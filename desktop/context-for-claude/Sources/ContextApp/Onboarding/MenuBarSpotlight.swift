@@ -51,27 +51,20 @@ enum MenuBarSpotlight {
         let padding: CGFloat = 14
         let framed = rect.insetBy(dx: -padding, dy: -padding)
 
-        // CoreGraphics hands back top-left origin; NSWindow wants bottom-left off the primary
-        // screen. Getting this backwards puts the ring at the bottom of the display.
-        guard let primary = NSScreen.screens.first else { return }
-        let flipped = NSRect(
-            x: framed.origin.x,
-            y: primary.frame.maxY - framed.origin.y - framed.height,
-            width: framed.width,
-            height: framed.height
-        )
+        // CoreGraphics hands back a top-left origin measured from the primary display; `NSWindow`
+        // wants bottom-left. `ScreenSpace` owns that conversion and is tested against monitor
+        // arrangements nobody has plugged in while running the suite — including the one this used
+        // to get wrong, where `NSScreen.screens.first` is not the display at (0, 0).
+        guard let flipped = ScreenSpace.live.appKit(from: framed) else { return }
 
         let window = overlay ?? {
-            let w = NSWindow(
-                contentRect: flipped, styleMask: [.borderless], backing: .buffered, defer: false)
-            w.isOpaque = false
-            w.backgroundColor = .clear
-            w.hasShadow = false
-            // Above the menu bar itself, and never in the way: the whole point is that the user can
-            // still click the icon being pointed at.
+            let w = SpotlightPanel(
+                contentRect: flipped, styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered, defer: false)
+            SpotlightWindow.configure(w)
+            // Above the menu bar *and* above the settings spotlight, and never in the way: the whole
+            // point is that the user can still click the icon being pointed at.
             w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.statusWindow)) + 1)
-            w.ignoresMouseEvents = true
-            w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
             w.contentView = SpotlightRingView(frame: NSRect(origin: .zero, size: flipped.size))
             overlay = w
             return w
@@ -123,18 +116,27 @@ enum MenuBarSpotlight {
 
 // MARK: - Ring
 
-/// A ring that breathes, so the eye finds it against a busy menu bar. Drawn in the accent and not
-/// in either end of the label ladder: this one lands on the menu bar, which is the system's own
-/// surface and is routinely dark *and* routinely light, so nothing else is guaranteed to show up.
+/// A ring that breathes, so the eye finds it against a busy menu bar.
+///
+/// White over a dark halo, not the accent. This lands on the menu bar, which is the system's own
+/// surface and is routinely dark *and* routinely light, so nothing that is a single colour is
+/// guaranteed to show up on it — and the accent is `controlAccentColor`, which is whatever the user
+/// picked in Appearance and can be purple, which this app never draws. Two passes, the same
+/// treatment `SettingsSpotlightCanvas` uses over System Settings, and for the same reason.
 private final class SpotlightRingView: NSView {
+    private let halo = CAShapeLayer()
     private let ring = CAShapeLayer()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.addSublayer(halo)
         layer?.addSublayer(ring)
+        halo.fillColor = NSColor.clear.cgColor
+        halo.strokeColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        halo.lineWidth = 5
         ring.fillColor = NSColor.clear.cgColor
-        ring.strokeColor = Ink.nsAccent.withAlphaComponent(0.9).cgColor
+        ring.strokeColor = NSColor.white.withAlphaComponent(0.96).cgColor
         ring.lineWidth = 2
     }
 
@@ -143,16 +145,20 @@ private final class SpotlightRingView: NSView {
 
     override func layout() {
         super.layout()
-        let inset = ring.lineWidth
+        let inset = halo.lineWidth
         let path = CGPath(ellipseIn: bounds.insetBy(dx: inset, dy: inset), transform: nil)
-        ring.frame = bounds
-        ring.path = path
+        for layer in [halo, ring] {
+            layer.frame = bounds
+            layer.path = path
+        }
     }
 
     func begin() {
         ring.removeAllAnimations()
+        halo.removeAllAnimations()
         guard !InkReduceMotion.isEnabled else {
             ring.opacity = 1
+            halo.opacity = 1
             return
         }
         let pulse = CABasicAnimation(keyPath: "opacity")
@@ -163,6 +169,7 @@ private final class SpotlightRingView: NSView {
         pulse.repeatCount = .infinity
         pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         ring.add(pulse, forKey: "pulse")
+        halo.add(pulse, forKey: "pulse")
 
         let breathe = CABasicAnimation(keyPath: "transform.scale")
         breathe.fromValue = 0.86
@@ -172,5 +179,6 @@ private final class SpotlightRingView: NSView {
         breathe.repeatCount = .infinity
         breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         ring.add(breathe, forKey: "breathe")
+        halo.add(breathe, forKey: "breathe")
     }
 }

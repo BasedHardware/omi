@@ -148,8 +148,27 @@ enum Permissions {
     /// Two-stage, because macOS is two-stage: the first ask raises the system prompt, and every ask
     /// after a denial opens the Settings pane instead — TCC never shows the same prompt twice, so a
     /// second `requestAccess` call would silently do nothing and the row would look broken.
+    ///
+    /// Every caller goes through `PermissionBroker`, which is what makes "one at a time" a fact
+    /// about the app rather than a convention each of the six call sites has to remember.
     @discardableResult
     static func request(_ c: Capability) async -> Bool {
+        await PermissionBroker.shared.request(c)
+    }
+
+    /// Sends the user to the exact pane. Also brokered: an unserialised open is how a pane the user
+    /// was deliberately sent to gets replaced by a different one a second and a half later.
+    static func openSettings(for c: Capability) {
+        Task { @MainActor in await PermissionBroker.shared.openSettings(for: c) }
+    }
+
+    /// Whether the system prompt for this capability has already been spent. macOS shows each one
+    /// exactly once, so a caller that sees `true` must open the pane rather than ask again.
+    static func promptIsSpent(_ c: Capability) -> Bool { hasPrompted(c) }
+
+    /// The ask itself, with no exclusion of its own. Only `PermissionBroker` may call it — the door
+    /// is the single owner, and a second entrance would restore exactly the defect it exists for.
+    fileprivate static func performRequest(_ c: Capability) async -> Bool {
         state.begin(c)
         defer { state.end(c) }
 
@@ -165,12 +184,12 @@ enum Permissions {
             // by hand, and `AXIsProcessTrustedWithOptions` merely nags with a dialog that leads
             // there — so send the user straight to the row instead of showing a dialog about a
             // dialog. Unlike Screen Recording this takes effect immediately, with no relaunch.
-            openSettings(for: c)
+            performOpenSettings(for: c)
             return AXElement.isTrusted
         }
     }
 
-    static func openSettings(for c: Capability) {
+    fileprivate static func performOpenSettings(for c: Capability) {
         guard let url = URL(string: c.settingsPane) else { return }
         let open = {
             NSWorkspace.shared.open(url)
@@ -182,6 +201,18 @@ enum Permissions {
             DispatchQueue.main.async(execute: open)
         }
     }
+
+    /// True while the user is looking at System Settings.
+    ///
+    /// The onboarding card floats above everything, so it has to step aside while the pane it just
+    /// opened is the thing being read — and step back the moment it is not. An `LSUIElement` app has
+    /// no Dock icon to click, so a card ordered out with no way back is a dead end; this is what
+    /// bounds the hiding to exactly the window in which it is right.
+    static var systemSettingsIsFrontmost: Bool {
+        NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleID
+    }
+
+    static let systemSettingsBundleID = "com.apple.systempreferences"
 
     // MARK: - Screen Recording relaunch
 
@@ -249,7 +280,7 @@ enum Permissions {
         default:
             // Determined and denied. The prompt will never appear again, so the pane is the only
             // route left.
-            openSettings(for: .microphone)
+            performOpenSettings(for: .microphone)
             return false
         }
     }
@@ -260,7 +291,7 @@ enum Permissions {
         guard !hasPrompted(.screen) else {
             // `CGRequestScreenCaptureAccess` returns false immediately once the answer is on record;
             // calling it again would make the row feel dead.
-            openSettings(for: .screen)
+            performOpenSettings(for: .screen)
             return false
         }
 
@@ -283,7 +314,7 @@ enum Permissions {
         if !granted && !firstAsk {
             // The consent dialog fired on an earlier ask and macOS will not repeat it, so the second
             // tap has to land the user on the switch itself.
-            openSettings(for: .systemAudio)
+            performOpenSettings(for: .systemAudio)
         }
         return granted
     }
@@ -315,12 +346,33 @@ enum Permissions {
         return cached
     }
 
+    /// Re-asks CoreAudio, now, instead of waiting for the 30 s staleness window.
+    ///
+    /// System audio is the one capability with no preflight: a grant made in System Settings is
+    /// invisible to this process until another tap is built. A watch that only polls `check` would
+    /// therefore wait forever on a switch the user has already flipped, so the watcher refreshes
+    /// explicitly rather than relying on a read with a side effect.
+    /// Throttled, because a probe is a real CoreAudio tap and the watch that calls this polls twice
+    /// a second. Two seconds is fast enough that a flipped switch reads as instant and slow enough
+    /// that the tap is not being rebuilt continuously under the user.
+    static func refreshSystemAudioGrant(minimumInterval: Double = 2) async {
+        guard !cachedSystemAudioGrant() else { return }
+        guard ContextTime.now - defaults.double(forKey: Key.systemAudioProbedAt) >= minimumInterval
+        else { return }
+        _ = await probeSystemAudio()
+    }
+
     private static func scheduleSystemAudioProbe() {
         guard state.beginIfIdle(.systemAudio) else { return }
         // Stamp before the work so a burst of polls cannot queue a second probe behind this one.
         defaults.set(ContextTime.now, forKey: Key.systemAudioProbedAt)
-        DispatchQueue.global(qos: .utility).async {
-            let granted = primeSystemAudioTap()
+        // Through the door like every other privileged acquisition. A background probe is a real
+        // CoreAudio tap, and one built while a TCC dialog is on screen is the same class of
+        // collision as a second dialog — observed live as `System audio stalled` mid-run.
+        Task { @MainActor in
+            let granted = await PermissionBroker.shared.hold(.systemAudio) {
+                await offMain { primeSystemAudioTap() }
+            }
             recordSystemAudio(granted)
             state.end(.systemAudio)
         }
@@ -453,6 +505,19 @@ protocol PermissionAsking {
     func isGranted(_ capability: Capability) -> Bool
     /// Raises the system prompt, or opens the pane when TCC will not prompt again.
     func request(_ capability: Capability) async -> Bool
+    /// True once macOS has spent this capability's prompt. TCC shows each one exactly once, so a
+    /// caller that sees `true` must open the pane instead of asking again — a second `requestAccess`
+    /// silently does nothing and the row looks dead.
+    func promptIsSpent(_ capability: Capability) -> Bool
+    /// Sends the user to the exact pane. Separate from `request` so the route out of a denial is
+    /// observable rather than buried inside the ask.
+    func openSettings(for capability: Capability)
+    /// Re-asks the system for a capability whose grant this process cannot otherwise notice.
+    /// Only system audio has one; everything else answers from a preflight.
+    func refresh(_ capability: Capability) async
+    /// True when the Screen Recording grant is real but this process cannot use it until it is
+    /// relaunched. Never a reason to keep waiting: the grant is already the user's answer.
+    var screenNeedsRelaunch: Bool { get }
 }
 
 /// `PermissionAsking` on the real `Permissions`.
@@ -460,6 +525,74 @@ protocol PermissionAsking {
 struct LivePermissionAsking: PermissionAsking {
     func isGranted(_ capability: Capability) -> Bool { Permissions.check(capability) }
     func request(_ capability: Capability) async -> Bool { await Permissions.request(capability) }
+    func promptIsSpent(_ capability: Capability) -> Bool { Permissions.promptIsSpent(capability) }
+    func openSettings(for capability: Capability) { Permissions.openSettings(for: capability) }
+
+    func refresh(_ capability: Capability) async {
+        guard capability == .systemAudio else { return }
+        await Permissions.refreshSystemAudioGrant()
+    }
+
+    var screenNeedsRelaunch: Bool { Permissions.screenNeedsRelaunch }
+}
+
+// MARK: - One door
+
+/// The single door onto every consent surface macOS has.
+///
+/// `Permissions.request` and `Permissions.openSettings` used to be ownerless statics with six
+/// unserialised callers — the onboarding run, a row tap on the card, the by-hand choreography, the
+/// `.done` screen button, the menu-bar row, and the tutorial. The only exclusion that existed was
+/// *per capability*, and it explicitly permitted different capabilities to proceed at once. Live
+/// first-run trace: the user tapped the Screen row and landed on Screen & System Audio Recording;
+/// 1.9 seconds later the app opened the Accessibility pane in the same System Settings window,
+/// replacing the pane they had just been sent to, and drew a ring over it.
+///
+/// So the exclusion is cross-capability and it lives here, not at the call sites. Re-entrant for the
+/// capability already holding the door, because one episode legitimately prompts *and* opens a pane
+/// for the same thing; anything else queues.
+@MainActor
+final class PermissionBroker {
+    static let shared = PermissionBroker()
+
+    /// The capability the door is currently open for, or nil when nothing is in flight.
+    private(set) var holder: Capability?
+    private var depth = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    /// True while any ask or pane is in flight. Drives row `.disabled` on every surface.
+    var isBusy: Bool { holder != nil }
+
+    /// Runs `body` with the door held for `capability`. Never two capabilities at once, anywhere.
+    func hold<T>(_ capability: Capability, _ body: () async -> T) async -> T {
+        await acquire(capability)
+        defer { release() }
+        return await body()
+    }
+
+    func request(_ capability: Capability) async -> Bool {
+        await hold(capability) { await Permissions.performRequest(capability) }
+    }
+
+    func openSettings(for capability: Capability) async {
+        await hold(capability) { Permissions.performOpenSettings(for: capability) }
+    }
+
+    private func acquire(_ capability: Capability) async {
+        while let holder, holder != capability {
+            await withCheckedContinuation { waiting.append($0) }
+        }
+        holder = capability
+        depth += 1
+    }
+
+    private func release() {
+        depth -= 1
+        guard depth == 0 else { return }
+        holder = nil
+        guard !waiting.isEmpty else { return }
+        waiting.removeFirst().resume()
+    }
 }
 
 /// Asks for a list of capabilities **one at a time**, with air around each ask.
@@ -472,33 +605,32 @@ struct LivePermissionAsking: PermissionAsking {
 ///   sentence it is asking about and short enough that nobody wonders whether the button worked.
 /// - After the answer, the new checkmark sits alone for `afterGrant` before the next dialog covers
 ///   it. A confirmation the user cannot witness is the same as no confirmation.
-/// - `settle` polls until the grant reads back, because TCC answers the dialog before it finishes
-///   writing the grant, and a check taken the instant `request` returns still reads false — the row
-///   would flash "action required" over a permission the user just gave.
-///
-/// It is bounded and indifferent to the answer. A decline never becomes true, so `settle` returns on
-/// its deadline and the run carries on to the next capability rather than stalling on a "no".
+/// It paces and asks. It does **not** decide the answer: a run that finishes is not a step that may
+/// advance, and nothing here has a deadline that could stand in for a user. `PermissionGate` owns
+/// the waiting, and its watch is unbounded.
 @MainActor
 struct PermissionRun {
     /// How long a row is lit before its dialog opens.
-    static let leadIn: Duration = .milliseconds(900)
-    /// How long the new checkmark sits alone before the next dialog opens over it.
-    static let afterGrant: Duration = .milliseconds(1_100)
-    /// The longest we wait for TCC to finish writing a grant it has already accepted.
-    static let settleDeadline: Duration = .seconds(2)
-    static let settlePoll: Duration = .milliseconds(120)
+    nonisolated static let leadIn: Duration = .milliseconds(900)
+    /// How long the answer sits alone before the next dialog opens over it. Also the window in which
+    /// TCC finishes writing a grant it has already accepted — a check taken the instant `request`
+    /// returns can still read false, and the row would flash "action required" over a permission the
+    /// user just gave.
+    nonisolated static let afterGrant: Duration = .milliseconds(1_100)
 
     let asking: any PermissionAsking
     var leadIn: Duration = PermissionRun.leadIn
     var afterGrant: Duration = PermissionRun.afterGrant
-    var settleDeadline: Duration = PermissionRun.settleDeadline
-    var settlePoll: Duration = PermissionRun.settlePoll
 
     /// What the view needs to know as the run moves.
     struct Callbacks {
         /// The row is lit and nothing is covering it yet.
         var willAsk: (Capability) -> Void = { _ in }
-        /// The answer is in and has been read back. `granted` is what TCC actually reports now, not
+        /// The lead-in is over and the dialog is about to open. This, and only this, is the moment
+        /// the card should step aside — hiding on `willAsk` spends the entire lead-in behind an
+        /// ordered-out window, which is the whole point of the lead-in.
+        var willPrompt: (Capability) -> Void = { _ in }
+        /// The answer is in and has been read back. `granted` is what the system reports now, not
         /// what the dialog returned.
         var didAnswer: (Capability, Bool) -> Void = { _, _ in }
     }
@@ -516,8 +648,14 @@ struct PermissionRun {
             callbacks.willAsk(capability)
             try? await Task.sleep(for: leadIn)
 
-            _ = await asking.request(capability)
-            let granted = await settle(capability)
+            // macOS shows each prompt exactly once. Asking again does nothing at all, so a spent
+            // prompt is not asked a second time — the pane is the only route left, and opening it
+            // belongs to whoever owns the waiting, not to the pacer.
+            if !asking.promptIsSpent(capability) {
+                callbacks.willPrompt(capability)
+                _ = await asking.request(capability)
+            }
+            let granted = asking.isGranted(capability)
             if granted { landed.insert(capability) }
             callbacks.didAnswer(capability, granted)
 
@@ -525,16 +663,230 @@ struct PermissionRun {
         }
         return landed
     }
+}
 
-    /// Polls until the grant reads back or the deadline passes. Never waits on a refusal.
-    private func settle(_ capability: Capability) async -> Bool {
-        if asking.isGranted(capability) { return true }
-        let deadline = ContinuousClock.now.advanced(by: settleDeadline)
-        while ContinuousClock.now < deadline {
-            try? await Task.sleep(for: settlePoll)
-            if asking.isGranted(capability) { return true }
+// MARK: - The gate
+
+/// The permissions step, as a value the view renders rather than a decision the view makes.
+///
+/// The bug this exists for: leaving the permissions card consulted no grant at all. Both exits
+/// called `advance()` unconditionally — one of them under a comment reading "Move on anyway" — and
+/// the run's 2 s settle deadline *structurally cannot* observe a Screen Recording grant, because
+/// `CGRequestScreenCaptureAccess()` returns before the user has answered. The live first-run trace
+/// has the deadline expiring at 10:13:13 and the user opening the pane at 10:13:46; the app was in
+/// the tutorial by 10:14:09 with Screen Recording never granted and nothing said about it.
+///
+/// **The exit predicate is `canLeaveStep`, and nothing else may decide it.** It is true only when
+/// every required capability has a terminal, *user-authored* answer: granted, or postponed because
+/// the user pressed "I'll do this later". No timeout advances anything.
+///
+/// A literal "permission or you cannot proceed" is unimplementable on macOS and would be a trap:
+/// TCC prompts exactly once, after a Deny only System Settings remains, and a user who simply
+/// refuses would be stranded forever. `postpone` is the escape, and it is deliberate, named, and
+/// never automatic.
+@MainActor
+final class PermissionGate: ObservableObject {
+
+    /// Where the run is, which is also what the card is allowed to show and whether it may be on
+    /// screen at all.
+    enum Phase: Equatable {
+        case idle
+        /// The row is lit alone and the card is being read. No dialog yet.
+        case explaining(Capability)
+        /// A TCC dialog is genuinely up.
+        case prompting(Capability)
+        /// The prompt is spent or was declined; the pane is open and the watch is unbounded.
+        case waitingInSettings(Capability)
+        /// The grant landed and the confirmation is being witnessed.
+        case confirming(Capability)
+        /// The run ended with something still unanswered. Only reachable by cancellation.
+        case blocked
+        /// Every required capability has an answer.
+        case complete
+    }
+
+    /// The two terminal answers. Both are the user's; neither is a clock's.
+    enum Answer: Equatable { case granted, deferred }
+
+    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var answers: [Capability: Answer] = [:]
+
+    /// How often the unbounded watch re-asks the system. Two beats a second is fast enough that a
+    /// flipped switch feels instant and slow enough to cost nothing.
+    nonisolated static let watchPoll: Duration = .milliseconds(500)
+
+    let required: [Capability]
+
+    private let asking: any PermissionAsking
+    private let broker: PermissionBroker
+    private let pacing: PermissionRun
+    private let watchPoll: Duration
+    private var openedSettings: Set<Capability> = []
+    private var isRunning = false
+
+    /// Everything defaults to the live path. The arguments are optional rather than defaulted to
+    /// main-actor values because a default expression is evaluated in a nonisolated context.
+    init(
+        asking: (any PermissionAsking)? = nil,
+        required: [Capability] = [.microphone, .systemAudio, .screen],
+        broker: PermissionBroker? = nil,
+        leadIn: Duration? = nil,
+        afterGrant: Duration? = nil,
+        watchPoll: Duration? = nil
+    ) {
+        let asking = asking ?? LivePermissionAsking()
+        self.asking = asking
+        self.required = required
+        self.broker = broker ?? .shared
+        self.pacing = PermissionRun(
+            asking: asking,
+            leadIn: leadIn ?? PermissionRun.leadIn,
+            afterGrant: afterGrant ?? PermissionRun.afterGrant)
+        self.watchPoll = watchPoll ?? PermissionGate.watchPoll
+    }
+
+    /// **The single exit predicate.** Every required capability answered, by the user.
+    var canLeaveStep: Bool { required.allSatisfy { answers[$0] != nil } }
+
+    /// True while an episode owns the screen — the rows must not be tappable under it.
+    var isBusy: Bool { isRunning }
+
+    /// The capability the card is currently about, if any.
+    var subject: Capability? {
+        switch phase {
+        case .explaining(let c), .prompting(let c), .waitingInSettings(let c), .confirming(let c):
+            return c
+        case .idle, .blocked, .complete:
+            return nil
         }
-        return false
+    }
+
+    /// Whether the card should take itself off screen.
+    ///
+    /// `prompting` is unconditional: a system dialog is up and the card is in the way. `waiting in
+    /// settings` is conditional on the user actually being in System Settings, and that condition is
+    /// load-bearing — this app is `LSUIElement`, so a card ordered out has no Dock icon to bring it
+    /// back, and a permanently hidden card is exactly the dead end the postpone escape exists to
+    /// prevent. `explaining` and `confirming` keep the card **on screen**: they are the lead-in and
+    /// the confirmation beat, and hiding through them is what made the preamble unreadable.
+    nonisolated static func cardYields(to phase: Phase, settingsIsFrontmost: Bool) -> Bool {
+        switch phase {
+        case .prompting: return true
+        case .waitingInSettings: return settingsIsFrontmost
+        case .idle, .explaining, .confirming, .blocked, .complete: return false
+        }
+    }
+
+    /// What the card says right now.
+    var caption: String? {
+        switch phase {
+        case .idle, .complete:
+            return nil
+        case .explaining:
+            return "One at a time. I’ll ask, and I’ll wait for your answer before the next one."
+        case .prompting:
+            return "macOS is asking. I’ll wait."
+        case .waitingInSettings(let capability):
+            return """
+                System Settings is open on the right row. Switch it on and I’ll notice — I won’t \
+                move on without an answer. If now is not the time, tell me and I’ll ask again \
+                later. \(waitingDetail(for: capability))
+                """
+        case .confirming(let capability):
+            if capability == .screen, asking.screenNeedsRelaunch {
+                return "Granted. I’ll need to be reopened before I can actually see the screen."
+            }
+            return "Got it."
+        case .blocked:
+            return "Still waiting on an answer."
+        }
+    }
+
+    private func waitingDetail(for capability: Capability) -> String {
+        switch capability {
+        case .microphone, .systemAudio: return "It’s under Privacy & Security ▸ Microphone."
+        case .screen: return "It’s under Privacy & Security ▸ Screen & System Audio Recording."
+        case .accessibility: return "It’s under Privacy & Security ▸ Accessibility."
+        }
+    }
+
+    // MARK: Running
+
+    /// Walks the required capabilities, one episode at a time. Returns when every one of them has an
+    /// answer, or when the task is cancelled.
+    func run() async {
+        guard !isRunning else { return }
+        isRunning = true
+        defer {
+            isRunning = false
+            phase = canLeaveStep ? .complete : .blocked
+        }
+
+        for capability in required {
+            guard answers[capability] == nil else { continue }
+            guard !Task.isCancelled else { return }
+            await episode(for: capability)
+        }
+    }
+
+    /// The escape, and the only thing other than a grant that ends an episode.
+    ///
+    /// Deliberately not a default, not a timeout, and not a quiet Continue: the user pressed a button
+    /// that says what it does. Everything still works without the capability, worse — which is what
+    /// the card says next to the button.
+    func postpone(_ capability: Capability) {
+        guard answers[capability] == nil else { return }
+        answers[capability] = .deferred
+        ContextLog.info("\(capability.rawValue) postponed by the user", "permissions")
+        if !isRunning { phase = canLeaveStep ? .complete : .blocked }
+    }
+
+    private func episode(for capability: Capability) async {
+        if asking.isGranted(capability) {
+            answers[capability] = .granted
+            return
+        }
+
+        await broker.hold(capability) {
+            phase = .explaining(capability)
+            await pacing.run(
+                [capability],
+                callbacks: .init(
+                    willPrompt: { [weak self] in self?.phase = .prompting($0) },
+                    didAnswer: { [weak self] capability, granted in
+                        // Either way the card comes back: the confirmation has to be witnessed, and
+                        // a refusal has to be met with the route out rather than a hidden window.
+                        self?.phase = granted ? .confirming(capability) : .explaining(capability)
+                    }))
+
+            if asking.isGranted(capability) {
+                answers[capability] = .granted
+                return
+            }
+            guard answers[capability] == nil else { return }
+
+            await waitInSettings(for: capability)
+        }
+    }
+
+    /// The unbounded watch. There is no deadline here on purpose: the 2 s one it replaces expired
+    /// 33 seconds before the user in the live trace so much as opened the pane.
+    private func waitInSettings(for capability: Capability) async {
+        phase = .waitingInSettings(capability)
+        if openedSettings.insert(capability).inserted {
+            asking.openSettings(for: capability)
+        }
+
+        while answers[capability] == nil, !Task.isCancelled {
+            try? await Task.sleep(for: watchPoll)
+            guard !Task.isCancelled else { return }
+            await asking.refresh(capability)
+            guard asking.isGranted(capability) else { continue }
+            answers[capability] = .granted
+            phase = .confirming(capability)
+            try? await Task.sleep(for: pacing.afterGrant)
+            return
+        }
     }
 }
 

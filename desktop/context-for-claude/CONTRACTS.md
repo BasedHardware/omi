@@ -409,6 +409,44 @@ Two-stage macOS behaviour: the first request raises the system TCC prompt; a sec
 exact System Settings pane (`x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`
 / `Privacy_ScreenCapture`). Screen Recording only takes effect after a relaunch — surface that.
 
+### `Sources/ContextApp/Onboarding/SettingsSpotlight.swift` + `PermissionChoreography.swift` — owner: **onboarding agent**
+
+The overlay that guides the user through System Settings: a white dotted boundary around the whole
+settings area, a glow on the control to act on, and an animated arrow into it.
+
+```swift
+struct ScreenSpace { func appKit(from global: CGRect) -> CGRect?      // CG top-left ⇄ AppKit bottom-left
+                     func display(holding: CGRect) -> DisplayGeometry? }
+struct ArrowPlan   { static func pointing(at:keepClearOf:within:) -> ArrowPlan
+                     static func dragging(from:to:) -> ArrowPlan }
+enum PermissionGuidance { case pointing(SettingsSpotlightTarget)   // area + control + gesture
+                          case framing(SettingsWindowFrame)        // window only, contents unreadable
+                          case instruction(String) }               // words only
+enum PermissionOverlay { static func show(for:caption:resolve:); static func confirmGranted(_:); static func hide() }
+```
+
+Rules this surface must keep — each of them cost a real defect:
+
+- **Precision degrades; presence does not.** Row → window → words. An arrow is only ever drawn with a
+  measured control at the end of it; `PermissionGuidance` is what makes "point approximately"
+  unrepresentable. There is no `AXScrollToVisible` on these rows, so a scrolled-away row hides the
+  highlight rather than moving it.
+- **The Accessibility step cannot use the Accessibility API** — reading the row that grants
+  Accessibility requires Accessibility. It runs in `framing`, off `CGWindowListCopyWindowInfo`, which
+  needs no grant. Never retry the AX walk while untrusted.
+- **Find once, track cheaply.** A full walk is ~270 ms and must run **off the main actor**; the
+  tracker re-reads only the window frame and translates. `SpotlightTrackPolicy` owns the schedule.
+- **The window rect is the only trustworthy bound.** System Settings answers stale inner frames after
+  a resize; clamp every derived rect to the window. `AXWindows` is not promised to contain windows —
+  filter on `AXWindow`.
+- **White and neutral only, never the accent.** `controlAccentColor` is whatever the user picked and
+  can be purple (`INV-UI-1`). Every stroke is white over a dark ribbon so it reads on a light *and* a
+  dark System Settings window.
+- **Click-through, non-activating, `sharingType = .none`.** The overlay covers a whole display
+  including the switch it points at, and this app records the screen.
+  `CONTEXT_SPOTLIGHT_CAPTURABLE=1` lifts the capture exclusion for verifying the overlay itself.
+- **Reduce Motion** freezes the phase at the still frame rather than removing the guidance.
+
 ### `Sources/ContextApp/Integration/ClaudeRegistrar.swift` — owner: **registrar agent (I/O half)**
 
 ```swift

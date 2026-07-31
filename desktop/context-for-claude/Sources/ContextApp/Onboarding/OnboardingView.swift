@@ -34,9 +34,22 @@ enum OnboardingStep: Int, CaseIterable, Sendable {
 
     /// The next card, or nil at the end. Nil at `.done` is what makes "the flow is over" a fact about
     /// the machine rather than a convention every call site has to remember.
+    ///
+    /// The itinerary is recomputed on every call, so it can change *while the user is standing on a
+    /// card* — and one card deletes itself by succeeding. `.signIn` is on the itinerary only while
+    /// `signedIn` is false, and the moment it does its job that becomes true, so the very call that
+    /// asks "where does a completed sign-in go" asks it of an itinerary `.signIn` is no longer on.
+    /// Answering nil there meant "the flow is over", which returned the user to the card they had
+    /// just finished. A step that has dropped out is not the end of the flow: hand it the first card
+    /// that still comes after it.
     static func next(after step: OnboardingStep, signedIn: Bool) -> OnboardingStep? {
         let itinerary = itinerary(signedIn: signedIn)
-        guard let index = itinerary.firstIndex(of: step), index + 1 < itinerary.count else { return nil }
+        guard let index = itinerary.firstIndex(of: step) else {
+            // `allCases` order *is* itinerary order, and `itinerary` only filters, so the first
+            // remaining card of higher rank is the one that would have followed this step.
+            return itinerary.first { $0.rawValue > step.rawValue }
+        }
+        guard index + 1 < itinerary.count else { return nil }
         return itinerary[index + 1]
     }
 
@@ -99,7 +112,11 @@ struct OnboardingView: View {
     /// anyone unwilling to leave the flow on a step with no button that could finish it. Capture
     /// degrades to OCR-only without it: a worse product, and a working one. It gets the choreography
     /// instead, which is a better offer than a prompt that does not exist.
-    private var requiredCapabilities: [Capability] { [.microphone, .systemAudio, .screen] }
+    ///
+    /// The list itself lives on `PermissionGate`, because the gate is what the list is *for*: it is
+    /// the set `canLeaveStep` quantifies over, and two copies of it would be two answers to "may
+    /// this card be left".
+    private var requiredCapabilities: [Capability] { gate.required }
 
     /// Owned by the auth layer, observed here. Everything Context for Claude records lands in this
     /// account, so the step machine asks it who the user is before it asks macOS for a microphone.
@@ -114,11 +131,21 @@ struct OnboardingView: View {
         PermissionChoreography.probedCapability == nil ? .welcome : .permissions
     @State private var settled = false
 
+    /// Who decides whether this card may be left. Not the view, and not a clock: the gate advances
+    /// only on a terminal answer the user authored — a grant, or an explicit "I'll do this later".
+    @StateObject private var gate = PermissionGate()
+
     @State private var granted: [Capability: Bool] = [:]
     @State private var asked: Set<Capability> = []
     @State private var requesting: Set<Capability> = []
     @State private var reported = false
     @State private var needsRelaunch = false
+    /// Whether System Settings is the app the user is looking at. The card steps aside for the pane
+    /// it opened and comes straight back when the pane is not what they are reading — this app has no
+    /// Dock icon, so a card hidden on a phase alone would be a card with no way back.
+    @State private var settingsIsFrontmost = false
+    /// The gate's run, held so leaving the card can end its unbounded watch.
+    @State private var setupTask: Task<Void, Never>?
 
     @State private var connectorSurfaces: Set<ClaudeSurface> = []
     @State private var connectorMessage: String?
@@ -142,28 +169,34 @@ struct OnboardingView: View {
     /// call the round trip off — the browser has it — so this only puts the buttons back.
     @State private var abandonedWait = false
 
+    /// The card, and nothing under it.
+    ///
+    /// There was a `Backdrop` here — a near-opaque sheet with a nine-blob wash drifting over it — and
+    /// it is gone rather than moved. The window is frosted glass now (`InkGlass`), so the
+    /// ground already has depth and already picks up the desktop; a blob field on top of it would be
+    /// a second ground competing with the first, which is exactly the "ugly hue" the sheet was
+    /// reported as. One ground, owned by the window, and the card draws only type.
     var body: some View {
-        Backdrop(working: working, settled: settled) {
-            GeometryReader { geometry in
-                ZStack(alignment: .topTrailing) {
-                    column
-                        .id(step)
-                        .transition(transition(in: geometry.size))
+        GeometryReader { geometry in
+            ZStack(alignment: .topTrailing) {
+                column
+                    .id(step)
+                    .transition(transition(in: geometry.size))
 
-                    if step == .done {
-                        menuBarCue
-                    }
+                if step == .done {
+                    menuBarCue
                 }
-                .overlay(alignment: .topLeading) { backCue }
-                .overlay(alignment: .bottom) { progressDots }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .overlay {
-                    if finale {
-                        edgeGlow(in: geometry.size)
-                    }
+            }
+            .overlay(alignment: .topLeading) { backCue }
+            .overlay(alignment: .bottom) { progressDots }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .overlay {
+                if finale {
+                    edgeGlow(in: geometry.size)
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         // `Engine.start()` has already called `OmiAuth.restore()` by the time this window is
         // presented, so a reinstall arrives here knowing whose account it is. Nothing restores it a
         // second time here — observing `auth` covers a session that lands late anyway.
@@ -175,12 +208,20 @@ struct OnboardingView: View {
     }
 
     /// True whenever the next thing the user must click belongs to another app.
+    ///
+    /// It used to be true from the instant the run decided to ask — which is *before* the 900 ms
+    /// lead-in the card exists to be read during, so the preamble explaining what macOS was about to
+    /// ask for was on screen for roughly zero frames and the card blinked out three times. The gate's
+    /// phase is what answers this now: only a dialog genuinely being up, or the user genuinely
+    /// standing in System Settings.
     private var yieldsScreen: Bool {
         if auth.isSigningIn { return true }
+        if PermissionGate.cardYields(to: gate.phase, settingsIsFrontmost: settingsIsFrontmost) { return true }
+        // A row tapped by hand, outside the gate's run.
         if !requesting.isEmpty { return true }
         // The choreography is pointing at a row in System Settings. Covering the thing we just spent
         // a card teaching them to recognise would be the one unforgivable version of this step.
-        if guiding { return true }
+        if guiding, settingsIsFrontmost { return true }
         // The Screen Recording grant happens entirely in System Settings, and the app relaunches
         // itself the moment it lands — there is nothing here worth covering it for.
         if step == .done, !isGranted(.screen), openedScreenSettings { return true }
@@ -212,20 +253,7 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: 24) {
-            RandomizedText(
-                segments: [
-                    ("I keep ", .plain),
-                    ("Claude", .bold),
-                    (" caught up on what you ", .plain),
-                    ("see and say", .bold),
-                    (".", .plain),
-                ],
-                style: .introHero,
-                // Colour is a parameter here, not the environment — `RandomizedText` builds one
-                // concatenated `Text` and per-word opacity has to ride on each run's colour.
-                color: Ink.primary
-            )
-            .multilineTextAlignment(.center)
+            says(Self.welcomeLead, style: .introHero)
 
             // The button arrives after the last word does; offering it mid-sentence invites a
             // click before the sentence has been read.
@@ -233,6 +261,38 @@ struct OnboardingView: View {
                 .opacity(settled ? 1 : 0)
                 .animation(stepAnimation, value: settled)
         }
+    }
+
+    /// The first line anyone ever sees, set in the largest role in the system.
+    ///
+    /// A named value rather than a literal inside `welcome`, because it is the widest thing the
+    /// reading column is ever asked to hold and the one card that has actually overflowed: the fit
+    /// test measures *this*, so it cannot pass against a copy of the copy that has since drifted.
+    static let welcomeLead: [(String, Emphasis)] = [
+        ("I keep ", .plain),
+        ("Claude", .bold),
+        (" caught up on what you ", .plain),
+        ("see and say", .bold),
+        (".", .plain),
+    ]
+
+    /// The card's own words, said by the mark.
+    ///
+    /// Every card with a headline goes through here, which is the point: the copy has always been
+    /// written in the mark's first person — "I keep Claude caught up", "Here's what I do", "I'm
+    /// listening" — and a character that speaks on one screen and vanishes on the next is a
+    /// flourish rather than a character. One call site shape, one character, the whole flow.
+    ///
+    /// It deliberately does **not** gate on `settled`: the words arriving *are* this card's
+    /// entrance, and the rest of the card settles in behind them. Nothing here delays a button —
+    /// `scheduleSettle` is untouched, and `SpokenCadence.maximumPhrase` caps a phrase at the
+    /// duration the welcome hero already took.
+    private func says(
+        _ lead: [(String, Emphasis)],
+        style: InkTextStyle,
+        aside: String? = nil
+    ) -> some View {
+        TalkingMark(lead: lead, leadStyle: style, aside: aside)
     }
 
     // MARK: - 2. What I do — said before anything is asked for
@@ -245,38 +305,39 @@ struct OnboardingView: View {
     /// agree to it.
     private var value: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Here's what I do.")
-                .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.primary)
+            says(
+                [("Here's what I do.", .plain)],
+                style: .firstTitle,
+                aside: "Three things I take in, and one place they go.")
 
-            Text("Three things I take in, and one place they go.")
-                .inkStyle(.prose)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 9) {
-                ForEach(Self.valueClaims, id: \.copy) { claim in
-                    Label {
-                        Text(claim.copy)
-                            .inkStyle(.rowCopy)
-                            .foregroundStyle(Ink.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: claim.glyph)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Ink.tertiary)
-                            .frame(width: 16)
+            // The list and the button settle in behind the mark, rather than the whole card waiting
+            // for one timer: the character speaks first and its furniture follows, which is the
+            // order those two things happen in.
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Self.valueClaims, id: \.copy) { claim in
+                        Label {
+                            Text(claim.copy)
+                                .inkStyle(.rowCopy)
+                                .foregroundStyle(Ink.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: claim.glyph)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Ink.tertiary)
+                                .frame(width: 16)
+                        }
+                        .labelStyle(.titleAndIcon)
                     }
-                    .labelStyle(.titleAndIcon)
                 }
-            }
 
-            InkButton("Continue") { advance() }
-                .padding(.top, 4)
+                InkButton("Continue") { advance() }
+                    .padding(.top, 4)
+            }
+            .opacity(settled ? 1 : 0)
+            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(settled ? 1 : 0)
-        .animation(stepAnimation, value: settled)
     }
 
     /// The three claims, each one a thing the app genuinely does — two sources and the destination.
@@ -299,14 +360,10 @@ struct OnboardingView: View {
     /// it changed.
     private var signIn: some View {
         VStack(spacing: 14) {
-            Text("Which account is this?")
-                .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.primary)
-
-            Text("It all lands in your Omi account.")
-                .inkStyle(.prose)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            says(
+                [("Which account is this?", .plain)],
+                style: .stepHeadline,
+                aside: "It all lands in your Omi account.")
 
             if isWaitingForBrowser {
                 VStack(spacing: 12) {
@@ -366,19 +423,17 @@ struct OnboardingView: View {
 
     private var permissions: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(setupTitle)
-                .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.primary)
-
-            // Said before the first dialog, never after. macOS asks in its own words — terse,
-            // system-voiced, and identical to the prompt of every app that ever abused the same
-            // permission — and a user meeting that cold has only the app's reputation to go on.
-            // Screen-recording tools die at exactly this prompt. Naming what is coming, in order,
-            // in the app's own voice, is the difference between consenting and being startled.
-            Text(setupPreamble)
-                .inkStyle(.prose)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // The preamble is said before the first dialog, never after. macOS asks in its own
+            // words — terse, system-voiced, and identical to the prompt of every app that ever
+            // abused the same permission — and a user meeting that cold has only the app's
+            // reputation to go on. Screen-recording tools die at exactly this prompt. Naming what is
+            // coming, in order, in the app's own voice, is the difference between consenting and
+            // being startled — and it is *this* card where having a face attached to that voice is
+            // worth the most.
+            //
+            // The title changes under the user as the run moves ("First…" → "Say yes."), which
+            // `TalkingMark` treats as a new phrase: the mark says the new line.
+            says([(setupTitle, .plain)], style: .firstTitle, aside: setupPreamble)
 
             VStack(spacing: 8) {
                 ForEach(capabilities, id: \.self) { capability in
@@ -392,19 +447,68 @@ struct OnboardingView: View {
                     )
                 }
             }
+            // While the gate has an ask in flight the rows are not a second entrance to it. A tap
+            // during the pause between two capabilities used to fire a request for a *different*
+            // one, which is the collision the broker now refuses and this stops from being offered.
+            .disabled(gate.isBusy)
+
+            if case .waitingInSettings(let capability) = gate.phase {
+                postponePanel(for: capability)
+            }
 
             if let handGrant {
                 handGrantPanel(for: handGrant)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onReceive(Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()) { _ in
-            refreshPermissions()
-        }
+        // The watch is unbounded on purpose, so it needs an owner that ends it. Leaving the card is
+        // that owner — and the card can only be left once the gate has its answers.
+        .onDisappear { setupTask?.cancel() }
+        .onReceive(permissionTick) { _ in refreshPermissions() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
         }
+        .onReceive(
+            NSWorkspace.shared.notificationCenter.publisher(
+                for: NSWorkspace.didActivateApplicationNotification)
+        ) { _ in
+            settingsIsFrontmost = Permissions.systemSettingsIsFrontmost
+        }
     }
+
+    /// The escape, and the only thing other than a grant that ends a wait.
+    ///
+    /// It is a button the user presses on purpose, with the consequence written next to it — never a
+    /// default, never a timeout, never a quiet Continue. A literal "grant or you cannot proceed" is
+    /// unimplementable on macOS: TCC prompts once, after a Deny only System Settings remains, and a
+    /// user who simply refuses would be stranded on this card forever.
+    @ViewBuilder
+    private func postponePanel(for capability: Capability) -> some View {
+        HStack(spacing: 10) {
+            InkButton("I’ll do this later", kind: .secondary) { gate.postpone(capability) }
+            Text(postponeConsequence(for: capability))
+                .inkStyle(.statusLabel)
+                .foregroundStyle(Ink.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+
+    /// What is actually lost by saying "later" — named, so the choice is informed.
+    private func postponeConsequence(for capability: Capability) -> String {
+        switch capability {
+        case .microphone: return "I won’t hear anything you say until you do."
+        case .systemAudio: return "I’ll hear you on calls, but not the other side."
+        case .screen: return "I won’t see your screen at all until you do."
+        case .accessibility: return "I’ll read your screen from pixels rather than text."
+        }
+    }
+
+    /// One subscription for the life of the view, not a fresh publisher on every body pass.
+    /// `permissions` is a computed property, so a `Timer.publish(…)` written inline there built a new
+    /// `TimerPublisher` every time the card re-rendered — and this card re-renders on model-download
+    /// progress. Matches `StatusView`'s own pattern.
+    private let permissionTick = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     /// What is about to happen, in the order it happens, before any of it happens.
     ///
@@ -418,6 +522,9 @@ struct OnboardingView: View {
             flip yourself, and this is what it looks like.
             """
         }
+        // The gate says where the run is, including the sentence that has to be on screen while the
+        // user is standing in System Settings deciding.
+        if let caption = gate.caption { return caption }
         if granting {
             return "One at a time. Answer each one and I’ll wait for it to land before the next."
         }
@@ -481,9 +588,12 @@ struct OnboardingView: View {
         guard !guiding else { return }
         Sound.effect(.click)
         guiding = true
-        Permissions.openSettings(for: capability)
 
         Task { @MainActor in
+            // Through the door, like every other pane in the app. This is the call site that was
+            // observed stomping the Screen Recording pane the user had just been sent to, 1.9 s
+            // after they tapped the row that opened it.
+            await PermissionBroker.shared.openSettings(for: capability)
             // System Settings has to be up, and on the right pane, before there is anything to find.
             // Pointing before it exists is how an overlay ends up ringing the last pane's rows.
             try? await Task.sleep(for: .milliseconds(1_200))
@@ -508,14 +618,14 @@ struct OnboardingView: View {
         }
     }
 
-    /// Ends the choreography and moves on, whether the grant landed or the user skipped it. This
-    /// step is never allowed to be a dead end: window text is an improvement, not a requirement.
+    /// Ends the choreography, whether the grant landed or the user skipped it. Window text is an
+    /// improvement, not a requirement, so this never blocks — but it no longer *advances* either.
+    /// Leaving the card is one predicate in one place, and this is not it.
     private func finishHandGrant() {
         guiding = false
         PermissionOverlay.hide()
         handGrant = nil
-        guard step == .permissions else { return }
-        advance()
+        advanceIfAnswered()
     }
 
     // MARK: - 5. Claude connector
@@ -525,33 +635,28 @@ struct OnboardingView: View {
     private var connector: some View {
         let copy = OnboardingConnectorCopy(surfaces: connectorSurfaces)
         return VStack(alignment: .leading, spacing: 18) {
-            Text(copy.title)
-                .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.primary)
+            says([(copy.title, .plain)], style: .firstTitle, aside: copy.detail)
 
-            Text(copy.detail)
-                .inkStyle(.prose)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 18) {
+                if let connectorMessage {
+                    Text(connectorMessage)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(Ink.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if let connectorMessage {
-                Text(connectorMessage)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 12) {
-                InkButton(configuringConnector ? "Setting up…" : copy.action) { configureConnectorOrContinue() }
-                    .disabled(configuringConnector)
-                if connectorMessage != nil, connectorSurfaces.isEmpty {
-                    InkButton("Continue without Claude", kind: .secondary) { advance() }
+                HStack(spacing: 12) {
+                    InkButton(configuringConnector ? "Setting up…" : copy.action) { configureConnectorOrContinue() }
+                        .disabled(configuringConnector)
+                    if connectorMessage != nil, connectorSurfaces.isEmpty {
+                        InkButton("Continue without Claude", kind: .secondary) { advance() }
+                    }
                 }
             }
+            .opacity(settled ? 1 : 0)
+            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(settled ? 1 : 0)
-        .animation(stepAnimation, value: settled)
     }
 
     private func configureConnectorOrContinue() {
@@ -598,23 +703,19 @@ struct OnboardingView: View {
     /// piece of the product cannot strand anyone on a card with no way out.
     private var tutorial: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Want to see it work?")
-                .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.primary)
-
-            Text("A minute, and it ends with Claude answering a question about your own screen.")
-            .inkStyle(.prose)
-            .foregroundStyle(Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            says(
+                [("Want to see it work?", .plain)],
+                style: .firstTitle,
+                aside: "A minute, and it ends with Claude answering a question about your own screen.")
 
             HStack(spacing: 12) {
                 InkButton("Show me") { startTutorial() }
                 InkButton("Not now", kind: .secondary) { advance() }
             }
+            .opacity(settled ? 1 : 0)
+            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(settled ? 1 : 0)
-        .animation(stepAnimation, value: settled)
     }
 
     private func startTutorial() {
@@ -630,16 +731,10 @@ struct OnboardingView: View {
 
     private var done: some View {
         VStack(spacing: 14) {
-            Text(isGranted(.screen) ? "I’m listening." : "One more thing.")
-                .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.primary)
-
-            Text(isGranted(.screen)
-                 ? homeLine
-                 : "Switch me on in Settings. I’ll do the rest.")
-                .inkStyle(.prose)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            says(
+                [(isGranted(.screen) ? "I’m listening." : "One more thing.", .plain)],
+                style: .stepHeadline,
+                aside: isGranted(.screen) ? homeLine : "Switch me on in Settings. I’ll do the rest.")
 
             if !isGranted(.screen) {
                 InkButton("Open Screen Recording", kind: .secondary) {
@@ -718,8 +813,9 @@ struct OnboardingView: View {
                         .frame(width: 5, height: 5)
                 }
             }
-            // Inside the legible area, not at the window's edge: the outer third of this window is
-            // the mask's falloff, and dots drawn down there dissolve along with it.
+            // Well clear of the pane's bottom edge. It used to be clear of the mask's falloff, which
+            // no longer exists; the number stays because it is also the distance at which a row of
+            // 5 pt dots reads as belonging to the card rather than sitting on its rim.
             .padding(.bottom, 62)
             .allowsHitTesting(false)
             .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: index)
@@ -758,17 +854,6 @@ struct OnboardingView: View {
         isLeftAligned ? InkLayout.permissionsMaxWidth : InkLayout.contentMaxWidth
     }
     private var columnAlignment: Alignment { isLeftAligned ? .leading : .center }
-
-    /// The backdrop drifts only while something is genuinely happening. Waiting on a browser counts,
-    /// and it keeps drifting through a cancelled wait, because the round trip is still open.
-    private var working: Bool {
-        switch step {
-        case .signIn: return auth.isSigningIn
-        case .permissions: return granting || warmingModels || guiding
-        case .connector: return configuringConnector
-        case .welcome, .value, .tutorial, .done: return false
-        }
-    }
 
     private var stepAnimation: Animation? {
         InkReduceMotion.isEnabled ? nil : .easeOut(duration: InkMotion.stepTransition)
@@ -846,8 +931,8 @@ struct OnboardingView: View {
     private func status(for capability: Capability) -> String {
         if capability == .screen, needsRelaunch { return "Action required" }
         if isGranted(capability) { return "Granted" }
-        if requesting.contains(capability) || !reported { return "Checking" }
-        return asked.contains(capability) ? "Action required" : "Open"
+        if requesting.contains(capability) || gate.subject == capability || !reported { return "Checking" }
+        return asked.contains(capability) || gate.answers[capability] != nil ? "Action required" : "Open"
     }
 
     private func refreshPermissions() {
@@ -865,12 +950,19 @@ struct OnboardingView: View {
         if reported, !landed.isEmpty { Sound.effect(.chime) }
         reported = true
 
-        // No continue button anywhere: the step ends the moment the grants are real — unless the
-        // choreography is still offering the one macOS will not prompt for, which is a card the user
-        // is in the middle of and must not be pulled out from under them.
-        guard step == .permissions, !granting, handGrant == nil,
-            requiredCapabilities.allSatisfy({ next[$0] == true })
-        else { return }
+        // Deliberately does not advance. This poll used to be a second exit from the card, and a
+        // poll cannot tell a grant the user made from a question they never answered. The gate owns
+        // the exit; this only keeps the rows honest.
+    }
+
+    /// **The one exit from the permissions card.**
+    ///
+    /// `gate.canLeaveStep` is the whole predicate: every required capability answered, and every
+    /// answer authored by the user — granted, or postponed by pressing a button that says so. No
+    /// timeout reaches this. The old card had two exits and neither consulted a grant at all.
+    private func advanceIfAnswered() {
+        guard step == .permissions, handGrant == nil, !granting else { return }
+        guard gate.canLeaveStep else { return }
         advance()
     }
 
@@ -895,9 +987,13 @@ struct OnboardingView: View {
 
     /// Everything the single button on the first screen is responsible for, in order.
     ///
-    /// The sequencing itself lives in `PermissionRun` — one at a time, with the lead-in and
-    /// after-grant pacing that was a deliberate earlier fix — so it can be asserted without TCC.
-    /// This is only the wiring: which capabilities, and what the rows do as the run moves.
+    /// The sequencing and the waiting both live in `PermissionGate` — one at a time, with the
+    /// lead-in and after-grant pacing that was a deliberate earlier fix, and an *unbounded* watch on
+    /// a grant made in System Settings. This is only the wiring.
+    ///
+    /// It no longer ends in `advance()`. It used to, unconditionally, under a comment reading "Move
+    /// on anyway" — which is how a live run reached the tutorial with Screen Recording never
+    /// granted and nothing said about it.
     ///
     /// Registration and the login item happen at the end, whether or not every permission landed —
     /// Claude should be able to reach Context for Claude and report the gap, which is far better than
@@ -906,34 +1002,24 @@ struct OnboardingView: View {
         guard !granting else { return }
         granting = true
 
-        Task { @MainActor in
+        setupTask = Task { @MainActor in
             // Only the promptable ones. Asking for Accessibility inside this loop would throw System
             // Settings over the card mid-sequence, with no dialog to answer and nothing to come back
             // to — the run has to stay inside the window it started in. It gets the choreography
             // below instead, once the run is finished and there is nothing left to interrupt.
-            await PermissionRun(asking: LivePermissionAsking()).run(
-                requiredCapabilities,
-                callbacks: .init(
-                    // The row lights up first, alone, before anything covers it. Without this the
-                    // dialogs arrive stacked on each other and the user answers three prompts having
-                    // read none of them.
-                    willAsk: { capability in
-                        requesting.insert(capability)
-                        asked.insert(capability)
-                    },
-                    didAnswer: { capability, _ in
-                        requesting.remove(capability)
-                        refreshPermissions()
-                    }))
+            await gate.run()
+            for capability in requiredCapabilities where gate.answers[capability] != nil {
+                asked.insert(capability)
+            }
+            refreshPermissions()
 
             if !LoginItem.isEnabled { _ = LoginItem.enable() }
             warmModels()
 
             // The by-hand offer is decided *before* the run is released, and this ordering is
-            // load-bearing. `refreshPermissions` runs on a 1.5 s poll and advances the step as soon as
-            // it sees the required grants in with no run in flight and no offer pending — so setting
-            // `granting = false` first opens a window in which a tick can skip the choreography
-            // entirely. It did, on the first live run: the card went straight to the connector.
+            // load-bearing: `granting` is part of the exit predicate, so releasing it first opens a
+            // window in which the choreography is skipped entirely. It did, on the first live run:
+            // the card went straight to the connector.
             //
             // The one macOS will not prompt for is offered here rather than skipped, because the
             // choreography is a better answer than a row the user can only discover is unaskable. The
@@ -947,12 +1033,7 @@ struct OnboardingView: View {
             // Give the last row's checkmark a beat to land before the card changes under it.
             try? await Task.sleep(for: .milliseconds(600))
             refreshPermissions()
-            guard step == .permissions, handGrant == nil else { return }
-
-            // Screen Recording is granted in System Settings and only takes effect in a new
-            // process, so it never satisfies `refreshPermissions` in this one. Move on anyway and
-            // let the last screen offer the restart.
-            advance()
+            advanceIfAnswered()
         }
     }
 
@@ -993,7 +1074,10 @@ struct OnboardingView: View {
         // here would leave the user believing setup finished with a third of it dead, so the card
         // stays, opens the right pane itself, and waits.
         guard isGranted(.screen) else {
-            openScreenSettingsOnce()
+            // "I'll do this later" was a real answer, given deliberately on the permissions card.
+            // Opening the pane over them again here would take it back. The button on this card is
+            // still the route forward whenever they want it.
+            if gate.answers[.screen] != .deferred { openScreenSettingsOnce() }
             return
         }
 

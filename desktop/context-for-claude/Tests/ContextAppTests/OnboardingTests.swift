@@ -96,6 +96,33 @@ final class OnboardingStepMachineTests: XCTestCase {
             XCTAssertLessThan(index, OnboardingStep.progressSteps(signedIn: true).count)
         }
     }
+
+    /// A sign-in that succeeds has to leave the sign-in card.
+    ///
+    /// This is the one step that deletes itself. `OnboardingView.beginSignIn` calls `advance()`
+    /// *after* `OmiAuth.signIn` returned, so `advance()` asks for `next(after: .signIn,
+    /// signedIn: true)` — and `signedIn: true` is exactly the condition under which
+    /// `itinerary(signedIn:)` drops `.signIn`. Looking the current step up in an itinerary it is no
+    /// longer on found nothing, nil meant "the flow is over", and `advance()` returned without
+    /// moving. The user came back from a completed browser round trip to the card they had just
+    /// finished, with no error on it, and pressing the button again only repeated the round trip.
+    func testASuccessfulSignInLeavesTheSignInCard() {
+        XCTAssertEqual(
+            OnboardingStep.next(after: .signIn, signedIn: true), .permissions,
+            "signing in must hand the flow to the permissions card, not strand it on sign-in")
+    }
+
+    /// The general form of the bug above: no card may dead-end because the itinerary changed while
+    /// the user was standing on it. Only `.done` is allowed to have no next step.
+    func testNoCardDeadEndsWhenTheItineraryChangesUnderneathIt() {
+        for step in OnboardingStep.allCases where step != .done {
+            for signedIn in [true, false] {
+                XCTAssertNotNil(
+                    OnboardingStep.next(after: step, signedIn: signedIn),
+                    "\(step) hands the flow nowhere when signedIn: \(signedIn)")
+            }
+        }
+    }
 }
 
 // MARK: - Asking one at a time
@@ -111,8 +138,18 @@ private final class RecordingAsker: PermissionAsking {
     var grants: Set<Capability>
     /// Capabilities already granted before the run starts.
     var alreadyGranted: Set<Capability> = []
+    /// Capabilities whose TCC prompt macOS has already spent. A spent prompt is never re-asked; the
+    /// pane is the only route left.
+    var promptSpent: Set<Capability> = []
+    /// A grant made in System Settings, landing on the *n*th poll rather than instantly — which is
+    /// what every Screen Recording grant actually looks like.
+    var grantsAfterPolls: [Capability: Int] = [:]
+    /// True while the grant is real but unusable until a relaunch. Never a reason to keep waiting.
+    var screenNeedsRelaunch = false
 
     private(set) var asked: [Capability] = []
+    private(set) var settingsOpened: [Capability] = []
+    private(set) var refreshed: [Capability] = []
     private(set) var sawOverlap = false
     private var inFlight = 0
 
@@ -121,7 +158,15 @@ private final class RecordingAsker: PermissionAsking {
     }
 
     func isGranted(_ capability: Capability) -> Bool {
-        alreadyGranted.contains(capability)
+        if let remaining = grantsAfterPolls[capability] {
+            if remaining <= 0 {
+                grantsAfterPolls[capability] = nil
+                alreadyGranted.insert(capability)
+            } else {
+                grantsAfterPolls[capability] = remaining - 1
+            }
+        }
+        return alreadyGranted.contains(capability)
     }
 
     func request(_ capability: Capability) async -> Bool {
@@ -132,10 +177,17 @@ private final class RecordingAsker: PermissionAsking {
         // genuinely interleave here rather than happening to run to completion in order.
         await Task.yield()
         inFlight -= 1
+        promptSpent.insert(capability)
         let granted = grants.contains(capability)
         if granted { alreadyGranted.insert(capability) }
         return granted
     }
+
+    func promptIsSpent(_ capability: Capability) -> Bool { promptSpent.contains(capability) }
+
+    func openSettings(for capability: Capability) { settingsOpened.append(capability) }
+
+    func refresh(_ capability: Capability) async { refreshed.append(capability) }
 }
 
 /// The pacing constants are real seconds in production. Every test drives the run at zero, so the
@@ -143,12 +195,39 @@ private final class RecordingAsker: PermissionAsking {
 /// the parts with bugs in them — are exercised exactly as they ship.
 @MainActor
 private func instantRun(_ asker: PermissionAsking) -> PermissionRun {
-    PermissionRun(
+    PermissionRun(asking: asker, leadIn: .zero, afterGrant: .zero)
+}
+
+/// Lets the gate's task run until it reaches a state, without ever hanging the suite. Bounded by
+/// iterations rather than wall-clock, so it stays hermetic on a loaded CI machine.
+@MainActor
+private func advance(
+    until reached: () -> Bool,
+    _ message: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    for _ in 0..<2_000 {
+        if reached() { return }
+        try? await Task.sleep(for: .milliseconds(1))
+    }
+    XCTFail(message, file: file, line: line)
+}
+
+/// The gate at zero pacing, on its own broker so a test never touches the app-wide door.
+@MainActor
+private func instantGate(
+    _ asker: PermissionAsking,
+    required: [Capability] = [.microphone, .systemAudio, .screen],
+    broker: PermissionBroker? = nil
+) -> PermissionGate {
+    PermissionGate(
         asking: asker,
+        required: required,
+        broker: broker ?? PermissionBroker(),
         leadIn: .zero,
         afterGrant: .zero,
-        settleDeadline: .zero,
-        settlePoll: .zero)
+        watchPoll: .zero)
 }
 
 final class PermissionSequencingTests: XCTestCase {
@@ -196,10 +275,211 @@ final class PermissionSequencingTests: XCTestCase {
     /// The production pacing is what it is because it was tuned once and must not silently drift:
     /// the row is lit alone long enough to read before the dialog covers it, and the new checkmark
     /// is on screen long enough to be witnessed before the next dialog opens over it.
+    ///
+    /// **The third assertion here is deliberately gone.** It read
+    /// `XCTAssertEqual(PermissionRun.settleDeadline, .seconds(2))`, and the constant it guarded no
+    /// longer exists — not because 2 s was retuned to some other number, but because *no* number can
+    /// be right. Per AGENTS.md a test changed alongside the code it asserts needs an external
+    /// citation, and this is it:
+    ///
+    /// 1. Apple's `CGRequestScreenCaptureAccess()` (CoreGraphics, `CGWindow.h`) "displays a prompt
+    ///    to the user" and returns immediately with whether the app *already* has the grant. It does
+    ///    not block until the user answers, and the only affirmative button on that alert opens
+    ///    System Settings. The answer, if it comes, arrives tens of seconds later in another process.
+    /// 2. macOS TCC presents each capability's prompt exactly once per app; after a denial the pane
+    ///    is the only remaining route, so "wait a bit longer" can never become "yes".
+    /// 3. Measured, not inferred: the live first-run trace at `/tmp/context-for-claude.log` has the
+    ///    screen deadline expiring at 10:13:13 and the user opening the Screen Recording pane at
+    ///    10:13:46 — 33 seconds later. The app was in the tutorial by 10:14:09 with the grant never
+    ///    made and nothing said about it.
+    ///
+    /// A deadline that decides an answer is therefore replaced by `PermissionGate`'s unbounded
+    /// watch, asserted behaviourally in `testAGrantMadeInSettingsIsObservedWithNoDeadline`.
     func testTheDeliberatePacingIsStillInPlace() {
         XCTAssertEqual(PermissionRun.leadIn, .milliseconds(900))
         XCTAssertEqual(PermissionRun.afterGrant, .milliseconds(1_100))
-        XCTAssertEqual(PermissionRun.settleDeadline, .seconds(2))
+    }
+}
+
+// MARK: - The gate: what it takes to leave the card
+
+/// The permissions step used to have two exits and neither consulted a grant. One of them was
+/// written under the comment "Move on anyway". These are the assertions that make that unwritable.
+final class PermissionGateTests: XCTestCase {
+
+    /// **D1.** No second capability may reach a prompt or a pane while one is in flight.
+    ///
+    /// Reproduces the live collision exactly: the user is standing in the Screen Recording pane and
+    /// a *different* surface asks for a *different* capability 1.9 seconds later. Before the broker
+    /// that second call opened the Accessibility pane in the same System Settings window, replacing
+    /// the pane the user had been deliberately sent to.
+    @MainActor
+    func testNoSecondRequestCanStartWhileOneIsInFlight() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.microphone]
+        let broker = PermissionBroker()
+        let gate = instantGate(asker, required: [.microphone], broker: broker)
+
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.phase == .waitingInSettings(.microphone) },
+            "the gate never reached the Settings watch")
+
+        // The menu-bar row, the tutorial, the `.done` button — any of the other five entrances.
+        let elsewhere = Task { await broker.openSettings(for: .screen) }
+        for _ in 0..<50 { try? await Task.sleep(for: .milliseconds(1)) }
+
+        XCTAssertEqual(
+            asker.settingsOpened, [.microphone],
+            "a second capability opened its pane over the one the user was sent to")
+        XCTAssertFalse(asker.sawOverlap)
+
+        gate.postpone(.microphone)
+        await run.value
+        await elsewhere.value
+    }
+
+    /// **D2, the headline bug.** Nothing granted, nothing answered — the card may not be left.
+    @MainActor
+    func testTheStepDoesNotCompleteWhileAnyRequiredCapabilityIsUnanswered() async {
+        let asker = RecordingAsker(grants: [])
+        let gate = instantGate(asker, required: [.microphone])
+
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.phase == .waitingInSettings(.microphone) },
+            "the gate never reached the Settings watch")
+
+        XCTAssertFalse(gate.canLeaveStep, "the step completed with a refused permission and no answer")
+        XCTAssertNil(gate.answers[.microphone])
+
+        run.cancel()
+        await run.value
+    }
+
+    /// **The anti-dead-end.** The only thing other than a grant that completes the step is a button
+    /// the user pressed on purpose — never a default, never a timeout.
+    @MainActor
+    func testAnExplicitDeferralIsWhatCompletesTheStep() async {
+        let asker = RecordingAsker(grants: [])
+        let gate = instantGate(asker)
+
+        let run = Task { await gate.run() }
+        for capability in [Capability.microphone, .systemAudio, .screen] {
+            await advance(
+                until: { gate.phase == .waitingInSettings(capability) },
+                "the gate never reached the Settings watch for \(capability)")
+            XCTAssertFalse(gate.canLeaveStep, "\(capability) was still unanswered")
+            gate.postpone(capability)
+        }
+        await run.value
+
+        XCTAssertTrue(gate.canLeaveStep)
+        XCTAssertEqual(gate.phase, .complete)
+        XCTAssertEqual(gate.answers[.screen], .deferred)
+    }
+
+    /// **D3.** A grant made in System Settings arrives long after any deadline would have expired.
+    /// This is the assertion that replaces `settleDeadline == 2s`.
+    @MainActor
+    func testAGrantMadeInSettingsIsObservedWithNoDeadline() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.screen]
+        asker.grantsAfterPolls = [.screen: 20]
+        let gate = instantGate(asker, required: [.screen])
+
+        await gate.run()
+
+        XCTAssertEqual(gate.answers[.screen], .granted, "the watch gave up on a grant that did arrive")
+        XCTAssertTrue(gate.canLeaveStep)
+        XCTAssertTrue(asker.refreshed.contains(.screen), "the watch has to re-ask, not just re-read")
+    }
+
+    /// **The deadlock the fix must not introduce.** Screen Recording takes effect only in a new
+    /// process, so `screenNeedsRelaunch` stays true until the app is reopened. Gating on it would
+    /// mean the card could never be left. `CGPreflightScreenCaptureAccess()` — `isGranted` — flips
+    /// in *this* process at the moment of the grant, and that is what the gate reads.
+    @MainActor
+    func testScreenRecordingCompletesWithoutWaitingForARelaunch() async {
+        let asker = RecordingAsker(grants: [])
+        asker.alreadyGranted = [.microphone, .systemAudio]
+        asker.promptSpent = [.screen]
+        // The real shape: the switch is flipped in System Settings some polls later, and the grant
+        // is immediately readable in this process while capture stays dead until a relaunch.
+        asker.grantsAfterPolls = [.screen: 5]
+        asker.screenNeedsRelaunch = true
+        let gate = instantGate(asker)
+
+        await gate.run()
+
+        XCTAssertEqual(gate.answers[.screen], .granted)
+        XCTAssertTrue(gate.canLeaveStep, "a grant waiting on a relaunch is still the user's answer")
+        XCTAssertEqual(gate.phase, .complete)
+    }
+
+    /// **The re-prompt trap.** macOS shows each prompt exactly once; asking again does nothing at
+    /// all and the row looks dead. A spent prompt goes straight to the pane, once.
+    @MainActor
+    func testAnExhaustedPromptOpensSettingsInsteadOfReAsking() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.microphone]
+        let gate = instantGate(asker, required: [.microphone])
+
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.phase == .waitingInSettings(.microphone) },
+            "the gate never reached the Settings watch")
+
+        XCTAssertFalse(asker.asked.contains(.microphone), "a spent prompt was asked a second time")
+        XCTAssertEqual(asker.settingsOpened, [.microphone], "one ask, one pane")
+
+        gate.postpone(.microphone)
+        await run.value
+        XCTAssertEqual(asker.settingsOpened, [.microphone], "the pane was opened again on the way out")
+    }
+
+    /// **D4.** The card is ordered out only while something else genuinely owns the screen. Hiding
+    /// on `explaining` is what spent the entire 900 ms lead-in — and the preamble the card exists to
+    /// show — behind an ordered-out window, and made the card blink out three times per run.
+    ///
+    /// `waitingInSettings` is conditional on purpose: this app is `LSUIElement`, so a card ordered
+    /// out has no Dock icon to bring it back, and a card hidden on a phase alone is a card whose
+    /// "I'll do this later" button can never be pressed.
+    func testTheCardIsOnlyHiddenWhileSomethingElseOwnsTheScreen() {
+        for frontmost in [true, false] {
+            XCTAssertFalse(PermissionGate.cardYields(to: .idle, settingsIsFrontmost: frontmost))
+            XCTAssertFalse(
+                PermissionGate.cardYields(to: .explaining(.microphone), settingsIsFrontmost: frontmost),
+                "the lead-in is the card being read; hiding through it is the bug")
+            XCTAssertFalse(
+                PermissionGate.cardYields(to: .confirming(.microphone), settingsIsFrontmost: frontmost),
+                "a confirmation nobody can witness is the same as no confirmation")
+            XCTAssertTrue(
+                PermissionGate.cardYields(to: .prompting(.microphone), settingsIsFrontmost: frontmost),
+                "a system dialog is up and the card is in the way")
+            XCTAssertFalse(PermissionGate.cardYields(to: .complete, settingsIsFrontmost: frontmost))
+        }
+
+        XCTAssertTrue(
+            PermissionGate.cardYields(to: .waitingInSettings(.screen), settingsIsFrontmost: true))
+        XCTAssertFalse(
+            PermissionGate.cardYields(to: .waitingInSettings(.screen), settingsIsFrontmost: false),
+            "back in front of the card, the escape has to be reachable")
+    }
+
+    /// Already-granted capabilities are answered without an ask and without a pane. A returning user
+    /// re-prompted for a permission they gave last week has been told the app forgot.
+    @MainActor
+    func testAnAlreadyGrantedRunCompletesWithoutAskingOrOpeningAnything() async {
+        let asker = RecordingAsker(grants: [])
+        asker.alreadyGranted = [.microphone, .systemAudio, .screen]
+        let gate = instantGate(asker)
+
+        await gate.run()
+
+        XCTAssertEqual(asker.asked, [])
+        XCTAssertEqual(asker.settingsOpened, [])
+        XCTAssertTrue(gate.canLeaveStep)
     }
 }
 
