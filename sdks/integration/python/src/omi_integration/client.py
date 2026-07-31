@@ -73,6 +73,10 @@ class OmiIntegrationClient:
         clean_params: Optional[dict[str, Any]] = None
         if params is not None:
             clean_params = {k: v for k, v in params.items() if v is not None}
+        if path == "/v1/integrations/notification":
+            if not isinstance(json_body, Mapping):
+                raise TypeError("notification body must be a mapping")
+            json_body = {**json_body, "aid": self.app_id}
         response = self._client.request(
             method,
             path,

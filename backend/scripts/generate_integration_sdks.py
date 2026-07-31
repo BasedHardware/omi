@@ -515,6 +515,32 @@ def gen_dart_types(schemas: dict[str, dict[str, Any]]) -> str:
                     lines.append(f"      {field}: json[{json.dumps(prop)}] as {te},")
         lines.append('    );')
         lines.append('  }')
+        lines.append('')
+        lines.append('  Map<String, dynamic> toJson() => {')
+        for prop, field, te, req in fields:
+            base = te.rstrip('?')
+            if base.startswith('List<'):
+                inner = base[len('List<') : -1].rstrip('?')
+                value = (
+                    f'{field}.map((value) => value.toJson()).toList()'
+                    if inner in schemas
+                    and not (
+                        (schemas.get(inner) or {}).get('enum') and (schemas.get(inner) or {}).get('type') == 'string'
+                    )
+                    else field
+                )
+            elif base in schemas and not (
+                (schemas.get(base) or {}).get('enum') and (schemas.get(base) or {}).get('type') == 'string'
+            ):
+                value = f'{field}.toJson()'
+            else:
+                value = field
+            if req and not te.endswith('?'):
+                lines.append(f'    {json.dumps(prop)}: {value},')
+            else:
+                value = value.replace(f'{field}.', f'{field}!.')
+                lines.append(f'    if ({field} != null) {json.dumps(prop)}: {value},')
+        lines.append('  };')
         lines.append('}')
         lines.append('')
     return '\n'.join(lines)
@@ -711,6 +737,8 @@ export class OmiIntegrationClient {
         else:
             query_arg = 'undefined'
         body_arg = 'body' if op['body_type'] else 'undefined'
+        if op['path'] == '/v1/integrations/notification':
+            body_arg = '{ ...body, aid: this.appId }'
         ret_t = op.get('success_ref') or 'Json'
         lines.append(
             f'    return (await this.request({json.dumps(op["method"])}, {path_expr}, {query_arg}, {body_arg})) as unknown as {ret_t};'
@@ -823,6 +851,18 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 \t}
 \tif c.AppID == "" {
 \t\treturn nil, fmt.Errorf("omi integration: app id is required")
+\t}
+\tif path == "/v1/integrations/notification" {
+\t\tdata, ok := body.(map[string]any)
+\t\tif !ok {
+\t\t\treturn nil, fmt.Errorf("omi integration: notification body must be a map")
+\t\t}
+\t\tpayload := make(map[string]any, len(data)+1)
+\t\tfor key, value := range data {
+\t\t\tpayload[key] = value
+\t\t}
+\t\tpayload["aid"] = c.AppID
+\t\tbody = payload
 \t}
 \tbase := c.BaseURL
 \tif base == "" {
@@ -1056,6 +1096,10 @@ class OmiIntegrationClient:
         clean_params: Optional[dict[str, Any]] = None
         if params is not None:
             clean_params = {k: v for k, v in params.items() if v is not None}
+        if path == "/v1/integrations/notification":
+            if not isinstance(json_body, Mapping):
+                raise TypeError("notification body must be a mapping")
+            json_body = {**json_body, "aid": self.app_id}
         response = self._client.request(
             method,
             path,
@@ -1191,6 +1235,8 @@ pub enum Error {
     MissingApiKey,
     #[error("app id is required")]
     MissingAppId,
+    #[error("invalid request body: {0}")]
+    InvalidRequestBody(String),
     #[error("http error: {0}")]
     Http(#[from] reqwest::Error),
     #[error("omi integration api: HTTP {status}: {body}")]
@@ -1238,16 +1284,27 @@ impl OmiIntegrationClient {
         body: Option<&Value>,
     ) -> Result<Value, Error> {
         let url = format!("{}{}", self.base_url, path);
+        let body = if path == "/v1/integrations/notification" {
+            let mut body = body
+                .cloned()
+                .ok_or_else(|| Error::InvalidRequestBody("notification body is required".to_string()))?;
+            let object = body
+                .as_object_mut()
+                .ok_or_else(|| Error::InvalidRequestBody("notification body must be an object".to_string()))?;
+            object.insert("aid".to_string(), Value::String(self.app_id.clone()));
+            Some(body)
+        } else {
+            body.cloned()
+        };
         let mut headers = HeaderMap::new();
         let auth = format!("Bearer {}", self.api_key);
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth).map_err(|e| Error::Api { status: 0, body: e.to_string() })?);
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
         let mut req = self.http.request(method, url).headers(headers);
         if !query.is_empty() {
             req = req.query(query);
         }
-        if let Some(b) = body {
+        if let Some(ref b) = body {
+            req = req.header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             req = req.json(b);
         }
         let response = req.send()?;
@@ -1411,8 +1468,6 @@ class ApiError : public std::runtime_error {
 class Client {
  public:
   Client(std::string api_key, std::string app_id, std::string base_url = "https://api.omi.me");
-  ~Client();
-
   Client(const Client&) = delete;
   Client& operator=(const Client&) = delete;
 
@@ -1432,7 +1487,9 @@ class Client {
                 args.append(f'const std::vector<std::string>& {p["name"]}')
             else:
                 args.append(f'const std::string& {p["name"]}')
-        if op['body_type']:
+        if op['path'] == '/v1/integrations/notification':
+            args.extend(['const std::string& uid', 'const std::string& message'])
+        elif op['body_type']:
             args.append('const std::string& json_body')
         for p in optional_q:
             if p['type'] in {'integer'}:
@@ -1462,7 +1519,7 @@ class Client {
 ''')
 
     src = [header_comment('cpp', spec_path)]
-    src.append('''#include "omi/integration/client.hpp"
+    src.append(r'''#include "omi/integration/client.hpp"
 
 #include <curl/curl.h>
 
@@ -1486,6 +1543,32 @@ std::string url_encode(CURL* curl, const std::string& value) {
   return result;
 }
 
+std::string json_escape(const std::string& value) {
+  std::ostringstream escaped;
+  for (unsigned char c : value) {
+    switch (c) {
+      case '\\': escaped << "\\\\"; break;
+      case '"': escaped << "\\\""; break;
+      case '\n': escaped << "\\n"; break;
+      case '\r': escaped << "\\r"; break;
+      case '\t': escaped << "\\t"; break;
+      default:
+        if (c < 0x20) {
+          const char hex[] = "0123456789abcdef";
+          escaped << "\\u00" << hex[c >> 4] << hex[c & 0x0f];
+        } else {
+          escaped << c;
+        }
+    }
+  }
+  return escaped.str();
+}
+
+void ensure_curl_initialized() {
+  static const CURLcode result = curl_global_init(CURL_GLOBAL_DEFAULT);
+  if (result != CURLE_OK) throw std::runtime_error("curl_global_init failed");
+}
+
 }  // namespace
 
 Client::Client(std::string api_key, std::string app_id, std::string base_url)
@@ -1493,10 +1576,8 @@ Client::Client(std::string api_key, std::string app_id, std::string base_url)
   if (api_key_.empty()) throw std::invalid_argument("api_key is required");
   if (app_id_.empty()) throw std::invalid_argument("app_id is required");
   while (!base_url_.empty() && base_url_.back() == '/') base_url_.pop_back();
-  curl_global_init(CURL_GLOBAL_DEFAULT);
+  ensure_curl_initialized();
 }
-
-Client::~Client() { curl_global_cleanup(); }
 
 JsonValue Client::request(const std::string& method, const std::string& path,
                           const std::multimap<std::string, std::string>& query,
@@ -1561,7 +1642,9 @@ JsonValue Client::request(const std::string& method, const std::string& path,
                 args.append(f'const std::vector<std::string>& {p["name"]}')
             else:
                 args.append(f'const std::string& {p["name"]}')
-        if op['body_type']:
+        if op['path'] == '/v1/integrations/notification':
+            args.extend(['const std::string& uid', 'const std::string& message'])
+        elif op['body_type']:
             args.append('const std::string& json_body')
         for p in optional_q:
             if p['type'] in {'integer'}:
@@ -1583,6 +1666,10 @@ JsonValue Client::request(const std::string& method, const std::string& path,
         src.append(f'JsonValue Client::{op["name"]}({", ".join(args)}) {{')
         src.append(path_build)
         src.append('  std::multimap<std::string, std::string> query;')
+        if op['path'] == '/v1/integrations/notification':
+            src.append(
+                '  const std::string json_body = "{\\\"aid\\\":\\\"" + json_escape(app_id_) + "\\\",\\\"uid\\\":\\\"" + json_escape(uid) + "\\\",\\\"message\\\":\\\"" + json_escape(message) + "\\\"}";'
+            )
         for p in required_q:
             n = p['name']
             if p['type'] in {'integer'}:
@@ -1823,7 +1910,11 @@ class OmiIntegrationClient {
             query_arg = "query: query"
         else:
             query_arg = "query: null"
-        body_arg = "body: body" if op["body_type"] else "body: null"
+        body_arg = "body: body.toJson()" if op["body_ref"] and op["body_ref"] in schemas else "body: body"
+        if op["path"] == "/v1/integrations/notification":
+            body_arg = "body: {...body, 'aid': appId}"
+        if not op["body_type"]:
+            body_arg = "body: null"
         request = f"_request({json.dumps(op['method'])}, {path_expr}, {query_arg}, {body_arg})"
         if op['success_ref']:
             lines.append(f"    final parsed = await {request};")
@@ -2141,9 +2232,7 @@ def main(argv: list[str] | None = None) -> int:
         import tempfile
 
         dirty = check_dirty(files, out_root)
-        # Dart sources are post-processed with `dart format`; compare non-Dart
-        # exactly, and require committed Dart to already be format-clean.
-        dirty = [item for item in dirty if not item.split(' ', 1)[-1].startswith('dart/')]
+        dirty = [item for item in dirty if not item.split(' ', 1)[-1].endswith('dart/lib/omi_integration.dart')]
         dart_dir = out_root / 'dart'
         dart_bin = None
         flutter_root = __import__('os').environ.get('FLUTTER_ROOT')

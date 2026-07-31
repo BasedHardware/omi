@@ -117,7 +117,7 @@ class OmiIntegrationClient {
   Future<IntegrationNotificationResponse> sendNotificationV1({
     required Map<String, dynamic> body,
   }) async {
-    final parsed = await _request("POST", "/v1/integrations/notification", query: null, body: body);
+    final parsed = await _request("POST", "/v1/integrations/notification", query: null, body: {...body, 'aid': appId});
     return IntegrationNotificationResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
@@ -184,7 +184,7 @@ class OmiIntegrationClient {
       "uid": uid,
     };
     if (maxTranscriptSegments != null) query["max_transcript_segments"] = maxTranscriptSegments;
-    final parsed = await _request("POST", "/v2/integrations/$appId/search/conversations", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/search/conversations", query: query, body: body.toJson());
     return SearchConversationsResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
@@ -223,7 +223,7 @@ class OmiIntegrationClient {
     final query = <String, dynamic>{
       "uid": uid,
     };
-    final parsed = await _request("POST", "/v2/integrations/$appId/user/conversations", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/user/conversations", query: query, body: body.toJson());
     return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
@@ -235,7 +235,7 @@ class OmiIntegrationClient {
     final query = <String, dynamic>{
       "uid": uid,
     };
-    final parsed = await _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body.toJson());
     return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
@@ -259,6 +259,14 @@ class ActionItem {
       exported: json["exported"] as bool?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (completed != null) "completed": completed,
+    "description": description,
+    if (exportDate != null) "export_date": exportDate,
+    if (exportPlatform != null) "export_platform": exportPlatform,
+    if (exported != null) "exported": exported,
+  };
 }
 
 class ConversationItem {
@@ -295,6 +303,22 @@ class ConversationItem {
       transcriptSegments: (json["transcript_segments"] as List<dynamic>?)?.map((e) => ConversationItemTranscriptSegment.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (appId != null) "app_id": appId,
+    "created_at": createdAt,
+    if (discarded != null) "discarded": discarded,
+    if (externalData != null) "external_data": externalData,
+    if (finishedAt != null) "finished_at": finishedAt,
+    if (geolocation != null) "geolocation": geolocation!.toJson(),
+    "id": id,
+    if (language != null) "language": language,
+    "source": source,
+    if (startedAt != null) "started_at": startedAt,
+    if (status != null) "status": status,
+    if (structured != null) "structured": structured!.toJson(),
+    if (transcriptSegments != null) "transcript_segments": transcriptSegments!.map((value) => value.toJson()).toList(),
+  };
 }
 
 class ConversationItemGeolocation {
@@ -315,6 +339,14 @@ class ConversationItemGeolocation {
       longitude: json["longitude"] as double,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (address != null) "address": address,
+    if (googlePlaceId != null) "google_place_id": googlePlaceId,
+    "latitude": latitude,
+    if (locationType != null) "location_type": locationType,
+    "longitude": longitude,
+  };
 }
 
 class ConversationItemStructured {
@@ -337,6 +369,15 @@ class ConversationItemStructured {
       title: json["title"] as String,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (actionItems != null) "action_items": actionItems!.map((value) => value.toJson()).toList(),
+    if (category != null) "category": category,
+    if (emoji != null) "emoji": emoji,
+    if (events != null) "events": events!.map((value) => value.toJson()).toList(),
+    "overview": overview,
+    "title": title,
+  };
 }
 
 class ConversationItemTranscriptSegment {
@@ -359,6 +400,15 @@ class ConversationItemTranscriptSegment {
       text: json["text"] as String,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (end != null) "end": end,
+    if (isUser != null) "is_user": isUser,
+    if (personId != null) "person_id": personId,
+    if (speaker != null) "speaker": speaker,
+    if (start != null) "start": start,
+    "text": text,
+  };
 }
 
 typedef ConversationSource = String;
@@ -373,6 +423,10 @@ class ConversationsResponse {
       conversations: (json["conversations"] as List<dynamic>?)?.map((e) => ConversationItem.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "conversations": conversations.map((value) => value.toJson()).toList(),
+  };
 }
 
 class EmptyResponse {
@@ -391,6 +445,10 @@ class ErrorResponse {
       detail: json["detail"] as Object,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "detail": detail,
+  };
 }
 
 class Event {
@@ -411,6 +469,14 @@ class Event {
       title: json["title"] as String,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (created != null) "created": created,
+    if (description != null) "description": description,
+    if (duration != null) "duration": duration,
+    "start": start,
+    "title": title,
+  };
 }
 
 class Evidence {
@@ -445,6 +511,21 @@ class Evidence {
       sourceType: json["source_type"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (artifactRef != null) "artifact_ref": artifactRef,
+    if (captureConfidence != null) "capture_confidence": captureConfidence,
+    if (clientDeviceId != null) "client_device_id": clientDeviceId,
+    if (createdAt != null) "created_at": createdAt,
+    "evidence_id": evidenceId,
+    if (extractorId != null) "extractor_id": extractorId,
+    if (extractorVersion != null) "extractor_version": extractorVersion,
+    "independence_group": independenceGroup,
+    if (redactionStatus != null) "redaction_status": redactionStatus,
+    if (sourceId != null) "source_id": sourceId,
+    if (sourceSignal != null) "source_signal": sourceSignal,
+    if (sourceType != null) "source_type": sourceType,
+  };
 }
 
 typedef ExternalIntegrationConversationSource = String;
@@ -479,6 +560,20 @@ class ExternalIntegrationCreateConversation {
       textSourceSpec: json["text_source_spec"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (appId != null) "app_id": appId,
+    if (clientDeviceId != null) "client_device_id": clientDeviceId,
+    if (clientPlatform != null) "client_platform": clientPlatform,
+    if (finishedAt != null) "finished_at": finishedAt,
+    if (geolocation != null) "geolocation": geolocation!.toJson(),
+    if (language != null) "language": language,
+    if (source != null) "source": source,
+    if (startedAt != null) "started_at": startedAt,
+    "text": text,
+    if (textSource != null) "text_source": textSource,
+    if (textSourceSpec != null) "text_source_spec": textSourceSpec,
+  };
 }
 
 class ExternalIntegrationCreateMemory {
@@ -505,6 +600,17 @@ class ExternalIntegrationCreateMemory {
       textSourceSpec: json["text_source_spec"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (appId != null) "app_id": appId,
+    if (artifactRef != null) "artifact_ref": artifactRef,
+    if (memories != null) "memories": memories!.map((value) => value.toJson()).toList(),
+    if (sourceId != null) "source_id": sourceId,
+    if (sourceUrl != null) "source_url": sourceUrl,
+    if (text != null) "text": text,
+    if (textSource != null) "text_source": textSource,
+    if (textSourceSpec != null) "text_source_spec": textSourceSpec,
+  };
 }
 
 class ExternalIntegrationMemory {
@@ -525,6 +631,14 @@ class ExternalIntegrationMemory {
       tags: (json["tags"] as List<dynamic>?)?.map((e) => e as String).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (artifactRef != null) "artifact_ref": artifactRef,
+    "content": content,
+    if (sourceId != null) "source_id": sourceId,
+    if (sourceUrl != null) "source_url": sourceUrl,
+    if (tags != null) "tags": tags,
+  };
 }
 
 typedef ExternalIntegrationMemorySource = String;
@@ -547,6 +661,14 @@ class Geolocation {
       longitude: json["longitude"] as double,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (address != null) "address": address,
+    if (googlePlaceId != null) "google_place_id": googlePlaceId,
+    "latitude": latitude,
+    if (locationType != null) "location_type": locationType,
+    "longitude": longitude,
+  };
 }
 
 class HTTPValidationError {
@@ -559,6 +681,10 @@ class HTTPValidationError {
       detail: (json["detail"] as List<dynamic>?)?.map((e) => ValidationError.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (detail != null) "detail": detail!.map((value) => value.toJson()).toList(),
+  };
 }
 
 class IntegrationNotificationResponse {
@@ -571,6 +697,10 @@ class IntegrationNotificationResponse {
       status: json["status"] as String,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "status": status,
+  };
 }
 
 class MemoriesResponse {
@@ -583,6 +713,10 @@ class MemoriesResponse {
       memories: (json["memories"] as List<dynamic>?)?.map((e) => MemoryItem.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "memories": memories.map((value) => value.toJson()).toList(),
+  };
 }
 
 typedef MemoryCategory = String;
@@ -673,6 +807,48 @@ class MemoryItem {
       visibility: json["visibility"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (appId != null) "app_id": appId,
+    if (arguments != null) "arguments": arguments,
+    if (captureConfidence != null) "capture_confidence": captureConfidence,
+    if (captureDeviceIds != null) "capture_device_ids": captureDeviceIds,
+    if (category != null) "category": category,
+    "content": content,
+    if (conversationId != null) "conversation_id": conversationId,
+    "created_at": createdAt,
+    if (dataProtectionLevel != null) "data_protection_level": dataProtectionLevel,
+    if (durability != null) "durability": durability,
+    if (edited != null) "edited": edited,
+    if (evidence != null) "evidence": evidence!.map((value) => value.toJson()).toList(),
+    if (headline != null) "headline": headline,
+    "id": id,
+    if (invalidAt != null) "invalid_at": invalidAt,
+    if (isBaseline != null) "is_baseline": isBaseline,
+    if (isLocked != null) "is_locked": isLocked,
+    if (kgExtracted != null) "kg_extracted": kgExtracted,
+    if (layer != null) "layer": layer,
+    if (manuallyAdded != null) "manually_added": manuallyAdded,
+    if (memoryId != null) "memory_id": memoryId,
+    if (memoryTier != null) "memory_tier": memoryTier,
+    if (objectEntityIds != null) "object_entity_ids": objectEntityIds,
+    if (predicate != null) "predicate": predicate,
+    if (primaryCaptureDevice != null) "primary_capture_device": primaryCaptureDevice,
+    if (qualifiers != null) "qualifiers": qualifiers,
+    if (reviewed != null) "reviewed": reviewed,
+    if (scoring != null) "scoring": scoring,
+    if (subjectAttribution != null) "subject_attribution": subjectAttribution,
+    if (subjectEntityId != null) "subject_entity_id": subjectEntityId,
+    if (supersededBy != null) "superseded_by": supersededBy,
+    if (tags != null) "tags": tags,
+    "uid": uid,
+    if (uncertaintyReasons != null) "uncertainty_reasons": uncertaintyReasons,
+    "updated_at": updatedAt,
+    if (userReview != null) "user_review": userReview,
+    if (validAt != null) "valid_at": validAt,
+    if (veracity != null) "veracity": veracity,
+    if (visibility != null) "visibility": visibility,
+  };
 }
 
 typedef MemoryLayer = String;
@@ -693,6 +869,13 @@ class SearchConversationsResponse {
       totalPages: json["total_pages"] as int,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "conversations": conversations.map((value) => value.toJson()).toList(),
+    "current_page": currentPage,
+    "per_page": perPage,
+    "total_pages": totalPages,
+  };
 }
 
 class SearchRequest {
@@ -717,6 +900,16 @@ class SearchRequest {
       startDate: json["start_date"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    if (endDate != null) "end_date": endDate,
+    if (includeDiscarded != null) "include_discarded": includeDiscarded,
+    if (page != null) "page": page,
+    if (perPage != null) "per_page": perPage,
+    if (query != null) "query": query,
+    if (speakerId != null) "speaker_id": speakerId,
+    if (startDate != null) "start_date": startDate,
+  };
 }
 
 typedef SubjectAttribution = String;
@@ -745,6 +938,17 @@ class TaskItem {
       updatedAt: json["updated_at"] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "completed": completed,
+    if (completedAt != null) "completed_at": completedAt,
+    if (conversationId != null) "conversation_id": conversationId,
+    if (createdAt != null) "created_at": createdAt,
+    "description": description,
+    if (dueAt != null) "due_at": dueAt,
+    "id": id,
+    if (updatedAt != null) "updated_at": updatedAt,
+  };
 }
 
 class TasksResponse {
@@ -757,6 +961,10 @@ class TasksResponse {
       tasks: (json["tasks"] as List<dynamic>?)?.map((e) => TaskItem.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "tasks": tasks.map((value) => value.toJson()).toList(),
+  };
 }
 
 class ValidationError {
@@ -773,4 +981,10 @@ class ValidationError {
       type: json["type"] as String,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    "loc": loc,
+    "msg": msg,
+    "type": type,
+  };
 }

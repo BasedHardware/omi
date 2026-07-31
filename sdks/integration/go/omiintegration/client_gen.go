@@ -56,6 +56,18 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 	if c.AppID == "" {
 		return nil, fmt.Errorf("omi integration: app id is required")
 	}
+	if path == "/v1/integrations/notification" {
+		data, ok := body.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("omi integration: notification body must be a map")
+		}
+		payload := make(map[string]any, len(data)+1)
+		for key, value := range data {
+			payload[key] = value
+		}
+		payload["aid"] = c.AppID
+		body = payload
+	}
 	base := c.BaseURL
 	if base == "" {
 		base = DefaultBaseURL
