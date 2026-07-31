@@ -1,5 +1,5 @@
 {
-  "originHash" : "09b7a4c672c41b896c95b69bc5402bbd040603cf4533098b1e9f95fabf49b5ed",
+  "originHash" : "c6844de26a81a73acf03286d47e3466180a9ca40c5aacef33fa2181b94f26ca8",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "fdc352fabaf5916e7faa1f96ad02b1957e93e5a5",
         "version" : "11.15.0"
+      }
+    },
+    {
+      "identity" : "flowtoken-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/undivisible/flowtoken-swift.git",
+      "state" : {
+        "revision" : "61910b6f628a5aae2b9ad34c79a64a549767ea83",
+        "version" : "0.1.1"
       }
     },
     {

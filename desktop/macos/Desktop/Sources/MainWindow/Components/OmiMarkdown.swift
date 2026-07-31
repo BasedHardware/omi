@@ -54,6 +54,14 @@ struct OmiMarkdown: View {
       return false
     }
   }
+
+  static func isPlainText(_ content: String) -> Bool {
+    guard !content.isEmpty, !containsGFMTable(content) else { return false }
+    return content.range(
+      of: #"(?m)^\s{0,3}(?:#{1,6}\s|[-+*]\s|\d+\.\s|>\s|```)|[`*_~]|\[[^\]]+\]\([^)]+\)"#,
+      options: .regularExpression
+    ) == nil
+  }
 }
 
 /// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from

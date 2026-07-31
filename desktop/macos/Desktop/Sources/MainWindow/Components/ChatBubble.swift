@@ -254,7 +254,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          if message.sender == .ai, shouldTruncate {
+if message.sender == .ai, shouldTruncate {
             // Keep the expansion affordance on the same baseline as the
             // visible truncation ellipsis. The text gets the remaining width,
             // so the control cannot fall onto a detached row.
@@ -268,6 +268,14 @@ struct ChatBubble: View {
               maxWidth: .infinity,
               alignment: .leading
             )
+          } else if message.isStreaming {
+            StreamingAssistantText(displayText, isStreaming: true)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.sm)
+              .background(
+                message.sender == .user
+                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+              )
           } else {
             messageTextBubble(displayText)
           }
@@ -360,9 +368,7 @@ struct ChatBubble: View {
       if text.isEmpty {
         return AnyView(EmptyView())
       }
-      // The glass is the ground for an assistant block — so no fill, and
-      // therefore none of a container's padding either.
-      return AnyView(OmiMarkdown(text: text, sender: .ai).chatMessageBlock(filled: false))
+return AnyView(StreamingAssistantText(text, isStreaming: message.isStreaming))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(

@@ -456,20 +456,8 @@ final class SBOnboardingModel: ObservableObject {
       try? await Task.sleep(nanoseconds: 700_000_000)
       guard let self, !Task.isCancelled else { return }
       self.typing = false
-      self.streamingText = "▍"
-      let words = full.split(separator: " ").map(String.init)
-      var i = 0
-      while i < words.count {
-        i += 1 + Int.random(in: 0...1)
-        let shown = words.prefix(min(i, words.count)).joined(separator: " ")
-        if i < words.count {
-          self.streamingText = shown + " ▍"
-        } else {
-          self.streamingText = full
-        }
-        if Task.isCancelled { return }
-        try? await Task.sleep(nanoseconds: UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
-      }
+      self.streamingText = full
+      try? await Task.sleep(nanoseconds: 180_000_000)
       guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))
       self.streamingText = nil
