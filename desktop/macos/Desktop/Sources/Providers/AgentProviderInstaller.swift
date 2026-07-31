@@ -132,14 +132,14 @@ enum AgentProviderInstaller {
             timeout: 600))
       }
       let configPath = (homeDirectory as NSString).appendingPathComponent(".openclaw/openclaw.json")
-      if !fileManager.fileExists(atPath: configPath) {
+      if !hasNonemptyRegularFile(at: configPath, fileManager: fileManager) {
         steps.append(
           Step(
             title: "Onboard OpenClaw",
             kind: .userAction(
               instructions: "Complete `openclaw onboard` in the Terminal window (model/API key choices are yours).",
               launch: openInTerminalScript(command: "openclaw onboard"),
-              isComplete: { fileManager.fileExists(atPath: configPath) }),
+              isComplete: { hasNonemptyRegularFile(at: configPath, fileManager: fileManager) }),
             timeout: 600))
       }
       return steps

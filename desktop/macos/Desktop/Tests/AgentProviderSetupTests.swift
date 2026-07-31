@@ -225,4 +225,20 @@ final class AgentProviderSetupTests: XCTestCase {
 
     XCTAssertEqual(plan(.codex).map(\.title), ["Sign in to Codex"])
   }
+
+  func testOpenClawPlanOnboardsForEmptyConfigPlaceholder() throws {
+    try installFakeExecutable("openclaw")
+    let configPath = tempHome + "/.openclaw/openclaw.json"
+    try FileManager.default.createDirectory(
+      atPath: (configPath as NSString).deletingLastPathComponent,
+      withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: configPath, contents: Data())
+
+    let steps = plan(.openclaw)
+    XCTAssertEqual(steps.map(\.title), ["Onboard OpenClaw"])
+    guard case .userAction(_, _, let isComplete) = steps[0].kind else {
+      return XCTFail("expected onboard userAction")
+    }
+    XCTAssertFalse(isComplete())
+  }
 }
