@@ -259,8 +259,7 @@ class TestNonePayloadCaching:
 
 class TestPublicNamespace:
     """daily_refresh lives at llm_gateway.gateway.daily_refresh (NOT _private/)
-    because config_reload.py uses it on the request path. This is different
-    from R5a's scoring.py which IS in _private (only emitter uses it)."""
+    because config_reload.py uses it on the request path."""
 
     def test_daily_refresh_importable_from_top_level_gateway_package(self):
         # Should work without going through _private
@@ -269,9 +268,7 @@ class TestPublicNamespace:
         assert callable(DailyRefreshCache)
 
     def test_daily_refresh_NOT_in_private_namespace(self):
-        """The runtime-isolation contract says _private/ is for emitter-only
-        modules. daily_refresh is used on the request path (via
-        config_reload.py), so it must NOT live in _private/."""
+        """daily_refresh is used on the request path, so it must NOT live in _private/."""
         import os
 
         private_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "llm_gateway", "gateway", "_private")

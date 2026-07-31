@@ -165,7 +165,7 @@ class Evidence(StrictBaseModel):
     benchmark_source: BenchmarkSource
     dev_only: bool = False
     # `placeholder: true` marks an artifact as a stop-gap that future promotion
-    # logic (R1 emitter, R4 cron) should replace before promoting to active.
+    # logic should replace before promoting to active.
     # Distinct from `dev_only` (which excludes the artifact from production
     # loading entirely). A placeholder is fully servable — it just shouldn't
     # be the long-term primary. See R0 spec + PR #8739 review (cubic P1).
