@@ -30,6 +30,7 @@ class BleBridge implements BleFlutterApi {
   void Function(String state)? bluetoothStateChangedCallback;
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
+  VoidCallback? pairingLostCallback;
 
   final List<void Function(String fileName)> _batchRecordingFinalizedListeners = [];
 
@@ -86,6 +87,7 @@ class BleBridge implements BleFlutterApi {
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
     _disconnectCallbacks[key]?.call(false, error);
+    if (error == 'pairing_lost') pairingLostCallback?.call();
   }
 
   @override
