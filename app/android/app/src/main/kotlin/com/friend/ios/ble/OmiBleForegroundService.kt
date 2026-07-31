@@ -505,6 +505,7 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
 
         val error = when {
+            status == 137 -> "pairing_lost"
             status == 22 -> "paired_to_another_phone"
             status != 0 -> "gatt_status_$status"
             else -> null
@@ -538,7 +539,7 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
         val managed = managedDevices[addr] ?: return
 
-        if (isDestroying || status == -1 || !isBluetoothEnabled) return
+        if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return
 
         managed.retryCount++
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
