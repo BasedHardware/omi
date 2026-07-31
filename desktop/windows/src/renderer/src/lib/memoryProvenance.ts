@@ -32,6 +32,9 @@ export function memorySource(memory: Memory): MemorySource {
   if (memory.manually_added || memory.category === 'manual') return 'manual'
   if (memory.conversation_id) return 'conversation'
   if (memory.app_id) return 'app'
+  if (memory.evidence?.some((evidence) => evidence.source_type?.startsWith('integration:'))) {
+    return 'app'
+  }
   return 'unknown'
 }
 

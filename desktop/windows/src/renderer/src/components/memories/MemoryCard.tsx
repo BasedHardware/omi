@@ -26,7 +26,7 @@ function InfoRows({ memory }: { memory: Memory }): React.JSX.Element {
   if (typeof memory.capture_confidence === 'number')
     rows.push(['Confidence', `${Math.round(memory.capture_confidence * 100)}%`])
   if (memory.app_id) rows.push(['App', memory.app_id])
-  if (memory.conversation_id) rows.push(['Source', 'Conversation'])
+  rows.push(['Source', memorySourceLabel(memory)])
   rows.push(['Created', formatMemoryDate(memory.created_at)])
   const tags = displayTags(memory)
   return (

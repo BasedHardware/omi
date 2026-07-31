@@ -30,6 +30,7 @@ describe('memorySource', () => {
     expect(memorySource(memory({ category: 'manual' }))).toBe('manual')
     expect(memorySource(memory({ conversation_id: 'conversation-1' }))).toBe('conversation')
     expect(memorySource(memory({ app_id: 'app-1' }))).toBe('app')
+    expect(memorySource(memory({ evidence: [{ source_type: 'integration:gmail' }] }))).toBe('app')
     expect(memorySource(memory())).toBe('unknown')
   })
 
