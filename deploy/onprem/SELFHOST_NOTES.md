@@ -177,6 +177,67 @@ docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.
 # expected: 2 passed  (real 256-dim wespeaker embedding, deterministic, discriminates two signals)
 ```
 
+Live STT (Parakeet / NeMo) — verified on an RTX 5060 Ti (Blackwell sm_120) with driver 610 + the
+NeMo 26.02 base (CUDA 12.8). The server needs two required env vars (`PARAKEET_STREAM_CAPACITY`,
+`PARAKEET_STREAM_ALLOCATION_PERCENT`) and loads a batch model (prerecorded) plus, if configured, a
+streaming model (live `/v3/stream`):
+
+```
+docker run -d --name parakeet --network host --device nvidia.com/gpu=all \
+  -e PARAKEET_MODEL=nvidia/parakeet-tdt-0.6b-v3 \
+  -e PARAKEET_STREAM_MODEL=nvidia/parakeet-rnnt-1.1b \
+  -e PARAKEET_STREAM_CAPACITY=4 -e PARAKEET_STREAM_ALLOCATION_PERCENT=100 \
+  -e HF_HOME=/models/hf -v $MODELS:/models omi-parakeet:test
+# batch tdt-0.6b (~2.5GB) + stream rnnt-1.1b (~4.5GB) load to GPU (~6.4GB total on 16GB — fits).
+```
+
+Official quality gates against the running server (WER on LibriSpeech, DER on synthetic 2-speaker):
+
+```
+# WER: pre-download the tarball outside the hermetic guard, then run (transcribes over loopback)
+python3 -c "import urllib.request;urllib.request.urlretrieve('https://www.openslr.org/resources/12/test-clean.tar.gz','$CACHE/test-clean.tar.gz')"
+docker run --rm --network host -e PARAKEET_URL=http://127.0.0.1:8080 -e LIBRISPEECH_CACHE=/cache \
+  -e WER_MAX_SAMPLES=10 -v $CACHE:/cache -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  python -m pytest tests/container/test_parakeet_wer_gate.py -q -p no:cacheprovider
+# expected: 4 passed  (aggregate WER 13.0% <= 15% on 10 LibriSpeech samples, ~0.1s each)
+
+# DER: runs inside the parakeet image (loads its own model — stop the server first to free the GPU)
+docker run --rm --device nvidia.com/gpu=all -e PARAKEET_MODEL=nvidia/parakeet-tdt-0.6b-v3 \
+  -e HF_HOME=/models/hf -e PARAKEET_STREAM_CAPACITY=4 -e PARAKEET_STREAM_ALLOCATION_PERCENT=100 \
+  -v $MODELS:/models omi-parakeet:test python -m pytest tests/container/test_parakeet_der_gate.py -q
+# expected: 2 passed  (DER 0.0% <= 12% on a 2-speaker mix)
+```
+
+### ⚠️ Live STT provider policy — the multilingual gap (WP5 finding)
+
+The default **live** STT primary is **Modulate "Velma-2", a cloud SaaS** (multilingual, unlimited
+concurrency); Parakeet is the bounded self-hosted secondary. Offline, Modulate is unreachable, so set
+`STT_SERVICE_MODELS=parakeet` (+ `STT_PRERECORDED_MODEL=parakeet`) to force the self-hosted path.
+
+**But the charts' streaming model `nvidia/parakeet-rnnt-1.1b` is English-only** (policy:
+`PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[...] = {'en'}`). With Omi's default multilingual live mode, a
+non-`multi`-incapable request resolves to `multi`, which the en-only Parakeet stream model cannot
+serve → selection falls back to Modulate → `transcription_service_unavailable`. Today a pure-Parakeet
+on-prem deployment serves live STT **only in single-language English** (user pref
+`transcription_preferences.single_language_mode=true`, or `onboarding_mode`).
+
+**On-prem multilingual live STT (REQUIRED — tracked as a debt):** replace Modulate with the
+multilingual self-hosted model **`parakeet-1.1b-rnnt-multilingual`** (available via NVIDIA NIM;
+`backend/parakeet/Dockerfile.nim` already targets `nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual`).
+This needs a backend **policy update** in `config/stt_provider_policy.py`
+(`PARAKEET_MODEL_BY_SURFACE[STREAMING]` + `PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL`) to register the
+multilingual model and its languages. Deepgram-self-hosted is the other policy-enabled streaming option.
+
+### Full live pipeline E2E (all inference services + backend + pusher)
+
+The pre-existing `tests/integration/test_speaker_id_real_embedding.py` exercises the whole live path:
+real audio → WS `/v4/listen` → streaming STT (Parakeet) → diarization → speaker embedding → cosine
+match → speaker suggestions. Bring up the stack on the host network (backend:10151, pusher:10152,
+parakeet:8080 with a stream model, diarizer:18881, firestore-emulator, valkey), seed the dev user with
+`transcription_preferences.single_language_mode=true` (until multilingual lands), provide a speech WAV
+at `pretrained_models/snakers4_silero-vad_master/tests/data/test.wav`, then run with
+`STT_SERVICE_MODELS=parakeet`. Verified: **11/11 passed** (6 embedding-API + 3 pipeline + 2 chaos).
+
 **STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 
