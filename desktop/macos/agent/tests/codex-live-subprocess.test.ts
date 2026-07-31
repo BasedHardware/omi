@@ -39,6 +39,7 @@ describe("Codex adapter — live real subprocess (no mocks)", () => {
   afterEach(() => {
     delete process.env.OMI_CODEX_ADAPTER_COMMAND;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OMI_BYOK_OPENAI;
     delete process.env.NO_BROWSER;
     delete process.env.INITIAL_AGENT_MODE;
   });
@@ -91,6 +92,23 @@ describe("Codex adapter — live real subprocess (no mocks)", () => {
       adapter.executeAttempt(makeContext(binding), () => {}, new AbortController().signal)
     ).rejects.toThrow(/Not authenticated|codex login|OPENAI_API_KEY/);
 
+    await adapter.stop();
+  });
+
+  it("authenticates Codex from Settings BYOK when OPENAI_API_KEY is unset", async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.CODEX_API_KEY;
+    process.env.OMI_BYOK_OPENAI = "sk-omi-settings-byok";
+
+    const adapter = new CodexRuntimeAdapter();
+    await adapter.start();
+    const binding = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+      model: "gpt-5.2[high]",
+    });
+    const result = await adapter.executeAttempt(makeContext(binding), () => {}, new AbortController().signal);
+    expect(result.text).toBe("CODEX_LIVE_OK auth=1 agent-full-access 1");
     await adapter.stop();
   });
 });

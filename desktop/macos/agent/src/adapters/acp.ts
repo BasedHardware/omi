@@ -333,6 +333,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
             : process.env[key];
         }
       }
+      // Settings BYOK arrives on the bridge as OMI_BYOK_OPENAI. Codex-acp
+      // authenticates via OPENAI_API_KEY, so map the Settings key when no
+      // explicit OPENAI_API_KEY is already present. Do not forward OMI_BYOK_*.
+      if (
+        this.adapterId === "codex"
+        && !externalEnv.OPENAI_API_KEY?.trim()
+        && process.env.OMI_BYOK_OPENAI?.trim()
+      ) {
+        externalEnv.OPENAI_API_KEY = process.env.OMI_BYOK_OPENAI;
+      }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
       this.process = spawn(command, {
         shell: true,

@@ -251,6 +251,71 @@ describe("AcpRuntimeAdapter process spawning", () => {
     }
   });
 
+  it("maps Settings BYOK OpenAI key to OPENAI_API_KEY for Codex subprocesses", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "codex",
+      command: "codex-acp",
+      envCommandName: "OMI_CODEX_ADAPTER_COMMAND",
+    });
+
+    const saved: Record<string, string | undefined> = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OMI_BYOK_OPENAI: process.env.OMI_BYOK_OPENAI,
+      OMI_AUTH_TOKEN: process.env.OMI_AUTH_TOKEN,
+    };
+    delete process.env.OPENAI_API_KEY;
+    process.env.OMI_BYOK_OPENAI = "sk-settings-byok";
+    process.env.OMI_AUTH_TOKEN = "should-not-leak";
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).toHaveProperty("OPENAI_API_KEY", "sk-settings-byok");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
+      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
+
+  it("prefers an explicit OPENAI_API_KEY over Settings BYOK for Codex", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "codex",
+      command: "codex-acp",
+      envCommandName: "OMI_CODEX_ADAPTER_COMMAND",
+    });
+
+    const saved: Record<string, string | undefined> = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OMI_BYOK_OPENAI: process.env.OMI_BYOK_OPENAI,
+    };
+    process.env.OPENAI_API_KEY = "sk-explicit";
+    process.env.OMI_BYOK_OPENAI = "sk-settings-byok";
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).toHaveProperty("OPENAI_API_KEY", "sk-explicit");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
+
   it("does not scrub Omi credentials for the built-in ACP (Claude) subprocess", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
