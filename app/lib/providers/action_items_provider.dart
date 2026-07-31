@@ -227,6 +227,10 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (response != null) {
+        // Snapshot server IDs before we assign/mutate the list — otherwise
+        // _actionItems.removeWhere() would alias response.actionItems and
+        // retire tombstones prematurely.
+        final serverIds = response.actionItems.map((e) => e.id).toSet();
         _actionItems = response.actionItems;
         // Suppress re-insertion of items with a pending/in-flight deletion.
         // Without this, any background refresh (foreground resume, shared-task
@@ -241,7 +245,6 @@ class ActionItemsProvider extends ChangeNotifier {
         // fresh server response can be cleared, because subsequent refreshes
         // will no longer see it.
         if (_pendingDeletionIds.isNotEmpty) {
-          final serverIds = response.actionItems.map((e) => e.id).toSet();
           _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
         }
         _hasMore = response.hasMore;

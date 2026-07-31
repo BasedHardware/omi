@@ -223,6 +223,11 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> loadMemories({int limit = 100}) async {
     final generation = _sessionGeneration;
+    // Snapshot the pending-deletion ID before any await: a refresh that
+    // started during the undo window must still suppress the deleted item
+    // even if _finalizeDeletion() clears the field while the fetch is in
+    // flight.
+    final tombstoneId = _pendingDeletionId;
     _loading = true;
     notifyListeners();
 
@@ -251,24 +256,16 @@ class MemoriesProvider extends ChangeNotifier {
       }
       offset += result.memories.length;
     }
-    // Keep an optimistic delete hidden throughout its undo window. A refresh
-    // can otherwise reinsert the still-live server row before finalization.
-    _memories = all.where((memory) => memory.id != _pendingDeletionId).toList();
+    // Keep an optimistic delete hidden throughout its undo window. Use the
+    // snapshot taken before the fetch so a concurrent finalization that
+    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
+    _memories = tombstoneId != null ? all.where((memory) => memory.id != tombstoneId).toList() : all;
     _deviceScopeSupported = deviceScopeSupported;
-
-    // Suppress re-insertion of a memory that has a pending/in-flight deletion.
-    // Without this, any background refresh (init, connectivity restore, pull-to-refresh)
-    // that fires during the undo window would re-fetch the still-present server
-    // document and overwrite the optimistic removal, making deleted items reappear.
-    final pendingDeletionId = _pendingDeletionId;
-    if (pendingDeletionId != null) {
-      _memories.removeWhere((m) => m.id == pendingDeletionId);
-    }
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (pending.id != _pendingDeletionId && !_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != tombstoneId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }
