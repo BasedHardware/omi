@@ -5,7 +5,8 @@ import PackageDescription
 let package = Package(
   name: "Omi Computer",
   platforms: [
-    .macOS("14.0")
+    // Candidate v0.12.148 for release planning.
+        .macOS("14.0")
   ],
   dependencies: [
     .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
