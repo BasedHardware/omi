@@ -12,8 +12,72 @@ from llm_gateway.gateway.errors import (
     GatewayModelNotFoundError,
     GatewayUnsupportedModelError,
 )
+from llm_gateway.gateway.lane_catalog import LaneCatalog, load_catalog
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
+
+# SUPPORTED_AUTO_LANE_IDS is now DERIVED FROM THE LANE CATALOG (R0.5).
+# Per David's 2026-07-02 feedback:
+#   - "I think we should separate lane catalog from serving config"
+#   - "Serving config should only include lanes the gateway can actually
+#     execute today"
+#   - "If a lane doesn't have the real surface / provider support / eval
+#     yet, keep it catalog-only"
+#
+# The frozenset is now a *view* over the catalog: lanes with
+# `provider_support_status: prod_ready` are resolvable; everything else
+# stays catalog-only. Adding a prod_ready entry to the catalog
+# automatically widens the resolver's allowlist; flipping an entry to
+# dev_only or planned narrows it.
+#
+# The catalog is loaded at import time. If the file is missing (e.g.,
+# during unit tests that don't exercise the resolver), we fall back
+_catalog: 'LaneCatalog | None' = None
+
+
+def _get_catalog() -> 'LaneCatalog | None':
+    """Lazily load the lane catalog on first access.
+
+    Avoids import-time I/O in a request-path module. Callers that need a
+    populated allowlist should call :func:`ensure_catalog_loaded` first.
+    """
+    global _catalog
+    if _catalog is None:
+        try:
+            _catalog = load_catalog()
+        except Exception as _exc:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning("lane catalog not loaded: %s", _exc)
+            _catalog = None
+    return _catalog
+
+
+def ensure_catalog_loaded(catalog: 'LaneCatalog | None' = None) -> None:
+    """Pre-load the catalog so SUPPORTED_AUTO_LANE_IDS is populated.
+
+    Called by config_loader after the catalog file is read, so the resolver
+    never does import-time I/O.
+    """
+    global _catalog
+    _catalog = catalog if catalog is not None else load_catalog()
+
+
+def _supported_lane_ids() -> frozenset[str]:
+    catalog = _get_catalog()
+    if catalog is None:
+        return frozenset()
+    return frozenset(catalog.prod_ready_lane_ids())
+
+
+def get_supported_auto_lane_ids() -> frozenset[str]:
+    """Return the current set of supported auto-lane IDs from the catalog.
+
+    Lazily loads the lane catalog on first call. Returns empty frozenset
+    if the catalog isn't loaded.
+    """
+    return _supported_lane_ids()
+
 
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
