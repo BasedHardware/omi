@@ -62,6 +62,7 @@ final class AgentPill: ObservableObject, Identifiable {
   let ownerID: String
   let bridgeHarnessOverride: AgentHarnessMode?
   @Published private(set) var providerIdentity: AgentHarnessMode?
+  var fallbackProviders: [AgentPillsManager.DirectedProvider?] = []
   var canonicalSessionId: String?
   var canonicalRunId: String?
   var canonicalAttemptId: String?
@@ -109,7 +110,7 @@ final class AgentPill: ObservableObject, Identifiable {
   func applyCanonicalProviderIdentity(_ rawValue: String?) {
     guard let rawValue,
       let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
-      provider == .hermes || provider == .openclaw,
+      provider == .hermes || provider == .openclaw || provider == .codex,
       providerIdentity != provider
     else { return }
     providerIdentity = provider
@@ -398,7 +399,7 @@ final class AgentPillsManager: ObservableObject {
       ?? producingJournalSurfaceByPill[pillID]
   }
 
-  enum DirectedProvider: String, Equatable {
+  enum DirectedProvider: String, Equatable, CaseIterable {
     case hermes
     case openclaw
     case codex
@@ -448,6 +449,38 @@ final class AgentPillsManager: ObservableObject {
       case .hermes: return "hermes login"
       case .openclaw: return "openclaw login"
       case .codex: return "codex login"
+      }
+    }
+
+    var unattendedInstallCommand: String {
+      switch self {
+      case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive"
+      case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"
+      case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
+      }
+    }
+
+    var installSourceDomain: String {
+      switch self {
+      case .hermes: return "hermes-agent.nousresearch.com"
+      case .openclaw: return "openclaw.ai"
+      case .codex: return "registry.npmjs.org"
+      }
+    }
+
+    var installDocsURL: String {
+      switch self {
+      case .hermes: return "https://hermes-agent.nousresearch.com/docs/getting-started/installation"
+      case .openclaw: return "https://docs.openclaw.ai/install"
+      case .codex: return "https://github.com/openai/codex"
+      }
+    }
+
+    var postInstallNote: String? {
+      switch self {
+      case .hermes: return "run `hermes setup` to finish configuring it"
+      case .openclaw: return "run `openclaw onboard --install-daemon` to finish onboarding"
+      case .codex: return "run `codex login` if you haven't signed in"
       }
     }
 
@@ -1828,6 +1861,26 @@ final class AgentPillsManager: ObservableObject {
       "- \(snapshot.title) [\(snapshot.id.prefix(8))]: \(snapshot.status); \(snapshot.latestActivity)"
     }
     return "Floating agent pills:\n" + lines.joined(separator: "\n")
+  }
+
+  func manage(action: String, agentId: String?) -> String {
+    switch action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "list", "status":
+      return statusSummary()
+    case "dismiss":
+      guard let agentId, !agentId.isEmpty else {
+        return "Missing agent_id. Call get_task_agent_status first and pass the floating_agent_pills id."
+      }
+      return dismiss(pillIdString: agentId)
+        ? "Dismissed floating agent pill \(agentId)."
+        : "No floating agent pill matched \(agentId)."
+    case "clear_completed":
+      let count = pills.filter { $0.status.isFinished }.count
+      clearCompleted()
+      return "Cleared \(count) completed floating agent pill(s)."
+    default:
+      return "Unknown action. Use list, dismiss, or clear_completed."
+    }
   }
 
   private func findPillId(from text: String) -> UUID? {

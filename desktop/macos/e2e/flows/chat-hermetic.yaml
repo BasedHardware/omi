@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
   - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
@@ -46,6 +47,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:
   - automation_bridge_ready

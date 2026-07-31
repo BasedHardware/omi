@@ -497,6 +497,47 @@ enum LocalAgentProviderRouting {
   }
 }
 
+extension AgentPillsManager {
+  struct ProviderDirective: Equatable, Sendable {
+    let provider: DirectedProvider
+    let rewrittenQuery: String
+    let title: String
+    let ack: String
+  }
+
+  nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
+    let patterns = [
+      #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
+      #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
+    ]
+    for pattern in patterns {
+      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+      let range = NSRange(trimmed.startIndex..., in: trimmed)
+      guard let match = regex.firstMatch(in: trimmed, range: range),
+        let providerRange = Range(match.range(at: 1), in: trimmed)
+      else { continue }
+      let providerToken = trimmed[providerRange].lowercased().replacingOccurrences(of: " ", with: "")
+      guard let provider = DirectedProvider(rawValue: providerToken) else { continue }
+      let rewrittenQuery: String
+      if match.numberOfRanges > 2, let queryRange = Range(match.range(at: 2), in: trimmed) {
+        rewrittenQuery = String(trimmed[queryRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+      } else {
+        rewrittenQuery = "Say how it's going."
+      }
+      return ProviderDirective(
+        provider: provider,
+        rewrittenQuery: rewrittenQuery,
+        title: provider.displayName,
+        ack: "Asking \(provider.displayName)."
+      )
+    }
+    return nil
+  }
+}
+
 extension LocalAgentProviderRouting {
   /// Resolve a spawn WITHOUT auto-installing. When a provider needs setup,
   /// the caller receives `.setupRequired` and should direct the user to

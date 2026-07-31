@@ -241,8 +241,8 @@ final class LocalAgentProviderInstaller {
     var envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") }
     envp.append(nil)
     defer {
-      argv.forEach { free($0) }
-      envp.forEach { free($0) }
+      for value in argv { free(value) }
+      for value in envp { free(value) }
     }
 
     var pid: pid_t = 0
@@ -337,7 +337,7 @@ final class LocalAgentProviderInstaller {
   ) -> String {
     let inherited = (existingPath ?? "").split(separator: ":").map(String.init)
     let providerDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(
-      homeDirectory: homeDirectory, fileManager: fileManager)
+      environment: ["PATH": existingPath ?? ""], homeDirectory: homeDirectory)
     let standardDirs = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
     var elements: [String] = []
     for dir in inherited + providerDirs + standardDirs where !dir.isEmpty && !elements.contains(dir) {
@@ -355,6 +355,7 @@ final class LocalAgentProviderInstaller {
     _ provider: AgentPillsManager.DirectedProvider, outcome: ProviderInstallOutcome
   ) {
     inFlight.remove(provider)
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId() ?? ""
     let availability = LocalAgentProviderDetector.availability(for: provider)
     if case .available(let command) = availability.status {
       log(
@@ -365,10 +366,13 @@ final class LocalAgentProviderInstaller {
         message += " Next: \(note)."
       }
       message += " Just ask Omi to use \(provider.displayName) again."
-      NotificationService.shared.sendNotification(
-        title: "\(provider.displayName) installed",
-        message: message,
-        respectFrequency: false)
+      if !ownerID.isEmpty {
+        NotificationService.shared.sendNotification(
+          ownerID: ownerID,
+          title: "\(provider.displayName) installed",
+          message: message,
+          respectFrequency: false)
+      }
       // Warm hub sessions freeze their tool schema and provider instruction
       // at session start — re-warm (idle-only) so voice sees the new provider.
       RealtimeHubController.shared.refreshForLocalAgentProviderChange()
@@ -396,10 +400,13 @@ final class LocalAgentProviderInstaller {
     }
     message += " Install guide: \(provider.installDocsURL)"
     log("LocalAgentProviderInstaller: \(provider.rawValue) install failed — \(reason)")
-    NotificationService.shared.sendNotification(
-      title: "\(provider.displayName) install failed",
-      message: message,
-      respectFrequency: false)
+    if !ownerID.isEmpty {
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: "\(provider.displayName) install failed",
+        message: message,
+        respectFrequency: false)
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 /// Settings > AI Agents: see every coding agent Omi can route to, its connected

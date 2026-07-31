@@ -47,7 +47,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     source: String? = nil,
     adapterId: String? = nil,
     provider: String? = nil,
-    retryable: Bool? = nil
+    retryable: Bool? = nil,
+    phase: String? = nil
   ) {
     self.code = code
     self.failureCode = failureCode
@@ -57,6 +58,7 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     self.adapterId = adapterId
     self.provider = provider
     self.retryable = retryable
+    self.phase = phase
   }
 
   var displayMessage: String {

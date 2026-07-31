@@ -529,7 +529,7 @@ extension RealtimeHubController {
   }
 
   func updateRegisteredDirectedProviders(_ providers: [String]) {
-    let normalized = providers.filter { ["hermes", "openclaw", "codex"].contains($0) }.sorted()
+    let normalized = providers.filter { ["codex", "hermes", "openclaw"].contains($0) }.sorted()
     guard registeredDirectedProviderIDs != normalized else { return }
     registeredDirectedProviderIDs = normalized
     // Tool schemas are immutable per provider session. This asynchronous
@@ -538,6 +538,10 @@ extension RealtimeHubController {
     requestSessionHandoff(
       reason: .directedProviderSchema,
       preservingReconnectAudio: reconnectAudioBuffer != nil)
+  }
+
+  func refreshForLocalAgentProviderChange() {
+    requestSessionHandoff(reason: .directedProviderSchema)
   }
 
   func reconcileWarmSessionForCurrentRequirement() {
