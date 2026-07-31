@@ -2738,8 +2738,8 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
-    // process can route to Hermes or OpenClaw even when it was launched for a
-    // different adapter. registerClient returns early once the reducer is
+    // process can route to Hermes, OpenClaw, or Codex even when it was launched
+    // for a different adapter. registerClient returns early once the reducer is
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2780,6 +2780,16 @@ actor AgentRuntimeProcess {
       ).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
+    }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      case .available(command: let codex) = LocalAgentProviderDetector.availability(
+        for: .codex,
+        environment: env,
+        homeDirectory: home
+      ).status
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
     }
   }
 
@@ -2823,6 +2833,10 @@ actor AgentRuntimeProcess {
       return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
     }
     return "\(shellQuote(openClawPath)) acp"
+  }
+
+  static func codexAdapterCommand(codexPath: String) -> String {
+    "CODEX_PATH=\(shellQuote(codexPath)) npx -y @agentclientprotocol/codex-acp"
   }
 
   /// Directly launched app bundles do not inherit the shell's FNM multishell
