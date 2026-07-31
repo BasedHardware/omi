@@ -108,10 +108,18 @@ final class SearchResultsModel: ObservableObject {
         didSet { if time == .pickADate { reload() } }
     }
 
+    /// What was last typed, trimmed.
+    ///
+    /// Published rather than private, because the panel's copy depends on it: a panel with nothing
+    /// typed into it has not been asked anything, and saying so is `SearchIntent`'s job. Derived
+    /// state would not do — an intent read off an unpublished field changes without telling SwiftUI,
+    /// and on a store-less model (previews, the render harness, tests) nothing else would publish in
+    /// its place, so the panel would keep drawing the previous question's copy.
+    @Published private(set) var query = ""
+
     let loader = FrameLoader()
 
     private let store: ContextStore?
-    private var query = ""
 
     init(store: ContextStore?) {
         self.store = store
@@ -123,16 +131,40 @@ final class SearchResultsModel: ObservableObject {
         moments: [SearchMoment],
         totalCount: Int? = nil,
         websites: [String] = [],
-        apps: [SearchAppFacet] = []
+        apps: [SearchAppFacet] = [],
+        query: String = ""
     ) {
         self.store = nil
         self.moments = moments
         self.totalCount = totalCount ?? moments.count
         self.websites = websites
         self.apps = apps
+        self.query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // MARK: What the panel is answering
+
+    /// Whether a filter is narrowing the answer. `anytime` with no site and no app is the resting
+    /// state, which is not a question.
+    var isNarrowed: Bool { time != .anytime || website != nil || app != nil }
+
+    /// Browsing, filtering or searching — the state the panel's copy is written against.
+    var intent: SearchIntent { .of(query: query, isNarrowed: isNarrowed) }
+
     // MARK: Input
+
+    /// **The first read, when the surface opens.**
+    ///
+    /// Separate from `search` because `search` is a keystroke de-duplicator, and its "identical text
+    /// is a no-op" guard is exactly wrong for the opening read: the query starts empty, the bar opens
+    /// empty, so `search("")` matched and returned without ever reading the database. The panel then
+    /// drew the empty state on every open — on a Mac with a hundred thousand captures — which is the
+    /// other half of the same defect the empty-query copy fixes. `RewindQueries.search` is explicit
+    /// that an empty query means "the newest captures", and this is the call that asks for them.
+    func start(_ text: String) {
+        query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        reload()
+    }
 
     /// A new query. Cheap to call on every keystroke: identical text is a no-op.
     func search(_ text: String) {

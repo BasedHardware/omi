@@ -105,6 +105,45 @@ enum SearchLayout {
         min(max(contentHeight, minimumResultsBodyHeight), maximumResultsBodyHeight)
     }
 
+    /// **Whether the body scrolls** — the content did not fit in the height the clamp gave it.
+    ///
+    /// The one question the bottom edge's appearance turns on. Above the ceiling the grid keeps
+    /// going past the panel, which is fine and is what the scroll view is for; what is not fine is
+    /// that state looking identical to the state where the panel really does contain everything. A
+    /// row of cards sliced by the panel's edge with no fade, no scroller and no motion reads as a
+    /// clipped view, not as "there is more below" — that is the defect this predicate exists to let
+    /// the view answer.
+    static func bodyScrolls(contentHeight: CGFloat) -> Bool {
+        // Half a point of slack: a content height that lands exactly on the ceiling fits, and
+        // floating-point measurement noise must not make a settled panel flicker its fade on.
+        contentHeight > resultsBodyHeight(contentHeight: contentHeight) + 0.5
+    }
+
+    /// The soft edge at the bottom of a body that has more below it, and the room the content gains
+    /// underneath itself so the fade always has something spare to fall on.
+    ///
+    /// Sized between two failures. Under about ten points a fade is a rendering artefact rather than
+    /// a signal; at more than `cardCaptionHeight` it could swallow a card's whole title-and-source
+    /// block, which would make the *last* row unreadable to fix the *next* row's slice. 26 pt is
+    /// roughly a tenth of a card — enough that the sliced row visibly dissolves into the glass
+    /// instead of being cut with a knife, and small enough that the row above it is untouched.
+    ///
+    /// Only the bottom edge fades. The top of the body is already bounded by the header's rule,
+    /// which is a real edge and reads as one; the bottom is a free edge with nothing to say where
+    /// the content stopped and the panel began.
+    static let scrollFadeHeight: CGFloat = 26
+
+    /// **How deep the bottom edge fades for a measured content height** — the whole of the view's
+    /// decision, as a value.
+    ///
+    /// The view has no arithmetic of its own for the same reason nothing else in this file does: a
+    /// fade the panel forgets to turn on, and a fade it leaves on over content that fits, are both
+    /// invisible in a `body` and both obvious here. It also feeds the matching bottom inset, so the
+    /// fade and the room it falls on cannot drift apart.
+    static func scrollFade(contentHeight: CGFloat) -> CGFloat {
+        bodyScrolls(contentHeight: contentHeight) ? scrollFadeHeight : 0
+    }
+
     /// The filter panel's own header — the `Filter` row and the rule under it.
     static let panelHeaderHeight: CGFloat = 44
 
@@ -520,12 +559,49 @@ enum SearchTime {
     }
 }
 
+// MARK: - What the panel was asked
+
+/// Whether the panel is reporting a **search**, or simply showing what this Mac has captured.
+///
+/// This distinction is the whole of a defect the surface shipped without it. With nothing typed and
+/// no chip lit, nobody has asked the panel anything — and yet it answered, in two places at once:
+/// the header said `No results` and the results section said `Nothing captured matches that yet`.
+/// Both are verdicts on a search that was never run, and both are the *first* two sentences a brand
+/// new install shows, on the one screen whose job is to make the app look like it works.
+///
+/// A search that really was run and really found nothing still says so. That state is `.searching`,
+/// and its copy is unchanged.
+enum SearchIntent: Equatable, Sendable {
+
+    /// Nothing typed, nothing narrowed. The panel is showing the newest captures, which is not an
+    /// answer to anything.
+    case browsing
+    /// No query, but a filter chip is lit. The user did ask something — "today", "this site" — so a
+    /// nothing-found answer is honest here.
+    case filtering
+    /// Something is typed.
+    case searching
+
+    /// Which of the three a given query and filter state is.
+    ///
+    /// Trimmed, because a bar holding one space is an untouched bar as far as the user is concerned
+    /// (and as far as `SearchResultsModel.search` is: it trims before it queries).
+    static func of(query: String, isNarrowed: Bool) -> SearchIntent {
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .searching }
+        return isNarrowed ? .filtering : .browsing
+    }
+
+    /// Whether a "found nothing" sentence would be an answer rather than a false negative.
+    var wasAsked: Bool { self != .browsing }
+}
+
 // MARK: - Copy
 
 /// The sentences the surface says about its own results.
 enum SearchCopy {
 
-    /// The count on the filter row: `109 results` · `1 result` · `No results`.
+    /// The count on the filter row for a panel that was actually asked something: `109 results` ·
+    /// `1 result` · `No results`.
     ///
     /// "No results" and not "0 results", because zero is a number a person has to convert and the
     /// words are the answer. Singular is not a nicety either — "1 results" is the tell that nobody
@@ -538,6 +614,23 @@ enum SearchCopy {
         }
     }
 
+    /// What the filter row says opposite `Filter`, or **nil when it should say nothing at all**.
+    ///
+    /// Nil is the point of this function rather than an oversight in it. With nothing typed and
+    /// nothing narrowed there is no search to report a verdict on, and `No results` in that state is
+    /// a failure the user never asked for — the single worst sentence a fresh install could open
+    /// with. A browsing panel that *does* have captures says how many, because that is a fact about
+    /// what is on the screen rather than a judgement about a query, and it is also the only place
+    /// the surface says how much there is to search.
+    static func countLabel(_ count: Int, intent: SearchIntent) -> String? {
+        guard !intent.wasAsked else { return resultCount(count) }
+        switch count {
+        case ..<1: return nil
+        case 1: return "1 moment captured"
+        default: return "\(count) moments captured"
+        }
+    }
+
     /// What a section says when it has nothing in it yet.
     ///
     /// Every one of these is reachable on a fresh install — a Mac that has captured for ten minutes
@@ -546,5 +639,21 @@ enum SearchCopy {
     /// deliberate rather than broken.
     static let noWebsites = "No sites captured yet"
     static let noApps = "No apps captured yet"
+
+    /// A search ran and matched nothing. Every word of it is about the query.
     static let noResults = "Nothing captured matches that yet"
+
+    /// …and what the same section says when there was no query to fail.
+    ///
+    /// Reached only when the panel is browsing and the capture is genuinely empty (no query and no
+    /// filter means the count is the whole of what exists), so it can state the real reason the
+    /// section is bare and what will change it. It is deliberately *not* an invitation to type: on
+    /// the machine that sees this sentence there is nothing to type at yet, and "try searching" over
+    /// an empty database is the same false promise in a friendlier voice.
+    static let nothingCapturedYet = "Nothing captured yet — what you look at shows up here"
+
+    /// The results section's sentence for a given intent.
+    static func results(intent: SearchIntent) -> String {
+        intent.wasAsked ? noResults : nothingCapturedYet
+    }
 }

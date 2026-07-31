@@ -45,21 +45,43 @@ final class SearchRenderHarness: XCTestCase {
 
         // state × desktop × system appearance. The panel is pinned light in all of them; the Dark
         // pass is what proves the pin rather than assuming it.
+        //
+        // The first three are the states the two shipped defects lived in, and they are first on
+        // purpose: an untouched bar over an empty capture and an untouched bar over a full one are
+        // both states nobody had looked at, and both used to be reported as a failed search.
         let cases: [(name: String, query: String, model: SearchResultsModel)] = [
-            ("00-empty-fresh-install", "", Fixtures.freshInstall()),
-            ("01-typed-twelve", "gpu benchmarks", Fixtures.twelve(thumbnails: thumbnails)),
-            ("02-typed-one", "invoice", Fixtures.one(thumbnails: thumbnails)),
-            ("03-typed-none", "zzzz nothing matches", Fixtures.none()),
-            ("04-missing-thumbnails", "retention", Fixtures.missingPictures()),
+            ("00-untouched-fresh-install", "", Fixtures.freshInstall()),
+            ("01-untouched-populated", "", Fixtures.twelve(thumbnails: thumbnails)),
+            ("02-typed-none", "zzzz nothing matches", Fixtures.none()),
+            ("03-typed-twelve", "gpu benchmarks", Fixtures.twelve(thumbnails: thumbnails)),
+            ("04-typed-hundred", "screenshot", Fixtures.hundred(thumbnails: thumbnails)),
+            ("05-typed-three", "invoice", Fixtures.few(3, thumbnails: thumbnails)),
+            ("06-typed-one", "invoice", Fixtures.one(thumbnails: thumbnails)),
+            ("07-missing-thumbnails", "retention", Fixtures.missingPictures()),
         ]
 
         var written: [String] = []
         for (name, query, model) in cases {
+            // The panel's copy follows the bar, in the harness exactly as in the app: the model is
+            // told what was typed rather than inferring it from the fact that it has rows.
+            model.start(query)
             let path = try render(
                 name: "\(name)-lightsystem-midgrey", query: query, model: model,
                 desktop: Fixtures.desktopImage(.midGrey), appearance: .aqua, in: directory)
             written.append(path)
         }
+        // The far end of the same scroll. The bottom edge's fade has to point at content that is
+        // really there, so the state to look at is the one where it is not: scrolled to the end, the
+        // last row's title and source line must be untouched, with the fade falling on the spare
+        // room under them instead.
+        let scrolled = Fixtures.hundred(thumbnails: thumbnails)
+        scrolled.start("screenshot")
+        written.append(
+            try render(
+                name: "09-typed-hundred-scrolled-to-end-lightsystem-midgrey",
+                query: "screenshot", model: scrolled,
+                desktop: Fixtures.desktopImage(.midGrey), appearance: .aqua,
+                scrollToEnd: true, in: directory))
         // The two extremes, on the state with the most type on it, in both system appearances —
         // this is the pair the contrast table is measured against.
         for (appearance, desktop) in [
@@ -68,10 +90,12 @@ final class SearchRenderHarness: XCTestCase {
             (NSAppearance.Name.darkAqua, Fixtures.Desktop.black),
             (NSAppearance.Name.darkAqua, Fixtures.Desktop.white),
         ] {
+            let model = Fixtures.twelve(thumbnails: thumbnails)
+            model.start("gpu benchmarks")
             let path = try render(
-                name: "05-typed-twelve-\(appearance == .aqua ? "lightsystem" : "darksystem")-\(desktop)",
+                name: "08-typed-twelve-\(appearance == .aqua ? "lightsystem" : "darksystem")-\(desktop)",
                 query: "gpu benchmarks",
-                model: Fixtures.twelve(thumbnails: thumbnails),
+                model: model,
                 desktop: Fixtures.desktopImage(desktop),
                 appearance: appearance,
                 in: directory)
@@ -93,6 +117,7 @@ final class SearchRenderHarness: XCTestCase {
         model: SearchResultsModel,
         desktop: NSImage,
         appearance: NSAppearance.Name,
+        scrollToEnd: Bool = false,
         in directory: URL
     ) throws -> String {
         NSApp.appearance = NSAppearance(named: appearance)
@@ -161,6 +186,47 @@ final class SearchRenderHarness: XCTestCase {
         // thumbnails decode on a detached task, and SwiftUI settles its layout — none of which
         // happens on a blocked thread.
         spin(seconds: 1.6)
+
+        if scrollToEnd {
+            let scroller = try XCTUnwrap(Self.verticalScroller(in: root))
+
+            // **The faded strip still scrolls.** The bottom edge's fade is a mask, and a mask that
+            // swallowed the pointer would make the one strip that says "there is more below" the one
+            // strip you cannot scroll from. Driven as a real wheel event through the window, landing
+            // inside the fade, and asserted on the clip view that had to move.
+            // **The faded strip is still the scroll view's.** A wheel event is routed by AppKit's
+            // `hitTest`, so the question the fade raises — does a mask take the strip that advertises
+            // "more below" out of the pointer's reach? — is answered by asking who owns that point.
+            // A layer mask must not, and this is what proves it rather than assuming it.
+            let body = scroller.convert(scroller.bounds, to: nil)
+            func owner(at point: NSPoint) -> NSView? {
+                let hit = window.contentView?.hitTest(point)
+                print("[fade] \(point) → \(hit.map { String(describing: type(of: $0)) } ?? "nothing")")
+                return hit
+            }
+            func isInsideBody(_ view: NSView?) -> Bool {
+                var node = view
+                while let current = node {
+                    if current === scroller { return true }
+                    node = current.superview
+                }
+                return false
+            }
+            let middle = owner(at: NSPoint(x: body.midX, y: body.midY))
+            let inFade = owner(at: NSPoint(x: body.midX, y: body.minY + SearchLayout.scrollFadeHeight / 2))
+            // The control: the unmasked middle of the body has to belong to the scroll view, or the
+            // probe is measuring the harness rather than the fade.
+            XCTAssertTrue(isInsideBody(middle), "the harness is not probing the results body at all")
+            XCTAssertTrue(
+                isInsideBody(inFade),
+                "the bottom fade is not part of the scroll view for hit testing — the mask is eating "
+                    + "the pointer in exactly the strip that advertises more below")
+
+            // …and then all the way to the end, which is the state worth looking at: the fade has to
+            // fall on the spare room under the last row rather than on its source line.
+            scroller.scrollToEnd()
+            spin(seconds: 0.8)
+        }
 
         let url = directory.appendingPathComponent("\(name).png")
         if !capture(rect: backdropFrame, on: screen, to: url) {
@@ -285,6 +351,25 @@ final class SearchRenderHarness: XCTestCase {
         try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: url)
     }
 
+    /// The panel's own vertical scroll view — the tallest one whose content overflows it.
+    ///
+    /// Found by walking the tree rather than held onto, because the view SwiftUI builds is the one
+    /// worth driving: the chip rows are scroll views too, and they scroll the other way.
+    private static func verticalScroller(in view: NSView) -> NSScrollView? {
+        var found: [NSScrollView] = []
+        func walk(_ node: NSView) {
+            if let scroll = node as? NSScrollView,
+                let document = scroll.documentView,
+                document.frame.height > scroll.contentView.bounds.height + 1
+            {
+                found.append(scroll)
+            }
+            node.subviews.forEach(walk)
+        }
+        walk(view)
+        return found.max { $0.contentView.bounds.height < $1.contentView.bounds.height }
+    }
+
     /// Every `NSVisualEffectView` in the tree, in `root`'s coordinates. One per glass panel.
     private static func materialFrames(in view: NSView, root: NSView) -> [NSRect] {
         var frames: [NSRect] = []
@@ -304,6 +389,18 @@ final class SearchRenderHarness: XCTestCase {
         let result = NSImage(size: rep.size)
         result.addRepresentation(rep)
         return result
+    }
+}
+
+extension NSScrollView {
+    /// Scrolls to the very bottom of the document, whichever way round the document is flipped.
+    @MainActor
+    fileprivate func scrollToEnd() {
+        guard let document = documentView else { return }
+        let clip = contentView.bounds.height
+        let y = document.isFlipped ? document.frame.height - clip : 0
+        contentView.scroll(to: NSPoint(x: 0, y: y))
+        reflectScrolledClipView(contentView)
     }
 }
 
@@ -433,6 +530,39 @@ enum Fixtures {
         return SearchResultsModel(
             moments: moments,
             totalCount: 109,
+            websites: SearchResultsModel.facetWebsites(moments),
+            apps: SearchResultsModel.facetApps(moments))
+    }
+
+    /// The first `count` of the same fabricated moments — the sparse states, where the panel has to
+    /// contain everything it has and therefore must show no fade at all.
+    static func few(_ count: Int, thumbnails: [String]) -> SearchResultsModel {
+        let moments = titles.prefix(count).enumerated().map { index, entry in
+            moment(
+                id: Int64(index + 1), title: entry.0, app: entry.1, minutesAgo: entry.2,
+                path: thumbnails[index % thumbnails.count])
+        }
+        return SearchResultsModel(
+            moments: Array(moments), totalCount: count,
+            websites: SearchResultsModel.facetWebsites(Array(moments)),
+            apps: SearchResultsModel.facetApps(Array(moments)))
+    }
+
+    /// A hundred cards — thirty-four rows, far past anything the panel can hold. The state the
+    /// bottom edge has to keep saying "there is more below" in, all the way down.
+    ///
+    /// The same dozen fabricated titles cycled, with the capture times marching backwards, so no new
+    /// invented content is introduced to make the grid longer.
+    static func hundred(thumbnails: [String]) -> SearchResultsModel {
+        let moments = (0..<100).map { index -> SearchMoment in
+            let entry = titles[index % titles.count]
+            return moment(
+                id: Int64(index + 1), title: entry.0, app: entry.1,
+                minutesAgo: entry.2 + Double(index) * 7,
+                path: index % 4 == 3 ? nil : thumbnails[index % thumbnails.count])
+        }
+        return SearchResultsModel(
+            moments: moments, totalCount: 100,
             websites: SearchResultsModel.facetWebsites(moments),
             apps: SearchResultsModel.facetApps(moments))
     }

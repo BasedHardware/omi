@@ -31,6 +31,13 @@ struct SearchResultsView: View {
 
     private var bodyHeight: CGFloat { SearchLayout.resultsBodyHeight(contentHeight: contentHeight) }
 
+    /// Whether there is more below the panel's bottom edge than fits inside it.
+    private var scrolls: Bool { SearchLayout.bodyScrolls(contentHeight: contentHeight) }
+
+    /// How deep the bottom edge dissolves, and the room the content gains under itself to match.
+    /// Zero when the panel contains everything it has.
+    private var fade: CGFloat { SearchLayout.scrollFade(contentHeight: contentHeight) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -39,9 +46,23 @@ struct SearchResultsView: View {
             ScrollView(.vertical) {
                 SearchFilterContent(model: model)
                     .background(SearchHeightReader(key: SearchPanelHeightKey.self))
+                    // Spare room under the last row, only when the body scrolls, so that a reader
+                    // who has scrolled all the way down has the fade falling on empty glass rather
+                    // than on the final card's source line. Applied *outside* the height reader on
+                    // purpose: the measurement stays the content's own natural height, so this inset
+                    // cannot feed back into the clamp that decided to add it.
+                    .padding(.bottom, fade)
             }
-            .scrollIndicators(.never)
+            // The platform affordance, restored the moment there is anything to scroll to. It was
+            // suppressed unconditionally before, which is right for a panel that contains
+            // everything and wrong for one that does not: on a Mac with "Show scroll bars: always"
+            // the surface was the only scrollable thing on screen with no scroller at all.
+            .scrollIndicators(scrolls ? .automatic : .never)
             .frame(height: bodyHeight)
+            // …and the part that works at rest, before the user has touched anything: overlay
+            // scrollers are invisible until something moves, so the first impression of an
+            // overflowing panel is carried entirely by the bottom edge dissolving.
+            .mask(SearchScrollFade(fade: fade))
         }
         .frame(width: SearchLayout.panelWidth, alignment: .top)
         .onPreferenceChange(SearchPanelHeightKey.self) { contentHeight = $0 }
@@ -56,9 +77,13 @@ struct SearchResultsView: View {
                 .foregroundStyle(Ink.secondary)
             Text("Filter").inkStyle(.rowCopy, color: Ink.primary)
             Spacer(minLength: 12)
-            Text(SearchCopy.resultCount(model.totalCount))
-                .inkStyle(.statusLabel, color: Ink.secondary)
-                .fixedSize()
+            // Nil is a state and not a missing value: an untouched bar over an empty capture has no
+            // verdict to report, and `No results` there answers a search nobody ran.
+            if let count = SearchCopy.countLabel(model.totalCount, intent: model.intent) {
+                Text(count)
+                    .inkStyle(.statusLabel, color: Ink.secondary)
+                    .fixedSize()
+            }
         }
         .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
         .frame(height: SearchLayout.panelHeaderHeight)
@@ -174,7 +199,9 @@ struct SearchFilterContent: View {
     private var resultsSection: some View {
         SearchSection(title: "Results") {
             if model.moments.isEmpty {
-                SearchEmptyNote(SearchCopy.noResults)
+                // Which sentence depends on whether anything was asked. "Nothing captured matches
+                // that yet" over an untouched search bar is a verdict on a search that never ran.
+                SearchEmptyNote(SearchCopy.results(intent: model.intent))
             } else {
                 LazyVGrid(columns: SearchResultsView.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
                     ForEach(model.moments) { moment in
@@ -185,6 +212,41 @@ struct SearchFilterContent: View {
         }
     }
 
+}
+
+// MARK: - The bottom edge
+
+/// The mask that turns a clipped body into a body with more below it.
+///
+/// A mask and not an overlay, because the panel is glass: there is no opaque colour to fade a
+/// gradient *to*, and painting one would put a grey band across the frosting. Fading the content's
+/// own alpha lets the sliced row dissolve into the same glass the panel is made of, which is what
+/// says "this continues" rather than "this was cut".
+///
+/// `fade` of zero is the identity mask and is drawn deliberately rather than by leaving the modifier
+/// off: a conditional modifier would change the scroll view's identity every time a query grew past
+/// one screenful, which throws away the scroll position mid-scroll.
+struct SearchScrollFade: View {
+    /// How many points at the bottom edge dissolve. Zero when the body contains everything — a fade
+    /// over a panel that cannot scroll is a promise of content that is not there.
+    let fade: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = max(proxy.size.height, 1)
+            // Where the fade begins, as a fraction of the body. Clamped so a body shorter than the
+            // fade cannot invert the gradient.
+            let start = min(max((height - fade) / height, 0), 1)
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: start),
+                    .init(color: fade > 0 ? .clear : .black, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom)
+        }
+    }
 }
 
 // MARK: - Section

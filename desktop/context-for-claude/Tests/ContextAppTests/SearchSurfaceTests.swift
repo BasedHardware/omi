@@ -1,4 +1,5 @@
 import AppKit
+import ContextCore
 import SwiftUI
 import XCTest
 
@@ -156,6 +157,126 @@ final class SearchSurfaceTests: XCTestCase {
                 + "row of cards — it needs \(filters + SearchLayout.cardHeight())")
     }
 
+    /// **A body with more below it says so; one that contains everything does not.**
+    ///
+    /// The regression: the grid's second row was sliced by the panel's bottom edge with no fade, no
+    /// scroller and nothing else to say the panel continued — `.scrollIndicators(.never)` on a view
+    /// that really did scroll. A half a card cut off by a hard edge reads as a broken layout, not as
+    /// "there is more below", and it was the state every populated query landed in.
+    func testTheBottomEdgeOnlyPromisesMoreBelowWhenThereIsMoreBelow() {
+        // Inside the clamp the panel contains everything it has, so nothing may be faded: a fade
+        // over a panel that cannot scroll is a promise of content that does not exist.
+        XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: 0))
+        XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: SearchLayout.minimumResultsBodyHeight / 2))
+        XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: 300))
+        XCTAssertFalse(
+            SearchLayout.bodyScrolls(contentHeight: SearchLayout.maximumResultsBodyHeight),
+            "content that lands exactly on the ceiling fits — it has nothing below it")
+
+        // Past the ceiling the content is cut, and that is precisely when the edge has to say so.
+        XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: SearchLayout.maximumResultsBodyHeight + 1))
+        XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: 5_000))
+
+        // The fade is a signal, not a curtain: readable as a dissolve, and never deep enough to
+        // swallow a card's title-and-source block, which would fix the next row by ruining the last.
+        XCTAssertGreaterThan(SearchLayout.scrollFadeHeight, 8)
+        XCTAssertLessThan(SearchLayout.scrollFadeHeight, SearchLayout.cardCaptionHeight)
+
+        // …and the depth the panel actually draws, which is the whole of the view's decision: the
+        // fade only exists where the content is cut, and the content's own bottom inset is the same
+        // number, so the reader who scrolls to the end has the fade falling on spare glass rather
+        // than on the last card's source line.
+        XCTAssertEqual(SearchLayout.scrollFade(contentHeight: 300), 0)
+        XCTAssertEqual(SearchLayout.scrollFade(contentHeight: SearchLayout.maximumResultsBodyHeight), 0)
+        XCTAssertEqual(
+            SearchLayout.scrollFade(contentHeight: SearchLayout.maximumResultsBodyHeight + 1),
+            SearchLayout.scrollFadeHeight)
+        XCTAssertEqual(SearchLayout.scrollFade(contentHeight: 5_000), SearchLayout.scrollFadeHeight)
+    }
+
+    /// …and the fade really is a fade: the bottom edge of a scrolling body dissolves, and the same
+    /// body with nothing below it is untouched.
+    ///
+    /// Rendered rather than asserted about the source, because the defect is a visual one — a
+    /// gradient whose stops were built the wrong way round would still type-check, still be applied,
+    /// and still cut the cards with a knife.
+    @MainActor
+    func testTheFadeDissolvesTheBottomEdgeAndLeavesAPanelThatFitsAlone() throws {
+        func alpha(fade: CGFloat, atBottom: Bool) throws -> CGFloat {
+            let height: CGFloat = 100
+            let renderer = ImageRenderer(
+                content: Color.black
+                    .frame(width: 20, height: height)
+                    .mask(SearchScrollFade(fade: fade)))
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.cgImage)
+            let rep = NSBitmapImageRep(cgImage: image)
+            let colour = try XCTUnwrap(rep.colorAt(x: 10, y: atBottom ? rep.pixelsHigh - 1 : 0))
+            return colour.alphaComponent
+        }
+
+        // Scrolling: opaque at the top, gone at the very bottom.
+        XCTAssertEqual(try alpha(fade: SearchLayout.scrollFadeHeight, atBottom: false), 1, accuracy: 0.02)
+        XCTAssertLessThan(
+            try alpha(fade: SearchLayout.scrollFadeHeight, atBottom: true), 0.15,
+            "the bottom edge is still a hard cut — the sliced row does not dissolve into the glass")
+
+        // Not scrolling: no fade anywhere, because there is nothing below to point at.
+        XCTAssertEqual(try alpha(fade: 0, atBottom: true), 1, accuracy: 0.02)
+        XCTAssertEqual(try alpha(fade: 0, atBottom: false), 1, accuracy: 0.02)
+    }
+
+    /// **At every result count the panel really shows, the bottom edge agrees with the content.**
+    ///
+    /// Measured on the real filter block and the real grid at the shipped panel width, so the inputs
+    /// are the heights the app actually produces rather than numbers chosen to make the predicate
+    /// true. One row fits inside the ceiling and must not be faded; four rows and thirty-four rows do
+    /// not fit and must be. The sweep asserts both directions occur, so it cannot pass by never
+    /// exercising the branch.
+    @MainActor
+    func testEveryResultCountEitherFitsOrSaysItDoesNot() {
+        var scrolled: [Int] = []
+        var fitted: [Int] = []
+        for count in [1, 2, 3, 12, 100] {
+            let model = SearchResultsModel(
+                moments: (1...count).map { Self.moment(id: Int64($0), title: "Docs — arc.net", app: "Arc") },
+                websites: ["arc.net", "duckduckgo.com"],
+                apps: [SearchAppFacet(name: "Arc", bundleId: nil)])
+            let host = NSHostingView(rootView: SearchFilterContent(model: model))
+            host.layoutSubtreeIfNeeded()
+            let content = host.fittingSize.height
+            let body = SearchLayout.resultsBodyHeight(contentHeight: content)
+
+            XCTAssertLessThanOrEqual(
+                body, SearchLayout.maximumResultsBodyHeight,
+                "\(count) results made the panel taller than a 13\" display can hold")
+            XCTAssertEqual(
+                SearchLayout.bodyScrolls(contentHeight: content), content > body + 0.5,
+                "at \(count) results the panel's bottom edge disagrees with whether it is cut: "
+                    + "content \(content) pt in a \(body) pt body")
+
+            if SearchLayout.bodyScrolls(contentHeight: content) {
+                scrolled.append(count)
+                XCTAssertEqual(
+                    SearchLayout.scrollFade(contentHeight: content), SearchLayout.scrollFadeHeight,
+                    "\(count) results are cut by the panel's edge with no fade on it")
+                // The fade is drawn inside the body, so it can only ever be a signal at the edge —
+                // never a curtain over a panel that is mostly fade.
+                XCTAssertLessThan(SearchLayout.scrollFadeHeight, body / 4)
+            } else {
+                fitted.append(count)
+                XCTAssertEqual(
+                    SearchLayout.scrollFade(contentHeight: content), 0,
+                    "\(count) results fit, and a fade over them promises a row that is not there")
+                // A panel that fits is exactly as tall as what is in it, and shows all of it.
+                XCTAssertEqual(body, content, accuracy: 0.5)
+            }
+        }
+        XCTAssertFalse(scrolled.isEmpty, "no count in the sweep overflowed — the sweep proves nothing")
+        XCTAssertFalse(fitted.isEmpty, "every count overflowed — the fade would be permanent")
+        print("[search] result counts that scroll: \(scrolled); counts that fit: \(fitted)")
+    }
+
     /// …and the card-height arithmetic the line above depends on really matches the card.
     @MainActor
     func testACardIsAsTallAsTheLayoutSays() {
@@ -307,10 +428,118 @@ final class SearchSurfaceTests: XCTestCase {
     /// void is the first thing a new user sees. This is the guard against a section being added later
     /// with no empty state — the copy has to exist and it has to be a sentence.
     func testEverySectionHasCopyForTheStateANewInstallIsIn() {
-        for note in [SearchCopy.noWebsites, SearchCopy.noApps, SearchCopy.noResults] {
+        for note in [
+            SearchCopy.noWebsites, SearchCopy.noApps, SearchCopy.noResults,
+            SearchCopy.results(intent: .browsing), SearchCopy.results(intent: .filtering),
+            SearchCopy.results(intent: .searching),
+        ] {
             XCTAssertFalse(note.isEmpty)
             XCTAssertGreaterThan(note.split(separator: " ").count, 2, "\"\(note)\" is a label, not an answer")
         }
+    }
+
+    /// **An untouched search bar is not a failed search.**
+    ///
+    /// The regression this exists for shipped: on a fresh install, with an empty query and nothing
+    /// captured, the panel said `No results` in its header and `Nothing captured matches that yet`
+    /// under `RESULTS`. Both are verdicts on a search nobody ran, and they were the first two
+    /// sentences the app showed a brand-new user. `SearchCopy` had no empty-query state at all — it
+    /// only knew "has results" from "no results" — so an untouched bar was reported as a failure.
+    func testAnUntouchedSearchBarIsNotReportedAsAFailedSearch() {
+        // The results section: browsing must not borrow the sentence written for a failed search.
+        XCTAssertNotEqual(
+            SearchCopy.results(intent: .browsing), SearchCopy.noResults,
+            "an empty query is answered with the no-results copy — the false negative is back")
+        XCTAssertFalse(
+            SearchCopy.results(intent: .browsing).lowercased().contains("match"),
+            "\"\(SearchCopy.results(intent: .browsing))\" claims a match failed; nothing was searched for")
+
+        // …and a search that really ran and really found nothing still says so, in both the forms
+        // that count as having asked.
+        XCTAssertEqual(SearchCopy.results(intent: .searching), SearchCopy.noResults)
+        XCTAssertEqual(
+            SearchCopy.results(intent: .filtering), SearchCopy.noResults,
+            "a lit filter chip is a question, so an empty answer to it is an answer")
+
+        // The header, which is the other half of the same defect.
+        XCTAssertNil(
+            SearchCopy.countLabel(0, intent: .browsing),
+            "the filter row reported \"No results\" for a search that was never run")
+        XCTAssertEqual(SearchCopy.countLabel(0, intent: .searching), "No results")
+        XCTAssertEqual(SearchCopy.countLabel(0, intent: .filtering), "No results")
+        // A browsing panel that does have captures says how much there is, which is a fact about
+        // what is on screen rather than a verdict on a query.
+        XCTAssertEqual(SearchCopy.countLabel(1, intent: .browsing), "1 moment captured")
+        XCTAssertEqual(SearchCopy.countLabel(109, intent: .browsing), "109 moments captured")
+        XCTAssertEqual(SearchCopy.countLabel(109, intent: .searching), "109 results")
+    }
+
+    /// **Opening the bar reads the capture, even though nothing was typed.**
+    ///
+    /// The other half of the empty-query defect, and the one that made the copy a lie rather than
+    /// merely a false negative: `onAppear` called `search("")`, whose "identical text is a no-op"
+    /// guard matched the query's initial `""` and returned before touching the database. Every open
+    /// therefore drew the no-captures state — on a Mac with a hundred thousand of them. Measured
+    /// against a real `ContextStore` on disk, because the bug was in the read that never happened.
+    @MainActor
+    func testOpeningTheBarWithNothingTypedStillReadsWhatWasCaptured() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("search-open-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+        for offset in 0..<3 {
+            _ = try store.insertFrame(
+                Frame(
+                    capturedAt: 1_760_000_000 + Double(offset),
+                    appName: "Cursor", bundleId: nil, windowTitle: "Docs — arc.net",
+                    imagePath: "/tmp/frame-\(offset).heic"))
+        }
+
+        let model = SearchResultsModel(store: store)
+        model.start("")
+
+        XCTAssertEqual(
+            model.moments.count, 3,
+            "the surface opened without reading anything — an empty bar is not a reason to skip the read")
+        XCTAssertEqual(model.totalCount, 3)
+        XCTAssertEqual(model.intent, .browsing)
+        // …so the sentence the panel would have shown is about what is there, not about a failure.
+        XCTAssertEqual(SearchCopy.countLabel(model.totalCount, intent: model.intent), "3 moments captured")
+        XCTAssertFalse(model.moments.isEmpty, "the browsing empty-state copy would be a lie here")
+
+        // And a store with nothing in it is the only way the browsing empty state is reached, which
+        // is what makes its sentence true wherever it appears.
+        let bare = try ContextStore(url: root.appendingPathComponent("empty.db"))
+        let fresh = SearchResultsModel(store: bare)
+        fresh.start("")
+        XCTAssertTrue(fresh.moments.isEmpty)
+        XCTAssertNil(SearchCopy.countLabel(fresh.totalCount, intent: fresh.intent))
+        XCTAssertEqual(SearchCopy.results(intent: fresh.intent), SearchCopy.nothingCapturedYet)
+    }
+
+    /// …and the intent really follows what the user did, so the copy above is reached in the states
+    /// it was written for. Whitespace is not a question, and a lit chip is.
+    @MainActor
+    func testTheIntentFollowsWhatTheUserActuallyDid() {
+        let model = SearchResultsModel(moments: [])
+        XCTAssertEqual(model.intent, .browsing, "a fresh install has been asked nothing")
+
+        model.search("gpu benchmarks")
+        XCTAssertEqual(model.intent, .searching)
+
+        model.search("   ")
+        XCTAssertEqual(model.intent, .browsing, "a bar holding one space is an untouched bar")
+
+        model.select(time: .today)
+        XCTAssertEqual(model.intent, .filtering, "a lit chip narrows the answer, so it is a question")
+        model.select(time: .anytime)
+        XCTAssertEqual(model.intent, .browsing, "\"anytime\" is the resting state, not a filter")
+
+        // And the model a preview or the render harness builds carries its query with it, rather
+        // than depending on a view's `onAppear` to put it there.
+        XCTAssertEqual(SearchResultsModel(moments: [], query: "invoice").intent, .searching)
+        XCTAssertEqual(SearchResultsModel(moments: []).intent, .browsing)
     }
 
     /// **An empty panel is short, and a full one is not.**

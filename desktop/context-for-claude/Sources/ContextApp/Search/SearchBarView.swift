@@ -108,7 +108,9 @@ struct SearchBarView: View {
             guard height > 0 else { return }
             onHeightChange(height)
         }
-        .onAppear { results.search(query) }
+        // `start`, not `search`: the bar opens empty, and `search` treats "still empty" as nothing to
+        // do, so the panel used to open having never read anything at all.
+        .onAppear { results.start(query) }
         .onChange(of: query) { text in
             outcome = nil
             results.search(text)
