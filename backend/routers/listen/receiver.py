@@ -165,6 +165,7 @@ class ListenReceiver:
                     modulate_callback or callback,
                     sample_rate,
                     self.host.stt_language,
+                    codec=self.host.request.codec,
                 ),
             )
             self.host.stt_service = actual_service
@@ -172,7 +173,12 @@ class ListenReceiver:
                 self.host.stt_model = 'velma-2'
             return socket
         if self.host.stt_service == STTService.modulate:
-            return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
+            return await process_audio_modulate(
+                modulate_callback or callback,
+                sample_rate,
+                self.host.stt_language,
+                codec=self.host.request.codec,
+            )
         if self.host.stt_service == STTService.deepgram:
             return await process_audio_dg(
                 callback,
