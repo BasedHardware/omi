@@ -282,8 +282,8 @@ impl Runtime {
         let key = (
             owner_id.clone(),
             surface_kind.clone(),
-            external_ref_kind,
-            external_ref_id,
+            external_ref_kind.clone(),
+            external_ref_id.clone(),
         );
         let session_id = self.surfaces.get(&key).cloned();
         let created = session_id.is_none();
@@ -295,6 +295,23 @@ impl Runtime {
             return;
         }
         let session_id = session_id.unwrap_or_else(|| {
+            let conversation_id = match self.journal.conversation_id(&JournalSurface {
+                owner_id: owner_id.clone(),
+                surface_kind: surface_kind.clone(),
+                external_ref_kind: external_ref_kind.clone(),
+                external_ref_id: external_ref_id.clone(),
+            }) {
+                Ok(conversation_id) => conversation_id,
+                Err(error) => {
+                    self.emit_error(
+                        Some(request_id.clone()),
+                        Some(client_id.clone()),
+                        "runtime_state",
+                        &error,
+                    );
+                    return String::new();
+                }
+            };
             let profile = creation_profile(&fields).unwrap_or_else(|| {
                 self.preferences
                     .get(&owner_id)
@@ -303,7 +320,6 @@ impl Runtime {
             });
             let session_id = format!("rx4-session-{}", self.next_session);
             self.next_session += 1;
-            let conversation_id = format!("rx4-conversation-{}", self.next_session - 1);
             self.sessions.insert(
                 session_id.clone(),
                 SurfaceSession {
@@ -316,6 +332,9 @@ impl Runtime {
             self.surfaces.insert(key, session_id.clone());
             session_id
         });
+        if session_id.is_empty() {
+            return;
+        }
         let Some(session) = self.sessions.get(&session_id) else {
             self.emit_error(
                 Some(request_id),
@@ -846,6 +865,17 @@ impl Runtime {
         }
     }
 
+    fn complete_run(
+        &mut self,
+        request_id: String,
+        tool_requests: &mut mpsc::UnboundedReceiver<ToolRequest>,
+    ) {
+        while let Ok(request) = tool_requests.try_recv() {
+            self.authorize_tool_request(request);
+        }
+        self.running.remove(&request_id);
+    }
+
     fn emit_journal_result(
         &self,
         operation: &str,
@@ -1186,17 +1216,18 @@ impl Runtime {
         }
         let profile_generation = session.profile.generation;
         let surface_kind = session.surface_kind.clone();
-        let run_identity =
-            match self
-                .journal
-                .admit_run(&credentials.owner_id, &session_id, profile_generation)
-            {
-                Ok(identity) => identity,
-                Err(error) => {
-                    self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
-                    return;
-                }
-            };
+        let run_identity = match self.journal.admit_run(
+            &credentials.owner_id,
+            &session_id,
+            &session.conversation_id,
+            profile_generation,
+        ) {
+            Ok(identity) => identity,
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
+                return;
+            }
+        };
 
         let requested_mode = fields
             .get("agentMode")
@@ -1620,7 +1651,7 @@ async fn main() {
                 Ok(None) => break,
             },
             Some(request_id) = completed_receiver.recv() => {
-                runtime.running.remove(&request_id);
+                runtime.complete_run(request_id, &mut tool_request_receiver);
             },
             Some(request) = tool_request_receiver.recv() => {
                 runtime.authorize_tool_request(request);
@@ -1751,6 +1782,52 @@ mod tests {
         assert_eq!(accepted.kind, "authorized_tool_result");
         assert_eq!(accepted.fields["outcome"], "succeeded");
         assert_eq!(accepted.fields["duplicate"], false);
+    }
+
+    #[tokio::test]
+    async fn completed_run_authorizes_queued_tool_call_before_removal() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let (cancel, _) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: "session".into(),
+                run_id: "run".into(),
+                attempt_id: "attempt".into(),
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        let (tool_requests, mut queued_tool_requests) = mpsc::unbounded_channel();
+        tool_requests
+            .send(ToolRequest {
+                request_id: "request".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-queued".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"omi"}"#.into(),
+                },
+            })
+            .expect("queued tool call must send");
+
+        runtime.complete_run("request".into(), &mut queued_tool_requests);
+
+        let authorized = receiver
+            .recv()
+            .await
+            .expect("queued tool call must authorize before completion");
+        assert_eq!(authorized.kind, "authorized_tool_execution");
+        assert_eq!(authorized.fields["invocationId"], "invoke-queued");
+        assert!(!runtime.running.contains_key("request"));
     }
 
     #[tokio::test]
@@ -2099,6 +2176,27 @@ mod tests {
         );
         let error = receiver.recv().await.expect("owner mismatch must reject");
         assert_eq!(error.fields["failure"]["failureCode"], "authentication");
+    }
+
+    #[tokio::test]
+    async fn surface_session_uses_the_journal_conversation_id() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("resolve fixture must parse"));
+        let resolved = receiver.recv().await.expect("surface response must emit");
+        let conversation_id = resolved.fields["conversationId"]
+            .as_str()
+            .expect("resolved conversation ID must be present")
+            .to_owned();
+
+        runtime.handle(parse_line(r#"{"type":"journal_record_turn","requestId":"record","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{"turnId":"turn-1","role":"user","content":"hello","status":"completed"}}"#).expect("record fixture must parse"));
+        let record = receiver.recv().await.expect("journal response must emit");
+        assert_eq!(record.fields["conversationId"], conversation_id);
     }
 
     #[tokio::test]
