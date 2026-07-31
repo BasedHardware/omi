@@ -2112,6 +2112,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "device_tools_probe",
+      summary: "Probe the on-device tool surface without reading real messages or sending anything",
+      params: ["messagesDbPath"]
+    ) { params in
+      await DeviceToolsProbe.run(messagesDbPath: params["messagesDbPath"])
+    }
+
+    register(
       name: "delete_conversation",
       summary: "Delete conversation with cascade (API + conversationDeleted notification)",
       params: ["id"]

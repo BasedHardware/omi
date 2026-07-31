@@ -124,8 +124,8 @@ actor MessagesReaderService {
     return .storeReadFailed(path: path, reason: error.localizedDescription)
   }
 
-  private func openReadOnlyStore() throws -> DatabaseQueue {
-    let url = Self.storeURL()
+  private func openReadOnlyStore(at override: URL? = nil) throws -> DatabaseQueue {
+    let url = override ?? Self.storeURL()
     guard FileManager.default.fileExists(atPath: url.path) else {
       throw MessagesReaderError.storeNotFound(path: url.path)
     }
@@ -138,10 +138,13 @@ actor MessagesReaderService {
     }
   }
 
-  func listChats(limit: Int) async throws -> [MessageChatRecord] {
+  /// `storeOverride` exists so the automation-bridge probe can point at a
+  /// fixture (or a deliberately absent) database without mutating process
+  /// environment shared with the rest of the app.
+  func listChats(limit: Int, storeOverride: URL? = nil) async throws -> [MessageChatRecord] {
     let bounded = max(1, min(limit, 100))
-    let dbQueue = try openReadOnlyStore()
-    let path = Self.storeURL().path
+    let dbQueue = try openReadOnlyStore(at: storeOverride)
+    let path = (storeOverride ?? Self.storeURL()).path
     do {
       return try await dbQueue.read { db in
         let rows = try Row.fetchAll(
@@ -194,10 +197,12 @@ actor MessagesReaderService {
     }
   }
 
-  func readHistory(chatID: Int64?, handle: String?, limit: Int) async throws -> [MessageRecord] {
+  func readHistory(
+    chatID: Int64?, handle: String?, limit: Int, storeOverride: URL? = nil
+  ) async throws -> [MessageRecord] {
     let bounded = max(1, min(limit, 200))
-    let dbQueue = try openReadOnlyStore()
-    let path = Self.storeURL().path
+    let dbQueue = try openReadOnlyStore(at: storeOverride)
+    let path = (storeOverride ?? Self.storeURL()).path
     do {
       return try await dbQueue.read { db in
         let resolvedChatID: Int64
