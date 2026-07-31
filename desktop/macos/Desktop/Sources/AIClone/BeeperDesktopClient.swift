@@ -16,14 +16,14 @@ enum BeeperClientError: Error, Equatable {
 
 // MARK: - Wire models (subset of the SDK schema that the clone needs)
 
-struct BeeperUser: Codable, Equatable {
+struct BeeperUser: Codable, Equatable, Sendable {
   let id: String
   var fullName: String?
   var username: String?
   var isSelf: Bool?
 }
 
-struct BeeperAccount: Codable, Equatable, Identifiable {
+struct BeeperAccount: Codable, Equatable, Identifiable, Sendable {
   let accountID: String
   var network: String?
   var user: BeeperUser?
@@ -37,12 +37,12 @@ struct BeeperAccount: Codable, Equatable, Identifiable {
   }
 }
 
-struct BeeperParticipants: Codable, Equatable {
+struct BeeperParticipants: Codable, Equatable, Sendable {
   var hasMore: Bool?
   var items: [BeeperUser]?
 }
 
-struct BeeperChat: Codable, Equatable, Identifiable {
+struct BeeperChat: Codable, Equatable, Identifiable, Sendable {
   let id: String
   let accountID: String
   var network: String?
@@ -58,7 +58,7 @@ struct BeeperChat: Codable, Equatable, Identifiable {
   var isSingle: Bool { (type ?? "single") == "single" }
 }
 
-struct BeeperMessage: Codable, Equatable, Identifiable {
+struct BeeperMessage: Codable, Equatable, Identifiable, Sendable {
   let id: String
   var accountID: String?
   var chatID: String?
@@ -75,23 +75,23 @@ struct BeeperMessage: Codable, Equatable, Identifiable {
   var isTextLike: Bool { (type ?? "TEXT") == "TEXT" }
 }
 
-struct BeeperCursorPage<Item: Codable & Equatable>: Codable, Equatable {
+struct BeeperCursorPage<Item: Codable & Equatable & Sendable>: Codable, Equatable, Sendable {
   var items: [Item]
   var hasMore: Bool?
   var oldestCursor: String?
   var newestCursor: String?
 }
 
-struct BeeperSendResponse: Codable, Equatable {
+struct BeeperSendResponse: Codable, Equatable, Sendable {
   let chatID: String
   let pendingMessageID: String
 }
 
-struct BeeperInfo: Codable, Equatable {
+struct BeeperInfo: Codable, Equatable, Sendable {
   // /v1/info is public server metadata. Keep everything optional so a Beeper
   // upgrade never breaks the probe; we only read `server.base_url` to
   // self-correct the port.
-  struct Server: Codable, Equatable {
+  struct Server: Codable, Equatable, Sendable {
     var baseURL: String?
     var port: Int?
 
@@ -106,7 +106,7 @@ struct BeeperInfo: Codable, Equatable {
 
 // MARK: - Live event stream wire models (ws://…/v1/ws, experimental)
 
-struct BeeperLiveEvent: Codable, Equatable {
+struct BeeperLiveEvent: Codable, Equatable, Sendable {
   let type: String  // message.upserted | message.deleted | chat.upserted | chat.deleted | ready | ...
   var chatID: String?
   var ids: [String]?

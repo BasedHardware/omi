@@ -34,6 +34,28 @@ enum AICloneConnectionState: Equatable {
   }
 }
 
+struct AICloneInboundQueue {
+  private var inFlightChatIDs: Set<String> = []
+  private var pendingByChatID: [String: BeeperMessage] = [:]
+
+  mutating func submit(_ inbound: BeeperMessage, chatID: String) -> BeeperMessage? {
+    guard !inFlightChatIDs.contains(chatID) else {
+      pendingByChatID[chatID] = inbound
+      return nil
+    }
+    inFlightChatIDs.insert(chatID)
+    return inbound
+  }
+
+  mutating func complete(chatID: String) -> BeeperMessage? {
+    if let pending = pendingByChatID.removeValue(forKey: chatID) {
+      return pending
+    }
+    inFlightChatIDs.remove(chatID)
+    return nil
+  }
+}
+
 @MainActor
 final class AICloneService: ObservableObject {
   static let shared = AICloneService()
@@ -57,7 +79,7 @@ final class AICloneService: ObservableObject {
   private var listeningSince = Date()
   /// Chats currently being processed — coalesces bursts of message.upserted
   /// events so one inbound burst produces one reply decision.
-  private var inFlightChatIDs: Set<String> = []
+  private var inboundQueue = AICloneInboundQueue()
   /// Inbound message ids the clone has already acted on. Beeper emits the same
   /// message as several `message.upserted` events (bridge numeric id, then the
   /// Matrix event id, plus edits), so one message must reply at most once.
@@ -274,10 +296,15 @@ final class AICloneService: ObservableObject {
       log("AIClone: duplicate event for an already-handled message; ignoring")
       return
     }
-    guard !inFlightChatIDs.contains(chatID) else { return }
-    inFlightChatIDs.insert(chatID)
-    defer { inFlightChatIDs.remove(chatID) }
-    await processInbound(inbound, chatID: chatID, mode: mode)
+    guard var next = inboundQueue.submit(inbound, chatID: chatID) else { return }
+    while true {
+      let currentMode = configuration.mode(for: chatID)
+      if currentMode != .off {
+        await processInbound(next, chatID: chatID, mode: currentMode)
+      }
+      guard let pending = inboundQueue.complete(chatID: chatID) else { return }
+      next = pending
+    }
   }
 
   /// Claims an inbound message id for processing. Returns true the first time a

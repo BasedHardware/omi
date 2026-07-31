@@ -217,6 +217,13 @@ final class AICloneInboundFilterTests: XCTestCase {
 
 @MainActor
 final class AICloneInboundDedupTests: XCTestCase {
+  private func message(_ id: String) -> BeeperMessage {
+    BeeperMessage(
+      id: id, accountID: "a", chatID: "c", senderID: "@x", senderName: "Alice",
+      sortKey: id, timestamp: "2026-07-15T01:00:00Z", text: id, type: "TEXT",
+      isSender: false, isUnread: true, isDeleted: false)
+  }
+
   func testEachMessageIDIsClaimedOnceEvenWithDuplicateEvents() {
     let service = AICloneService(
       store: AICloneConfigurationStore(
@@ -229,6 +236,19 @@ final class AICloneInboundDedupTests: XCTestCase {
     XCTAssertFalse(service.claimInbound("275"))
     XCTAssertTrue(service.claimInbound("276"), "a different message still replies once")
     XCTAssertFalse(service.claimInbound("276"))
+  }
+
+  func testNewestPendingInboundRunsAfterCurrentMessage() {
+    var queue = AICloneInboundQueue()
+    let first = message("first")
+    let second = message("second")
+    let third = message("third")
+
+    XCTAssertEqual(queue.submit(first, chatID: "c"), first)
+    XCTAssertNil(queue.submit(second, chatID: "c"))
+    XCTAssertNil(queue.submit(third, chatID: "c"))
+    XCTAssertEqual(queue.complete(chatID: "c"), third)
+    XCTAssertNil(queue.complete(chatID: "c"))
   }
 }
 
