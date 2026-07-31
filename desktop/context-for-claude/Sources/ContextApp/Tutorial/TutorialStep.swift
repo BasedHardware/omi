@@ -5,35 +5,37 @@ import Foundation
 /// The order lives in `flow` rather than in `CaseIterable`'s declaration order so the two terminal
 /// states can sit in the same enum without being reachable by advancing, and so a re-order is one
 /// array literal rather than a scattered set of `case`s in a `next()` switch.
+///
+/// There are eleven of them and there used to be fourteen. The cuts were beats that taught nothing:
+/// one that opened a stranger's website — teaching this app on somebody else's content — and one that
+/// only announced the next beat. "It's time to open the timeline" came back as `openTimeline`, but
+/// inverted: it no longer announces a chord and then opens the window itself, it asks for the chord
+/// and waits, and the window that appears is opened by the keypress. What is left is one idea per
+/// card, and every card that asks for something waits for it.
 enum TutorialStep: String, CaseIterable, Sendable {
-    /// G1 — "Learn how this works", Start / Skip.
+    /// "Let me show you what I do", Start / Skip.
     case invitation
-    /// G2 — a real, text-dense page opens in the user's own default browser.
-    case article
-    /// G3 — Screen Recording, asked for here and only if it is genuinely missing.
+    /// Screen Recording, asked for here and only if it is genuinely missing.
     case screenAccess
-    /// G4/G5 — "scroll around and collect your first frames", counted from the store.
+    /// "Go look at something" — on whatever the user actually has open, gated on real frames.
     case collectFrames
-    /// G6 — "it's time to open the timeline", showing the chord.
+    /// The chord, taught the only way a chord can be taught: the user presses it and the real window
+    /// opens because they did. Gated on the real shortcut really firing.
     case openTimeline
-    /// G7 — the real timeline window is up.
+    /// The real timeline window is up, and the drag that travels through it. Gated on a real gesture.
     case timeline
-    /// G8 — "scroll left to see what you did in the past".
-    case scrollBack
-    /// G9 — "find specific moments — click Search All".
+    /// "Find one moment" — the real Search All pill.
     case findMoments
-    /// G10/G11 — type a query, press Return.
+    /// Type a query, press Return, and the real hit that comes back is tapped to travel to it.
     case query
-    /// G12 — a real result, and tapping it goes back to that exact moment.
-    case foundIt
     /// The handoff the first-run plan ends on: Claude reads its MCP config at startup, so it has to
     /// be restarted before it can answer from this store.
     case claudeHandoff
     /// The payoff, gated on `QueryStamp`: Claude has genuinely called one of our tools.
     case claudeProof
-    /// G13 — "you're all set".
+    /// "That's everything", and the one sentence that says what the capture beat really achieved.
     case allSet
-    /// G14 — "one more thing", with the menu bar spotlight.
+    /// "One more thing", with the menu bar spotlight.
     case menuBar
 
     /// Ran to the end.
@@ -44,8 +46,8 @@ enum TutorialStep: String, CaseIterable, Sendable {
 
     /// Every step the user is walked through, in order. Terminal states are deliberately absent.
     static let flow: [TutorialStep] = [
-        .invitation, .article, .screenAccess, .collectFrames, .openTimeline, .timeline,
-        .scrollBack, .findMoments, .query, .foundIt, .claudeHandoff, .claudeProof, .allSet, .menuBar,
+        .invitation, .screenAccess, .collectFrames, .openTimeline, .timeline, .findMoments, .query,
+        .claudeHandoff, .claudeProof, .allSet, .menuBar,
     ]
 
     var isTerminal: Bool { self == .finished || self == .skipped }
@@ -63,15 +65,19 @@ enum TutorialStep: String, CaseIterable, Sendable {
     ///
     /// This is the honesty contract, written where the machine can be tested against it rather than
     /// left implicit in a pile of `if`s: a step whose gate is `realFrames` cannot be satisfied by
-    /// time passing, and one whose gate is `genuineStamp` cannot be satisfied by this app at all.
+    /// time passing, and one whose gate is `genuineToolCall` cannot be satisfied by this app at all.
+    ///
+    /// Hiding the *mechanism* from the copy changed none of this. The card no longer counts frames
+    /// out loud; the step still cannot be left until they are really there.
     var gate: TutorialGate {
         switch self {
         case .screenAccess: return .screenRecordingGrant
         case .collectFrames: return .realFrames
+        case .openTimeline: return .realHotkey
+        case .timeline: return .realGesture
         case .query: return .realSearchResult
         case .claudeProof: return .genuineToolCall
-        case .invitation, .article, .openTimeline, .timeline, .scrollBack, .findMoments, .foundIt,
-             .claudeHandoff, .allSet, .menuBar:
+        case .invitation, .findMoments, .claudeHandoff, .allSet, .menuBar:
             return .userAction
         case .finished, .skipped:
             return .userAction
@@ -83,13 +89,29 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// located — an arrow aimed at a guess is worse than a sentence.
     var target: TutorialTarget? {
         switch self {
-        case .collectFrames: return .browserWindow
-        case .scrollBack: return .timelineTrack
+        case .timeline: return .timelineTrack
         case .findMoments: return .searchAllButton
-        case .query, .foundIt: return .timelineWindow
+        case .query: return .timelineWindow
         default: return nil
         }
     }
+
+    /// Where the card goes when it has no target to sit beside.
+    ///
+    /// One step needs an answer other than "the middle of the screen": `collectFrames` asks the user
+    /// to go and use their own machine, and a card parked over the thing they were told to look at is
+    /// the tutorial getting in the way of its own lesson.
+    var placement: TutorialPlacement {
+        self == .collectFrames ? .outOfTheWay : .centred
+    }
+}
+
+/// Where a card with nothing to point at sits.
+enum TutorialPlacement: Equatable, Sendable {
+    /// The middle of the screen, a little above centre. What a card to be read wants.
+    case centred
+    /// The bottom trailing corner, clear of whatever the user was asked to go and do.
+    case outOfTheWay
 }
 
 /// What a step is waiting for. Only one of these can be satisfied by the user pressing a button.
@@ -100,6 +122,13 @@ enum TutorialGate: Equatable, Sendable {
     case screenRecordingGrant
     /// Frames genuinely in the capture store, counted from it. Waivable, loudly.
     case realFrames
+    /// The real global shortcut really fired, after this step began watching for it. Waivable — a
+    /// machine with no Accessibility grant cannot fire it at all — and the waiver is explicit that
+    /// the tutorial opened the window rather than the user.
+    case realHotkey
+    /// A real scroll gesture over one of this app's own windows, measured in points travelled.
+    /// Waivable: a timeline that never opened has nothing to drag.
+    case realGesture
     /// At least one real hit from a real search of the real store. Not waivable: a "found it" with
     /// nothing behind it is the one beat that would make everything else in the product suspect.
     case realSearchResult
@@ -111,7 +140,7 @@ enum TutorialGate: Equatable, Sendable {
     /// labelled user action that says what did not happen.
     var isWaivable: Bool {
         switch self {
-        case .userAction, .screenRecordingGrant, .realFrames: return true
+        case .userAction, .screenRecordingGrant, .realFrames, .realHotkey, .realGesture: return true
         case .realSearchResult, .genuineToolCall: return false
         }
     }
@@ -120,8 +149,6 @@ enum TutorialGate: Equatable, Sendable {
 /// A real piece of UI a coach mark can be positioned against. Every case is something whose frame is
 /// discoverable at runtime; nothing here is a constant.
 enum TutorialTarget: Equatable, Sendable {
-    /// The default browser's frontmost window, found through the window server.
-    case browserWindow
     /// Our own timeline window, found through `NSApp.windows`.
     case timelineWindow
     /// The timeline's track, derived from the timeline window's actual frame.

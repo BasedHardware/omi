@@ -51,8 +51,8 @@ final class RewindTrackView: NSView {
 
     /// Called with an instant when the user scrubs. The model turns it into a frame.
     var onScrub: ((Double) -> Void)?
-    /// Called with a signed number of seconds when the user scrolls.
-    var onPan: ((Double) -> Void)?
+    /// Called with a signed number of seconds when the user scrolls. Positive is forward in time.
+    var onTravel: ((Double) -> Void)?
 
     private var tooltipWindow: NSWindow?
     private var trackingAreaAdded: NSTrackingArea?
@@ -314,8 +314,12 @@ final class RewindTrackView: NSView {
         onScrub?(instant(atX: point.x))
     }
 
-    /// Scrolling left moves back in time, which the spec asks for explicitly and which is only
-    /// meaningful because the axis is time rather than an array index.
+    /// Scrolling travels through time, which is only meaningful because the axis is time rather than
+    /// an array index.
+    ///
+    /// Which way is "back" is the user's own natural-scrolling setting and this view does not try to
+    /// second-guess it: the sign follows the platform, so the gesture reads the same here as it does
+    /// everywhere else on their Mac.
     override func scrollWheel(with event: NSEvent) {
         guard bounds.width > 0 else { return }
         let deltaX = event.scrollingDeltaX
@@ -324,7 +328,7 @@ final class RewindTrackView: NSView {
         // with no horizontal wheel would otherwise be unable to move at all.
         let travel = abs(deltaX) >= abs(deltaY) ? -deltaX : -deltaY
         let seconds = Double(travel / bounds.width) * trackSpan
-        onPan?(seconds)
+        onTravel?(seconds)
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -446,12 +450,12 @@ struct RewindTrack: NSViewRepresentable {
     let trackSpan: Double
     let playheadAt: Double?
     let onScrub: (Double) -> Void
-    let onPan: (Double) -> Void
+    let onTravel: (Double) -> Void
 
     func makeNSView(context: Context) -> RewindTrackView {
         let view = RewindTrackView()
         view.onScrub = onScrub
-        view.onPan = onPan
+        view.onTravel = onTravel
         return view
     }
 
@@ -459,7 +463,7 @@ struct RewindTrack: NSViewRepresentable {
         // Reassigned every update: the closures capture the model, and a stale one would scrub a
         // model that is no longer the window's.
         view.onScrub = onScrub
-        view.onPan = onPan
+        view.onTravel = onTravel
         view.apply(
             blocks: blocks,
             frames: frames,

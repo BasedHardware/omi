@@ -3,6 +3,21 @@ import SwiftUI
 
 /// The tutorial's card: one surface, whatever the step.
 ///
+/// Every card is the same three things in the same order — **the mark saying one line**, whatever
+/// that line needs the user to touch, and the controls. Nothing else. The words are not written here:
+/// they come from `TutorialModel.speech`, which is where a claim can be tested, and this file only
+/// decides how they are delivered.
+///
+/// Two things are deliberately absent, and both were here before:
+///
+/// - **A step counter.** A number that says how much of this is left is a number people read as a
+///   reason to leave. The user is told what to do next and nothing about the length of the queue.
+/// - **A frame readout.** The capture beat used to show five dots filling and "3 of 5 frames", which
+///   is this app's plumbing narrated at someone who has been using it for ninety seconds. The gate is
+///   unchanged — the step still cannot be left until the frames are genuinely in the store — but the
+///   card says "Go and look at something" and then "Got it", which is the same fact in a human's
+///   words. Nothing here is on a timer; see `TutorialModel.outcome`.
+///
 /// Every colour is an `Ink` token — a system semantic or `controlAccentColor` — so it reads correctly
 /// in both appearances and carries no borrowed brand. Nothing here is purple (`INV-UI-1`).
 struct TutorialCardView: View {
@@ -13,266 +28,168 @@ struct TutorialCardView: View {
     /// width (`TutorialOverlay.fittingHeight()`), so the width must not depend on anything the window
     /// does.
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            content
+        VStack(alignment: .leading, spacing: 16) {
+            // The mark says the card's own words — the same component and the same call-site shape
+            // onboarding uses, because it is the same character and this is the screen straight
+            // after those.
+            TalkingMark(
+                lead: model.speech.runs,
+                leadStyle: InkType.stepHeadline,
+                aside: model.speech.aside)
+
+            extras
             footer
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 20)
         .frame(width: TutorialOverlay.width - (chrome.arrow == nil ? 0 : 18), alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .background(surface)
+        // The app's shared glass, not a fill of its own: a coach mark floats over the desktop beside
+        // the very windows it points at, and it has to be made of the same thing they are. The
+        // modifier carries the material, the scrim, the corner, the faint edge, the ambient shadow
+        // *and* the light appearance — which is what makes `Ink`'s dynamic colours resolve dark on it.
+        .inkGlassPanel()
         .overlay(alignment: .top) { arrow(.top) }
         .overlay(alignment: .bottom) { arrow(.bottom) }
         .padding(chrome.arrow == nil ? 0 : 9)
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: model.step)
     }
 
-    private var surface: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Ink.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Ink.hairline, lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.22), radius: 18, y: 6)
-    }
-
     /// The pointer, drawn only on the edge the placement asked for and offset to track the target.
+    ///
+    /// The same glass as the card, clipped to the triangle rather than filled with a flat colour: a
+    /// solid tab on a translucent card is visible as a tab on every wallpaper that is not the one it
+    /// was picked against.
     @ViewBuilder
     private func arrow(_ edge: TutorialArrow.Edge) -> some View {
         if let arrow = chrome.arrow, arrow.edge == edge {
-            TutorialArrowShape(pointsUp: edge == .top)
-                .fill(Ink.surface)
-                .overlay(
-                    TutorialArrowShape(pointsUp: edge == .top)
-                        .stroke(Ink.hairline, lineWidth: 1))
+            InkGlassSurface(cornerRadius: 0)
+                .clipShape(TutorialArrowShape(pointsUp: edge == .top))
                 .frame(width: 20, height: 10)
                 .offset(x: arrow.offset, y: edge == .top ? -9 : 9)
         }
     }
 
-    // MARK: - Steps
+    // MARK: - What the step needs the user to touch
 
+    /// Only the steps that ask for something have anything here. A card whose whole content is one
+    /// spoken line and a button is the shape most of them want.
     @ViewBuilder
-    private var content: some View {
+    private var extras: some View {
         switch model.step {
-        case .invitation: invitation
-        case .article: article
-        case .screenAccess: screenAccess
-        case .collectFrames: collectFrames
-        case .openTimeline: openTimeline
-        case .timeline: timeline
-        case .scrollBack: scrollBack
-        case .findMoments: findMoments
-        case .query: query
-        case .foundIt: foundIt
-        case .claudeHandoff: claudeHandoff
-        case .claudeProof: claudeProof
-        case .allSet: allSet
-        case .menuBar: menuBar
-        case .finished, .skipped: EmptyView()
-        }
-    }
-
-    // G1
-    private var invitation: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("Learn how this works")
-            prose("Two minutes. You'll collect a few real frames, open the timeline, and find one of them again.")
-        }
-    }
-
-    // G2
-    private var article: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("Something to look at")
-            if model.articleDidOpen == false {
-                prose("Your browser didn't open. Open this yourself, then continue:")
-                Text(TutorialModel.articleURL.absoluteString)
-                    .inkStyle(InkType.statusLabel, color: Ink.accent)
-                    .textSelection(.enabled)
-                InkButton("Try again", kind: .secondary) { model.openArticleAgain() }
-            } else {
-                prose("I opened Ling's Cars in your browser. Leave it open — there is a lot on that page.")
-            }
-        }
-    }
-
-    // G3
-    private var screenAccess: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline(model.screenIsGranted ? "Thank you" : "I need to see your screen")
-            prose(model.screenIsGranted
-                  ? "Screen Recording is on. Frames can land now."
-                  : "Screen Recording is off, so nothing you look at can be captured — and the rest of this tutorial would have nothing to find.")
-            if !model.screenIsGranted {
-                HStack(spacing: 10) {
-                    InkButton(model.isRequestingScreenAccess ? "Waiting…" : "Allow") {
-                        model.requestScreenAccess()
-                    }
-                    .disabled(model.isRequestingScreenAccess)
-                    Text("I'll notice the moment you do.")
-                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
-                }
-            }
-        }
-    }
-
-    // G4/G5 — the live counter. The number comes from the capture store on every tick.
-    private var collectFrames: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headline("Scroll around on this page")
-            prose("Keep going — well past the banners and into the small print. I only store a frame when the screen genuinely changes.")
+        case .screenAccess where !model.screenIsGranted:
             HStack(spacing: 10) {
-                ForEach(0..<TutorialModel.frameTarget, id: \.self) { index in
-                    Circle()
-                        .fill(index < model.framesCollected ? Ink.accent : Ink.wash)
-                        .frame(width: 9, height: 9)
+                InkButton(model.isRequestingScreenAccess ? "Waiting…" : "Allow") {
+                    model.requestScreenAccess()
                 }
-                // Past the target the count keeps being the store's answer rather than the target's —
-                // capping it would be the first small lie — so the label drops the "of 5" instead of
-                // reading "6 of 5", which is what a live walkthrough showed.
-                Text(model.gateIsSatisfied
-                     ? "\(model.framesCollected) frames"
-                     : "\(model.framesCollected) of \(TutorialModel.frameTarget) frames")
-                    .inkStyle(InkType.rowCopy, color: Ink.primary)
-                    .monospacedDigit()
+                .disabled(model.isRequestingScreenAccess)
+                // Only after the ask, and only as a button. The model no longer opens the pane on
+                // the user's behalf — `Permissions.request(.screen)` already does when there is one
+                // to open, and doing it twice opened two windows on one press.
+                if model.didAskForScreenAccess {
+                    InkButton("Open Settings", kind: .secondary) { model.openScreenSettings() }
+                } else {
+                    // Only before the ask. Afterwards the mark's own line says it, and three things
+                    // on this row wrapped the sentence under the buttons.
+                    Text("I will notice the moment you do.")
+                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            if !model.gateIsSatisfied {
-                Text(model.framesCollected == 0
-                     ? "Nothing yet — this counts real frames in your own store, so it only moves when one lands."
-                     : "Counting from your store, not from a clock.")
-                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
 
-    // G6
-    private var openTimeline: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("It's time to open the timeline")
+        // Only while something could still arrive. A spinner over "nothing will arrive until Screen
+        // Recording is on" would be the card miming work it knows is not happening.
+        case .collectFrames where model.outcome == .waiting:
+            listening
+
+        // The chord itself, as the thing to press. Shown only when it is genuinely registered: a
+        // tutorial that taught keys this machine does not listen for would be teaching a surface
+        // that is not there, and this beat cannot be earned on such a machine at all.
+        case .openTimeline where model.timelineChordIsArmed:
             HStack(spacing: 8) {
-                chordKey(TutorialModel.timelineChord)
-                Text("is the chord.")
-                    .inkStyle(InkType.prose, color: Ink.secondary)
+                chordKey(model.timelineChord)
+                Text("opens it from anywhere.")
+                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
             }
-            prose(TutorialModel.timelineChordIsArmed
-                  ? "Try it whenever you like — this button opens it too."
-                  : "That chord isn't live on this machine yet, so this button is what opens it today.")
-        }
-    }
 
-    // G7
-    private var timeline: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline(model.timelineIsOpen ? "Everything I remembered" : "The timeline didn't open")
-            prose(model.timelineIsOpen
-                  ? "One frame per moment, laid out in real time — a long gap looks like a long gap."
-                  : "There's no capture database to open it against yet, so there is nothing for it to show.")
-        }
-    }
-
-    // G8
-    private var scrollBack: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headline("Scroll left to see the past")
-            prose("The track underneath is time. Drag it left and you travel back through your own day.")
+        // The drag hint, and only until they have dragged. Leaving a loop running under "there you
+        // go" would be the card still asking for something it has already been given.
+        case .timeline where model.timelineIsOpen && !model.didDrag:
             TutorialScrollHint()
+
+        case .claudeHandoff:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("“\(TutorialModel.suggestedQuestion)”")
+                    .inkStyle(InkType.rowCopy, color: Ink.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if model.isAskingClaude {
+                    listening
+                } else if model.claudeAsk == nil, model.claudeNeedsRestart {
+                    // The consent row, and the only place anything in this app offers to quit
+                    // another one. Both choices are real: declining still hands the question over,
+                    // to the Claude they already have, and the card then says the reach may be
+                    // stale rather than quietly taking their session to force a gate.
+                    HStack(spacing: 10) {
+                        InkButton("Restart it and ask") { model.askClaude(restartingFirst: true) }
+                        InkButton("Keep it open", kind: .secondary) {
+                            model.askClaude(restartingFirst: false)
+                        }
+                    }
+                } else if model.claudeAsk != nil {
+                    // A retry rather than the old "Restart Claude": the handoff has already run, and
+                    // the only thing left worth offering is doing it again if it did not land.
+                    InkButton("Ask Claude again", kind: .secondary) { model.askClaude() }
+                }
+            }
+
+        case .query:
+            query
+
+        case .claudeProof where model.proof == nil:
+            listening
+
+        default:
+            EmptyView()
         }
     }
 
-    // G9
-    private var findMoments: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("Find specific moments")
-            prose("Click Search All, up there. I'll notice when you do.")
-        }
+    /// The one thing the card shows while it is waiting on something real: that it is awake.
+    ///
+    /// Indeterminate on purpose. Both waits — frames landing, Claude calling a tool — used to be
+    /// narrated with counts and machinery, and neither number ever helped: there is nothing the user
+    /// can do with "3 of 5" that they cannot do with "not yet". What it must never become is a bar
+    /// that fills on a clock, which would be the one lie this whole flow is built to avoid.
+    private var listening: some View {
+        ProgressView()
+            .controlSize(.small)
+            .accessibilityLabel(Text("Waiting"))
     }
 
-    // G10/G11
+    /// The search beat: type, press Return, and the real hits come back into the same card. The mark
+    /// changes its line to "There it is" — which it can only do because there was really a hit.
+    @ViewBuilder
     private var query: some View {
         VStack(alignment: .leading, spacing: 10) {
-            headline("Type what you're looking for")
-            prose("A word you actually saw on that page, then press Return.")
-            TutorialQueryField(model: model)
-            if let message = model.searchMessage {
-                Text(message)
-                    .inkStyle(InkType.statusLabel, color: Ink.errorRed)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    // G12
-    private var foundIt: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headline("Found it")
-            prose(model.chosenMemory == nil
-                  ? "Tap the memory to jump back to that exact moment."
-                  : "That's the moment, as it was.")
-            VStack(spacing: 6) {
-                ForEach(model.results) { memory in
-                    TutorialMemoryRow(
-                        memory: memory,
-                        isChosen: model.chosenMemory == memory,
-                        action: { model.choose(memory) })
+            if model.results.isEmpty {
+                TutorialQueryField(model: model)
+                if let message = model.searchMessage {
+                    Text(message)
+                        .inkStyle(InkType.statusLabel, color: Ink.errorRed)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            if let moment = model.chosenMoment {
-                TutorialMomentPreview(moment: moment)
-            } else if model.chosenMemory != nil {
-                Text("No stored picture survives for that second — the text is what I still have.")
-                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
-            }
-        }
-    }
-
-    private var claudeHandoff: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("Now hand it to Claude")
-            prose("Claude reads its MCP config when it starts, so it has to be restarted before it can ask me anything.")
-            Text("“\(TutorialModel.suggestedQuestion)”")
-                .inkStyle(InkType.rowCopy, color: Ink.primary)
-            HStack(spacing: 10) {
-                InkButton(model.claudeIsInstalled ? "Restart Claude" : "Copy the question") {
-                    model.handOffToClaude()
-                }
-                Text(model.didRestartClaude ? "Restarting, and copied." : "In a terminal: claude")
-                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
-            }
-        }
-    }
-
-    private var claudeProof: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline(model.proof == nil ? "Ask Claude" : "Claude just read your context")
-            if let proof = model.proof {
-                prose("It called \(proof.tool). That is a real call, recorded by the server that served it.")
             } else {
-                prose("Paste the question into Claude. I'll only say this worked once Claude has genuinely called one of my tools — nothing here is on a timer.")
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for a real tool call.")
-                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                VStack(spacing: 6) {
+                    ForEach(model.results) { memory in
+                        TutorialMemoryRow(
+                            memory: memory,
+                            isChosen: model.chosenMemory == memory,
+                            action: { model.choose(memory) })
+                    }
+                }
+                if let moment = model.chosenMoment {
+                    TutorialMomentPreview(moment: moment)
                 }
             }
-        }
-    }
-
-    // G13
-    private var allSet: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("You're all set")
-            prose(model.framesSummary)
-        }
-    }
-
-    // G14
-    private var menuBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headline("One more thing")
-            prose("You can always find me up here, in the menu bar.")
         }
     }
 
@@ -290,7 +207,14 @@ struct TutorialCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 12) {
-                TutorialProgressDots(index: model.progress.index, total: model.progress.total)
+                if let title = primaryTitle {
+                    InkButton(title) { model.advance() }
+                        // Also while the handoff is still running: a Claude being restarted has not
+                        // answered yet, and letting the user walk past that lands them on the proof
+                        // beat with nothing on its way.
+                        .disabled(!model.gateIsSatisfied || model.isAskingClaude)
+                        .fixedSize()
+                }
                 Spacer(minLength: 8)
                 // Every step is skippable, and skipping tears the whole thing down.
                 if model.step != .menuBar {
@@ -299,26 +223,23 @@ struct TutorialCardView: View {
                         .inkStyle(InkType.statusLabel, color: Ink.tertiary)
                         .fixedSize()
                 }
-                if let title = primaryTitle {
-                    InkButton(title) { model.advance() }
-                        .disabled(!model.gateIsSatisfied)
-                        .fixedSize()
-                }
             }
         }
     }
 
-    /// The primary action's label, or nil for the steps whose gate no button can satisfy — the search
-    /// beat, which needs a real result, and the proof beat, which needs Claude.
+    /// The primary action's label, or nil for the one step no button can move: the proof beat, which
+    /// needs Claude. Everywhere else the button is present and *disabled* until the gate is met, so
+    /// the way forward is always visible and never a lie about being ready.
     private var primaryTitle: String? {
         switch model.step {
         case .invitation: return "Start"
-        case .article: return "I see it"
         case .screenAccess: return model.screenIsGranted ? "Continue" : nil
         case .collectFrames: return "Continue"
-        case .openTimeline: return "Open the timeline"
-        case .timeline, .scrollBack, .findMoments, .foundIt, .claudeHandoff: return "Continue"
-        case .query: return nil
+        // No button can move these two: one needs a keypress the tutorial must not fake, the other a
+        // gesture it must not mime. Both have a labelled way out that says what did not happen.
+        case .openTimeline: return nil
+        case .timeline: return model.didDrag ? "Continue" : nil
+        case .findMoments, .query, .claudeHandoff: return "Continue"
         case .claudeProof: return model.proof == nil ? nil : "Continue"
         case .allSet: return "Continue"
         case .menuBar: return "Done"
@@ -328,28 +249,15 @@ struct TutorialCardView: View {
 
     private var waiverLabel: String {
         switch model.step.gate {
-        case .realFrames: return "Nothing is arriving — continue anyway"
-        case .screenRecordingGrant: return "Continue without it"
+        case .realFrames: return "Nothing is arriving — carry on anyway"
+        case .screenRecordingGrant: return "Carry on without it"
+        case .realHotkey: return "That shortcut isn't working — open it for me"
+        case .realGesture: return "I can't drag it — carry on anyway"
         case .userAction, .realSearchResult, .genuineToolCall: return ""
         }
     }
 
     // MARK: - Pieces
-
-    /// `stepHeadline` rather than a hand-assembled face and size: `Ink`'s roles carry their tracking,
-    /// and the header comment in that file is explicit that a caller who reaches for
-    /// `.openRunde(_:_:)` and forgets the tracking has shipped a different product.
-    private func headline(_ text: String) -> some View {
-        Text(text)
-            .inkStyle(InkType.stepHeadline, color: Ink.primary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func prose(_ text: String) -> some View {
-        Text(text)
-            .inkStyle(InkType.prose, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
 
     private func chordKey(_ text: String) -> some View {
         Text(text)
@@ -363,24 +271,6 @@ struct TutorialCardView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(Ink.hairline, lineWidth: 1)))
-    }
-}
-
-// MARK: - Progress
-
-struct TutorialProgressDots: View {
-    let index: Int
-    let total: Int
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<max(total, 1), id: \.self) { position in
-                Circle()
-                    .fill(position <= index ? Ink.primary.opacity(0.75) : Ink.wash)
-                    .frame(width: 5, height: 5)
-            }
-        }
-        .accessibilityLabel(Text("Step \(index + 1) of \(total)"))
     }
 }
 
@@ -405,16 +295,21 @@ struct TutorialArrowShape: Shape {
     }
 }
 
-// MARK: - G8's hint
+// MARK: - The drag hint
 
-/// Three marks travelling leftwards, which is the gesture the step is asking for. Collapses to a
-/// static arrow under Reduce Motion, where a loop would be exactly what the setting exists to stop.
+/// Three marks travelling, which is the gesture the timeline step is asking for. Collapses to a
+/// static glyph under Reduce Motion, where a loop would be exactly what the setting exists to stop.
+///
+/// The glyph points both ways on purpose. Which direction travels *back* depends on the user's own
+/// natural-scrolling setting, which this app does not get to read off them, and the gate accepts
+/// either — so an arrow committing to one of them would be the picture disagreeing with the
+/// behaviour for half of everybody.
 struct TutorialScrollHint: View {
     @State private var shift = false
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "arrow.left")
+            Image(systemName: "arrow.left.and.right")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Ink.secondary)
             ZStack(alignment: .leading) {
@@ -438,9 +333,9 @@ struct TutorialScrollHint: View {
     }
 }
 
-// MARK: - G10's field
+// MARK: - The query field
 
-/// The query field. Submits on Return and never pretends: the search it runs is the real one.
+/// Submits on Return and never pretends: the search it runs is the real one.
 struct TutorialQueryField: View {
     @ObservedObject var model: TutorialModel
     @State private var draft = ""
@@ -470,7 +365,7 @@ struct TutorialQueryField: View {
     }
 }
 
-// MARK: - G12's result
+// MARK: - A real result
 
 struct TutorialMemoryRow: View {
     let memory: TutorialMemory

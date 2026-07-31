@@ -49,6 +49,30 @@ enum ClaudeRegistrar {
         }
     }
 
+    // MARK: - When we were written
+
+    /// When Claude Desktop's copy of our MCP registration was last written to disk.
+    ///
+    /// Evidence for exactly one question, and it is asked before something destructive: a Claude
+    /// Desktop process launched *after* this already read us at startup, so quitting it would
+    /// accomplish nothing except taking the user's open conversation with it.
+    ///
+    /// Deliberately this file and **not** `~/.claude.json`. That one is Claude Code's own state
+    /// store and is rewritten constantly for reasons that have nothing to do with us, so its
+    /// modification date is no evidence of when *we* wrote — reading it would have us quitting
+    /// sessions on the strength of somebody else's write, which is the wrong direction to be wrong
+    /// in. This file is the one read at startup by the process a restart would restart.
+    ///
+    /// Nil when there is no registration on disk at all. That is a different fact, and it is not a
+    /// reason to restart either: a Claude with no entry for us does not gain one by relaunching.
+    static var claudeDesktopRegisteredAt: Date? {
+        let path = ClaudeConfig.claudeDesktopConfigURL.path
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
+            return nil
+        }
+        return attributes[.modificationDate] as? Date
+    }
+
     // MARK: - Register / unregister
 
     static func register() -> Result {

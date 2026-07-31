@@ -222,10 +222,23 @@ final class RewindModel: ObservableObject {
     var canZoomTrackIn: Bool { trackSpan > Self.minimumTrackSpan }
     var canZoomTrackOut: Bool { trackSpan < min(Self.maximumTrackSpan, dayBounds.end - dayBounds.start) }
 
-    /// Scrolls the visible window. Positive `seconds` moves forward in time.
-    func panTrack(by seconds: Double) {
-        trackStart += seconds
-        clampTrackWindow()
+    /// Travels through the day by `seconds`, which is what a scroll on the track means. Positive is
+    /// forward in time.
+    ///
+    /// It moves the **playhead**, and that is the substantive fix. This used to pan the visible
+    /// window instead (`trackStart += seconds`, then `clampTrackWindow()`) — and at the zoom the
+    /// window opens on, that is arithmetically a no-op: `resetTrackWindow` sets `trackSpan` to the
+    /// whole loaded day, so the clamp's own bound `bounds.end - trackSpan` *is* `bounds.start` and
+    /// `trackStart` cannot move by any number of seconds. Every scroll on a freshly opened timeline
+    /// resolved to nothing at all, which is exactly what "the two finger dragging didn't work" looks
+    /// like from the outside. Moving the playhead is also what the tutorial's card promises — you
+    /// travel through your day — and it is visible, because the picture changes.
+    ///
+    /// The visible window still follows: `setPlayhead` calls `keepPlayheadVisible()`, which pans it
+    /// when the playhead would leave, so a zoomed-in track scrolls as it always did.
+    func travel(by seconds: Double) {
+        guard let at = currentFrame?.capturedAt else { return }
+        scrub(to: at + seconds)
     }
 
     /// Keeps the window inside the loaded day, so the track can never show a stretch of time the

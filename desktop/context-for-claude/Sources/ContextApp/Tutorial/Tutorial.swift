@@ -25,6 +25,19 @@ enum Tutorial {
     static func abandon() {
         TutorialController.shared.abandon()
     }
+
+    /// The real "Search All" pill in the real timeline was pressed.
+    ///
+    /// The shell asks before opening its search bar, so the one real control serves both: during the
+    /// beat that asked for it the tutorial takes the press and answers true, and everywhere else this
+    /// is one boolean and the bar opens exactly as it always did. That is what lets the timeline be
+    /// opened by the user's own shortcut — there is no second, tutorial-only copy of the window with
+    /// different buttons wired behind it.
+    ///
+    /// - Returns: whether the tutorial consumed the press.
+    static func searchPillWasPressed() -> Bool {
+        TutorialController.shared.searchPillWasPressed()
+    }
 }
 
 /// Owns the step machine, the poll timer, and the window the cards live in.
@@ -67,22 +80,6 @@ final class TutorialController {
             TutorialOverlay.shared.show(model: model, step: step)
         }
         environment.dismissOverlay = { TutorialOverlay.shared.hide() }
-        // The real timeline, with its real "Search All" button wired back into the step machine — so
-        // G9 advances because the user pressed the actual control, not because they read about it.
-        // The same wiring the shell uses (`ContextApp.swift`), plus one extra: the pill also tells the
-        // step machine it was pressed, so G9 advances because the user pressed the real control.
-        //
-        // The pill deliberately does *not* open `SearchBarWindow` during the tutorial. That bar routes
-        // a question to Claude, which is the beat two steps later and is gated on `QueryStamp`; this
-        // beat is "find the moment again and jump back to it", which needs a result and a timestamp
-        // this app can actually show. Opening both would put two query fields on screen at once.
-        environment.presentTimeline = { [weak self] in
-            guard let store = self?.store else { return }
-            RewindWindow.present(
-                store: store,
-                onOpenSettings: { SettingsWindow.present() },
-                onSearch: { _ in self?.model?.searchPillWasPressed() })
-        }
 
         let model = TutorialModel(environment: environment)
         self.model = model
@@ -93,6 +90,13 @@ final class TutorialController {
     func abandon() {
         model?.abandon()
         stopTicking()
+    }
+
+    /// The pill press, offered to the running step machine. False when nothing is running or the
+    /// current beat is not the one that asked for it, which is what leaves the shell's own behaviour
+    /// untouched everywhere else.
+    func searchPillWasPressed() -> Bool {
+        model?.searchPillWasPressed() ?? false
     }
 
     /// One timer for the whole tutorial: the model's own polling and the overlay's re-anchoring.

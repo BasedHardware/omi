@@ -14,7 +14,6 @@ enum TutorialTargetLocator {
     /// `NSWindow.setFrame` wants.
     static func frame(of target: TutorialTarget) -> CGRect? {
         switch target {
-        case .browserWindow: return browserWindowFrame()
         case .timelineWindow: return timelineWindow()?.frame
         case .timelineTrack: return trackFrame()
         case .searchAllButton: return searchAllFrame()
@@ -150,56 +149,6 @@ enum TutorialTargetLocator {
         return nil
     }
 
-    // MARK: - The browser
-
-    /// The default browser's frontmost window.
-    ///
-    /// The browser is found by asking Launch Services which application opens an `https` URL, not by
-    /// guessing at Safari: the tutorial opened the article in the *default* browser, so that is the
-    /// window the coach mark has to sit beside.
-    ///
-    /// Bounds come from `CGWindowListCopyWindowInfo`, which needs no permission for geometry (unlike
-    /// window *titles*, which this deliberately never reads).
-    private static func browserWindowFrame() -> CGRect? {
-        guard let probe = URL(string: "https://en.wikipedia.org"),
-              let application = NSWorkspace.shared.urlForApplication(toOpen: probe),
-              let bundleIdentifier = Bundle(url: application)?.bundleIdentifier
-        else { return nil }
-
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        guard !running.isEmpty else { return nil }
-        let pids = Set(running.map(\.processIdentifier))
-
-        guard let listing = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
-        else { return nil }
-
-        var best: CGRect?
-        for entry in listing {
-            guard let owner = entry[kCGWindowOwnerPID as String] as? pid_t, pids.contains(owner),
-                  (entry[kCGWindowLayer as String] as? Int) == 0,
-                  let bounds = entry[kCGWindowBounds as String] as? [String: Any],
-                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary)
-            else { continue }
-            // The largest layer-0 window: a browser also owns tiny helper windows, and the frontmost
-            // one in list order is not reliably the document window.
-            if best == nil || rect.width * rect.height > best!.width * best!.height { best = rect }
-        }
-        guard let found = best, found.width > 80, found.height > 80 else { return nil }
-        return flippedFromCoreGraphics(found)
-    }
-
-    /// CoreGraphics hands back a top-left origin measured from the primary display; `NSWindow` wants
-    /// bottom-left. Getting this backwards puts the coach mark at the bottom of the screen — the same
-    /// bug `MenuBarSpotlight` documents.
-    static func flippedFromCoreGraphics(_ rect: CGRect) -> CGRect? {
-        guard let primary = NSScreen.screens.first else { return nil }
-        return CGRect(
-            x: rect.origin.x,
-            y: primary.frame.maxY - rect.origin.y - rect.height,
-            width: rect.width,
-            height: rect.height)
-    }
 }
 
 // MARK: - Our own accessibility tree, asked for the way a client asks

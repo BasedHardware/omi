@@ -7,6 +7,10 @@ import XCTest
 /// claims can be produced by time passing, by an empty search, or by this app alone — and that
 /// leaving it, from any step, takes everything it put on screen back off.
 ///
+/// Since the cards stopped narrating the machinery, the *words* are tested here too. Hiding a
+/// mechanism is only safe if the sentence that replaced it is still a consequence of what happened,
+/// so `speech` and `outcome` are asserted alongside the gates rather than trusted.
+///
 /// No window is created anywhere in here. `TutorialModel` holds no `NSWindow` precisely so these
 /// assertions can be about behaviour rather than about a screen.
 @MainActor
@@ -24,13 +28,26 @@ final class TutorialTests: XCTestCase {
         var screenGranted = false
         var searchResults: [TutorialMemory] = []
         var stampURL: URL?
-        var timelineIsVisible = true
+        /// Starts closed. Nothing in this app opens a timeline until something opens it, and a world
+        /// that begins with one already up would let a beat read a window it never caused.
+        var timelineIsVisible = false
         var momentNear: TutorialMoment?
 
-        var articleOpens = true
-        var openedArticles: [URL] = []
-        var clipboard: [String] = []
-        var restartedClaude = 0
+        /// What the world answers when the tutorial hands the first question over. The happy path by
+        /// default; every test that cares about a failing handoff sets its own.
+        var claudeAnswer: TutorialClaudeAsk? = .prompted(restarted: false, mayNotReachMe: false)
+        var claudeAsks: [String] = []
+        /// The consent answer each ask carried, so a test can assert nothing agreed to a restart on
+        /// the user's behalf.
+        var claudeAsksRestartingFirst: [Bool] = []
+        /// Whether a Claude is open that predates our MCP config.
+        var claudeNeedsRestart = false
+
+        /// Whether the machine is genuinely listening for the timeline chord.
+        var chordIsArmed = true
+        /// Whether a timeline window actually comes up when something opens one. False models the
+        /// shell declining because the capture store is not open yet.
+        var timelineCanOpen = true
 
         var overlayPresented: [TutorialStep] = []
         var overlayDismissals = 0
@@ -44,6 +61,11 @@ final class TutorialTests: XCTestCase {
         var chimes = 0
         var scrubs: [Double] = []
 
+        /// The two watchers, as the model armed them. Held rather than counted so a test can fire
+        /// the *real* callback — which is the only way anything sets the gates they feed.
+        var hotkeyWatch: (() -> Void)?
+        var dragWatch: (() -> Void)?
+
         func environment() -> TutorialEnvironment {
             var environment = TutorialEnvironment()
             environment.pollInterval = nil
@@ -56,16 +78,22 @@ final class TutorialTests: XCTestCase {
             environment.frameNear = { _ in self.momentNear }
             environment.storeIsReadable = { true }
             environment.screenIsGranted = { self.screenGranted }
-            environment.openArticle = { url in
-                self.openedArticles.append(url)
-                return self.articleOpens
+            environment.askClaude = { question, restartingFirst, answer in
+                self.claudeAsks.append(question)
+                self.claudeAsksRestartingFirst.append(restartingFirst)
+                if let outcome = self.claudeAnswer { answer(outcome) }
             }
-            environment.copyToClipboard = { self.clipboard.append($0) }
-            environment.restartClaude = {
-                self.restartedClaude += 1
-                return true
+            environment.claudeRestartIsNeeded = { self.claudeNeedsRestart }
+            environment.timelineChord = { "⌘⌘" }
+            environment.timelineChordIsArmed = { self.chordIsArmed }
+            environment.watchForTimelineHotkey = { self.hotkeyWatch = $0 }
+            environment.stopWatchingTimelineHotkey = { self.hotkeyWatch = nil }
+            environment.watchForDrag = { self.dragWatch = $0 }
+            environment.stopWatchingDrag = { self.dragWatch = nil }
+            environment.presentTimeline = {
+                self.timelinePresentations += 1
+                self.timelineIsVisible = self.timelineCanOpen
             }
-            environment.presentTimeline = { self.timelinePresentations += 1 }
             environment.dismissTimeline = { self.timelineDismissals += 1 }
             environment.timelineIsVisible = { self.timelineIsVisible }
             environment.scrubTimeline = { self.scrubs.append($0) }
@@ -85,13 +113,33 @@ final class TutorialTests: XCTestCase {
             environment.stopMusic = { self.musicStops += 1 }
             return environment
         }
+
+        /// The user really presses the chord.
+        ///
+        /// Modelled the way it happens: the shortcut layer delivers to the app's own handler, which
+        /// is what opens the window, and *then* to the tutorial's observer. Nothing here reaches
+        /// into the model to set a flag — the only route in is the callback the model itself armed,
+        /// which is what makes this beat's gate a fact about the user.
+        func pressTimelineChord() {
+            guard let fired = hotkeyWatch else { return }
+            if timelineCanOpen {
+                timelinePresentations += 1
+                timelineIsVisible = true
+            }
+            fired()
+        }
+
+        /// The user really drags, far enough for `TutorialDrag` to call it a gesture.
+        func dragAcrossTheTimeline() {
+            dragWatch?()
+        }
     }
 
     private func makeModel(_ world: World) -> TutorialModel {
         TutorialModel(environment: world.environment())
     }
 
-    private func memory(_ text: String = "LINGsCARS car leasing", at: Double = 1_699_999_000)
+    private func memory(_ text: String = "a line of captured text", at: Double = 1_699_999_000)
         -> TutorialMemory
     {
         TutorialMemory(at: at, when: "earlier", text: text, app: "Safari", kind: "screen")
@@ -111,10 +159,18 @@ final class TutorialTests: XCTestCase {
             world.frameCount = TutorialModel.frameTarget
             model.poll()
             model.advance()
+        case .realHotkey:
+            // The keypress is the transition; there is no button to press afterwards.
+            world.pressTimelineChord()
+        case .realGesture:
+            world.dragAcrossTheTimeline()
+            model.advance()
         case .realSearchResult:
             world.searchResults = [memory()]
-            // Advances by itself, and only because there was something to find.
-            model.search("leasing")
+            // The search only fills the gate. Leaving the step is still the button's job, and the
+            // button still checks.
+            model.search("captured")
+            model.advance()
         case .genuineToolCall:
             recordStamp(world, at: world.clock + 1)
             model.poll()
@@ -147,6 +203,8 @@ final class TutorialTests: XCTestCase {
 
     // MARK: - Ordering
 
+    /// Also the guard on what the flow does *not* contain. A beat that opens a website, or a second
+    /// beat that only announces the next one, would land in this list and fail here.
     func testTheFlowWalksEveryBeatInOrder() {
         let world = World()
         world.screenGranted = true
@@ -165,15 +223,14 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(
             visited,
             [
-                .invitation, .article, .collectFrames, .openTimeline, .timeline, .scrollBack,
-                .findMoments, .query, .foundIt, .claudeHandoff, .claudeProof, .allSet, .menuBar,
-                .finished,
+                .invitation, .collectFrames, .openTimeline, .timeline, .findMoments, .query,
+                .claudeHandoff, .claudeProof, .allSet, .menuBar, .finished,
             ],
             "the tutorial's order is the lesson; a reordering has to be deliberate")
         XCTAssertEqual(model.step, .finished)
     }
 
-    /// G3 is asked for "at the right moment", which includes not asking at all.
+    /// The screen grant is asked for "at the right moment", which includes not asking at all.
     func testScreenAccessIsDroppedFromThePlanWhenItIsAlreadyGranted() {
         let granted = World()
         granted.screenGranted = true
@@ -203,39 +260,12 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(model.step, .collectFrames)
     }
 
-    func testTheProgressDotsCountThisRunsPlan() {
-        let world = World()
-        world.screenGranted = true
-        let model = makeModel(world)
-        model.begin()
-        XCTAssertEqual(model.progress.total, TutorialStep.flow.count - 1)
-        XCTAssertEqual(model.progress.index, 0)
-        stepForward(model, world)
-        XCTAssertEqual(model.progress.index, 1)
-    }
+    // MARK: - The capture beat, whose mechanism is now hidden
 
-    // MARK: - G2
-
-    func testTheArticleIsOpenedInTheDefaultBrowserAndFailureIsAdmitted() {
-        let world = World()
-        world.screenGranted = true
-        world.articleOpens = false
-        let model = makeModel(world)
-        drive(model, world, to: .article)
-
-        XCTAssertEqual(world.openedArticles, [TutorialModel.articleURL])
-        XCTAssertEqual(model.articleDidOpen, false, "a browser that did not open must not be claimed")
-        // Over https and nothing else asserted about the host: the page is a product decision that can
-        // change, and a test that pins it would be a test of the copy rather than of the step.
-        XCTAssertEqual(TutorialModel.articleURL.scheme, "https")
-        XCTAssertNotNil(TutorialModel.articleURL.host())
-    }
-
-    // MARK: - G5, the counter
-
-    /// The whole of G5. A frame count that could be satisfied by waiting would make every other
-    /// number this app reports suspect.
-    func testTheFrameCounterReflectsTheStoreAndNeverElapsedTime() {
+    /// The whole of the capture gate. A beat that could be satisfied by waiting would make every
+    /// other claim this app makes suspect — and it is now the *only* thing holding that line, because
+    /// the card no longer shows a number the user could check it against.
+    func testTheCaptureBeatReflectsTheStoreAndNeverElapsedTime() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
@@ -250,13 +280,36 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(model.gateIsSatisfied)
         XCTAssertFalse(model.advance(), "time passing is not a frame")
         XCTAssertEqual(model.step, .collectFrames)
+        XCTAssertEqual(model.outcome, .waiting)
 
         // Frames genuinely land.
         world.frameCount = TutorialModel.frameTarget
         model.poll()
         XCTAssertEqual(model.framesCollected, TutorialModel.frameTarget)
+        XCTAssertEqual(model.outcome, .caught)
         XCTAssertTrue(model.advance())
         XCTAssertEqual(model.step, .openTimeline)
+    }
+
+    /// The sentence the user reads is a consequence of the store, not of the step being on screen.
+    /// Ten minutes of ticking must not turn "go and look at something" into "got it".
+    func testTheCaptureBeatSaysGotItOnlyOnceItReallyHasIt() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .collectFrames)
+
+        for _ in 0..<100 {
+            world.clock += 6
+            model.poll()
+        }
+        let waiting = model.speech
+        XCTAssertEqual(waiting.lead, "Go and look at something.")
+
+        world.frameCount = TutorialModel.frameTarget
+        model.poll()
+        XCTAssertEqual(model.speech.lead, "Got it.")
+        XCTAssertNotEqual(model.speech, waiting, "the line has to change when the fact does")
     }
 
     func testFramesAreCountedOnlyFromTheMomentTheStepBegan() {
@@ -286,27 +339,175 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(model.waive())
         XCTAssertEqual(model.step, .openTimeline)
         XCTAssertTrue(model.didWaiveFrames)
+        XCTAssertEqual(model.outcome, .nothingArrived)
 
         drive(model, world, to: .allSet)
-        XCTAssertTrue(
-            model.framesSummary.contains("No frames arrived"),
-            "a waived step must not be reported as a success: \(model.framesSummary)")
+        XCTAssertEqual(model.outcome, .nothingArrived, "a waived beat is not a caught one")
+        XCTAssertEqual(model.speech.aside, TutorialOutcome.nothingArrived.sentence)
+        XCTAssertNotEqual(
+            model.speech.aside, TutorialOutcome.caught.sentence,
+            "a waived step must not be reported as a success")
     }
 
-    func testAWaivedFrameStepNeverClaimsFramesLanded() {
+    func testAWaivedCaptureBeatNeverClaimsTheScreenIsSearchable() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .collectFrames)
-        world.frameCount = 2
+        world.frameCount = TutorialModel.frameTarget - 1
         model.poll()
         world.clock += TutorialModel.framePatience + 1
         XCTAssertTrue(model.waive())
-        XCTAssertTrue(model.framesSummary.contains("Only 2 frames"), model.framesSummary)
-        XCTAssertFalse(model.framesSummary.contains("searchable"))
+
+        XCTAssertEqual(model.outcome, .tooLittleArrived)
+        drive(model, world, to: .allSet)
+        XCTAssertFalse(
+            model.speech.everythingSaid.contains("searchable"),
+            "one frame short of the gate is not a searchable screen: \(model.speech.everythingSaid)")
     }
 
-    // MARK: - G10/G12, the search
+    /// The closing card's success sentence, from every direction. Only one of them reaches it, and it
+    /// is the one where the store really answered — which is what makes `outcome` worth having as a
+    /// value rather than as three `if`s inside a view.
+    func testTheSuccessSentenceIsReachableOnlyFromARealFrameCount() {
+        for landed in [0, 1, TutorialModel.frameTarget - 1] {
+            let world = World()
+            world.screenGranted = true
+            let model = makeModel(world)
+            drive(model, world, to: .collectFrames)
+            world.frameCount = landed
+            model.poll()
+            world.clock += TutorialModel.framePatience + 1
+            XCTAssertTrue(model.waive())
+            drive(model, world, to: .allSet)
+            XCTAssertNotEqual(
+                model.speech.aside, TutorialOutcome.caught.sentence,
+                "\(landed) frames must not close the tutorial as a success")
+        }
+
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .allSet)
+        XCTAssertEqual(model.outcome, .caught)
+        XCTAssertEqual(model.speech.aside, TutorialOutcome.caught.sentence)
+    }
+
+    // MARK: - The words
+
+    /// The two things the cards must never put back: how long the tutorial is, and how many frames
+    /// have landed. Read off the production copy through the production model, in every state the
+    /// flow can be driven into, rather than off the source text.
+    func testNoCardEverSpeaksAProgressCountOrAFrameCount() {
+        var said: [String] = []
+
+        // The grant path, both answers.
+        let ungranted = World()
+        let asking = makeModel(ungranted)
+        drive(asking, ungranted, to: .screenAccess)
+        said.append(asking.speech.everythingSaid)
+        ungranted.screenGranted = true
+        asking.poll()
+        said.append(asking.speech.everythingSaid)
+
+        // The main path, and both answers of every step that has two.
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        model.begin()
+        var guardrail = 0
+        while !model.step.isTerminal, guardrail < 40 {
+            said.append(model.speech.everythingSaid)
+            if model.step == .query {
+                // The empty-handed line as well as the found-it one.
+                world.searchResults = []
+                model.search("nothing captured matches this")
+                said.append(model.speech.everythingSaid)
+            }
+            stepForward(model, world)
+            guardrail += 1
+        }
+
+        // The failure branches the happy path never visits.
+        let dark = World()
+        dark.screenGranted = true
+        dark.timelineCanOpen = false
+        let darkModel = makeModel(dark)
+        drive(darkModel, dark, to: .timeline)
+        said.append(darkModel.speech.everythingSaid)
+
+        // The chord this machine cannot fire, and the handoff Claude would not take.
+        let unarmed = World()
+        unarmed.screenGranted = true
+        unarmed.chordIsArmed = false
+        let unarmedModel = makeModel(unarmed)
+        drive(unarmedModel, unarmed, to: .openTimeline)
+        said.append(unarmedModel.speech.everythingSaid)
+
+        // The consent beat, which only appears when a restart would cost the user something.
+        let openClaude = World()
+        openClaude.screenGranted = true
+        openClaude.claudeNeedsRestart = true
+        let openClaudeModel = makeModel(openClaude)
+        drive(openClaudeModel, openClaude, to: .claudeHandoff)
+        said.append(openClaudeModel.speech.everythingSaid)
+
+        for outcome in [TutorialClaudeAsk.copiedInstead, .notInstalled] {
+            let refused = World()
+            refused.screenGranted = true
+            refused.claudeAnswer = outcome
+            let refusedModel = makeModel(refused)
+            drive(refusedModel, refused, to: .claudeHandoff)
+            said.append(refusedModel.speech.everythingSaid)
+            XCTAssertTrue(refusedModel.advance())
+            said.append(refusedModel.speech.everythingSaid)
+        }
+
+        let waived = World()
+        waived.screenGranted = true
+        let waivedModel = makeModel(waived)
+        drive(waivedModel, waived, to: .collectFrames)
+        waived.clock += TutorialModel.framePatience + 1
+        XCTAssertTrue(waivedModel.waive())
+        drive(waivedModel, waived, to: .allSet)
+        said.append(waivedModel.speech.everythingSaid)
+
+        XCTAssertGreaterThan(said.count, 10, "the walk has to have visited the whole flow")
+        for line in said {
+            XCTAssertFalse(
+                line.contains(where: \.isNumber),
+                "a card is counting something out loud: \(line)")
+            for word in ["frame", "step ", " of ", "%", "progress"] {
+                XCTAssertFalse(
+                    line.localizedCaseInsensitiveContains(word),
+                    "“\(word)” is the mechanism showing through: \(line)")
+            }
+        }
+    }
+
+    /// The mark leans on a run of its own sentence, never on a second copy of those words.
+    func testEveryStressedRunIsPartOfTheLineItBelongsTo() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        model.begin()
+        var guardrail = 0
+        while !model.step.isTerminal, guardrail < 40 {
+            let speech = model.speech
+            if let stress = speech.stress {
+                XCTAssertTrue(
+                    speech.lead.contains(stress),
+                    "“\(stress)” is not in “\(speech.lead)”, so the emphasis would silently vanish")
+                XCTAssertEqual(
+                    speech.runs.map(\.0).joined(), speech.lead,
+                    "the runs have to reassemble into exactly the line")
+            }
+            stepForward(model, world)
+            guardrail += 1
+        }
+    }
+
+    // MARK: - The search
 
     func testAnEmptySearchStaysOnTheStepAndSaysSo() {
         let world = World()
@@ -320,33 +521,59 @@ final class TutorialTests: XCTestCase {
         XCTAssertNotNil(model.searchMessage)
         XCTAssertTrue(model.results.isEmpty)
         XCTAssertFalse(model.gateIsSatisfied)
-        XCTAssertFalse(model.advance(), "the found-it beat is not reachable by pressing continue")
+        XCTAssertEqual(model.speech.lead, "Type a word you saw.", "and the mark does not say it found one")
+        XCTAssertFalse(model.advance(), "the found-it line is not reachable by pressing continue")
         XCTAssertFalse(model.step.gate.isWaivable, "and it cannot be waived either")
     }
 
-    func testARealResultCarriesTheRealHitIntoTheFoundItBeat() {
+    func testARealResultTurnsTheCardIntoTheFoundItBeatAndCarriesTheRealHit() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        let hit = memory("cheap car leasing, no hidden fees", at: 1_699_998_888)
+        let hit = memory("the invoice I was reading", at: 1_699_998_888)
         world.searchResults = [hit]
-        model.search("leasing")
+        model.search("invoice")
 
-        XCTAssertEqual(model.step, .foundIt)
+        XCTAssertEqual(model.step, .query, "the found-it beat is the same card, changed")
         XCTAssertEqual(model.results, [hit])
-        XCTAssertEqual(model.lastQuery, "leasing")
+        XCTAssertEqual(model.lastQuery, "invoice")
+        XCTAssertEqual(model.speech.lead, "There it is.")
+        XCTAssertTrue(model.gateIsSatisfied)
+        XCTAssertTrue(model.advance())
+    }
+
+    /// A second search that finds nothing takes the found-it line back off the card. The line is a
+    /// statement about the current results, not a badge the step earned once.
+    func testAFailedSecondSearchWithdrawsTheFoundItLine() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+
+        world.searchResults = [memory()]
+        model.search("captured")
+        XCTAssertEqual(model.speech.lead, "There it is.")
+
+        world.searchResults = []
+        model.search("nothing at all")
+        XCTAssertEqual(model.speech.lead, "Type a word you saw.")
+        XCTAssertNil(model.chosenMemory, "and the moment it was showing goes with it")
+        XCTAssertFalse(model.gateIsSatisfied)
+        XCTAssertFalse(model.advance())
     }
 
     func testTappingAMemoryGoesBackToThatExactMoment() throws {
         let world = World()
         world.screenGranted = true
         world.momentNear = TutorialMoment(
-            at: 1_699_998_890, app: "Safari", windowTitle: "LINGsCARS car leasing",
+            at: 1_699_998_890, app: "Safari", windowTitle: "a captured window",
             imagePath: "/tmp/does-not-need-to-exist.heic")
         let model = makeModel(world)
-        drive(model, world, to: .foundIt)
+        drive(model, world, to: .query)
+        world.searchResults = [memory()]
+        model.search("captured")
 
         // `XCTUnwrap` rather than a force unwrap: this file is also run against deliberately broken
         // builds to check that these assertions bite, and a crash there would abort the whole suite
@@ -356,9 +583,27 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(model.chosenMemory, hit)
         XCTAssertEqual(model.chosenMoment, world.momentNear)
         XCTAssertEqual(world.scrubs, [hit.at], "the timeline is repositioned on the real instant")
+        XCTAssertEqual(model.speech.aside, "That is the moment, exactly as it was.")
     }
 
-    /// G9 advances because the real control in the real window was pressed.
+    /// A hit with no surviving picture is said out loud rather than shown as a blank frame.
+    func testAMomentWithNoPictureIsAdmitted() throws {
+        let world = World()
+        world.screenGranted = true
+        world.momentNear = nil
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+        world.searchResults = [memory()]
+        model.search("captured")
+
+        let hit = try XCTUnwrap(model.results.first)
+        model.choose(hit)
+        XCTAssertNil(model.chosenMoment)
+        XCTAssertEqual(
+            model.speech.aside, "No picture survived that second — the words are what I still have.")
+    }
+
+    /// The pill advances because the real control in the real window was pressed.
     func testTheSearchPillOnlyAdvancesTheStepThatAskedForIt() {
         let world = World()
         world.screenGranted = true
@@ -390,6 +635,7 @@ final class TutorialTests: XCTestCase {
         }
         XCTAssertNil(model.proof, "a stamp from an earlier session is not proof of this one")
         XCTAssertFalse(model.gateIsSatisfied)
+        XCTAssertEqual(model.speech.lead, "Send it in Claude.", "and the card still waits")
         XCTAssertFalse(model.advance())
         XCTAssertEqual(model.step, .claudeProof)
         XCTAssertFalse(model.step.gate.isWaivable, "and there is no button that can stand in for it")
@@ -398,21 +644,21 @@ final class TutorialTests: XCTestCase {
         recordStamp(world, tool: "screen", at: world.clock + 1)
         model.poll()
         XCTAssertEqual(model.proof?.tool, "screen")
+        XCTAssertEqual(model.speech.lead, "Claude just read your context.")
         XCTAssertTrue(model.advance())
         XCTAssertEqual(model.step, .allSet)
     }
 
-    func testTheHandoffCopiesTheQuestionAndSnapshotsBeforeTellingAnyoneToRestart() throws {
+    func testTheProofWatchStartsAtTheHandoffAndNotAtLaunch() throws {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .claudeHandoff)
 
-        // A call served *before* the handoff, i.e. before the user was told to restart Claude.
+        // A call served *before* the handoff, i.e. before the Claude we are about to restart could
+        // possibly have read this store.
         recordStamp(world, tool: "recall", at: world.clock - 1)
-        model.handOffToClaude()
-        XCTAssertEqual(world.clipboard, [TutorialModel.suggestedQuestion])
-        XCTAssertEqual(world.restartedClaude, 1)
+        XCTAssertEqual(world.claudeAsks.count, 1)
 
         XCTAssertTrue(model.advance())
         model.poll()
@@ -469,7 +715,7 @@ final class TutorialTests: XCTestCase {
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .menuBar)
-        XCTAssertEqual(world.spotlightShows, 1, "G14 rings the real status item")
+        XCTAssertEqual(world.spotlightShows, 1, "the last beat rings the real status item")
 
         XCTAssertTrue(model.advance())
         XCTAssertEqual(model.step, .finished)
@@ -483,7 +729,7 @@ final class TutorialTests: XCTestCase {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
-        drive(model, world, to: .scrollBack)
+        drive(model, world, to: .findMoments)
         model.abandon()
         XCTAssertEqual(model.step, .skipped)
         XCTAssertEqual(world.timelineDismissals, 1)
@@ -510,17 +756,270 @@ final class TutorialTests: XCTestCase {
     func testTheTimelineIsOnlyDescribedAsOpenWhenItReallyOpened() {
         let world = World()
         world.screenGranted = true
-        world.timelineIsVisible = false
+        world.timelineCanOpen = false
         let model = makeModel(world)
         drive(model, world, to: .timeline)
-        XCTAssertEqual(world.timelinePresentations, 1)
         XCTAssertFalse(model.timelineIsOpen, "a window that did not appear must not be described")
+        XCTAssertEqual(model.speech.lead, "The timeline did not open.")
 
         let second = World()
         second.screenGranted = true
         let openModel = makeModel(second)
         drive(openModel, second, to: .timeline)
         XCTAssertTrue(openModel.timelineIsOpen)
+        XCTAssertEqual(openModel.speech.lead, "Everything I have seen.")
+    }
+
+    // MARK: - The chord, which the user has to press
+
+    /// The whole of the second defect this beat exists to fix. The window used to open on its own
+    /// the moment the step began, which taught nothing: the tutorial announced a shortcut and then
+    /// did the shortcut's job. Now the step waits, and the only thing that satisfies it is the real
+    /// shortcut layer delivering — the same delivery that opens the window.
+    func testTheChordBeatWaitsForTheRealShortcutAndOpensNothingItself() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .openTimeline)
+
+        // Five minutes of ticking on the step.
+        for _ in 0..<100 {
+            world.clock += 3
+            model.poll()
+        }
+        XCTAssertEqual(
+            world.timelinePresentations, 0,
+            "the tutorial must not open the window it is asking the user to open")
+        XCTAssertFalse(model.hotkeyFired)
+        XCTAssertFalse(model.gateIsSatisfied)
+        XCTAssertFalse(model.advance(), "no keypress, no advance")
+        XCTAssertEqual(model.step, .openTimeline)
+
+        // The user presses it. The shell's handler opens the window; the observer reports it.
+        world.pressTimelineChord()
+        XCTAssertTrue(model.hotkeyFired)
+        XCTAssertEqual(model.step, .timeline, "the keypress is the transition")
+        XCTAssertTrue(model.timelineIsOpen)
+        XCTAssertFalse(model.didWaiveHotkey)
+        XCTAssertEqual(model.speech.lead, "Everything I have seen.")
+    }
+
+    /// The honest way forward when the chord cannot fire at all: offered immediately, labelled with
+    /// what did not happen, and the card owns up to having opened the window itself.
+    func testAChordThatCannotFireOffersTheWayOutAtOnceAndSaysWhoOpenedIt() {
+        let world = World()
+        world.screenGranted = true
+        world.chordIsArmed = false
+        let model = makeModel(world)
+        drive(model, world, to: .openTimeline)
+
+        XCTAssertTrue(model.waiverIsOffered, "a chord nothing is listening for is not a slow start")
+        XCTAssertEqual(model.speech.lead, "I cannot listen for that shortcut.")
+        XCTAssertTrue(model.waive())
+
+        XCTAssertEqual(model.step, .timeline)
+        XCTAssertTrue(model.didWaiveHotkey)
+        XCTAssertEqual(world.timelinePresentations, 1, "the fallback is the only thing that opens it")
+        XCTAssertEqual(
+            model.speech.lead, "I opened it for you.",
+            "a window the tutorial opened must not be reported as the user's keypress")
+    }
+
+    /// An armed chord gets the full wait before the escape hatch appears — otherwise the way out is
+    /// on screen before anyone has had a chance to press anything.
+    func testAnArmedChordIsGivenTimeBeforeTheWayOutAppears() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .openTimeline)
+
+        XCTAssertFalse(model.waiverIsOffered)
+        XCTAssertFalse(model.waive())
+        world.clock += TutorialModel.hotkeyPatience + 1
+        XCTAssertTrue(model.waiverIsOffered)
+    }
+
+    /// The watcher is not left running over the rest of the tutorial.
+    func testTheShortcutWatcherIsArmedForItsStepAndTornDownAfterIt() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .openTimeline)
+        XCTAssertNotNil(world.hotkeyWatch, "the step that needs it arms it")
+
+        world.pressTimelineChord()
+        XCTAssertNil(world.hotkeyWatch, "and leaving the step takes it back down")
+
+        model.skip()
+        XCTAssertNil(world.dragWatch, "teardown stops every watcher")
+    }
+
+    // MARK: - The drag, which the user has to make
+
+    /// The first defect, at the level the machine reads it. The beat asks for a gesture; only a
+    /// gesture satisfies it, and no amount of time on the step does.
+    func testTheDragBeatWaitsForARealGestureAndNotForTheClock() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .timeline)
+
+        for _ in 0..<100 {
+            world.clock += 3
+            model.poll()
+        }
+        XCTAssertFalse(model.didDrag)
+        XCTAssertFalse(model.gateIsSatisfied)
+        XCTAssertFalse(model.advance(), "time passing is not a gesture")
+        XCTAssertEqual(model.step, .timeline)
+        XCTAssertEqual(model.speech.aside, "Drag across it with two fingers to travel through your day.")
+
+        world.dragAcrossTheTimeline()
+        XCTAssertTrue(model.didDrag)
+        XCTAssertEqual(model.speech.lead, "There you go.", "and the line changes because the fact did")
+        XCTAssertTrue(model.gateIsSatisfied)
+        XCTAssertTrue(model.advance())
+        XCTAssertEqual(model.step, .findMoments)
+    }
+
+    /// A timeline that never came up has nothing to drag, and the beat knows it rather than sitting
+    /// the user out a wait that cannot end.
+    func testADragBeatWithNoTimelineOffersTheWayOutAtOnce() {
+        let world = World()
+        world.screenGranted = true
+        world.timelineCanOpen = false
+        let model = makeModel(world)
+        drive(model, world, to: .timeline)
+
+        XCTAssertFalse(model.timelineIsOpen)
+        XCTAssertTrue(model.waiverIsOffered)
+        XCTAssertTrue(model.waive())
+        XCTAssertEqual(model.step, .findMoments)
+        XCTAssertFalse(model.didDrag, "and a waived beat is never recorded as a gesture")
+    }
+
+    func testAnOpenTimelineIsGivenTimeBeforeTheDragWayOutAppears() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .timeline)
+
+        XCTAssertTrue(model.timelineIsOpen)
+        XCTAssertFalse(model.waiverIsOffered)
+        world.clock += TutorialModel.dragPatience + 1
+        XCTAssertTrue(model.waiverIsOffered)
+    }
+
+    // MARK: - The handoff, which the tutorial performs
+
+    /// The third defect. The tutorial opens Claude and puts the question in its prompt; it does not
+    /// tell the user to go and ask something.
+    func testTheHandoffAsksClaudeItselfAndSaysWhatReallyHappened() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .claudeHandoff)
+
+        XCTAssertEqual(
+            world.claudeAsks, [TutorialModel.suggestedQuestion],
+            "the tutorial hands the question over rather than describing it")
+        XCTAssertEqual(model.claudeAsk, .prompted(restarted: false, mayNotReachMe: false))
+        XCTAssertEqual(model.speech.lead, "Your question is in Claude.")
+        XCTAssertFalse(
+            model.speech.everythingSaid.localizedCaseInsensitiveContains("ask claude"),
+            "the card must not tell them to do the thing it just did: \(model.speech.everythingSaid)")
+        XCTAssertEqual(
+            world.claudeAsksRestartingFirst, [false],
+            "nothing may agree to a restart on the user's behalf")
+    }
+
+    /// The beat may not quit an app the user is using without being asked. When a restart is
+    /// genuinely needed the card says what it would cost and then waits — it hands nothing over
+    /// until it is told to.
+    func testAHandoffThatWouldCostARestartAsksFirst() {
+        let world = World()
+        world.screenGranted = true
+        world.claudeNeedsRestart = true
+        let model = makeModel(world)
+        drive(model, world, to: .claudeHandoff)
+
+        XCTAssertTrue(model.claudeNeedsRestart)
+        XCTAssertTrue(world.claudeAsks.isEmpty, "the handoff must not run itself when it costs a quit")
+        XCTAssertFalse(model.isAskingClaude)
+        XCTAssertEqual(model.speech.lead, "Claude is open already.")
+        XCTAssertTrue(
+            model.speech.everythingSaid.contains("May I"),
+            "the card has to ask: \(model.speech.everythingSaid)")
+
+        model.askClaude(restartingFirst: true)
+        XCTAssertEqual(world.claudeAsksRestartingFirst, [true])
+    }
+
+    /// Declining is a real choice, not a dead end: the question still goes over, and the card says
+    /// the reach may be stale rather than quietly quitting their session to force the gate.
+    func testDecliningTheRestartStillHandsTheQuestionOverAndSaysTheReachMayBeStale() {
+        let world = World()
+        world.screenGranted = true
+        world.claudeNeedsRestart = true
+        world.claudeAnswer = .prompted(restarted: false, mayNotReachMe: true)
+        let model = makeModel(world)
+        drive(model, world, to: .claudeHandoff)
+
+        model.askClaude(restartingFirst: false)
+        XCTAssertEqual(world.claudeAsksRestartingFirst, [false])
+        XCTAssertEqual(model.claudeAsk, .prompted(restarted: false, mayNotReachMe: true))
+        XCTAssertEqual(model.speech.lead, "Your question is in Claude.")
+        XCTAssertFalse(
+            model.speech.everythingSaid.contains("restarted it"),
+            "a restart that did not happen must not be described: \(model.speech.everythingSaid)")
+
+        XCTAssertTrue(model.advance())
+        XCTAssertTrue(
+            model.speech.everythingSaid.contains("quitting and reopening"),
+            "a gate that may never fire has to name the way out: \(model.speech.everythingSaid)")
+    }
+
+    /// Every branch that did not fill a prompt says so, and the proof beat inherits the difference.
+    func testAHandoffThatCouldNotFillThePromptNeverClaimsItDid() {
+        for outcome in [TutorialClaudeAsk.copiedInstead, .notInstalled] {
+            let world = World()
+            world.screenGranted = true
+            world.claudeAnswer = outcome
+            let model = makeModel(world)
+            // Stopped one beat short so the chime count below is about this handoff and not about
+            // every earned gate before it.
+            drive(model, world, to: .query)
+            world.searchResults = [memory()]
+            model.search("captured")
+            let chimesBefore = world.chimes
+            XCTAssertTrue(model.advance())
+            XCTAssertEqual(model.step, .claudeHandoff)
+
+            XCTAssertEqual(model.claudeAsk, outcome)
+            XCTAssertFalse(
+                model.speech.everythingSaid.contains("in the prompt"),
+                "\(outcome) must not read as a pre-fill: \(model.speech.everythingSaid)")
+            XCTAssertEqual(
+                world.chimes, chimesBefore, "and it does not get the sound that means it worked")
+
+            XCTAssertTrue(model.advance())
+            XCTAssertEqual(model.step, .claudeProof)
+            XCTAssertEqual(model.speech.lead, "Paste it into Claude.")
+        }
+    }
+
+    /// A handoff still in flight is not a handoff that happened, and the card cannot be walked past
+    /// while it is running.
+    func testTheCardWaitsWhileClaudeIsStillBeingAsked() {
+        let world = World()
+        world.screenGranted = true
+        world.claudeAnswer = nil  // the callback never comes back
+        let model = makeModel(world)
+        drive(model, world, to: .claudeHandoff)
+
+        XCTAssertTrue(model.isAskingClaude)
+        XCTAssertNil(model.claudeAsk, "“we asked” is not an outcome")
+        XCTAssertEqual(model.speech.lead, "Let me ask Claude for you.")
     }
 
     func testEveryAdvanceClicksAndTheMusicRunsForExactlyOneRun() {
@@ -546,9 +1045,31 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(TutorialGate.genuineToolCall.isWaivable)
         XCTAssertTrue(TutorialGate.realFrames.isWaivable)
         XCTAssertTrue(TutorialGate.screenRecordingGrant.isWaivable)
+        XCTAssertTrue(TutorialGate.realHotkey.isWaivable)
+        XCTAssertTrue(TutorialGate.realGesture.isWaivable)
         XCTAssertEqual(TutorialStep.collectFrames.gate, .realFrames)
+        XCTAssertEqual(TutorialStep.openTimeline.gate, .realHotkey)
+        XCTAssertEqual(TutorialStep.timeline.gate, .realGesture)
         XCTAssertEqual(TutorialStep.query.gate, .realSearchResult)
         XCTAssertEqual(TutorialStep.claudeProof.gate, .genuineToolCall)
+    }
+
+    /// Nothing is earned by starting. Every fact the flow's gates read is false on a model that has
+    /// only ever been begun — the one thing a new gate must never be is true by default, because
+    /// that is how a beat silently stops asking for anything at all.
+    func testAFreshRunHasEarnedNothing() {
+        let world = World()
+        let model = makeModel(world)
+        model.begin()
+        model.poll()
+        XCTAssertEqual(model.framesCollected, 0)
+        XCTAssertFalse(model.screenIsGranted)
+        XCTAssertFalse(model.hotkeyFired)
+        XCTAssertFalse(model.timelineIsOpen)
+        XCTAssertFalse(model.didDrag)
+        XCTAssertTrue(model.results.isEmpty)
+        XCTAssertNil(model.claudeAsk)
+        XCTAssertNil(model.proof)
     }
 
     func testEveryNonTerminalStepHasASuccessorAndTerminalsHaveNone() {
@@ -558,5 +1079,15 @@ final class TutorialTests: XCTestCase {
         XCTAssertNil(TutorialStep.finished.next)
         XCTAssertNil(TutorialStep.skipped.next)
         XCTAssertEqual(TutorialStep.flow.last?.next, .finished)
+    }
+
+    /// The one step that asks the user to go and work somewhere else is the one step that must not
+    /// park itself in the middle of where they are working.
+    func testOnlyTheCaptureBeatStandsOutOfTheWay() {
+        for step in TutorialStep.flow {
+            XCTAssertEqual(
+                step.placement, step == .collectFrames ? .outOfTheWay : .centred,
+                "\(step) sits in the wrong place")
+        }
     }
 }

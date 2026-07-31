@@ -367,6 +367,15 @@ final class GlobalShortcuts {
     private var hotKeys: [Action: EventHotKeyRef] = [:]
     private var rejections: [Action: String] = [:]
     private var onTrigger: ((Action) -> Void)?
+    /// Extra listeners, for a surface that needs to know a chord really fired without taking the
+    /// app's single handler away from it.
+    ///
+    /// The tutorial is why this exists: its timeline beat may only be satisfied by the user
+    /// genuinely pressing the chord, and the window that opens is opened by the app's own handler —
+    /// not by the tutorial reaching for `RewindWindow` itself. Replacing `onTrigger` for the length
+    /// of a walkthrough would have meant the tutorial owning the shortcut, which is exactly the
+    /// arrangement where "we opened something" can quietly stand in for "they pressed it".
+    private var observers: [UUID: (Action) -> Void] = [:]
     private var carbonHandler: EventHandlerRef?
     private var activationObserver: NSObjectProtocol?
 
@@ -427,6 +436,21 @@ final class GlobalShortcuts {
         self.onTrigger = onTrigger
         observeActivation()
         reapply()
+    }
+
+    /// Adds a listener that is told about every chord that fires, alongside the app's own handler.
+    ///
+    /// - Returns: a token to hand back to `removeObserver`. Observers are additive and never replace
+    ///   `onTrigger`, so whatever the shortcut normally does still happens.
+    @discardableResult
+    func addObserver(_ observe: @escaping (Action) -> Void) -> UUID {
+        let token = UUID()
+        observers[token] = observe
+        return token
+    }
+
+    func removeObserver(_ token: UUID) {
+        observers[token] = nil
     }
 
     /// Re-evaluates permission and re-registers. Accessibility can be granted while the app runs and
@@ -564,7 +588,10 @@ final class GlobalShortcuts {
 
     private func deliver(_ action: Action) {
         ContextLog.info("\(action.rawValue) fired via \(chord(for: action).display)", Self.logCategory)
+        // The app's handler first, observers second, and that order is load-bearing: the handler is
+        // what opens the window, so an observer asking "is it up?" is asking after it has happened.
         onTrigger?(action)
+        for observe in observers.values { observe(action) }
     }
 
     // MARK: Carbon plumbing

@@ -31,7 +31,11 @@ final class TutorialOverlay {
 
     /// One width for every step. Coach marks and cards are the same object as far as the user is
     /// concerned, and a width that changed between steps made the card jump sideways mid-flow.
-    static let width: CGFloat = 420
+    ///
+    /// 470 rather than the 420 it was: the mark now stands beside the copy and takes a fixed 56 pt
+    /// out of every line, so the same headline role has ~50 pt less to work with. Measured by
+    /// rendering every card in the flow at both widths rather than guessed at.
+    static let width: CGFloat = 470
 
     /// Gap between a card and the thing it points at, big enough that the arrow reads as an arrow.
     private static let gap: CGFloat = 14
@@ -168,13 +172,6 @@ final class TutorialOverlay {
         var arrow: TutorialArrow?
 
         switch (step.target, target) {
-        case (.browserWindow, .some(let rect)):
-            // Over the page, near its bottom edge: the user has to be able to see and scroll the
-            // article, so the card sits on it rather than beside it.
-            frame.origin = CGPoint(
-                x: rect.midX - size.width / 2,
-                y: rect.minY + Self.gap * 3)
-
         case (.timelineTrack, .some(let rect)):
             // Above the track, pointing down at it.
             frame.origin = CGPoint(x: rect.midX - size.width / 2, y: rect.maxY + Self.gap)
@@ -190,11 +187,22 @@ final class TutorialOverlay {
             frame.origin = CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2)
 
         default:
-            // No target, or a target that could not be located: a centred card, and no arrow.
+            // No target, or a target that could not be located: the step says where it would rather
+            // be, and there is no arrow either way.
             let visible = screen.visibleFrame
-            frame.origin = CGPoint(
-                x: visible.midX - size.width / 2,
-                y: visible.midY - size.height / 2 + visible.height * 0.04)
+            switch step.placement {
+            case .centred:
+                frame.origin = CGPoint(
+                    x: visible.midX - size.width / 2,
+                    y: visible.midY - size.height / 2 + visible.height * 0.04)
+            case .outOfTheWay:
+                // The capture beat asks the user to go and use their own machine on their own
+                // content. A card in the middle of the screen would be sitting on the very thing it
+                // just told them to go and look at, so it stands down into the corner and waits.
+                frame.origin = CGPoint(
+                    x: visible.maxX - size.width - Self.gap * 2,
+                    y: visible.minY + Self.gap * 2)
+            }
         }
 
         let clamped = clamp(frame, into: screen.visibleFrame)

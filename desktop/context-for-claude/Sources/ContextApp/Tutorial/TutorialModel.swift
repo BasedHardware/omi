@@ -6,30 +6,36 @@ import Foundation
 ///
 /// Everything the tutorial claims passes through here, which is why it holds no window, no store and
 /// no clock of its own — those arrive as `TutorialEnvironment` closures, so the claims are testable.
+/// That now includes the *words*: `speech` is the sentence the mark says on each step, computed from
+/// what really happened, so "the card never claims something that did not happen" is an assertion a
+/// test can make rather than a promise about a `switch` inside a view.
 ///
 /// ## The honesty rules this type exists to enforce
 ///
-/// 1. **A frame count is a count of frames.** `collectFrames` leaves only when the store really
-///    holds new frames (`TutorialGate.realFrames`). Time passing does not satisfy it, and there is no
-///    code path that increments the counter — it is assigned from the store on every poll.
+/// 1. **The capture beat waits for capture.** `collectFrames` leaves only when the store really holds
+///    new frames (`TutorialGate.realFrames`). Time passing does not satisfy it, and there is no code
+///    path that increments the count — it is assigned from the store on every poll. The card no
+///    longer reads that number out; the gate still holds it.
 /// 2. **"Found it" needs something found.** `query` leaves only on a real hit from a real search
 ///    (`.realSearchResult`). An empty result stays on the step and says so.
 /// 3. **The Claude payoff cannot be produced by this app.** `claudeProof` leaves only on a
 ///    `QueryStamp` written strictly after this run began watching (`.genuineToolCall`), which only
 ///    the MCP server writes, and only when Claude calls a tool.
-/// 4. **A waiver is louder than a success.** The two waivable gates set a flag that changes the copy
-///    downstream, so a user who skipped past a missing grant is never told their screen is
-///    searchable.
+/// 4. **A waiver is louder than a success.** The two waivable gates set a flag that changes
+///    `outcome`, and `outcome` is the only thing allowed to describe what the capture beat achieved —
+///    so a user who skipped past a missing grant is never told their screen is searchable.
 /// 5. **Leaving tears everything down.** Both terminal states run the same teardown, so a skip from
 ///    any step cannot leave the timeline, a coach mark, the spotlight or the music behind.
 @MainActor
 final class TutorialModel: ObservableObject {
 
-    /// How many frames the collect step waits for.
+    /// How many frames the capture beat waits for.
     ///
     /// Five, because capture runs on a 3 s cadence with a perceptual dedupe gate: a user who really
-    /// scrolls produces five distinct screens in about fifteen seconds, and a user who does nothing
-    /// produces none however long they sit there. That asymmetry is the point of the step.
+    /// goes and does something produces five distinct screens in about fifteen seconds, and a user
+    /// who does nothing produces none however long they sit there. That asymmetry is the point of the
+    /// step — and it is the reason the card can stay quiet about the number and still be waiting for
+    /// something real.
     static let frameTarget = 5
 
     /// Results asked of the store for the search beat. Small on purpose: this is a lesson in how
@@ -40,60 +46,60 @@ final class TutorialModel: ObservableObject {
     /// never sees the escape hatch, short enough that a broken one is not a dead end.
     static let framePatience: Double = 45
     static let grantPatience: Double = 20
-
-    /// The page the tutorial opens.
-    ///
-    /// Text-dense and unmistakable, which is what the later beats need: the capture pipeline stores a
-    /// frame only when the screen has genuinely *changed*, so a page that looks different every time
-    /// you scroll is what makes the frame counter move for real, and a page full of words is what
-    /// gives OCR something to find again.
-    ///
-    /// Opened with `NSWorkspace.shared.open` — the user's own default browser, whatever it is — and
-    /// **never fetched.** This host answers a scripted request with a bot challenge, so any
-    /// reachability probe would report it as down while a real browser loads it perfectly. There is
-    /// deliberately no pre-flight check anywhere in this file.
-    ///
-    /// Nothing downstream assumes a single word from it. If the browser shows an interstitial instead,
-    /// the frames are still frames and the counter still counts them; the search beat asks the user
-    /// for a word *they* saw rather than testing for one this file guessed.
-    static let articleURL = URL(string: "https://www.lingscars.com/")!
+    /// The two beats that wait on a physical action. Shorter than the frame wait: a user who is going
+    /// to press the chord or move their fingers does it in the first few seconds, and one who is not
+    /// is stuck rather than slow.
+    static let hotkeyPatience: Double = 25
+    static let dragPatience: Double = 25
 
     /// The question the handoff puts on the clipboard. Answerable only from captured context, so a
     /// Claude that answers it has genuinely read the store rather than guessed.
     static let suggestedQuestion = "What was I reading about a few minutes ago?"
 
-    /// The chord the timeline really opens on, read from the shortcut layer that registers it rather
-    /// than written out here. A tutorial that taught a chord the app does not listen for would be
-    /// teaching a surface that does not exist — and the user can rebind it in Settings, after which a
-    /// literal string would be wrong for them specifically.
-    static var timelineChord: String {
-        GlobalShortcuts.shared.display(for: .openTimeline)
-    }
+    /// The chord the timeline really opens on, read through the environment from the shortcut layer
+    /// that registers it rather than written out here. A tutorial that taught a chord the app does
+    /// not listen for would be teaching a surface that does not exist — and the user can rebind it in
+    /// Settings, after which a literal string would be wrong for them specifically.
+    var timelineChord: String { environment.timelineChord() }
 
     /// Whether that chord is actually live. When it is not — Accessibility not granted, a conflict, a
-    /// registration that was refused — the step says the button is what opens the window today instead
-    /// of implying the keys will work.
-    static var timelineChordIsArmed: Bool {
-        GlobalShortcuts.shared.readiness(for: .openTimeline) == .armed
-    }
+    /// registration that was refused — the beat cannot be earned at all, so the way forward is
+    /// offered immediately rather than after a wait nothing can end.
+    var timelineChordIsArmed: Bool { environment.timelineChordIsArmed() }
 
     // MARK: - Published state
 
     @Published private(set) var step: TutorialStep = .invitation
-    /// The steps this run will walk, after dropping any that are already satisfied. Drives the dots.
+    /// The steps this run will walk, after dropping any that are already satisfied.
     @Published private(set) var plan: [TutorialStep] = TutorialStep.flow
 
+    /// Frames the store really holds since this step began watching. Read by the gate and by
+    /// `outcome`; deliberately never rendered — see `TutorialCardView`.
     @Published private(set) var framesCollected = 0
     @Published private(set) var didWaiveFrames = false
     @Published private(set) var didWaiveScreenAccess = false
 
     @Published private(set) var screenIsGranted = false
     @Published private(set) var isRequestingScreenAccess = false
+    /// Whether this run has already put the ask in front of the user. Only ever means "we asked" —
+    /// never "they answered", and never "they said yes".
+    @Published private(set) var didAskForScreenAccess = false
 
-    @Published private(set) var articleDidOpen: Bool?
     /// Whether the timeline window really came up. The step's copy depends on it — describing a
     /// window that is not on screen would be the same class of lie as a fake frame count.
     @Published private(set) var timelineIsOpen = false
+
+    /// Whether the real `openTimeline` shortcut really fired while this step was watching for it.
+    /// Set from the shortcut layer's own delivery and from nowhere else: there is deliberately no
+    /// path in this type that can set it on the tutorial's behalf.
+    @Published private(set) var hotkeyFired = false
+    /// Whether the tutorial had to open the timeline itself because the chord could not. Read by the
+    /// card, which then says so rather than congratulating the user on a keypress they never made.
+    @Published private(set) var didWaiveHotkey = false
+
+    /// Whether the user really dragged. Set only by `TutorialDrag` clearing its threshold on real
+    /// scroll events; no amount of time on this step moves it.
+    @Published private(set) var didDrag = false
 
     @Published private(set) var results: [TutorialMemory] = []
     @Published private(set) var searchMessage: String?
@@ -101,7 +107,15 @@ final class TutorialModel: ObservableObject {
     @Published private(set) var chosenMemory: TutorialMemory?
     @Published private(set) var chosenMoment: TutorialMoment?
 
-    @Published private(set) var didRestartClaude = false
+    /// What really happened when the tutorial handed the first question over. Nil until the answer
+    /// comes back — "we asked" is not an outcome and does not get a case.
+    @Published private(set) var claudeAsk: TutorialClaudeAsk?
+    @Published private(set) var isAskingClaude = false
+    /// Whether the Claude that is open was launched before we registered, and so cannot call our
+    /// tools until it restarts. When this is true the handoff does **not** run on its own: quitting
+    /// an app somebody is in the middle of using is not a thing a tutorial gets to do unasked, so
+    /// the card says what it would cost and waits to be told.
+    @Published private(set) var claudeNeedsRestart = false
     @Published private(set) var proof: QueryStamp?
 
     /// Where the current step's coach mark points, or nil for a card. Republished on every poll so a
@@ -111,7 +125,7 @@ final class TutorialModel: ObservableObject {
     // MARK: - Internals
 
     private var environment: TutorialEnvironment
-    /// When the collect step started watching. Frames are counted strictly from here, so frames the
+    /// When the capture beat started watching. Frames are counted strictly from here, so frames the
     /// user captured yesterday cannot satisfy today's lesson.
     private var framesSince: Double = 0
     /// When the handoff began watching for a tool call, snapshotted *before* the user is told to
@@ -132,8 +146,6 @@ final class TutorialModel: ObservableObject {
         guard !hasBegun else { return }
         hasBegun = true
         screenIsGranted = environment.screenIsGranted()
-        // Computed once: the plan is what the dots count, and a step count that changed underfoot
-        // would make the progress indicator lie in the other direction.
         plan = TutorialStep.flow.filter { !($0 == .screenAccess && screenIsGranted) }
         environment.startMusic()
         enter(.invitation)
@@ -158,6 +170,12 @@ final class TutorialModel: ObservableObject {
         switch step.gate {
         case .realFrames: didWaiveFrames = true
         case .screenRecordingGrant: didWaiveScreenAccess = true
+        case .realHotkey: didWaiveHotkey = true
+        // Nothing recorded, and deliberately: `didWaiveHotkey` exists because a later card would
+        // otherwise credit the user with a keypress they never made, and there is no equivalent
+        // claim about the drag anywhere downstream to qualify. A flag set and never read is the
+        // defect this file's rule 4 was written about.
+        case .realGesture: break
         case .userAction, .realSearchResult, .genuineToolCall: return false
         }
         environment.playClick()
@@ -184,6 +202,8 @@ final class TutorialModel: ObservableObject {
         case .userAction: return true
         case .screenRecordingGrant: return screenIsGranted
         case .realFrames: return framesCollected >= Self.frameTarget
+        case .realHotkey: return hotkeyFired
+        case .realGesture: return didDrag
         case .realSearchResult: return !results.isEmpty
         case .genuineToolCall: return proof != nil
         }
@@ -193,13 +213,28 @@ final class TutorialModel: ObservableObject {
     /// unmet for long enough to be a genuine problem rather than a slow start.
     var waiverIsOffered: Bool {
         guard step.gate.isWaivable, !gateIsSatisfied else { return false }
-        let patience: Double
         switch step.gate {
-        case .realFrames: patience = Self.framePatience
-        case .screenRecordingGrant: patience = Self.grantPatience
-        case .userAction, .realSearchResult, .genuineToolCall: return false
+        case .realFrames:
+            // A user who has already declined Screen Recording is not having a slow start. Nothing
+            // can arrive for them, this beat knows it, and sitting them out the full patience to be
+            // told a fact the tutorial already holds is the flow being stubborn.
+            if didWaiveScreenAccess { return true }
+            return environment.now() - stepEnteredAt >= Self.framePatience
+        case .screenRecordingGrant:
+            return environment.now() - stepEnteredAt >= Self.grantPatience
+        case .realHotkey:
+            // A chord this machine is not listening for can never fire. Making the user wait out a
+            // patience for a fact the tutorial already holds is the flow being stubborn — and worse,
+            // it is a card teaching keys that do nothing.
+            if !timelineChordIsArmed { return true }
+            return environment.now() - stepEnteredAt >= Self.hotkeyPatience
+        case .realGesture:
+            // Nothing on screen to drag. Same reasoning.
+            if !timelineIsOpen { return true }
+            return environment.now() - stepEnteredAt >= Self.dragPatience
+        case .userAction, .realSearchResult, .genuineToolCall:
+            return false
         }
-        return environment.now() - stepEnteredAt >= patience
     }
 
     // MARK: - Polling
@@ -225,7 +260,7 @@ final class TutorialModel: ObservableObject {
 
         case .collectFrames:
             // Assigned from the store, never incremented. There is deliberately no `+= 1` anywhere
-            // in this type: the number on screen is a query result.
+            // in this type: the number the gate reads is a query result.
             let counted = environment.frameCount(framesSince)
             guard counted != framesCollected else { return }
             let hadEnough = framesCollected >= Self.frameTarget
@@ -244,40 +279,99 @@ final class TutorialModel: ObservableObject {
 
     // MARK: - Step actions
 
-    /// G3. Asks for the grant the way the rest of the app does, then opens the pane, because the
-    /// window server only ever answers "no" to the prompt for Screen Recording.
+    /// Asks for the grant the way the rest of the app does, and then asks the *system* what the
+    /// answer was.
+    ///
+    /// Two things this deliberately does not do, both of which it used to:
+    ///
+    /// 1. **It does not believe the request.** `CGRequestScreenCaptureAccess` returns before the user
+    ///    has touched the dialog, so its answer is evidence that we asked and nothing more. Only
+    ///    `screenIsGranted()` — `CGPreflightScreenCaptureAccess` underneath — speaks for the user.
+    ///    Letting "we asked" stand in for "they granted" is the same class of lie as a frame counter
+    ///    driven by a clock, and it is the one the rest of this file exists to prevent.
+    /// 2. **It does not open System Settings itself.** `Permissions.request(.screen)` already opens
+    ///    the pane on the branch where the answer is on record, so a second open here made one press
+    ///    open two panes — measured 14 ms apart in a live first-run trace, twice in one session.
+    ///    The user gets a button for that instead, so one press opens one pane.
     func requestScreenAccess() {
         guard !isRequestingScreenAccess else { return }
         isRequestingScreenAccess = true
+        didAskForScreenAccess = true
         Task { [environment] in
-            let granted = await environment.requestScreenAccess()
+            _ = await environment.requestScreenAccess()
             isRequestingScreenAccess = false
-            screenIsGranted = granted || environment.screenIsGranted()
-            if !screenIsGranted { environment.openScreenSettings() }
+            screenIsGranted = environment.screenIsGranted()
         }
     }
 
-    /// G2, retried by hand when the browser did not open.
-    func openArticleAgain() {
-        articleDidOpen = environment.openArticle(Self.articleURL)
+    /// The manual way to the pane, for the run where the dialog never appeared because the answer was
+    /// already on record. One press, one open.
+    func openScreenSettings() {
+        environment.openScreenSettings()
     }
 
-    /// G9. The real "Search All" button in the real timeline was pressed. Advances only from the step
-    /// that asked for it — the button keeps working for the rest of the tutorial and must not skip it.
-    func searchPillWasPressed() {
-        guard step == .findMoments else { return }
+    /// The real `openTimeline` shortcut fired.
+    ///
+    /// The window is already up by the time this runs — the shortcut's own handler opened it, which
+    /// is the entire point of the beat: the user pressed keys and a window appeared *because they
+    /// did*. This only records that it happened and moves on, so the keypress is the transition
+    /// rather than a button press afterwards congratulating them on it.
+    ///
+    /// It reads `timelineIsVisible()` rather than assuming: the shell declines to open a timeline
+    /// over an unopened store, and a card describing a window that is not there is the same class of
+    /// lie as a frame count driven by a clock.
+    func timelineHotkeyFired() {
+        guard step == .openTimeline, !hotkeyFired else { return }
+        hotkeyFired = true
+        timelineIsOpen = environment.timelineIsVisible()
+        if timelineIsOpen {
+            didOpenTimeline = true
+            environment.playSwoosh()
+        }
+        environment.playChime()
         advance()
     }
 
-    /// G10/G11. A real search of the real store; an empty result is reported, never routed around.
+    /// The user really dragged, far enough for it to be a gesture.
+    ///
+    /// Deliberately does **not** advance. The drag is the lesson, and yanking the card forward
+    /// mid-gesture would take the thing they are watching away at the moment it starts moving; the
+    /// card changes its line, the chime fires, and Continue becomes pressable.
+    func dragTravelled() {
+        guard step == .timeline, !didDrag else { return }
+        didDrag = true
+        environment.playChime()
+    }
+
+    /// The real "Search All" button in the real timeline was pressed. Advances only from the step
+    /// that asked for it — the button keeps working for the rest of the tutorial and must not skip it.
+    ///
+    /// - Returns: whether the tutorial took the press. The shell asks, and opens its search bar only
+    ///   when the answer is no, so the one real pill serves both without a second window appearing
+    ///   over the beat that is using it.
+    @discardableResult
+    func searchPillWasPressed() -> Bool {
+        guard step == .findMoments else { return false }
+        return advance()
+    }
+
+    /// A real search of the real store; an empty result is reported, never routed around.
+    ///
+    /// It deliberately does **not** advance. The result *is* the gate, so leaving the step to
+    /// `advance()` means the one check that says "there was really a hit" is the one the button runs,
+    /// rather than a second copy of that condition written out here.
     func search(_ query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         lastQuery = trimmed
+        chosenMemory = nil
+        chosenMoment = nil
         guard !trimmed.isEmpty else {
+            results = []
             searchMessage = "Type something you were just looking at."
             return
         }
         guard environment.storeIsReadable() else {
+            results = []
             searchMessage = "I can't read the capture store yet, so there is nothing to search."
             return
         }
@@ -289,11 +383,10 @@ final class TutorialModel: ObservableObject {
         }
         searchMessage = nil
         environment.playChime()
-        enter(nextStep())
     }
 
-    /// G12. Tapping the memory goes back to the moment it came from: the real frame captured then,
-    /// and — when the shell has wired it — the timeline repositioned on it.
+    /// Tapping the memory goes back to the moment it came from: the real frame captured then, and —
+    /// when the shell has wired it — the timeline repositioned on it.
     func choose(_ memory: TutorialMemory) {
         chosenMemory = memory
         chosenMoment = environment.frameNear(memory.at)
@@ -301,36 +394,216 @@ final class TutorialModel: ObservableObject {
         environment.playClick()
     }
 
-    /// The handoff: put the question somewhere the user can paste it, and restart Claude so it reads
-    /// the MCP config it was launched without.
-    func handOffToClaude() {
-        environment.copyToClipboard(Self.suggestedQuestion)
-        didRestartClaude = environment.restartClaude()
+    /// The handoff, done rather than described: open Claude and put the question in its prompt.
+    ///
+    /// The user is not told to ask Claude anything. They watch it happen and then press Return,
+    /// which is the one part of it that has to be theirs: a shortcut that can fire by accident must
+    /// never send a message on someone's behalf.
+    ///
+    /// - Parameter restartingFirst: whether they have agreed to Claude being restarted. Only ever
+    ///   `true` from the button that says so — `enter(.claudeHandoff)` calls this on its own only on
+    ///   the branch where no restart is needed, so nothing here can quit an app unasked. It is also
+    ///   ignored downstream when the running Claude turns out not to need one.
+    ///
+    /// Nothing here decides what happened. `claudeAsk` is assigned from the answer that comes back,
+    /// so a machine with no Claude on it lands on an admission rather than on a claim.
+    func askClaude(restartingFirst: Bool = false) {
+        guard !isAskingClaude else { return }
+        isAskingClaude = true
+        claudeAsk = nil
         environment.playClick()
+        environment.askClaude(Self.suggestedQuestion, restartingFirst) { [weak self] outcome in
+            guard let self else { return }
+            self.isAskingClaude = false
+            self.claudeAsk = outcome
+            // Only the branch that genuinely filled a prompt gets the sound that means it worked.
+            if outcome.didPrefill { self.environment.playChime() }
+        }
     }
 
-    var claudeIsInstalled: Bool { ClaudeRelaunch.isInstalled }
+    // MARK: - What really happened
 
-    // MARK: - Copy that depends on what really happened
-
-    /// What the collect step achieved, said either way. This is the sentence a timer-driven counter
-    /// would have got wrong.
-    var framesSummary: String {
-        if framesCollected >= Self.frameTarget {
-            return "\(framesCollected) frames landed. That much of your screen is searchable now."
-        }
-        if didWaiveFrames {
-            return framesCollected == 0
-                ? "No frames arrived, so there is nothing new to find yet."
-                : "Only \(framesCollected) frame\(framesCollected == 1 ? "" : "s") arrived, so there is very little to find yet."
-        }
-        return "Waiting for frames."
+    /// What the capture beat achieved. The **only** thing allowed to describe it.
+    ///
+    /// An enum rather than a sentence because this is the claim the whole tutorial's credibility
+    /// rests on: `.caught` is reachable from exactly one condition — the gate's own — and every other
+    /// route out of that step lands on an admission. A test can hold this value; it cannot hold a
+    /// paragraph.
+    var outcome: TutorialOutcome {
+        if framesCollected >= Self.frameTarget { return .caught }
+        // Checked before the frame waiver, and deliberately: a run that was never allowed to see the
+        // screen did not "capture too little", it was blind, and those are different sentences. This
+        // is the flag rule 4 promises and the old code set and then never read.
+        if didWaiveScreenAccess { return .cannotSee }
+        guard didWaiveFrames else { return .waiting }
+        return framesCollected == 0 ? .nothingArrived : .tooLittleArrived
     }
 
-    /// The dots. Terminal states sit past the end of the plan, which is what makes the last dot fill.
-    var progress: (index: Int, total: Int) {
-        guard let index = plan.firstIndex(of: step) else { return (plan.count, plan.count) }
-        return (index, plan.count)
+    // MARK: - The words
+
+    /// What the mark says on this step, given what really happened.
+    ///
+    /// One line, one sentence under it, and nothing else — the card has no other copy. Kept here
+    /// rather than in the view because these are claims, and a claim belongs where it can be
+    /// asserted: `TutorialTests` walks the flow and reads this.
+    var speech: TutorialSpeech {
+        switch step {
+        case .invitation:
+            return TutorialSpeech(
+                "Let me show you what I do.", aside: "It takes about two minutes.")
+
+        case .screenAccess:
+            if screenIsGranted {
+                return TutorialSpeech("Thank you.", aside: "Now I can see what you see.")
+            }
+            // Three states, not two. "We asked" is its own state and says so, because the dialog
+            // returns before the user has answered it and a card that jumped straight to thanking
+            // them would be reading a grant off our own button press.
+            if didAskForScreenAccess {
+                return TutorialSpeech(
+                    "I am still waiting on that.",
+                    aside: "Turn Screen Recording on for me, and I will notice.")
+            }
+            return TutorialSpeech(
+                "I need to see your screen.",
+                aside: "Without it there is nothing for me to remember.")
+
+        case .collectFrames:
+            // The halves of the honesty rule, said in plain words: while the store has not answered,
+            // the mark asks; the moment it has, the mark says so; and if it was never allowed to look
+            // at all, it says that instead of asking for something it cannot receive. None of these
+            // sentences mentions what is being counted, and none can be reached by a clock.
+            switch outcome {
+            case .caught:
+                return TutorialSpeech("Got it.", aside: "What you were just doing is on your timeline.")
+            case .cannotSee:
+                return TutorialSpeech(
+                    "I still cannot see your screen.",
+                    aside: "Nothing will arrive until Screen Recording is on.")
+            case .nothingArrived, .tooLittleArrived, .waiting:
+                return TutorialSpeech(
+                    "Go and look at something.",
+                    aside: "Anything you would normally read. I will tell you when I have it.")
+            }
+
+        case .openTimeline:
+            // The chord itself is never spoken — the card shows it as a key chip, because it can
+            // contain a digit on a rebound machine and because keys are read, not said.
+            guard timelineChordIsArmed else {
+                return TutorialSpeech(
+                    "I cannot listen for that shortcut.",
+                    aside: "Accessibility is off, so I will have to open your timeline myself.")
+            }
+            return TutorialSpeech(
+                "Open your timeline.", aside: "Press these keys, and it will come up.")
+
+        case .timeline:
+            guard timelineIsOpen else {
+                return TutorialSpeech(
+                    "The timeline did not open.",
+                    aside: "There is nothing captured for it to show yet.")
+            }
+            guard !didDrag else {
+                return TutorialSpeech(
+                    "There you go.", aside: "That is how you get back to anything I saw.")
+            }
+            // Which way is "back" depends on the user's own scrolling setting, so the card asks for
+            // the gesture and not for a direction it cannot promise.
+            let opening = didWaiveHotkey ? "I opened it for you." : "Everything I have seen."
+            return TutorialSpeech(
+                opening, aside: "Drag across it with two fingers to travel through your day.")
+
+        case .findMoments:
+            return TutorialSpeech("Now find one moment.", aside: "Click Search All, just up there.")
+
+        case .query:
+            guard !results.isEmpty else {
+                return TutorialSpeech(
+                    "Type a word you saw.", aside: "Anything off that screen, then press Return.")
+            }
+            guard chosenMemory != nil else {
+                return TutorialSpeech("There it is.", aside: "Tap it to go back to that moment.")
+            }
+            return TutorialSpeech(
+                "There it is.",
+                aside: chosenMoment == nil
+                    ? "No picture survived that second — the words are what I still have."
+                    : "That is the moment, exactly as it was.")
+
+        case .claudeHandoff:
+            // Three answers, and only one of them says a prompt was filled in. "We opened Claude" is
+            // not "your question is in Claude", and the difference is the whole beat.
+            switch claudeAsk {
+            case .prompted(let restarted, let mayNotReachMe):
+                return TutorialSpeech(
+                    "Your question is in Claude.", stress: "Claude",
+                    aside: {
+                        if restarted {
+                            return "I restarted it first so it could read me, then typed it in for you."
+                        }
+                        if mayNotReachMe {
+                            return "It is the Claude you already had open, which may not be able to reach me yet."
+                        }
+                        return "I typed it in for you."
+                    }())
+            case .copiedInstead:
+                return TutorialSpeech(
+                    "Claude would not take it directly.", stress: "Claude",
+                    aside: "So I copied your question and brought it forward — paste it in.")
+            case .notInstalled:
+                return TutorialSpeech(
+                    "Claude Desktop is not on this Mac.", stress: "Claude",
+                    aside: "I copied your question, ready to paste into the claude command.")
+            case nil:
+                // The consent beat. It names the cost before it offers the button, because the cost
+                // is somebody else's open conversation.
+                guard !claudeNeedsRestart else {
+                    return TutorialSpeech(
+                        "Claude is open already.", stress: "Claude",
+                        aside: "It has not read me yet, and it only reads me when it starts. May I close and reopen it?")
+                }
+                return TutorialSpeech(
+                    "Let me ask Claude for you.", stress: "Claude",
+                    aside: "Opening it with your question already typed in.")
+            }
+
+        case .claudeProof:
+            guard let proof else {
+                switch claudeAsk {
+                case .prompted(_, let mayNotReachMe):
+                    // A Claude that never re-read our config may never call a tool, and this gate
+                    // cannot be waived — so the card names the way out instead of waiting silently.
+                    guard !mayNotReachMe else {
+                        return TutorialSpeech(
+                            "Send it in Claude.", stress: "Claude",
+                            aside: "It is in the prompt. If nothing reaches me, quitting and reopening Claude is what fixes it.")
+                    }
+                    return TutorialSpeech(
+                        "Send it in Claude.", stress: "Claude",
+                        aside: "It is already in the prompt — press Return there, and I will notice.")
+                case .copiedInstead, .notInstalled:
+                    return TutorialSpeech(
+                        "Paste it into Claude.", stress: "Claude",
+                        aside: "I will only say this worked once Claude has really called me.")
+                case nil:
+                    return TutorialSpeech(
+                        "Ask Claude your question.", stress: "Claude",
+                        aside: "I will only say this worked once Claude has really called me.")
+                }
+            }
+            return TutorialSpeech(
+                "Claude just read your context.", stress: "Claude",
+                aside: "It called \(proof.tool), and the server that served it wrote that down.")
+
+        case .allSet:
+            return TutorialSpeech("That is everything.", aside: outcome.sentence)
+
+        case .menuBar:
+            return TutorialSpeech("I am up here.", aside: "Click me whenever you want me.")
+
+        case .finished, .skipped:
+            return TutorialSpeech("")
+        }
     }
 
     // MARK: - Transitions
@@ -345,17 +618,17 @@ final class TutorialModel: ObservableObject {
     private func enter(_ next: TutorialStep) {
         step = next
         stepEnteredAt = environment.now()
+        // Every watcher this flow can install is torn down here and re-armed by the step that wants
+        // it. One place, so a beat cannot leave a system-wide event monitor running behind it — and
+        // so no watcher can outlive the step whose gate it feeds.
+        environment.stopWatchingTimelineHotkey()
+        environment.stopWatchingDrag()
         // One line per beat. A tutorial that stalls is the kind of thing a user reports as "it just
         // sat there", and the step it sat on is the whole diagnosis.
         ContextLog.info("step \(next.rawValue)", "tutorial")
 
         switch next {
         case .invitation:
-            environment.presentOverlay(next)
-
-        case .article:
-            articleDidOpen = environment.openArticle(Self.articleURL)
-            environment.playSwoosh()
             environment.presentOverlay(next)
 
         case .screenAccess:
@@ -366,34 +639,44 @@ final class TutorialModel: ObservableObject {
             framesSince = environment.now()
             framesCollected = 0
             environment.presentOverlay(next)
-            // One immediate read so the counter shows a real number rather than a placeholder that
-            // happens to be zero.
+            // One immediate read, so the gate starts from the store's answer rather than from a
+            // placeholder that happens to be zero.
             poll()
 
         case .openTimeline:
+            hotkeyFired = false
+            // Armed before the card is on screen, so a user who presses the chord the instant they
+            // read it is not racing the watcher.
+            environment.watchForTimelineHotkey { [weak self] in self?.timelineHotkeyFired() }
             environment.presentOverlay(next)
 
         case .timeline:
-            environment.presentTimeline()
-            didOpenTimeline = true
+            // The window is normally already up — the user's own keypress opened it through the
+            // shortcut's own handler. The tutorial opens it itself on exactly one branch: the chord
+            // could not fire and the user took the way out that says so.
+            if didWaiveHotkey {
+                environment.presentTimeline()
+                didOpenTimeline = true
+                environment.playSwoosh()
+            }
             timelineIsOpen = environment.timelineIsVisible()
-            environment.playSwoosh()
+            environment.watchForDrag { [weak self] in self?.dragTravelled() }
             environment.presentOverlay(next)
             poll()
 
-        case .scrollBack, .findMoments, .query:
-            environment.presentOverlay(next)
-            poll()
-
-        case .foundIt:
+        case .findMoments, .query:
             environment.presentOverlay(next)
             poll()
 
         case .claudeHandoff:
-            // Before the user is told to restart Claude, so a stamp from an earlier session cannot
+            // Before Claude is restarted, so a stamp from the session we are about to end cannot
             // satisfy the gate that follows.
             proofSince = environment.now()
+            claudeNeedsRestart = environment.claudeRestartIsNeeded()
             environment.presentOverlay(next)
+            // Only the branch with no destructive side effect runs by itself. When a restart really
+            // is needed the card asks first — see `claudeNeedsRestart`.
+            if !claudeNeedsRestart { askClaude() }
 
         case .claudeProof:
             environment.presentOverlay(next)
@@ -415,6 +698,8 @@ final class TutorialModel: ObservableObject {
     /// Everything this tutorial put on screen, taken back off it. Runs for both terminal states:
     /// finishing and abandoning leave the same empty desktop, and only one of them is a success.
     private func tearDown() {
+        environment.stopWatchingTimelineHotkey()
+        environment.stopWatchingDrag()
         environment.dismissOverlay()
         environment.hideMenuBarSpotlight()
         if didOpenTimeline {
@@ -424,4 +709,67 @@ final class TutorialModel: ObservableObject {
         environment.stopMusic()
         targetFrame = nil
     }
+}
+
+// MARK: - What the capture beat achieved
+
+/// The result of the one beat that can genuinely fail, as a value.
+///
+/// The sentences live on the enum rather than in the view for the same reason the enum exists: there
+/// is exactly one route to `.caught`, so there is exactly one route to the sentence that says the
+/// screen is searchable.
+enum TutorialOutcome: Equatable, Sendable {
+    /// Frames genuinely landed while the step was watching.
+    case caught
+    /// The step was left with nothing at all in the store.
+    case nothingArrived
+    /// The step was left with something, but less than the beat asked for.
+    case tooLittleArrived
+    /// The screen grant was declined, so nothing could ever have arrived. Distinct from
+    /// `nothingArrived` because the reason is the thing worth saying.
+    case cannotSee
+    /// Still watching. Not reachable from the closing card — the capture beat is either met or
+    /// waived before it — and it resolves to an admission anyway, because a state that should not
+    /// happen must not be the one that claims success.
+    case waiting
+
+    var sentence: String {
+        switch self {
+        case .caught: return "What you were doing is searchable now, and Claude can read it."
+        case .cannotSee: return "You have kept Screen Recording off, so I saw none of it."
+        case .nothingArrived: return "Nothing arrived while I was watching, so there is nothing new to find."
+        case .tooLittleArrived: return "Very little arrived, so there is not much to find yet."
+        case .waiting: return "I am not sure anything arrived, so there may be nothing new to find."
+        }
+    }
+}
+
+// MARK: - The mark's line
+
+/// One card's worth of copy: the line the mark speaks, and at most one sentence under it.
+///
+/// `stress` is a *substring of* `lead` rather than a second copy of those words, so a run the mark
+/// leans on can never drift out of the sentence it belongs to — the emphasis is a lookup, not a
+/// parallel string a careless edit could leave behind.
+struct TutorialSpeech: Equatable {
+    let lead: String
+    let stress: String?
+    let aside: String?
+
+    init(_ lead: String, stress: String? = nil, aside: String? = nil) {
+        self.lead = lead
+        self.stress = stress
+        self.aside = aside
+    }
+
+    /// `lead`, cut into the runs a talking mark wants: plain, the stressed run, plain.
+    var runs: [(String, Emphasis)] {
+        guard let stress, let range = lead.range(of: stress) else { return [(lead, .plain)] }
+        let before = String(lead[lead.startIndex..<range.lowerBound])
+        let after = String(lead[range.upperBound...])
+        return [(before, .plain), (stress, .bold), (after, .plain)].filter { !$0.0.isEmpty }
+    }
+
+    /// Everything this card says out loud, as one string. What a test reads.
+    var everythingSaid: String { [lead, aside].compactMap { $0 }.joined(separator: " ") }
 }

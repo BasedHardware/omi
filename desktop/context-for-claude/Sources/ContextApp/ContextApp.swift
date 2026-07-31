@@ -78,11 +78,23 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                     // The store opens lazily on the engine's own queue, so ask at trigger time
                     // rather than at launch. Nil means it is not open yet: decline to put a timeline
                     // over nothing instead of showing an empty one.
+                    //
+                    // This is also what the tutorial's timeline beat rides on: it observes the
+                    // shortcut rather than opening anything itself, so the window the user learns to
+                    // summon is opened here, by their own keypress, exactly as it will be forever
+                    // after.
                     guard let store = Engine.shared.contextStore else { return }
                     RewindWindow.present(
                         store: store,
                         onOpenSettings: { SettingsWindow.present() },
-                        onSearch: { query in SearchBarWindow.present(prefill: query) })
+                        onSearch: { query in
+                            // The tutorial's "click Search All" beat advances because the real pill
+                            // in the real window was pressed. It answers true only while it is the
+                            // beat waiting for one; outside the tutorial this is a single boolean and
+                            // the bar opens as it always did.
+                            guard !Tutorial.searchPillWasPressed() else { return }
+                            SearchBarWindow.present(prefill: query)
+                        })
                 }
             }
 
