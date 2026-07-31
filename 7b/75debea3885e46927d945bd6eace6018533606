@@ -1,0 +1,89 @@
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsView.swift
+  s_d60bd669afaade::t_74758fa642ff53 75-76
+  s_d60bd669afaade::t_cbb043dab4c0b1 99-103
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_d60bd669afaade::t_25cc632808ee2f 50-61
+desktop/context-for-claude/docs/design-system.md
+  s_d60bd669afaade::t_1f21aa08f80f11 22-23
+  s_d60bd669afaade::t_b109acd3faad2a 218-235,238-242
+  s_d60bd669afaade::t_84414ee0201929 307-308
+  s_d60bd669afaade::t_c2529185259dd9 50-74
+  s_d60bd669afaade::t_cb26fba9667b30 4-6
+  s_d60bd669afaade::t_52ea74585411a7 255-273,275-282
+  s_d60bd669afaade::t_126d272ff3a0de 291
+  s_d60bd669afaade::t_750abe2e94b78b 236-237
+  s_d60bd669afaade::t_6aec900906dceb 75-76,93,95-99,101-182,243-244,283-284,292-293,309-310,360,371-373,438-442
+desktop/context-for-claude/Tests/ContextAppTests/InkGlassTests.swift
+  s_d60bd669afaade::t_1abd11ef3d4c71 1-286,288-289,295-325
+  s_d60bd669afaade::t_0382a4248e31e9 287,290-294
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_d60bd669afaade::t_ec196ac18dec51 259
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_d60bd669afaade::t_1740fa9be27182 187-190,193-195
+  s_d60bd669afaade::t_642dda82607da3 493-494
+  s_d60bd669afaade::t_282d226eb12128 526
+  s_d60bd669afaade::t_cf8838670daf93 533-537
+  s_d60bd669afaade::t_ff3daf2755ac55 74-76
+  s_d60bd669afaade::t_043dc448ab4355 19-22
+  s_d60bd669afaade::t_6467110a0e0a78 49-67,73,83,85-86,97
+  s_d60bd669afaade::t_478926645c2cbd 36-37
+  s_d60bd669afaade::t_0140c01237938b 214-230
+  s_d60bd669afaade::t_5d7bbcf06c70ec 87-96
+  s_d60bd669afaade::t_825556eaf917e1 473-488,490-492,496,499,501,507,510-517,519,522-524,529-532,539,542,544,547-552
+  s_d60bd669afaade::t_d874943cdd53d0 106-113
+  s_d60bd669afaade::t_5870ebd3649a3f 4-5
+  s_d60bd669afaade::t_ff39ecfaba420d 141-144
+  s_d60bd669afaade::t_08b51616a14cbf 77-82
+  s_d60bd669afaade::t_05734df892d889 169-174,176-186,191
+  s_d60bd669afaade::t_ca06bcf1cb174f 553
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsWindow.swift
+  s_d60bd669afaade::t_32e89247f69469 70-75,77-78,81
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingWindow.swift
+  s_d60bd669afaade::t_4a721180af0966 4,6-7
+  s_d60bd669afaade::t_1dc34b20688d45 224-226
+  s_d60bd669afaade::t_1cac3ecd5064cf 236,238-242,244,246-247,252-253,256-259
+  s_d60bd669afaade::t_43bf834f5a30e6 8-11,13-16
+  s_d60bd669afaade::t_0496592aa134fb 269-274,277-285,287-306,308-312,316-329,333-339,343-348
+  s_d60bd669afaade::t_94a7994a3972f3 340-342
+  s_d60bd669afaade::t_9234d34244f1a3 19,22-30
+  s_d60bd669afaade::t_811cfc0b0e2f4d 31
+  s_d60bd669afaade::t_0386176ae65690 349
+  s_1bb969a666d0b3::t_54363c7c789687 94,178-186,355,363-374
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d60bd669afaade::t_6c02c2220f4940 71-80
+  s_d60bd669afaade::t_0cd69424ac9bbd 91-94,97
+desktop/context-for-claude/Sources/ContextApp/Onboarding/InkGlass.swift
+  s_d60bd669afaade::t_d2bb5f84cee1be 180-181,186-187,192-193,197-198,200-204
+  s_d60bd669afaade::t_23d349116ac421 328-336
+  s_d60bd669afaade::t_a0bf23642ae88f 1-179,182-185,188-191,194-196,199,205-228,242-327,337-429,448-480
+  s_d60bd669afaade::t_58fb8fabf8d82d 430-442,446-447
+  s_d60bd669afaade::t_8da5c56bfbfb8a 229-241
+  s_d60bd669afaade::t_df0a0daf3ba9f2 443-445
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_d60bd669afaade::t_8eebd2999e4d65 37-40
+  s_d60bd669afaade::t_7bcaffb4959592 375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "7b75debea3885e46927d945bd6eace6018533606",
+  "prompts": {},
+  "sessions": {
+    "s_1bb969a666d0b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a290477b89640327d",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
