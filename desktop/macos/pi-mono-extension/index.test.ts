@@ -1175,12 +1175,23 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     capture_screen: [],
     check_permission_status: [],
     request_permission: ["type"],
+    screenshot: [],
+    get_work_context: [],
+    search_contacts: ["query"],
+    list_message_chats: [],
+    read_message_history: [],
+    send_message: ["to", "text"],
+    run_applescript: ["script"],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(expected, tool.name),
+      `${tool.name} is missing from the expected required-field table`,
+    );
     assert.deepEqual(
       req.sort(),
-      (expected[tool.name] ?? []).sort(),
+      expected[tool.name].sort(),
       `${tool.name} required fields mismatch`,
     );
   }
