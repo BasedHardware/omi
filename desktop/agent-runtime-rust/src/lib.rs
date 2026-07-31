@@ -363,7 +363,6 @@ async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
             return;
         }
     }
-    std::future::pending::<()>().await;
 }
 
 #[cfg(test)]
@@ -472,6 +471,14 @@ mod tests {
                 .expect("cancelled result must collect"),
             SubagentCompletion::Cancelled
         );
+    }
+
+    #[tokio::test]
+    async fn cancellation_waiter_returns_when_sender_closes() {
+        let (sender, mut receiver) = watch::channel(false);
+        drop(sender);
+
+        wait_for_cancellation(&mut receiver).await;
     }
 
     #[tokio::test]

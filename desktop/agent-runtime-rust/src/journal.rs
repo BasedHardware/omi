@@ -136,6 +136,7 @@ impl JournalStore {
                  attempt_id TEXT NOT NULL UNIQUE,
                  owner_id TEXT NOT NULL,
                  session_id TEXT NOT NULL,
+                 conversation_id TEXT,
                  profile_generation INTEGER NOT NULL,
                  created_at_ms INTEGER NOT NULL
              );
@@ -160,21 +161,39 @@ impl JournalStore {
                  ON rx4_tool_claims(owner_id, run_id, status);",
             )
             .map_err(|error| error.to_string())?;
+        let has_run_conversation: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('rx4_runtime_runs') WHERE name = 'conversation_id')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if !has_run_conversation {
+            self.connection
+                .execute_batch("ALTER TABLE rx4_runtime_runs ADD COLUMN conversation_id TEXT;")
+                .map_err(|error| error.to_string())?;
+        }
         self.migrate_node_journal()?;
         Ok(())
+    }
+
+    pub fn conversation_id(&self, surface: &Surface) -> Result<String, String> {
+        ensure_conversation(&self.connection, surface)
     }
 
     pub fn admit_run(
         &mut self,
         owner_id: &str,
         session_id: &str,
+        conversation_id: &str,
         profile_generation: u64,
     ) -> Result<RunIdentity, String> {
         let identity = RunIdentity {
             run_id: Uuid::new_v4().to_string(),
             attempt_id: Uuid::new_v4().to_string(),
         };
-        self.connection.execute("INSERT INTO rx4_runtime_runs(run_id, attempt_id, owner_id, session_id, profile_generation, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)", params![identity.run_id, identity.attempt_id, owner_id, session_id, profile_generation, now_ms()]).map_err(|error| error.to_string())?;
+        self.connection.execute("INSERT INTO rx4_runtime_runs(run_id, attempt_id, owner_id, session_id, conversation_id, profile_generation, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)", params![identity.run_id, identity.attempt_id, owner_id, session_id, conversation_id, profile_generation, now_ms()]).map_err(|error| error.to_string())?;
         Ok(identity)
     }
 
@@ -545,9 +564,28 @@ impl JournalStore {
             .transaction()
             .map_err(|error| error.to_string())?;
         let conversation_id = ensure_conversation(&transaction, surface)?;
-        let current = turn_row(&transaction, &conversation_id, &turn_id)?
+        let mut current = turn_row(&transaction, &conversation_id, &turn_id)?
             .ok_or_else(|| "journal turn not found".to_owned())?;
-        if current.producing_run_id.as_deref() != Some(run_id.as_str())
+        let run_matches: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM rx4_runtime_runs WHERE run_id = ? AND attempt_id = ? AND owner_id = ? AND conversation_id = ?)",
+                params![run_id, attempt_id, surface.owner_id, conversation_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if !run_matches {
+            return Err("journal terminalization does not match producing run attempt".into());
+        }
+        if current.producing_run_id.is_none() && current.producing_attempt_id.is_none() {
+            transaction
+                .execute(
+                    "UPDATE rx4_journal_turns SET producing_run_id = ?, producing_attempt_id = ? WHERE conversation_id = ? AND turn_id = ?",
+                    params![run_id, attempt_id, conversation_id, turn_id],
+                )
+                .map_err(|error| error.to_string())?;
+            current.producing_run_id = Some(run_id.clone());
+            current.producing_attempt_id = Some(attempt_id.clone());
+        } else if current.producing_run_id.as_deref() != Some(run_id.as_str())
             || current.producing_attempt_id.as_deref() != Some(attempt_id.as_str())
         {
             return Err("journal terminalization does not match producing run attempt".into());
@@ -721,10 +759,13 @@ fn record_turn(
     if role != "user" && role != "assistant" {
         return Err("journal role is invalid".into());
     }
-    let content = required(input, "content")?;
+    let content = optional(input, "content").ok_or_else(|| "content is required".to_owned())?;
     let origin = optional(input, "origin").unwrap_or_else(|| "local".into());
     let status = optional(input, "status").unwrap_or_else(|| "pending".into());
     valid_status(&status)?;
+    if content.trim().is_empty() && (role != "assistant" || terminal(&status)) {
+        return Err("content is required".into());
+    }
     let blocks = json_array(input.get("contentBlocks"))?;
     let resources = json_array(input.get("resources"))?;
     let metadata = object_json(input.get("metadataJson"))?;
@@ -1053,12 +1094,42 @@ mod tests {
     }
 
     #[test]
+    fn upgrades_existing_runtime_runs_with_conversation_identity() {
+        let connection = match Connection::open_in_memory() {
+            Ok(connection) => connection,
+            Err(error) => panic!("runtime migration setup failed: {error}"),
+        };
+        if let Err(error) = connection.execute_batch(
+            "CREATE TABLE rx4_runtime_runs (
+                run_id TEXT PRIMARY KEY,
+                attempt_id TEXT NOT NULL UNIQUE,
+                owner_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                profile_generation INTEGER NOT NULL,
+                created_at_ms INTEGER NOT NULL
+            );",
+        ) {
+            panic!("runtime migration setup failed: {error}");
+        }
+        let store = must(JournalStore::from_connection(connection));
+        let has_conversation: bool = store
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('rx4_runtime_runs') WHERE name = 'conversation_id')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("runtime migration lookup must succeed");
+        assert!(has_conversation);
+    }
+
+    #[test]
     fn prunes_only_expired_terminal_runtime_state() {
         let mut store = must(JournalStore::in_memory());
         store.connection.execute_batch(
-            "INSERT INTO rx4_runtime_runs VALUES ('expired-run', 'expired-attempt', 'owner', 'session', 1, 1);
-             INSERT INTO rx4_runtime_runs VALUES ('pending-run', 'pending-attempt', 'owner', 'session', 1, 1);
-             INSERT INTO rx4_runtime_runs VALUES ('recent-run', 'recent-attempt', 'owner', 'session', 1, 1);
+            "INSERT INTO rx4_runtime_runs VALUES ('expired-run', 'expired-attempt', 'owner', 'session', NULL, 1, 1);
+             INSERT INTO rx4_runtime_runs VALUES ('pending-run', 'pending-attempt', 'owner', 'session', NULL, 1, 1);
+             INSERT INTO rx4_runtime_runs VALUES ('recent-run', 'recent-attempt', 'owner', 'session', NULL, 1, 1);
              INSERT INTO rx4_tool_claims VALUES ('expired-claim', 'owner', 'session', 'expired-run', 'expired-attempt', 1, 'boot', 1, 'search', 'hash', 'completed', 'succeeded', 'result', 1, 1);
              INSERT INTO rx4_tool_claims VALUES ('pending-claim', 'owner', 'session', 'pending-run', 'pending-attempt', 1, 'boot', 1, 'search', 'hash', 'pending', NULL, NULL, 1, 1);
              INSERT INTO rx4_tool_claims VALUES ('recent-claim', 'owner', 'session', 'recent-run', 'recent-attempt', 1, 'boot', 1, 'search', 'hash', 'revoked', NULL, NULL, 99, 99);",
@@ -1086,5 +1157,42 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM rx4_tool_claims", [], |row| row.get(0))
             .expect("claim count must succeed");
         assert_eq!(remaining_claims, 2);
+    }
+
+    #[test]
+    fn terminalization_binds_an_unowned_turn_to_its_durable_run() {
+        let mut store = must(JournalStore::in_memory());
+        let surface = Surface {
+            owner_id: "owner".into(),
+            surface_kind: "main_chat".into(),
+            external_ref_kind: "chat".into(),
+            external_ref_id: "chat-1".into(),
+        };
+        let conversation_id = must(store.conversation_id(&surface));
+        let run = must(store.admit_run("owner", "session", &conversation_id, 1));
+        let record = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "role": "assistant",
+            "content": "",
+            "status": "streaming"
+        }))
+        .expect("record fixture must be valid");
+        must(store.record(&surface, &record));
+        let terminalization = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "producingRunId": run.run_id,
+            "producingAttemptId": run.attempt_id,
+            "disposition": "accept",
+            "content": "done"
+        }))
+        .expect("terminalization fixture must be valid");
+        let result = must(store.terminalize(&surface, &terminalization));
+        let turn = result.turn.expect("terminalization must return the turn");
+        assert_eq!(turn["status"], "completed");
+        assert_eq!(turn["producingRunId"], terminalization["producingRunId"]);
+        assert_eq!(
+            turn["producingAttemptId"],
+            terminalization["producingAttemptId"]
+        );
     }
 }
