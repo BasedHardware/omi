@@ -5912,6 +5912,10 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
+  private static func normalizeStreamingText(_ message: ChatMessage, _ text: String) -> String {
+    message.sender == .ai ? normalizeAssistantSentenceSpacing(text) : text
+  }
+
   /// Append text to a streaming message via a buffer that reveals at ~35ms intervals.
   /// This reduces SwiftUI re-renders from once-per-token while keeping text movement smooth.
   private func appendToMessage(id: String, text: String) {
@@ -5922,18 +5926,12 @@ class ChatProvider: ObservableObject {
 
   /// Flush accumulated text and thinking deltas to the published messages array.
   private func flushStreamingBuffer(revealAll: Bool = true) {
-    let normalizeText: (ChatMessage, String) -> String = { message, text in
-      if message.sender == .ai {
-        return Self.normalizeAssistantSentenceSpacing(text)
-      }
-      return text
-    }
     if revealAll {
-      streamingBuffer.flush(messages: &messages, normalizeText: normalizeText)
+      streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreamingText)
     } else {
       streamingBuffer.flushMetered(
         messages: &messages,
-        normalizeText: normalizeText
+        normalizeText: Self.normalizeStreamingText
       ) { [weak self] in
         self?.flushStreamingBuffer(revealAll: false)
       }
@@ -5964,12 +5962,7 @@ class ChatProvider: ObservableObject {
         toolUseId: toolUseId,
         input: input,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
-        }
+        normalizeText: Self.normalizeStreamingText
       )
     else { return }
     if status == .completed {
@@ -5992,12 +5985,7 @@ class ChatProvider: ObservableObject {
         name: name,
         output: output,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
-        }
+        normalizeText: Self.normalizeStreamingText
       )
     else { return }
     attachGeneratedFileResources(
@@ -6284,12 +6272,7 @@ class ChatProvider: ObservableObject {
       messageId: messageId,
       terminalStatus: terminalStatus,
       messages: &messages,
-      normalizeText: { message, text in
-        if message.sender == .ai {
-          return Self.normalizeAssistantSentenceSpacing(text)
-        }
-        return text
-      }
+      normalizeText: Self.normalizeStreamingText
     )
     if scheduleJournal {
       scheduleJournalUpdate(messageId: messageId)
