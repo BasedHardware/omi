@@ -1722,10 +1722,12 @@ export async function searchRewindEmbeddings(
 
   const scored = await scanTopKBySimilarity(
     (offset, size) =>
-      (page.all(...(scope ? [scope.from, scope.to] : []), size, offset) as {
-        hash: string
-        vec: Uint8Array
-      }[]).map((r) => ({
+      (
+        page.all(...(scope ? [scope.from, scope.to] : []), size, offset) as {
+          hash: string
+          vec: Uint8Array
+        }[]
+      ).map((r) => ({
         hash: r.hash,
         vec: bufferToVector(r.vec)
       })),
