@@ -7,6 +7,7 @@ import type {
   ListenStartArgs
 } from '../../shared/types'
 import { translateToGlosses, defaultSignOpts } from '../integrations/signLanguage'
+import { isSignLanguageEnabled } from './integrations'
 
 function buildEndpoint(language: string): string {
   return (
@@ -112,25 +113,28 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
 
       // Live Sign Language translation: accumulate the latest segment text and
       // translate (throttled) so the renderer can drive the sign avatar.
-      let textToTranslate = ''
-      segments.forEach((seg) => {
-        textToTranslate += (textToTranslate ? ' ' : '') + seg.text
-      })
-      if (textToTranslate) {
-        session.transcriptBuffer += (session.transcriptBuffer ? ' ' : '') + textToTranslate
-        const now = Date.now()
-        if (now - session.lastTranslationTime > 2000 || session.transcriptBuffer.length > 50) {
-          const limitedText = session.transcriptBuffer.slice(-256)
-          translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
-            .then((result) => {
-              const wc = webContents.fromId(session.ownerId)
-              if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
-            })
-            .catch((e) => console.error('[omi-listen] live translation failed:', e))
-          session.lastTranslationTime = now
-        }
-        if (session.transcriptBuffer.length > 1000) {
-          session.transcriptBuffer = session.transcriptBuffer.slice(-500)
+      // Opt-in only — disabled by default until a maintainer confirms consent.
+      if (isSignLanguageEnabled()) {
+        let textToTranslate = ''
+        segments.forEach((seg) => {
+          textToTranslate += (textToTranslate ? ' ' : '') + seg.text
+        })
+        if (textToTranslate) {
+          session.transcriptBuffer += (session.transcriptBuffer ? ' ' : '') + textToTranslate
+          const now = Date.now()
+          if (now - session.lastTranslationTime > 2000 || session.transcriptBuffer.length > 50) {
+            const limitedText = session.transcriptBuffer.slice(-256)
+            translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
+              .then((result) => {
+                const wc = webContents.fromId(session.ownerId)
+                if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
+              })
+              .catch((e) => console.error('[omi-listen] live translation failed:', e))
+            session.lastTranslationTime = now
+          }
+          if (session.transcriptBuffer.length > 1000) {
+            session.transcriptBuffer = session.transcriptBuffer.slice(-500)
+          }
         }
       }
       return

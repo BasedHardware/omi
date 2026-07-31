@@ -19,6 +19,16 @@ import type {
   TranslationResult
 } from '../../shared/types'
 
+let signLanguageEnabled = false
+
+export function isSignLanguageEnabled(): boolean {
+  return signLanguageEnabled
+}
+
+export function setSignLanguageEnabled(enabled: boolean): void {
+  signLanguageEnabled = enabled
+}
+
 // All integrations IPC lives here (3e Sticky Notes + 3d Gmail/Calendar) so
 // concurrent chat/KG work doesn't conflict in index.ts.
 function googleStatus(): GoogleStatus {
@@ -84,11 +94,31 @@ export function registerIntegrationsHandlers(): void {
     async (_e, payload: unknown): Promise<TranslationResult> => {
       const text = typeof payload === 'string' ? payload : (payload as { text?: string })?.text
       const spokenLanguage =
-        typeof payload === 'object' && payload ? (payload as { spokenLanguage?: string }).spokenLanguage : 'en'
+        typeof payload === 'object' && payload
+          ? (payload as { spokenLanguage?: string }).spokenLanguage
+          : 'en'
       const signedLanguage =
-        typeof payload === 'object' && payload ? (payload as { signedLanguage?: string }).signedLanguage : 'ase'
+        typeof payload === 'object' && payload
+          ? (payload as { signedLanguage?: string }).signedLanguage
+          : 'ase'
       if (!text) throw new Error('No text provided for translation')
-      return translateToGlosses(text, spokenLanguage ?? 'en', signedLanguage ?? 'ase', defaultSignOpts())
+      return translateToGlosses(
+        text,
+        spokenLanguage ?? 'en',
+        signedLanguage ?? 'ase',
+        defaultSignOpts()
+      )
+    }
+  )
+
+  ipcMain.handle('integrations:signLanguage:getEnabled', async (): Promise<boolean> => {
+    return isSignLanguageEnabled()
+  })
+
+  ipcMain.handle(
+    'integrations:signLanguage:setEnabled',
+    async (_e, enabled: boolean): Promise<void> => {
+      setSignLanguageEnabled(enabled)
     }
   )
 }

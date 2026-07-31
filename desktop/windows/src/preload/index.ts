@@ -156,7 +156,11 @@ const omi: OmiBridgeApi = {
     const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
     ipcRenderer.on('omi-sign-update', listener)
     return () => ipcRenderer.removeListener('omi-sign-update', listener)
-  }
+  },
+  signLanguageSetEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
+  signLanguageGetEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('integrations:signLanguage:getEnabled')
 }
 
 const omiOverlay: OmiOverlayApi = {

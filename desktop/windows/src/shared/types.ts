@@ -307,6 +307,8 @@ export type OmiBridgeApi = {
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
   onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
+  signLanguageSetEnabled: (enabled: boolean) => void
+  signLanguageGetEnabled: () => Promise<boolean>
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
