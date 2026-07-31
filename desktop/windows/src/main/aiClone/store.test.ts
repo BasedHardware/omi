@@ -48,7 +48,7 @@ describe('AiCloneStore', () => {
     const b = new AiCloneStore(deps(file))
     expect(b.getBeeperToken()).toBe('beeper-secret')
     expect(b.getEnabled()).toBe(true)
-    expect(b.getChatMode('chat1')).toBe('auto')
+    expect(b.getChatMode('chat1')).toBe('draft')
     expect(b.getChatMode('unknown')).toBe('off')
     expect(b.getDrafts()).toHaveLength(1)
     expect(b.getActivity()[0].id).toBe('a1')

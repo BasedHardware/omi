@@ -71,7 +71,8 @@ export class AiCloneStore {
   }
 
   getChatMode(chatId: string): AiCloneChatMode {
-    return this.data.chatModes?.[chatId] ?? 'off'
+    const mode = this.data.chatModes?.[chatId] ?? 'off'
+    return mode === 'auto' ? 'draft' : mode
   }
 
   getChatModes(): Record<string, AiCloneChatMode> {
@@ -80,8 +81,9 @@ export class AiCloneStore {
 
   setChatMode(chatId: string, mode: AiCloneChatMode): void {
     const modes = { ...(this.data.chatModes ?? {}) }
-    if (mode === 'off') delete modes[chatId]
-    else modes[chatId] = mode
+    const safeMode = mode === 'auto' ? 'draft' : mode
+    if (safeMode === 'off') delete modes[chatId]
+    else modes[chatId] = safeMode
     this.data.chatModes = modes
     this.save()
   }

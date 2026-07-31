@@ -16,22 +16,9 @@ export type ResponderInput = {
   autoSendHourlyCap: number
 }
 
-export type ResponderDecision =
-  | { action: 'ignore'; reason: string }
-  | { action: 'draft' }
-  | { action: 'autoSend' }
+export type ResponderDecision = { action: 'ignore'; reason: string } | { action: 'draft' }
 
 export const AUTO_SEND_HOURLY_CAP = 30
-
-const SENSITIVE_AUTO_SEND_CONTENT =
-  /\b(venmo|paypal|zelle|wire transfer|bank account|routing number|credit card|debit card|invoice|refund|pay me|send money|gift card|crypto|bitcoin|wallet address|password|passcode|one-time code|verification code|otp|2fa|social security|ssn|lawyer|attorney|lawsuit|contract|sign here|nda|diagnosis|prescription|hospital|emergency|suicide|self-harm|break up|get fired|laid off|divorce)\b/i
-
-const PROMPT_INJECTION_CONTENT =
-  /\b(ignore (all )?previous|ignore the above|disregard (previous|the above)|forget (previous|everything)|new instructions|system prompt|you are now|pretend to be|reveal your (prompt|instructions)|print your instructions|repeat the text above|developer mode|jailbreak|do anything now|override your|your real instructions|as an ai)\b/i
-
-export function requiresHumanReview(replyText: string, incomingText = ''): boolean {
-  return SENSITIVE_AUTO_SEND_CONTENT.test(replyText) || PROMPT_INJECTION_CONTENT.test(incomingText)
-}
 
 export function decide(input: ResponderInput): ResponderDecision {
   const { message, chatMode } = input
@@ -55,5 +42,5 @@ export function decide(input: ResponderInput): ResponderDecision {
     return { action: 'draft' }
   }
 
-  return chatMode === 'auto' ? { action: 'autoSend' } : { action: 'draft' }
+  return { action: 'draft' }
 }

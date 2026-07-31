@@ -15,8 +15,13 @@ import type {
   AiCloneState
 } from '../../shared/types'
 import { AiCloneStore } from './store'
-import { BeeperClient, beeperTimestampMs, type BeeperChat, type BeeperMessage } from './beeperClient'
-import { decide, requiresHumanReview, AUTO_SEND_HOURLY_CAP } from './responder'
+import {
+  BeeperClient,
+  beeperTimestampMs,
+  type BeeperChat,
+  type BeeperMessage
+} from './beeperClient'
+import { decide, AUTO_SEND_HOURLY_CAP } from './responder'
 import { ChatTaskQueue } from './chatTaskQueue'
 import { generateReply, type ReplyTranscriptLine } from './replyEngine'
 
@@ -43,7 +48,10 @@ export class AiCloneService {
   /** id → chat metadata cache for titles/types in decisions and drafts. */
   private chatCache = new Map<string, BeeperChat>()
 
-  constructor(private broadcast: (e: AiCloneEvent) => void) {
+  constructor(
+    private broadcast: (e: AiCloneEvent) => void,
+    private replyGenerator = generateReply
+  ) {
     this.store = new AiCloneStore({
       file: join(app.getPath('userData'), 'ai-clone.json'),
       encrypt: (s) => {
@@ -227,8 +235,7 @@ export class AiCloneService {
       if (decision.action === 'ignore') return
       // Only accepted messages are marked processed — ignores stay cheap to
       // re-decide, and a parked-then-superseded message was never marked.
-      this.markProcessed(messageId)
-      await this.respond(chat, message, decision.action)
+      if (await this.respond(chat, message)) this.markProcessed(messageId)
     })
   }
 
@@ -241,16 +248,12 @@ export class AiCloneService {
     }
   }
 
-  private async respond(
-    chat: BeeperChat,
-    message: BeeperMessage,
-    action: 'draft' | 'autoSend'
-  ): Promise<void> {
+  private async respond(chat: BeeperChat, message: BeeperMessage): Promise<boolean> {
     const chatTitle = chat.title ?? chat.id
     if (!this.firebaseToken) {
       this.recordError(chatTitle, 'No Omi session token — open the AI Clone page to refresh')
       this.broadcast({ kind: 'token-expired' })
-      return
+      return false
     }
     const ctx = {
       userDisplayName: this.displayName,
@@ -261,7 +264,7 @@ export class AiCloneService {
       incomingText: message.text ?? ''
     }
     const engineArgs = { apiBase: this.apiBase, desktopApiBase: this.desktopApiBase }
-    let reply = await generateReply({ ...engineArgs, firebaseToken: this.firebaseToken, ctx })
+    let reply = await this.replyGenerator({ ...engineArgs, firebaseToken: this.firebaseToken, ctx })
     if (!reply.ok && reply.error === 'unauthorized') {
       // The token can sit in main for up to an hour, so expiry mid-session is
       // routine — ask the renderer for a fresh one and retry this message once
@@ -270,7 +273,7 @@ export class AiCloneService {
       this.broadcast({ kind: 'token-expired' })
       const fresh = await this.waitForToken(5_000)
       if (fresh) {
-        reply = await generateReply({ ...engineArgs, firebaseToken: fresh, ctx })
+        reply = await this.replyGenerator({ ...engineArgs, firebaseToken: fresh, ctx })
       }
     }
     if (!reply.ok) {
@@ -280,25 +283,7 @@ export class AiCloneService {
           ? 'Omi session expired — reply skipped'
           : (reply.detail ?? `Reply generation failed (${reply.error})`)
       )
-      return
-    }
-
-    if (action === 'autoSend' && !requiresHumanReview(reply.text, message.text)) {
-      const sent = await this.client!.sendMessage(chat.id, reply.text, message.id)
-      if (sent.ok) {
-        this.autoSends.push(Date.now())
-        this.store.addActivity({
-          id: randomUUID(),
-          at: Date.now(),
-          kind: 'auto_sent',
-          chatTitle,
-          text: reply.text
-        })
-        this.emitState()
-      } else {
-        this.recordError(chatTitle, `Send failed (${sent.error})`)
-      }
-      return
+      return false
     }
 
     const draft: AiCloneDraft = {
@@ -315,6 +300,7 @@ export class AiCloneService {
     this.store.upsertDraft(draft)
     this.emitState()
     this.notifyDraft(draft)
+    return true
   }
 
   private async recentTranscript(

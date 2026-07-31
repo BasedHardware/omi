@@ -11,8 +11,7 @@ const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 const OMI_DESKTOP_BASE = import.meta.env.VITE_OMI_DESKTOP_API_BASE as string | undefined
 const MODES: { value: AiCloneChatMode; label: string }[] = [
   { value: 'off', label: 'Off' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'auto', label: 'Auto' }
+  { value: 'draft', label: 'Draft' }
 ]
 
 /** Fresh Firebase auth bundle for main's /v2/messages calls. */
@@ -134,15 +133,6 @@ export function AiClone(): React.JSX.Element {
   }
 
   const setMode = async (chat: AiCloneChat, mode: AiCloneChatMode): Promise<void> => {
-    if (
-      mode === 'auto' &&
-      chat.mode !== 'auto' &&
-      !window.confirm(
-        `Auto-send replies in "${chat.title}"? Omi will answer new messages there without asking you first.`
-      )
-    ) {
-      return
-    }
     setChats((cs) => (cs ?? []).map((c) => (c.id === chat.id ? { ...c, mode } : c)))
     await window.omi.aiCloneSetChatMode(chat.id, mode)
   }
@@ -159,7 +149,7 @@ export function AiClone(): React.JSX.Element {
     <>
       <PageHeader
         title="AI Clone"
-        subtitle="Omi answers your WhatsApp, Telegram and other chats as you — drafts first, auto-send only where you allow it."
+        subtitle="Omi drafts replies for your WhatsApp, Telegram and other chats — you approve every send."
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 lg:px-10">
         <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -259,7 +249,7 @@ function ConnectCard(props: {
             <div className="text-sm font-medium text-white/90">Respond on my behalf</div>
             <div className="text-xs text-white/50">
               {state.enabled
-                ? `On — drafting replies${state.autoSentThisHour ? ` · ${state.autoSentThisHour} auto-sent this hour` : ''}`
+                ? 'On — drafting replies'
                 : 'Off — Omi is not reading or answering your chats.'}
             </div>
           </div>
@@ -302,8 +292,7 @@ function ChatsCard(props: {
         </button>
       </div>
       <p className="mb-3 text-xs text-white/50">
-        Draft = Omi writes a reply and waits for your approval below. Auto = Omi sends it
-        immediately (never for group chats).
+        Draft = Omi writes a reply and waits for your approval below.
       </p>
       {chats === null ? (
         <div className="flex justify-center py-6 text-white/40">
