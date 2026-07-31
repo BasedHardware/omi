@@ -49,6 +49,9 @@ enum PTTInputDeviceRouting {
     let builtInDeviceID: AudioDeviceID?
     var defaultInputDeviceID: AudioDeviceID? = nil
     var defaultInputIsBluetooth: Bool = false
+    /// True when this snapshot was probed while a capture was live, i.e. the
+    /// contention fields above are meaningful rather than skipped-for-cost.
+    var contentionResolved: Bool = false
 
     var overrideDeviceID: AudioDeviceID? {
       PTTInputDeviceRouting.overrideDeviceID(
@@ -104,7 +107,8 @@ enum PTTInputDeviceRouting {
           outputIsBluetooth: outputIsBluetooth,
           builtInDeviceID: (outputIsBluetooth || contentionPossible) ? probe.builtInMicDeviceID() : nil,
           defaultInputDeviceID: defaultInputDeviceID,
-          defaultInputIsBluetooth: defaultInputDeviceID.map(probe.isBluetoothInput) ?? false
+          defaultInputIsBluetooth: defaultInputDeviceID.map(probe.isBluetoothInput) ?? false,
+          contentionResolved: contentionPossible
         ))
       completion?()
     }
@@ -186,6 +190,22 @@ extension PushToTalkManager {
     guard let snapshot else { return nil }
     let overrideID = snapshot.overrideDeviceID
     let parkedCapture = parkedMicCapture?.service
+    if snapshot.selectedDeviceID == nil, overrideID == nil,
+      !snapshot.contentionResolved,
+      AudioCaptureService.hasActiveCapture(excluding: parkedCapture)
+    {
+      // The snapshot predates the live capture, so the contention fields were
+      // skipped for cost and this turn cannot see the contended device. The
+      // refresh this call already kicked will carry them for the next turn;
+      // surface the blind turn instead of hiding it.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "ptt_input_routing",
+        from: "resolved_routing",
+        to: "system_default_input",
+        reason: "stale_contention_snapshot",
+        outcome: .degraded)
+      return overrideID
+    }
     if snapshot.selectedDeviceID == nil, overrideID == nil,
       let defaultInput = snapshot.defaultInputDeviceID,
       let builtIn = snapshot.builtInDeviceID,

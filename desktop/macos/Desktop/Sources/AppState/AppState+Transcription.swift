@@ -104,9 +104,10 @@ extension AppState {
 
       // Initialize audio services based on source
       if effectiveSource == .microphone {
-        // Initialize audio capture service, honoring an explicit microphone
-        // choice (e.g. Ray-Ban Meta glasses) from Settings -> Transcription.
-        audioCaptureService = makeMicrophoneCaptureService()
+        // Initialize audio capture service. The user's persisted microphone
+        // choice is resolved and applied in startMicCaptureIfNeeded(), off the
+        // main actor, right before the device actually opens.
+        audioCaptureService = AudioCaptureService()
 
         // Initialize audio mixer for combining mic and system audio
         audioMixer = AudioMixer()
@@ -321,36 +322,13 @@ extension AppState {
   ///    outside meetings.
   /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
   /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
-  /// Build the transcription capture service, honoring the user's persisted
-  /// microphone choice when it resolves. Device IDs aren't stable across
-  /// reconnects, so the UID is resolved at every (re)construction — including
-  /// recovery rebuilds, which must not silently abandon the selection.
-  func makeMicrophoneCaptureService() -> AudioCaptureService {
-    if let preferredUID = UserDefaults.standard.string(
-      forKey: AudioCaptureService.preferredInputUIDDefaultsKey),
-      !preferredUID.isEmpty,
-      let preferredID = AudioCaptureService.inputDeviceID(forUID: preferredUID)
-    {
-      recordingInputDeviceName =
-        AudioCaptureService.deviceName(for: preferredID) ?? recordingInputDeviceName
-      let preferredName = recordingInputDeviceName ?? "?"
-      log("Transcription: using preferred microphone \(preferredName) (uid=\(preferredUID))")
-      return AudioCaptureService(overrideDeviceID: preferredID)
-    }
-    return AudioCaptureService()
-  }
-
-  func startMicrophoneAudioCapture() async {
-    guard let audioCaptureService = audioCaptureService else { return }
-    // Let the PTT warm keep-alive release a parked capture before ambient
-    // transcription opens (possibly the same) device.
-    NotificationCenter.default.post(name: .ambientMicCaptureStarting, object: nil)
-
-    // Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
-    // built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
-    // they must opt into all-transport detection just as PTT does.
-    SharedCaptureSilentMicRecoveryPolicy.configure(audioCaptureService)
-    audioCaptureService.onSilentMicDetected = { [weak self] detection in
+  /// Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
+  /// built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
+  /// they must opt into all-transport detection just as PTT does. Shared by the session-arm
+  /// path and the preferred-microphone swap in startMicCaptureIfNeeded().
+  private func configureSharedCaptureWatchdog(_ service: AudioCaptureService) {
+    SharedCaptureSilentMicRecoveryPolicy.configure(service)
+    service.onSilentMicDetected = { [weak self] detection in
       Task { @MainActor in
         switch detection.suggestedAction {
         case .fallbackToBuiltIn:
@@ -360,6 +338,11 @@ extension AppState {
         }
       }
     }
+  }
+
+  func startMicrophoneAudioCapture() async {
+    guard let audioCaptureService = audioCaptureService else { return }
+    configureSharedCaptureWatchdog(audioCaptureService)
 
     // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
     // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
@@ -382,8 +365,44 @@ extension AppState {
   ///   false on a hard start failure (or if the session was torn down during the async start).
   @discardableResult
   func startMicCaptureIfNeeded() async -> Bool {
-    guard let mic = audioCaptureService else { return false }
+    guard var mic = audioCaptureService else { return false }
     guard !mic.capturing else { return true }
+
+    // A parked PTT warm capture may still hold the very device this session is
+    // about to open — release it and wait for its HAL teardown so the two
+    // owners' IOProcs can never overlap on one device (Bluetooth A2DP↔HFP
+    // profile flap, stream-format reconfiguration races).
+    if let parked = PushToTalkManager.shared.releaseParkedMicCapture() {
+      await parked.waitForPhysicalStop()
+    }
+
+    // Honor the user's persisted microphone choice (e.g. Ray-Ban Meta glasses)
+    // at the moment the device opens — this also covers the meetings-only gate
+    // and recovery rebuilds. Re-resolved every open because device IDs are not
+    // stable across reconnects, and resolved off the main actor because the
+    // full-device enumeration has no deadline against a wedged HAL.
+    let preferredUID =
+      UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    if !preferredUID.isEmpty, !mic.hasOverrideDevice {
+      let resolved = await Task.detached(priority: .userInitiated) {
+        AudioCaptureService.inputDeviceID(forUID: preferredUID)
+          .map { (id: $0, name: AudioCaptureService.deviceName(for: $0)) }
+      }.value
+      // The session may have been torn down or the service swapped while the
+      // resolution was in flight.
+      guard let current = audioCaptureService, current === mic else { return false }
+      if let resolved {
+        let replacement = AudioCaptureService(overrideDeviceID: resolved.id)
+        configureSharedCaptureWatchdog(replacement)
+        audioCaptureService = replacement
+        mic = replacement
+        recordingInputDeviceName = resolved.name ?? recordingInputDeviceName
+        log(
+          "Transcription: using preferred microphone \(recordingInputDeviceName ?? "?") (uid=\(preferredUID))"
+        )
+      }
+    }
+
     do {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
@@ -672,7 +691,7 @@ extension AppState {
     }
 
     audioCaptureService?.stopCapture()
-    audioCaptureService = makeMicrophoneCaptureService()
+    audioCaptureService = AudioCaptureService()
     AudioLevelMonitor.shared.updateMicrophoneLevel(0)
 
     if !sttSession.useLocalSTT {
@@ -680,9 +699,7 @@ extension AppState {
       audioMixer = AudioMixer()
     }
 
-    if audioCaptureService?.hasOverrideDevice != true {
-      recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
-    }
+    recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
     await startMicrophoneAudioCapture()
   }
 
