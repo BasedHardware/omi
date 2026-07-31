@@ -70,11 +70,22 @@ jobs:
             fi
           done
 
+      # Minted BEFORE the PR is opened. GitHub deliberately does not fire
+      # `pull_request` workflows for events authored by GITHUB_TOKEN, so a PR
+      # created with it arrives with zero checks (#10535). Opening it as the app
+      # is what makes CI run on the regenerated READMEs.
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
       - name: Create Pull Request
         id: create_pr
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: sync docs to README files"
           title: "chore: sync docs to README files"
           body: |
@@ -84,17 +95,12 @@ jobs:
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
 
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
       - name: Auto-merge PR
         if: steps.create_pr.outputs.pull-request-operation == 'created'
         run: |
-          gh pr merge --squash --delete-branch --admin "$PR_URL"
+          # --merge, never --squash: AGENTS.md keeps merge commits so a bad
+          # regeneration on main stays revertible with `git revert -m 1`.
+          gh pr merge --merge --delete-branch --admin "$PR_URL"
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
