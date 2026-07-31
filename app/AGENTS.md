@@ -55,6 +55,11 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
+### MethodChannel (On-device tool surface)
+- Channel `com.omi.device_tools`; Dart `lib/services/device_tools/device_tool_surface.dart`; iOS `ios/Runner/DeviceToolsService.swift`. Tools: `search_contacts`, `propose_message`.
+- iOS cannot send silently, so the verb is **propose**: the prefilled `MFMessageComposeViewController` sheet *is* the approval. Never add a second in-app confirmation, and never treat a cancelled sheet as delivered.
+- Details, macOS parity, and why the backend tool-call transport is a separate change: `desktop/macos/docs/device-tool-surface.md`.
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |

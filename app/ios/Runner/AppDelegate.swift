@@ -86,6 +86,8 @@ final class QuickActionsIconPatcher: NSObject {
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private var deviceToolsChannel: FlutterMethodChannel?
+  private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -173,6 +175,12 @@ final class QuickActionsIconPatcher: NSObject {
     appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
     appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleHealthCall(call, result: result)
+    }
+
+    // Create the on-device tool surface method channel
+    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: controller!.binaryMessenger)
+    deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.deviceToolsService.handleMethodCall(call, result: result)
     }
 
     // Create Speech Recognition method channel
