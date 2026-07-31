@@ -200,6 +200,30 @@ docker rm -f wp2-mongo wp2-emu    # cleanup
 Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
 which the guard permits.
 
+### Object-store contract test (adapter parity)
+
+Proves the GCS and S3 adapters honor the same neutral object-store contract (ADR-0032) against **real**
+services: `fsouza/fake-gcs-server` (GCS) and `rustfs/rustfs` (S3). Both run on `--network host` so they
+are reachable on `127.0.0.1`, which the loopback-only hermetic guard accepts. The `fake` backend always
+runs (hermetic); `gcs`/`s3` are skipped when their env is absent.
+
+```bash
+# 1. RustFS (S3) + fake-gcs-server (GCS) on the host network (loopback)
+docker run -d --name oc-rustfs --network host \
+  -e RUSTFS_ACCESS_KEY=testkey -e RUSTFS_SECRET_KEY=testsecret rustfs/rustfs:latest
+docker run -d --name oc-gcs --network host \
+  fsouza/fake-gcs-server:latest -scheme http -host 0.0.0.0 -port 4443 -public-host 127.0.0.1:4443
+# wait: curl 127.0.0.1:9000 -> 403 (S3 serving); curl 127.0.0.1:4443/storage/v1/b -> 200
+# 2. Contract suite (same host netns)
+docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e S3_ENDPOINT=http://127.0.0.1:9000 -e S3_ACCESS_KEY=testkey -e S3_SECRET_KEY=testsecret -e S3_REGION=us-east-1 \
+  -e STORAGE_EMULATOR_HOST=http://127.0.0.1:4443 \
+  omi-onprem-backend-test -m pytest -q tests/contract/test_object_store_contract.py
+# expected: 33 passed, 1 skipped (presign_get[gcs]: fake-gcs-server has no signing key; GCS V4
+# signing is covered by the hermetic delegation unit test in the same file)
+docker rm -f oc-rustfs oc-gcs    # cleanup
+```
+
 ### Two known residual failures (not our code, not fixable via the harness)
 
 With the harness above the offline unit sweep is green except two files, both pre-existing at the
