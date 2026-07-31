@@ -27,6 +27,7 @@ import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
 import { readRewindFrame } from '../rewind/frameFile'
+import { parseRewindNaturalSearch } from '../rewind/rewindNaturalSearch'
 import type { RewindSettings } from '../../shared/types'
 
 /** How many semantic neighbours to pull before the similarity floor + the
@@ -88,15 +89,20 @@ export function registerRewindHandlers(): void {
   // is supposed to degrade silently to keyword-only (macOS wraps the whole leg in
   // `try?`), which is only true if keyword results don't depend on it.
   ipcMain.handle('rewind:search', async (e, query: string) => {
-    const q = query.trim()
-    if (!q) return []
+    const { query: q, from, to } = parseRewindNaturalSearch(query)
+    if (!q && (from == null || to == null)) return []
     const seq = ++searchSeq
-    const fts = searchRewindFrames(q)
+    const inScope = (ts: number): boolean =>
+      (from == null || ts >= from) && (to == null || ts <= to)
+    const fts = q
+      ? searchRewindFrames(q).filter((frame) => inScope(frame.ts))
+      : listRewindFramesSampled(from ?? 0, to ?? Date.now())
 
     // Fire-and-forget: nothing about the reply below depends on this resolving,
     // and it must never reject into the handler.
     void (async () => {
-      const hits = await vectorHits(q)
+      if (!q) return
+      const hits = (await vectorHits(q)).filter((hit) => inScope(hit.frame.ts))
       if (hits.length === 0) return // keyword-only; the phase-1 reply already stands
       if (seq !== searchSeq) return // a newer query has since been issued
       if (e.sender.isDestroyed()) return
@@ -104,7 +110,7 @@ export function registerRewindHandlers(): void {
       // groups (those that exist only because vector recall added them).
       const keywordIds = new Set(fts.map((f) => f.id).filter((id): id is number => id != null))
       e.sender.send('rewind:search-results', {
-        query: q,
+        query: query.trim(),
         groups: groupFrames(mergeRewindSearchResults(fts, hits), q, { keywordIds })
       })
     })()
