@@ -42,8 +42,10 @@ from models.chat import (
     FileChat,
     RateMessageRequest,
     ShareChatMessagesRequest,
+    DeviceToolResultRequest,
 )
 from utils.apps import get_available_app_by_id
+from utils.device_tools import store_device_tool_result
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
@@ -443,6 +445,7 @@ def send_message(
                 chat_session=chat_session,
                 context=data.context,
                 platform=x_app_platform,
+                device_tool_names=set(data.device_tools or ()),
             ):
                 if chunk:
                     msg = chunk.replace("\n", "__CRLF__")
@@ -480,6 +483,28 @@ def send_message(
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+@router.post('/v2/messages/device-tool/{call_id}/result', tags=['chat'])
+def submit_device_tool_result(
+    call_id: str,
+    data: DeviceToolResultRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:device_tool_result")),
+):
+    """Deliver a client's result for an in-flight device tool call.
+
+    The awaiting tool coroutine may be on a different worker than this request,
+    so the result is handed over through Redis rather than an in-process future.
+    The key is scoped by uid, so one user cannot answer another user's call.
+    """
+    if not call_id or len(call_id) > 100:
+        raise HTTPException(status_code=400, detail='Invalid call_id')
+
+    store_device_tool_result(uid, call_id, data.result)
+    # Whether a coroutine was still waiting is deliberately not reported: it
+    # would let a caller probe which calls are in flight, and a late result is
+    # harmless because the tool has already returned its timeout.
+    return {'status': 'accepted'}
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)

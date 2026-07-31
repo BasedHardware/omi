@@ -6,6 +6,8 @@ to use to gather context and answer user questions. Uses Anthropic's native
 tool use API with streaming for real-time responses.
 """
 
+import base64
+import json
 import uuid
 import asyncio
 import contextvars
@@ -49,6 +51,7 @@ from utils.retrieval.tools import (
     traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -165,8 +168,10 @@ CORE_TOOLS = [
     traverse_knowledge_graph_tool,
 ]
 
-# Standard tool names (used to detect app tools by exclusion)
-STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS}
+# Standard tool names (used to detect app tools by exclusion). Device tools are
+# included because they are named like core tools (propose_message), and
+# _extract_app_id would otherwise read "propose" as an app id.
+STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS} | set(DEVICE_TOOL_NAMES)
 
 
 def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
@@ -259,6 +264,16 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     def put_data_nowait(self, text):
         self._put_nowait_threadsafe(f"data: {text}")
+
+    async def put_device_tool_request(self, request: dict):
+        """Ask the client to run a tool that only exists on their device.
+
+        Emitted on the stream that is already open for this turn, so the turn
+        stays live while the user answers instead of being suspended and resumed.
+        Base64 keeps arbitrary message text off the line-delimited SSE grammar.
+        """
+        encoded = base64.b64encode(json.dumps(request).encode('utf-8')).decode('utf-8')
+        await self.queue.put(f"tool: {encoded}")
 
     async def end(self):
         await self.queue.put(None)
@@ -778,10 +793,11 @@ async def execute_agentic_chat_stream(
     platform: Optional[str] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
-    Yields formatted chunks with "data: " or "think: " prefixes.
+    Yields formatted chunks with "data: ", "think: " or "tool: " prefixes.
     """
     # Guard against oversized input before any setup or model call. An extremely long message (or
     # a long history) would exceed the chat model's context window; the Anthropic call then raises
@@ -872,8 +888,30 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
+    # The callback is created before tool conversion because device tools close
+    # over it: their execution is a round trip to the client on this stream.
+    callback = AsyncStreamingCallback()
+
+    # Device tools the client declared it can run. Appended after the fixed core
+    # list so the cached tools prefix stays byte-stable for clients that declare
+    # none, and stable per-client for those that do. Unlike app tools these are
+    # immediately visible — the model cannot discover them via tool search.
+    device_tools = build_device_tools(uid, set(device_tool_names or ()), callback)
+    if device_tools:
+        device_tool_list = ', '.join(sorted(t.name for t in device_tools))
+        logger.info('Device tools available uid=%s tools=%s', uid, device_tool_list)
+        system_prompt += f"""
+
+<device_tools>
+These tools run on the user's own device, not on the server: {device_tool_list}
+
+propose_message opens the system compose sheet — it does NOT send. Only report a
+message as sent when the tool result says status=sent. If it says cancelled, the
+user chose not to send; acknowledge that rather than retrying.
+</device_tools>"""
+
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
-    tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+    tool_schemas, tool_registry = _convert_tools(core_tools + device_tools, app_tools)
 
     # Convert messages to Anthropic format. The current datetime is injected into the user
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
@@ -881,8 +919,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
-
-    callback = AsyncStreamingCallback()
 
     # Conversations collected by tools for citation
     conversations_collected = []
@@ -900,7 +936,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "conversations_collected": conversations_collected,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
-        "tools": core_tools + app_tools,
+        "tools": core_tools + device_tools + app_tools,
     }
 
     # Store config in context variable for tools that use agent_config_context

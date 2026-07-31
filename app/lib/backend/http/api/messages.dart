@@ -5,6 +5,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
@@ -74,6 +75,12 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
     return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
   }
 
+  // A device tool request. Base64 because the payload carries arbitrary message
+  // text that must not be parsed as part of the line-delimited SSE grammar.
+  if (line.startsWith('tool: ')) {
+    return ServerMessageChunk(messageId, decodeBase64(line.substring(6)), MessageChunkType.tool);
+  }
+
   if (line.startsWith('done: ')) {
     var text = decodeBase64(line.substring(6));
     return ServerMessageChunk(
@@ -132,14 +139,29 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   }
 
   var messageId = "1000"; // Default new message
+  final dispatcher = DeviceToolDispatcher();
 
-  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
+  await for (var line in makeStreamingApiCall(
+    url: url,
+    body: jsonEncode({
+      'text': text,
+      'file_ids': filesId,
+      'device_tools': dispatcher.declaredToolNames,
+    }),
+  )) {
     if (line.startsWith('error:402:')) {
       yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
       return;
     }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
+      // A device tool request is handled here rather than surfaced to the chat
+      // UI: the server is still waiting on this turn, and the visible result is
+      // the reply it produces once the tool comes back.
+      if (messageChunk.type == MessageChunkType.tool) {
+        await dispatcher.handleFrame(messageChunk.text);
+        continue;
+      }
       yield messageChunk;
     } else {
       yield ServerMessageChunk.failedMessage();

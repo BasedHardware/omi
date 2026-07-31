@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, model_validator
 
@@ -224,6 +224,17 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+    # Tools this client can execute on the device itself. Declared per request
+    # because it depends on the device in hand: an iPad with no messaging
+    # service, or a denied Contacts grant, advertises fewer than an iPhone.
+    # A tool the client did not declare is never offered to the model.
+    device_tools: Optional[List[str]] = None
+
+
+class DeviceToolResultRequest(BaseModel):
+    """A client's result for one in-flight device tool call."""
+
+    result: Dict[str, Any]
 
 
 class RateMessageRequest(BaseModel):

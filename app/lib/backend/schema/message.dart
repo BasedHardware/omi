@@ -385,7 +385,11 @@ enum MessageChunkType {
   data('data'),
   done('done'),
   error('error'),
-  message('message');
+  message('message'),
+
+  /// The server is asking this client to run a tool that only exists on the
+  /// device. The turn stays open while the user answers.
+  tool('tool');
 
   final String value;
 
