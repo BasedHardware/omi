@@ -429,24 +429,26 @@ final class OmiAuth: ObservableObject {
     /// not a secret; it identifies which project a REST call addresses and every Firebase web app
     /// ships it in plain JavaScript. It is still resolved at runtime rather than typed into source:
     ///
-    /// 1. `FIREBASE_API_KEY` in the environment, so a developer can run against a different project
-    ///    (or the emulator) without editing or rebuilding anything.
+    /// 1. `FIREBASE_API_KEY` in the environment is honored only in DEBUG builds, so a developer can
+    ///    run against a different project (or the emulator) without editing or rebuilding anything.
     /// 2. `OmiFirebaseAPIKey` in `Info.plist`, which `scripts/build.sh` injects for shipped builds.
     ///
     /// Hardcoding it would make the fallback invisible and would put a project identifier into git
     /// where rotating it means a source change.
     private static func firebaseAPIKey() throws -> String {
+        #if DEBUG
         if let fromEnvironment = ProcessInfo.processInfo.environment["FIREBASE_API_KEY"],
             !fromEnvironment.isEmpty
         {
             return fromEnvironment
         }
+        #endif
         if let fromBundle = Bundle.main.object(forInfoDictionaryKey: "OmiFirebaseAPIKey") as? String,
             !fromBundle.isEmpty
         {
             return fromBundle
         }
-        ContextLog.error("No Firebase API key in the environment or Info.plist", "auth")
+        ContextLog.error("No Firebase API key in Info.plist", "auth")
         throw OmiAuthError.missingAPIKey
     }
 

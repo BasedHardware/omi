@@ -67,17 +67,23 @@ final class OmiAPI: @unchecked Sendable {
 
     // MARK: - Base URL
 
-    /// `https://api.omi.me/` — override with `OMI_PYTHON_API_URL` for local testing only.
+    /// `https://api.omi.me/` — override with `OMI_PYTHON_API_URL` for local DEBUG builds only.
     ///
     /// Resolved once at first use: the value is process-wide configuration, and re-reading the
     /// environment per request would let a mid-run `setenv` split one session's traffic across two
-    /// backends.
+    /// backends. The override is ignored in release builds so a wrapper or launcher cannot redirect
+    /// production traffic.
     static var baseURL: URL { resolvedBaseURL }
 
     static let productionBaseURL = URL(string: "https://api.omi.me/")!
 
-    private static let resolvedBaseURL: URL =
-        resolveBaseURL(ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"])
+    private static let resolvedBaseURL: URL = {
+        #if DEBUG
+        return resolveBaseURL(ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"])
+        #else
+        return productionBaseURL
+        #endif
+    }()
 
     /// Always ends in `/`, so relative paths concatenate onto it without a special case.
     static func resolveBaseURL(_ override: String?) -> URL {
