@@ -197,8 +197,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           selectedLanguage = savedLanguage;
           // Find the language name for the saved language code
           try {
-            selectedLanguageName =
-                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName = homeProvider.availableLanguages.entries
+                .firstWhere((entry) => entry.value == savedLanguage)
+                .key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -361,10 +362,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                             if (!context.mounted) return;
                             if (!success) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(context.l10n.failedToSetLanguage),
-                                  backgroundColor: Colors.red,
-                                ),
+                                SnackBar(content: Text(context.l10n.failedToSetLanguage), backgroundColor: Colors.red),
                               );
                               return;
                             }
