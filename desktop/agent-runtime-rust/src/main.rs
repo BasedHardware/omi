@@ -827,6 +827,15 @@ impl Runtime {
             );
             return;
         };
+        if *running.cancel.borrow() {
+            self.emit_error(
+                Some(request.request_id),
+                Some(request.client_id),
+                "invalid_request",
+                "authorized tool execution was cancelled",
+            );
+            return;
+        }
         let input =
             serde_json::from_str::<Map<String, Value>>(&request.call.arguments).unwrap_or_default();
         let identity = Identity {
@@ -870,8 +879,26 @@ impl Runtime {
         request_id: String,
         tool_requests: &mut mpsc::UnboundedReceiver<ToolRequest>,
     ) {
+        let cancelled = self
+            .running
+            .get(&request_id)
+            .is_some_and(|running| *running.cancel.borrow());
         while let Ok(request) = tool_requests.try_recv() {
+            if cancelled && request.request_id == request_id {
+                continue;
+            }
             self.authorize_tool_request(request);
+        }
+        if cancelled {
+            if let Some(running) = self.running.get(&request_id).cloned() {
+                if let Err(error) = self.tool_relay.revoke_owner_run(
+                    &mut self.journal,
+                    &running.owner_id,
+                    Some(&running.run_id),
+                ) {
+                    self.emit_error(None, None, "runtime_state", &error);
+                }
+            }
         }
         self.running.remove(&request_id);
     }
@@ -1347,10 +1374,34 @@ impl Runtime {
 
     fn interrupt(&mut self, fields: Map<String, Value>) {
         let request_id = string_field(&fields, "requestId");
-        let accepted = request_id
+        let accepted = match request_id
             .as_deref()
             .and_then(|request_id| self.running.get(request_id))
-            .is_some_and(|running| running.cancel.send(true).is_ok());
+            .cloned()
+        {
+            Some(running) => {
+                match self.tool_relay.revoke_owner_run(
+                    &mut self.journal,
+                    &running.owner_id,
+                    Some(&running.run_id),
+                ) {
+                    Ok(_) => running.cancel.send(true).is_ok(),
+                    Err(error) => {
+                        self.emit_error(
+                            request_id.clone(),
+                            fields
+                                .get("clientId")
+                                .and_then(Value::as_str)
+                                .map(str::to_owned),
+                            "runtime_state",
+                            &error,
+                        );
+                        false
+                    }
+                }
+            }
+            None => false,
+        };
         self.emit(
             "cancel_ack",
             envelope(
@@ -1933,6 +1984,85 @@ mod tests {
             .await
             .expect("pending tool claim must complete after its run ends");
         assert_eq!(completed.kind, "authorized_tool_result");
+    }
+
+    #[tokio::test]
+    async fn cancelled_run_discards_queued_tool_calls_and_revokes_claims() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let run = runtime
+            .journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
+        let (cancel, cancel_receiver) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: "session".into(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime.authorize_tool_request(ToolRequest {
+            request_id: "request".into(),
+            client_id: "client".into(),
+            call: rx4::ToolCall {
+                id: "invoke-before-cancel".into(),
+                name: "search".into(),
+                arguments: r#"{"q":"before"}"#.into(),
+            },
+        });
+        let authorized = receiver
+            .recv()
+            .await
+            .expect("pre-cancel tool must authorize");
+        assert_eq!(authorized.kind, "authorized_tool_execution");
+
+        runtime.handle(
+            parse_line(r#"{"type":"interrupt","requestId":"request","clientId":"client","ownerId":"owner"}"#)
+                .expect("interrupt fixture must parse"),
+        );
+        let ack = receiver.recv().await.expect("interrupt must acknowledge");
+        assert_eq!(ack.kind, "cancel_ack");
+        assert_eq!(ack.fields["accepted"], true);
+        assert!(*cancel_receiver.borrow());
+        assert!(runtime
+            .journal
+            .pending_tool_claim("invoke-before-cancel")
+            .expect("claim lookup must succeed")
+            .is_none());
+
+        let (tool_requests, mut queued_tool_requests) = mpsc::unbounded_channel();
+        tool_requests
+            .send(ToolRequest {
+                request_id: "request".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-queued-after-cancel".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"after"}"#.into(),
+                },
+            })
+            .expect("queued tool call must send");
+
+        runtime.complete_run("request".into(), &mut queued_tool_requests);
+
+        assert!(receiver.try_recv().is_err());
+        assert!(!runtime.running.contains_key("request"));
+        assert!(runtime
+            .journal
+            .pending_tool_claim("invoke-queued-after-cancel")
+            .expect("queued claim lookup must succeed")
+            .is_none());
     }
 
     #[tokio::test]
