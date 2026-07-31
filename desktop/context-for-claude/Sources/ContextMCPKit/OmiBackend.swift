@@ -288,6 +288,13 @@ public struct OmiMemory: Decodable, Sendable {
         category = container.optionalString(.category)
         relevance = container.optionalDouble(.relevance)
     }
+
+    public init(id: String, content: String, category: String?, relevance: Double? = nil) {
+        self.id = id
+        self.content = content
+        self.category = category
+        self.relevance = relevance
+    }
 }
 
 public struct OmiScreenRow: Decodable, Sendable {
@@ -400,11 +407,11 @@ public final class OmiBackend: @unchecked Sendable {
 
     /// Search memories and conversations at once. Two calls, issued in parallel, because `recall`
     /// genuinely needs both: memories are the durable facts, conversations are the episodes.
+    ///
+    /// Local memories from the main Omi app's `omi.db` are always included — even when the API key
+    /// is not configured — so memories that have not synced yet are still searchable.
     public func recall(query: String, since: Double?, until: Double?, limit: Int) -> OmiRecallResults {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isConfigured else {
-            return OmiRecallResults(memories: [], conversations: [], failures: [OmiBackendError.notConfigured.reason])
-        }
         guard !trimmed.isEmpty else { return OmiRecallResults(memories: [], conversations: [], failures: []) }
 
         let memoryBox = Box<OmiResult<[OmiMemory]>>(.unavailable(.timedOut))
@@ -414,6 +421,10 @@ public final class OmiBackend: @unchecked Sendable {
         let queue = DispatchQueue.global(qos: .userInitiated)
         queue.async(group: group) { memoryBox.value = self.searchMemories(query: trimmed, limit: limit) }
         queue.async(group: group) {
+            guard self.isConfigured else {
+                conversationBox.value = .unavailable(.notConfigured)
+                return
+            }
             conversationBox.value = self.searchConversations(query: trimmed, since: since, until: until, limit: limit)
         }
         // The URLSession timeout is the real bound; this only stops a hung callback from stranding
@@ -431,13 +442,36 @@ public final class OmiBackend: @unchecked Sendable {
     }
 
     public func searchMemories(query: String, limit: Int) -> OmiResult<[OmiMemory]> {
-        get(
+        // Local memories from the main Omi app's omi.db — always available when the app has run,
+        // even without an API key. These include memories that have not synced to the backend yet.
+        let local = OmiMemoryStore.shared.searchMemories(query: query, limit: limit)
+        let localMemories = local.map {
+            OmiMemory(id: $0.id, content: $0.content, category: $0.category)
+        }
+
+        guard isConfigured else {
+            return localMemories.isEmpty
+                ? .unavailable(.notConfigured)
+                : .ok(localMemories)
+        }
+
+        // Merge local with API results, deduplicating by id.
+        let apiResult = get(
             [OmiMemory].self,
             path: "v1/mcp/memories/search",
             // The endpoint clamps to 20 anyway; asking for more only wastes the budget.
             query: [.init(name: "query", value: query), .init(name: "limit", value: String(clamp(limit, 1, 20)))],
             ttl: 600
         )
+
+        switch apiResult {
+        case let .ok(apiMemories):
+            let seen = Set(localMemories.map(\.id))
+            let merged = localMemories + apiMemories.filter { !seen.contains($0.id) }
+            return .ok(merged)
+        case let .unavailable(error):
+            return localMemories.isEmpty ? .unavailable(error) : .ok(localMemories)
+        }
     }
 
     /// Vector search over the account's conversations.

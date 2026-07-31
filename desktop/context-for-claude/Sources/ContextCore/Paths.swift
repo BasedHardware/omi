@@ -3,7 +3,9 @@ import Foundation
 /// Every on-disk location the app and the MCP server agree on.
 ///
 /// Deliberately independent of the Omi desktop app's own support directory — Context for Claude never reads or
-/// writes Omi's data, and Omi never sees Context for Claude's.
+/// writes Omi's data, and Omi never sees Context for Claude's. The one exception is **read-only** access to
+/// Omi's `memories` table through `omiDatabaseURL`, so Claude can answer "what does Omi know about me"
+/// without a round trip to the backend.
 public enum ContextPaths {
     public static let bundleIdentifier = "com.omi.context-for-claude"
 
@@ -22,6 +24,37 @@ public enum ContextPaths {
     /// `~/Library/Application Support/ContextForClaude/context.db`
     public static var databaseURL: URL {
         supportDirectory.appendingPathComponent("context.db")
+    }
+
+    /// The main Omi desktop app's per-user database, opened **read-only**.
+    ///
+    /// Context for Claude reads the `memories` table from here so Claude can answer
+    /// "what does Omi know about me" without a round trip to the backend — and so
+    /// memories that have not synced yet are still searchable.
+    ///
+    /// The path is `~/Library/Application Support/Omi/users/<userId>/omi.db`. The
+    /// user id is not known here, so the directory is scanned for any subdirectory
+    /// containing `omi.db`, preferring a real user over the `anonymous` fallback.
+    /// `Omi Beta` is checked as a secondary root.
+    public static var omiDatabaseURL: URL? {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        for rootName in ["Omi", "Omi Beta"] {
+            let usersDir = base.appendingPathComponent(rootName, isDirectory: true)
+                .appendingPathComponent("users", isDirectory: true)
+            guard let candidates = try? fm.contentsOfDirectory(atPath: usersDir.path) else { continue }
+            let sorted = candidates.sorted { a, b in
+                if a == "anonymous" { return false }
+                if b == "anonymous" { return true }
+                return a < b
+            }
+            for userId in sorted {
+                let db = usersDir.appendingPathComponent(userId, isDirectory: true)
+                    .appendingPathComponent("omi.db")
+                if fm.fileExists(atPath: db.path) { return db }
+            }
+        }
+        return nil
     }
 
     /// Where screen JPEGs live, one directory per day.

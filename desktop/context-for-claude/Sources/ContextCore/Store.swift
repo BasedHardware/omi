@@ -401,7 +401,7 @@ public final class ContextStore: @unchecked Sendable {
 
     /// PRAGMAs both processes depend on. WAL and `synchronous` are writer-only settings — issuing
     /// them on a read-only connection fails, and a failed `prepareDatabase` aborts the open.
-    private static func makeConfiguration(readOnly: Bool) -> Configuration {
+    static func makeConfiguration(readOnly: Bool) -> Configuration {
         var config = Configuration()
         config.readonly = readOnly
         config.prepareDatabase { db in

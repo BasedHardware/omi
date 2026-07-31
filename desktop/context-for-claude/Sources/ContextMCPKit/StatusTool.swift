@@ -76,6 +76,14 @@ extension Tools {
 
         out.append("")
         out.append("Database: `\(status.databasePath)`")
+
+        if OmiMemoryStore.shared.isAvailable {
+            out.append("")
+            out.append("""
+            Omi memories: the main Omi app's local database is connected, so `recall` searches \
+            memories that have not synced to the backend yet as well as those that have.
+            """)
+        }
         return out.joined(separator: "\n")
     }
 
