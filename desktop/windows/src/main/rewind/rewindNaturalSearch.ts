@@ -50,21 +50,13 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
     }
   },
   {
-    pattern: /\btoday\b/i,
-    range: (now) => {
-      const from = new Date(now)
-      from.setHours(0, 0, 0, 0)
-      return [from, now]
-    }
-  },
-  {
     pattern: /\bthis morning\b/i,
     range: (now) => {
       const from = new Date(now)
       from.setHours(6, 0, 0, 0)
       const to = new Date(now)
       to.setHours(11, 59, 59, 999)
-      return [from, to]
+      return now < from ? [from, from] : [from, now < to ? now : to]
     }
   },
   {
@@ -74,7 +66,7 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
       from.setHours(12, 0, 0, 0)
       const to = new Date(now)
       to.setHours(17, 59, 59, 999)
-      return [from, to]
+      return now < from ? [from, from] : [from, now < to ? now : to]
     }
   },
   {
@@ -84,10 +76,21 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
       from.setHours(18, 0, 0, 0)
       return now < from ? [from, from] : [from, now]
     }
+  },
+  {
+    pattern: /\btoday\b/i,
+    range: (now) => {
+      const from = new Date(now)
+      from.setHours(0, 0, 0, 0)
+      return [from, now]
+    }
   }
 ]
 
-const QUESTION_WORDS = /\b(?:what|was|were|did|do|i|my|on|the|screen|show|me|find|for)\b/gi
+const QUESTION_WORDS =
+  /\b(?:what(?:'s|’s)?|was|were|did|do|i|my|on|the|screen|show|me|find|for)\b/gi
+const TIME_WORDS =
+  /\b(?:yesterday\s+(?:morning|afternoon|evening)|yesterday|today|this\s+(?:morning|afternoon|evening))\b/gi
 
 export function parseRewindNaturalSearch(input: string, now = new Date()): RewindSearchScope {
   let query = input.trim()
@@ -95,9 +98,9 @@ export function parseRewindNaturalSearch(input: string, now = new Date()): Rewin
     if (!pattern.test(query)) continue
     const [from, to] = range(now)
     query = query
-      .replace(pattern, ' ')
+      .replace(TIME_WORDS, ' ')
       .replace(QUESTION_WORDS, ' ')
-      .replace(/[?.,:;!]/g, ' ')
+      .replace(/[?'’.,:;!]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
     return { query, from: from.getTime(), to: to.getTime() }
