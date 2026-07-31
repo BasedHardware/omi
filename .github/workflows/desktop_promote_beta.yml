@@ -23,7 +23,6 @@ jobs:
     if: >-
       github.event_name == 'workflow_call' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'workflow_dispatch' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     outputs:
