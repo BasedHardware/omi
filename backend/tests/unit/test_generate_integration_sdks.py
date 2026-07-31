@@ -15,6 +15,13 @@ def test_dart_typed_request_models_serialize_to_json():
     assert 'body: body.toJson()' in dart
 
 
+def test_dart_numeric_fields_accept_any_json_number():
+    dart = generator.generate_all(generator.DEFAULT_SPEC)['dart/lib/omi_integration.g.dart']
+
+    assert 'as num).toInt()' in dart
+    assert 'as num).toDouble()' in dart
+
+
 def test_generated_clients_supply_the_configured_app_id_to_v1_notifications():
     files = generator.generate_all(generator.DEFAULT_SPEC)
 

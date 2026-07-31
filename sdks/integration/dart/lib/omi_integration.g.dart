@@ -334,9 +334,9 @@ class ConversationItemGeolocation {
     return ConversationItemGeolocation(
       address: json["address"] as String?,
       googlePlaceId: json["google_place_id"] as String?,
-      latitude: json["latitude"] as double,
+      latitude: (json["latitude"] as num).toDouble(),
       locationType: json["location_type"] as String?,
-      longitude: json["longitude"] as double,
+      longitude: (json["longitude"] as num).toDouble(),
     );
   }
 
@@ -392,11 +392,11 @@ class ConversationItemTranscriptSegment {
 
   factory ConversationItemTranscriptSegment.fromJson(Map<String, dynamic> json) {
     return ConversationItemTranscriptSegment(
-      end: json["end"] as double?,
+      end: json["end"] == null ? null : (json["end"] as num).toDouble(),
       isUser: json["is_user"] as bool?,
       personId: json["person_id"] as String?,
       speaker: json["speaker"] as String?,
-      start: json["start"] as double?,
+      start: json["start"] == null ? null : (json["start"] as num).toDouble(),
       text: json["text"] as String,
     );
   }
@@ -464,7 +464,7 @@ class Event {
     return Event(
       created: json["created"] as bool?,
       description: json["description"] as String?,
-      duration: json["duration"] as int?,
+      duration: json["duration"] == null ? null : (json["duration"] as num).toInt(),
       start: json["start"] as String,
       title: json["title"] as String,
     );
@@ -498,7 +498,7 @@ class Evidence {
   factory Evidence.fromJson(Map<String, dynamic> json) {
     return Evidence(
       artifactRef: (json["artifact_ref"] as Map?)?.cast<String, dynamic>(),
-      captureConfidence: json["capture_confidence"] as double?,
+      captureConfidence: json["capture_confidence"] == null ? null : (json["capture_confidence"] as num).toDouble(),
       clientDeviceId: json["client_device_id"] as String?,
       createdAt: json["created_at"] as String?,
       evidenceId: json["evidence_id"] as String,
@@ -656,9 +656,9 @@ class Geolocation {
     return Geolocation(
       address: json["address"] as String?,
       googlePlaceId: json["google_place_id"] as String?,
-      latitude: json["latitude"] as double,
+      latitude: (json["latitude"] as num).toDouble(),
       locationType: json["location_type"] as String?,
-      longitude: json["longitude"] as double,
+      longitude: (json["longitude"] as num).toDouble(),
     );
   }
 
@@ -768,7 +768,7 @@ class MemoryItem {
     return MemoryItem(
       appId: json["app_id"] as String?,
       arguments: (json["arguments"] as Map?)?.cast<String, dynamic>(),
-      captureConfidence: json["capture_confidence"] as double?,
+      captureConfidence: json["capture_confidence"] == null ? null : (json["capture_confidence"] as num).toDouble(),
       captureDeviceIds: (json["capture_device_ids"] as List<dynamic>?)?.map((e) => e as String).toList(),
       category: json["category"] as MemoryCategory?,
       content: json["content"] as String,
@@ -803,7 +803,7 @@ class MemoryItem {
       updatedAt: json["updated_at"] as String,
       userReview: json["user_review"] as bool?,
       validAt: json["valid_at"] as String?,
-      veracity: json["veracity"] as double?,
+      veracity: json["veracity"] == null ? null : (json["veracity"] as num).toDouble(),
       visibility: json["visibility"] as String?,
     );
   }
@@ -864,9 +864,9 @@ class SearchConversationsResponse {
   factory SearchConversationsResponse.fromJson(Map<String, dynamic> json) {
     return SearchConversationsResponse(
       conversations: (json["conversations"] as List<dynamic>?)?.map((e) => ConversationItem.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
-      currentPage: json["current_page"] as int,
-      perPage: json["per_page"] as int,
-      totalPages: json["total_pages"] as int,
+      currentPage: (json["current_page"] as num).toInt(),
+      perPage: (json["per_page"] as num).toInt(),
+      totalPages: (json["total_pages"] as num).toInt(),
     );
   }
 
@@ -893,8 +893,8 @@ class SearchRequest {
     return SearchRequest(
       endDate: json["end_date"] as String?,
       includeDiscarded: json["include_discarded"] as bool?,
-      page: json["page"] as int?,
-      perPage: json["per_page"] as int?,
+      page: json["page"] == null ? null : (json["page"] as num).toInt(),
+      perPage: json["per_page"] == null ? null : (json["per_page"] as num).toInt(),
       query: json["query"] as String?,
       speakerId: json["speaker_id"] as String?,
       startDate: json["start_date"] as String?,
