@@ -188,7 +188,7 @@ describe("omi tool manifest", () => {
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
     expect(requestPermission?.inputSchema.properties.type).toMatchObject({
-      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access", "location"],
+      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
     });
   });
 
