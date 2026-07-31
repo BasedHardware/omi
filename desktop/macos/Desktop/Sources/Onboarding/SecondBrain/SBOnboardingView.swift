@@ -324,10 +324,7 @@ struct SBOnboardingView: View {
         .focused($languageFieldFocused)
         .onAppear { languageFieldFocused = true }
         .onSubmit {
-          guard SBOnboardingModel.shouldSelectLanguageOnSubmit(model.languageDraft), let first = matches.first else {
-            return
-          }
-          model.pickLanguage(code: first.code, name: first.name)
+          model.answerLanguageText()
         }
       if !matches.isEmpty {
         VStack(spacing: 0) {
@@ -351,7 +348,7 @@ struct SBOnboardingView: View {
         .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
       }
       SBInkButton(title: "Continue", isDefaultAction: true) { model.answerLanguageText() }
-        .disabled(draft.isEmpty)
+        .disabled(SBOnboardingModel.languageSelection(for: draft) == nil)
     }
     .frame(maxWidth: 340, alignment: .leading)
   }
@@ -654,25 +651,26 @@ struct SBOnboardingView: View {
   private func agentToggleRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
     -> some View
   {
-    VStack(alignment: .leading, spacing: 8) {
+    let presentation = SBOnboardingModel.agentTogglePresentation(for: state, detail: detail)
+    return VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 12) {
         ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
         VStack(alignment: .leading, spacing: 1) {
           Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-          Text(state == "unavailable" ? "not installed" : (state == "connecting" ? "connecting…" : detail))
+          Text(presentation.detail)
             .geist(size: 12).foregroundStyle(sb.ink(.w4))
         }
         Spacer(minLength: 8)
         Toggle(
           name,
           isOn: Binding(
-            get: { state == "on" || state == "connecting" },
+            get: { presentation.isOn },
             set: { enabled in if enabled { action() } }
           )
         )
         .labelsHidden()
         .toggleStyle(OmiToggleStyle())
-        .disabled(state != "idle")
+        .disabled(presentation.isDisabled)
         .accessibilityLabel(name)
       }
       if id == "claudeCode", state == "on" {

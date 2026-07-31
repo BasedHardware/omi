@@ -15,10 +15,11 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
     XCTAssertEqual(model.languageDraft, "")
   }
 
-  func testEmptyLanguageSubmissionDoesNotChooseASuggestion() {
-    XCTAssertFalse(SBOnboardingModel.shouldSelectLanguageOnSubmit(""))
-    XCTAssertFalse(SBOnboardingModel.shouldSelectLanguageOnSubmit("   \n"))
-    XCTAssertTrue(SBOnboardingModel.shouldSelectLanguageOnSubmit("Spanish"))
+  func testLanguageSelectionRejectsEmptyAndPartialInput() {
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: ""))
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: "   \n"))
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: "Span"))
+    XCTAssertEqual(SBOnboardingModel.languageSelection(for: "Spanish")?.code, "es")
   }
 
   func testLanguageSuggestionsPreferTheCurrentLocaleThenCommonLanguages() {
@@ -26,5 +27,9 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
       SBOnboardingModel.preferredLanguageCodes(localeCode: "fr").prefix(4),
       ["fr", "en", "es", "de"]
     )
+  }
+
+  func testLanguageSuggestionsNormalizeLocaleCodes() {
+    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh").first, "zh-CN")
   }
 }

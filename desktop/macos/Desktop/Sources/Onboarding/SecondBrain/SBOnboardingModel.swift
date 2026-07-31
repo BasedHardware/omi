@@ -68,6 +68,12 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
+  struct AgentTogglePresentation: Equatable {
+    let isOn: Bool
+    let isDisabled: Bool
+    let detail: String
+  }
+
   typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
   typealias StreamSleeper = @MainActor (UInt64) async -> Void
 
@@ -365,6 +371,9 @@ final class SBOnboardingModel: ObservableObject {
     streamTask?.cancel()
     streamGeneration &+= 1
     let generation = streamGeneration
+    if displayedSteps.last != step {
+      displayedSteps.append(step)
+    }
     showWidget = false
     typing = true
     let full = message(for: step)
@@ -398,9 +407,6 @@ final class SBOnboardingModel: ObservableObject {
   /// Hook fired right after a step's message finishes streaming and its widget
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
-    if displayedSteps.last != step {
-      displayedSteps.append(step)
-    }
     switch step {
     case .mic: precheckPerm("microphone")
     case .systemAudio: precheckPerm("system_audio")
@@ -430,11 +436,7 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func goBack() {
-    guard let rawPrevious = Step(rawValue: step.rawValue - 1) else { return }
-    let previous =
-      displayedSteps.last == step
-      ? displayedSteps.dropLast().last ?? rawPrevious
-      : rawPrevious
+    guard let previous = previousStep(before: step) else { return }
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
     streamGeneration &+= 1
@@ -448,18 +450,42 @@ final class SBOnboardingModel: ObservableObject {
       displayedSteps.removeLast()
     }
     step = previous
+    if displayedSteps.last != previous {
+      displayedSteps.append(previous)
+    }
     UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
-    showWidget = true
-    onStepShown(previous)
+    if thread.contains(where: { $0.isOmi && $0.text == message(for: previous) }) {
+      showWidget = true
+      onStepShown(previous)
+    } else {
+      streamMessage(for: previous)
+    }
   }
 
   private func retractCurrentExchange() {
-    if thread.last?.isOmi == true {
+    if thread.last?.isOmi == true, thread.last?.text == message(for: step) {
       thread.removeLast()
-    }
-    if thread.last?.isOmi == false {
+      if thread.last?.isOmi == false {
+        thread.removeLast()
+      }
+    } else if thread.last?.isOmi == false {
       thread.removeLast()
+      if thread.last?.isOmi == true, thread.last?.text == message(for: step) {
+        thread.removeLast()
+      }
     }
+  }
+
+  private func previousStep(before current: Step) -> Step? {
+    if displayedSteps.last == current, let previous = displayedSteps.dropLast().last {
+      return previous
+    }
+    var rawValue = current.rawValue - 1
+    while let candidate = Step(rawValue: rawValue) {
+      guard let key = permissionKey(for: candidate), isGranted(key) else { return candidate }
+      rawValue -= 1
+    }
+    return nil
   }
 
   private func resetAnswer(for step: Step) {
@@ -564,11 +590,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func answerLanguageText() {
-    let raw = languageDraft.trimmingCharacters(in: .whitespaces)
-    guard !raw.isEmpty else { return }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
-    let name = AssistantSettings.supportedLanguages.first { $0.code == code }?.name ?? raw
-    pickLanguage(code: code, name: name)
+    guard let language = Self.languageSelection(for: languageDraft) else { return }
+    pickLanguage(code: language.code, name: language.name)
   }
 
   func pickRole(_ r: String) {

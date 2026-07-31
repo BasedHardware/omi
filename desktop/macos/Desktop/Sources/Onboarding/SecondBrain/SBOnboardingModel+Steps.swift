@@ -8,14 +8,19 @@ import Foundation
 extension SBOnboardingModel {
   static func preferredLanguageCodes(localeCode: String?) -> [String] {
     let common = ["en", "es", "fr", "de", "pt", "ja", "zh", "ko", "hi"]
-    let preferred = [localeCode?.lowercased()].compactMap { $0 } + common
+    let preferred = ([localeCode].compactMap { $0 } + common)
+      .map(AssistantSettings.normalizeTranscriptionLanguageCode)
     return preferred.reduce(into: []) { codes, code in
       if !codes.contains(code) { codes.append(code) }
     }
   }
 
-  static func shouldSelectLanguageOnSubmit(_ draft: String) -> Bool {
-    !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  static func languageSelection(for draft: String) -> (code: String, name: String)? {
+    let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(trimmed)
+    guard let language = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) else { return nil }
+    return language
   }
 
   func requestPerm(_ key: String) {
@@ -641,6 +646,16 @@ extension SBOnboardingModel {
 // MARK: - Agents (do things for you)
 
 extension SBOnboardingModel {
+  static func agentTogglePresentation(for state: String, detail: String) -> AgentTogglePresentation {
+    switch state {
+    case "connecting": return .init(isOn: true, isDisabled: true, detail: "connecting…")
+    case "on": return .init(isOn: true, isDisabled: true, detail: detail)
+    case "idle": return .init(isOn: false, isDisabled: false, detail: detail)
+    case "unavailable": return .init(isOn: false, isDisabled: true, detail: "not installed")
+    default: return .init(isOn: false, isDisabled: true, detail: "checking…")
+    }
+  }
+
   var agentRows: [(id: String, name: String, detail: String)] {
     [
       ("openclaw", "OpenClaw", "runs tasks on your Mac"),
