@@ -1,0 +1,66 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingWindow.swift
+  s_d60bd669afaade::t_df5a81c77692dc 20-40
+desktop/context-for-claude/docs/design-system.md
+  s_d60bd669afaade::t_f39c0daea79693 289-309
+  s_d60bd669afaade::t_b372b5d36e75a2 80-98
+  s_d60bd669afaade::t_0835add42ad447 4-7
+  s_d60bd669afaade::t_5fa808f5a9f144 434-436
+  s_d60bd669afaade::t_127b3e4107a0b7 26
+  s_d60bd669afaade::t_1c6ba0caa75084 36-38
+  s_ee1a30263e0455::t_aabbba1d980c7f 402
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionsCard.swift
+  s_d60bd669afaade::t_3c4e438a30afbe 1-186
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_d60bd669afaade::t_1108f0fee0ac3b 181-198,200-202
+  s_d60bd669afaade::t_dcfb57ff9a0091 466-469,473-476
+  s_d60bd669afaade::t_9c9a49c25e5c58 438-450
+  s_d60bd669afaade::t_c482b4e0b10edc 737-744
+  s_d60bd669afaade::t_27e08d2f1179ce 745-746
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_d60bd669afaade::t_0c35a685f1bcf0 1252-1253
+  s_d60bd669afaade::t_e7510af036ef29 1100-1106,1115-1116,1120
+desktop/context-for-claude/Tests/ContextAppTests/PermissionsCardTests.swift
+  s_d60bd669afaade::t_bf3cd1bea2834e 111,113,117,124-125,132-134
+  s_d60bd669afaade::t_5c46b0454d712b 90-95,97-101
+  s_d60bd669afaade::t_e5115f68c409ce 1-41,43-52,58-89,96,102-110,112,114-116,118-123,126-131,135-275,277-298
+  s_d60bd669afaade::t_62f37c1ca2a0b8 42
+  s_d60bd669afaade::t_0d58236bed467e 276
+  s_d60bd669afaade::t_9a9adef36d08c5 53-57
+desktop/context-for-claude/Tests/ContextAppTests/InkGlassTests.swift
+  s_d60bd669afaade::t_766137daad68e1 292-302
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsSpotlight.swift
+  s_d60bd669afaade::t_a30a7404361acd 631-638,642-656
+  s_d60bd669afaade::t_fb1a0fbe75936b 516-522
+desktop/context-for-claude/Tests/ContextAppTests/SettingsSpotlightTests.swift
+  s_d60bd669afaade::t_e0a5dbfac3f2e2 388-471
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Cinematic.swift
+  s_d60bd669afaade::t_642b63fbe5c10f 8
+desktop/context-for-claude/Tests/ContextAppTests/TalkingMarkTests.swift
+  s_d60bd669afaade::t_72cabc908f51e5 278
+desktop/context-for-claude/docs/first-run-experience.md
+  s_d60bd669afaade::t_f0625387fb1fd3 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "63fe5c73c3b9132a8ba91251c3a8494e7742279e",
+  "prompts": {},
+  "sessions": {
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_ee1a30263e0455": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-afa0b1adecd8e4dcc",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
