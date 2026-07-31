@@ -130,8 +130,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, codec=None):
-        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service, codec))
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -142,7 +142,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
 
     assert await runtime._bootstrap() is True
-    assert selected_multi_language_options == [('es', False, None, 'pcm8')]
+    assert selected_multi_language_options == [('es', False, None)]
 
 
 @pytest.mark.anyio
@@ -153,7 +153,6 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         websocket=SimpleNamespace(),
         uid='language-routing-user',
         language='es',
-        codec='opus',
         stt_service='parakeet',
     )
     runtime = object.__new__(ListenSessionRuntime)
@@ -178,8 +177,8 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, codec=None):
-        assert (language, multi_lang_enabled, preferred_service, codec) == ('es', True, 'parakeet', 'opus')
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+        assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
