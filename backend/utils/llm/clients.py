@@ -137,6 +137,47 @@ logger = logging.getLogger(__name__)
 _usage_callback = get_usage_callback()
 _GEMINI_OPENAI_BASE_URL = GEMINI_OPENAI_BASE_URL
 
+# ---------------------------------------------------------------------------
+# On-prem embeddings endpoint (the one hard-cloud inference gap).
+#
+# By default embeddings go to OpenAI ``text-embedding-3-large`` (3072-dim),
+# a first-class cloud backend. On-prem operators point them at any
+# OpenAI-compatible endpoint (Ollama / vLLM / TEI) that serves ``/v1/embeddings``
+# — the same endpoint can serve chat, so a single Ollama URL covers both.
+# The embedding model's dimension MUST equal ``QDRANT_VECTOR_DIM`` (e.g.
+# nomic-embed-text=768, mxbai-embed-large=1024); a fresh vector store is
+# required when switching away from the 3072-dim default.
+EMBEDDINGS_BASE_URL_ENV_VAR = 'OMI_EMBEDDINGS_BASE_URL'
+EMBEDDINGS_MODEL_ENV_VAR = 'OMI_EMBEDDINGS_MODEL'
+EMBEDDINGS_API_KEY_ENV_VAR = 'OMI_EMBEDDINGS_API_KEY'
+_DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-large'
+
+
+def _embeddings_base_url() -> str:
+    """The configured on-prem embeddings endpoint, or '' for cloud OpenAI."""
+    return os.getenv(EMBEDDINGS_BASE_URL_ENV_VAR, '').strip().rstrip('/')
+
+
+def _embeddings_model() -> str:
+    return os.getenv(EMBEDDINGS_MODEL_ENV_VAR, '').strip() or _DEFAULT_EMBEDDINGS_MODEL
+
+
+def _embeddings_ctor_kwargs() -> Dict[str, Any]:
+    """Extra ``OpenAIEmbeddings`` kwargs.
+
+    When an on-prem endpoint is configured every client construction (default
+    *and* BYOK) is pinned to it, so no embedding call escapes to the cloud.
+    ``check_embedding_ctx_length=False`` is required: with the default True,
+    LangChain sends token-id arrays rather than strings, which OpenAI-compatible
+    servers like Ollama reject.
+    """
+    base_url = _embeddings_base_url()
+    if not base_url:
+        return {}
+    # Local servers ignore the key, but the OpenAI client requires a non-empty one.
+    api_key = os.getenv(EMBEDDINGS_API_KEY_ENV_VAR, '').strip() or 'not-set'
+    return {'base_url': base_url, 'api_key': api_key, 'check_embedding_ctx_length': False}
+
 
 class _LLMErrorCallback(BaseCallbackHandler):
     """LangChain callback that tags provider errors with platform/BYOK source."""
@@ -639,9 +680,9 @@ llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
 embeddings = _OpenAIEmbeddingsProxy(
-    model="text-embedding-3-large",
+    model=_embeddings_model(),
     default=None,
-    ctor_kwargs={},
+    ctor_kwargs=_embeddings_ctor_kwargs(),
 )
 parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
@@ -672,6 +713,12 @@ def gemini_embed_query(text: str) -> List[float]:
     Prefers the per-request BYOK Gemini key; falls back to the process-wide
     env key so non-BYOK callers behave exactly as before.
     """
+    if _embeddings_base_url():
+        # On-prem: screen-activity queries use the same local OpenAI-compatible
+        # endpoint as every other embedding, so there is no Google egress. The
+        # desktop app must be configured to the same model/endpoint so its
+        # RETRIEVAL_DOCUMENT vectors align with these query vectors.
+        return generate_embedding(text)
     if should_route_features_through_gateway():
         record_direct_exception_surface(surface='gemini_screen_activity_query_embedding', reason='out_of_scope')
     api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
