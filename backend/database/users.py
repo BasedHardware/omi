@@ -1049,7 +1049,7 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
     return user_doc.to_dict().get('speaker_embedding')
 
 
-def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, attribution: Optional[str] = None) -> bool:
     """
     Store speaker embedding for a person.
 
@@ -1057,6 +1057,12 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
         uid: User ID
         person_id: Person ID
         embedding: List of floats representing the speaker embedding
+        attribution: How this person came to be identified for the audio the
+            embedding was built from ('user_tagged', 'llm_inferred', ...).
+            Recorded so an embedding enrolled from an inferred identity can be
+            told apart from one the user confirmed, and cleared on its own if
+            that inference is later contradicted. Omitted leaves the existing
+            value untouched.
 
     Returns:
         True if stored successfully, False if person not found
@@ -1067,13 +1073,26 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
     if not person_doc.exists:
         return False
 
-    person_ref.update(
-        {
-            'speaker_embedding': embedding,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
+    update_data = {
+        'speaker_embedding': embedding,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    if attribution is not None:
+        update_data['speaker_embedding_attribution'] = attribution
+
+    person_ref.update(update_data)
     return True
+
+
+def get_person_speaker_embedding_attribution(uid: str, person_id: str) -> Optional[str]:
+    """Get how a person's stored speaker embedding was attributed, if recorded."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return None
+
+    return person_doc.to_dict().get('speaker_embedding_attribution')
 
 
 def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:

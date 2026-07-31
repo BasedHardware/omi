@@ -86,6 +86,8 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_category': ('gpt-5-nano', 'openai'),
     'smart_glasses': ('gpt-5-nano', 'openai'),
     'persona_chat': ('gpt-5-nano', 'openai'),
+    'speaker_resolution': ('gpt-5-nano', 'openai'),
+    'speaker_verification': ('gpt-5-nano', 'openai'),
     # Non-OpenAI routes remain intentionally unchanged.
     'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
     'followup': ('gemini-2.5-flash-lite', 'gemini'),
