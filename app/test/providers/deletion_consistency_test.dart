@@ -1,9 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/memories.dart';
-import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -56,13 +53,14 @@ void main() {
   });
 
   group('MemoriesProvider deletion eventual consistency', () {
-    FetchMemoriesRequest _emptyFetcher() {
-      return ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async => GetMemoriesResult([], true);
+    FetchMemoriesRequest emptyFetcher() {
+      return ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true);
     }
 
     test('deleteMemory removes item optimistically and sets pending state', () {
       final provider = MemoriesProvider(
-        fetchMemoriesRequest: _emptyFetcher(),
+        fetchMemoriesRequest: emptyFetcher(),
         deleteMemoryRequest: (_) async => true,
       );
       memoryProviders.add(provider);
@@ -76,7 +74,7 @@ void main() {
 
     test('restoreLastDeletedMemory brings the memory back and clears pending state', () async {
       final provider = MemoriesProvider(
-        fetchMemoriesRequest: _emptyFetcher(),
+        fetchMemoriesRequest: emptyFetcher(),
         deleteMemoryRequest: (_) async => true,
       );
       memoryProviders.add(provider);
@@ -93,7 +91,7 @@ void main() {
 
     test('consecutive deletions replace pending state correctly', () {
       final provider = MemoriesProvider(
-        fetchMemoriesRequest: _emptyFetcher(),
+        fetchMemoriesRequest: emptyFetcher(),
         deleteMemoryRequest: (_) async => true,
       );
       memoryProviders.add(provider);
@@ -147,7 +145,7 @@ void main() {
   });
 
   group('ActionItemsProvider deletion eventual consistency', () {
-    ActionItemsProvider _newProvider({
+    ActionItemsProvider newProvider({
       required ActionItemsFetcher fetcher,
       DeleteActionItemRequest? deleter,
     }) {
@@ -159,7 +157,7 @@ void main() {
       return p;
     }
 
-    ActionItemsFetcher _emptyFetcher() {
+    ActionItemsFetcher emptyFetcher() {
       return (
               {int limit = 100,
               int offset = 0,
@@ -167,11 +165,11 @@ void main() {
               String? conversationId,
               DateTime? startDate,
               DateTime? endDate}) async =>
-          ActionItemsResponse(actionItems: []);
+          const ActionItemsResponse(actionItems: []);
     }
 
     test('deleteActionItem removes item optimistically and tracks pending deletion', () async {
-      final provider = _newProvider(fetcher: _emptyFetcher());
+      final provider = newProvider(fetcher: emptyFetcher());
 
       final item = _item('task-1');
       provider.actionItems.insert(0, item);
@@ -186,7 +184,7 @@ void main() {
       // deleted item, but the tombstone guard must prevent reinsertion.
       final deleted = _item('task-2', description: 'should not reappear');
 
-      final provider = _newProvider(
+      final provider = newProvider(
         fetcher: (
                 {int limit = 100,
                 int offset = 0,
@@ -213,7 +211,7 @@ void main() {
       final deleted = _item('task-3');
 
       var fetchCall = 0;
-      final provider = _newProvider(
+      final provider = newProvider(
         fetcher: (
             {int limit = 100,
             int offset = 0,
@@ -227,7 +225,7 @@ void main() {
           if (fetchCall == 1) {
             return ActionItemsResponse(actionItems: [deleted]);
           }
-          return ActionItemsResponse(actionItems: []);
+          return const ActionItemsResponse(actionItems: []);
         },
       );
 
@@ -245,7 +243,7 @@ void main() {
     test('loadMoreActionItems filters pending-deletion items from paginated response', () async {
       final deleted = _item('task-4');
 
-      final provider = _newProvider(
+      final provider = newProvider(
         fetcher: (
             {int limit = 100,
             int offset = 0,
