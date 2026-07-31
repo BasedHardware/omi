@@ -164,14 +164,27 @@ fn validate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::journal::Surface;
 
-    fn identity() -> Identity {
+    fn identity(journal: &mut JournalStore) -> Identity {
+        let surface = Surface {
+            owner_id: "o".into(),
+            surface_kind: "main_chat".into(),
+            external_ref_kind: "chat".into(),
+            external_ref_id: "chat-1".into(),
+        };
+        let conversation_id = journal
+            .conversation_id(&surface)
+            .unwrap_or_else(|error| panic!("conversation setup failed: {error}"));
+        let run = journal
+            .admit_run("o", "s", &conversation_id, 1)
+            .unwrap_or_else(|error| panic!("run setup failed: {error}"));
         Identity {
             invocation_id: "i".into(),
             owner_id: "o".into(),
             session_id: "s".into(),
-            run_id: "r".into(),
-            attempt_id: "a".into(),
+            run_id: run.run_id,
+            attempt_id: run.attempt_id,
             profile_generation: 1,
             daemon_boot_epoch: "b".into(),
             execution_generation: 1,
@@ -182,10 +195,11 @@ mod tests {
     fn blocks_dangerous_then_accepts_exact_idempotent_result() {
         let mut journal = JournalStore::in_memory().unwrap_or_else(|error| panic!("{error}"));
         let relay = ToolRelay::new();
+        let identity = identity(&mut journal);
         assert!(relay
             .dispatch(
                 &mut journal,
-                identity(),
+                identity.clone(),
                 "bash".into(),
                 serde_json::from_value(json!({"command":"sudo rm -rf /"})).unwrap_or_default(),
                 "main_chat".into(),
@@ -197,7 +211,7 @@ mod tests {
         let dispatch = relay
             .dispatch(
                 &mut journal,
-                identity(),
+                identity,
                 "bash".into(),
                 serde_json::from_value(json!({"command":"pwd"})).unwrap_or_default(),
                 "main_chat".into(),
@@ -243,10 +257,11 @@ mod tests {
         let mut journal =
             JournalStore::open(path.clone()).unwrap_or_else(|error| panic!("{error}"));
         let relay = ToolRelay::new();
+        let identity = identity(&mut journal);
         let dispatch = relay
             .dispatch(
                 &mut journal,
-                identity(),
+                identity,
                 "bash".into(),
                 serde_json::from_value(json!({"command":"pwd"})).unwrap_or_default(),
                 "main_chat".into(),
@@ -285,10 +300,11 @@ mod tests {
     fn revokes_pending_claims_for_owner_run_on_reconcile() {
         let mut journal = JournalStore::in_memory().unwrap_or_else(|error| panic!("{error}"));
         let relay = ToolRelay::new();
+        let identity = identity(&mut journal);
         relay
             .dispatch(
                 &mut journal,
-                identity(),
+                identity.clone(),
                 "bash".into(),
                 serde_json::from_value(json!({"command":"pwd"})).unwrap_or_default(),
                 "main_chat".into(),
@@ -299,7 +315,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("dispatch failed: {error}"));
         assert_eq!(
             relay
-                .revoke_owner_run(&mut journal, "o", Some("r"))
+                .revoke_owner_run(&mut journal, "o", Some(&identity.run_id))
                 .unwrap_or(0),
             1
         );

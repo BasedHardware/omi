@@ -1,5 +1,5 @@
 use omi_agent_runtime::journal::{
-    JournalStore, ResultPage as JournalResultPage, Surface as JournalSurface,
+    JournalStore, ResultPage as JournalResultPage, RunIdentity, Surface as JournalSurface,
 };
 use omi_agent_runtime::provider_policy::ManagedTransport;
 use omi_agent_runtime::tool_relay::{Identity, ToolRelay};
@@ -1070,8 +1070,13 @@ impl Runtime {
             );
             return;
         }
-        let mut revoked_run_ids = self.running.keys().cloned().collect::<Vec<_>>();
+        let mut revoked_run_ids = self
+            .running
+            .values()
+            .map(|running| running.run_id.clone())
+            .collect::<Vec<_>>();
         revoked_run_ids.sort();
+        revoked_run_ids.dedup();
         for running in self.running.values() {
             let _ = running.cancel.send(true);
         }
@@ -1228,6 +1233,7 @@ impl Runtime {
                 return;
             }
         };
+        let result_identity = run_identity.clone();
 
         let requested_mode = fields
             .get("agentMode")
@@ -1309,13 +1315,29 @@ impl Runtime {
                 result = &mut prompt_run => match result {
                     Ok(()) => {
                         let text = text.lock().map(|text| text.clone()).unwrap_or_default();
-                        send_result(&output, &request_id, &client_id, &session_id, &text, "succeeded")
+                        send_result(
+                            &output,
+                            &request_id,
+                            &client_id,
+                            &session_id,
+                            &result_identity,
+                            &text,
+                            "succeeded",
+                        )
                     }
                     Err(error) => send_error(&output, &request_id, &client_id, "transport_interruption", &error.to_string()),
                 },
                 changed = cancelled.changed() => {
                     if changed.is_ok() && *cancelled.borrow() {
-                        send_result(&output, &request_id, &client_id, &session_id, "", "cancelled");
+                        send_result(
+                            &output,
+                            &request_id,
+                            &client_id,
+                            &session_id,
+                            &result_identity,
+                            "",
+                            "cancelled",
+                        );
                     }
                 }
             }
@@ -1394,6 +1416,7 @@ fn send_result(
     request_id: &str,
     client_id: &str,
     session_id: &str,
+    run: &RunIdentity,
     text: &str,
     terminal_status: &str,
 ) {
@@ -1402,7 +1425,7 @@ fn send_result(
         fields: envelope(
             Some(request_id),
             Some(client_id),
-            json!({"sessionId": session_id, "text": text, "terminalStatus": terminal_status}),
+            json!({"sessionId": session_id, "runId": run.run_id, "attemptId": run.attempt_id, "text": text, "terminalStatus": terminal_status}),
         ),
     });
 }
@@ -1481,6 +1504,7 @@ fn is_owner_scoped_message(kind: &str) -> bool {
             | "journal_terminalize_turn"
             | "journal_list_turns"
             | "journal_clear_turns"
+            | "authorized_tool_execution_result"
     )
 }
 
@@ -1715,8 +1739,28 @@ mod tests {
         .is_none());
     }
 
+    #[test]
+    fn result_keeps_the_run_identity_swift_reads() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        send_result(
+            &output,
+            "request",
+            "client",
+            "session",
+            &RunIdentity {
+                run_id: "run".into(),
+                attempt_id: "attempt".into(),
+            },
+            "done",
+            "succeeded",
+        );
+        let result = receiver.try_recv().expect("result must emit");
+        assert_eq!(result.fields["runId"], "run");
+        assert_eq!(result.fields["attemptId"], "attempt");
+    }
+
     #[tokio::test]
-    async fn authorized_tool_dispatch_accepts_persisted_result() {
+    async fn authorized_tool_result_requires_the_active_owner() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
         let mut runtime = test_runtime(None, output, completed);
@@ -1724,6 +1768,11 @@ mod tests {
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
         );
+        let run = runtime
+            .journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
+        let run_id = run.run_id.clone();
         let (cancel, _) = watch::channel(false);
         runtime.running.insert(
             "request".into(),
@@ -1731,8 +1780,8 @@ mod tests {
                 cancel,
                 owner_id: "owner".into(),
                 session_id: "session".into(),
-                run_id: "run".into(),
-                attempt_id: "attempt".into(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
                 profile_generation: 1,
                 surface_kind: "main_chat".into(),
             },
@@ -1752,7 +1801,7 @@ mod tests {
             .expect("authorized tool execution must emit");
         assert_eq!(authorized.kind, "authorized_tool_execution");
         assert_eq!(authorized.fields["invocationId"], "invoke-1");
-        assert_eq!(authorized.fields["runId"], "run");
+        assert_eq!(authorized.fields["runId"], run_id);
         let mut result = authorized.fields.clone();
         result.insert("type".into(), json!("authorized_tool_execution_result"));
         result.insert("outcome".into(), json!("succeeded"));
@@ -1774,7 +1823,28 @@ mod tests {
         ] {
             result.remove(key);
         }
-        runtime.authorized_tool_execution_result(result);
+        result.insert("ownerId".into(), json!("other-owner"));
+        runtime.handle(Message {
+            kind: "authorized_tool_execution_result".into(),
+            fields: result.clone(),
+        });
+        let rejected = receiver
+            .recv()
+            .await
+            .expect("wrong owner result must reject");
+        assert_eq!(rejected.kind, "error");
+        assert_eq!(rejected.fields["failure"]["failureCode"], "authentication");
+        assert!(runtime
+            .journal
+            .pending_tool_claim("invoke-1")
+            .expect("pending claim lookup must succeed")
+            .is_some());
+
+        result.insert("ownerId".into(), json!("owner"));
+        runtime.handle(Message {
+            kind: "authorized_tool_execution_result".into(),
+            fields: result,
+        });
         let accepted = receiver
             .recv()
             .await
@@ -1793,6 +1863,10 @@ mod tests {
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
         );
+        let run = runtime
+            .journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
         let (cancel, _) = watch::channel(false);
         runtime.running.insert(
             "request".into(),
@@ -1800,8 +1874,8 @@ mod tests {
                 cancel,
                 owner_id: "owner".into(),
                 session_id: "session".into(),
-                run_id: "run".into(),
-                attempt_id: "attempt".into(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
                 profile_generation: 1,
                 surface_kind: "main_chat".into(),
             },
@@ -1828,6 +1902,37 @@ mod tests {
         assert_eq!(authorized.kind, "authorized_tool_execution");
         assert_eq!(authorized.fields["invocationId"], "invoke-queued");
         assert!(!runtime.running.contains_key("request"));
+
+        let mut result = authorized.fields;
+        result.insert("type".into(), json!("authorized_tool_execution_result"));
+        result.insert("outcome".into(), json!("succeeded"));
+        result.insert("result".into(), json!("found"));
+        for key in [
+            "toolName",
+            "input",
+            "effectClass",
+            "retryPolicy",
+            "surfaceKind",
+            "externalRefKind",
+            "externalRefId",
+            "originatingUserText",
+            "precedingAssistantText",
+            "runMode",
+            "chatMode",
+            "requestId",
+            "clientId",
+        ] {
+            result.remove(key);
+        }
+        runtime.handle(Message {
+            kind: "authorized_tool_execution_result".into(),
+            fields: result,
+        });
+        let completed = receiver
+            .recv()
+            .await
+            .expect("pending tool claim must complete after its run ends");
+        assert_eq!(completed.kind, "authorized_tool_result");
     }
 
     #[tokio::test]
@@ -1841,6 +1946,9 @@ mod tests {
         ));
         let mut journal = JournalStore::open(path.clone()).expect("journal must open");
         let relay = ToolRelay::new();
+        let run = journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
         relay
             .dispatch(
                 &mut journal,
@@ -1848,8 +1956,8 @@ mod tests {
                     invocation_id: "invoke-restart".into(),
                     owner_id: "owner".into(),
                     session_id: "session".into(),
-                    run_id: "run".into(),
-                    attempt_id: "attempt".into(),
+                    run_id: run.run_id,
+                    attempt_id: run.attempt_id,
                     profile_generation: 1,
                     daemon_boot_epoch: "boot".into(),
                     execution_generation: 1,
@@ -2037,6 +2145,16 @@ mod tests {
             .as_str()
             .expect("session id must be present")
             .to_owned();
+        let conversation_id = runtime
+            .sessions
+            .get(&session_id)
+            .expect("resolved session must exist")
+            .conversation_id
+            .clone();
+        let run = runtime
+            .journal
+            .admit_run("owner", &session_id, &conversation_id, 1)
+            .expect("run must admit");
         let (cancel, _) = watch::channel(false);
         runtime.running.insert(
             "request".into(),
@@ -2044,8 +2162,8 @@ mod tests {
                 cancel,
                 owner_id: "owner".into(),
                 session_id: session_id.clone(),
-                run_id: "run".into(),
-                attempt_id: "attempt".into(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
                 profile_generation: 1,
                 surface_kind: "main_chat".into(),
             },
@@ -2126,7 +2244,7 @@ mod tests {
         );
         let (cancel, cancelled) = watch::channel(false);
         runtime.running.insert(
-            "run-a".into(),
+            "request-a".into(),
             RunningQuery {
                 cancel,
                 owner_id: "owner-a".into(),
