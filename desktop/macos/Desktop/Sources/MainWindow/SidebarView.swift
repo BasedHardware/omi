@@ -74,6 +74,7 @@ enum SidebarNavItem: Int, CaseIterable {
 struct SidebarView: View {
   @Binding var selectedIndex: Int
   @Binding var isCollapsed: Bool
+  @Binding var memoryDestinationRawValue: Int
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var insightStorage = InsightStorage.shared
@@ -173,6 +174,7 @@ struct SidebarView: View {
                       }
                     }
                     selectedIndex = item.rawValue
+                    memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
                     AnalyticsManager.shared.tabChanged(tabName: item.title)
                   },
                   onToggle: {
