@@ -89,7 +89,10 @@ export function rewindFramesNeedingEmbeddingSql(excludeCount: number): string {
  * It is a parameter, not a baked constant, only so the SQL test can drive it with
  * small toy vectors — the guard shape is identical either way.
  */
-export function searchEmbeddingPageSql(blobBytes: number = EMBED_BLOB_BYTES, scoped = false): string {
+export function searchEmbeddingPageSql(
+  blobBytes: number = EMBED_BLOB_BYTES,
+  scoped = false
+): string {
   return `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
       WHERE EXISTS (SELECT 1 FROM rewind_embeddings e
                     JOIN rewind_frames f ON f.id = e.frame_id

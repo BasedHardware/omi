@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -1709,7 +1714,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1814,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
