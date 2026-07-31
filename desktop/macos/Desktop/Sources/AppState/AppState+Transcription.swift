@@ -201,6 +201,7 @@ extension AppState {
       )
 
       // Create crash-safe DB session for persistence
+      let sessionGeneration = recordingGeneration
       Task {
         do {
           // Persist the microphone this session will actually use: an explicit
@@ -211,8 +212,13 @@ extension AppState {
           if effectiveSource == .microphone,
             let preferredName = await AudioCaptureService.resolvePreferredMicrophone()?.name
           {
+            // The recording may have stopped (or stopped and restarted) while
+            // the HAL lookup was in flight — a stale task must not create a
+            // session for a dead recording nor touch a newer one's state.
+            guard recordingGeneration == sessionGeneration else { return }
             recordingInputDeviceName = preferredName
           }
+          guard recordingGeneration == sessionGeneration else { return }
           let sessionId = try await TranscriptionStorage.shared.startSession(
             source: currentConversationSource.rawValue,
             language: effectiveLanguage,
@@ -221,11 +227,17 @@ extension AppState {
             clientConversationId: sttSession.useLocalSTT ? nil : clientConversationId,
             finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile
           )
-          await MainActor.run {
+          // Stale after creation: leave the orphaned row to the crash-safe
+          // reconciler rather than pointing a newer recording at it — and stop
+          // the whole task so the backend binding below cannot run either.
+          let sessionStillCurrent = await MainActor.run { () -> Bool in
+            guard self.recordingGeneration == sessionGeneration else { return false }
             self.currentSessionId = sessionId
             // Start live notes session
             LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+            return true
           }
+          guard sessionStillCurrent else { return }
           if let backendId = await MainActor.run(body: { () -> String? in
             let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
             guard let candidate else { return nil }
