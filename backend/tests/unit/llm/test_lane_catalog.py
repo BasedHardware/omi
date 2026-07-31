@@ -204,16 +204,16 @@ class TestValidateServingConfig:
         catalog = load_catalog()
         validate_serving_config(catalog, load_gateway_config(prod_mode=False))
 
-    def test_serving_lane_not_in_catalog_is_allowed(self):
-        """Generated feature routes are not required to be catalogued yet."""
+    def test_serving_lane_not_in_catalog_is_rejected(self):
         catalog = load_catalog()
         cfg = self._minimal_serving_config(lane_id="omi:auto:not-in-catalog")
         # Start from the complete real config so all prod_ready catalog lanes
-        # are present before adding the uncatalogued generated lane.
+        # are present before adding the uncatalogued lane.
         base = load_gateway_config(prod_mode=False)
         base.lanes["omi:auto:not-in-catalog"] = cfg.lanes["omi:auto:not-in-catalog"]
         base.route_artifacts.update(cfg.route_artifacts)
-        validate_serving_config(catalog, base)
+        with pytest.raises(ConfigValidationError, match="is not catalogued"):
+            validate_serving_config(catalog, base)
 
     def test_serving_lane_marked_dev_only_is_rejected(self):
         catalog = load_catalog()

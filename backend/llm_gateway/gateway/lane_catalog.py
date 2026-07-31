@@ -150,11 +150,11 @@ def validate_serving_config(
     for art_id, art in serving_cfg.route_artifacts.items():
         serving_lane_to_artifacts.setdefault(art.lane_id, []).append(art_id)
 
-    # Generated feature routes may not be catalogued yet. A catalogued lane,
-    # however, must be promoted before it can enter the serving config.
     for lane_id in sorted(serving_lane_ids):
         entry = catalog.get(lane_id)
-        if entry is not None and entry.provider_support_status != ProviderSupportStatus.PROD_READY:
+        if entry is None:
+            raise ConfigValidationError(f"serving lane {lane_id!r} is not catalogued")
+        if entry.provider_support_status != ProviderSupportStatus.PROD_READY:
             raise ConfigValidationError(
                 f"serving lane {lane_id!r} is catalogued as "
                 f"{entry.provider_support_status.value}; only prod_ready lanes may serve"
