@@ -1,0 +1,198 @@
+"""Client-executed device tools.
+
+Some capabilities only exist on the user's own device. iOS can present a message
+compose sheet but has no API for sending silently, and only the phone can read
+its own Contacts store. Those tools cannot run on the server, so the model calls
+them like any other tool and the backend round-trips the call to the client that
+opened this chat stream.
+
+Transport, deliberately reusing what already exists:
+
+1. The tool coroutine announces the call on the SSE stream that is *already open*
+   for this turn, as a ``tool:`` frame. No suspend/resume of the streaming
+   generator is required — the turn simply stays open while the user decides.
+2. The client executes it locally and POSTs the result to
+   ``/v2/messages/device-tool/{call_id}/result``.
+3. That handler writes the result to Redis; the awaiting coroutine polls for it.
+
+Polling rather than pub/sub is what makes this correct under multiple workers:
+the POST may land on a different worker than the one holding the awaiting
+coroutine, and a poll on a shared key does not care which worker wrote it. The
+latency floor is a human tapping a compose sheet, so a 250ms poll is far below
+the noise.
+"""
+
+import asyncio
+import json
+import logging
+import time
+import uuid
+from typing import Any, Optional
+
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+
+from database.redis_db import r as redis_client
+from utils.executors import db_executor, run_blocking
+
+logger = logging.getLogger(__name__)
+
+# A device tool call is bounded by how long a person plausibly takes to answer a
+# system sheet. Beyond this the model gets a timeout result and can respond
+# without it, rather than the whole turn hanging on an unanswered prompt.
+DEVICE_TOOL_TIMEOUT_SECONDS = 180
+DEVICE_TOOL_POLL_INTERVAL_SECONDS = 0.25
+
+# Results outlive the poll window slightly so a result that arrives just as the
+# tool gives up is still readable for diagnostics rather than vanishing.
+DEVICE_TOOL_RESULT_TTL_SECONDS = DEVICE_TOOL_TIMEOUT_SECONDS + 60
+
+
+class ProposeMessageInput(BaseModel):
+    to: list[str] = Field(description="Recipient phone numbers or email addresses.")
+    text: str = Field(description="Exact message body to prefill.")
+    subject: Optional[str] = Field(default=None, description="Optional subject, when the device supports it.")
+
+
+class SearchContactsInput(BaseModel):
+    query: str = Field(description="Name or partial name to search for.")
+    limit: Optional[int] = Field(default=10, description="Maximum contacts to return (max 50).")
+
+
+# Descriptions are written for the model and must state the consent model, so it
+# does not promise the user a message was sent when it only opened a sheet.
+DEVICE_TOOL_SPECS: dict[str, dict[str, Any]] = {
+    'propose_message': {
+        'args_schema': ProposeMessageInput,
+        'description': (
+            "Open the system message composer on the user's phone, prefilled with a recipient "
+            "and body. This does NOT send on its own: iOS requires the user to tap Send. The "
+            "result reports status=sent when they sent it, or status=cancelled when they "
+            "dismissed the sheet. Never tell the user a message was sent unless the result says "
+            "sent. Resolve a named person with search_contacts first."
+        ),
+    },
+    'search_contacts': {
+        'args_schema': SearchContactsInput,
+        'description': (
+            "Resolve a person's name to their phone numbers and email addresses from the "
+            "contacts on the user's own device. Use before propose_message when the user names "
+            "a person instead of giving a raw handle. Ask which one when several match."
+        ),
+    },
+}
+
+DEVICE_TOOL_NAMES = frozenset(DEVICE_TOOL_SPECS)
+
+
+def device_tool_result_key(uid: str, call_id: str) -> str:
+    return f'device_tool_result:{uid}:{call_id}'
+
+
+def store_device_tool_result(uid: str, call_id: str, payload: dict) -> None:
+    """Record a client's result for an in-flight device tool call."""
+    redis_client.setex(
+        device_tool_result_key(uid, call_id),
+        DEVICE_TOOL_RESULT_TTL_SECONDS,
+        json.dumps(payload),
+    )
+
+
+def _read_device_tool_result(uid: str, call_id: str) -> Optional[dict]:
+    raw = redis_client.get(device_tool_result_key(uid, call_id))
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8')
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning('Discarding unparseable device tool result uid=%s call_id=%s', uid, call_id)
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _clear_device_tool_result(uid: str, call_id: str) -> None:
+    try:
+        redis_client.delete(device_tool_result_key(uid, call_id))
+    except Exception as error:
+        # A stale key expires on its own; failing the tool over cleanup would
+        # discard a result the user already produced.
+        logger.warning('Could not clear device tool result error_type=%s', type(error).__name__)
+
+
+async def _await_device_tool_result(uid: str, call_id: str, timeout_seconds: int) -> dict:
+    """Poll for the client's result until it arrives or the bound elapses."""
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        result = await run_blocking(db_executor, _read_device_tool_result, uid, call_id)
+        if result is not None:
+            await run_blocking(db_executor, _clear_device_tool_result, uid, call_id)
+            return result
+        await asyncio.sleep(DEVICE_TOOL_POLL_INTERVAL_SECONDS)
+
+    return {
+        'ok': False,
+        'reason': 'timed_out',
+        'error': (
+            'The user did not respond on their device in time. Do not retry automatically; '
+            'ask them whether they still want this.'
+        ),
+    }
+
+
+def build_device_tools(
+    uid: str,
+    available_tool_names: set[str],
+    callback: Any,
+    timeout_seconds: int = DEVICE_TOOL_TIMEOUT_SECONDS,
+) -> list:
+    """Build LangChain tools for the device capabilities this client declared.
+
+    ``available_tool_names`` comes from the client on the request that opened
+    this turn. A tool the client did not declare is never advertised, so the
+    model cannot call a capability the device in hand does not have — an iPad
+    with no messaging service, or an Android build with no implementation.
+    """
+    tools = []
+    for name in sorted(DEVICE_TOOL_NAMES & set(available_tool_names)):
+        spec = DEVICE_TOOL_SPECS[name]
+        tools.append(_build_one(uid, name, spec, callback, timeout_seconds))
+    return tools
+
+
+def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: int):
+    async def _call(**kwargs) -> str:
+        # Drop the RunnableConfig LangChain injects; it is not part of the
+        # payload the device should receive.
+        kwargs.pop('config', None)
+        call_id = str(uuid.uuid4())
+        request = {
+            'call_id': call_id,
+            'tool': name,
+            'arguments': {key: value for key, value in kwargs.items() if value is not None},
+        }
+
+        logger.info('Dispatching device tool uid=%s tool=%s call_id=%s', uid, name, call_id)
+        started_at = time.monotonic()
+        await callback.put_device_tool_request(request)
+
+        result = await _await_device_tool_result(uid, call_id, timeout_seconds)
+        logger.info(
+            'Device tool settled uid=%s tool=%s call_id=%s ok=%s elapsed_ms=%d',
+            uid,
+            name,
+            call_id,
+            result.get('ok'),
+            int((time.monotonic() - started_at) * 1000),
+        )
+        # Returned as JSON text: the model reads `status` and `ok` directly, and
+        # a cancelled sheet must stay visibly distinct from a delivered message.
+        return json.dumps(result)
+
+    return StructuredTool.from_function(
+        coroutine=_call,
+        name=name,
+        description=spec['description'],
+        args_schema=spec['args_schema'],
+    )

@@ -80,14 +80,54 @@ Reading message history and running scripts have no iOS equivalent at all.
 so the model does not propose them. Those capabilities exist only on the paired
 Mac.
 
-## Not yet wired: the mobile tool-call transport
+## The mobile tool-call transport
 
-The Dart surface (`app/lib/services/device_tools/device_tool_surface.dart`) can
-execute any of these tools by name and returns the same result shape the desktop
-executors do. What does not exist yet is a way for the backend model to *call*
-one mid-turn: `/v2/messages` is a one-way SSE stream, and a client round-trip
-would mean restructuring that streaming generator into a suspend/resume protocol
-with durable state.
+The backend model calls these tools mid-turn over the SSE stream that is
+**already open** for the turn. No suspend/resume of the streaming generator was
+needed — the turn simply stays live while the user answers.
 
-That transport is deliberately a separate change. This surface is the half that
-has to exist first, and it is callable the moment the transport lands.
+```text
+client  POST /v2/messages { text, device_tools: [...] }
+                                   |
+backend  model calls propose_message
+         -> tool coroutine emits  `tool: <base64 json>`  on the open stream
+         -> coroutine polls Redis for the result
+                                   |
+client  reads the frame, runs MFMessageComposeViewController,
+        POSTs /v2/messages/device-tool/{call_id}/result
+                                   |
+backend  poll observes the result, tool returns it to the model,
+         model finishes the turn and the reply streams as usual
+```
+
+Ownership:
+
+- `backend/utils/device_tools.py` — specs, tool construction, the Redis handoff.
+- `AsyncStreamingCallback.put_device_tool_request` — the only writer of `tool:` frames.
+- `app/lib/services/device_tools/device_tool_dispatcher.dart` — parses the frame,
+  executes it, returns the result.
+
+### Why the client declares its tools per request
+
+`SendMessageRequest.device_tools` names what this client can actually run. The
+model is offered nothing else, so it cannot propose a message on an iPad with no
+messaging service or on Android, where the surface has no implementation. The
+capability set depends on the device in hand, so it is sent per request rather
+than stored.
+
+### Why Redis polling and not an in-process future
+
+The result POST can land on a different worker than the one holding the awaiting
+coroutine. A poll on a uid-scoped shared key does not care which worker wrote
+it. The latency floor here is a human tapping a compose sheet, so the 250ms poll
+interval is far below the noise.
+
+The key is scoped by uid, so one user's POST cannot satisfy another user's call,
+and the result is deleted once consumed so a later call cannot reuse it.
+
+### Timeout
+
+A device tool call is bounded at 180s — roughly how long a person plausibly
+takes to answer a system sheet. On timeout the model receives
+`{"ok": false, "reason": "timed_out"}` with an explicit instruction not to retry
+automatically, because the user may still be looking at the sheet.
