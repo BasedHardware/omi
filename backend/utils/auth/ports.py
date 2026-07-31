@@ -50,9 +50,10 @@ class UserProfile:
 class AuthProvider(Protocol):
     """The neutral auth contract. ``verify_token`` is the hot path (HTTP + WS); the rest are user ops."""
 
-    def verify_token(self, bearer: str) -> Principal:
-        """Validate a bearer token and return its Principal. Raises errors.InvalidToken/ExpiredToken/
-        RevokedToken/JWKSUnavailable — never a backend SDK exception."""
+    def verify_token(self, bearer: str, *, check_revoked: bool = False) -> Principal:
+        """Validate a bearer token and return its Principal. ``check_revoked=True`` also rejects tokens
+        revoked server-side (used by the anonymous migrate-owner proof). Raises errors.InvalidToken/
+        ExpiredToken/RevokedToken/JWKSUnavailable — never a backend SDK exception."""
         ...
 
     def get_user_profile(self, uid: str) -> UserProfile:

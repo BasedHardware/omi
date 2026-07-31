@@ -45,9 +45,9 @@ def _translate(exc: Exception) -> errors.AuthError:
 class FirebaseAuthProvider:
     """AuthProvider over Firebase Auth. ``uid`` is the Firebase uid."""
 
-    def verify_token(self, bearer: str) -> Principal:
+    def verify_token(self, bearer: str, *, check_revoked: bool = False) -> Principal:
         try:
-            decoded: Any = _auth().verify_id_token(bearer)
+            decoded: Any = _auth().verify_id_token(bearer, check_revoked=check_revoked)
         except Exception as exc:  # firebase SDK exceptions -> neutral taxonomy
             raise _translate(exc)
         firebase_claims = decoded.get('firebase') or {}

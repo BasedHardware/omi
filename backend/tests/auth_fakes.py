@@ -35,7 +35,7 @@ class FakeAuthProvider:
         return self
 
     # --- port ---
-    def verify_token(self, bearer: str) -> Principal:
+    def verify_token(self, bearer: str, *, check_revoked: bool = False) -> Principal:
         try:
             return self._principals[bearer]
         except KeyError:
