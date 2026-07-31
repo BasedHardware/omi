@@ -387,6 +387,7 @@ final class DashboardCaptureStateTests: XCTestCase {
       testsURL
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/EscapeKeyHandler.swift")
+    // omi-test-quality: source-inspection -- static contract: Esc stays window-scoped, never .onExitCommand
     return try String(contentsOf: handlerURL, encoding: .utf8)
   }
 
