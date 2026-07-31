@@ -7,7 +7,7 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
   // MARK: - Confirmation dialog content (the code-level consent gate)
 
   func testConfirmationTextShowsExactCommandAndSourceDomain() {
-    for provider in AgentPillsManager.orderedDirectedProviders {
+    for provider in AgentPillsManager.DirectedProvider.allCases {
       let text = LocalAgentProviderInstaller.confirmationText(for: provider)
       // The dialog must show the LITERAL command that will run — no summary.
       XCTAssertTrue(text.contains(provider.unattendedInstallCommand))
@@ -42,7 +42,9 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
 
     // Every authoritative detection directory is on the install PATH, so a
     // fresh install lands somewhere the detector can already see.
-    for dir in LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home) {
+    for dir in LocalAgentProviderDetector.adapterActivationSearchDirectories(
+      environment: ["PATH": "/usr/bin:/opt/homebrew/bin"], homeDirectory: home)
+    {
       XCTAssertTrue(elements.contains(dir), "missing detector dir \(dir)")
     }
     // Standard system dirs are appended; inherited entries are deduplicated.

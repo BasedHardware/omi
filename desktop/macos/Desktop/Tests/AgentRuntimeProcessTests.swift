@@ -932,7 +932,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
     // Discovery shares its curated search dirs with the detector; the inherited
     // PATH is used only to assemble the subprocess PATH, never for discovery.
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)"))
+    XCTAssertTrue(source.contains("Self.localAdapterSearchDirectories(home: home)"))
     XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init)"))
     XCTAssertTrue(source.contains("for path in pathDirs + adapterSearchDirs"))
     XCTAssertFalse(source.contains("sharedSearchDirs + pathDirs"))
@@ -1082,15 +1082,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
-  func testCodexAdapterCommandWrapsDetectedBinaryWithACPBridge() {
-    let command = AgentRuntimeProcess.codexAdapterCommand(codexPath: "/opt/homebrew/bin/codex")
-
-    XCTAssertEqual(
-      command,
-      "CODEX_PATH='/opt/homebrew/bin/codex' npx -y @agentclientprotocol/codex-acp"
-    )
-  }
-
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -1109,8 +1100,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     // The implementation now uses a generation-guarded signature; match the current
     // function name without coupling the test to the exact parameter list.
     XCTAssertTrue(source.contains("func processStdoutData("))
-    XCTAssertFalse(reader.contains("Task.detached { [weak self] in"))
-    XCTAssertFalse(reader.contains("while !Task.isCancelled"))
+    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(source.contains("while !Task.isCancelled"))
   }
 
   func testStdoutChunksAreReorderedBeforeJSONLFraming() {
