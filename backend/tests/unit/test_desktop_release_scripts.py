@@ -611,8 +611,9 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "gcloud run deploy" not in workflow
 
 
-def test_release_process_guard_matches_trusted_auto_promotion():
+def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
     """Behavioral contract: the guard rejects a promotion that drops its trusted-repository gate."""
+    monkeypatch.syspath_prepend(str(SCRIPTS))
     guard = _load("release_process_guards", "check-release-process-guards.py")
     promotion_text = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
     trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
