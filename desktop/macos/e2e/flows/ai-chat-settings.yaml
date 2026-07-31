@@ -28,8 +28,6 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/AgentProviderHealth.swift
   - desktop/macos/Desktop/Sources/Providers/AgentProviderInstaller.swift
   - desktop/macos/Desktop/Sources/Providers/AgentProviderRouter.swift
-  - desktop/macos/Desktop/Sources/Providers/AgentSelector.swift
-  - desktop/macos/Desktop/Sources/Providers/AgentSpeechMatcher.swift
 preconditions:
   - automation_bridge_ready
 
