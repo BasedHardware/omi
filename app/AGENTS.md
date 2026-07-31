@@ -64,6 +64,11 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
+### MethodChannel (On-device tool surface)
+- Channel `com.omi.device_tools`; Dart `lib/services/device_tools/device_tool_surface.dart`; iOS `ios/Runner/DeviceToolsService.swift`. Tools: `search_contacts`, `propose_message`.
+- iOS cannot send silently, so the verb is **propose**: the prefilled `MFMessageComposeViewController` sheet *is* the approval. Never add a second in-app confirmation, and never treat a cancelled sheet as delivered.
+- Details, macOS parity, and why the backend tool-call transport is a separate change: `desktop/macos/docs/device-tool-surface.md`.
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |
