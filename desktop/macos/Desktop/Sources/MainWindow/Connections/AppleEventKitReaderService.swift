@@ -313,7 +313,8 @@ final class AppleEventKitReaderService {
       var itemChanged = false
       if appleIsNewer {
         if reminder.isCompleted != item.completed { update.completed = reminder.isCompleted }
-        if let title = reminder.title, !title.isEmpty, title != item.description_ { update.description = title }
+        let appleTitle = reminder.title ?? ""
+        if appleTitle != item.description_ { update.description = appleTitle }
         let appleDue = reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) }
         if let dueAt = appleDue {
           let backendDue = item.dueAt.flatMap(Self.parseDate)
