@@ -201,6 +201,7 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   func testAppleCompletionPropagatesToBackend() async throws {
     let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
     let reminder = store.makeReminder(id: "reminder-1", title: "Done locally", completed: true)
+    store.lastModifiedByID["reminder-1"] = Date(timeIntervalSince1970: 1_900_000_000)
     let sync = AppleRemindersSyncStub(
       pending: AppleRemindersPendingSync(
         pendingExport: [],
@@ -209,7 +210,8 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
             id: "item-1",
             description: "Done locally",
             completed: false,
-            appleReminderId: "reminder-1"
+            appleReminderId: "reminder-1",
+            updatedAt: "2026-07-20T12:00:00Z"
           )
         ]
       )
@@ -222,6 +224,61 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     XCTAssertEqual(sync.syncBatches[0].first?.id, "item-1")
     XCTAssertEqual(sync.syncBatches[0].first?.completed, true)
     XCTAssertTrue(reminder.isCompleted)
+  }
+
+  @MainActor
+  func testAppleReopenPropagatesToBackendWhenAppleIsNewer() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let reminder = store.makeReminder(id: "reminder-1", title: "Reopened locally", completed: false)
+    store.lastModifiedByID["reminder-1"] = Date(timeIntervalSince1970: 1_900_000_000)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(
+            id: "item-1",
+            description: "Reopened locally",
+            completed: true,
+            appleReminderId: "reminder-1",
+            updatedAt: "2026-07-20T12:00:00Z"
+          )
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.updated, 1)
+    XCTAssertEqual(sync.syncBatches[0].first?.completed, false)
+    XCTAssertFalse(reminder.isCompleted)
+  }
+
+  @MainActor
+  func testOmiReopenClearsAppleCompletionWhenOmiIsNewer() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let reminder = store.makeReminder(id: "reminder-1", title: "Reopened in Omi", completed: true)
+    store.lastModifiedByID["reminder-1"] = Date(timeIntervalSince1970: 1_700_000_000)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(
+            id: "item-1",
+            description: "Reopened in Omi",
+            completed: false,
+            appleReminderId: "reminder-1",
+            updatedAt: "2026-07-20T12:00:00Z"
+          )
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.updated, 1)
+    XCTAssertTrue(sync.syncBatches.isEmpty)
+    XCTAssertFalse(reminder.isCompleted)
+    XCTAssertNil(reminder.completionDate)
   }
 
   @MainActor

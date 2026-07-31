@@ -311,16 +311,8 @@ final class AppleEventKitReaderService {
         } ?? false
       var update = AppleRemindersSyncUpdate(id: item.id)
       var itemChanged = false
-      if reminder.isCompleted && !item.completed {
-        update.completed = true
-      } else if item.completed && !reminder.isCompleted {
-        reminder.isCompleted = true
-        reminder.completionDate = Date()
-        try eventStore.saveReminder(reminder, commit: true)
-        itemChanged = true
-      }
-
       if appleIsNewer {
+        if reminder.isCompleted != item.completed { update.completed = reminder.isCompleted }
         if let title = reminder.title, !title.isEmpty, title != item.description_ { update.description = title }
         let appleDue = reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) }
         if let dueAt = appleDue {
@@ -334,6 +326,11 @@ final class AppleEventKitReaderService {
         }
       } else {
         var needsSave = false
+        if reminder.isCompleted != item.completed {
+          reminder.isCompleted = item.completed
+          reminder.completionDate = item.completed ? Date() : nil
+          needsSave = true
+        }
         if reminder.title != item.description_ {
           reminder.title = item.description_
           needsSave = true
