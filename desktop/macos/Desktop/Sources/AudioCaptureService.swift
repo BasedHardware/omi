@@ -492,6 +492,30 @@ class AudioCaptureService: @unchecked Sendable {
   /// UserDefaults key for the user's explicit microphone choice ("" = system default).
   static let preferredInputUIDDefaultsKey = DefaultsKey.preferredMicrophoneDeviceUID.rawValue
 
+  /// Serializes every preferred-microphone HAL resolution onto one queue: the
+  /// enumeration has no deadline against a wedged driver, so concurrent callers
+  /// (session metadata, capture open, retries) must strand at most one worker —
+  /// later requests wait behind it instead of spawning more blocked tasks.
+  private static let preferredMicResolveQueue = DispatchQueue(
+    label: "com.omi.preferred-mic-resolve", qos: .userInitiated)
+
+  /// Resolve the persisted preferred-microphone UID to its current device ID
+  /// and display name, off the calling actor. Returns nil when no selection is
+  /// set or the device is unavailable.
+  static func resolvePreferredMicrophone() async -> (id: AudioDeviceID, name: String?)? {
+    let uid = UserDefaults.standard.string(forKey: preferredInputUIDDefaultsKey) ?? ""
+    guard !uid.isEmpty else { return nil }
+    return await withCheckedContinuation { continuation in
+      preferredMicResolveQueue.async {
+        guard let id = inputDeviceID(forUID: uid) else {
+          continuation.resume(returning: nil)
+          return
+        }
+        continuation.resume(returning: (id: id, name: deviceName(for: id)))
+      }
+    }
+  }
+
   // MARK: - Active-capture registry
   //
   // Tracks which devices are held by a live capture so other audio consumers
@@ -1083,6 +1107,10 @@ class AudioCaptureService: @unchecked Sendable {
       }
     } else {
       logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
+      // Clearing isCapturing makes stopCapture() and deinit skip their
+      // listener cleanup, so the still-registered CoreAudio listeners must be
+      // removed here or repeated unrecoverable route changes leak them.
+      removePropertyListeners()
       isReconfiguring = false
       isCapturing = false
       unregisterActiveCapture()

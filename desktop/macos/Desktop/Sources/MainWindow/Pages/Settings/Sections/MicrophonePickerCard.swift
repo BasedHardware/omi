@@ -146,6 +146,10 @@ struct MicrophonePickerCard: View {
     }
     refreshInFlight = true
     defer { refreshInFlight = false }
+    // No Task.isCancelled in the loop condition: when a new `.task(id:)`
+    // revision cancels this invocation, the newer one has already delegated
+    // its rerun here by setting refreshQueued — dropping it would leave a
+    // just-connected device missing until the next notification.
     repeat {
       refreshQueued = false
       let latest = await Task.detached(priority: .utility) {
@@ -158,7 +162,7 @@ struct MicrophonePickerCard: View {
         }
       }.value
       devices = latest
-    } while refreshQueued && !Task.isCancelled
+    } while refreshQueued
   }
 
   @ViewBuilder

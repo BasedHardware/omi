@@ -206,8 +206,11 @@ extension AppState {
           // Persist the microphone this session will actually use: an explicit
           // selection resolves asynchronously (off-main HAL read), so wait for
           // it here rather than recording the system-default name and leaving
-          // the conversation with wrong input-device provenance.
-          if let preferredName = await Self.resolvePreferredMicrophoneName() {
+          // the conversation with wrong input-device provenance. Microphone
+          // sessions only — a BLE session's provenance is the BLE device.
+          if effectiveSource == .microphone,
+            let preferredName = await AudioCaptureService.resolvePreferredMicrophone()?.name
+          {
             recordingInputDeviceName = preferredName
           }
           let sessionId = try await TranscriptionStorage.shared.startSession(
@@ -329,18 +332,6 @@ extension AppState {
   ///    outside meetings.
   /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
   /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
-  /// Resolve the persisted preferred-microphone UID to its display name, off
-  /// the main actor (the full-device enumeration has no deadline against a
-  /// wedged HAL). Returns nil when no selection is set or it is unavailable.
-  static func resolvePreferredMicrophoneName() async -> String? {
-    let uid =
-      UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
-    guard !uid.isEmpty else { return nil }
-    return await Task.detached(priority: .userInitiated) {
-      AudioCaptureService.inputDeviceID(forUID: uid).flatMap { AudioCaptureService.deviceName(for: $0) }
-    }.value
-  }
-
   /// Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
   /// built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
   /// they must opt into all-transport detection just as PTT does. Shared by the session-arm
@@ -387,26 +378,15 @@ extension AppState {
     guard var mic = audioCaptureService else { return false }
     guard !mic.capturing else { return true }
 
-    // A parked PTT warm capture may still hold the very device this session is
-    // about to open — release it and wait for its HAL teardown so the two
-    // owners' IOProcs can never overlap on one device (Bluetooth A2DP↔HFP
-    // profile flap, stream-format reconfiguration races).
-    if let parked = PushToTalkManager.shared.releaseParkedMicCapture() {
-      await parked.waitForPhysicalStop()
-    }
-
     // Honor the user's persisted microphone choice (e.g. Ray-Ban Meta glasses)
     // at the moment the device opens — this also covers the meetings-only gate
     // and recovery rebuilds. Re-resolved every open because device IDs are not
-    // stable across reconnects, and resolved off the main actor because the
-    // full-device enumeration has no deadline against a wedged HAL.
+    // stable across reconnects, through the shared single-flight resolver so a
+    // wedged HAL strands at most one worker across all callers and retries.
     let preferredUID =
       UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
     if !preferredUID.isEmpty, !mic.hasOverrideDevice {
-      let resolved = await Task.detached(priority: .userInitiated) {
-        AudioCaptureService.inputDeviceID(forUID: preferredUID)
-          .map { (id: $0, name: AudioCaptureService.deviceName(for: $0)) }
-      }.value
+      let resolved = await AudioCaptureService.resolvePreferredMicrophone()
       // The session may have been torn down or the service swapped while the
       // resolution was in flight.
       guard let current = audioCaptureService, current === mic else { return false }
@@ -416,9 +396,7 @@ extension AppState {
         audioCaptureService = replacement
         mic = replacement
         recordingInputDeviceName = resolved.name ?? recordingInputDeviceName
-        log(
-          "Transcription: using preferred microphone \(recordingInputDeviceName ?? "?") (uid=\(preferredUID))"
-        )
+        log("Transcription: using preferred microphone \(recordingInputDeviceName ?? "?")")
       } else {
         // The user's explicit choice is unavailable — capture continues on the
         // system default. A silent substitution must be visible to release
@@ -431,6 +409,18 @@ extension AppState {
           reason: "device_unavailable",
           outcome: .degraded)
       }
+    }
+
+    // A parked PTT warm capture may still hold the very device this session is
+    // about to open — release it and wait for its HAL teardown so the two
+    // owners' IOProcs can never overlap on one device (Bluetooth A2DP↔HFP
+    // profile flap, stream-format reconfiguration races). Deliberately the
+    // LAST await before the device opens: a PTT turn finishing during the
+    // preferred-mic resolution above can park a fresh capture, which an
+    // earlier handshake would miss.
+    if let parked = PushToTalkManager.shared.releaseParkedMicCapture() {
+      await parked.waitForPhysicalStop()
+      guard let current = audioCaptureService, current === mic else { return false }
     }
 
     do {

@@ -2058,6 +2058,7 @@ class PushToTalkManager: ObservableObject {
     if let old = parkedMicCapture, old.service !== service {
       old.service.stopCapture()
     }
+    lease.setParked(true)
     parkedMicCapture = (service, lease, overrideID)
     parkedMicExpiryTask = Task { @MainActor [weak self] in
       try? await Task.sleep(nanoseconds: Self.parkedMicKeepAliveSeconds * 1_000_000_000)
@@ -2154,7 +2155,7 @@ class PushToTalkManager: ObservableObject {
     capture.onSilentMicDetected = { [weak self] detection in
       // Snapshot before scheduling: a warm adoption renewing the lease must not
       // re-authorize an event emitted under the previous turn's authority.
-      let leased = lease.snapshot()
+      guard let leased = lease.snapshotIfActive() else { return }
       Task { @MainActor in
         guard let self else { return }
         guard self.micCaptureGeneration == leased.generation,
@@ -2164,7 +2165,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     capture.onInputRouteChanged = { [weak self] in
-      let leased = lease.snapshot()
+      guard let leased = lease.snapshotIfActive() else { return }
       Task { @MainActor in
         guard let self else { return }
         guard self.micCaptureGeneration == leased.generation,
@@ -2198,7 +2199,7 @@ class PushToTalkManager: ObservableObject {
             // Snapshot before scheduling so a frame emitted during the previous
             // turn or the parked interval keeps that authority even if a warm
             // adoption renews the lease before this Task runs.
-            let leased = lease.snapshot()
+            guard let leased = lease.snapshotIfActive() else { return }
             Task { @MainActor [weak self] in
               guard let self else { return }
               guard self.micCaptureGeneration == leased.generation,
@@ -2232,7 +2233,7 @@ class PushToTalkManager: ObservableObject {
             }
           },
           onAudioLevel: { [weak self] level in
-            let leased = lease.snapshot()
+            guard let leased = lease.snapshotIfActive() else { return }
             Task { @MainActor [weak self] in
               guard let self else { return }
               guard self.micCaptureGeneration == leased.generation,
@@ -2257,7 +2258,9 @@ class PushToTalkManager: ObservableObject {
           // running (or starting) service, parking this stale one would leave
           // two open IOProcs — possibly on the same Bluetooth device. Parking
           // is only for the quiet gap between turns.
-          if generation <= self.discardLateStartsThroughGeneration || self.audioCaptureService != nil {
+          if generation <= self.discardLateStartsThroughGeneration || self.audioCaptureService != nil
+            || self.parkedMicCapture != nil
+          {
             capture.stopCapture()
             if let diagnosticRecoveryAction {
               DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
@@ -2762,6 +2765,7 @@ final class MicCaptureLease: @unchecked Sendable {
   private var generation: UInt64
   private var batchMode: Bool
   private var turnID: VoiceTurnID
+  private var parked = false
 
   init(generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
     self.generation = generation
@@ -2774,7 +2778,25 @@ final class MicCaptureLease: @unchecked Sendable {
     self.generation = generation
     self.batchMode = batchMode
     self.turnID = turnID
+    self.parked = false
     lock.unlock()
+  }
+
+  /// Marks the lease revoked while its capture idles in the keep-alive park,
+  /// so audio callbacks can drop frames synchronously instead of allocating a
+  /// main-actor task per buffer for up to the whole park window.
+  func setParked(_ value: Bool) {
+    lock.lock()
+    parked = value
+    lock.unlock()
+  }
+
+  /// Snapshot for frame authority — nil while parked (frame must be dropped).
+  func snapshotIfActive() -> (generation: UInt64, batchMode: Bool, turnID: VoiceTurnID)? {
+    lock.lock()
+    defer { lock.unlock() }
+    if parked { return nil }
+    return (generation, batchMode, turnID)
   }
 
   func snapshot() -> (generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
