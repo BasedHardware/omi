@@ -4,6 +4,16 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <type_traits>
+
+#include "omi/integration/client.hpp"
+
+using SendNotificationV1 = omi::integration::JsonValue (
+    omi::integration::Client::*)(const std::string &);
+
+static_assert(
+    std::is_same_v<decltype(&omi::integration::Client::send_notification_v1),
+                   SendNotificationV1>);
 
 int main() {
   // Build query with repeated statuses (list-valued param) using multimap.

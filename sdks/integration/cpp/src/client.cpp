@@ -27,27 +27,6 @@ std::string url_encode(CURL* curl, const std::string& value) {
   return result;
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream escaped;
-  for (unsigned char c : value) {
-    switch (c) {
-      case '\\': escaped << "\\\\"; break;
-      case '"': escaped << "\\\""; break;
-      case '\n': escaped << "\\n"; break;
-      case '\r': escaped << "\\r"; break;
-      case '\t': escaped << "\\t"; break;
-      default:
-        if (c < 0x20) {
-          const char hex[] = "0123456789abcdef";
-          escaped << "\\u00" << hex[c >> 4] << hex[c & 0x0f];
-        } else {
-          escaped << c;
-        }
-    }
-  }
-  return escaped.str();
-}
-
 void ensure_curl_initialized() {
   static const CURLcode result = curl_global_init(CURL_GLOBAL_DEFAULT);
   if (result != CURLE_OK) throw std::runtime_error("curl_global_init failed");
@@ -111,10 +90,9 @@ JsonValue Client::request(const std::string& method, const std::string& path,
   return JsonValue{response_body};
 }
 
-JsonValue Client::send_notification_v1(const std::string& uid, const std::string& message) {
+JsonValue Client::send_notification_v1(const std::string& json_body) {
   std::string path = "/v1/integrations/notification";
   std::multimap<std::string, std::string> query;
-  const std::string json_body = "{\"aid\":\"" + json_escape(app_id_) + "\",\"uid\":\"" + json_escape(uid) + "\",\"message\":\"" + json_escape(message) + "\"}";
   return request("POST", path, query, &json_body);
 }
 

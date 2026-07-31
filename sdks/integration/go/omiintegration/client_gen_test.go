@@ -56,3 +56,27 @@ func TestAPIError(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestNotificationAcceptsStructBody(t *testing.T) {
+	type notificationBody struct {
+		UID     string `json:"uid"`
+		Message string `json:"message"`
+		Extra   string `json:"extra"`
+	}
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+	}))
+	defer server.Close()
+	client := New("test-key", "app-123")
+	client.BaseURL = server.URL
+	if _, err := client.SendNotificationV1(context.Background(), notificationBody{UID: "user-1", Message: "hello", Extra: "value"}); err != nil {
+		t.Fatal(err)
+	}
+	if body["aid"] != "app-123" || body["extra"] != "value" {
+		t.Fatalf("body=%v", body)
+	}
+}

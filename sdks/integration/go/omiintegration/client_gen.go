@@ -57,13 +57,13 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 		return nil, fmt.Errorf("omi integration: app id is required")
 	}
 	if path == "/v1/integrations/notification" {
-		data, ok := body.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("omi integration: notification body must be a map")
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
 		}
-		payload := make(map[string]any, len(data)+1)
-		for key, value := range data {
-			payload[key] = value
+		var payload map[string]any
+		if err := json.Unmarshal(encoded, &payload); err != nil || payload == nil {
+			return nil, fmt.Errorf("omi integration: notification body must encode to an object")
 		}
 		payload["aid"] = c.AppID
 		body = payload

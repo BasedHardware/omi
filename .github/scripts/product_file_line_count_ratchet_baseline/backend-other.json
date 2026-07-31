@@ -1,12 +1,12 @@
 {
   "files": {
+    "backend/scripts/generate_integration_sdks.py": 2291,
     "backend/scripts/validate-backend-runtime-env.py": 1836,
-    "backend/testing/listen_pusher_stack/run.py": 1790,
-    "backend/scripts/generate_integration_sdks.py": 2309
+    "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and SCA-29/SCA-33 runtime-versus-workflow source boundaries remain one authoritative deployment contract.",
-    "backend/scripts/generate_integration_sdks.py": "Single multi-language Integration API SDK generator; one file keeps OpenAPI→TS/Go/Python/Rust/C++/Dart emission consistent."
+    "backend/scripts/generate_integration_sdks.py": "Single multi-language Integration API SDK generator; one file keeps OpenAPI\u2192TS/Go/Python/Rust/C++/Dart emission consistent.",
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and SCA-29/SCA-33 runtime-versus-workflow source boundaries remain one authoritative deployment contract."
   },
   "threshold": 1500
 }
