@@ -312,7 +312,7 @@ struct SBOnboardingView: View {
       let matches: [(code: String, name: String)] =
         filter.isEmpty
         ? SBOnboardingModel.preferredLanguageCodes(
-          localeCode: Locale.current.language.languageCode?.identifier
+          localeCode: Locale.current.identifier
         ).compactMap { code in all.first { $0.code == code } }
         : Array(
           all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))

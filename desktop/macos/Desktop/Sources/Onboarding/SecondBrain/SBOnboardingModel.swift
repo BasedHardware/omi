@@ -463,16 +463,14 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   private func retractCurrentExchange() {
+    if thread.last?.isOmi == false {
+      thread.removeLast()
+    }
     if thread.last?.isOmi == true, thread.last?.text == message(for: step) {
       thread.removeLast()
-      if thread.last?.isOmi == false {
-        thread.removeLast()
-      }
-    } else if thread.last?.isOmi == false {
+    }
+    if thread.last?.isOmi == false {
       thread.removeLast()
-      if thread.last?.isOmi == true, thread.last?.text == message(for: step) {
-        thread.removeLast()
-      }
     }
   }
 
@@ -490,8 +488,6 @@ final class SBOnboardingModel: ObservableObject {
 
   private func resetAnswer(for step: Step) {
     switch step {
-    case .language:
-      languageDraft = ""
     case .role:
       role = nil
       roleDraft = ""

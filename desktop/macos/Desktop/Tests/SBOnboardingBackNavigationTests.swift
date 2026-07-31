@@ -5,15 +5,20 @@ import XCTest
 @MainActor
 final class SBOnboardingBackNavigationTests: XCTestCase {
   private let resumeStepKey = "sbOnboardingResumeStep"
+  private var voiceLanguages: [String] = []
+  private var hasExplicitVoiceLanguages = false
 
   override func setUp() {
     super.setUp()
+    voiceLanguages = AssistantSettings.shared.voiceLanguages
+    hasExplicitVoiceLanguages = AssistantSettings.shared.hasExplicitVoiceLanguages
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
   }
 
   override func tearDown() {
+    AssistantSettings.shared.voiceLanguages = hasExplicitVoiceLanguages ? voiceLanguages : []
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
@@ -47,10 +52,11 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
       SBOnboardingModel.Step.role.rawValue)
   }
 
-  func testBackToLanguageClearsItsPreviousChoiceWithoutAppendingMessages() {
+  func testBackToLanguageKeepsItsActiveSelectionWithoutAppendingMessages() {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
     model.languageDraft = "Spanish"
+    AssistantSettings.shared.voiceLanguages = ["es"]
     model.thread = [
       .init(isOmi: true, text: SBOnboardingLanguageCopy.question),
       .init(isOmi: false, text: "Spanish"),
@@ -61,7 +67,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     model.goBack()
 
     XCTAssertEqual(model.step, .language)
-    XCTAssertEqual(model.languageDraft, "")
+    XCTAssertEqual(model.languageDraft, "Spanish")
+    XCTAssertEqual(AssistantSettings.shared.voiceLanguages, ["es"])
     XCTAssertEqual(model.thread.map(\.text), [SBOnboardingLanguageCopy.question])
   }
 
@@ -135,7 +142,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     model.goBack()
 
     XCTAssertEqual(model.step, .role)
-    XCTAssertEqual(model.thread.map(\.text), [model.message(for: .role), "Allowed"])
+    XCTAssertEqual(model.thread.map(\.text), [model.message(for: .role)])
     XCTAssertTrue(model.showWidget)
   }
 

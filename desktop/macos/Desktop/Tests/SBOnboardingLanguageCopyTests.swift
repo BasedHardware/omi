@@ -32,4 +32,8 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
   func testLanguageSuggestionsNormalizeLocaleCodes() {
     XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh").first, "zh-CN")
   }
+
+  func testLanguageSuggestionsKeepTheCurrentRegion() {
+    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh-TW").first, "zh-TW")
+  }
 }
