@@ -1024,12 +1024,12 @@ struct DesktopHomeView: View {
           SidebarView(
             selectedIndex: $selectedIndex,
             isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             appState: appState
           )
           .opacity(0)
           .allowsHitTesting(false)
         }
-
         SettingsSidebar(
           selectedSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
@@ -1051,12 +1051,12 @@ struct DesktopHomeView: View {
           SidebarView(
             selectedIndex: $selectedIndex,
             isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             appState: appState
           )
           .opacity(isInSettings ? 0 : 1)
           .allowsHitTesting(!isInSettings)
         }
-
       }
       .fixedSize(horizontal: true, vertical: false)
       .clipped()
