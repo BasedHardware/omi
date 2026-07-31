@@ -44,6 +44,10 @@ int main() {
       omi::integration::detail::notification_body_with_app_id("{}", "app\"\\id\n");
   assert(escaped_notification == R"({"aid":"app\"\\id\n"})");
 
+  const auto overwritten = omi::integration::detail::notification_body_with_app_id(
+      R"({"aid":"caller-aid","message":"hello","metadata":{"aid":"nested"}})", "app-123");
+  assert(overwritten == R"({"message":"hello","metadata":{"aid":"nested"},"aid":"app-123"})");
+
   std::cout << "PASS: list-valued query params" << std::endl;
   return 0;
 }

@@ -1589,6 +1589,86 @@ std::string json_string(const std::string& value) {
   return encoded;
 }
 
+size_t skip_json_string(const std::string& text, size_t index) {
+  if (index >= text.size() || text[index] != '"') {
+    throw std::invalid_argument("expected json string");
+  }
+  ++index;
+  while (index < text.size()) {
+    if (text[index] == '\\') {
+      index += (index + 1 < text.size()) ? 2 : 1;
+      continue;
+    }
+    if (text[index] == '"') return index + 1;
+    ++index;
+  }
+  throw std::invalid_argument("unterminated json string");
+}
+
+size_t skip_json_value(const std::string& text, size_t index) {
+  while (index < text.size() &&
+         (text[index] == ' ' || text[index] == '\t' || text[index] == '\n' || text[index] == '\r')) {
+    ++index;
+  }
+  if (index >= text.size()) throw std::invalid_argument("expected json value");
+  if (text[index] == '"') return skip_json_string(text, index);
+  if (text[index] == '{' || text[index] == '[') {
+    const char open = text[index];
+    const char close = open == '{' ? '}' : ']';
+    int depth = 1;
+    ++index;
+    while (index < text.size() && depth > 0) {
+      if (text[index] == '"') {
+        index = skip_json_string(text, index);
+        continue;
+      }
+      if (text[index] == open) ++depth;
+      else if (text[index] == close) --depth;
+      ++index;
+    }
+    return index;
+  }
+  while (index < text.size() && text[index] != ',' && text[index] != '}' && text[index] != ']' &&
+         text[index] != ' ' && text[index] != '\t' && text[index] != '\n' && text[index] != '\r') {
+    ++index;
+  }
+  return index;
+}
+
+std::string object_without_top_level_key(const std::string& object, const std::string& key) {
+  std::string out = "{";
+  bool wrote_member = false;
+  size_t index = 1;
+  const size_t end = object.size() - 1;
+  const std::string quoted_key = "\"" + key + "\"";
+  while (index < end) {
+    while (index < end && (object[index] == ' ' || object[index] == '\t' || object[index] == '\n' ||
+                           object[index] == '\r' || object[index] == ',')) {
+      ++index;
+    }
+    if (index >= end) break;
+    if (object[index] != '"') throw std::invalid_argument("expected json object key");
+    const size_t key_start = index;
+    const size_t key_end = skip_json_string(object, index);
+    index = key_end;
+    while (index < end &&
+           (object[index] == ' ' || object[index] == '\t' || object[index] == '\n' || object[index] == '\r')) {
+      ++index;
+    }
+    if (index >= end || object[index] != ':') throw std::invalid_argument("expected json object colon");
+    ++index;
+    const size_t value_end = skip_json_value(object, index);
+    if (object.compare(key_start, key_end - key_start, quoted_key) != 0) {
+      if (wrote_member) out.push_back(',');
+      out.append(object, key_start, value_end - key_start);
+      wrote_member = true;
+    }
+    index = value_end;
+  }
+  out.push_back('}');
+  return out;
+}
+
 }  // namespace
 
 namespace detail {
@@ -1599,9 +1679,12 @@ std::string notification_body_with_app_id(const std::string& json_body, const st
   if (first == std::string::npos || json_body[first] != '{' || json_body[last] != '}') {
     throw std::invalid_argument("notification json_body must be an object");
   }
-  const bool has_members = json_body.find_first_not_of(" \t\n\r", first + 1) < last;
-  return json_body.substr(0, last) + (has_members ? ",\"aid\":\"" : "\"aid\":\"") +
-         json_string(app_id) + "\"" + json_body.substr(last);
+  const std::string object =
+      object_without_top_level_key(json_body.substr(first, last - first + 1), "aid");
+  const auto object_last = object.size() - 1;
+  const bool has_members = object.find_first_not_of(" \t\n\r", 1) < object_last;
+  return object.substr(0, object_last) + (has_members ? ",\"aid\":\"" : "\"aid\":\"") +
+         json_string(app_id) + "\"}";
 }
 
 }  // namespace detail
@@ -1951,7 +2034,9 @@ class OmiIntegrationClient {
         request = f"_request({json.dumps(op['method'])}, {path_expr}, {query_arg}, {body_arg})"
         if op['success_ref']:
             lines.append(f"    final parsed = await {request};")
-            lines.append(f"    return {op['success_ref']}.fromJson(parsed as Map<String, dynamic>);")
+            lines.append(
+                f"    return {op['success_ref']}.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{{}});"
+            )
         else:
             lines.append(f"    return {request};")
         lines.append("  }")
