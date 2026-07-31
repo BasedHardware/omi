@@ -1,0 +1,168 @@
+desktop/context-for-claude/Tests/ContextAppTests/SettingsSpotlightTests.swift
+  s_d60bd669afaade::t_649b4b922a72c5 129-133
+  s_d60bd669afaade::t_b57ad5011695d9 1-128,134-238,299-380,400-539
+  s_d60bd669afaade::t_e5fc0d8cad1fd8 239-298
+  s_d60bd669afaade::t_ca68e048697f59 381-399
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_d60bd669afaade::t_2c7a43daa8fef1 738-739
+  s_d60bd669afaade::t_18ef045f30de8c 746-750,756-759,761-765,767
+  s_d60bd669afaade::t_5b12f463268db8 459-462
+  s_d60bd669afaade::t_ba5b2124f9ada2 97-100,104-107
+  s_d60bd669afaade::t_dc8287b6316a57 483
+  s_d60bd669afaade::t_0d939c8d03c64c 638-641
+  s_d60bd669afaade::t_feab35a32cdfe6 995-1003,1005-1023
+  s_d60bd669afaade::t_1f4387e11d254c 149-177,185-188,190,192,196-234,240-280,287-289,297-322,324-328,332-335,339-364,371-377,379,383-396,401-404,410-411,416
+  s_d60bd669afaade::t_32fb5d80f89bbf 618-627
+  s_d60bd669afaade::t_c25e48123d0632 17-20,24-26,31-35,46,49
+  s_d60bd669afaade::t_646df2c60dcec1 568,575-597,601-602,606-608,614,616-617,628-631,634-637,642,647,651-678,706-737,740-745,751-755,760,766,768-770,773-774,776-783,785-787,792,940,1025,1071,1085
+  s_d60bd669afaade::t_e44b515928cf9e 469-477
+  s_d60bd669afaade::t_2d440a3c14a844 1142-1146
+  s_d60bd669afaade::t_3d82b03eb8a321 681-701,1152
+  s_d60bd669afaade::t_a02d8994ee0467 36-45,57-62
+  s_d60bd669afaade::t_a3cee2518cb0fc 63,108,679,702,822,837,855,861,863-864,866-877,879-880,885-924,928,932-933,939,947-949,961,990,1126,1137,1149
+  s_d60bd669afaade::t_425ab0a9b4f646 878,881-884
+  s_d60bd669afaade::t_e4ba461893b4bc 64
+  s_d60bd669afaade::t_78a723f79474ea 109
+  s_d60bd669afaade::t_02b9f02f867728 680
+  s_d60bd669afaade::t_f28920725c2c6d 703
+  s_d60bd669afaade::t_7b3ed75255a896 819-821
+  s_d60bd669afaade::t_5aebc5b53279cf 823-825,834-836
+  s_d60bd669afaade::t_021a1c157e94bb 838-840,852-854
+  s_d60bd669afaade::t_3c7990cfc32e5b 856-860
+  s_d60bd669afaade::t_82a808f0ca9ca0 862
+  s_d60bd669afaade::t_44a4b4106bdeaf 865
+  s_d60bd669afaade::t_359723eb76683b 925-927
+  s_d60bd669afaade::t_43b547297c3018 929-931
+  s_d60bd669afaade::t_372a6bd37e63c1 934-938
+  s_d60bd669afaade::t_0dd6227728f4be 941-946
+  s_d60bd669afaade::t_220e7762bc2981 950
+  s_d60bd669afaade::t_6646f341c6ed11 959-960
+  s_d60bd669afaade::t_c01ab14438be22 962-964
+  s_d60bd669afaade::t_e086f1282d684a 988-989
+  s_d60bd669afaade::t_cec44037445562 1024
+  s_d60bd669afaade::t_0ed01f4570f527 1072-1074,1082-1084
+  s_d60bd669afaade::t_4695c71a5a4b0b 1086-1088
+  s_d60bd669afaade::t_47d61a6ecf30ad 1123-1125
+  s_d60bd669afaade::t_f8b90f438259f4 1134-1136
+  s_d60bd669afaade::t_5e8e336f61078a 1139-1141
+  s_d60bd669afaade::t_1ce1ecf3e0729a 1147-1148
+  s_d60bd669afaade::t_01e650a9381a95 1150-1151
+  s_d60bd669afaade::t_a44f9307e87b80 1153-1155
+  s_5ff33036f20ed6::t_fd39a7ecf8de81 826-833,841-851,953-955,965-966,970,973-976,978,983-984,993,1035-1036,1040-1043,1054-1055,1058,1068,1075-1081,1089-1094,1098-1100,1105-1113,1116-1122,1128-1133,1156-1161
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingTests.swift
+  s_d60bd669afaade::t_a375efcb1e2b08 201-216
+  s_d60bd669afaade::t_49f2e3e1ccb444 278-297,301-472,479
+  s_d60bd669afaade::t_0cdbe8f351c618 141-148,151-152,161-169,180,185-190,198-200,217-224,226-227,230
+  s_d60bd669afaade::t_8545c414f4369c 99-125
+  s_d60bd669afaade::t_ab65843aa08d96 473-478,480-482
+desktop/context-for-claude/CONTRACTS.md
+  s_d60bd669afaade::t_89f79d387793fa 412-449
+desktop/context-for-claude/Tests/ContextAppTests/MenuBarPresentationTests.swift
+  s_d60bd669afaade::t_8bba9478c0a272 377-379,389
+  s_d60bd669afaade::t_2eb57408fa2098 382
+  s_d60bd669afaade::t_a86406ddb20ec7 303,362
+  s_d60bd669afaade::t_28df16b2a4032a 157,225,247-248,280-302,306,355,357-361,363-371,380-381,385-388,390-397,399-403,405-422
+  s_d60bd669afaade::t_e36fd8b1d777b1 172-224
+  s_d60bd669afaade::t_9f816bc7be9c0e 27
+  s_d60bd669afaade::t_ea19c805eb50ec 135
+  s_d60bd669afaade::t_2d4db6e2a9df09 372-376,398,404
+  s_d60bd669afaade::t_36d5e890f3811a 59-134,136-156
+  s_d60bd669afaade::t_a7933f56c93fe3 383-384
+  s_d60bd669afaade::t_41b37f1c64a221 249-279
+  s_d60bd669afaade::t_8fd707f47f000e 304-305,311
+  s_d60bd669afaade::t_679e6e79ee5c88 308-310,312-354,356
+  s_d60bd669afaade::t_9191bacdc6cc47 158
+  s_d60bd669afaade::t_61f93494472232 226
+  s_d60bd669afaade::t_f2ff37370656bd 307
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_d60bd669afaade::t_15716eafdf6fd6 426-436
+  s_d60bd669afaade::t_cd2db329e987ae 278-283,285-295
+  s_d60bd669afaade::t_acee35ba9b7eb6 115-119
+  s_d60bd669afaade::t_e94e934cfc5e8c 464-466
+  s_d60bd669afaade::t_ddc47cd2b9cc01 934-935
+  s_d60bd669afaade::t_8c00f0e2899215 1077-1080
+  s_d60bd669afaade::t_ebc413912abc07 37-44,47-52
+  s_d60bd669afaade::t_01671461989c6f 621-623,628
+  s_d60bd669afaade::t_82dcd4b8bb9406 816-818
+  s_d60bd669afaade::t_7ef739f145ad91 638,640-646,648-653,656-657
+  s_d60bd669afaade::t_c83dbfcc3b3306 256,266-277
+  s_d60bd669afaade::t_e9c16f827b66d4 450-457,467,471-504,507-511
+  s_d60bd669afaade::t_99fbe8682b9da4 734-737
+  s_d60bd669afaade::t_86c211b2208d0f 134-137,143-146
+  s_d60bd669afaade::t_867d09adfaf30a 990-996,1005,1010,1012-1014,1020-1022,1036
+  s_d60bd669afaade::t_9049f1a5ba23c6 706-709,715-716
+  s_d60bd669afaade::t_14632ae99ca800 172-178,180-187,189-195,199
+  s_d60bd669afaade::t_eb225d38146a66 1011
+  s_d60bd669afaade::t_c249e2b112ff3d 308-330,334-338
+  s_d60bd669afaade::t_41da40397f72e9 211-216,219-220,224
+  s_d60bd669afaade::t_929a7761d59414 953-965
+  s_d60bd669afaade::t_58d0dbc7f101bb 593-596
+  s_d60bd669afaade::t_b8e0d4f784a24c 525-527
+  s_d60bd669afaade::t_8919477e2e8eb2 284
+  s_d60bd669afaade::t_63281127c829f7 363-366
+  s_d60bd669afaade::t_06fbbba029932f 147-148,296-297,512
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_d60bd669afaade::t_1dbaeab488d3f9 119-125,127,133,135-137,139
+  s_d60bd669afaade::t_45e055050d8b81 172,182
+  s_d60bd669afaade::t_02e3c09a14d058 54-58,61-66
+  s_d60bd669afaade::t_926292a96b98cd 148,150-153,158,161
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsSpotlight.swift
+  s_d60bd669afaade::t_2f6d8c8c659c26 215,217-223,225-242
+  s_d60bd669afaade::t_ae11ca0984fe0c 584-613,638
+  s_d60bd669afaade::t_d8171bd042d8cf 784
+  s_d60bd669afaade::t_e8907cb1683c8b 697-699
+  s_d60bd669afaade::t_aeb689bba24023 783
+  s_d60bd669afaade::t_155a68b284451d 787-792
+  s_d60bd669afaade::t_ef71d2e2cb3853 724-728,733-734,753,755-756
+  s_d60bd669afaade::t_50bdd10dc2093f 992-999,1004-1019,1024,1027,1030,1032-1047
+  s_d60bd669afaade::t_8ee90c41a97705 153-214,216,224,243-246
+  s_d60bd669afaade::t_55ff25b24ae22a 853-854,856-858
+  s_d60bd669afaade::t_6f0367416bc606 1-152,247-515,518,522-523,528-533,538-583,639-682,696,700-701,706,708-723,735,752,757-761,772-775,782,786,793,795,830,833-840,844-852,855,859-904,921-923,935-991,1000-1003,1020-1023,1025-1026,1028-1029,1031,1048
+  s_d60bd669afaade::t_369c55c08213ba 762-771
+  s_d60bd669afaade::t_cd419f2be4fbb0 614-637
+  s_d60bd669afaade::t_eaa302b3216664 534-537
+  s_d60bd669afaade::t_c455e999b87fde 905-920,932
+  s_d60bd669afaade::t_75f0a3e56e8d93 841-843
+  s_d60bd669afaade::t_b04d53a936f659 776-781,785,794,796-829,831-832
+  s_d60bd669afaade::t_5adf0a10320cbe 924-931,933-934
+  s_d60bd669afaade::t_7f947e720b5a59 683-695,702-705,707
+  s_d60bd669afaade::t_8fb61da1a220d4 736-751,754
+  s_d60bd669afaade::t_dd4065eb3a7e3d 729-732
+  s_d60bd669afaade::t_56a7daa2d6535e 516-517,519-521,524-527
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_d60bd669afaade::t_f4171ace353445 668-726,729,731,736,738-739,746-856,860-878,880-888
+  s_d60bd669afaade::t_e24125ab8df804 373
+  s_d60bd669afaade::t_c06690e8c95a09 651-655
+  s_d60bd669afaade::t_cf4cb4bfe221a2 508-520,528-595,666
+  s_d60bd669afaade::t_4b8622483a44c5 608-610,614-619,629-633,656-658
+  s_d60bd669afaade::t_ec91e1bb0c4f3c 857-859
+  s_d60bd669afaade::t_681204d28c6f68 349-354,359,362-364,369-372,374-375
+  s_d60bd669afaade::t_d0b9fed7fffe36 151-153,156-171,187,192,205-215
+  s_d60bd669afaade::t_78151c4fbeed31 727-728,730,732-735,737,740-745
+  s_d60bd669afaade::t_19c70d80615dbb 355-358,360-361
+  s_d60bd669afaade::t_44a7ed359f4755 216,283,294,317,667
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "c543ecde85441b4d38b9a7ebf390ec550cdc53eb",
+  "prompts": {},
+  "sessions": {
+    "s_5ff33036f20ed6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adc5af078bff1a9d6",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
