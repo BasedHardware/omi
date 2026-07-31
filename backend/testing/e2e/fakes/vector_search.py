@@ -183,15 +183,62 @@ class FakeVectorIndex:
                         return False
                     if op == "$lte" and (actual is None or actual > value):
                         return False
+                    if op == "$exists":
+                        present = key in metadata and metadata.get(key) is not None
+                        if bool(value) != present:
+                            return False
             elif actual != expected:
                 return False
         return True
 
 
+class _FakeVectorStoreOverIndex:
+    """Port-shaped facade over ``FakeVectorIndex`` (ADR-0033). vector_db.py migrated from the raw
+    Pinecone ``index`` to the neutral ``_vector_store()`` seam, so the fake is installed there; this
+    reuses FakeVectorIndex's storage/scoring/filter and translates the 6 port verbs to it."""
+
+    def __init__(self, index: "FakeVectorIndex"):
+        self._index = index
+
+    def upsert(self, namespace, records):
+        self._index.upsert(list(records), namespace=namespace)
+        return len(records)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._index.query(
+            vector,
+            top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._index.update(id, set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        self._index.delete(ids=list(ids), namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._index.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._index.list(prefix=prefix, namespace=namespace)
+
+
 def install_vector_search_fakes(monkeypatch, vector_db_module):
-    """Patch database.vector_db's Pinecone and embedding clients for one test."""
+    """Patch database.vector_db's vector-store and embedding seams for one test.
+
+    Points the neutral ``_vector_store()`` seam at a port-shaped fake and marks the store available
+    (``is_vector_available()`` reads env), so the vector_db guards pass regardless of PINECONE_* env.
+    Returns the underlying FakeVectorIndex (for count/_vectors introspection) + embeddings, unchanged."""
     embeddings = DeterministicEmbeddings()
     index = FakeVectorIndex(embeddings)
+    store = _FakeVectorStoreOverIndex(index)
     monkeypatch.setattr(vector_db_module, "embeddings", embeddings)
-    monkeypatch.setattr(vector_db_module, "index", index)
+    monkeypatch.setattr(vector_db_module, "_vector_store", lambda: store)
+    monkeypatch.setenv("PINECONE_API_KEY", "fake-e2e-key")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "fake-e2e-index")
     return index, embeddings

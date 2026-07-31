@@ -552,7 +552,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 
 
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
-    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion.vector_db, 'is_vector_available', lambda: False)
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
     monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))

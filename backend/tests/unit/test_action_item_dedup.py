@@ -28,6 +28,42 @@ from testing.import_isolation import load_module_fresh, stub_modules
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
+class _PortOverIndex:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
+
+    def __init__(self, index):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
 class _FakeFirestoreClient:
     def collection(self, *a, **kw):
         return MagicMock()
@@ -102,7 +138,11 @@ def _setup_mocks(
         fake_index.query = MagicMock(side_effect=query_raises)
     else:
         fake_index.query = MagicMock(return_value=query_response or {'matches': []})
-    monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
+    if index_none:
+        monkeypatch.setattr(vector_db, 'is_vector_available', lambda: False)
+    else:
+        monkeypatch.setattr(vector_db, '_vector_store', lambda: _PortOverIndex(fake_index))
+        monkeypatch.setattr(vector_db, 'is_vector_available', lambda: True)
 
     fake_embeddings = MagicMock()
     if embed_raises is not None:
