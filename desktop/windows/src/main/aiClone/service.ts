@@ -283,7 +283,7 @@ export class AiCloneService {
       return
     }
 
-    if (action === 'autoSend' && !requiresHumanReview(reply.text)) {
+    if (action === 'autoSend' && !requiresHumanReview(reply.text, message.text)) {
       const sent = await this.client!.sendMessage(chat.id, reply.text, message.id)
       if (sent.ok) {
         this.autoSends.push(Date.now())
