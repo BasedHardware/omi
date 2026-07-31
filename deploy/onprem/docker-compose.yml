@@ -115,7 +115,95 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # ---- Optional local inference (ADR-0035) — GPU services, opt-in via the `inference` profile.
+  # These are the in-repo GPU servers (STT / diarization / translation). LLM + embeddings are
+  # deliberately NOT here: they are an operator-provided OpenAI-compatible endpoint (Ollama/vLLM)
+  # pointed at via backend.env (OPENAI_BASE_URL / OMI_EMBEDDINGS_BASE_URL), typically a dedicated
+  # GPU host. To turn these on:
+  #   docker compose --profile inference up -d --build
+  # Requirements:
+  #   - NVIDIA Container Toolkit on the host (the `deploy.resources` GPU reservation below).
+  #   - Pre-provisioned models: the `omi` network is internal (no egress), so weights cannot be
+  #     downloaded at runtime. Populate the `inference-models` volume first — see SELFHOST_NOTES
+  #     "Local inference (WP5)". Point the backend at them in backend.env:
+  #       HOSTED_PARAKEET_API_URL=http://parakeet:8080
+  #       HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080
+  #       HOSTED_TRANSLATION_API_URL=http://nllb:8080   + TRANSLATION_SERVICE_MODELS=nllb
+  parakeet:
+    build:
+      context: ../../
+      # Base nvcr.io/nvidia/nemo:26.02 — run `docker login nvcr.io` (free NGC account) before building.
+      dockerfile: backend/parakeet/Dockerfile
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf
+    volumes:
+      - inference-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    networks: [omi]
+    restart: unless-stopped
+
+  diarizer:
+    build:
+      context: ../../
+      dockerfile: backend/diarizer/Dockerfile
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf
+    volumes:
+      - inference-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks: [omi]
+    restart: unless-stopped
+
+  nllb:
+    build:
+      context: ../../
+      # Base nvidia/cuda:12.4.1-runtime — public, builds directly.
+      dockerfile: backend/nllb_translation/Dockerfile
+    profiles: ["inference"]
+    environment:
+      # CTranslate2 model dir (pre-provisioned into the volume; not baked into the image).
+      NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
+    volumes:
+      - inference-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks: [omi]
+    restart: unless-stopped
+
 networks:
   omi:
     driver: bridge
     internal: true
+
+volumes:
+  # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
+  # out-of-band before first `--profile inference` run — the internal network has no egress.
+  inference-models:

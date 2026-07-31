@@ -1,4 +1,8 @@
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+# Default keeps the upstream private base (unchanged builds); on-prem overrides it with a
+# public image, e.g. --build-arg PYTHON_BASE_IMAGE=python:3.11-slim (see SELFHOST_NOTES).
+ARG PYTHON_BASE_IMAGE=gcr.io/based-hardware-dev/python:3.11-slim-forky
+
+FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -6,7 +10,7 @@ RUN python -m venv /opt/venv
 COPY backend/diarizer/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+FROM ${PYTHON_BASE_IMAGE}
 # Python 3.11 on Debian 14 (Forky)
 
 WORKDIR /app
