@@ -13,18 +13,26 @@ import io
 from datetime import datetime, timezone
 from typing import IO, Any, Dict, List, Optional, Tuple
 
+from utils.object_store.errors import ObjectNotFound
 from utils.object_store.ports import ObjectInfo
 
 
 class _Obj:
     __slots__ = ("data", "content_type", "cache_control", "public", "metadata", "updated_at")
 
-    def __init__(self, data: bytes, content_type: Optional[str], cache_control: Optional[str], public: bool):
+    def __init__(
+        self,
+        data: bytes,
+        content_type: Optional[str],
+        cache_control: Optional[str],
+        public: bool,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         self.data = data
         self.content_type = content_type
         self.cache_control = cache_control
         self.public = public
-        self.metadata: Dict[str, Any] = {}
+        self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.updated_at = datetime.now(timezone.utc)
 
 
@@ -60,10 +68,11 @@ class FakeObjectStore:
         *,
         content_type: Optional[str] = None,
         cache_control: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         public: bool = False,
     ) -> None:
         raw = bytes(data) if isinstance(data, (bytes, bytearray)) else data.read()
-        self._objs[(bucket, key)] = _Obj(raw, content_type, cache_control, public)
+        self._objs[(bucket, key)] = _Obj(raw, content_type, cache_control, public, metadata)
 
     def put_from_file(
         self,
@@ -86,7 +95,7 @@ class FakeObjectStore:
         try:
             return self._objs[(bucket, key)].data
         except KeyError:
-            raise FileNotFoundError(f"{bucket}/{key}")
+            raise ObjectNotFound(bucket, key)
 
     def download_to(self, bucket: str, key: str, dst_path: str) -> None:
         with open(dst_path, "wb") as fh:

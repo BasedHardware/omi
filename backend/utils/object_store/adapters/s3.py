@@ -15,7 +15,10 @@ import os
 import threading
 from typing import IO, Any, Dict, List, Optional
 
+from utils.object_store.errors import ObjectNotFound
 from utils.object_store.ports import ObjectInfo
+
+_NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
 
 _client_lock = threading.Lock()
 _client: Any = None
@@ -76,6 +79,7 @@ class S3ObjectStore:
         *,
         content_type: Optional[str] = None,
         cache_control: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         public: bool = False,
     ) -> None:
         kwargs: Dict[str, Any] = {"Bucket": bucket, "Key": key}
@@ -84,6 +88,8 @@ class S3ObjectStore:
             kwargs["ContentType"] = content_type
         if cache_control:
             kwargs["CacheControl"] = cache_control
+        if metadata is not None:
+            kwargs["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
         if public:
             kwargs["ACL"] = "public-read"
         _s3().put_object(**kwargs)
@@ -112,10 +118,24 @@ class S3ObjectStore:
 
     # --- reads ---
     def get_bytes(self, bucket: str, key: str) -> bytes:
-        return _s3().get_object(Bucket=bucket, Key=key)["Body"].read()
+        from botocore.exceptions import ClientError
+
+        try:
+            return _s3().get_object(Bucket=bucket, Key=key)["Body"].read()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in _NOT_FOUND_CODES:
+                raise ObjectNotFound(bucket, key)
+            raise
 
     def download_to(self, bucket: str, key: str, dst_path: str) -> None:
-        _s3().download_file(bucket, key, dst_path)
+        from botocore.exceptions import ClientError
+
+        try:
+            _s3().download_file(bucket, key, dst_path)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in _NOT_FOUND_CODES:
+                raise ObjectNotFound(bucket, key)
+            raise
 
     def exists(self, bucket: str, key: str) -> bool:
         from botocore.exceptions import ClientError

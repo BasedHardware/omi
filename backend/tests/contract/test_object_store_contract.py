@@ -19,6 +19,8 @@ import uuid
 
 import pytest
 
+from utils.object_store.errors import ObjectNotFound
+
 
 def _new_bucket_name() -> str:
     return f"omi-contract-{uuid.uuid4().hex[:12]}"
@@ -70,6 +72,18 @@ def test_exists(store_and_bucket):
     assert store.exists(bucket, "missing") is False
     store.put(bucket, "here", b"x")
     assert store.exists(bucket, "here") is True
+
+
+def test_get_bytes_missing_raises_object_not_found(store_and_bucket):
+    store, bucket = store_and_bucket
+    with pytest.raises(ObjectNotFound):
+        store.get_bytes(bucket, "does/not/exist")
+
+
+def test_put_with_metadata_roundtrips(store_and_bucket):
+    store, bucket = store_and_bucket
+    store.put(bucket, "meta/obj", b"x", metadata={"expires_at": "2099-01-01", "id": "abc"})
+    assert store.get_metadata(bucket, "meta/obj") == {"expires_at": "2099-01-01", "id": "abc"}
 
 
 def test_put_from_file_and_download_to(store_and_bucket, tmp_path):

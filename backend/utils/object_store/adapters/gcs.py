@@ -14,6 +14,7 @@ import os
 import threading
 from typing import IO, Any, Dict, List, Optional
 
+from utils.object_store.errors import ObjectNotFound
 from utils.object_store.ports import ObjectInfo
 
 _client_lock = threading.Lock()
@@ -63,11 +64,14 @@ class GCSObjectStore:
         *,
         content_type: Optional[str] = None,
         cache_control: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         public: bool = False,
     ) -> None:
         blob = self._blob(bucket, key)
         if cache_control is not None:
             blob.cache_control = cache_control
+        if metadata is not None:
+            blob.metadata = dict(metadata)
         if isinstance(data, (bytes, bytearray)):
             blob.upload_from_string(bytes(data), content_type=content_type)
         else:
@@ -97,10 +101,20 @@ class GCSObjectStore:
 
     # --- reads ---
     def get_bytes(self, bucket: str, key: str) -> bytes:
-        return self._blob(bucket, key).download_as_bytes()
+        from google.api_core.exceptions import NotFound
+
+        try:
+            return self._blob(bucket, key).download_as_bytes()
+        except NotFound:
+            raise ObjectNotFound(bucket, key)
 
     def download_to(self, bucket: str, key: str, dst_path: str) -> None:
-        self._blob(bucket, key).download_to_filename(dst_path)
+        from google.api_core.exceptions import NotFound
+
+        try:
+            self._blob(bucket, key).download_to_filename(dst_path)
+        except NotFound:
+            raise ObjectNotFound(bucket, key)
 
     def exists(self, bucket: str, key: str) -> bool:
         return bool(self._blob(bucket, key).exists())

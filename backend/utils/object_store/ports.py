@@ -41,8 +41,11 @@ class ObjectStore(Protocol):
         *,
         content_type: Optional[str] = None,
         cache_control: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         public: bool = False,
-    ) -> None: ...
+    ) -> None:
+        """``metadata`` is written atomically with the object (GCS blob.metadata / S3 Metadata=)."""
+        ...
 
     def put_from_file(
         self,
@@ -64,7 +67,7 @@ class ObjectStore(Protocol):
         """Streaming writer context manager (replaces ``blob.open('wb')``); S3 maps to multipart."""
         ...
 
-    # --- reads ---
+    # --- reads (get_bytes/download_to raise errors.ObjectNotFound on a missing key) ---
     def get_bytes(self, bucket: str, key: str) -> bytes: ...
 
     def download_to(self, bucket: str, key: str, dst_path: str) -> None: ...
