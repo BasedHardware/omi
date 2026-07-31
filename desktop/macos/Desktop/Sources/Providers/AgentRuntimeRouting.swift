@@ -393,7 +393,7 @@ enum LocalAgentProviderRouting {
     // task when Codex is the preferred and installed choice).
     // Exception: if the model's pick isn't installed and we DO have an
     // installed fallback, speak the fallback note so the user knows.
-    if let requestedProvider,
+    if taskKind != .general, let requestedProvider,
       !LocalAgentProviderDetector.isAvailable(
         requestedProvider,
         environment: environment,
@@ -423,7 +423,7 @@ enum LocalAgentProviderRouting {
       )
     }
 
-    if let primary = availableProviders.first {
+    if taskKind != .general, let primary = availableProviders.first {
       let resolvedTitle = normalizedTitle(title, provider: primary)
       return .spawn(
         AgentSpawnPlan(

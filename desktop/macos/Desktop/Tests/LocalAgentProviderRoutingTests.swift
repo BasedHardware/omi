@@ -97,6 +97,30 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     XCTAssertFalse(plan.usedFallback)
   }
 
+  func testUnnamedGeneralTaskStaysOnDefaultOrchestrator() {
+    let env = [
+      "OMI_CODEX_ADAPTER_COMMAND": "/tmp/codex",
+      "OMI_OPENCLAW_ADAPTER_COMMAND": "/tmp/openclaw",
+      "OMI_HERMES_ADAPTER_COMMAND": "/tmp/hermes",
+    ]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "summarize my meetings from this week",
+      requestedProvider: nil,
+      userRequestText: nil,
+      title: nil,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: "/tmp/omi-routing-test"
+    )
+
+    guard case .spawn(let plan) = resolution else {
+      return XCTFail("Expected spawn, got \(resolution)")
+    }
+    XCTAssertNil(plan.selectedProvider)
+    XCTAssertNil(plan.harnessOverride)
+    XCTAssertFalse(plan.usedFallback)
+  }
+
   func testSpawnContextAdvancesFallbackChain() {
     var context = AgentSpawnContext(
       taskKind: .coding,
