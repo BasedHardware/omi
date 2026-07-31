@@ -174,25 +174,33 @@ def build_vector_repair_outbox_production_dependencies(
     pinecone_index_name = _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
     _required_dependency_env(env, OPENAI_API_KEY_ENV)
 
-    pinecone_module = module_loader("pinecone")
+    vector_module = module_loader("utils.vector")
     firestore_client_module = module_loader("database._client")
     llm_clients_module = module_loader("utils.llm.clients")
 
-    pinecone_client = pinecone_module.Pinecone(api_key=pinecone_api_key)
-    pinecone_index = pinecone_client.Index(pinecone_index_name)
+    # Route the repair adapter's delete/upsert seams through the neutral vector-store port
+    # (ADR-0033) instead of a raw Pinecone client, so the worker honors VECTOR_STORE_BACKEND. The
+    # adapter calls delete_vectors(filter=, namespace=) and upsert_vectors(vectors=, namespace=).
+    vector_store = vector_module.get_vector_store()
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
+
+    def _delete_vectors(*, filter, namespace):
+        return vector_store.delete_by_filter(namespace, filter)
+
+    def _upsert_vectors(*, vectors, namespace):
+        return vector_store.upsert(namespace, vectors)
 
     return VectorRepairOutboxProductionDependencies(
         authoritative_item_loader=make_authoritative_item_loader(db_client=db_client),
         vector_deleter=make_pinecone_vector_deleter(
-            delete_vectors=pinecone_index.delete,
+            delete_vectors=_delete_vectors,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
         vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
-            delete_vectors=pinecone_index.delete,
-            upsert_vectors=pinecone_index.upsert,
+            delete_vectors=_delete_vectors,
+            upsert_vectors=_upsert_vectors,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
     )

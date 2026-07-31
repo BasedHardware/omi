@@ -1178,25 +1178,22 @@ class TestEntrypoint:
             def document(self, path):
                 return Document(path)
 
-        class Index:
-            def delete(self, **kwargs):
-                calls.append(("delete", kwargs))
+        class Store:
+            # Port-shaped seam: the worker routes the repair adapter's delete/upsert through the
+            # neutral vector-store port (ADR-0033). Record the same {filter/vectors, namespace} shape.
+            def delete_by_filter(self, namespace, filter):
+                calls.append(("delete", {"filter": filter, "namespace": namespace}))
                 return {"deleted": 1}
 
-            def upsert(self, **kwargs):
-                calls.append(("upsert", kwargs))
-                return {"upserted": 1}
+            def upsert(self, namespace, records):
+                calls.append(("upsert", {"vectors": records, "namespace": namespace}))
+                return len(records)
 
-        class PineconeClient:
-            def __init__(self, api_key):
-                calls.append(("pinecone", api_key))
-
-            def Index(self, name):
-                calls.append(("index", name))
-                return Index()
-
-        class PineconeModule:
-            Pinecone = PineconeClient
+        class VectorModule:
+            @staticmethod
+            def get_vector_store():
+                calls.append(("get_vector_store",))
+                return Store()
 
         class ClientModule:
             db = DB()
@@ -1211,8 +1208,8 @@ class TestEntrypoint:
 
         def module_loader(name):
             calls.append(("import", name))
-            if name == "pinecone":
-                return PineconeModule
+            if name == "utils.vector":
+                return VectorModule
             if name == "database._client":
                 return ClientModule
             if name == "utils.llm.clients":
@@ -1232,8 +1229,8 @@ class TestEntrypoint:
         deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
-        assert ("pinecone", "pc-key") in calls
-        assert ("index", "memory-index") in calls
+        assert ("get_vector_store",) in calls
+        assert ("import", "utils.vector") in calls
         assert ("get", "users/u1/memory_items/mem1") in calls
         assert (
             calls.count(
