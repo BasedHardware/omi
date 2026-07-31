@@ -258,7 +258,7 @@ def write_proposed_yaml(artifacts: list[RouteArtifact], path: Path) -> None:
     validates that `artifact_digest` matches the sha256 of the body on load,
     so this is required for the proposed YAML to be loadable as-is.
     """
-    if path.name == "route_artifacts.yaml":
+    if path.name == "route_artifacts.yaml" or path.resolve().name == "route_artifacts.yaml":
         raise ValueError(f"emitter must not edit route_artifacts.yaml directly (got {path})")
     payload = {"route_artifacts": []}
     for a in artifacts:

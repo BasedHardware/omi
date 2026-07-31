@@ -369,6 +369,20 @@ def test_write_proposed_yaml_refuses_route_artifacts_yaml(tmp_path):
         write_proposed_yaml(artifacts, bad)
 
 
+def test_write_proposed_yaml_refuses_symlink_to_route_artifacts_yaml(tmp_path):
+    benchmarks = load_benchmarks(FIXTURE)
+    artifacts, _ = emit_all(benchmarks, today=date(2026, 7, 1))
+    serving = tmp_path / "route_artifacts.yaml"
+    serving.write_text("unchanged")
+    proposed = tmp_path / "route_artifacts.proposed.yaml"
+    proposed.symlink_to(serving)
+
+    with pytest.raises(ValueError, match="must not edit route_artifacts.yaml"):
+        write_proposed_yaml(artifacts, proposed)
+
+    assert serving.read_text() == "unchanged"
+
+
 def test_write_proposed_yaml_artifact_digests_match_model_validation():
     """Every artifact's emitted digest must match what RouteArtifact would compute."""
     benchmarks = load_benchmarks(FIXTURE)
