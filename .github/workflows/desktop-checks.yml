@@ -38,6 +38,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Rust for desktop agent runtime
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache desktop agent runtime Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+
+      - name: Check desktop agent runtime Rust
+        run: |
+          cargo fmt --manifest-path desktop/Cargo.toml --all --check
+          cargo clippy --manifest-path desktop/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path desktop/Cargo.toml --locked --workspace
+
       - name: Setup Node.js for desktop agent runtime
         uses: actions/setup-node@v7
         with:

@@ -1066,10 +1066,13 @@ mod tests {
 
         must(store.prune_terminal_runtime_state_before(10));
 
-        assert!(store.pending_tool_claim("pending-claim").unwrap().is_some());
+        assert!(store
+            .pending_tool_claim("pending-claim")
+            .expect("pending claim lookup must succeed")
+            .is_some());
         assert!(store
             .completed_tool_claim("expired-claim")
-            .unwrap()
+            .expect("completed claim lookup must succeed")
             .is_none());
         let remaining_runs: i64 = store
             .connection

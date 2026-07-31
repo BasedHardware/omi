@@ -126,6 +126,9 @@ DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
 }
 
 DESKTOP_AGENT_RUNTIME_INPUTS = {
+    ".github/workflows/desktop-checks.yml",
+    "desktop/Cargo.lock",
+    "desktop/Cargo.toml",
     "desktop/macos/run.sh",
     "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
     "desktop/macos/scripts/prepare-agent-runtime.sh",
@@ -296,7 +299,12 @@ def _is_desktop_notification_input(path: str) -> bool:
 
 def _is_desktop_agent_runtime_input(path: str) -> bool:
     return path in DESKTOP_AGENT_RUNTIME_INPUTS or path.startswith(
-        ("desktop/macos/agent/", "desktop/macos/pi-mono-extension/")
+        (
+            "desktop/agent-runtime-rust/",
+            "desktop/macos/agent/",
+            "desktop/macos/pi-mono-extension/",
+            "desktop/shared-rust/",
+        )
     )
 
 
@@ -352,10 +360,11 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
-            if _is_desktop_agent_runtime_input(path):
-                selected.add("desktop-agent-runtime")
             if path.startswith("desktop/macos/e2e/") or path in DESKTOP_FLOW_LINT_INPUTS:
                 selected.add("desktop-flow-lint")
+
+        if _is_desktop_agent_runtime_input(path):
+            selected.add("desktop-agent-runtime")
 
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
@@ -377,6 +386,7 @@ def resolve_impact(
                 "app-compile-smoke",
                 "desktop-ci-only",
                 "desktop-flow-lint",
+                "desktop-agent-runtime",
                 "desktop-swift-tests",
             }
         )
