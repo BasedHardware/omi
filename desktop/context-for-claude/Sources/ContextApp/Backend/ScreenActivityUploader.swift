@@ -197,13 +197,31 @@ final class ScreenActivityUploader: ObservableObject {
                 lastError = message
                 ContextLog.error(
                     "Screen sync halted at ids \(first.id)–\(last.id): desktop trial expired", Self.category)
+                ContextTelemetry.recordFallback(
+                    area: .upload,
+                    from: "screen-activity sync",
+                    to: "halted",
+                    reason: "desktop-trial-expired",
+                    outcome: .degraded)
                 return
 
             case .signedOut:
+                ContextTelemetry.recordFallback(
+                    area: .upload,
+                    from: "screen-activity sync",
+                    to: "halted",
+                    reason: "firebase-session-lost",
+                    outcome: .degraded)
                 return
 
             case .failed(let message):
                 noteFailure("\(message) (\(rows.count) frames, ids \(first.id)–\(last.id))")
+                ContextTelemetry.recordFallback(
+                    area: .upload,
+                    from: "screen-activity sync",
+                    to: "retry-with-backoff",
+                    reason: "backend-or-network-error",
+                    outcome: .retried)
                 return
             }
 
