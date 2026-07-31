@@ -123,6 +123,37 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertTrue(coordinator.schedule(messageID: messageID, supersededByTerminalization: false) {})
   }
 
+  func testTerminalizationCancelsPendingStreamingCoalesce() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var writes = 0
+
+    XCTAssertTrue(
+      coordinator.scheduleStreaming(messageID: "assistant-turn-4", delay: .seconds(60)) {
+        writes += 1
+      })
+
+    let beganTerminalization = await coordinator.beginTerminalization(messageID: "assistant-turn-4")
+    XCTAssertTrue(beganTerminalization)
+    XCTAssertEqual(writes, 0)
+  }
+
+  func testLatestStreamingCoalesceReplacesOlderUpdate() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var writes: [String] = []
+
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      coordinator.scheduleStreaming(messageID: "assistant-turn-5", delay: .zero) {
+        writes.append("older")
+      }
+      coordinator.scheduleStreaming(messageID: "assistant-turn-5", delay: .zero) {
+        writes.append("newer")
+        continuation.resume()
+      }
+    }
+
+    XCTAssertEqual(writes, ["newer"])
+  }
+
   func testTerminalizationRetriesOneFailedIdempotentProjection() async {
     let coordinator = ChatJournalWriteCoordinator()
     var attempts = 0

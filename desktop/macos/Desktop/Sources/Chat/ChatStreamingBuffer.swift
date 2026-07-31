@@ -41,6 +41,11 @@ final class ChatStreamingBuffer {
     lastRevealTime = nil
   }
 
+  func discardAllPendingSegments() {
+    pendingSegments.removeAll()
+    cancelPendingFlush()
+  }
+
   /// Drop only the buffered deltas for a revoked turn. A newer turn may already
   /// share this buffer, so cancelling or flushing the whole queue would either
   /// lose its tokens or apply the stopped turn's late output.
@@ -89,27 +94,29 @@ final class ChatStreamingBuffer {
       return
     }
 
-    switch pendingSegments[0] {
-    case .text(let messageId, let text):
-      let step = SmoothStreamReveal.step(remaining: text.count, elapsedMs: elapsedMs)
-      let revealed = String(text.prefix(step))
-      let remaining = String(text.dropFirst(step))
-      pendingSegments[0] = .text(messageId: messageId, text: remaining)
-      if remaining.isEmpty {
+    while let segment = pendingSegments.first {
+      guard let index = messages.firstIndex(where: { $0.id == segment.messageId }) else {
         pendingSegments.removeFirst()
+        continue
       }
-      guard let index = messages.firstIndex(where: { $0.id == messageId }) else { break }
-      appendTextSegment(revealed, to: &messages[index], normalizeText: normalizeText)
-    case .thinking(let messageId, let text):
-      let step = SmoothStreamReveal.step(remaining: text.count, elapsedMs: elapsedMs)
-      let revealed = String(text.prefix(step))
-      let remaining = String(text.dropFirst(step))
-      pendingSegments[0] = .thinking(messageId: messageId, text: remaining)
-      if remaining.isEmpty {
+
+      switch segment {
+      case .text(let messageId, let text):
+        let step = SmoothStreamReveal.step(remaining: text.count, elapsedMs: elapsedMs)
+        let revealed = String(text.prefix(step))
+        let remaining = String(text.dropFirst(step))
+        pendingSegments[0] = .text(messageId: messageId, text: remaining)
+        if remaining.isEmpty {
+          pendingSegments.removeFirst()
+        }
+        appendTextSegment(revealed, to: &messages[index], normalizeText: normalizeText)
+      case .thinking(_, let text):
         pendingSegments.removeFirst()
+        appendThinkingSegment(text, to: &messages[index])
+        continue
       }
-      guard let index = messages.firstIndex(where: { $0.id == messageId }) else { break }
-      appendThinkingSegment(revealed, to: &messages[index])
+
+      break
     }
 
     if pendingSegments.isEmpty {

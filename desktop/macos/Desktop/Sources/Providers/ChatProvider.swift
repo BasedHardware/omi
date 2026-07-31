@@ -1680,10 +1680,10 @@ class ChatProvider: ObservableObject {
   private func preparePromptContextIfNeeded() async {
     await warmupPromptContext()
   }
-
   private func resetSessionStateForAuthChange() {
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
+    streamingBuffer.discardAllPendingSegments()
     journalOwnerByMessageID.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
@@ -3336,7 +3336,6 @@ class ChatProvider: ObservableObject {
     messages = []
     resetMessagesPagination()
   }
-
   private func scheduleJournalUpdate(
     messageId: String,
     status: KernelJournalTurnStatus? = nil,
@@ -3351,7 +3350,8 @@ class ChatProvider: ObservableObject {
     // mutation and must remain journalable after the turn terminalizes.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescingDelay: status == .streaming ? .milliseconds(150) : nil
     ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(

@@ -130,15 +130,21 @@ struct ChatTerminalTargetRegistry<T> {
 @MainActor
 final class ChatJournalWriteCoordinator {
   private var updateTasks: [String: Task<Void, Never>] = [:]
+  private var streamingTasks: [String: Task<Void, Never>] = [:]
+  private var streamingTokens: [String: UUID] = [:]
   private var terminalizingMessageIDs: Set<String> = []
 
   @discardableResult
   func schedule(
     messageID: String,
     supersededByTerminalization: Bool = true,
+    coalescingDelay: Duration? = nil,
     operation: @escaping @MainActor @Sendable () async -> Void
   ) -> Bool {
     if supersededByTerminalization, terminalizingMessageIDs.contains(messageID) { return false }
+    if let coalescingDelay {
+      return scheduleStreaming(messageID: messageID, delay: coalescingDelay, operation: operation)
+    }
     let previous = updateTasks[messageID]
     let task = Task { @MainActor in
       _ = await previous?.value
@@ -149,8 +155,32 @@ final class ChatJournalWriteCoordinator {
     return true
   }
 
+  @discardableResult
+  func scheduleStreaming(
+    messageID: String,
+    delay: Duration,
+    operation: @escaping @MainActor @Sendable () async -> Void
+  ) -> Bool {
+    guard !terminalizingMessageIDs.contains(messageID) else { return false }
+    streamingTasks[messageID]?.cancel()
+    let token = UUID()
+    streamingTokens[messageID] = token
+    streamingTasks[messageID] = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: delay)
+      guard !Task.isCancelled, let self, self.streamingTokens[messageID] == token else { return }
+      self.streamingTasks.removeValue(forKey: messageID)
+      self.streamingTokens.removeValue(forKey: messageID)
+      _ = self.schedule(messageID: messageID, supersededByTerminalization: false, operation: operation)
+    }
+    return true
+  }
+
   func beginTerminalization(messageID: String) async -> Bool {
     guard terminalizingMessageIDs.insert(messageID).inserted else { return false }
+    let streamingTask = streamingTasks.removeValue(forKey: messageID)
+    streamingTokens.removeValue(forKey: messageID)
+    streamingTask?.cancel()
+    _ = await streamingTask?.value
     _ = await updateTasks.removeValue(forKey: messageID)?.value
     return true
   }
@@ -164,6 +194,9 @@ final class ChatJournalWriteCoordinator {
   }
 
   func cancelAll() {
+    for task in streamingTasks.values { task.cancel() }
+    streamingTasks.removeAll()
+    streamingTokens.removeAll()
     for task in updateTasks.values { task.cancel() }
     updateTasks.removeAll()
     terminalizingMessageIDs.removeAll()
