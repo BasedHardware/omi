@@ -1,0 +1,45 @@
+version: 2
+name: device-tool-surface
+tier: 2
+description: On-device tool surface probe — absent Messages store classifies deterministically, an empty send is rejected before Messages.app is contacted, and osascript receives untrusted values as argv
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Services/MessagesReaderService.swift
+  - desktop/macos/Desktop/Sources/Services/MessagesSenderService.swift
+  - desktop/macos/Desktop/Sources/Services/AppleScriptRunner.swift
+  - desktop/macos/Desktop/Sources/Services/ContactsReaderService.swift
+  - desktop/macos/Desktop/Sources/Services/DeviceToolsProbe.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+DeviceTools.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+DeviceToolPermissions.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Device tool surface probe
+    # A bogus messagesDbPath fails openReadOnlyStore's existence check on every
+    # machine, so store_not_found is hermetic whether or not this Mac has
+    # Messages signed in or Full Disk Access granted.
+    bridge.action:
+      name: device_tools_probe
+      params:
+        messagesDbPath: "/nonexistent/omi-e2e-messages-fixture.db"
+    expect:
+      ok: true
+      result.detail.messagesRead: "false"
+      result.detail.messagesClassification: "store_not_found"
+      # store_not_found is not a permission problem, so no permission is named.
+      result.detail.messagesRequiredPermission: ""
+      # An empty body must be rejected by validation, never forwarded to
+      # Messages.app — this is what keeps the probe non-sending.
+      result.detail.sendValidation: "empty_body"
+      # Untrusted text reaches osascript as argv: the marker comes back byte
+      # for byte instead of being compiled as AppleScript.
+      result.detail.appleScriptOk: "true"
+      result.detail.appleScriptEchoedArgv: "true"
+
+  - id: S2
+    name: Logs clean
+    log.expect:
+      forbid:
+        - "Fatal error"
