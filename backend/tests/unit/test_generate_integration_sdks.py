@@ -29,6 +29,7 @@ def test_generated_clients_supply_the_configured_app_id_to_v1_notifications():
     assert 'payload["aid"] = c.AppID' in files['go/omiintegration/client_gen.go']
     assert 'json_body = {**json_body, "aid": self.app_id}' in files['python/src/omi_integration/client.py']
     assert 'object.insert("aid".to_string(), Value::String(self.app_id.clone()));' in files['rust/src/client_gen.rs']
+    assert 'notification_body_with_app_id(json_body, app_id_)' in files['cpp/src/client.cpp']
 
 
 def test_generated_v1_notification_bodies_preserve_openapi_shape():
@@ -37,7 +38,7 @@ def test_generated_v1_notification_bodies_preserve_openapi_shape():
     assert 'json.Unmarshal(encoded, &payload)' in files['go/omiintegration/client_gen.go']
     assert 'body.(map[string]any)' not in files['go/omiintegration/client_gen.go']
     assert 'send_notification_v1(const std::string& json_body)' in files['cpp/include/omi/integration/client.hpp']
-    assert 'return request("POST", path, query, &json_body);' in files['cpp/src/client.cpp']
+    assert 'notification_body_with_app_id' in files['cpp/include/omi/integration/client.hpp']
 
 
 def test_check_rejects_stale_dart_generated_client(monkeypatch, tmp_path):

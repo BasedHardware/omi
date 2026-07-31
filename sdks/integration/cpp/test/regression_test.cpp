@@ -35,6 +35,15 @@ int main() {
   }
   assert(statuses_count == 2);
 
+  const auto notification = omi::integration::detail::notification_body_with_app_id(
+      R"({"message":"hello","metadata":{"source":"sdk"},"tags":["one","two"]})", "app-123");
+  assert(notification ==
+         R"({"message":"hello","metadata":{"source":"sdk"},"tags":["one","two"],"aid":"app-123"})");
+
+  const auto escaped_notification =
+      omi::integration::detail::notification_body_with_app_id("{}", "app\"\\id\n");
+  assert(escaped_notification == R"({"aid":"app\"\\id\n"})");
+
   std::cout << "PASS: list-valued query params" << std::endl;
   return 0;
 }

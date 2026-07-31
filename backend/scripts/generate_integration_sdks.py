@@ -1479,6 +1479,10 @@ class ApiError : public std::runtime_error {
   std::string body_;
 };
 
+namespace detail {
+std::string notification_body_with_app_id(const std::string& json_body, const std::string& app_id);
+}
+
 class Client {
  public:
   Client(std::string api_key, std::string app_id, std::string base_url = "https://api.omi.me");
@@ -1560,7 +1564,47 @@ void ensure_curl_initialized() {
   if (result != CURLE_OK) throw std::runtime_error("curl_global_init failed");
 }
 
+std::string json_string(const std::string& value) {
+  static constexpr char hex[] = "0123456789abcdef";
+  std::string encoded;
+  for (unsigned char character : value) {
+    switch (character) {
+      case '"': encoded += "\\\""; break;
+      case '\\': encoded += "\\\\"; break;
+      case '\b': encoded += "\\b"; break;
+      case '\f': encoded += "\\f"; break;
+      case '\n': encoded += "\\n"; break;
+      case '\r': encoded += "\\r"; break;
+      case '\t': encoded += "\\t"; break;
+      default:
+        if (character < 0x20) {
+          encoded += "\\u00";
+          encoded += hex[character >> 4];
+          encoded += hex[character & 0x0f];
+        } else {
+          encoded += static_cast<char>(character);
+        }
+    }
+  }
+  return encoded;
+}
+
 }  // namespace
+
+namespace detail {
+
+std::string notification_body_with_app_id(const std::string& json_body, const std::string& app_id) {
+  const auto first = json_body.find_first_not_of(" \t\n\r");
+  const auto last = json_body.find_last_not_of(" \t\n\r");
+  if (first == std::string::npos || json_body[first] != '{' || json_body[last] != '}') {
+    throw std::invalid_argument("notification json_body must be an object");
+  }
+  const bool has_members = json_body.find_first_not_of(" \t\n\r", first + 1) < last;
+  return json_body.substr(0, last) + (has_members ? ",\"aid\":\"" : "\"aid\":\"") +
+         json_string(app_id) + "\"" + json_body.substr(last);
+}
+
+}  // namespace detail
 
 Client::Client(std::string api_key, std::string app_id, std::string base_url)
     : api_key_(std::move(api_key)), app_id_(std::move(app_id)), base_url_(std::move(base_url)) {
@@ -1675,7 +1719,11 @@ JsonValue Client::request(const std::string& method, const std::string& path,
                 src.append(f'  if ({n}.has_value()) for (const auto& item : *{n}) query.emplace("{n}", item);')
             else:
                 src.append(f'  if ({n}.has_value()) query.emplace("{n}", *{n});')
-        body_arg = '&json_body' if op['body_type'] else 'nullptr'
+        if op['path'] == '/v1/integrations/notification':
+            src.append('  std::string body = detail::notification_body_with_app_id(json_body, app_id_);')
+            body_arg = '&body'
+        else:
+            body_arg = '&json_body' if op['body_type'] else 'nullptr'
         src.append(f'  return request("{op["method"]}", path, query, {body_arg});')
         src.append('}')
         src.append('')
