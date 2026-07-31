@@ -116,6 +116,7 @@ final class SBOnboardingModel: ObservableObject {
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
+  var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   /// Each shortcut stage keeps its own choice so stepping back does not make a
   /// user re-select a key they already confirmed.
   var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
@@ -285,9 +286,9 @@ final class SBOnboardingModel: ObservableObject {
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
-      return "How do you want to open me? Just press any key, or one of these to set it."
+      return "How do you want to open me? Press any key or choose one of these."
     case .shortcutTalk:
-      return "And to talk to me hands-free? Press one of these to set it."
+      return "And to talk to me hands-free? Press any key or choose one of these."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:

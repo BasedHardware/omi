@@ -6,6 +6,7 @@ struct ShortcutsSettingsSection: View {
   @Binding var highlightedSettingId: String?
   @State private var recordingTarget: ShortcutTarget?
   @State private var captureError: String?
+  @State private var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   @State private var localShortcutCaptureMonitor: Any?
   @State private var pttInputDevices: [AudioCaptureService.InputDevice] = []
 
@@ -448,6 +449,7 @@ struct ShortcutsSettingsSection: View {
     stopShortcutCapture()
     recordingTarget = target
     captureError = nil
+    pendingModifierOnlyShortcut = nil
 
     localShortcutCaptureMonitor = NSEvent.addLocalMonitorForEvents(matching: [
       .flagsChanged, .keyDown,
@@ -463,6 +465,7 @@ struct ShortcutsSettingsSection: View {
     }
     recordingTarget = nil
     captureError = nil
+    pendingModifierOnlyShortcut = nil
   }
 
   private func handleShortcutCapture(_ event: NSEvent) -> Bool {
@@ -482,12 +485,28 @@ struct ShortcutsSettingsSection: View {
       }
       settings.updateAskOmiRegistration(enabled: true, shortcut: shortcut)
     case .pushToTalk:
+      if event.type == .flagsChanged {
+        let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+        if activeModifiers.isEmpty {
+          guard let shortcut = pendingModifierOnlyShortcut else { return true }
+          settings.pttEnabled = true
+          settings.pttShortcut = shortcut
+          stopShortcutCapture()
+          return true
+        }
+        pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+          event,
+          allowModifierOnly: true
+        )
+        return true
+      }
       guard
         let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
           event, allowModifierOnly: true)
       else {
         return false
       }
+      pendingModifierOnlyShortcut = nil
       settings.pttEnabled = true
       settings.pttShortcut = shortcut
     }

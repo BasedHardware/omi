@@ -426,6 +426,7 @@ extension SBOnboardingModel {
     shortcutPicked = rememberedSelection != nil
     shortcutPressed = false
     shortcutRecording = false
+    pendingModifierOnlyShortcut = nil
     shortcutTokens = rememberedSelection?.displayTokens ?? []
     chosenShortcut = rememberedSelection
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
@@ -517,6 +518,7 @@ extension SBOnboardingModel {
     shortcutPicked = true
     shortcutPressed = false
     shortcutRecording = false
+    pendingModifierOnlyShortcut = nil
     if isTalk {
       talkShortcutSelection = shortcut
       ShortcutSettings.shared.pttShortcut = shortcut
@@ -535,10 +537,24 @@ extension SBOnboardingModel {
     shortcutPicked = false
     shortcutPressed = false
     shortcutRecording = true
+    pendingModifierOnlyShortcut = nil
   }
 
   func recordShortcut(from event: NSEvent) -> Bool {
     let isTalk = step == .shortcutTalk
+    if isTalk, event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        pickShortcut(shortcut, isTalk: true)
+        return true
+      }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
     guard
       let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
         event,
@@ -547,6 +563,7 @@ extension SBOnboardingModel {
     else {
       return event.type == .flagsChanged
     }
+    pendingModifierOnlyShortcut = nil
     pickShortcut(shortcut, isTalk: isTalk)
     return true
   }
