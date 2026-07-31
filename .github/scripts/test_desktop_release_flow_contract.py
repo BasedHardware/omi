@@ -205,6 +205,23 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn('git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
         self.assertNotIn("ref: ${{ inputs.release_tag }}", fragments)
 
+    def test_release_process_guard_matches_trusted_auto_promotion(self) -> None:
+        tree = ast.parse(self.release_guard)
+        guard = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "check_desktop_qualification_runner"
+        )
+        fragments = {
+            node.value for node in ast.walk(guard) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
+        obsolete_dispatch_gate = "github.event.workflow_run.event == 'workflow_dispatch'"
+        self.assertIn(trusted_repository, self.promotion)
+        self.assertNotIn(obsolete_dispatch_gate, self.promotion)
+        self.assertIn(trusted_repository, fragments)
+        self.assertNotIn(obsolete_dispatch_gate, fragments)
+
     def test_run_staging_evidence_and_cleanup_are_isolated_and_rerun_safe(self) -> None:
         for fragment in (
             "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}",
