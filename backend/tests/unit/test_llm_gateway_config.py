@@ -7,7 +7,7 @@ import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
 from llm_gateway.gateway.lane_catalog import ProviderSupportStatus, load_catalog
-from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
+from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode
 from utils.llm.model_config import get_all_configured_features, get_model, get_provider
 
 LANE_ID = 'omi:auto:chat-structured'
@@ -34,7 +34,7 @@ def test_loads_default_gateway_config():
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
 
 
-def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
+def test_gateway_config_excludes_uncatalogued_model_config_lanes():
     config = load_gateway_config(prod_mode=True)
 
     assert get_model('conv_discard') == 'gpt-5-nano'
@@ -42,26 +42,18 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert get_model('fair_use') == 'gpt-5.6-luna'
     assert get_model('chat_agent') == 'claude-sonnet-4-6'
 
-    assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
-    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.6-luna'
-    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'claude-sonnet-5'
-    assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {}
-    chat_agent_lane = config.lanes['omi:auto:chat-agent']
-    assert chat_agent_lane.surface == Surface.ANTHROPIC_MESSAGES
-    assert chat_agent_lane.capabilities.streaming is True
-    assert chat_agent_lane.capabilities.tools is True
+    assert 'omi:auto:conv-discard' not in config.lanes
+    assert 'omi:auto:memories' not in config.lanes
+    assert 'omi:auto:fair-use' not in config.lanes
+    assert 'omi:auto:chat-agent' not in config.lanes
 
 
-def test_translation_uses_the_gateway_translation_capability():
+def test_gateway_config_excludes_uncatalogued_translation_lane():
     config = load_gateway_config(prod_mode=True)
 
     assert get_model('translation') == 'gemini-2.5-flash-lite'
     assert get_provider('translation') == 'gemini'
-    lane = config.lanes['omi:auto:translation']
-    assert lane.capabilities.translation is True
-    assert lane.capabilities.structured_output.value == 'json_schema'
+    assert 'omi:auto:translation' not in config.lanes
 
 
 def test_translation_capability_requires_json_schema_output():
