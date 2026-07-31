@@ -325,6 +325,23 @@ impl JournalStore {
         Ok(updated as u64)
     }
 
+    pub fn revoke_tool_claims_for_session(
+        &mut self,
+        owner_id: &str,
+        session_id: &str,
+    ) -> Result<u64, String> {
+        let updated = self
+            .connection
+            .execute(
+                "UPDATE rx4_tool_claims
+                 SET status = 'revoked', updated_at_ms = ?
+                 WHERE owner_id = ? AND session_id = ? AND status = 'pending'",
+                params![now_ms(), owner_id, session_id],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(updated as u64)
+    }
+
     pub fn reconcile_pending_tool_claims(&mut self, owner_id: Option<&str>) -> Result<u64, String> {
         let updated = match owner_id {
             Some(owner_id) => self
@@ -1325,5 +1342,29 @@ mod tests {
                 "hash",
             )
             .is_err());
+    }
+
+    #[test]
+    fn revokes_pending_claims_for_a_session_after_its_run_completes() {
+        let mut store = must(JournalStore::in_memory());
+        let run = must(store.admit_run("owner", "session", "conversation", 1));
+        must(store.authorize_tool_claim(
+            "claim",
+            "owner",
+            "session",
+            &run.run_id,
+            &run.attempt_id,
+            1,
+            "boot",
+            1,
+            "search",
+            "hash",
+        ));
+
+        assert_eq!(
+            must(store.revoke_tool_claims_for_session("owner", "session")),
+            1
+        );
+        assert!(must(store.pending_tool_claim("claim")).is_none());
     }
 }

@@ -141,6 +141,7 @@ impl Runtime {
             "invalidate_session" => self.invalidate_session(input.fields),
             "journal_record_turn" => self.journal_record_turn(input.fields),
             "journal_record_exchange" => self.journal_record_exchange(input.fields),
+            "journal_import_remote_turn" => self.journal_import_remote_turn(input.fields),
             "journal_update_turn" => self.journal_update_turn(input.fields),
             "journal_terminalize_turn" => self.journal_terminalize_turn(input.fields),
             "journal_list_turns" => self.journal_list_turns(input.fields),
@@ -575,25 +576,16 @@ impl Runtime {
                 return;
             }
         };
-        let run_ids = self
-            .running
-            .values()
-            .filter(|running| running.session_id == session_id && running.owner_id == owner_id)
-            .map(|running| running.run_id.clone())
-            .collect::<Vec<_>>();
-        let mut revoked_tool_claims = 0_u64;
-        for run_id in &run_ids {
-            match self
-                .tool_relay
-                .revoke_owner_run(&mut self.journal, &owner_id, Some(run_id))
-            {
-                Ok(revoked) => revoked_tool_claims += revoked,
-                Err(error) => {
-                    self.emit_error(None, None, "runtime_state", &error);
-                    return;
-                }
+        let revoked_tool_claims = match self
+            .journal
+            .revoke_tool_claims_for_session(&owner_id, &session_id)
+        {
+            Ok(revoked) => revoked,
+            Err(error) => {
+                self.emit_error(None, None, "runtime_state", &error);
+                return;
             }
-        }
+        };
         // Cancel every active run bound to this session only after revoking its claims.
         let mut cancelled = 0_u64;
         self.running.retain(|_request_id, running| {
@@ -691,6 +683,80 @@ impl Runtime {
                 "invalid_request",
                 "journal exchange is invalid",
             ),
+        }
+    }
+
+    fn journal_import_remote_turn(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal import requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal import requires a surface reference");
+            return;
+        };
+        let Some(turn) = fields.get("turn").and_then(Value::as_object) else {
+            self.invalid_request(&fields, "journal import requires turn");
+            return;
+        };
+        let Some(remote_id) = string_field(turn, "remoteId") else {
+            self.invalid_request(&fields, "remote journal turn requires remoteId");
+            return;
+        };
+        let canonical_turn_id =
+            string_field(turn, "canonicalTurnId").unwrap_or_else(|| remote_id.clone());
+        let Some(role) = string_field(turn, "role") else {
+            self.invalid_request(&fields, "remote journal turn requires role");
+            return;
+        };
+        let Some(content) = string_field(turn, "content") else {
+            self.invalid_request(&fields, "remote journal turn requires content");
+            return;
+        };
+        let Some(content_blocks) = turn.get("contentBlocks").filter(|value| value.is_array())
+        else {
+            self.invalid_request(&fields, "remote journal turn requires contentBlocks");
+            return;
+        };
+        let Some(resources) = turn.get("resources").filter(|value| value.is_array()) else {
+            self.invalid_request(&fields, "remote journal turn requires resources");
+            return;
+        };
+        let Some(metadata_json) = string_field(turn, "metadataJson") else {
+            self.invalid_request(&fields, "remote journal turn requires metadataJson");
+            return;
+        };
+        let Some(created_at_ms) = turn.get("createdAtMs").and_then(Value::as_u64) else {
+            self.invalid_request(&fields, "remote journal turn requires createdAtMs");
+            return;
+        };
+        let mut imported = Map::new();
+        imported.insert("turnId".into(), Value::String(canonical_turn_id));
+        imported.insert(
+            "producerId".into(),
+            Value::String(format!("remote:{remote_id}")),
+        );
+        imported.insert("role".into(), Value::String(role));
+        imported.insert("content".into(), Value::String(content));
+        imported.insert("origin".into(), Value::String("legacy_upgrade".into()));
+        imported.insert("status".into(), Value::String("completed".into()));
+        imported.insert("contentBlocks".into(), content_blocks.clone());
+        imported.insert("resources".into(), resources.clone());
+        imported.insert("metadataJson".into(), Value::String(metadata_json));
+        imported.insert("createdAtMs".into(), Value::Number(created_at_ms.into()));
+        match self.journal.record(&surface, &imported) {
+            Ok(page) => self.emit_journal_result(
+                "import_remote",
+                &request_id,
+                &client_id,
+                &surface,
+                page,
+                true,
+            ),
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
         }
     }
 
@@ -836,8 +902,18 @@ impl Runtime {
             );
             return;
         }
-        let input =
-            serde_json::from_str::<Map<String, Value>>(&request.call.arguments).unwrap_or_default();
+        let input = match serde_json::from_str::<Map<String, Value>>(&request.call.arguments) {
+            Ok(input) => input,
+            Err(_) => {
+                self.emit_error(
+                    Some(request.request_id),
+                    Some(request.client_id),
+                    "invalid_request",
+                    "authorized tool arguments must be a JSON object",
+                );
+                return;
+            }
+        };
         let identity = Identity {
             invocation_id: request.call.id.clone(),
             owner_id: running.owner_id,
@@ -1228,6 +1304,10 @@ impl Runtime {
             );
             return;
         }
+        if let Err(error) = self.journal.prune_expired_runtime_state() {
+            self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
+            return;
+        }
         let Some(session) = self.sessions.get(&session_id) else {
             self.emit_error(
                 Some(request_id),
@@ -1551,6 +1631,7 @@ fn is_owner_scoped_message(kind: &str) -> bool {
             | "interrupt"
             | "journal_record_turn"
             | "journal_record_exchange"
+            | "journal_import_remote_turn"
             | "journal_update_turn"
             | "journal_terminalize_turn"
             | "journal_list_turns"
@@ -2492,6 +2573,24 @@ mod tests {
             .unwrap_or_else(|| panic!("clear response missing"));
         assert_eq!(cleared.fields["clearedCount"], 1);
         assert_eq!(cleared.fields["conversationGeneration"], 2);
+    }
+
+    #[tokio::test]
+    async fn journal_import_remote_turn_returns_the_imported_projection() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+
+        runtime.handle(parse_line(r#"{"type":"journal_import_remote_turn","requestId":"import","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{"remoteId":"remote-1","canonicalTurnId":"turn-1","role":"assistant","content":"hello","contentBlocks":[],"resources":[],"metadataJson":"{}","createdAtMs":1}}"#).expect("import fixture must parse"));
+
+        let imported = receiver.recv().await.expect("import response must emit");
+        assert_eq!(imported.kind, "journal_operation_result");
+        assert_eq!(imported.fields["operation"], "import_remote");
+        assert_eq!(imported.fields["turn"]["turnId"], "turn-1");
     }
 
     #[tokio::test]
