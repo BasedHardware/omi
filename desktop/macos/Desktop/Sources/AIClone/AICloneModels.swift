@@ -194,9 +194,17 @@ struct AICloneReplyDecision: Codable, Equatable {
   /// The action the trust ladder takes for this decision under a chat mode.
   func plannedOutcome(
     mode: AICloneChatMode,
-    autoConfidenceThreshold: Double
+    autoConfidenceThreshold: Double,
+    inboundText: String = ""
   ) -> AICloneActionOutcome {
     if suspectedInjection { return .declinedInjection }
+    if Self.requiresHumanReview(inboundText: inboundText, replyText: reply) {
+      switch mode {
+      case .off: return .stayedSilent
+      case .draft, .auto: return .drafted
+      case .ask: return .askedApproval
+      }
+    }
     guard shouldReply, let reply, !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return .stayedSilent }
     switch mode {
@@ -211,5 +219,32 @@ struct AICloneReplyDecision: Codable, Equatable {
       // still sees the proposal in Beeper without the clone speaking for them.
       return confidence >= autoConfidenceThreshold ? .sentAutomatically : .drafted
     }
+  }
+
+  private static let sensitiveContent = [
+    "venmo", "paypal", "zelle", "wire transfer", "bank account", "routing number", "credit card",
+    "debit card", "invoice", "refund", "pay me", "send money", "gift card", "crypto", "bitcoin",
+    "wallet address", "password", "passcode", "one time code", "verification code", "otp", "2fa",
+    "social security", "ssn", "lawyer", "attorney", "lawsuit", "contract", "sign here", "nda",
+    "diagnosis", "prescription", "hospital", "emergency", "suicide", "self harm", "break up",
+    "get fired", "laid off", "divorce",
+  ]
+
+  private static let injectionContent = [
+    "ignore previous", "ignore all previous", "ignore the above", "disregard previous", "disregard the above",
+    "forget previous", "forget everything", "new instructions", "system prompt", "you are now", "pretend to be",
+    "reveal your prompt", "reveal your instructions", "print your instructions", "repeat the text above",
+    "developer mode", "jailbreak", "do anything now", "override your", "your real instructions", "as an ai",
+  ]
+
+  private static func requiresHumanReview(inboundText: String, replyText: String?) -> Bool {
+    let inbound = normalizedSafetyText(inboundText)
+    let reply = normalizedSafetyText(replyText ?? "")
+    return sensitiveContent.contains { inbound.contains($0) || reply.contains($0) }
+      || injectionContent.contains { inbound.contains($0) }
+  }
+
+  private static func normalizedSafetyText(_ value: String) -> String {
+    value.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: " ")
   }
 }

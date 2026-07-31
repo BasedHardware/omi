@@ -90,10 +90,11 @@ struct AICloneReplyEngine {
   // MARK: Prompts
 
   static func systemPrompt(context: AICloneReplyContext) -> String {
-    let persona = context.personaPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-    let facts = context.memoryFacts.prefix(40).map { "- \($0)" }.joined(separator: "\n")
+    let personaName = promptData(context.personaName, limit: 120)
+    let persona = promptData(context.personaPrompt.trimmingCharacters(in: .whitespacesAndNewlines))
+    let facts = context.memoryFacts.prefix(40).map { "- \(promptData($0, limit: 600))" }.joined(separator: "\n")
     return """
-      You are the messaging clone of \(context.personaName). You draft chat replies exactly as \
+      You are the messaging clone of \(personaName). You draft chat replies exactly as \
       they would write them — their tone, their typical message length, their language. Chat \
       replies are usually short and informal; never sign messages or mention being an AI unless \
       the persona notes say otherwise.
@@ -101,7 +102,7 @@ struct AICloneReplyEngine {
       PERSONA (condensed from their real memories and conversations):
       \(persona.isEmpty ? "(no persona prompt configured)" : persona)
 
-      KNOWN FACTS ABOUT \(context.personaName.uppercased()) (from their memory bank):
+      KNOWN FACTS ABOUT \(personaName.uppercased()) (from their memory bank):
       \(facts.isEmpty ? "(none loaded)" : facts)
 
       HARD RULES:
@@ -115,9 +116,9 @@ struct AICloneReplyEngine {
       working on?" with no notes, something like "Been keeping busy with a few things! How about \
       you?"). A real person replies casually all the time without sharing specifics.
       3. Set "should_reply": false only when a reply would need a specific fact you do not have \
-      and cannot safely deflect, or when the message truly needs the real \(context.personaName) \
+      and cannot safely deflect, or when the message truly needs the real \(personaName) \
       (money, commitments, strong emotion, medical, legal, or a decision only they can make).
-      4. Never invent concrete facts about \(context.personaName)'s life (specific projects, \
+      4. Never invent concrete facts about \(personaName)'s life (specific projects, \
       names, dates, places, numbers). Ground any specifics in the persona and facts above; if \
       they don't cover it, keep the reply general rather than guessing.
       5. Respond ONLY with a JSON object, no prose around it:
@@ -126,19 +127,26 @@ struct AICloneReplyEngine {
   }
 
   static func userPrompt(context: AICloneReplyContext) -> String {
-    let thread = context.threadLines.suffix(24).joined(separator: "\n")
+    let personaName = promptData(context.personaName, limit: 120)
+    let thread = context.threadLines.suffix(24).map { promptData($0, limit: 1_200) }.joined(separator: "\n")
     let kind = context.isGroupChat ? "group chat" : "direct chat"
     return """
-      \(kind.capitalized) "\(context.chatTitle)" on \(context.network).
+      \(kind.capitalized) "\(promptData(context.chatTitle, limit: 240))" on \(promptData(context.network, limit: 120)).
 
       Recent thread (oldest first):
       \(thread.isEmpty ? "(no earlier messages)" : thread)
 
-      New message from \(context.inboundSenderName):
-      \(context.inboundText)
+      New message from \(promptData(context.inboundSenderName, limit: 120)):
+      \(promptData(context.inboundText))
 
-      Draft \(context.personaName)'s reply (or decline) as the JSON verdict.
+      Draft \(personaName)'s reply (or decline) as the JSON verdict.
       """
+  }
+
+  static func promptData(_ value: String, limit: Int = 2_000) -> String {
+    String(value.prefix(limit))
+      .replacingOccurrences(of: "<", with: "‹")
+      .replacingOccurrences(of: ">", with: "›")
   }
 
   // MARK: Thread rendering

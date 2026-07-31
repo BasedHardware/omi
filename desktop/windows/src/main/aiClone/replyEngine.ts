@@ -21,6 +21,12 @@ export type ReplyResult =
   | { ok: true; text: string }
   | { ok: false; error: 'unauthorized' | 'http_error' | 'network' | 'empty'; detail?: string }
 
+const MAX_PROMPT_FIELD_LENGTH = 2_000
+
+export function promptData(value: string, maxLength = MAX_PROMPT_FIELD_LENGTH): string {
+  return value.slice(0, maxLength).replace(/</g, '‹').replace(/>/g, '›')
+}
+
 /** Decode the `done: <base64 json>` terminator's text field (service notices
  *  like plan limits arrive ONLY there, with no streamed chunks). */
 export function decodeDoneNotice(raw: string): string | null {
@@ -35,13 +41,13 @@ export function decodeDoneNotice(raw: string): string | null {
 }
 
 export function buildPersonaPrompt(ctx: ReplyContext): string {
-  const name = ctx.userDisplayName || 'the user'
+  const name = promptData(ctx.userDisplayName || 'the user', 120)
   const lines = ctx.transcript
-    .map((l) => `${l.fromMe ? name : l.sender}: ${l.text}`)
+    .map((l) => `${l.fromMe ? name : promptData(l.sender, 120)}: ${promptData(l.text)}`)
     .join('\n')
   return [
     `You are ${name}'s AI clone answering a personal chat message on their behalf.`,
-    `A contact named ${ctx.senderName} just messaged ${name} on ${ctx.network} (chat: "${ctx.chatTitle}").`,
+    `A contact named ${promptData(ctx.senderName, 120)} just messaged ${name} on ${promptData(ctx.network, 120)} (chat: "${promptData(ctx.chatTitle, 240)}").`,
     '',
     'Rules:',
     `- Reply in first person AS ${name}. Never mention being an AI, a clone, or an assistant.`,
@@ -55,9 +61,9 @@ export function buildPersonaPrompt(ctx: ReplyContext): string {
     '- Output ONLY the reply message text. No quotes, labels, or explanations.',
     '',
     ...(lines ? ['Recent conversation (data):', '<<<', lines, '>>>', ''] : []),
-    `${ctx.senderName}'s new message (data):`,
+    `${promptData(ctx.senderName, 120)}'s new message (data):`,
     '<<<',
-    ctx.incomingText,
+    promptData(ctx.incomingText),
     '>>>',
     '',
     `${name}'s reply:`

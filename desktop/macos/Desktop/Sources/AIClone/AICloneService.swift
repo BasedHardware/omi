@@ -329,7 +329,8 @@ final class AICloneService: ObservableObject {
       let decision = try await replyEngine.decide(context: context)
       let outcome = decision.plannedOutcome(
         mode: mode,
-        autoConfidenceThreshold: configuration.autoSendConfidenceThreshold)
+        autoConfidenceThreshold: configuration.autoSendConfidenceThreshold,
+        inboundText: inbound.text ?? "")
       log(
         "AIClone: reply decision shouldReply=\(decision.shouldReply) confidence=\(decision.confidence) injection=\(decision.suspectedInjection) outcome=\(outcome.rawValue)"
       )
