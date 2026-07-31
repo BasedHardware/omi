@@ -96,6 +96,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
     redis_db.store_chat_share = MagicMock()
     redis_db.get_chat_share = MagicMock(return_value=None)
+    redis_db.r = MagicMock()
 
     executors = install('utils.executors', ModuleType('utils.executors'))
     executors.critical_executor = MagicMock()
