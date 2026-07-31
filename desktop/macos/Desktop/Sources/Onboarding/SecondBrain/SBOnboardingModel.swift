@@ -4,12 +4,6 @@ import Foundation
 
 enum SBOnboardingLanguageCopy {
   static let question = "What language should Omi listen and reply in?"
-  static let detectedLanguageDetail = "· detected from your Mac"
-  static let changeSpokenLanguageAction = "Change spoken language"
-
-  static func continueAction(for language: String) -> String {
-    "Continue in \(language)"
-  }
 }
 
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
@@ -86,8 +80,6 @@ final class SBOnboardingModel: ObservableObject {
   // Per-step answers / state
   @Published var nameDraft = ""
   @Published var languageDraft = ""
-  @Published private(set) var languageIsDetectedFromMac = false
-  @Published var languageName: String?
   @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
@@ -290,7 +282,7 @@ final class SBOnboardingModel: ObservableObject {
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
-      return "Want me to do things for you? Connect an agent and I'll put it to work."
+      return "Which AI assistants do you use? Turn on each installed assistant you want me to work with."
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
@@ -396,7 +388,6 @@ final class SBOnboardingModel: ObservableObject {
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
     switch step {
-    case .language: prefillDetectedLanguage()
     case .mic: precheckPerm("microphone")
     case .systemAudio: precheckPerm("system_audio")
     case .screen: precheckPerm("screen_recording")
@@ -424,18 +415,42 @@ final class SBOnboardingModel: ObservableObject {
     streamMessage(for: target)
   }
 
-  /// Return to the immediately preceding onboarding stage without discarding
-  /// any answer the user already supplied. The conversational transcript stays
-  /// intact; the re-rendered widget is the editable source of truth for that
-  /// stage, so a user can revise (for example) Student to Founder.
   func goBack() {
     guard let previous = Step(rawValue: step.rawValue - 1) else { return }
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
-    rehydrateDrafts()
+    streamTask?.cancel()
+    streamTask = nil
+    typing = false
+    streamingText = nil
+    retractCurrentExchange()
+    resetAnswer(for: previous)
     step = previous
     UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
-    streamMessage(for: previous)
+    showWidget = true
+    onStepShown(previous)
+  }
+
+  private func retractCurrentExchange() {
+    if thread.last?.isOmi == true {
+      thread.removeLast()
+    }
+    if thread.last?.isOmi == false {
+      thread.removeLast()
+    }
+  }
+
+  private func resetAnswer(for step: Step) {
+    switch step {
+    case .language:
+      languageDraft = ""
+    case .role:
+      role = nil
+      roleDraft = ""
+      UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
+    default:
+      break
+    }
   }
 
   var canGoBack: Bool {
@@ -488,11 +503,6 @@ final class SBOnboardingModel: ObservableObject {
       let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
       if let saved, !saved.isEmpty { howHeard = saved }
     }
-    if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
-      let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
-    {
-      languageDraft = match.name
-    }
   }
 
   // MARK: promise / name / language / role
@@ -523,32 +533,12 @@ final class SBOnboardingModel: ObservableObject {
   /// Set the user's spoken language locally + on the backend (mirrors the legacy
   /// confirmLanguages, single-primary). Advances optimistically.
   func pickLanguage(code: String, name: String) {
-    languageName = name
     languageDraft = name
-    languageIsDetectedFromMac = false
     AssistantSettings.shared.voiceLanguages = [code]
     answerWriteGate.enqueue(.language) { [code] in
       _ = try? await APIClient.shared.updateUserLanguage(code)
     }
     advance(userAnswer: name, to: .role)
-  }
-
-  /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
-  /// (the user can still type to change). Only fills an empty field once.
-  func prefillDetectedLanguage() {
-    let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
-    prefillDetectedLanguage(from: raw)
-  }
-
-  /// Records that the draft came from the Mac locale, rather than a saved or
-  /// fallback language, so the UI can accurately disclose its source.
-  func prefillDetectedLanguage(from raw: String) {
-    guard languageDraft.isEmpty, languageName == nil else { return }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
-    if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
-      languageDraft = match.name
-      languageIsDetectedFromMac = true
-    }
   }
 
   func answerLanguageText() {

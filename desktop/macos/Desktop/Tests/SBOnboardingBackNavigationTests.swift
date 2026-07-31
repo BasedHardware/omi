@@ -20,19 +20,60 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     super.tearDown()
   }
 
-  func testBackFromPermissionsReturnsToRoleAndPreservesSelectedRole() {
+  func testBackFromPermissionsRetractsTheCurrentExchangeAndClearsRole() {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
     UserDefaults.standard.set("Student", forKey: DefaultsKey.onboardingRole)
+    model.role = "Student"
+    model.roleDraft = "Student"
+    model.thread = [
+      .init(isOmi: true, text: "What do your days look like?"),
+      .init(isOmi: false, text: "Student"),
+      .init(isOmi: true, text: "Let's give me senses."),
+    ]
     model.step = .mic
 
     model.goBack()
 
     XCTAssertEqual(model.step, .role)
-    XCTAssertEqual(model.role, "Student")
+    XCTAssertNil(model.role)
+    XCTAssertEqual(model.roleDraft, "")
+    XCTAssertNil(UserDefaults.standard.object(forKey: DefaultsKey.onboardingRole))
+    XCTAssertEqual(model.thread.map(\.text), ["What do your days look like?"])
+    XCTAssertTrue(model.showWidget)
     XCTAssertEqual(
       UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
       SBOnboardingModel.Step.role.rawValue)
+  }
+
+  func testBackToLanguageClearsItsPreviousChoiceWithoutAppendingMessages() {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.languageDraft = "Spanish"
+    model.thread = [
+      .init(isOmi: true, text: SBOnboardingLanguageCopy.question),
+      .init(isOmi: false, text: "Spanish"),
+      .init(isOmi: true, text: "What do your days look like?"),
+    ]
+    model.step = .role
+
+    model.goBack()
+
+    XCTAssertEqual(model.step, .language)
+    XCTAssertEqual(model.languageDraft, "")
+    XCTAssertEqual(model.thread.map(\.text), [SBOnboardingLanguageCopy.question])
+  }
+
+  func testAssistantChoicesAreAlwaysPresentedAsSeparateOptions() {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+
+    XCTAssertEqual(
+      model.agentRows.map { $0.id },
+      ["openclaw", "hermes", "claudeCode", "codex"])
+    XCTAssertEqual(
+      model.agentRows.map { $0.name },
+      ["OpenClaw", "Hermes", "Claude Code", "Codex"])
   }
 
   func testBackPreservesEarlierAcquisitionChoiceAndStopsAtFirstStep() {
