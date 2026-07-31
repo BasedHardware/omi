@@ -98,6 +98,32 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         assert selected == all_tests
 
 
+def test_bun_lock_selects_high_risk_stack_contract_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    selected, reason = selector.tests_for_changed_paths(["bun.lock"], all_tests)
+
+    assert selected == [
+        "tests/unit/test_audio_merge_tasks.py",
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/test_listen_pusher_stack_ci_wiring.py",
+        "tests/unit/test_listen_runtime_regressions.py",
+        "tests/unit/test_live_stt_failure.py",
+        "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_pusher_heartbeat.py",
+        "tests/unit/test_streaming_deepgram_backoff.py",
+        "tests/unit/test_stt_provider_policy.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py",
+        "tests/unit/test_sync_fair_use_gate.py",
+        "tests/unit/test_sync_v2.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_transcribe_teardown_flush.py",
+        "tests/unit/utils/test_listen_pusher_session.py",
+    ]
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
