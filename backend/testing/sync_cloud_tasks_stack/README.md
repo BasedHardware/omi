@@ -5,10 +5,10 @@ dispatch, worker ownership/retry, staged-audio handling, or the Sync content
 ledger:
 
 ```bash
-npm run test:sync-cloud-tasks-stack:emulator
+bun run test:sync-cloud-tasks-stack:emulator
 ```
 
-It needs the backend virtual environment, root Node dependencies, Redis, and
+It needs the backend virtual environment, root Bun dependencies (`bun install --frozen-lockfile --ignore-scripts`), Redis, and
 Java 21+ for the Firestore emulator. The runner gives Firebase a fresh
 loopback port, starts a private loopback Redis, and starts **separate**
 admission and worker ASGI processes. Their environment is allowlisted and has
