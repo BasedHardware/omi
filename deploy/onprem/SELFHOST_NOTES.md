@@ -163,6 +163,20 @@ docker run --rm --network host \
 # expected: 4 passed  (en->it/fr/es real translations + en->it->en round-trip via TranslationService)
 ```
 
+Live speaker embedding through the backend path against a running diarizer. The pyannote models are
+gated: use an `HUGGINGFACE_TOKEN` whose account has accepted the licenses of `pyannote/embedding`,
+`pyannote/wespeaker-voxceleb-resnet34-LM` and `pyannote/speaker-diarization-community-1` (visit each
+model page once and click *Agree and access*). Then:
+
+```
+docker run -d --name diarizer --network host --device nvidia.com/gpu=all \
+  -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-diarizer:test
+docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  python -m pytest tests/contract/test_speaker_embedding_live_contract.py -q -p no:cacheprovider
+# expected: 2 passed  (real 256-dim wespeaker embedding, deterministic, discriminates two signals)
+```
+
 **STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 
@@ -172,10 +186,16 @@ docker compose --profile inference up -d --build
 
 Requirements and gotchas:
 - **GPU passthrough is a container-runtime concern, not just a driver.** A working `nvidia-smi` on
-  the host is NOT enough: Docker needs the **NVIDIA Container Toolkit** installed and the CDI/runtime
-  configured, or `--gpus all` / the compose `deploy.resources` reservation fail with
-  *"failed to discover GPU vendor from CDI: no known GPU vendor found"*. Install
-  `nvidia-container-toolkit` and run `nvidia-ctk runtime configure` (or set up CDI) on the host first.
+  the host is NOT enough: Docker needs the **NVIDIA Container Toolkit** installed, or `--gpus all` /
+  the compose `deploy.resources` reservation fail with *"failed to discover GPU vendor from CDI: no
+  known GPU vendor found"*. The toolkit is required either way; two ways to wire it in:
+  - **CDI (recommended, Docker ≥25 — no daemon restart):** `sudo apt-get install nvidia-container-toolkit`
+    then `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`, and run containers with
+    `--device nvidia.com/gpu=all` (compose: `devices: [nvidia.com/gpu=all]` under `deploy.resources`).
+  - **Legacy runtime:** `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`,
+    then `--gpus all`. The daemon restart stops running containers, so prefer CDI.
+  Verified here on Ubuntu 24.04 + driver 610 + RTX 5060 Ti (Blackwell sm_120): NLLB (CTranslate2) and
+  the diarizer (pyannote) both run on GPU via CDI. NeMo 26.02 ships CUDA 12.8, which supports sm_120.
 - **CPU fallback for a smoke test:** NLLB and the diarizer both run CPU-only — set `CT2_DEVICE=cpu`
   (NLLB) or `CUDA_VISIBLE_DEVICES=""` (diarizer). Useful to validate wiring on a host without GPU
   passthrough; production STT/diarization/translation want the GPU.
