@@ -36,6 +36,7 @@ _CONFIG_FILES = (
     "route_artifacts.yaml",
     "feature_bundles.yaml",
     "lanes_catalog.yaml",
+    "generated_route_overrides.yaml",
 )
 
 

@@ -135,6 +135,15 @@ async def test_reloader_reloads_when_any_of_three_files_change(tmp_path):
         cfg_initial = cfg_after
 
 
+@pytest.mark.asyncio
+async def test_reloader_reloads_when_generated_route_overrides_changes(tmp_path):
+    config_dir = _copy_default_config_to(tmp_path)
+    reloader = GatewayConfigReloader(config_dir)
+    cfg_initial = await reloader.get()
+    _bump_mtime(config_dir / "generated_route_overrides.yaml")
+    assert await reloader.get() is not cfg_initial
+
+
 # ---------------------------------------------------------------------------
 # Stale fallback
 # ---------------------------------------------------------------------------
