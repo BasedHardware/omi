@@ -1,0 +1,81 @@
+"""Tests for the object-store boundary AST ratchet (WP6 seal, ADR-0032/D14)."""
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+_SCRIPT = Path(__file__).resolve().parents[3] / '.github' / 'scripts' / 'check_object_store_boundary.py'
+if not _SCRIPT.exists():
+    # Repo-root guard script — absent when only backend/ is mounted (the offline test image).
+    # CI checks out the full repo, so the boundary guard still runs there.
+    pytest.skip(f'guard script not present at {_SCRIPT}', allow_module_level=True)
+_SPEC = importlib.util.spec_from_file_location('check_object_store_boundary', _SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+
+
+def test_flags_forbidden_client_imports():
+    source = '''
+from google.cloud import storage
+import google.cloud.storage
+from google.cloud.storage import Client
+'''
+    # 3 forbidden import statements above.
+    assert _MODULE.count_boundary_violations(source) == 3
+
+
+def test_flags_raw_blob_ops_regardless_of_receiver():
+    source = '''
+blob.upload_from_filename(path)
+blob.upload_from_string(data, content_type="x")
+b.upload_from_file(fh)
+data = blob.download_as_bytes()
+blob.download_to_filename(dst)
+bucket.copy_blob(src, bucket, new)
+blob.make_public()
+list(bucket.list_blobs(prefix=p))
+url = blob.generate_signed_url(version="v4")
+'''
+    # 9 raw blob/bucket-op method calls.
+    assert _MODULE.count_boundary_violations(source) == 9
+
+
+def test_ignores_the_neutral_port_and_unrelated_code():
+    source = '''
+from utils.object_store import get_object_store, ObjectNotFound
+
+store = get_object_store()
+store.put(bucket, key, data, content_type="image/png")
+raw = store.get_bytes(bucket, key)
+url = store.presign_get(bucket, key, expires_seconds=300)
+public = store.public_url(bucket, key)
+store.set_metadata(bucket, key, {"a": "b"})
+value = some_dict.get("key")
+tokens = rate_limiter.bucket(user)      # "bucket" as a domain word must not trip the guard
+'''
+    assert _MODULE.count_boundary_violations(source) == 0
+
+
+def test_collect_counts_excludes_boundary_and_allowlisted_dirs(tmp_path):
+    backend = tmp_path / 'backend'
+    for rel in ('utils/object_store', 'tests', 'testing', 'scripts', 'agent-proxy', 'routers'):
+        (backend / rel).mkdir(parents=True)
+    leak = 'from google.cloud import storage\nx = storage.Client().bucket("b").blob("k").upload_from_filename("f")\n'
+    (backend / 'utils' / 'object_store' / 'adapters.py').write_text(leak)  # boundary: allowed
+    (backend / 'tests' / 'test_x.py').write_text(leak)                     # tests: allowed
+    (backend / 'testing' / 'harness.py').write_text(leak)                  # testing: allowed
+    (backend / 'scripts' / 'oneoff.py').write_text(leak)                   # scripts: allowed
+    (backend / 'agent-proxy' / 'main.py').write_text(leak)                 # separate service: allowed
+    (backend / 'routers' / 'leaky.py').write_text(leak)                    # runtime router: FLAGGED
+
+    counts = _MODULE.collect_counts(tmp_path, Path('backend'))
+    assert counts == {'backend/routers/leaky.py': 2}
+
+
+def test_reports_only_count_increases_over_baseline():
+    assert _MODULE.violations({'backend/routers/x.py': 2}, {'backend/routers/x.py': 1}) == [
+        'backend/routers/x.py: found 2, baseline allows 1'
+    ]
+    assert _MODULE.violations({'backend/routers/x.py': 1}, {'backend/routers/x.py': 1}) == []

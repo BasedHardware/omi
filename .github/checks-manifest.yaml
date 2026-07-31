@@ -349,6 +349,11 @@ checks:
     triggers: ["backend/**/*.py", ".github/scripts/check_firestore_persistence_boundary.py", ".github/scripts/firestore_persistence_boundary_baseline.json", "backend/tests/unit/test_check_firestore_persistence_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "WP1 seal (ADR-0002/0004): database/ is the only door to Firestore — no database._client/SDK import and no raw .document()/.collection()/.collection_group()/.transaction() op outside database/, so the storage layer stays swappable (Firestore | Mongo | ArcadeDB)"
+  - id: object-store-boundary
+    command: ["python3", ".github/scripts/check_object_store_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_object_store_boundary.py", ".github/scripts/object_store_boundary_baseline.json", "backend/tests/unit/test_check_object_store_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP6 seal (ADR-0032/0004): utils/object_store/ is the only door to object storage — no google.cloud.storage import and no raw .upload_from_*/.download_as_bytes/.copy_blob/.make_public/.list_blobs/.generate_signed_url op outside it, so the backend stays swappable (GCS | S3-compatible). Analogue of firestore-persistence-boundary; catches raw-GCS reintroduced by an upstream merge (ADR-0029/0030)"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
