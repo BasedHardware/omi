@@ -1,0 +1,81 @@
+desktop/context-for-claude/Tests/ContextAppTests/TalkingMarkTests.swift
+  s_d60bd669afaade::t_6e07e4451454c2 274,276-281,283-285,287,290,292-300,302-306,311-312,315,317-325,327-329,332,335-336,340
+  s_d60bd669afaade::t_acd7ec768293fa 313
+  s_d60bd669afaade::t_85de8cac9adf2e 364,368,372
+  s_d60bd669afaade::t_08897870f1e813 259-273,286,288-289,291,301,309-310,316,330-331,333,337,341-363,370-371,373-374
+  s_d60bd669afaade::t_5a59d927deab43 1-193,195,198-199,206-210,213-222,230,234,236,239-241,252,257-258,375-404,486-566
+  s_d60bd669afaade::t_ca9eeaae9a6296 275,282,307-308,314,326,334,338-339,365-367,369
+  s_d60bd669afaade::t_1fdccc3ee55f9f 405-485
+  s_d60bd669afaade::t_06a6199fa5ba85 194,196-197,200-205,211-212,223-229,231-233,235,237-238,242-251,253-256
+desktop/context-for-claude/Sources/ContextApp/Onboarding/RandomizedText.swift
+  s_d60bd669afaade::t_6fec60e9e3dd23 51,57-68,72,76-77
+  s_d60bd669afaade::t_8958bd12d9abc8 108-112,119,127-130,132,140
+  s_d60bd669afaade::t_d54c2ed7cda877 169-174
+  s_d60bd669afaade::t_2f4e340bacd567 192-195,197,199-202,207-209,211-214,216-217,223
+  s_d60bd669afaade::t_5e98368cd32d39 90
+  s_d60bd669afaade::t_be55e7cf391ea9 256-257
+  s_d60bd669afaade::t_990fbb326c44b0 175
+desktop/context-for-claude/Tests/ContextAppTests/CinematicTests.swift
+  s_d60bd669afaade::t_4a9fa1ab5e2efa 741-750
+  s_d60bd669afaade::t_b83f302d2df01a 1,3
+  s_d60bd669afaade::t_438e67faaae7e0 436,686
+  s_d60bd669afaade::t_4a712edfeaf818 689-697,708-709,711-713
+  s_d60bd669afaade::t_3f55ece6872e48 813-815
+  s_d60bd669afaade::t_5307b067d0cc04 233,327,349,698-707,710
+  s_d60bd669afaade::t_cbb1533b82a42c 325,334,347,359,368,378,385,394,403,410,423-424,431,445-447,450,453,463-464,477,484,583,672-685,687-688,714-740,751-812,816-824
+  s_d60bd669afaade::t_903ee627d7aef8 62,232,238-239,324,326,328-333,336-344,348,351,354-358,360-367,369-377,379-384,386-387,390-393,395-402,404-405,408-409,411-413,415-416,418-419,422,425-430,432-435,437-444,448-449,451-452,454-462,465-468,470-475,478,480,483,485-497,582,585-586,592-593,825
+desktop/context-for-claude/docs/first-run-experience.md
+  s_d60bd669afaade::t_5037a6812914e4 158-165
+  s_d60bd669afaade::t_be290fdc3e5307 210-225
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicMark.swift
+  s_d60bd669afaade::t_65c56447f8d49f 278-279,283-285
+  s_d60bd669afaade::t_3176b7bf9e9bf8 460-461,474
+  s_d60bd669afaade::t_90293d575bad5f 223-238
+  s_d60bd669afaade::t_c692d78615f028 418-434,436
+  s_d60bd669afaade::t_ca9363b25ac3b6 499
+  s_d60bd669afaade::t_2cc333ec7a83a9 462-473
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicWindowArt.swift
+  s_d60bd669afaade::t_52302ee0f79283 1-548
+  s_d60bd669afaade::t_dd255c69cba4df 549-551
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicWindows.swift
+  s_d60bd669afaade::t_2053fdfbed4506 4,6,8-30,34,36,61-62,78,87-88,94-101,104-110,113-114,116-122,126,128-131,135,138-146,149-165,167,169-184,199,235-236,238,245-246,266,304
+desktop/context-for-claude/Sources/ContextApp/Onboarding/TalkingMark.swift
+  s_d60bd669afaade::t_c5097b5245ef11 26-31,33-36,38-39
+  s_d60bd669afaade::t_2593aa4dc91b2a 116
+  s_d60bd669afaade::t_075e429ace66d8 476
+  s_d60bd669afaade::t_b6b50c05482090 382
+  s_d60bd669afaade::t_19aaf040b84fe3 286,288,290-293,295-305,307-308,310-311,313-314,318,322-323,330,334-337
+  s_d60bd669afaade::t_bd69865ce65be1 458
+  s_d60bd669afaade::t_de6f72486338c6 474-475,477-479,485,487-488,490-491,493-494
+  s_d60bd669afaade::t_b799ed6333c3ba 462,465
+  s_d60bd669afaade::t_56c41f43cffd27 1-25,32,37,40-115,117-136,162-168,184-196,198-203,206-285,287,289,294,306,309,312,315-317,319-321,324-329,331-333,338-342,344-345,347-359,361,366-369,372,374-376,385-386,433,435,437-441,443,446-448,450-457,459-461,463-464,466-473,480-484,486,489,492,495-498,504-513,516-544,547-549
+  s_d60bd669afaade::t_1d7381efd10574 197
+  s_d60bd669afaade::t_fb05b3034ccd1b 514
+  s_d60bd669afaade::t_f01f6b5e5cfe02 204-205
+  s_d60bd669afaade::t_dbf8a663d183f1 343,346
+  s_d60bd669afaade::t_e686a040ff0aca 515
+  s_d60bd669afaade::t_4947880d6b87d4 370-371,378-381,383-384
+  s_d60bd669afaade::t_3c40dd20fd8b21 545-546
+  s_d60bd669afaade::t_1ea136e95248fc 499-503
+  s_d60bd669afaade::t_7d2b782e45c586 436,442
+  s_d60bd669afaade::t_1a689f0b51cff0 360,362-365,373,377,387-432,434,444-445,449
+  s_d60bd669afaade::t_12f07d2b55d078 137-161,169-183
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Cinematic.swift
+  s_d60bd669afaade::t_2449c0ab409e30 21-23,442-445,502-504,635,637,639-640,646,660
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "74194216fd56bd10c5ac7369f3166d27f6e91539",
+  "prompts": {},
+  "sessions": {
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
