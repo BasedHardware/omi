@@ -487,7 +487,9 @@ class AudioCaptureService: @unchecked Sendable {
   // — or joining a Bluetooth mic's A2DP↔HFP profile flap — which races the
   // two instances' stream-format reconfiguration paths.
   private static let activeCapturesLock = NSLock()
-  private static var activeCaptures: [ObjectIdentifier: AudioDeviceID] = [:]
+  // nonisolated(unsafe): every access is guarded by activeCapturesLock (same
+  // pattern as ScreenCaptureService's lock-guarded statics).
+  nonisolated(unsafe) private static var activeCaptures: [ObjectIdentifier: AudioDeviceID] = [:]
 
   private func registerActiveCapture(deviceID: AudioDeviceID) {
     Self.activeCapturesLock.lock()

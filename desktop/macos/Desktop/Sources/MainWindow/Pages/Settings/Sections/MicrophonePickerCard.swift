@@ -7,7 +7,9 @@ private final class AudioInputDeviceListObserver: ObservableObject {
   @Published private(set) var revision = 0
 
   private var isObserving = false
-  private var listenerBlock: AudioObjectPropertyListenerBlock?
+  // nonisolated(unsafe): written only on the main actor (start/stop); the one
+  // nonisolated read is deinit, which runs after the last reference is gone.
+  nonisolated(unsafe) private var listenerBlock: AudioObjectPropertyListenerBlock?
 
   func start() {
     guard !isObserving else { return }

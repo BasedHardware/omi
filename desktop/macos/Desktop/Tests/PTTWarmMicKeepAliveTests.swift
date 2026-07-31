@@ -16,7 +16,8 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     XCTAssertTrue(source.contains("self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)"))
     XCTAssertTrue(source.contains("self.audioCaptureService === capture"))
     XCTAssertTrue(source.contains("PushToTalkManager: mic capture start completed after turn ended — parked warm"))
-    XCTAssertTrue(source.contains("voiceTurnCoordinator.publish(.captureStarted(turnID: turnID, captureID: captureID))"))
+    XCTAssertTrue(
+      source.contains("voiceTurnCoordinator.publish(.captureStarted(turnID: turnID, captureID: captureID))"))
   }
 
   func testWarmMicReuseRestoresLeaseAndTerminalCleanupDiscardsParking() throws {

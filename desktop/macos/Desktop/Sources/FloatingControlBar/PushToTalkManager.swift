@@ -2019,37 +2019,7 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  /// Routing state the mic-frame closures consult per chunk. Lock-guarded so a
-  /// parked capture can be leased to a later turn without reinstalling IOProc closures.
-  final class MicCaptureLease {
-    private let lock = NSLock()
-    private var generation: UInt64
-    private var batchMode: Bool
-    private var turnID: VoiceTurnID
-
-    init(generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
-      self.generation = generation
-      self.batchMode = batchMode
-      self.turnID = turnID
-    }
-
-    func renew(generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
-      lock.lock()
-      self.generation = generation
-      self.batchMode = batchMode
-      self.turnID = turnID
-      lock.unlock()
-    }
-
-    func snapshot() -> (generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
-      lock.lock()
-      defer { lock.unlock() }
-      return (generation, batchMode, turnID)
-    }
-  }
-
-  var parkedMicCapture:
-    (service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?)?
+  var parkedMicCapture: (service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?)?
   private var parkedMicExpiryTask: Task<Void, Never>?
   private var activeMicLease: MicCaptureLease?
   private var activeMicOverrideID: AudioDeviceID?
@@ -2696,5 +2666,38 @@ extension PushToTalkManager {
       .transcriptionCompletionClaimedScoped(turnID: turnID, identity: identity))
     return voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity
       && voiceTurnCoordinator.activeTurn?.transcriptionCompletionClaimed == true
+  }
+}
+
+/// Routing state the mic-frame closures consult per chunk. Lock-guarded so a
+/// parked capture can be leased to a later turn without reinstalling IOProc
+/// closures. Deliberately a top-level type: nesting it in the @MainActor
+/// manager would inherit that isolation and forbid the lock calls the
+/// @Sendable audio closures make off the main actor.
+/// @unchecked Sendable: every stored property is read and written under `lock`.
+final class MicCaptureLease: @unchecked Sendable {
+  private let lock = NSLock()
+  private var generation: UInt64
+  private var batchMode: Bool
+  private var turnID: VoiceTurnID
+
+  init(generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
+    self.generation = generation
+    self.batchMode = batchMode
+    self.turnID = turnID
+  }
+
+  func renew(generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
+    lock.lock()
+    self.generation = generation
+    self.batchMode = batchMode
+    self.turnID = turnID
+    lock.unlock()
+  }
+
+  func snapshot() -> (generation: UInt64, batchMode: Bool, turnID: VoiceTurnID) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (generation, batchMode, turnID)
   }
 }
