@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decide, type ResponderInput } from './responder'
+import { decide, requiresHumanReview, type ResponderInput } from './responder'
 
 const base = (over: Partial<ResponderInput> = {}): ResponderInput => ({
   message: {
@@ -62,5 +62,10 @@ describe('decide', () => {
     expect(decide(base({ chatMode: 'auto', autoSentThisHour: 29 }))).toEqual({
       action: 'autoSend'
     })
+  })
+
+  it('requires review for sensitive generated replies', () => {
+    expect(requiresHumanReview('I can send the wire transfer today.')).toBe(true)
+    expect(requiresHumanReview('Sounds good, see you soon.')).toBe(false)
   })
 })

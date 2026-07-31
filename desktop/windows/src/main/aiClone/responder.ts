@@ -23,6 +23,13 @@ export type ResponderDecision =
 
 export const AUTO_SEND_HOURLY_CAP = 30
 
+const SENSITIVE_AUTO_SEND_CONTENT =
+  /\b(password|ssn|social security|wire transfer|bank account|routing number|credit card number|breaking up|break up with|divorc\w*|lawsuit|diagnos\w*|prescription|i quit|i'?m quitting|got fired|laid off|layoff)\b/i
+
+export function requiresHumanReview(replyText: string): boolean {
+  return SENSITIVE_AUTO_SEND_CONTENT.test(replyText)
+}
+
 export function decide(input: ResponderInput): ResponderDecision {
   const { message, chatMode } = input
   if (chatMode === 'off') return { action: 'ignore', reason: 'chat_off' }

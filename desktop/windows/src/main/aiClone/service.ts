@@ -16,7 +16,7 @@ import type {
 } from '../../shared/types'
 import { AiCloneStore } from './store'
 import { BeeperClient, beeperTimestampMs, type BeeperChat, type BeeperMessage } from './beeperClient'
-import { decide, AUTO_SEND_HOURLY_CAP } from './responder'
+import { decide, requiresHumanReview, AUTO_SEND_HOURLY_CAP } from './responder'
 import { ChatTaskQueue } from './chatTaskQueue'
 import { generateReply, type ReplyTranscriptLine } from './replyEngine'
 
@@ -283,7 +283,7 @@ export class AiCloneService {
       return
     }
 
-    if (action === 'autoSend') {
+    if (action === 'autoSend' && !requiresHumanReview(reply.text)) {
       const sent = await this.client!.sendMessage(chat.id, reply.text, message.id)
       if (sent.ok) {
         this.autoSends.push(Date.now())
