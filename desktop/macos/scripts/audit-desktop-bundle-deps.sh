@@ -231,7 +231,7 @@ done < <(
     -print0
 )
 
-node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/node"
+node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"

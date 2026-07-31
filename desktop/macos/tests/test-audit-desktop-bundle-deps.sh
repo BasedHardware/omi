@@ -18,7 +18,7 @@ trap cleanup EXIT
 fakebin="$tmpdir/bin"
 app_bundle="$tmpdir/Omi Test.app"
 main_binary="$app_bundle/Contents/MacOS/Omi Computer"
-node_bin="$app_bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+node_bin="$app_bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
 framework="$app_bundle/Contents/Frameworks/libexample.dylib"
 mkdir -p "$fakebin" "$(dirname "$main_binary")" "$(dirname "$node_bin")" "$(dirname "$framework")"
 touch "$main_binary" "$node_bin" "$framework"
