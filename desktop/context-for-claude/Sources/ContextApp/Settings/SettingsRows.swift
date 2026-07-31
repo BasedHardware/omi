@@ -342,6 +342,16 @@ struct SettingsFavicon: View {
     @State private var image: NSImage?
     @State private var isSuppressed = false
 
+    /// Favicons are a third-party signal; they must not be cached to disk or share cookies with the
+    /// user's browser. An ephemeral session keeps the request in memory only.
+    private static let faviconSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpShouldSetCookies = false
+        return URLSession(configuration: config)
+    }()
+
     var body: some View {
         Group {
             if let image {
@@ -380,7 +390,7 @@ struct SettingsFavicon: View {
             image = nil
         case .allowed(let url):
             isSuppressed = false
-            guard let (data, response) = try? await URLSession.shared.data(from: url),
+            guard let (data, response) = try? await Self.faviconSession.data(from: url),
                 (response as? HTTPURLResponse)?.statusCode == 200,
                 let decoded = NSImage(data: data)
             else { return }

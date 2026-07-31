@@ -49,6 +49,17 @@ final class ScreenActivityUploader: ObservableObject {
     private static let installIdKey = "context.screenSync.installId"
     private static let category = "screensync"
 
+    /// Ephemeral, no-disk-cache session: the payloads are OCR text and window titles from the user's
+    /// screen. Nothing about them belongs in a persistent URL cache.
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = requestTimeout
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpShouldSetCookies = false
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - State
 
     private var loop: Task<Void, Never>?
@@ -356,7 +367,7 @@ final class ScreenActivityUploader: ObservableObject {
             request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
 
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await Self.urlSession.data(for: request)
                 guard let http = response as? HTTPURLResponse else {
                     return .failed("Malformed response from screen-activity sync")
                 }
