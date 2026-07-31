@@ -325,6 +325,23 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertFalse(messages[0].text.isEmpty)
   }
 
+  func testTargetedFlushPreservesUnrevealedStoppedText() {
+    var messages = [
+      ChatMessage(id: "stopped", text: "", sender: .ai, isStreaming: true),
+      ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
+    ]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendText(messageId: "stopped", text: "Partial answer", scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "Current answer", scheduleFlush: {})
+    buffer.flushPendingSegments("stopped", messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "Partial answer")
+    XCTAssertTrue(messages[1].text.isEmpty)
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+    XCTAssertFalse(messages[1].text.isEmpty)
+  }
+
   func testTerminalFlushBypassesMeteredReveal() {
     let messageId = "assistant-1"
     var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]

@@ -14,14 +14,19 @@ struct StreamingAssistantText: View {
     self.sender = sender
   }
 
+  static func displayedText(_ text: String) -> String {
+    text.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   var body: some View {
-    if sender == .ai && isStreaming && OmiMarkdown.isPlainText(text) {
-      TokenizedText(text, separator: .diff, animation: .fadeIn, animationDuration: 0.18)
+    let displayedText = Self.displayedText(text)
+    if sender == .ai && isStreaming && OmiMarkdown.isPlainText(displayedText) {
+      TokenizedText(displayedText, separator: .diff, animation: .fadeIn, animationDuration: 0.18)
         .font(.system(size: round(14 * fontScale)))
         .foregroundStyle(OmiColors.textPrimary)
         .textSelection(.disabled)
     } else {
-      OmiMarkdown(text: text, sender: sender)
+      OmiMarkdown(text: displayedText, sender: sender)
     }
   }
 }

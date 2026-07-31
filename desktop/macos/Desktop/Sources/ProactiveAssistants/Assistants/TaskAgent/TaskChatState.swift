@@ -154,7 +154,7 @@ class TaskChatState: ObservableObject {
   private var journalGeneration = 0
   private var isRefreshingJournal = false
   private var journalRefreshRequested = false
-  private var journalUpdateTasks: [String: Task<Void, Never>] = [:]
+  private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private let boundOwnerID: String
   private let boundAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   private let ownerIDProvider: @MainActor () -> String?
@@ -244,8 +244,7 @@ class TaskChatState: ObservableObject {
     runtimeProjectionCancellable?.cancel()
     runtimeProjectionCancellable = nil
     streamingBuffer.cancelPendingFlush()
-    for task in journalUpdateTasks.values { task.cancel() }
-    journalUpdateTasks.removeAll()
+    journalWriteCoordinator.cancelAll()
     messages.removeAll()
     surfacedFailureKeys.removeAll()
     activeAssistantMessageId = nil
@@ -266,7 +265,7 @@ class TaskChatState: ObservableObject {
 
   var ownerProjectionIsEmpty: Bool {
     messages.isEmpty
-      && journalUpdateTasks.isEmpty
+      && !journalWriteCoordinator.hasPendingWrites
       && activeAssistantMessageId == nil
       && !isSending
       && !isStopping
@@ -454,9 +453,11 @@ class TaskChatState: ObservableObject {
   ) {
     guard let lease = captureOwnerLease() else { return }
     guard let message = messages.first(where: { $0.id == messageId }) else { return }
-    let previous = journalUpdateTasks[messageId]
-    journalUpdateTasks[messageId] = Task { @MainActor [weak self] in
-      _ = await previous?.value
+    journalWriteCoordinator.schedule(
+      messageID: messageId,
+      supersededByTerminalization: status == .streaming,
+      coalescingDelay: status == .streaming ? .milliseconds(150) : nil
+    ) { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
       _ = try? await TaskChatRuntime.updateJournalMessage(
         workstreamId: self.workstreamId,
@@ -474,7 +475,9 @@ class TaskChatState: ObservableObject {
     producingRunId: String,
     producingAttemptId: String
   ) async throws -> KernelJournalTurn {
-    _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+    guard await journalWriteCoordinator.beginTerminalization(messageID: messageId) else {
+      throw BridgeError.agentError("Task-chat turn terminalization is already in progress")
+    }
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
     guard let message = messages.first(where: { $0.id == messageId }) else {
       throw BridgeError.agentError("Producing task-chat turn is unavailable")
@@ -508,7 +511,7 @@ class TaskChatState: ObservableObject {
     messageId: String,
     lease: TaskChatOwnerLease
   ) async {
-    _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+    guard await journalWriteCoordinator.beginTerminalization(messageID: messageId) else { return }
     guard isCurrent(lease),
       let message = messages.first(where: { $0.id == messageId })
     else { return }
