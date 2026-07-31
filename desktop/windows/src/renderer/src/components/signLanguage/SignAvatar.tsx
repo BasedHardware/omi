@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import 'pose-viewer'
 import { resolveOmiAsset } from '../../utils/assetResolver'
 
 type SignAvatarProps = {
