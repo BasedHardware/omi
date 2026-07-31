@@ -319,7 +319,7 @@ export class OmiIntegrationClient {
 
   /** Send App Notification To User */
   async sendNotificationV1(body: Record<string, unknown>): Promise<IntegrationNotificationResponse> {
-    return (await this.request("POST", "/v1/integrations/notification", undefined, body)) as unknown as IntegrationNotificationResponse;
+    return (await this.request("POST", "/v1/integrations/notification", undefined, { ...body, aid: this.appId })) as unknown as IntegrationNotificationResponse;
   }
 
   /** Get Conversations Via Integration */

@@ -16,6 +16,8 @@ pub enum Error {
     MissingApiKey,
     #[error("app id is required")]
     MissingAppId,
+    #[error("invalid request body: {0}")]
+    InvalidRequestBody(String),
     #[error("http error: {0}")]
     Http(#[from] reqwest::Error),
     #[error("omi integration api: HTTP {status}: {body}")]
@@ -63,16 +65,27 @@ impl OmiIntegrationClient {
         body: Option<&Value>,
     ) -> Result<Value, Error> {
         let url = format!("{}{}", self.base_url, path);
+        let body = if path == "/v1/integrations/notification" {
+            let mut body = body
+                .cloned()
+                .ok_or_else(|| Error::InvalidRequestBody("notification body is required".to_string()))?;
+            let object = body
+                .as_object_mut()
+                .ok_or_else(|| Error::InvalidRequestBody("notification body must be an object".to_string()))?;
+            object.insert("aid".to_string(), Value::String(self.app_id.clone()));
+            Some(body)
+        } else {
+            body.cloned()
+        };
         let mut headers = HeaderMap::new();
         let auth = format!("Bearer {}", self.api_key);
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth).map_err(|e| Error::Api { status: 0, body: e.to_string() })?);
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
         let mut req = self.http.request(method, url).headers(headers);
         if !query.is_empty() {
             req = req.query(query);
         }
-        if let Some(b) = body {
+        if let Some(ref b) = body {
+            req = req.header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             req = req.json(b);
         }
         let response = req.send()?;

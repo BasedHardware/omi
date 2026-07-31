@@ -37,14 +37,12 @@ class ApiError : public std::runtime_error {
 class Client {
  public:
   Client(std::string api_key, std::string app_id, std::string base_url = "https://api.omi.me");
-  ~Client();
-
   Client(const Client&) = delete;
   Client& operator=(const Client&) = delete;
 
 
   // Send App Notification To User
-  JsonValue send_notification_v1(const std::string& json_body);
+  JsonValue send_notification_v1(const std::string& uid, const std::string& message);
 
   // Get Conversations Via Integration
   JsonValue list_conversations(const std::string& uid, std::optional<int> limit = std::nullopt, std::optional<int> offset = std::nullopt, std::optional<bool> include_discarded = std::nullopt, std::optional<std::vector<std::string>> statuses = std::nullopt, std::optional<std::string> start_date = std::nullopt, std::optional<std::string> end_date = std::nullopt, std::optional<int> max_transcript_segments = std::nullopt);
