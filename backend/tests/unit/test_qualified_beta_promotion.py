@@ -711,6 +711,26 @@ async def test_server_admits_a_candidate_that_ships_the_side_by_side_beta_assets
 
 
 @pytest.mark.asyncio
+async def test_server_admits_a_candidate_from_github_release_digests_without_blob_reads():
+    release, evidence, run = _candidate_with_beta()[:3]
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    # Normal promotion only downloads the small, retained Actions artifact.
+    # It must not traverse the release binaries' temporary blob redirects.
+    reader.downloaded = {}
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
+    assert manifest["zip_sha256"] == release["assets"][0]["digest"]
+    assert manifest["dmg_sha256"] == release["assets"][1]["digest"]
+    assert reader.download_calls == []
+
+
+@pytest.mark.asyncio
 async def test_server_rejects_a_non_sanctioned_beta_like_identity():
     release, evidence, run = _candidate()
     release["assets"].append(
