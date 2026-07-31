@@ -111,7 +111,7 @@ resolve_rpath_dependency() {
   local resolved_rpath
   local resolved_dep
 
-  for rpath in "${candidate_rpaths[@]}"; do
+  for rpath in "${candidate_rpaths[@]+${candidate_rpaths[@]}}"; do
     case "$rpath" in
       @executable_path/*|@loader_path/*)
         resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
