@@ -34,6 +34,10 @@ class ApiError : public std::runtime_error {
   std::string body_;
 };
 
+namespace detail {
+std::string notification_body_with_app_id(const std::string& json_body, const std::string& app_id);
+}
+
 class Client {
  public:
   Client(std::string api_key, std::string app_id, std::string base_url = "https://api.omi.me");
