@@ -12,6 +12,7 @@ ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+    "Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift",
 )
 
 FLOW_LINT_INPUTS = frozenset(

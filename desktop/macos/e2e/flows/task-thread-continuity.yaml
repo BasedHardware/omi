@@ -1,0 +1,30 @@
+version: 2
+name: task-thread-continuity
+tier: 2
+description: Hermetic task-backed thread continuity through the app kernel
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open the task-backed thread through its kernel projection
+    bridge.action:
+      name: task_thread_scenario_13
+      params:
+        task: "second"
+        resume: "false"
+    expect:
+      result.detail.kernel_surface: "workstream"
+      result.detail.active_task_id: "scenario-13-task-review"
+      result.detail.cited_v2: "true"
+      result.detail.runtime_bridge: "live_app_kernel"
+
+  - id: S2
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
