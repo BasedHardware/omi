@@ -20,12 +20,8 @@ SyncRateLimiter get limiter => SyncRateLimiter.instance;
 
 const int _hour = 3600;
 
-Wal _wal({required int ageSeconds, String? conversationId, int nowSeconds = 1000000}) => Wal(
-      timerStart: nowSeconds - ageSeconds,
-      codec: BleAudioCodec.opus,
-      seconds: 30,
-      conversationId: conversationId,
-    );
+Wal _wal({required int ageSeconds, String? conversationId, int nowSeconds = 1000000}) =>
+    Wal(timerStart: nowSeconds - ageSeconds, codec: BleAudioCodec.opus, seconds: 30, conversationId: conversationId);
 
 void main() {
   setUp(() async {
@@ -69,10 +65,7 @@ void main() {
     bool onlyFreshLimited(String lane) => lane == SyncUploadLane.fresh.name;
 
     test('a backlog on a free lane is not blocked by another lane cooldown', () {
-      expect(
-        allSyncLanesLimited({SyncUploadLane.backfill}, onlyFreshLimited, fallback: true),
-        isFalse,
-      );
+      expect(allSyncLanesLimited({SyncUploadLane.backfill}, onlyFreshLimited, fallback: true), isFalse);
     });
 
     test('work on the limited lane is blocked', () {
@@ -192,10 +185,16 @@ void main() {
     ]) {
       test(path, () {
         final source = File(path).readAsStringSync();
-        expect(source.contains('isRateLimitedForPendingUploads'), isTrue,
-            reason: '$path must gate on the lanes the pending work needs');
-        expect(RegExp(r'isRateLimited\b(?!ForPendingUploads)').hasMatch(source), isFalse,
-            reason: '$path must not gate on the account-wide cooldown; uploads gate per lane');
+        expect(
+          source.contains('isRateLimitedForPendingUploads'),
+          isTrue,
+          reason: '$path must gate on the lanes the pending work needs',
+        );
+        expect(
+          RegExp(r'isRateLimited\b(?!ForPendingUploads)').hasMatch(source),
+          isFalse,
+          reason: '$path must not gate on the account-wide cooldown; uploads gate per lane',
+        );
       });
     }
   });
