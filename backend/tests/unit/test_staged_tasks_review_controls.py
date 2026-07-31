@@ -427,25 +427,72 @@ class TestModeAwareSidecarReconciliation:
             is False
         )
 
-    def test_read_mode_legacy_migrations_are_noops(self, monkeypatch):
+    @pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
+    def test_legacy_migrations_are_noops_for_every_workflow_mode(self, monkeypatch, workflow_mode):
         monkeypatch.setattr(
             r.task_control_db,
             'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
+            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
+        )
+        restore_calls = []
+        monkeypatch.setattr(
+            r.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            lambda uid: restore_calls.append(uid) or {'restored': 0, 'skipped_existing': 0},
+        )
+        assert r.migrate_ai_tasks(uid='u1')['status'].startswith('legacy task migration retired')
+        assert r.migrate_conversation_items(uid='u1') == {
+            'status': 'ok',
+            'migrated': 0,
+            'deleted': 0,
+            'restored': 0,
+            'skipped_existing': 0,
+        }
+        assert restore_calls == ([] if workflow_mode == 'write' else ['u1'])
+
+    def test_write_mode_recovery_keeps_legacy_staged_candidate_authoritative(self, monkeypatch):
+        monkeypatch.setattr(
+            r.task_control_db,
+            'get_task_workflow_control',
+            lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=7),
         )
         monkeypatch.setattr(
             r.staged_tasks_db,
-            'migrate_ai_tasks',
-            lambda uid: pytest.fail('read mode cannot invoke staged migration writer'),
-        )
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'migrate_conversation_items_to_staged',
-            lambda uid: pytest.fail('read mode cannot invoke staged migration writer'),
+            'restore_legacy_conversation_items',
+            lambda uid: pytest.fail('write-mode recovery must not duplicate a legacy_staged Candidate'),
         )
 
-        assert r.migrate_ai_tasks(uid='u1')['status'].startswith('canonical read mode')
-        assert r.migrate_conversation_items(uid='u1') == {'status': 'ok', 'migrated': 0, 'deleted': 0}
+        assert r.restore_legacy_conversation_items(uid='u1') == {
+            'status': 'ok',
+            'restored': 0,
+            'skipped_existing': 0,
+        }
+
+    def test_retired_conversation_migration_uses_only_the_marked_recovery(self, monkeypatch):
+        monkeypatch.setattr(
+            r.task_control_db,
+            'get_task_workflow_control',
+            lambda uid: TaskWorkflowControl(workflow_mode='off', account_generation=7),
+        )
+        monkeypatch.setattr(
+            r.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            lambda uid: {'restored': 2, 'skipped_existing': 1},
+        )
+
+        assert r.migrate_conversation_items(uid='u1') == {
+            'status': 'ok',
+            'migrated': 0,
+            'deleted': 0,
+            'restored': 2,
+            'skipped_existing': 1,
+        }
+
+        assert r.restore_legacy_conversation_items(uid='u1') == {
+            'status': 'ok',
+            'restored': 2,
+            'skipped_existing': 1,
+        }
 
     def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):
         monkeypatch.setattr(

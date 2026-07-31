@@ -1955,22 +1955,27 @@ class TestPromoteResponseWireCompat:
         """migrate endpoint returns {status: str} matching Swift StatusResponse."""
         from routers.staged_tasks import migrate_ai_tasks
 
-        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
-            result = migrate_ai_tasks(uid='test-uid')
+        result = migrate_ai_tasks(uid='test-uid')
 
         assert 'status' in result
         assert isinstance(result['status'], str)
+        assert result['status'].startswith('legacy task migration retired')
 
     def test_migrate_conversation_items_returns_status_migrated_deleted(self):
         """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
         from routers.staged_tasks import migrate_conversation_items
 
-        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
+        with patch.object(
+            staged_tasks_db,
+            'restore_legacy_conversation_items',
+            return_value={'restored': 3, 'skipped_existing': 0},
+        ):
             result = migrate_conversation_items(uid='test-uid')
 
         assert result['status'] == 'ok'
-        assert result['migrated'] == 10
+        assert result['migrated'] == 0
         assert 'deleted' in result
+        assert result['restored'] == 3
 
 
 # ===========================================================================
@@ -2111,49 +2116,85 @@ class TestRatingZeroBoundary:
 # ===========================================================================
 
 
-class TestMigrationBatchIntegration:
-    """Exercise migration functions with enough items to cross batch boundary."""
+class TestLegacyConversationRecovery:
+    """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self):
+        """Recovery removes only its marker and atomically recreates the original action item."""
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'conversation_id': 'conversation-1',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        ordinary_staged_snapshot = MagicMock()
+        ordinary_staged_snapshot.id = 'ordinary-staged-task'
+        ordinary_staged_snapshot.to_dict.return_value = {
+            'id': 'ordinary-staged-task',
+            'description': 'Keep this staged task',
+            'completed': False,
+            'source': 'screenshot',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        staged_col.where.return_value.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        action_item_ref = MagicMock()
+        action_items_col.document.return_value = action_item_ref
+        staged_ref = MagicMock()
+        staged_col.document.return_value = staged_ref
+        batch = MagicMock()
 
-        def _make_doc(i, source='screenshot'):
-            doc = MagicMock()
-            doc.id = f'task-{i}'
-            doc.to_dict.return_value = {
-                'id': f'task-{i}',
-                'completed': False,
-                'source': source,
-                'relevance_score': i,
-            }
-            return doc
-
-        ai_docs = [_make_doc(i) for i in range(260)]
-
-        mock_action_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.stream.return_value = ai_docs
-        mock_action_col.where.return_value = mock_query
-        mock_action_col.document.return_value = MagicMock()
-
-        mock_staged_col = MagicMock()
-        mock_staged_col.document.return_value = MagicMock()
-
-        batch1 = MagicMock()
-        batch2 = MagicMock()
-
-        def col_side_effect(col_name):
-            if col_name == 'action_items':
-                return mock_action_col
-            return mock_staged_col
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
 
         with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.side_effect = [batch1, batch2]
             patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+            patched_db.batch.return_value = batch
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
 
-        assert result['moved'] == 257  # 260 - 3 kept
-        batch1.commit.assert_called()  # intermediate commit at 500 ops
+        assert result == {'restored': 1, 'skipped_existing': 0}
+        batch.create.assert_called_once_with(
+            action_item_ref,
+            {
+                'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
+                'completed': False,
+            },
+        )
+        batch.delete.assert_called_once_with(staged_ref)
+        batch.commit.assert_called_once()
+
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self):
+        """An identity collision preserves both copies instead of overwriting current task data."""
+        from google.api_core.exceptions import AlreadyExists
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        staged_col.where.return_value.stream.return_value = [staged_snapshot]
+        batch = MagicMock()
+        batch.commit.side_effect = AlreadyExists('task already exists')
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        with patch.object(staged_tasks_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+            patched_db.batch.return_value = batch
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
+
+        assert result == {'restored': 0, 'skipped_existing': 1}
+        batch.delete.assert_called_once()
 
 
 # ============================================================================

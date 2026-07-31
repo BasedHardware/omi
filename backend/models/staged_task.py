@@ -53,12 +53,31 @@ class PromoteStagedTaskResponse(BaseModel):
 
 
 class MigrateConversationItemsResponse(BaseModel):
-    """Outcome of migrating conversation items to staged tasks.
+    """Compatibility response for the retired conversation migration route.
 
-    Preserves the `migrated` count that the handler returns alongside the status ack;
-    using StatusResponse here would silently drop it (Pydantic extra='ignore').
+    The released ``migrated``/``deleted`` fields stay response-compatible for
+    older desktop clients; the route now reports restoration of explicitly
+    marked legacy rows instead of moving live action items.
     """
 
     status: str = Field(default='ok', description='Ack status, e.g. "ok".')
-    migrated: int = Field(default=0, description='Number of conversation items migrated to staged tasks.')
-    deleted: int = Field(default=0, description='Number of items deleted during migration (reserved; currently 0).')
+    migrated: int = Field(default=0, description='Retained compatibility field; always zero for the retired migration.')
+    deleted: int = Field(default=0, description='Retained compatibility field; always zero for the retired migration.')
+    restored: int = Field(
+        default=0, description='Number of legacy action items restored by the retired migration route.'
+    )
+    skipped_existing: int = Field(
+        default=0,
+        description='Marked rows left staged because a current action item with that identity already exists.',
+    )
+
+
+class RestoreLegacyConversationItemsResponse(BaseModel):
+    """Outcome of the safe action-items recovery endpoint."""
+
+    status: str = Field(default='ok', description='Ack status, e.g. "ok".')
+    restored: int = Field(default=0, description='Number of action items safely restored.')
+    skipped_existing: int = Field(
+        default=0,
+        description='Rows left staged because an action item with that identity already exists.',
+    )

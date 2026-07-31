@@ -2706,6 +2706,12 @@ export interface ResponseMessage {
   type: MessageType;
 }
 
+export interface RestoreLegacyConversationItemsResponse {
+  restored?: number;
+  skipped_existing?: number;
+  status?: string;
+}
+
 export interface ReviewAppRequest {
   response?: string | null;
   review?: string | null;
@@ -4116,6 +4122,7 @@ export interface OmiApiSchemas {
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
+  "RestoreLegacyConversationItemsResponse": RestoreLegacyConversationItemsResponse;
   "ReviewAppRequest": ReviewAppRequest;
   "ReviewResolutionRequest": ReviewResolutionRequest;
   "ReviewResolutionResponse": ReviewResolutionResponse;
@@ -4336,6 +4343,16 @@ export interface OmiApiPaths {
       operationId: "get_pending_sync_items_v1_action_items_pending_sync_get";
       responses: {
         "200": PendingSyncResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/restore-legacy-conversation-items": {
+    post: {
+      operationId: "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post";
+      responses: {
+        "200": RestoreLegacyConversationItemsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8328,6 +8345,25 @@ export async function get_pending_sync_items_v1_action_items_pending_sync_get(qu
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RestoreLegacyConversationItemsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/restore-legacy-conversation-items`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -15781,4 +15817,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 387 client methods generated.
+// Total: 388 client methods generated.
