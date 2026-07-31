@@ -118,8 +118,14 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
 
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
-        assert result == 'user-1'
-        assert calls == [(dependencies.critical_executor, verify_id_token, ('firebase-token',), {})]
+        assert result == 'user-1'  # the port's verify_token internally calls the stubbed verify_id_token
+        # Auth verification is offloaded to the critical executor (the port's verify_token, not the raw
+        # firebase SDK function — dependencies.py now goes through utils.auth, ADR-0034).
+        assert len(calls) == 1
+        executor, fn, args, kwargs = calls[0]
+        assert executor is dependencies.critical_executor
+        assert args == ('firebase-token',) and kwargs == {}
+        assert getattr(fn, '__name__', '') == 'verify_token'
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:

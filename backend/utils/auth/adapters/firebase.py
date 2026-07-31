@@ -22,20 +22,22 @@ def _auth():
 
 
 def _translate(exc: Exception) -> errors.AuthError:
-    from firebase_admin.auth import (
-        CertificateFetchError,
-        ExpiredIdTokenError,
-        InvalidIdTokenError,
-        RevokedIdTokenError,
-    )
+    import firebase_admin.auth as fa
 
-    if isinstance(exc, RevokedIdTokenError):
+    # getattr with an empty-tuple fallback: a firebase version (or an incomplete test stub) that lacks
+    # one of these classes just makes that isinstance branch never match — never an ImportError.
+    revoked = getattr(fa, 'RevokedIdTokenError', ())
+    expired = getattr(fa, 'ExpiredIdTokenError', ())
+    cert = getattr(fa, 'CertificateFetchError', ())
+    invalid = getattr(fa, 'InvalidIdTokenError', ())
+
+    if isinstance(exc, revoked):
         return errors.RevokedToken(str(exc))
-    if isinstance(exc, ExpiredIdTokenError):
+    if isinstance(exc, expired):
         return errors.ExpiredToken(str(exc))
-    if isinstance(exc, CertificateFetchError):
+    if isinstance(exc, cert):
         return errors.JWKSUnavailable(str(exc))
-    if isinstance(exc, InvalidIdTokenError):
+    if isinstance(exc, invalid):
         return errors.InvalidToken(str(exc))
     return errors.InvalidToken(str(exc))
 

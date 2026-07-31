@@ -131,10 +131,13 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
             'redirect_url': 'https://app.test/complete',
             'state': 'opaque',
         }
-        assert [(executor, func) for executor, func, _args in calls] == [
-            (oauth.critical_executor, firebase_auth.verify_id_token),
-            (oauth.db_executor, apps_db.get_app_by_id_db),
-            (oauth.db_executor, oauth.is_user_app_enabled),
+        # Auth verification is offloaded to the critical executor — now the neutral port's verify_token
+        # (oauth.py goes through utils.auth, ADR-0034), not the raw firebase SDK function. Compare by
+        # function name so the assertion is identity-agnostic while still pinning each executor boundary.
+        assert [(executor, getattr(func, '__name__', '')) for executor, func, _args in calls] == [
+            (oauth.critical_executor, 'verify_token'),
+            (oauth.db_executor, apps_db.get_app_by_id_db.__name__),
+            (oauth.db_executor, oauth.is_user_app_enabled.__name__),
         ]
 
 
@@ -189,4 +192,4 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
             )
 
         assert exc.value.status_code == 401
-        assert 'Invalid Firebase ID token' in exc.value.detail
+        assert 'Invalid sign-in token' in exc.value.detail

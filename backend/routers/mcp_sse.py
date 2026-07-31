@@ -18,7 +18,8 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 from pydantic import BaseModel
 
-import firebase_admin.auth
+from utils.auth import get_auth_provider
+from utils.auth import errors as auth_errors
 from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
@@ -1617,9 +1618,8 @@ def mcp_authorize_consent(
         _, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
-        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-        uid = cast(str, decoded_token["uid"])
-    except firebase_admin.auth.InvalidIdTokenError:
+        uid = cast(str, get_auth_provider().verify_token(firebase_id_token).uid)
+    except auth_errors.InvalidToken:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
         if isinstance(e, ValueError):

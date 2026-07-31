@@ -7,7 +7,8 @@ from fastapi import APIRouter, Cookie, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-import firebase_admin.auth
+from utils.auth import get_auth_provider
+from utils.auth import errors as auth_errors
 import httpx
 
 from database.apps import get_app_by_id_db
@@ -176,16 +177,12 @@ async def oauth_token(
             detail='This authorization request is invalid or expired. Please restart the connection from the app.',
         )
     try:
-        decoded_token = await run_blocking(
-            critical_executor,
-            firebase_admin.auth.verify_id_token,
-            firebase_id_token,
-        )
-        uid = decoded_token['uid']
-    except firebase_admin.auth.InvalidIdTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
+        principal = await run_blocking(critical_executor, get_auth_provider().verify_token, firebase_id_token)
+        uid = principal.uid
+    except auth_errors.InvalidToken as e:
+        raise HTTPException(status_code=401, detail=f"Invalid sign-in token: {e}")
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
+        raise HTTPException(status_code=401, detail=f"Error verifying sign-in token: {e}")
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
