@@ -343,6 +343,35 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     XCTAssertEqual(sync.syncBatches[0].first?.clearDueAt, true)
     XCTAssertNil(sync.syncBatches[0].first?.dueAt)
   }
+
+  @MainActor
+  func testAppleTitleClearPropagatesEmptyDescriptionToBackend() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let reminder = store.makeReminder(id: "reminder-1", title: "Ship it", completed: false)
+    reminder.title = ""
+    // Apple is newer than the backend row that still has the old title.
+    store.lastModifiedByID["reminder-1"] = Date(timeIntervalSince1970: 1_900_000_000)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(
+            id: "item-1",
+            description: "Ship it",
+            appleReminderId: "reminder-1",
+            updatedAt: "2026-07-19T12:00:00Z"
+          )
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.updated, 1)
+    XCTAssertEqual(sync.syncBatches.count, 1)
+    XCTAssertEqual(sync.syncBatches[0].first?.id, "item-1")
+    XCTAssertEqual(sync.syncBatches[0].first?.description, "")
+  }
 }
 
 @MainActor
