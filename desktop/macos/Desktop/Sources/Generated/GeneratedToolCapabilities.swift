@@ -652,6 +652,80 @@ enum GeneratedToolCapabilities {
       "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
       "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]
+    ),
+    Capability(
+      toolName: "search_contacts",
+      title: "Search Contacts",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Resolve a person's name to their phone numbers and email addresses from local Contacts.",
+      bullets: [
+      "Call before send_message when the user names a person instead of giving a handle.",
+      "Ask the user to choose when several contacts or handles match.",
+      "Call this before send_message whenever the recipient is named rather than given as a raw phone number or email.",
+      "If several contacts match, ask the user which one instead of guessing.",
+      "If a contact has multiple handles, prefer the mobile number for messaging and say which one you chose."
+    ]
+    ),
+    Capability(
+      toolName: "list_message_chats",
+      title: "List Message Chats",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "List recent iMessage/SMS conversations from the local Messages database.",
+      bullets: [
+      "Use to locate the conversation the user means before reading or replying.",
+      "Requires Full Disk Access; returns an empty result with a permission hint without it.",
+      "Use this to find the chat the user means before reading history or sending.",
+      "Chat identifiers from this tool are stable; pass chat_id to read_message_history."
+    ]
+    ),
+    Capability(
+      toolName: "read_message_history",
+      title: "Read Message History",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Read recent messages from one iMessage/SMS conversation.",
+      bullets: [
+      "Identify the thread by chat_id from list_message_chats, or by handle.",
+      "Read the thread before drafting a reply so it matches the real conversation.",
+      "Identify the conversation by chat_id from list_message_chats, or by handle for a direct thread.",
+      "Read the thread before drafting a reply so the reply matches the actual conversation.",
+      "Quote message text only when the user asked for it; summarize otherwise."
+    ]
+    ),
+    Capability(
+      toolName: "send_message",
+      title: "Send Message",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Send an iMessage or SMS through Messages.app after an explicit approval.",
+      bullets: [
+      "Always requires an approval dispatch showing the resolved recipient and exact text.",
+      "Resolve named recipients with search_contacts first.",
+      "Leave service unset unless the user explicitly asked for SMS or iMessage.",
+      "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
+      "Put the exact text you intend to send in the text field — the approval card shows the user this string verbatim.",
+      "Never send to a handle the user did not name or confirm.",
+      "Leave service unset unless the user explicitly asked for SMS or iMessage; auto lets Messages.app choose.",
+      "After a successful send, report the recipient and that it was sent — do not re-send on an ambiguous result."
+    ]
+    ),
+    Capability(
+      toolName: "run_applescript",
+      title: "Run AppleScript",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Run an AppleScript snippet against local macOS apps after an explicit approval.",
+      bullets: [
+      "Always requires an approval dispatch showing the exact script.",
+      "Prefer a dedicated tool when one exists — send_message rather than scripting Messages.app.",
+      "Requires Automation permission for every app the script targets.",
+      "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",
+      "Keep the script to the single action you described to the user; the approval card shows the script verbatim.",
+      "Read-only scripting (querying window titles, reading a selection) still requires approval because it drives other apps.",
+      "Do not use this to bypass a denied approval or to script a permission dialog."
+    ]
     )
   ]
 

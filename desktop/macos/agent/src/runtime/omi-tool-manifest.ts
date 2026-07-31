@@ -643,6 +643,63 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ),
     },
   },
+  search_contacts: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Search Contacts",
+      "Resolve a person's name to their phone numbers and email addresses from local Contacts.",
+      [
+        "Call before send_message when the user names a person instead of giving a handle.",
+        "Ask the user to choose when several contacts or handles match.",
+      ],
+    ),
+  },
+  list_message_chats: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "List Message Chats",
+      "List recent iMessage/SMS conversations from the local Messages database.",
+      [
+        "Use to locate the conversation the user means before reading or replying.",
+        "Requires Full Disk Access; returns an empty result with a permission hint without it.",
+      ],
+    ),
+  },
+  read_message_history: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Read Message History",
+      "Read recent messages from one iMessage/SMS conversation.",
+      [
+        "Identify the thread by chat_id from list_message_chats, or by handle.",
+        "Read the thread before drafting a reply so it matches the real conversation.",
+      ],
+    ),
+  },
+  send_message: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Send Message",
+      "Send an iMessage or SMS through Messages.app after an explicit approval.",
+      [
+        "Always requires an approval dispatch showing the resolved recipient and exact text.",
+        "Resolve named recipients with search_contacts first.",
+        "Leave service unset unless the user explicitly asked for SMS or iMessage.",
+      ],
+    ),
+  },
+  run_applescript: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Run AppleScript",
+      "Run an AppleScript snippet against local macOS apps after an explicit approval.",
+      [
+        "Always requires an approval dispatch showing the exact script.",
+        "Prefer a dedicated tool when one exists — send_message rather than scripting Messages.app.",
+        "Requires Automation permission for every app the script targets.",
+      ],
+    ),
+  },
 };
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
@@ -1100,7 +1157,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     inputSchema: schema({
       type: {
         type: "string",
-        enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+        enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access", "contacts", "calendars", "reminders", "photos"],
         description: "Optional permission type. Omit to return all supported permissions.",
       },
     }),
@@ -1129,9 +1186,9 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       {
         type: {
           type: "string",
-          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access", "contacts", "calendars", "reminders", "photos"],
           description:
-            "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
+            "Permission type: screen_recording, microphone, notifications, accessibility, automation, full_disk_access, contacts, calendars, reminders, or photos",
         },
       },
       ["type"],
@@ -1396,6 +1453,144 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires local Rewind database; raw screenshot pixels still require separate approval."],
     adapters: piLocalApiAndScreenContextStdio(),
+  },
+  {
+    name: "search_contacts",
+    label: "Search Contacts",
+    description:
+      "Resolve a person's name to their phone numbers and email addresses from the local macOS Contacts store. Use before send_message when the user names a person instead of a handle.",
+    promptSnippet: "search_contacts - Resolve a name to phone/email handles",
+    promptGuidelines: [
+      "Call this before send_message whenever the recipient is named rather than given as a raw phone number or email.",
+      "If several contacts match, ask the user which one instead of guessing.",
+      "If a contact has multiple handles, prefer the mobile number for messaging and say which one you chose.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "Name or partial name to search for." },
+        limit: { type: "number", description: "Maximum contacts to return (default 10, max 50)." },
+      },
+      ["query"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires macOS Contacts permission."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "list_message_chats",
+    label: "List Message Chats",
+    description:
+      "List recent iMessage/SMS conversations from the local Messages database, most recently active first. Read-only.",
+    promptSnippet: "list_message_chats - List recent Messages conversations",
+    promptGuidelines: [
+      "Use this to find the chat the user means before reading history or sending.",
+      "Chat identifiers from this tool are stable; pass chat_id to read_message_history.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      limit: { type: "number", description: "Maximum chats to return (default 20, max 100)." },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires macOS Full Disk Access to read the Messages database."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "read_message_history",
+    label: "Read Message History",
+    description:
+      "Read recent messages from one iMessage/SMS conversation in the local Messages database. Read-only.",
+    promptSnippet: "read_message_history - Read one conversation's recent messages",
+    promptGuidelines: [
+      "Identify the conversation by chat_id from list_message_chats, or by handle for a direct thread.",
+      "Read the thread before drafting a reply so the reply matches the actual conversation.",
+      "Quote message text only when the user asked for it; summarize otherwise.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      chat_id: { type: "number", description: "Chat identifier from list_message_chats." },
+      handle: { type: "string", description: "Phone number or email of a direct thread, when chat_id is unknown." },
+      limit: { type: "number", description: "Maximum messages to return (default 30, max 200)." },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires macOS Full Disk Access to read the Messages database."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "send_message",
+    label: "Send Message",
+    description:
+      "Send an iMessage or SMS through Messages.app. Sending is a physical external effect and always requires an approval dispatch showing the resolved recipient and the exact text.",
+    promptSnippet: "send_message - Send an iMessage/SMS via Messages.app",
+    promptGuidelines: [
+      "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
+      "Put the exact text you intend to send in the text field — the approval card shows the user this string verbatim.",
+      "Never send to a handle the user did not name or confirm.",
+      "Leave service unset unless the user explicitly asked for SMS or iMessage; auto lets Messages.app choose.",
+      "After a successful send, report the recipient and that it was sent — do not re-send on an ambiguous result.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        to: { type: "string", description: "Phone number, email, or Apple ID of the recipient." },
+        text: { type: "string", description: "Exact message body to send." },
+        service: {
+          type: "string",
+          enum: ["auto", "imessage", "sms"],
+          description: "Delivery service. Default auto lets Messages.app choose.",
+        },
+        file_path: { type: "string", description: "Optional absolute path of a file to attach." },
+      },
+      ["to", "text"],
+    ),
+    annotations: openWorldWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires Messages.app to be signed in and macOS Automation permission for Messages.",
+      "Requires an approval dispatch or an unexpired scoped grant for this recipient.",
+    ],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "run_applescript",
+    label: "Run AppleScript",
+    description:
+      "Run an AppleScript/osascript snippet against local macOS apps and return its output. This actuates the user's machine and always requires an approval dispatch showing the exact script.",
+    promptSnippet: "run_applescript - Run an AppleScript against local apps",
+    promptGuidelines: [
+      "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",
+      "Keep the script to the single action you described to the user; the approval card shows the script verbatim.",
+      "Read-only scripting (querying window titles, reading a selection) still requires approval because it drives other apps.",
+      "Do not use this to bypass a denied approval or to script a permission dialog.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        script: { type: "string", description: "AppleScript source to execute." },
+        timeout_seconds: { type: "number", description: "Maximum seconds to wait (default 30, max 120)." },
+      },
+      ["script"],
+    ),
+    annotations: openWorldWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires macOS Automation permission for each app the script targets.",
+      "Requires an approval dispatch or an unexpired scoped grant.",
+    ],
+    adapters: piAndStdio(),
   },
 ];
 

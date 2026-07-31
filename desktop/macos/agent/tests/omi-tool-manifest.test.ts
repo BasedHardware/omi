@@ -66,6 +66,11 @@ describe("omi tool manifest", () => {
       "request_permission",
       "screenshot",
       "get_work_context",
+      "search_contacts",
+      "list_message_chats",
+      "read_message_history",
+      "send_message",
+      "run_applescript",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
@@ -188,7 +193,18 @@ describe("omi tool manifest", () => {
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
     expect(requestPermission?.inputSchema.properties.type).toMatchObject({
-      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+      enum: [
+        "screen_recording",
+        "microphone",
+        "notifications",
+        "accessibility",
+        "automation",
+        "full_disk_access",
+        "contacts",
+        "calendars",
+        "reminders",
+        "photos",
+      ],
     });
   });
 

@@ -72,6 +72,10 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.artifacts.manage",
   "desktop.automation.read",
   "desktop.automation.act_dev_only",
+  "desktop.automation.act",
+  "desktop.contacts.read",
+  "desktop.messaging.read",
+  "desktop.messaging.send",
   "external.write_prepare",
   "external.write_send",
 ]);
