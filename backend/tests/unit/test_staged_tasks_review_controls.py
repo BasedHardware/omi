@@ -428,7 +428,7 @@ class TestModeAwareSidecarReconciliation:
         )
 
     @pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
-    def test_legacy_migrations_are_noops_for_every_workflow_mode(self, monkeypatch, workflow_mode):
+    def test_legacy_migrations_only_recover_legacy_read_modes(self, monkeypatch, workflow_mode):
         monkeypatch.setattr(
             r.task_control_db,
             'get_task_workflow_control',
@@ -438,34 +438,40 @@ class TestModeAwareSidecarReconciliation:
         monkeypatch.setattr(
             r.staged_tasks_db,
             'restore_legacy_conversation_items',
-            lambda uid: restore_calls.append(uid) or {'restored': 0, 'skipped_existing': 0},
+            lambda uid, **kwargs: restore_calls.append(uid)
+            or {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
         )
         assert r.migrate_ai_tasks(uid='u1')['status'].startswith('legacy task migration retired')
-        assert r.migrate_conversation_items(uid='u1') == {
+        assert r.migrate_conversation_items(uid='u1', limit=50, cursor=None) == {
             'status': 'ok',
             'migrated': 0,
             'deleted': 0,
             'restored': 0,
             'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
         }
-        assert restore_calls == ([] if workflow_mode == 'write' else ['u1'])
+        assert restore_calls == ([] if workflow_mode in {'write', 'read'} else ['u1'])
 
-    def test_write_mode_recovery_keeps_legacy_staged_candidate_authoritative(self, monkeypatch):
+    @pytest.mark.parametrize('workflow_mode', ['write', 'read'])
+    def test_canonical_mode_recovery_keeps_legacy_staged_candidate_authoritative(self, monkeypatch, workflow_mode):
         monkeypatch.setattr(
             r.task_control_db,
             'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=7),
+            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
         )
         monkeypatch.setattr(
             r.staged_tasks_db,
             'restore_legacy_conversation_items',
-            lambda uid: pytest.fail('write-mode recovery must not duplicate a legacy_staged Candidate'),
+            lambda *args, **kwargs: pytest.fail('canonical recovery must not duplicate a legacy_staged Candidate'),
         )
 
-        assert r.restore_legacy_conversation_items(uid='u1') == {
+        assert r.restore_legacy_conversation_items(uid='u1', limit=50, cursor=None) == {
             'status': 'ok',
             'restored': 0,
             'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
         }
 
     def test_retired_conversation_migration_uses_only_the_marked_recovery(self, monkeypatch):
@@ -477,21 +483,30 @@ class TestModeAwareSidecarReconciliation:
         monkeypatch.setattr(
             r.staged_tasks_db,
             'restore_legacy_conversation_items',
-            lambda uid: {'restored': 2, 'skipped_existing': 1},
+            lambda uid, **kwargs: {
+                'restored': 2,
+                'skipped_existing': 1,
+                'has_more': True,
+                'next_cursor': 'legacy-2',
+            },
         )
 
-        assert r.migrate_conversation_items(uid='u1') == {
+        assert r.migrate_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
             'status': 'ok',
             'migrated': 0,
             'deleted': 0,
             'restored': 2,
             'skipped_existing': 1,
+            'has_more': True,
+            'next_cursor': 'legacy-2',
         }
 
-        assert r.restore_legacy_conversation_items(uid='u1') == {
+        assert r.restore_legacy_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
             'status': 'ok',
             'restored': 2,
             'skipped_existing': 1,
+            'has_more': True,
+            'next_cursor': 'legacy-2',
         }
 
     def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):

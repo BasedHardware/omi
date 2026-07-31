@@ -70,6 +70,14 @@ class MigrateConversationItemsResponse(BaseModel):
         default=0,
         description='Marked rows left staged because a current action item with that identity already exists.',
     )
+    has_more: bool = Field(
+        default=False,
+        description='Whether more marked legacy rows remain after this recovery page.',
+    )
+    next_cursor: Optional[str] = Field(
+        default=None,
+        description='Exclusive recovery cursor for the next page, present only when has_more is true.',
+    )
 
 
 class RestoreLegacyConversationItemsResponse(BaseModel):
@@ -80,4 +88,12 @@ class RestoreLegacyConversationItemsResponse(BaseModel):
     skipped_existing: int = Field(
         default=0,
         description='Rows left staged because an action item with that identity already exists.',
+    )
+    has_more: bool = Field(
+        default=False,
+        description='Whether more marked legacy rows remain after this recovery page.',
+    )
+    next_cursor: Optional[str] = Field(
+        default=None,
+        description='Exclusive recovery cursor for the next page, present only when has_more is true.',
     )

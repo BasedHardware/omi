@@ -1968,9 +1968,9 @@ class TestPromoteResponseWireCompat:
         with patch.object(
             staged_tasks_db,
             'restore_legacy_conversation_items',
-            return_value={'restored': 3, 'skipped_existing': 0},
+            return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
         ):
-            result = migrate_conversation_items(uid='test-uid')
+            result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
         assert result['migrated'] == 0
@@ -2140,7 +2140,11 @@ class TestLegacyConversationRecovery:
         }
         action_items_col = MagicMock()
         staged_col = MagicMock()
-        staged_col.where.return_value.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        staged_col.where.return_value = recovery_query
         action_item_ref = MagicMock()
         action_items_col.document.return_value = action_item_ref
         staged_ref = MagicMock()
@@ -2155,7 +2159,12 @@ class TestLegacyConversationRecovery:
             patched_db.batch.return_value = batch
             result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
 
-        assert result == {'restored': 1, 'skipped_existing': 0}
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
         batch.create.assert_called_once_with(
             action_item_ref,
             {
@@ -2181,7 +2190,11 @@ class TestLegacyConversationRecovery:
         }
         action_items_col = MagicMock()
         staged_col = MagicMock()
-        staged_col.where.return_value.stream.return_value = [staged_snapshot]
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
         batch = MagicMock()
         batch.commit.side_effect = AlreadyExists('task already exists')
 
@@ -2193,8 +2206,77 @@ class TestLegacyConversationRecovery:
             patched_db.batch.return_value = batch
             result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
 
-        assert result == {'restored': 0, 'skipped_existing': 1}
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
         batch.delete.assert_called_once()
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        snapshots = []
+        for index in range(3):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-{index}'
+            snapshot.to_dict.return_value = {
+                'id': f'legacy-{index}',
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+
+        with patch.object(staged_tasks_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
+                action_items_col if collection_name == 'action_items' else staged_col
+            )
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', limit=2)
+
+        recovery_query.order_by.assert_called_once_with('__name__')
+        recovery_query.limit.assert_called_once_with(3)
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': True,
+            'next_cursor': 'legacy-1',
+        }
+
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self):
+        """A continuation skips already-scanned collisions instead of retrying them forever."""
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.start_after.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = []
+        staged_col.where.return_value = recovery_query
+        cursor_ref = MagicMock()
+        staged_col.document.return_value = cursor_ref
+
+        with patch.object(staged_tasks_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
+                action_items_col if collection_name == 'action_items' else staged_col
+            )
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', cursor='legacy-1')
+
+        recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
 
 # ============================================================================

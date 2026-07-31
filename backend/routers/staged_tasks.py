@@ -577,18 +577,30 @@ def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
     tags=['staged-tasks'],
     response_model=MigrateConversationItemsResponse,
 )
-def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
+def migrate_conversation_items(
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None, min_length=1, max_length=256),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     control = task_control_db.get_task_workflow_control(uid)
-    # In canonical-write mode, a marked row may already have a matching
+    # In canonical modes, a marked row may already have a matching
     # legacy_staged Candidate. Restoring it as an action item while that
     # Candidate is pending or accepted would create a duplicate. That mode
     # retains the Candidate as the canonical representation instead.
-    if control.workflow_mode == TaskWorkflowMode.write:
-        return {'status': 'ok', 'migrated': 0, 'deleted': 0, 'restored': 0, 'skipped_existing': 0}
+    if control.workflow_mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
+        return {
+            'status': 'ok',
+            'migrated': 0,
+            'deleted': 0,
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
     # The legacy route remains response-compatible but now restores only rows
     # that it explicitly marked, never live action items.
-    result = staged_tasks_db.restore_legacy_conversation_items(uid)
+    result = staged_tasks_db.restore_legacy_conversation_items(uid, limit=limit, cursor=cursor)
     return {'status': 'ok', 'migrated': 0, 'deleted': 0, **result}
 
 
@@ -597,11 +609,15 @@ def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
     tags=['action-items'],
     response_model=RestoreLegacyConversationItemsResponse,
 )
-def restore_legacy_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
+def restore_legacy_conversation_items(
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None, min_length=1, max_length=256),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     """Safely restore rows moved by the now-retired desktop migration."""
 
     control = task_control_db.get_task_workflow_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.write:
-        return {'status': 'ok', 'restored': 0, 'skipped_existing': 0}
-    result = staged_tasks_db.restore_legacy_conversation_items(uid)
+    if control.workflow_mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
+        return {'status': 'ok', 'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+    result = staged_tasks_db.restore_legacy_conversation_items(uid, limit=limit, cursor=cursor)
     return {'status': 'ok', **result}

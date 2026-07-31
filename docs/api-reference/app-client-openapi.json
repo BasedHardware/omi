@@ -16460,6 +16460,24 @@
       "RestoreLegacyConversationItemsResponse": {
         "description": "Outcome of the safe action-items recovery endpoint.",
         "properties": {
+          "has_more": {
+            "default": false,
+            "description": "Whether more marked legacy rows remain after this recovery page.",
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive recovery cursor for the next page, present only when has_more is true.",
+            "title": "Next Cursor"
+          },
           "restored": {
             "default": 0,
             "description": "Number of action items safely restored.",
@@ -23697,6 +23715,36 @@
         "description": "Safely restore rows moved by the now-retired desktop migration.",
         "operationId": "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post",
         "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

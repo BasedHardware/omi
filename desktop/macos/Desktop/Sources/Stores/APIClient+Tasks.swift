@@ -5,6 +5,23 @@ struct ActionItemIdsResponse: Decodable {
   let ids: [String]
 }
 
+/// One bounded page from the marker-scoped legacy task recovery endpoint.
+/// `nextCursor` is present only when `hasMore` is true, so callers can make
+/// finite forward progress without marking recovery complete mid-sweep.
+struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
+  let restored: Int
+  let skippedExisting: Int
+  let hasMore: Bool
+  let nextCursor: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case restored
+    case skippedExisting = "skipped_existing"
+    case hasMore = "has_more"
+    case nextCursor = "next_cursor"
+  }
+}
+
 extension APIClient {
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
@@ -57,18 +74,22 @@ extension APIClient {
   /// backend returns a safe 404 for this new route, so a client update can never
   /// trigger the old destructive migration during a staggered rollout.
   func restoreLegacyConversationItems(
+    limit: Int = 100,
+    cursor: String? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws -> Int {
-    struct RestoreResponse: Decodable {
-      let restored: Int
+  ) async throws -> LegacyConversationRecoveryPage {
+    precondition((1...100).contains(limit), "Legacy recovery page limit must be between 1 and 100")
+    var path = "v1/action-items/restore-legacy-conversation-items?limit=\(limit)"
+    if let cursor {
+      let escapedCursor = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+      path += "&cursor=\(escapedCursor)"
     }
-    let response: RestoreResponse = try await post(
-      "v1/action-items/restore-legacy-conversation-items",
+    return try await post(
+      path,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
-    return response.restored
   }
 
   func batchUpdateScores(

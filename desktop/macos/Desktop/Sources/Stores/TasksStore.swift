@@ -60,7 +60,8 @@ class TasksStore: ObservableObject {
     var loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var refreshDashboard: ((_ ownerID: String) async -> Void)?
-    var restoreLegacyConversationItems: ((_ ownerID: String) async throws -> Int)?
+    var restoreLegacyConversationItems:
+      ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)?
     var backfillRelevance: ((_ ownerID: String) async throws -> Int)?
 
     init(
@@ -81,7 +82,8 @@ class TasksStore: ObservableObject {
       loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       refreshDashboard: ((_ ownerID: String) async -> Void)? = nil,
-      restoreLegacyConversationItems: ((_ ownerID: String) async throws -> Int)? = nil,
+      restoreLegacyConversationItems:
+        ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)? = nil,
       backfillRelevance: ((_ ownerID: String) async throws -> Int)? = nil
     ) {
       self.fetchPage = fetchPage
@@ -359,11 +361,7 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: authorizationSnapshot
       )
     else { return }
-    await DashboardTaskRefreshService.refresh(
-      store: self,
-      expectedOwnerID: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot
-    )
+    await refreshDashboard(lease: lease, operations: .init())
   }
 
   var todoCount: Int {
@@ -1281,6 +1279,17 @@ class TasksStore: ObservableObject {
     operations: OwnerBoundOperations
   ) async {
     guard isCurrent(lease) else { return }
+    guard legacyConversationRecoveryCompleted(for: lease) else {
+      // DashboardTaskRefreshService reconciles remote absence by hard-deleting
+      // local rows. Before the marker-scoped recovery succeeds, a 404 from an
+      // older backend leaves those local rows as the only safe copy.
+      log("TasksStore: Dashboard server reconciliation skipped until legacy task recovery succeeds")
+      await loadDashboardTasks(
+        expectedOwnerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      return
+    }
     if let refreshDashboard = operations.refreshDashboard {
       await refreshDashboard(lease.ownerID)
     } else {
@@ -1861,23 +1870,53 @@ class TasksStore: ObservableObject {
     log("TasksStore: Checking for conversation tasks moved by the retired migration")
 
     do {
-      let restored: Int
-      if let restoreLegacyConversationItems = operations.restoreLegacyConversationItems {
-        restored = try await restoreLegacyConversationItems(lease.ownerID)
-      } else {
-        restored = try await APIClient.shared.restoreLegacyConversationItems(
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
+      var cursor: String?
+      var seenCursors = Set<String>()
+      var restored = 0
+      var skippedExisting = 0
+
+      while true {
+        let page: LegacyConversationRecoveryPage
+        if let restoreLegacyConversationItems = operations.restoreLegacyConversationItems {
+          page = try await restoreLegacyConversationItems(lease.ownerID, cursor)
+        } else {
+          page = try await APIClient.shared.restoreLegacyConversationItems(
+            cursor: cursor,
+            expectedOwnerId: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot
+          )
+        }
+        guard isCurrent(lease) else { return false }
+        restored += page.restored
+        skippedExisting += page.skippedExisting
+
+        guard page.hasMore else {
+          guard page.nextCursor == nil else { throw URLError(.badServerResponse) }
+          break
+        }
+        guard
+          let nextCursor = page.nextCursor,
+          nextCursor != cursor,
+          seenCursors.insert(nextCursor).inserted
+        else {
+          // A bounded page without a new cursor cannot safely prove the sweep
+          // complete. Leave the marker unset and retry on a later launch.
+          throw URLError(.badServerResponse)
+        }
+        cursor = nextCursor
       }
-      guard isCurrent(lease) else { return false }
+
       UserDefaults.standard.set(true, forKey: recoveryKey)
 
-      if restored > 0 {
-        // Force the following full sync to bring restored server rows back into
-        // SQLite and the already-open Tasks view.
-        UserDefaults.standard.set(false, forKey: .tasksFullSyncCompleted(ownerID: userId))
-        log("TasksStore: Restored \(restored) conversation task(s) from the retired migration")
+      // Every completed recovery sweep invalidates the startup sync, including
+      // identity collisions. A skipped row has a current server action item
+      // that the cache still needs to fetch, just like a newly restored row.
+      UserDefaults.standard.set(false, forKey: .tasksFullSyncCompleted(ownerID: userId))
+      if restored > 0 || skippedExisting > 0 {
+        log(
+          "TasksStore: Legacy conversation-task recovery completed: restored=\(restored), "
+            + "alreadyCurrent=\(skippedExisting)"
+        )
       }
       return true
     } catch {
