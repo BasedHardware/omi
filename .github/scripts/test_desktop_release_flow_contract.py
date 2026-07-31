@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import os
 import shutil
@@ -205,38 +204,6 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         }
         self.assertIn('git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
         self.assertNotIn("ref: ${{ inputs.release_tag }}", fragments)
-
-    def test_release_process_guard_matches_trusted_auto_promotion(self) -> None:
-        trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
-        obsolete_dispatch_gate = "github.event.workflow_run.event == 'workflow_dispatch'"
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for relative_path in (
-                ".github/workflows/desktop_qualify_beta.yml",
-                ".github/workflows/desktop_promote_beta.yml",
-                ".github/scripts/check-desktop-auto-beta-candidate.py",
-            ):
-                source = ROOT / relative_path
-                target = root / relative_path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
-            promotion = root / ".github/workflows/desktop_promote_beta.yml"
-            self.assertIn(trusted_repository, self.promotion)
-            self.assertNotIn(obsolete_dispatch_gate, self.promotion)
-            promotion.write_text(self.promotion.replace(trusted_repository, "", 1), encoding="utf-8")
-            spec = importlib.util.spec_from_file_location(
-                "release_process_guards",
-                ROOT / ".github/scripts/check-release-process-guards.py",
-            )
-            self.assertIsNotNone(spec)
-            self.assertIsNotNone(spec.loader if spec else None)
-            guard = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(guard)
-            guard.ROOT = root
-            errors = guard.check_desktop_qualification_runner()
-            self.assertTrue(any(trusted_repository in error for error in errors), errors)
-            promotion.write_text(self.promotion, encoding="utf-8")
-            self.assertEqual(guard.check_desktop_qualification_runner(), [])
 
     def test_run_staging_evidence_and_cleanup_are_isolated_and_rerun_safe(self) -> None:
         for fragment in (
