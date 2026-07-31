@@ -879,13 +879,19 @@ class TaskChatState: ObservableObject {
   private func appendToMessage(id: String, text: String) {
     guard hasCurrentOwner else { return }
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
-  private func flushStreamingBuffer() {
+  private func flushStreamingBuffer(revealAll: Bool = true) {
     guard hasCurrentOwner else { return }
-    streamingBuffer.flush(messages: &messages)
+    if revealAll {
+      streamingBuffer.flush(messages: &messages)
+    } else {
+      streamingBuffer.flushMetered(messages: &messages) { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
+      }
+    }
     if let activeAssistantMessageId {
       scheduleJournalUpdate(messageId: activeAssistantMessageId, status: .streaming)
     }
@@ -921,7 +927,7 @@ class TaskChatState: ObservableObject {
   private func appendThinking(messageId: String, text: String) {
     guard hasCurrentOwner else { return }
     streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 

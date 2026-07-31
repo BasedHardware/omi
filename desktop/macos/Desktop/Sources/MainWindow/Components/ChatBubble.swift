@@ -269,11 +269,14 @@ if message.sender == .ai, shouldTruncate {
               alignment: .leading
             )
           } else if message.isStreaming {
-            StreamingAssistantText(displayText, isStreaming: true)
+            StreamingAssistantText(displayText, isStreaming: true, sender: message.sender)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 message.sender == .user
+                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+              )
+          } else {
                   ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
               )
           } else {
