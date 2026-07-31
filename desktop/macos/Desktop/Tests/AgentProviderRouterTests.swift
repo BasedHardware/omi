@@ -18,6 +18,7 @@ final class AgentProviderRouterTests: XCTestCase {
   func testClassifiesComputerUseTasks() {
     XCTAssertEqual(AgentProviderRouter.classify("open the browser and fill the signup form"), .computerUse)
     XCTAssertEqual(AgentProviderRouter.classify("search the web for flight prices and book the cheapest"), .computerUse)
+    XCTAssertEqual(AgentProviderRouter.classify("automate sending this email"), .computerUse)
   }
 
   func testClassifiesGeneralTasks() {

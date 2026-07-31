@@ -33,13 +33,15 @@ enum AgentProviderRouter {
     "function", "class", "api", "endpoint", "test", "unit test", "debug",
     "implement", "typescript", "javascript", "python", "swift", "rust",
     "html", "css", "sql", "regex", "json", "yaml", "readme", "hello world",
+    "lint", "syntax",
   ]
 
   private static let computerUseKeywords: [String] = [
     "browser", "chrome", "safari", "website", "web page", "webpage", "url",
     "click", "scroll", "tab", "form", "fill", "download", "upload",
     "open the app", "open app", "screenshot", "navigate", "sign in", "log in",
-    "book", "order", "buy", "search the web",
+    "book", "order", "buy", "search the web", "automate", "send email",
+    "reminder", "notes app", "messages app", "files app", "folder",
   ]
 
   /// Static capability prior: which providers are strongest for each task

@@ -17,6 +17,18 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     )
   }
 
+  func testPreferredProvidersMatchSharedRouterPriors() {
+    XCTAssertEqual(
+      LocalAgentProviderRouting.preferredProviders(for: .coding),
+      AgentProviderRouter.prior(for: .coding))
+    XCTAssertEqual(
+      LocalAgentProviderRouting.preferredProviders(for: .automation),
+      AgentProviderRouter.prior(for: .computerUse))
+    XCTAssertEqual(
+      LocalAgentProviderRouting.preferredProviders(for: .general),
+      AgentProviderRouter.prior(for: .general))
+  }
+
   func testModelBriefMentioningHermesDoesNotCountAsExplicitUserRequest() {
     let env = ["OMI_CODEX_ADAPTER_COMMAND": "/tmp/codex"]
     let resolution = LocalAgentProviderRouting.resolveSpawn(

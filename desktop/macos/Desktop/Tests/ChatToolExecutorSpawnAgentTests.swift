@@ -11,6 +11,11 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     await ownerFixture.establish(authOwnerID: "spawn-test-owner")
   }
 
+  override func tearDown() async throws {
+    await ownerFixture.restore()
+    ownerFixture = nil
+  }
+
   func testFloatingPillCannotStartProviderInstall() async {
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(

@@ -235,34 +235,27 @@ enum LocalAgentProviderRouting {
   }
 
   static func classifyTask(_ text: String) -> AgentTaskKind {
-    let lower = text.lowercased()
-    let codingSignals = [
-      "code", "script", "debug", "refactor", "compile", "function", "class", "api",
-      "bug", "implement", "python", "swift", "typescript", "javascript", "repo",
-      "repository", "pull request", "unit test", "lint", "syntax",
-    ]
-    if codingSignals.contains(where: { lower.contains($0) }) {
+    switch AgentProviderRouter.classify(text) {
+    case .coding:
       return .coding
-    }
-    let automationSignals = [
-      "automate", "click", "open app", "send email", "browser", "download",
-      "upload", "reminder", "notes app", "messages app", "files app", "folder",
-    ]
-    if automationSignals.contains(where: { lower.contains($0) }) {
+    case .computerUse:
       return .automation
+    case .general:
+      return .general
     }
-    return .general
   }
 
   static func preferredProviders(for task: AgentTaskKind) -> [AgentPillsManager.DirectedProvider] {
+    let kind: AgentProviderRouter.TaskKind
     switch task {
     case .coding:
-      return [.codex, .hermes, .openclaw]
+      kind = .coding
     case .automation:
-      return [.openclaw, .codex, .hermes]
+      kind = .computerUse
     case .general:
-      return [.openclaw, .codex, .hermes]
+      kind = .general
     }
+    return AgentProviderRouter.prior(for: kind)
   }
 
   static func explicitProvider(in text: String) -> AgentPillsManager.DirectedProvider? {
