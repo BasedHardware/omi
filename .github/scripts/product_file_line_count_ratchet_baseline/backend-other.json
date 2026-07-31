@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/scripts/generate_integration_sdks.py": 2339,
+    "backend/scripts/generate_integration_sdks.py": 2424,
     "backend/scripts/validate-backend-runtime-env.py": 1836,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
