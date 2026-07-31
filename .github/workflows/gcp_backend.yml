@@ -418,10 +418,15 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
+          # Match auto-dev: complete tag-only targets (revision+tag+https URL, no
+          # percent) are not serving traffic. Without this flag the verifier
+          # misreports them as "non-integer Cloud Run traffic percentage" and
+          # blocks manual deploys whenever diagnostic tags remain on the service.
           python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_ledger_fence_transition.py" \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE" \
+            --allow-tagged-no-percent-targets
 
       - name: Login to GCR
         run: gcloud auth configure-docker
