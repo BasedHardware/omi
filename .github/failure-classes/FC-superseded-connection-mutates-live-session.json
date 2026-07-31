@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-superseded-connection-mutates-live-session",
+  "violated_contract": "A callback registered on a connection that has since been replaced may end only that connection's own lifecycle. Its late close, open, error, or timeout event must never mutate the session state its replacement now owns — marking a live session disconnected from a retired socket's event silently strands every subsequent send.",
+  "canonical_prevention": "Bind each connection callback to the connection instance that registered it and return early when the session no longer points at that instance, so a queued event from a retired connection cannot write session state. Prove it by delivering the retired connection's close event after the replacement is live and asserting the session still transmits.",
+  "evidence_prs": [
+    10941
+  ],
+  "scope_hints": [
+    "web/app/src/lib/**"
+  ],
+  "status": "open"
+}
