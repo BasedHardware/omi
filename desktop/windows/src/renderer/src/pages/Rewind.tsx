@@ -99,7 +99,7 @@ export function Rewind(): React.JSX.Element {
               ref={inputRef}
               value={query}
               onChange={(e) => changeQuery(e.target.value)}
-              placeholder="Search what was on screen…"
+              placeholder="Search “meeting notes yesterday”…"
               className="w-full rounded-control border border-line bg-white/[0.07] py-1.5 pl-8 pr-8 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-line-strong"
             />
             {searching && (
