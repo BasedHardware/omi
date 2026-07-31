@@ -101,6 +101,55 @@ curl -fsS http://localhost:8000/v1/health
 7. **Health path.** The brief mentioned `/health`: it does not exist in the backend; the real
    no-auth endpoint is **`/v1/health`** (`backend/routers/other.py`).
 
+## Local inference (WP5, ADR-0035)
+
+Inference is **configured, not bundled**. The backend points at endpoints the operator runs —
+often a dedicated GPU host — instead of shipping an LLM as a prod service. Two groups:
+
+**LLM + embeddings — one OpenAI-compatible endpoint (external).** Ollama/vLLM/TEI serve both
+`/v1/chat/completions` and `/v1/embeddings`, so a single URL covers chat and embeddings. Wire it
+in `backend.env`:
+
+```
+# chat
+OMI_LLM_GATEWAY_FEATURE_MODE=gateway
+OMI_LLM_GATEWAY_URL=http://<ollama-host>:11434/v1
+# embeddings (the one hard-cloud gap, now pointable)
+OMI_EMBEDDINGS_BASE_URL=http://<ollama-host>:11434/v1
+OMI_EMBEDDINGS_MODEL=nomic-embed-text
+QDRANT_VECTOR_DIM=768        # MUST equal the embedding model's dimension
+```
+
+The embedding dimension must match `QDRANT_VECTOR_DIM`: `nomic-embed-text`=768,
+`mxbai-embed-large`=1024, OpenAI `text-embedding-3-large`=3072. Ollama does not serve a 3072-dim
+model — pick one and set the dim to match, on a **fresh** vector store (existing 3072-dim vectors
+are incompatible). VAD needs nothing: Silero ONNX runs in-process, bundled in the backend image.
+
+**STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
+These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
+
+```
+docker compose --profile inference up -d --build
+```
+
+Requirements and gotchas:
+- **GPU:** the host needs the NVIDIA Container Toolkit (the compose `deploy.resources` GPU reservation).
+- **Parakeet base is on NGC:** `docker login nvcr.io` (free NVIDIA NGC account) before building —
+  base `nvcr.io/nvidia/nemo:26.02`. NLLB uses a public CUDA base; diarizer's private base is
+  overridden to `python:3.11-slim` via the `PYTHON_BASE_IMAGE` build-arg (already set in compose).
+- **Models are pre-provisioned, not downloaded at runtime.** The `omi` network is `internal: true`
+  (no egress) — the proof of "zero external calls". Populate the `inference-models` volume before the
+  first `--profile inference` run:
+  - **NLLB:** convert `facebook/nllb-200-distilled-600M` to CTranslate2 int8 and place it at
+    `nllb-200-distilled-600M-ct2-int8/` inside the volume (matches `NLLB_MODEL_DIR`). Serving then
+    makes **zero** external calls.
+  - **Parakeet / diarizer:** pre-populate the HuggingFace cache (`HF_HOME=/models/hf` in the volume)
+    with the model weights, e.g. a one-time `docker run` with network before switching to the
+    internal network. Otherwise first startup fails (cannot reach HuggingFace).
+- Point the backend at them in `backend.env`: `HOSTED_PARAKEET_API_URL=http://parakeet:8080`,
+  `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
+  `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
+
 ## Testing the backend offline
 
 The box has only Docker (no host venv). Suites run in a **test image** = the WP0 backend image plus
