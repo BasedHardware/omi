@@ -208,8 +208,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
+          if-no-files-found: error
+          overwrite: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-qualification-backend-compatibility-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/desktop-backend-compatibility.json
           if-no-files-found: error
           overwrite: false
