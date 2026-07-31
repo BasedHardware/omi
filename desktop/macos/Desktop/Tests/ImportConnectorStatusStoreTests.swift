@@ -151,6 +151,25 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertEqual(snapshot.primaryText, "500 events • 500 memories")
   }
 
+  func testEventKitAccessRevocationClearsPersistedConnectionMetrics() throws {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+    let connector = try XCTUnwrap(ImportConnector.all.first { $0.id == "apple-calendar" })
+    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+
+    store.markSynced(connectorID: connector.id, sourceCount: 500, memoryCount: 500)
+    store.applyAppleEventKitStatus(
+      .needsAccess(message: "Calendar access was revoked.", reasonCode: "authorization_denied"),
+      connectorID: connector.id)
+
+    let snapshot = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
+      for: connector)
+    XCTAssertFalse(snapshot.isConnected)
+    XCTAssertEqual(snapshot.actionTitle, "Connect Apple Calendar")
+    XCTAssertEqual(snapshot.primaryText, "Not connected")
+  }
+
   func testLegacyManualImportCountStillMarksConnectorConnected() {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
