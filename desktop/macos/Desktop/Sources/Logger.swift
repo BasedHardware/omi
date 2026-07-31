@@ -666,4 +666,3 @@ func logError(
     }
   }
 }
-
