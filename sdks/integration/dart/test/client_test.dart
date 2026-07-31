@@ -57,29 +57,19 @@ void main() {
     late http.Request seen;
     final mock = MockClient((request) async {
       seen = request;
-      return http.Response(
-        jsonEncode({
-          'conversations': [],
-          'current_page': 1,
-          'per_page': 20,
-          'total_pages': 1,
-        }),
-        200,
-      );
+      return http.Response(jsonEncode({'conversations': [], 'current_page': 1, 'per_page': 20, 'total_pages': 1}), 200);
     });
     final client = OmiIntegrationClient(apiKey: 'test-key', appId: 'app-123', httpClient: mock);
-    await client.searchConversations(uid: 'user-1', body: const SearchRequest(query: 'project alpha'));
+    await client.searchConversations(
+      uid: 'user-1',
+      body: const SearchRequest(query: 'project alpha'),
+    );
     expect(jsonDecode(seen.body), {'query': 'project alpha'});
     client.close();
   });
 
   test('accepts JSON numbers for integer and double fields', () {
-    final pageJson = <String, dynamic>{
-      'conversations': [],
-      'current_page': 1.0,
-      'per_page': 20.0,
-      'total_pages': 1.0,
-    };
+    final pageJson = <String, dynamic>{'conversations': [], 'current_page': 1.0, 'per_page': 20.0, 'total_pages': 1.0};
     final locationJson = <String, dynamic>{'latitude': 40, 'longitude': -74};
     final page = SearchConversationsResponse.fromJson(pageJson);
     final location = ConversationItemGeolocation.fromJson(locationJson);
