@@ -24,6 +24,8 @@ jobs:
     # and the merge gate correctly failed closed on "scope cancelled" with no
     # code failure. Bound generously like the apt steps below: the cap is a
     # hang backstop, not a budget the legitimate path must fit under.
+    # filter: blob:none keeps the history cheap while still enabling name-only
+    # diffs against the live base SHA.
     timeout-minutes: 10
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
@@ -32,6 +34,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Decide whether hermetic backend coverage applies
         id: scope
