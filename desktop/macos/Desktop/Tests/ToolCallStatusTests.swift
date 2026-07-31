@@ -298,6 +298,33 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertFalse(buffer.hasScheduledFlush)
   }
 
+  func testMeteredFlushRevealsTextAfterThinkingWithoutDrainingItFirst() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendThinking(messageId: messageId, text: String(repeating: "t", count: 100), scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "Answer", scheduleFlush: {})
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+
+    XCTAssertFalse(messages[0].text.isEmpty)
+    guard case .thinking(_, let thinking) = messages[0].contentBlocks.first else {
+      return XCTFail("Expected eager thinking block")
+    }
+    XCTAssertEqual(thinking.count, 100)
+  }
+
+  func testMeteredFlushDropsOrphanBeforeRevealingCurrentSegment() {
+    var messages = [ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendText(messageId: "orphan", text: String(repeating: "x", count: 100), scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "Answer", scheduleFlush: {})
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+
+    XCTAssertFalse(messages[0].text.isEmpty)
+  }
+
   func testTerminalFlushBypassesMeteredReveal() {
     let messageId = "assistant-1"
     var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]

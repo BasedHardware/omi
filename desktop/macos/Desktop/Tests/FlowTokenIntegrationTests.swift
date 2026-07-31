@@ -15,6 +15,9 @@ import XCTest
     XCTAssertFalse(OmiMarkdown.isPlainText("Use **bold** text."))
     XCTAssertFalse(OmiMarkdown.isPlainText("Run `swift test`."))
     XCTAssertFalse(OmiMarkdown.isPlainText("[Open Omi](https://omi.me)"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Read <https://omi.me>"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Email <mailto:user@example.com>"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Email <user@example.com>"))
     XCTAssertFalse(OmiMarkdown.isPlainText("| Name | Value |\n| --- | --- |\n| Omi | 1 |"))
   }
 
