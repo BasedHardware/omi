@@ -142,10 +142,16 @@ final class ChatJournalWritePathTests: XCTestCase {
     var writes: [String] = []
 
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      coordinator.scheduleStreaming(messageID: "assistant-turn-5", delay: .zero) {
+      coordinator.schedule(
+        messageID: "assistant-turn-5",
+        coalescingDelay: .zero
+      ) {
         writes.append("older")
       }
-      coordinator.scheduleStreaming(messageID: "assistant-turn-5", delay: .zero) {
+      coordinator.schedule(
+        messageID: "assistant-turn-5",
+        coalescingDelay: .zero
+      ) {
         writes.append("newer")
         continuation.resume()
       }

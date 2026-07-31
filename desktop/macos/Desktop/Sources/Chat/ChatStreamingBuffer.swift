@@ -56,6 +56,28 @@ final class ChatStreamingBuffer {
     }
   }
 
+  func flushPendingSegments(
+    _ messageId: String,
+    messages: inout [ChatMessage],
+    normalizeText: (_ message: ChatMessage, _ text: String) -> String = { _, text in text }
+  ) {
+    let segments = pendingSegments.filter { $0.messageId == messageId }
+    pendingSegments.removeAll { $0.messageId == messageId }
+    if pendingSegments.isEmpty {
+      cancelPendingFlush()
+    }
+    guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+
+    for segment in segments {
+      switch segment {
+      case .text(_, let text):
+        appendTextSegment(text, to: &messages[index], normalizeText: normalizeText)
+      case .thinking(_, let text):
+        appendThinkingSegment(text, to: &messages[index])
+      }
+    }
+  }
+
   func flush(
     messages: inout [ChatMessage],
     normalizeText: (_ message: ChatMessage, _ text: String) -> String = { _, text in text }

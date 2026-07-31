@@ -134,6 +134,8 @@ final class ChatJournalWriteCoordinator {
   private var streamingTokens: [String: UUID] = [:]
   private var terminalizingMessageIDs: Set<String> = []
 
+  var hasPendingWrites: Bool { !updateTasks.isEmpty || !streamingTasks.isEmpty }
+
   @discardableResult
   func schedule(
     messageID: String,

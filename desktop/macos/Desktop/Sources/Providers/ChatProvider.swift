@@ -4465,7 +4465,7 @@ class ChatProvider: ObservableObject {
         // Never let it resurrect the old bubble, overwrite a newer
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
-        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -4729,7 +4729,7 @@ class ChatProvider: ObservableObject {
         turnGeneration: sendGen,
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
-        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout
@@ -5295,7 +5295,7 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
-  private static func normalizeStreamingText(_ message: ChatMessage, _ text: String) -> String {
+  private static func normalizeStreaming(_ message: ChatMessage, _ text: String) -> String {
     message.sender == .ai ? normalizeAssistantSentenceSpacing(text) : text
   }
 
@@ -5310,11 +5310,11 @@ class ChatProvider: ObservableObject {
   /// Flush accumulated text and thinking deltas to the published messages array.
   private func flushStreamingBuffer(revealAll: Bool = true) {
     if revealAll {
-      streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreamingText)
+      streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreaming)
     } else {
       streamingBuffer.flushMetered(
         messages: &messages,
-        normalizeText: Self.normalizeStreamingText
+        normalizeText: Self.normalizeStreaming
       ) { [weak self] in
         self?.flushStreamingBuffer(revealAll: false)
       }
@@ -5345,7 +5345,7 @@ class ChatProvider: ObservableObject {
         toolUseId: toolUseId,
         input: input,
         messages: &messages,
-        normalizeText: Self.normalizeStreamingText
+        normalizeText: Self.normalizeStreaming
       )
     else { return }
     if status == .completed {
@@ -5368,7 +5368,7 @@ class ChatProvider: ObservableObject {
         name: name,
         output: output,
         messages: &messages,
-        normalizeText: Self.normalizeStreamingText
+        normalizeText: Self.normalizeStreaming
       )
     else { return }
     attachGeneratedFileResources(
@@ -5632,7 +5632,7 @@ class ChatProvider: ObservableObject {
   /// Append thinking text to the streaming message via the shared buffer.
   private func appendThinking(messageId: String, text: String) {
     streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
@@ -5649,7 +5649,7 @@ class ChatProvider: ObservableObject {
       messageId: messageId,
       terminalStatus: terminalStatus,
       messages: &messages,
-      normalizeText: Self.normalizeStreamingText
+      normalizeText: Self.normalizeStreaming
     )
     if scheduleJournal {
       scheduleJournalUpdate(messageId: messageId)

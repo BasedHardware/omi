@@ -35,4 +35,8 @@ import XCTest
     XCTAssertGreaterThan(size.height, 0)
   }
 
+  func testStreamingTextUsesSettledMarkdownWhitespaceRules() {
+    XCTAssertEqual(StreamingAssistantText.displayedText("\n  A streamed answer.  \n"), "A streamed answer.")
+  }
+
 }
