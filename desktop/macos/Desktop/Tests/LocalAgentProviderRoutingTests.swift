@@ -180,7 +180,7 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
         remaining: &remaining,
         error: NSError(
           domain: "test", code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "Failed to start child process"])))
+          userInfo: [NSLocalizedDescriptionKey: "Failed to start child process"])) as Any?)
   }
 
   func testTakeNextFallbackIgnoresNonRetriableErrors() {
@@ -190,7 +190,7 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
         remaining: &remaining,
         error: NSError(
           domain: "test", code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "Could not find the email thread"])))
+          userInfo: [NSLocalizedDescriptionKey: "Could not find the email thread"])) as Any?)
     XCTAssertEqual(remaining, [.openclaw, nil])
   }
 
@@ -204,7 +204,7 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
         phase: nil
       ))
     XCTAssertNil(
-      AgentSpawnFallbackPolicy.takeNextFallback(remaining: &remaining, error: executionFailure))
+      AgentSpawnFallbackPolicy.takeNextFallback(remaining: &remaining, error: executionFailure) as Any?)
     XCTAssertEqual(remaining, [.hermes, nil])
 
     let startupFailure = BridgeError.agentRuntimeFailure(
