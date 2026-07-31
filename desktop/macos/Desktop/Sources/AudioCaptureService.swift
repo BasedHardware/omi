@@ -409,16 +409,17 @@ class AudioCaptureService: @unchecked Sendable {
     // clears; startCapture assigns this state on the same queue, so a stop's
     // clear and a restart's fresh assignment can never interleave.
     // AudioDeviceStop can block waiting for the IO thread — run off main thread.
-    let ownerID = ObjectIdentifier(self)
+    let teardownToken = activeCaptureToken
     audioQueue.async { [weak self] in
       if let procID = procID, devID != kAudioObjectUnknown {
         AudioDeviceStop(devID, procID)
         AudioDeviceDestroyIOProcID(devID, procID)
       }
-      // Owner-identity unregister: releases physical ownership only after the
-      // HAL teardown above completes, and still runs if the service was
-      // deallocated while this block waited (no reliance on weak self).
-      AudioCaptureService.unregisterActiveCapture(owner: ownerID)
+      // Token unregister: releases physical ownership only after the HAL
+      // teardown above completes, still runs if the service was deallocated
+      // while this block waited, and can never collide with a replacement
+      // service's registration (no reliance on weak self or address identity).
+      AudioCaptureService.unregisterActiveCapture(token: teardownToken)
       guard let self else { return }
       self.onAudioChunk = nil
       self.onAudioLevel = nil
@@ -500,24 +501,31 @@ class AudioCaptureService: @unchecked Sendable {
   private static let activeCapturesLock = NSLock()
   // nonisolated(unsafe): every access is guarded by activeCapturesLock (same
   // pattern as ScreenCaptureService's lock-guarded statics).
-  nonisolated(unsafe) private static var activeCaptures: [ObjectIdentifier: AudioDeviceID] = [:]
+  nonisolated(unsafe) private static var activeCaptures: [UUID: AudioDeviceID] = [:]
+
+  /// Per-instance registration token. Deliberately NOT ObjectIdentifier: the
+  /// queued HAL-teardown unregister can run after this service deallocates,
+  /// and a replacement service allocated at the same address would collide on
+  /// an identity key — the stale removal would then delete the replacement's
+  /// live entry. A UUID can never be reused by a new instance.
+  private let activeCaptureToken = UUID()
 
   private func registerActiveCapture(deviceID: AudioDeviceID) {
     Self.activeCapturesLock.lock()
-    Self.activeCaptures[ObjectIdentifier(self)] = deviceID
+    Self.activeCaptures[activeCaptureToken] = deviceID
     Self.activeCapturesLock.unlock()
   }
 
   private func unregisterActiveCapture() {
-    Self.unregisterActiveCapture(owner: ObjectIdentifier(self))
+    Self.unregisterActiveCapture(token: activeCaptureToken)
   }
 
-  /// Owner-identity form so a queued HAL-teardown block can release the
-  /// registry entry after AudioDeviceStop completes even when the service
-  /// itself was deallocated while the block waited.
-  private static func unregisterActiveCapture(owner: ObjectIdentifier) {
+  /// Token form so a queued HAL-teardown block can release the registry entry
+  /// after AudioDeviceStop completes even when the service itself was
+  /// deallocated while the block waited.
+  private static func unregisterActiveCapture(token: UUID) {
     activeCapturesLock.lock()
-    activeCaptures.removeValue(forKey: owner)
+    activeCaptures.removeValue(forKey: token)
     activeCapturesLock.unlock()
   }
 
@@ -528,9 +536,9 @@ class AudioCaptureService: @unchecked Sendable {
   ) -> Bool {
     activeCapturesLock.lock()
     defer { activeCapturesLock.unlock() }
-    let excludedID = excludedCapture.map(ObjectIdentifier.init)
-    return activeCaptures.contains { owner, activeDeviceID in
-      activeDeviceID == deviceID && (excludedID.map { owner != $0 } ?? true)
+    let excludedToken = excludedCapture?.activeCaptureToken
+    return activeCaptures.contains { token, activeDeviceID in
+      activeDeviceID == deviceID && token != excludedToken
     }
   }
 
@@ -539,7 +547,7 @@ class AudioCaptureService: @unchecked Sendable {
     activeCapturesLock.lock()
     defer { activeCapturesLock.unlock() }
     guard let excludedCapture else { return !activeCaptures.isEmpty }
-    return activeCaptures.keys.contains { $0 != ObjectIdentifier(excludedCapture) }
+    return activeCaptures.keys.contains { $0 != excludedCapture.activeCaptureToken }
   }
 
   /// Get the name of the current default input device (microphone)

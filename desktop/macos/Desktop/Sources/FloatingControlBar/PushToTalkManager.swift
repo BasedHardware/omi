@@ -2118,7 +2118,12 @@ class PushToTalkManager: ObservableObject {
       log("PushToTalkManager: mic capture adopted from warm keep-alive (batch=\(batchMode))")
       return
     }
-    discardParkedMicCapture()
+    // A parked capture on a different route is displaced, not adopted. Its HAL
+    // teardown is awaited inside the start Task below so the replacement can
+    // never open while the displaced IOProc is still physically alive (the two
+    // could even resolve to the same device, e.g. nil-override on the built-in
+    // default vs. an explicit built-in override).
+    let displacedParkedCapture = releaseParkedMicCapture()
 
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
     let lease = MicCaptureLease(generation: generation, batchMode: batchMode, turnID: turnID)
@@ -2155,6 +2160,9 @@ class PushToTalkManager: ObservableObject {
 
     Task { @MainActor [weak self] in
       guard let self else { return }
+      if let displacedParkedCapture {
+        await displacedParkedCapture.waitForPhysicalStop()
+      }
       do {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
@@ -2216,7 +2224,11 @@ class PushToTalkManager: ObservableObject {
           if isCurrentGeneration {
             self.micCaptureStartInFlight = false
           }
-          if generation <= self.discardLateStartsThroughGeneration {
+          // Never park beside a live capture: if a newer turn already owns a
+          // running (or starting) service, parking this stale one would leave
+          // two open IOProcs — possibly on the same Bluetooth device. Parking
+          // is only for the quiet gap between turns.
+          if generation <= self.discardLateStartsThroughGeneration || self.audioCaptureService != nil {
             capture.stopCapture()
             if let diagnosticRecoveryAction {
               DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
