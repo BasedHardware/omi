@@ -31,6 +31,10 @@ describe('parseRewindNaturalSearch', () => {
     expect(parsed.query).toBe('')
   })
 
+  it('treats contractions in time-only questions as boilerplate', () => {
+    expect(parseRewindNaturalSearch("What's on my screen today?", NOW).query).toBe('')
+  })
+
   it('keeps combined relative dates and day parts in one scope', () => {
     const parsed = parseRewindNaturalSearch('meeting notes yesterday morning', NOW)
     const yesterdayMorning = new Date(2026, 6, 30, 6)
@@ -43,6 +47,19 @@ describe('parseRewindNaturalSearch', () => {
 
   it('does not produce an inverted evening scope before evening starts', () => {
     const parsed = parseRewindNaturalSearch('this evening', NOW)
+    expect(parsed.from).toBe(parsed.to)
+  })
+
+  it('clamps an active day part and prefers it over today', () => {
+    const morning = new Date(2026, 6, 31, 9, 30)
+    const parsed = parseRewindNaturalSearch('meeting this morning today', morning)
+    const from = new Date(morning)
+    from.setHours(6, 0, 0, 0)
+    expect(parsed).toEqual({ query: 'meeting', from: from.getTime(), to: morning.getTime() })
+  })
+
+  it('does not produce an inverted morning scope before morning starts', () => {
+    const parsed = parseRewindNaturalSearch('this morning', new Date(2026, 6, 31, 5, 30))
     expect(parsed.from).toBe(parsed.to)
   })
 

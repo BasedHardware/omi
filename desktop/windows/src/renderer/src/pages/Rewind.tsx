@@ -98,6 +98,7 @@ export function Rewind(): React.JSX.Element {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
             <input
               ref={inputRef}
+              data-testid="rewind-search"
               value={query}
               onChange={(e) => changeQuery(e.target.value)}
               placeholder="Search “meeting notes yesterday”…"
