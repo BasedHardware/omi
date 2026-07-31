@@ -69,7 +69,7 @@ final class LoopbackCallbackServer: @unchecked Sendable {
             close(fd)
             throw ServerError.bindFailed
         }
-        guard listen(fd, 1) == 0 else {
+        guard listen(fd, 10) == 0 else {
             close(fd)
             throw ServerError.listenFailed
         }
@@ -191,9 +191,13 @@ final class LoopbackCallbackServer: @unchecked Sendable {
     }
 
     private func parse(_ request: String) -> ParsedRequest {
-        guard let requestLine = request.split(separator: "\r\n", maxSplits: 1).first else { return .ignore }
+        let lines = request.split(separator: "\r\n", omittingEmptySubsequences: false)
+        guard let requestLine = lines.first else { return .ignore }
         let parts = requestLine.split(separator: " ")
         guard parts.count >= 2, parts[0] == "GET" else { return .ignore }
+
+        let headers = Array(lines.dropFirst())
+        guard headersComeFromLoopback(headers) else { return .ignore }
 
         guard let components = URLComponents(string: "http://127.0.0.1\(parts[1])"),
             components.path == "/callback"
@@ -212,6 +216,43 @@ final class LoopbackCallbackServer: @unchecked Sendable {
             return .ignore
         }
         return .code(code)
+    }
+
+    /// The redirect URI is a bearer credential and must only be accepted from the same machine. We
+    /// require the HTTP `Host` header to match the bound loopback address, and if the browser sent an
+    /// `Origin` or `Referer` it must also be loopback for this app.
+    private func headersComeFromLoopback(_ headers: [Substring]) -> Bool {
+        let hostHeader = headers.first {
+            $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("host:")
+        }.map { String($0.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        let expectedHost = redirectURI.replacingOccurrences(of: "http://", with: "")
+            .replacingOccurrences(of: "/callback", with: "")
+        let expectedHosts: Set<String> = [
+            expectedHost,
+            expectedHost.replacingOccurrences(of: "127.0.0.1", with: "localhost")
+        ]
+        guard let hostHeader, expectedHosts.contains(hostHeader) else { return false }
+
+        let originOrReferer = headers.compactMap { line -> String? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+            if trimmed.hasPrefix("origin:") {
+                return String(line.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            }
+            if trimmed.hasPrefix("referer:") {
+                return String(line.dropFirst(8)).trimmingCharacters(in: .whitespaces)
+            }
+            return nil
+        }
+        for value in originOrReferer where !value.isEmpty {
+            let allowed: Set<String> = [
+                "http://127.0.0.1:\(port)",
+                "http://localhost:\(port)",
+            ]
+            guard allowed.contains(value) || value.hasPrefix("http://127.0.0.1:\(port)/")
+                  || value.hasPrefix("http://localhost:\(port)/")
+            else { return false }
+        }
+        return true
     }
 
     // MARK: - Response
