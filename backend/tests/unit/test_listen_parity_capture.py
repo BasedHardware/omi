@@ -158,35 +158,21 @@ def test_export_target_resolves_uri_and_bucket_prefix():
 
 def test_export_cassette_file_uploads_under_prefix(tmp_path, monkeypatch):
     from routers.listen import parity_pack_export as export_mod
+    from tests.object_store_fakes import FakeObjectStore
 
     cassette_dir = tmp_path / 'cassettes'
     cassette_dir.mkdir()
     cassette = cassette_dir / 'abc.json'
     cassette.write_text('{"ok":true}\n', encoding='utf-8')
 
-    uploaded = {}
-
-    class FakeBlob:
-        def upload_from_filename(self, filename, content_type=None):
-            uploaded['filename'] = filename
-            uploaded['content_type'] = content_type
-
-    class FakeBucket:
-        def blob(self, name):
-            uploaded['object'] = name
-            return FakeBlob()
-
-    class FakeClient:
-        def bucket(self, name):
-            uploaded['bucket'] = name
-            return FakeBucket()
-
-    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
+    store = FakeObjectStore()  # parity export now goes through the object-store port (ADR-0032)
+    monkeypatch.setattr(export_mod, '_object_store', lambda: store)
     env = {
         'OMI_PARITY_PACK_ROOT': str(tmp_path),
         'OMI_PARITY_PACK_GCS_URI': 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0',
     }
     assert export_mod.export_cassette_file(cassette, environ=env) is True
-    assert uploaded['bucket'] == 'based-hardware-dev-omi-parity-pack-v0'
-    assert uploaded['object'] == 'parity-pack/v0/cassettes/abc.json'
-    assert uploaded['filename'] == str(cassette)
+    assert (
+        store.get_bytes('based-hardware-dev-omi-parity-pack-v0', 'parity-pack/v0/cassettes/abc.json')
+        == b'{"ok":true}\n'
+    )
