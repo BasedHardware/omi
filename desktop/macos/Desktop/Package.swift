@@ -1,6 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+// Release path advancement for v0.12.148 planner unblock.
 let package = Package(
   name: "Omi Computer",
   platforms: [
