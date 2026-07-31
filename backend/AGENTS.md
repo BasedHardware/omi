@@ -218,10 +218,12 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.
 
 ## Testing
 
+Emulator commands require Bun 1.3.14 (the root `packageManager` pin): install/activate it, verify `bun --version`, then run `bun install --frozen-lockfile --ignore-scripts` from the repository root.
+
 ```bash
 bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
-npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
+bun run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
 **Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push intentionally keeps its own 40-file cap and runs changed test files when a broad selector exceeds that budget. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. Local `test.sh` runs the selected set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.

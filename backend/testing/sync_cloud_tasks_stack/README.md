@@ -8,7 +8,8 @@ ledger:
 bun run test:sync-cloud-tasks-stack:emulator
 ```
 
-It needs the backend virtual environment, root Bun dependencies (`bun install --frozen-lockfile --ignore-scripts`), Redis, and
+It needs the backend virtual environment, Bun 1.3.14 (the root `packageManager` pin; install/activate it and verify `bun --version`),
+root dependencies (`bun install --frozen-lockfile --ignore-scripts`), Redis, and
 Java 21+ for the Firestore emulator. The runner gives Firebase a fresh
 loopback port, starts a private loopback Redis, and starts **separate**
 admission and worker ASGI processes. Their environment is allowlisted and has
