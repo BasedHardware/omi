@@ -41,3 +41,8 @@ def test_check_rejects_stale_dart_generated_client(tmp_path):
     dart_client.write_text('stale\n', encoding='utf-8')
 
     assert generator.main(['--check', '--out', str(tmp_path)]) == 1
+    dart_client.write_text(files['dart/lib/omi_integration.g.dart'], encoding='utf-8')
+    dart_barrel = tmp_path / 'dart/lib/omi_integration.dart'
+    dart_barrel.write_text('stale\n', encoding='utf-8')
+
+    assert generator.main(['--check', '--out', str(tmp_path)]) == 1

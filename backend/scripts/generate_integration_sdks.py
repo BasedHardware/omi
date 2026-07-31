@@ -2246,7 +2246,6 @@ def main(argv: list[str] | None = None) -> int:
         import tempfile
 
         dirty = check_dirty(files, out_root)
-        dirty = [item for item in dirty if not item.split(' ', 1)[-1].endswith('dart/lib/omi_integration.dart')]
         dart_dir = out_root / 'dart'
         dart_bin = None
         flutter_root = __import__('os').environ.get('FLUTTER_ROOT')
