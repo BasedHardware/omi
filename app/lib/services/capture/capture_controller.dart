@@ -729,14 +729,25 @@ class CaptureController extends ChangeNotifier
         );
     _socket = connectedSocket;
     if (connectedSocket == null) {
+      _markRetryableTranscriptionInterruption(
+        reason: 'socket_connect_failed',
+        outcome: 'transport_unavailable',
+      );
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
+      notifyListeners();
       return;
     }
     connectedSocket.subscribe(this, this);
     _transcriptServiceReady = await connectedSocket.waitUntilServerReady();
     if (!identical(_socket, connectedSocket)) return;
     if (!_transcriptServiceReady) {
+      _markRetryableTranscriptionInterruption(
+        reason: connectedSocket.state == SocketServiceState.disconnected
+            ? 'socket_closed_before_ready'
+            : 'service_readiness_timeout',
+        outcome: 'not_ready',
+      );
       Logger.warning(
         'Transcription transport connected without a ready STT session; '
         'holding durable audio for reconnect',
@@ -1941,6 +1952,13 @@ class CaptureController extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
 
+    if (recordingDeviceServiceReady && _socket?.serverReady != true) {
+      _markRetryableTranscriptionInterruption(
+        reason: 'socket_closed',
+        outcome: 'transport_unavailable',
+      );
+    }
+
     if (closeCode == 4002) {
       externalActions.markAsOutOfCreditsAndRefresh();
     }
@@ -2024,6 +2042,12 @@ class CaptureController extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    if (recordingDeviceServiceReady && _socket?.serverReady != true) {
+      _markRetryableTranscriptionInterruption(
+        reason: 'socket_error',
+        outcome: 'transport_unavailable',
+      );
+    }
     if (recordingState == RecordingState.deviceRecord) {
       _socketReconnectPending = true;
       unawaited(
@@ -2033,6 +2057,23 @@ class CaptureController extends ChangeNotifier
 
     notifyListeners();
     _startKeepAliveServices();
+  }
+
+  void _markRetryableTranscriptionInterruption({
+    required String reason,
+    required String outcome,
+  }) {
+    // Preserve a provider-authored failure: it carries more useful diagnosis
+    // than the transport close that normally follows it.
+    if (_terminalTranscriptionFailure != null) return;
+    _terminalTranscriptionFailure = MessageServiceStatusEvent(
+      status: 'stt_failed',
+      statusText: 'Live transcription is reconnecting',
+      outcome: outcome,
+      provider: 'transport',
+      retryable: true,
+      reason: reason,
+    );
   }
 
   @override

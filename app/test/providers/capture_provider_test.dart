@@ -609,6 +609,41 @@ void main() {
   });
 
   group('terminal live transcription status', () {
+    test('reports an abnormal live transport close as retrying until ready', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(
+        _device(id: 'cv1-a', type: DeviceType.omi),
+      );
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onClosed(1006);
+
+      final failure = provider.terminalTranscriptionFailure;
+      expect(failure?.status, 'stt_failed');
+      expect(failure?.provider, 'transport');
+      expect(failure?.outcome, 'transport_unavailable');
+      expect(failure?.reason, 'socket_closed');
+      expect(failure?.retryable, isTrue);
+
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      expect(provider.terminalTranscriptionFailure, isNull);
+      provider.dispose();
+    });
+
+    test('reports a live transport error as retrying', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(
+        _device(id: 'cv1-a', type: DeviceType.omi),
+      );
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onError(StateError('socket failed'));
+
+      expect(provider.terminalTranscriptionFailure?.reason, 'socket_error');
+      expect(provider.terminalTranscriptionFailure?.retryable, isTrue);
+      provider.dispose();
+    });
+
     test('preserves server STT failure across socket close until ready', () {
       final provider = CaptureProvider();
       final failure = MessageServiceStatusEvent(

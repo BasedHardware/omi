@@ -182,6 +182,26 @@ void main() {
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 
+    testWidgets('shows reconnecting after an abnormal device live-socket close', (tester) async {
+      final captureProvider = CaptureProvider();
+      captureProvider.updateRecordingDevice(
+        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
+      );
+      captureProvider.updateRecordingState(RecordingState.deviceRecord);
+
+      await pumpCaptureWidget(tester, captureProvider);
+      captureProvider.onClosed(1006);
+      await tester.pump();
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(
+        find.text(AppLocalizations.of(context).transcriptionReconnecting),
+        findsWidgets,
+      );
+      expect(find.text(AppLocalizations.of(context).listening), findsNothing);
+      captureProvider.dispose();
+    });
+
     testWidgets('paused state overrides Listening during device recording', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
