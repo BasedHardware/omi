@@ -418,17 +418,28 @@ extension SBOnboardingModel {
     // Preserve a choice when the user returns with Back. A fresh stage still
     // starts empty, while an already-confirmed shortcut stays visible/editable.
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
+    let isTalk: Bool
     switch step {
-    case .shortcutOpen: rememberedSelection = openShortcutSelection
-    case .shortcutTalk: rememberedSelection = talkShortcutSelection
-    default: rememberedSelection = nil
+    case .shortcutOpen:
+      rememberedSelection = openShortcutSelection
+      isTalk = false
+    case .shortcutTalk:
+      rememberedSelection = talkShortcutSelection
+      isTalk = true
+    default:
+      rememberedSelection = nil
+      isTalk = false
     }
-    shortcutPicked = rememberedSelection != nil
-    shortcutPressed = false
-    shortcutRecording = false
-    pendingModifierOnlyShortcut = nil
-    shortcutTokens = rememberedSelection?.displayTokens ?? []
-    chosenShortcut = rememberedSelection
+    if let rememberedSelection {
+      shortcutPicked = true
+      shortcutPressed = false
+      shortcutRecording = false
+      pendingModifierOnlyShortcut = nil
+      shortcutTokens = rememberedSelection.displayTokens
+      chosenShortcut = rememberedSelection
+    } else {
+      beginShortcutRecording(isTalk: isTalk)
+    }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
