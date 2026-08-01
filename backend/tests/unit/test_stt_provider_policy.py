@@ -61,13 +61,34 @@ def test_deepgram_model_tokens_are_classified_as_self_hosted_only():
     assert provider_for_model_token('dg-nova-3') == DEEPGRAM_SELF_HOSTED_PROVIDER
 
 
-def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
+def test_parakeet_capability_tracks_the_model_selected_for_each_surface(monkeypatch):
+    # Default (no deployment override): the real-time model is English-only.
+    monkeypatch.delenv('PARAKEET_STREAM_MODEL', raising=False)
     assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
     assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
     assert parakeet_supports_language(STTServingSurface.PTT, 'en')
     assert not parakeet_supports_language(STTServingSurface.PTT, 'multi')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'multi')
+
+
+def test_streaming_multilingual_model_enables_its_locales(monkeypatch):
+    """On-prem deploying the multilingual NIM model makes real-time STT serve its languages."""
+    monkeypatch.setenv('PARAKEET_STREAM_MODEL', 'nvidia/parakeet-1-1b-rnnt-multilingual')
+    for lang in ('en', 'es', 'it', 'fr', 'de', 'pt', 'ja', 'multi'):
+        assert parakeet_supports_language(STTServingSurface.STREAMING, lang), lang
+        assert parakeet_supports_language(STTServingSurface.PTT, lang), lang
+    # A language outside the 25-language set is still rejected.
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'zu')
+    # Prerecorded is unaffected by the streaming override (own model).
+    assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
+
+
+def test_unknown_stream_model_falls_back_to_english_only_default(monkeypatch):
+    """A typo/unapproved value must not silently disable or widen the surface."""
+    monkeypatch.setenv('PARAKEET_STREAM_MODEL', 'nvidia/not-a-real-model')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
 
 
 @pytest.mark.parametrize('values_path', PARAKEET_VALUES_FILES)
