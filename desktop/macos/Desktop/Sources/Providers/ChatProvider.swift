@@ -5112,9 +5112,16 @@ class ChatProvider: ObservableObject {
         return nil
       }
 
-      // Flush any remaining buffered streaming text before finalizing
+      // Drain the remaining streaming buffers at the metered reveal pace so
+      // a fast/single-chunk success response still renders progressively
+      // instead of jumping to the full settled text.
+      while streamingBuffer.hasPendingSegments {
+        flushStreamingBuffer(revealAll: false)
+        if streamingBuffer.hasPendingSegments {
+          try? await Task.sleep(nanoseconds: 35_000_000)
+        }
+      }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
 
       // Determine the final text to display and save
       let messageText: String
