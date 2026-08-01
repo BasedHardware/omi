@@ -102,7 +102,9 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     sync.failAfterSyncCalls = 1
 
     do {
-      _ = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+      _ = try await AppleEventKitReaderService(
+        eventStore: store, remindersSync: sync, exportJournal: try makeExportJournal()
+      ).syncReminders()
       XCTFail("Expected second backend ack to fail")
     } catch {
       XCTAssertEqual(error as? AppleRemindersSyncStub.Error, .forcedFailure)
@@ -115,6 +117,91 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     XCTAssertEqual(sync.syncBatches[0].map(\.id), ["item-1"])
     XCTAssertEqual(sync.syncBatches[0].first?.exported, true)
     XCTAssertEqual(sync.syncBatches[0].first?.appleReminderId, "stub-reminder-1")
+  }
+
+  @MainActor
+  func testFailedAckDoesNotDuplicateAppleReminderOnRetry() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
+    let journal = try makeExportJournal()
+    let pending = AppleRemindersPendingSync(
+      pendingExport: [.fixture(id: "item-1", description: "Buy milk")],
+      syncedItems: []
+    )
+    let sync = AppleRemindersSyncStub(pending: pending, failAfterSyncCalls: 0)
+
+    do {
+      _ = try await AppleEventKitReaderService(
+        eventStore: store, remindersSync: sync, exportJournal: journal
+      ).syncReminders()
+      XCTFail("Expected backend ack to fail")
+    } catch {
+      XCTAssertEqual(error as? AppleRemindersSyncStub.Error, .forcedFailure)
+    }
+
+    XCTAssertEqual(store.savedReminderTitles, ["Buy milk"])
+    XCTAssertTrue(sync.syncBatches.isEmpty)
+
+    // The backend row is still pending_export because the ack never landed.
+    sync.failAfterSyncCalls = nil
+    let result = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    XCTAssertEqual(result.exported, 1)
+    XCTAssertEqual(store.savedReminderTitles, ["Buy milk"])
+    XCTAssertEqual(sync.syncBatches.count, 1)
+    XCTAssertEqual(sync.syncBatches[0].first?.appleReminderId, "stub-reminder-1")
+    XCTAssertNil(journal.reminderID(forItemID: "item-1"))
+  }
+
+  @MainActor
+  func testDeletedAppleReminderIsRecreatedOnceAfterFailedAck() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
+    let journal = try makeExportJournal()
+    let pending = AppleRemindersPendingSync(
+      pendingExport: [.fixture(id: "item-1", description: "Buy milk")],
+      syncedItems: []
+    )
+    let sync = AppleRemindersSyncStub(pending: pending, failAfterSyncCalls: 0)
+
+    _ = try? await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+    store.remindersByID.removeValue(forKey: "stub-reminder-1")
+
+    sync.failAfterSyncCalls = nil
+    _ = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    XCTAssertEqual(store.savedReminderTitles, ["Buy milk", "Buy milk"])
+    XCTAssertEqual(sync.syncBatches[0].first?.appleReminderId, "stub-reminder-2")
+  }
+
+  @MainActor
+  func testExportJournalDropsEntriesNoLongerPendingExport() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let journal = try makeExportJournal()
+    journal.record(reminderID: "stale-reminder", forItemID: "item-gone")
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(pendingExport: [], syncedItems: [])
+    )
+
+    _ = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    XCTAssertNil(journal.reminderID(forItemID: "item-gone"))
+  }
+
+  @MainActor
+  private func makeExportJournal() throws -> DefaultsAppleRemindersExportJournal {
+    let suiteName = "apple-reminders-export-journal-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+    return DefaultsAppleRemindersExportJournal(defaults: defaults)
   }
 
   @MainActor

@@ -169,19 +169,70 @@ final class APIClientAppleRemindersSync: AppleRemindersSyncing {
   }
 }
 
+/// Durable record of Apple reminders created for a backend action item but not
+/// yet acknowledged by the backend. Written before the ack so a failed ack can
+/// never make the next run export the same item twice.
+@MainActor
+protocol AppleRemindersExportJournaling: AnyObject {
+  func reminderID(forItemID itemID: String) -> String?
+  func record(reminderID: String, forItemID itemID: String)
+  func clear(itemID: String)
+  func retain(itemIDs: Set<String>)
+}
+
+@MainActor
+final class DefaultsAppleRemindersExportJournal: AppleRemindersExportJournaling {
+  private let defaults: UserDefaults
+
+  init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+  }
+
+  func reminderID(forItemID itemID: String) -> String? {
+    entries[itemID]
+  }
+
+  func record(reminderID: String, forItemID itemID: String) {
+    var current = entries
+    current[itemID] = reminderID
+    entries = current
+  }
+
+  func clear(itemID: String) {
+    var current = entries
+    guard current.removeValue(forKey: itemID) != nil else { return }
+    entries = current
+  }
+
+  func retain(itemIDs: Set<String>) {
+    let current = entries
+    let kept = current.filter { itemIDs.contains($0.key) }
+    guard kept.count != current.count else { return }
+    entries = kept
+  }
+
+  private var entries: [String: String] {
+    get { defaults.object(forKey: .appleRemindersExportJournal) as? [String: String] ?? [:] }
+    set { defaults.set(newValue, forKey: .appleRemindersExportJournal) }
+  }
+}
+
 @MainActor
 final class AppleEventKitReaderService {
   static let shared = AppleEventKitReaderService()
 
   private let eventStore: any AppleEventKitStore
   private let remindersSync: any AppleRemindersSyncing
+  private let exportJournal: any AppleRemindersExportJournaling
 
   init(
     eventStore: any AppleEventKitStore = EKEventStore(),
-    remindersSync: any AppleRemindersSyncing = APIClientAppleRemindersSync()
+    remindersSync: any AppleRemindersSyncing = APIClientAppleRemindersSync(),
+    exportJournal: any AppleRemindersExportJournaling = DefaultsAppleRemindersExportJournal()
   ) {
     self.eventStore = eventStore
     self.remindersSync = remindersSync
+    self.exportJournal = exportJournal
   }
 
   func connectionStatus(for source: AppleEventKitSource) async -> AppleEventKitConnectionStatus {
@@ -264,22 +315,31 @@ final class AppleEventKitReaderService {
     var updates: [AppleRemindersSyncUpdate] = []
     var exported = 0
 
+    exportJournal.retain(itemIDs: Set(pending.pendingExport.map(\.id)))
+
     if !pending.pendingExport.isEmpty {
       guard let calendar = eventStore.defaultCalendarForNewReminders() else {
         throw AppleEventKitReaderError.readFailed(.reminders, "No writable reminders list is available.")
       }
-      // Acknowledge each export immediately after EventKit commit so a mid-batch
-      // network failure cannot re-create already-persisted Apple reminders.
+      // Journal the EventKit identifier before the ack and acknowledge each
+      // export immediately after its commit, so neither a mid-batch network
+      // failure nor a failed ack can re-create an already-persisted reminder.
       for item in pending.pendingExport {
-        let reminder = eventStore.newReminder()
-        reminder.title = item.description_
-        reminder.notes = "From Omi"
-        reminder.calendar = calendar
-        if let dueAt = item.dueAt.flatMap(Self.parseDate) {
-          reminder.dueDateComponents = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute], from: dueAt)
+        let reminderID: String
+        if let journaled = journaledReminderID(forItemID: item.id) {
+          reminderID = journaled
+        } else {
+          let reminder = eventStore.newReminder()
+          reminder.title = item.description_
+          reminder.notes = "From Omi"
+          reminder.calendar = calendar
+          if let dueAt = item.dueAt.flatMap(Self.parseDate) {
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+              [.year, .month, .day, .hour, .minute], from: dueAt)
+          }
+          reminderID = try eventStore.saveReminder(reminder, commit: true)
+          exportJournal.record(reminderID: reminderID, forItemID: item.id)
         }
-        let reminderID = try eventStore.saveReminder(reminder, commit: true)
         try await remindersSync.syncAppleReminders(
           [
             AppleRemindersSyncUpdate(
@@ -290,6 +350,7 @@ final class AppleEventKitReaderService {
             )
           ]
         )
+        exportJournal.clear(itemID: item.id)
         exported += 1
       }
     }
@@ -386,6 +447,18 @@ final class AppleEventKitReaderService {
     if let date = formatter.date(from: value) { return date }
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter.date(from: value)
+  }
+
+  /// Reminder identifier already created for this backend item on an earlier
+  /// run whose ack failed. Drops the journal entry when the user deleted that
+  /// reminder in Apple Reminders, so the retry re-creates it exactly once.
+  private func journaledReminderID(forItemID itemID: String) -> String? {
+    guard let identifier = exportJournal.reminderID(forItemID: itemID) else { return nil }
+    guard eventStore.calendarItem(withIdentifier: identifier) is EKReminder else {
+      exportJournal.clear(itemID: itemID)
+      return nil
+    }
+    return identifier
   }
 
   private func ensureAccess(to source: AppleEventKitSource, requestIfNeeded: Bool) async throws {
