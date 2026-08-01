@@ -1556,9 +1556,15 @@ def process_conversation(
     # The BYOK lookup is deferred until after the custom-STT check so the hot
     # Omi-STT path never pays for the uncached users/... document read.
     uses_custom_stt = getattr(conversation, 'uses_custom_stt', False) is True
+    if uses_custom_stt:
+        # Deferred: users_db.is_byok_active does an uncached Firestore read, so
+        # it only runs for custom-STT conversations, not every finalization.
+        has_llm_byok_key = bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')))
+    else:
+        has_llm_byok_key = False
     if uses_custom_stt and should_skip_custom_stt_postprocessing(
         uses_custom_stt=True,
-        has_llm_byok_key=bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic'))),
+        has_llm_byok_key=has_llm_byok_key,
     ):
         logger.info(
             "custom STT: skipping Omi-paid post-processing for uid=%s conv=%s",

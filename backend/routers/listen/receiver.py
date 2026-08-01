@@ -331,11 +331,17 @@ class ListenReceiver:
         await self.host.asend_event(PhotoProcessingEvent(temp_id=temporary_id, photo_id=photo_id))
         # Custom-STT sessions without an LLM BYOK key must not incur Omi-paid LLM
         # spend (same gate as post-processing, #7690): store the photo without a
-        # generated description instead of calling describe_image.
-        if should_skip_custom_stt_postprocessing(
-            uses_custom_stt=self.host.use_custom_stt,
-            has_llm_byok_key=bool(get_byok_key('openai') or get_byok_key('anthropic')),
-        ):
+        # generated description instead of calling describe_image. Defer the BYOK
+        # key lookup so Omi-STT sessions never pay for it.
+        if self.host.use_custom_stt:
+            has_llm_byok_key = bool(get_byok_key('openai') or get_byok_key('anthropic'))
+            skip_photo_description = should_skip_custom_stt_postprocessing(
+                uses_custom_stt=True,
+                has_llm_byok_key=has_llm_byok_key,
+            )
+        else:
+            skip_photo_description = False
+        if skip_photo_description:
             description, discarded = 'Custom STT: photo description skipped (no LLM BYOK key).', False
         else:
             try:
