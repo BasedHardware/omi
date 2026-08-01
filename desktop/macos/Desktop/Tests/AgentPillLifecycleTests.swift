@@ -1501,10 +1501,10 @@ import XCTest
     let logoMarkSource = try agentProviderLogoMarkSource()
     let viewSource = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("let modelForSpawn =\n      bridgeHarnessOverride == nil"))
+    XCTAssertTrue(source.contains("let modelForSpawn =\n          activeHarness == nil"))
     XCTAssertTrue(source.contains("model: modelForSpawn"))
     XCTAssertTrue(source.contains("model: pill.bridgeHarnessOverride == nil ? pill.model : nil"))
-    XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
+    XCTAssertTrue(source.contains("harnessMode: activeHarness"))
     XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(viewSource.contains("provider: pill.providerIdentity"))
     XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))

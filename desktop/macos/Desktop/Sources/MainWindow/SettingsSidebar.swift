@@ -17,6 +17,14 @@ struct SettingsSearchItem: Identifiable {
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
+    // AI Agents
+    SettingsSearchItem(
+      name: "AI Agents", subtitle: "Route a spoken task to the best coding agent",
+      keywords: [
+        "agent", "agents", "codex", "claude code", "hermes", "openclaw", "coding agent",
+        "routing", "route", "fallback", "install agent",
+      ],
+      section: .aiAgents, icon: "wand.and.stars", settingId: "aiagents.default"),
     // General
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
@@ -340,17 +348,22 @@ struct SettingsSidebar: View {
   // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
   // content too). The absorbed cases stay routable for deep links/automation
   // and highlight their merged item via `sidebarItem`.
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
+  static let visibleNavSections: [SettingsContentView.SettingsSection] = [
     .general,
     .account,
     .transcription,
     .floatingBar,
+    .aiAgents,
     .notifications,
     .rewind,
     .shortcuts,
     .advanced,
     .about,
   ]
+
+  private var visibleSections: [SettingsContentView.SettingsSection] {
+    Self.visibleNavSections
+  }
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -531,6 +544,7 @@ struct SettingsSidebarItem: View {
     case .account: return "person.circle"
     case .planUsage: return "creditcard"
     case .aiChat: return "cpu"
+    case .aiAgents: return "wand.and.stars"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"

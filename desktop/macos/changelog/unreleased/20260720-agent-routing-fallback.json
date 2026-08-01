@@ -1,0 +1,3 @@
+{
+  "change": "Added best-agent routing: Omi auto-selects the most capable connected agent (Codex/OpenClaw/Hermes/Claude Code) based on task type, with explicit-mention override, STT-robust name matching, and phased fallback chain."
+}

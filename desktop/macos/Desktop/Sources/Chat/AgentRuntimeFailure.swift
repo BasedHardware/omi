@@ -27,6 +27,17 @@ struct AgentRuntimeFailure: Equatable, Sendable {
   let adapterId: String?
   let provider: String?
   let retryable: Bool?
+  /// Lifecycle phase reported by the Node runtime. `"startup"` is only set at
+  /// sites where the runtime can PROVE the adapter never began executing the
+  /// prompt (activation gate, adapter registration, session binding — see
+  /// agent/src/runtime/failures.ts). Absent for execution-time failures.
+  let phase: String?
+
+  /// True when the Node runtime provably tagged this failure as happening
+  /// before the adapter began executing the prompt. This is the only failure
+  /// class where re-running the same brief on another provider cannot
+  /// duplicate side effects.
+  var isStartupPhase: Bool { phase == "startup" }
 
   init(
     code: String,
@@ -36,7 +47,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     source: String? = nil,
     adapterId: String? = nil,
     provider: String? = nil,
-    retryable: Bool? = nil
+    retryable: Bool? = nil,
+    phase: String? = nil
   ) {
     self.code = code
     self.failureCode = failureCode
@@ -46,6 +58,7 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     self.adapterId = adapterId
     self.provider = provider
     self.retryable = retryable
+    self.phase = phase
   }
 
   var displayMessage: String {
@@ -78,7 +91,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       source: payload["source"] as? String,
       adapterId: payload["adapterId"] as? String,
       provider: payload["provider"] as? String,
-      retryable: payload["retryable"] as? Bool
+      retryable: payload["retryable"] as? Bool,
+      phase: payload["phase"] as? String
     )
   }
 }

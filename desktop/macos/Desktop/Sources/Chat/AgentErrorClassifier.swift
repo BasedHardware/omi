@@ -79,6 +79,14 @@ enum AgentErrorClassifier {
           "Your Anthropic credit balance is too low. Add credits in your Anthropic account (Plans & Billing), then send your message again.",
         retryable: false)
     }
+    // Codex auth errors mention codex/OPENAI_API_KEY — sign-in guidance, not the generic "update the app".
+    if lower.contains("codex") {
+      return ClassifiedAgentError(
+        code: .providerAuthExpired,
+        userMessage:
+          "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again.",
+        retryable: false)
+    }
     if lower.contains("oauth callback timed out") {
       return ClassifiedAgentError(
         code: .oauthTimeout,

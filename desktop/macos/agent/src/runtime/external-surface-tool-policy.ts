@@ -75,6 +75,7 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
 const DIRECTED_PROVIDER_TARGETS = [
   { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
   { provider: "hermes" as const, pattern: "hermes" },
+  { provider: "codex" as const, pattern: "codex" },
 ] as const;
 const DIRECTED_PROVIDER_ACTION = "(?:ask|tell|ping|message|use|run|try|start|spawn|delegate(?:\\s+to)?|have|let|send|make)";
 
@@ -204,13 +205,13 @@ function constrainSpawnProviderToCurrentUserIntent(
   if (selectedProvider) return { ...toolInput, provider: selectedProvider };
 
   const suppliedProvider = textField(toolInput, "provider");
-  if (suppliedProvider !== "openclaw" && suppliedProvider !== "hermes") return toolInput;
+  if (suppliedProvider !== "openclaw" && suppliedProvider !== "hermes" && suppliedProvider !== "codex") return toolInput;
 
   const { provider: _, ...defaultOmiInput } = toolInput;
   return defaultOmiInput;
 }
 
-function directedProviderSelectedByUser(prompt: string): "openclaw" | "hermes" | null {
+function directedProviderSelectedByUser(prompt: string): "openclaw" | "hermes" | "codex" | null {
   const normalized = prompt.toLowerCase();
   const selected = DIRECTED_PROVIDER_TARGETS.flatMap(({ provider, pattern }) => {
     const target = `(?:the\\s+)?${pattern}(?:\\s+agent)?`;

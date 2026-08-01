@@ -38,6 +38,7 @@ export interface RuntimeFailure {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  phase?: "startup";
 }
 
 export class AdapterRuntimeError extends Error {
@@ -227,6 +228,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
         return "OpenAI";
       }
       return "ACP";
+    case "codex":
+      return "Codex";
   }
 }
 

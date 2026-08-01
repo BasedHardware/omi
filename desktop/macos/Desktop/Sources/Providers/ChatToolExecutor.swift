@@ -211,6 +211,23 @@ class ChatToolExecutor {
       return message
     }
 
+    if toolCall.name == "manage_agent_pills" {
+      return await executeManageAgentPills(toolCall.arguments)
+    }
+    if toolCall.name == "setup_agent_provider" {
+      return await executeSetupAgentProvider(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+    }
+    if toolCall.name == "spawn_agent" {
+      return await executeSpawnAgent(
+        toolCall.arguments,
+        originatingClientScope: originatingClientScope
+      )
+    }
+
     switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
     case .executeSql:
       return await executeSQL(toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -1010,6 +1027,128 @@ class ChatToolExecutor {
       guard ownerIsCurrent(expectedOwnerID) else { return false }
     }
     return true
+  }
+
+  static func spawnAgentResponse(for pill: AgentPill) -> String {
+    if case .failed(let errorText) = pill.status {
+      return """
+        Error: agent FAILED to start: \(errorText)
+        Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+        """
+    }
+    return """
+      Floating agent pill created.
+      id: \(pill.id.uuidString)
+      title: \(pill.title)
+      status: \(pill.status.machineLabel)
+      If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
+      """
+  }
+
+  private static func executeSpawnAgent(
+    _ args: [String: Any],
+    originatingClientScope: String?
+  ) async -> String {
+    if originatingClientScope == AgentClientScope.floatingPill {
+      return
+        "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
+    }
+    let brief = (args["objective"] as? String ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else {
+      return "Error: Missing objective. Pass a clear, self-contained task objective."
+    }
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    let requestedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": requestedProvider = .openclaw
+    case "hermes": requestedProvider = .hermes
+    case "codex": requestedProvider = .codex
+    case "", "auto", "best", "any": requestedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+    }
+    let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+      brief: brief,
+      requestedProvider: requestedProvider,
+      userRequestText: nil,
+      title: title,
+      treatRequestedAsExplicit: requestedProvider != nil
+    )
+    switch resolution {
+    case .setupRequired(_, let setupPrompt, _):
+      return "Error: \(setupPrompt)"
+    case .spawn(let plan):
+      let model =
+        ShortcutSettings.shared.selectedModel.isEmpty
+        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief,
+        model: model,
+        fromVoice: false,
+        preFetchedTitle: plan.title,
+        preFetchedAck: plan.ack,
+        bridgeHarnessOverride: plan.harnessOverride,
+        spawnContext: plan.context
+      )
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      // Startup-class failures (provider not running / not signed in) surface
+      // within ~1.5s — wait briefly so the model reports the truth instead of
+      // claiming a dead agent is running.
+      try? await Task.sleep(nanoseconds: 1_800_000_000)
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      return await MainActor.run {
+        let livePill = AgentPillsManager.shared.pills.first(where: { $0.id == pill.id }) ?? pill
+        return spawnAgentResponse(for: livePill)
+      }
+    }
+  }
+
+  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
+    let action = ((args["action"] as? String) ?? "list")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let manager = AgentPillsManager.shared
+    switch action.lowercased() {
+    case "list", "status", "":
+      return manager.statusSummary()
+    case "dismiss":
+      guard let agentId, !agentId.isEmpty else {
+        return "Missing agent_id. Call get_task_agent_status first and pass the floating_agent_pills id."
+      }
+      return manager.dismiss(pillIdString: agentId)
+        ? "Dismissed floating agent pill \(agentId)."
+        : "No floating agent pill matched \(agentId)."
+    case "clear_completed":
+      let count = manager.completedPillCount()
+      manager.clearCompleted()
+      return "Cleared \(count) completed floating agent pill(s)."
+    default:
+      return "Unknown action. Use list, dismiss, or clear_completed."
+    }
+  }
+
+  private static func executeSetupAgentProvider(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
+    guard originatingChatMode != .ask else {
+      return "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode to install agent providers."
+    }
+    if originatingClientScope == AgentClientScope.floatingPill {
+      return
+        "Error: setup_agent_provider is unavailable from an existing floating background agent. Type in the chat bar to install a provider."
+    }
+    let raw = (args["provider"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !raw.isEmpty, let provider = AgentPillsManager.DirectedProvider(rawValue: raw.lowercased()) else {
+      return "Unsupported agent provider '\(raw)'. Use 'hermes', 'openclaw', or 'codex'."
+    }
+    return LocalAgentProviderInstaller.shared.beginInstall(for: provider)
   }
 
   /// Backend tools that write the user's tasks to the server. Unlike the local
