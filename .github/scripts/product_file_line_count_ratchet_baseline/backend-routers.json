@@ -3,19 +3,19 @@
     "backend/routers/apps.py": 2464,
     "backend/routers/chat.py": 1645,
     "backend/routers/developer.py": 2282,
-    "backend/routers/mcp_sse.py": 1891,
+    "backend/routers/mcp_sse.py": 1894,
     "backend/routers/sync.py": 2086,
     "backend/routers/users.py": 2083,
-    "backend/routers/payment.py": 1582
+    "backend/routers/payment.py": 1608
   },
   "raise_justifications": {
     "backend/routers/apps.py": "Admin gate hardening, unauthenticated MCP-callback state consumption, install-count and review install checks, and SSRF-wrapping the setup-completed fetch all belong to the routes that own those contracts.",
     "backend/routers/chat.py": "Transcription budget no longer silently skipped when a file's duration cannot be parsed; the charge decision belongs to the route that admits the upload.",
     "backend/routers/developer.py": "Developer memory create and batch routes must record their accepted write result at the authoritative API boundary; the shared dev-only allowlisted serializer/exporter lives in testing.parity_pack_v0.live_capture.",
-    "backend/routers/mcp_sse.py": "Batch length cap and per-message rate-limit charging must live where the JSON-RPC batch is parsed.",
+    "backend/routers/mcp_sse.py": "Token revocation now enforced on the MCP sign-in path, which previously let a revoked token mint a 365-day OAuth grant.",
     "backend/routers/sync.py": "Per-request file-count cap on the two audio sync routes, rejected before any part is read.",
     "backend/routers/users.py": "Account-deletion outcome telemetry at the users router boundary for PostHog ownership repair.",
-    "backend/routers/payment.py": "New file entry: purchasable-price validation plus refund/chargeback/cancellation entitlement revocation belong to the router that owns the Stripe webhook contract."
+    "backend/routers/payment.py": "Refund/chargeback entitlement revocation plus an idempotency key that survives the customer id being written mid-flight."
   },
   "threshold": 1500
 }
