@@ -7,27 +7,33 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
 
   func testLanguagePickerCopyExplainsTheSpokenLanguagePreference() {
     XCTAssertEqual(SBOnboardingLanguageCopy.question, "What language should Omi listen and reply in?")
-    XCTAssertEqual(SBOnboardingLanguageCopy.detectedLanguageDetail, "· detected from your Mac")
-    XCTAssertEqual(SBOnboardingLanguageCopy.continueAction(for: "English"), "Continue in English")
-    XCTAssertEqual(SBOnboardingLanguageCopy.changeSpokenLanguageAction, "Change spoken language")
   }
 
-  func testDetectedLanguageDetailIsShownOnlyForAMacLocalePrefill() {
+  func testLanguageStepStartsWithAnEmptyDraft() {
     let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
 
-    model.prefillDetectedLanguage(from: "es")
-
-    XCTAssertEqual(model.languageDraft, "Spanish")
-    XCTAssertTrue(model.languageIsDetectedFromMac)
+    XCTAssertEqual(model.languageDraft, "")
   }
 
-  func testExistingLanguageDraftIsNotRelabeledAsMacDetected() {
-    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.languageDraft = "English"
+  func testLanguageSelectionRejectsEmptyAndPartialInput() {
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: ""))
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: "   \n"))
+    XCTAssertNil(SBOnboardingModel.languageSelection(for: "Span"))
+    XCTAssertEqual(SBOnboardingModel.languageSelection(for: "Spanish")?.code, "es")
+  }
 
-    model.prefillDetectedLanguage(from: "es")
+  func testLanguageSuggestionsPreferTheCurrentLocaleThenCommonLanguages() {
+    XCTAssertEqual(
+      SBOnboardingModel.preferredLanguageCodes(localeCode: "fr").prefix(4),
+      ["fr", "en", "es", "de"]
+    )
+  }
 
-    XCTAssertEqual(model.languageDraft, "English")
-    XCTAssertFalse(model.languageIsDetectedFromMac)
+  func testLanguageSuggestionsNormalizeLocaleCodes() {
+    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh").first, "zh-CN")
+  }
+
+  func testLanguageSuggestionsKeepTheCurrentRegion() {
+    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh-TW").first, "zh-TW")
   }
 }

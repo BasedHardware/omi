@@ -26,8 +26,7 @@ struct SBOnboardingView: View {
   @StateObject private var model: SBOnboardingModel
   @ObservedObject private var importConnectorStatusStore: ImportConnectorStatusStore
   @State private var selectedImportConnector: ImportConnector?
-  /// Language step: false shows the detected default + Continue; true reveals the picker.
-  @State private var languageChanging = false
+  @FocusState private var languageFieldFocused: Bool
 
   /// Same dune background as sign-in, for a continuous entry experience.
   private static let backgroundImage: NSImage? = {
@@ -121,6 +120,7 @@ struct SBOnboardingView: View {
           VStack(alignment: .leading, spacing: 14) {
             ForEach(model.thread) { msg in
               messageRow(msg)
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
             if let streaming = model.streamingText {
               omiRow(streaming)
@@ -159,7 +159,11 @@ struct SBOnboardingView: View {
 
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
-      Button(action: { model.goBack() }) {
+      Button(action: {
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+          model.goBack()
+        }
+      }) {
         Text("← Back")
           .geist(size: 13).foregroundStyle(sb.ink(.w75))
           .padding(.horizontal, 14).padding(.vertical, 7)
@@ -304,66 +308,47 @@ struct SBOnboardingView: View {
     let all = AssistantSettings.supportedLanguages
     let draft = model.languageDraft.trimmingCharacters(in: .whitespaces)
     return VStack(alignment: .leading, spacing: 12) {
-      if !languageChanging, !draft.isEmpty {
-        // Auto-detected default: accept with one tap, or reveal the picker.
-        HStack(spacing: 8) {
-          Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
-          if model.languageIsDetectedFromMac {
-            Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
-              .geist(size: 12.5)
-              .foregroundStyle(sb.ink(.w4))
-          }
+      let filter = draft.lowercased()
+      let matches: [(code: String, name: String)] =
+        filter.isEmpty
+        ? SBOnboardingModel.preferredLanguageCodes(
+          localeCode: Locale.current.identifier
+        ).compactMap { code in all.first { $0.code == code } }
+        : Array(
+          all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
+      TextField("Type a language…", text: $model.languageDraft)
+        .textFieldStyle(.plain).geist(size: 15).foregroundStyle(sb.ink)
+        .padding(.horizontal, 13).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
+        .focused($languageFieldFocused)
+        .onAppear { languageFieldFocused = true }
+        .onSubmit {
+          model.answerLanguageText()
         }
-        SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
-          if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
-            model.pickLanguage(code: m.code, name: m.name)
-          } else {
-            model.answerLanguageText()
-          }
-        }
-        Button {
-          languageChanging = true
-        } label: {
-          Text(SBOnboardingLanguageCopy.changeSpokenLanguageAction)
-            .geist(size: 13)
-            .foregroundStyle(sb.ink(.w45))
-        }
-        .buttonStyle(.plain)
-      } else {
-        let filter = draft.lowercased()
-        let matches: [(code: String, name: String)] =
-          filter.isEmpty
-          ? Array(all.prefix(6))
-          : Array(
-            all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
-        TextField("Type a language…", text: $model.languageDraft)
-          .textFieldStyle(.plain).geist(size: 15).foregroundStyle(sb.ink)
-          .padding(.horizontal, 13).padding(.vertical, 10)
-          .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
-          .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
-          .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
-        if !matches.isEmpty {
-          VStack(spacing: 0) {
-            ForEach(matches, id: \.code) { lang in
-              Button {
-                model.pickLanguage(code: lang.code, name: lang.name)
-              } label: {
-                HStack {
-                  Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
-                  Spacer()
-                  Text(lang.code).geistMono(size: 11).foregroundStyle(sb.ink(.w35))
-                }
-                .padding(.horizontal, 13).padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+      if !matches.isEmpty {
+        VStack(spacing: 0) {
+          ForEach(matches, id: \.code) { lang in
+            Button {
+              model.pickLanguage(code: lang.code, name: lang.name)
+            } label: {
+              HStack {
+                Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
+                Spacer()
+                Text(lang.code).geistMono(size: 11).foregroundStyle(sb.ink(.w35))
               }
-              .buttonStyle(.plain)
-              if lang.code != matches.last?.code { Divider().overlay(sb.ink(.w06)) }
+              .padding(.horizontal, 13).padding(.vertical, 9)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            if lang.code != matches.last?.code { Divider().overlay(sb.ink(.w06)) }
           }
-          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
         }
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
       }
+      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerLanguageText() }
+        .disabled(SBOnboardingModel.languageSelection(for: draft) == nil)
     }
     .frame(maxWidth: 340, alignment: .leading)
   }
@@ -650,7 +635,7 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
+          agentToggleRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
             model.connectAgent(row.id)
           }
           if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
@@ -661,6 +646,38 @@ struct SBOnboardingView: View {
       SBInkButton(title: "Continue", isDefaultAction: true) { model.answerAgents() }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  private func agentToggleRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
+    -> some View
+  {
+    let presentation = SBOnboardingModel.agentTogglePresentation(for: state, detail: detail)
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text(presentation.detail)
+            .geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        Toggle(
+          name,
+          isOn: Binding(
+            get: { presentation.isOn },
+            set: { enabled in if enabled { action() } }
+          )
+        )
+        .labelsHidden()
+        .toggleStyle(OmiToggleStyle())
+        .disabled(presentation.isDisabled)
+        .accessibilityLabel(name)
+      }
+      if id == "claudeCode", state == "on" {
+        ClaudeCodeRestartSubtitle()
+      }
+    }
+    .padding(.vertical, 10)
   }
 
   private var contextWidget: some View {
