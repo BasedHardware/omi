@@ -197,9 +197,60 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   }
 
   @MainActor
-  private func makeExportJournal() throws -> DefaultsAppleRemindersExportJournal {
+  func testExportJournalIsScopedPerSignedInAccount() throws {
+    let suiteName = "apple-reminders-export-journal-scope-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+    let journal = DefaultsAppleRemindersExportJournal(defaults: defaults)
+
+    defaults.set("user-a", forKey: .authUserId)
+    journal.record(reminderID: "reminder-a", forItemID: "shared-item-id")
+
+    defaults.set("user-b", forKey: .authUserId)
+    XCTAssertNil(journal.reminderID(forItemID: "shared-item-id"))
+
+    defaults.set("user-a", forKey: .authUserId)
+    XCTAssertEqual(journal.reminderID(forItemID: "shared-item-id"), "reminder-a")
+  }
+
+  @MainActor
+  func testExportRetryDoesNotReuseAnotherAccountsJournaledReminder() async throws {
+    let suiteName = "apple-reminders-export-journal-cross-user-\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+    let journal = DefaultsAppleRemindersExportJournal(defaults: defaults)
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
+
+    defaults.set("user-a", forKey: .authUserId)
+    journal.record(reminderID: "user-a-reminder", forItemID: "shared-item-id")
+    _ = store.makeReminder(id: "user-a-reminder", title: "User A task", completed: false)
+
+    defaults.set("user-b", forKey: .authUserId)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [.fixture(id: "shared-item-id", description: "User B task")],
+        syncedItems: []
+      )
+    )
+    let result = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    XCTAssertEqual(result.exported, 1)
+    XCTAssertEqual(store.savedReminderTitles, ["User B task"])
+    XCTAssertEqual(sync.syncBatches[0].first?.appleReminderId, "stub-reminder-1")
+    XCTAssertNotEqual(sync.syncBatches[0].first?.appleReminderId, "user-a-reminder")
+
+    defaults.set("user-a", forKey: .authUserId)
+    XCTAssertEqual(journal.reminderID(forItemID: "shared-item-id"), "user-a-reminder")
+  }
+
+  @MainActor
+  private func makeExportJournal(userID: String = "test-user") throws -> DefaultsAppleRemindersExportJournal {
     let suiteName = "apple-reminders-export-journal-\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defaults.set(userID, forKey: .authUserId)
     addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
     return DefaultsAppleRemindersExportJournal(defaults: defaults)
   }

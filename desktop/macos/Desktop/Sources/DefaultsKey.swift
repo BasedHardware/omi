@@ -55,7 +55,6 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
-  case appleRemindersExportJournal = "apple_reminders_export_journal"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -69,6 +68,10 @@ struct ScopedDefaultsKey {
 
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+  }
+
+  static func appleRemindersExportJournal(ownerHash: String) -> Self {
+    Self(rawValue: "apple_reminders_export_journal.v1.\(ownerHash)")
   }
 }
 

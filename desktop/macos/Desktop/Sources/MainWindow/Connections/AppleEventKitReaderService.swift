@@ -1,4 +1,5 @@
 @preconcurrency import EventKit
+import CryptoKit
 import Foundation
 
 enum AppleEventKitSource: String, Sendable {
@@ -212,8 +213,23 @@ final class DefaultsAppleRemindersExportJournal: AppleRemindersExportJournaling 
   }
 
   private var entries: [String: String] {
-    get { defaults.object(forKey: .appleRemindersExportJournal) as? [String: String] ?? [:] }
-    set { defaults.set(newValue, forKey: .appleRemindersExportJournal) }
+    get { defaults.object(forKey: storageKey) as? [String: String] ?? [:] }
+    set { defaults.set(newValue, forKey: storageKey) }
+  }
+
+  private var storageKey: ScopedDefaultsKey {
+    .appleRemindersExportJournal(ownerHash: Self.ownerHash(for: ownerUserID))
+  }
+
+  private var ownerUserID: String {
+    let trimmed = defaults.string(forKey: .authUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? "signed-out" : trimmed
+  }
+
+  private static func ownerHash(for owner: String) -> String {
+    let digest = SHA256.hash(data: Data(owner.utf8)).map { String(format: "%02x", $0) }.joined()
+    return String(digest.prefix(24))
   }
 }
 
