@@ -15,6 +15,9 @@ enum GoogleOAuthError: LocalizedError {
   case revocationFailed(String)
   case network(String)
   case reconnectRequired
+  case randomGenerationFailed
+  case keychainWriteFailed
+  case accountUnverified
 
   var errorDescription: String? {
     switch self {
@@ -40,6 +43,12 @@ enum GoogleOAuthError: LocalizedError {
       return "Network error: \(detail)"
     case .reconnectRequired:
       return "This connection needs to be reconnected."
+    case .randomGenerationFailed:
+      return "Could not generate secure random bytes for Google sign-in."
+    case .keychainWriteFailed:
+      return "Google sign-in succeeded but the connection could not be saved securely."
+    case .accountUnverified:
+      return "Google did not return a verified account email."
     }
   }
 }
@@ -48,9 +57,11 @@ struct PkcePair: Equatable {
   let verifier: String
   let challenge: String
 
-  static func generate() -> PkcePair {
+  static func generate() throws -> PkcePair {
     var bytes = [UInt8](repeating: 0, count: 48)
-    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+      throw GoogleOAuthError.randomGenerationFailed
+    }
     let verifier = Data(bytes).base64URLUnpadded
     return PkcePair(verifier: verifier, challenge: challenge(from: verifier))
   }
@@ -70,12 +81,17 @@ extension Data {
 }
 
 /// One-shot HTTP server on 127.0.0.1:0 that captures the OAuth redirect and
-/// answers it so the browser stops loading. Torn down after the first request.
+/// answers it so the browser stops loading. Torn down after the redirect
+/// callback arrives. The listener reports `.ready` before `start()` returns,
+/// so the redirect URI never embeds an unbound port 0.
 final class LoopbackRedirectServer: @unchecked Sendable {
   private let listener: NWListener
   private let queue = DispatchQueue(label: "com.omi.oauth.loopback")
   private var pending: CheckedContinuation<URL, Error>?
+  private var retainedResult: Result<URL, Error>?
   private var settled = false
+  private var readyWaiter: CheckedContinuation<Void, Error>?
+  private var boundPort: UInt16 = 0
 
   init() throws {
     let parameters = NWParameters.tcp
@@ -85,16 +101,41 @@ final class LoopbackRedirectServer: @unchecked Sendable {
     listener = try NWListener(using: parameters)
   }
 
-  var uri: URL {
-    // swiftlint:disable:next force_unwrapping — fixed localhost literal cannot fail
-    URL(string: "http://127.0.0.1:\(listener.port?.rawValue ?? 0)/oauth/callback")!
+  /// Bind the listener and wait for the OS to report `.ready`, then return the
+  /// resolved redirect URI. NWListener binds port 0 asynchronously on its own
+  /// queue, so reading `listener.port` immediately after `start()` can yield
+  /// nil and produce a redirect URI of `http://127.0.0.1:0/oauth/callback`.
+  func start() async throws -> URL {
+    try await withCheckedThrowingContinuation { continuation in
+      queue.async { [weak self] in
+        guard let self else { return }
+        self.readyWaiter = continuation
+        self.listener.newConnectionHandler = { [weak self] connection in
+          self?.handle(connection)
+        }
+        self.listener.stateUpdateHandler = { [weak self] state in
+          guard let self else { return }
+          switch state {
+          case .ready:
+            self.boundPort = self.listener.port?.rawValue ?? 0
+            self.readyWaiter?.resume()
+            self.readyWaiter = nil
+          case .failed(let error):
+            self.readyWaiter?.resume(throwing: error)
+            self.readyWaiter = nil
+          default:
+            break
+          }
+        }
+        self.listener.start(queue: self.queue)
+      }
+    }
+    return uri
   }
 
-  func start() {
-    listener.newConnectionHandler = { [weak self] connection in
-      self?.handle(connection)
-    }
-    listener.start(queue: queue)
+  var uri: URL {
+    // swiftlint:disable:next force_unwrapping — fixed localhost literal cannot fail
+    URL(string: "http://127.0.0.1:\(boundPort)/oauth/callback")!
   }
 
   func stop() {
@@ -105,13 +146,26 @@ final class LoopbackRedirectServer: @unchecked Sendable {
   }
 
   func waitForRedirect() async throws -> URL {
-    try await withCheckedThrowingContinuation { continuation in
-      queue.async { [weak self] in
-        guard let self, !self.settled else {
-          continuation.resume(throwing: GoogleOAuthError.redirectMissing)
-          return
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        queue.async { [weak self] in
+          guard let self else {
+            continuation.resume(throwing: GoogleOAuthError.redirectMissing)
+            return
+          }
+          if let retainedResult {
+            // A redirect may arrive before this waiter installs; keep it and
+            // hand it to whoever asks next instead of discarding it.
+            continuation.resume(with: retainedResult)
+            self.retainedResult = nil
+            return
+          }
+          self.pending = continuation
         }
-        self.pending = continuation
+      }
+    } onCancel: {
+      queue.async { [weak self] in
+        self?.settle(with: .failure(GoogleOAuthError.redirectMissing))
       }
     }
   }
@@ -120,35 +174,35 @@ final class LoopbackRedirectServer: @unchecked Sendable {
     guard !settled else { return }
     settled = true
     listener.cancel()
-    let waiter = pending
-    pending = nil
-    waiter?.resume(with: result)
+    if let waiter = pending {
+      pending = nil
+      waiter.resume(with: result)
+    } else {
+      // No waiter yet — the redirect is a legitimate result, not an error.
+      retainedResult = result
+    }
   }
 
   private func handle(_ connection: NWConnection) {
     connection.start(queue: queue)
-    var buffer = Data()
-    func receiveLoop(
-      data: Data?,
-      context: NWConnection.ContentContext?,
-      isComplete: Bool,
-      error: NWError?
-    ) {
-      if let data {
-        buffer.append(data)
-      }
-      if error != nil || isComplete || buffer.range(of: Data("\r\n\r\n".utf8)) != nil {
-        respond(connection: connection, buffer: &buffer)
+    let box = ConnectionBox(connection)
+    // The completion handler must be @Sendable; the loop is stored on the box
+    // so the closure does not recursively capture itself.
+    box.receiveLoop = { [weak self, weak box] data, _, isComplete, error in
+      guard let self, let box else { return }
+      box.buffer.append(data ?? Data())
+      if error != nil || isComplete || box.buffer.range(of: Data("\r\n\r\n".utf8)) != nil {
+        self.respond(connection: box.connection, buffer: box.buffer)
         return
       }
-      connection.receive(
-        minimumIncompleteLength: 1, maximumLength: 8192, completion: receiveLoop)
+      box.connection.receive(
+        minimumIncompleteLength: 1, maximumLength: 8192, completion: box.receiveLoop)
     }
     connection.receive(
-      minimumIncompleteLength: 1, maximumLength: 8192, completion: receiveLoop)
+      minimumIncompleteLength: 1, maximumLength: 8192, completion: box.receiveLoop)
   }
 
-  private func respond(connection: NWConnection, buffer: inout Data) {
+  private func respond(connection: NWConnection, buffer: Data) {
     defer { connection.cancel() }
     let head = String(
       decoding: buffer.prefix(4096), as: UTF8.self)
@@ -161,8 +215,24 @@ final class LoopbackRedirectServer: @unchecked Sendable {
       + "Content-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
     connection.send(
       content: Data(response.utf8), completion: .contentProcessed { _ in })
-    if let url {
-      settle(with: .success(url))
+    // Only the OAuth callback URL may settle the waiter. A non-callback
+    // request (e.g. a favicon or a health ping) is answered and ignored so it
+    // cannot finish the wait with a stateMismatch that drops the real redirect.
+    guard let url, url.path == "/oauth/callback" else { return }
+    settle(with: .success(url))
+  }
+
+  /// Boxed connection + buffer so the `@Sendable` receive completion can
+  /// capture mutable state without strict-concurrency errors. `receiveLoop`
+  /// is stored here (not captured) so the loop closure can recurse legally.
+  private final class ConnectionBox: @unchecked Sendable {
+    let connection: NWConnection
+    var buffer = Data()
+    var receiveLoop: @Sendable (Data?, NWConnection.ContentContext?, Bool, NWError?) -> Void = {
+      _, _, _, _ in
+    }
+    init(_ connection: NWConnection) {
+      self.connection = connection
     }
   }
 
@@ -385,11 +455,10 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     guard let clientId = GoogleOAuth.clientId, !clientId.isEmpty else {
       throw GoogleOAuthError.noClientId
     }
-    let pair = PkcePair.generate()
-    let state = Self.randomState()
+    let pair = try PkcePair.generate()
+    let state = try Self.randomState()
     let server = try LoopbackRedirectServer()
-    server.start()
-    let redirectUri = server.uri
+    let redirectUri = try await server.start()
     let authURL = Self.authorizationURL(
       clientId: clientId, redirectUri: redirectUri, challenge: pair.challenge,
       state: state)
@@ -416,7 +485,21 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
       redirectUri: redirectUri.absoluteString,
       clientId: clientId
     )
-    upsert(connection)
+    // A grant without a verified account key cannot be deduplicated or
+    // surfaced in the account list; reject it instead of silently
+    // overwriting a prior nil-account grant.
+    guard let account = connection.account, !account.isEmpty else {
+      throw GoogleOAuthError.accountUnverified
+    }
+    // Probe both required APIs before persisting so a disabled API or a
+    // missing resource scope fails the connect, not the next import.
+    let token = connection.accessToken
+    _ = try await GoogleOAuthGmailReader.readRecentEmails(token: token, maxResults: 1)
+    _ = try await GoogleOAuthCalendarReader.readEvents(
+      token: token, daysBack: 1, daysForward: 1, maxResults: 1)
+    guard upsert(connection) else {
+      throw GoogleOAuthError.keychainWriteFailed
+    }
     return connection
   }
 
@@ -430,11 +513,13 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     }
     do {
       let refreshed = try await tokenClient.refresh(stored, clientId: clientId)
-      upsert(refreshed)
+      if !upsert(refreshed) {
+        throw GoogleOAuthError.keychainWriteFailed
+      }
       return refreshed.accessToken
     } catch GoogleOAuthError.invalidGrant {
       stored.needsReconnect = true
-      upsert(stored)
+      _ = upsert(stored)
       throw GoogleOAuthError.reconnectRequired
     }
   }
@@ -451,20 +536,22 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     if let failure { throw failure }
   }
 
-  func upsert(_ connection: GoogleOAuthConnection) {
+  /// Returns false when the keychain write fails, so callers can surface the
+  /// failure instead of reporting a connection that was never persisted.
+  func upsert(_ connection: GoogleOAuthConnection) -> Bool {
     lock.lock()
     defer { lock.unlock() }
     var all = store.readAll()
     all.removeAll { $0.account == connection.account }
     all.insert(connection, at: 0)
-    store.write(all)
+    return store.write(all)
   }
 
   func remove(account: String?) {
     lock.lock()
     defer { lock.unlock() }
     let all = store.readAll().filter { $0.account != account }
-    store.write(all)
+    _ = store.write(all)
   }
 
   static func authorizationURL(
@@ -512,9 +599,11 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     return code
   }
 
-  static func randomState() -> String {
+  static func randomState() throws -> String {
     var bytes = [UInt8](repeating: 0, count: 32)
-    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+      throw GoogleOAuthError.randomGenerationFailed
+    }
     return Data(bytes).base64URLUnpadded
   }
 

@@ -74,7 +74,7 @@ struct OnboardingDataSourcesStepView: View {
           onSelect: { cookiePath, label in
             coordinator.selectGmailAccount(cookiePath, label: label)
           },
-          onCancel: { coordinator.showingGmailAccountPicker = false }
+          onCancel: { coordinator.cancelGmailAccountSelection() }
         )
       }
     }

@@ -46,7 +46,10 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
 final class VolatileGoogleOAuthStore: GoogleOAuthStoring {
   var values: [GoogleOAuthConnection] = []
   func readAll() -> [GoogleOAuthConnection] { values }
-  func write(_ connections: [GoogleOAuthConnection]) { values = connections }
+  func write(_ connections: [GoogleOAuthConnection]) -> Bool {
+    values = connections
+    return true
+  }
 }
 
 private func mockSession() -> URLSession {
@@ -91,7 +94,7 @@ final class GoogleOAuthTests: XCTestCase {
     MockURLProtocol.handler = nil
   }
 
-  func testPkceChallengeIsUnpaddedBase64UrlSha256() {
+  func testPkceChallengeIsUnpaddedBase64UrlSha256() throws {
     let verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
     let expected = Data(SHA256.hash(data: Data(verifier.utf8)))
       .base64EncodedString()
@@ -99,7 +102,7 @@ final class GoogleOAuthTests: XCTestCase {
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
     XCTAssertEqual(PkcePair.challenge(from: verifier), expected)
-    let pair = PkcePair.generate()
+    let pair = try PkcePair.generate()
     XCTAssertEqual(pair.verifier.count, 64)
     XCTAssertEqual(pair.challenge, PkcePair.challenge(from: pair.verifier))
     XCTAssertFalse(pair.verifier.contains("="))
@@ -153,6 +156,52 @@ final class GoogleOAuthTests: XCTestCase {
     XCTAssertEqual(url?.path, "/oauth/callback")
     XCTAssertEqual(url?.query, "code=c&state=state-1")
     XCTAssertNil(LoopbackRedirectServer.redirectURL(fromRequestHead: "POST / HTTP/1.1\r\n\r\n"))
+  }
+
+  func testCalendarEventUntitledFallbackAndFractionalSeconds() {
+    let dict: [String: Any] = [
+      "id": "ev-frac",
+      "start": ["dateTime": "2026-03-20T09:00:00.123Z"],
+      "end": ["dateTime": "2026-03-20T09:30:00Z"],
+    ]
+    let event = GoogleOAuthCalendarReader.parseEvent(dict)
+    XCTAssertEqual(event?.id, "ev-frac")
+    // Missing summary falls back to "Untitled" instead of dropping the event.
+    XCTAssertEqual(event?.summary, "Untitled")
+    // Fractional-second dateTime still parses to a wall-clock time.
+    XCTAssertEqual(event?.startTime, "2026-03-20T09:00:00Z")
+    XCTAssertEqual(event?.endTime, "2026-03-20T09:30:00Z")
+  }
+
+  func testExchangeWithoutVerifiedAccountFails() async throws {
+    MockURLProtocol.handler = { request in
+      if request.url?.host?.contains("openidconnect") == true {
+        // userinfo returns no email — the exchange must not produce a grant
+        // that would be keyed on a nil account.
+        return jsonResponse([:], status: 200)
+      }
+      return jsonResponse(["access_token": "at", "expires_in": 3600])
+    }
+    let client = GoogleOAuthTokenClient(session: mockSession())
+    let value = try await client.exchangeCode(
+      code: "code-1", verifier: String(repeating: "v", count: 64), redirectUri: "http://127.0.0.1:1/x",
+      clientId: "client-abc")
+    XCTAssertNil(value.account)
+  }
+
+  func testManagerUpsertReportsWriteFailure() {
+    struct FailingStore: GoogleOAuthStoring {
+      func readAll() -> [GoogleOAuthConnection] { [] }
+      func write(_ connections: [GoogleOAuthConnection]) -> Bool { false }
+    }
+    let manager = GoogleOAuthConnectionManager(
+      store: FailingStore(), tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    XCTAssertFalse(manager.upsert(connection(account: "a@b.co")))
+  }
+
+  func testRandomStateIsNonEmpty() throws {
+    let state = try GoogleOAuthConnectionManager.randomState()
+    XCTAssertFalse(state.isEmpty)
   }
 
   func testExchangeSendsCodeVerifierAndNamesAccount() async throws {
@@ -217,10 +266,13 @@ final class GoogleOAuthTests: XCTestCase {
     let store = VolatileGoogleOAuthStore()
     let manager = GoogleOAuthConnectionManager(
       store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
-    manager.upsert(connection(accessToken: "access-1", account: "junk@gmail.com"))
-    manager.upsert(connection(accessToken: "access-2", account: "work@corp.com"))
+    XCTAssertTrue(
+      manager.upsert(connection(accessToken: "access-1", account: "junk@gmail.com")))
+    XCTAssertTrue(
+      manager.upsert(connection(accessToken: "access-2", account: "work@corp.com")))
     XCTAssertEqual(store.readAll().count, 2)
-    manager.upsert(connection(accessToken: "access-3", account: "junk@gmail.com"))
+    XCTAssertTrue(
+      manager.upsert(connection(accessToken: "access-3", account: "junk@gmail.com")))
     XCTAssertEqual(store.readAll().count, 2)
     XCTAssertEqual(
       store.readAll().first { $0.account == "junk@gmail.com" }?.accessToken, "access-3")

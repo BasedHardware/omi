@@ -152,11 +152,10 @@ enum GoogleOAuthCalendarReader {
   }
 
   static func parseEvent(_ dict: [String: Any]) -> CalendarEvent? {
-    guard let id = dict["id"] as? String,
-      let summary = dict["summary"] as? String
-    else {
+    guard let id = dict["id"] as? String else {
       return nil
     }
+    let summary = (dict["summary"] as? String) ?? "Untitled"
     let start = dict["start"] as? [String: Any] ?? [:]
     let end = dict["end"] as? [String: Any] ?? [:]
     let isAllDay = start["date"] is String
@@ -177,7 +176,7 @@ enum GoogleOAuthCalendarReader {
       return start["date"] as? String ?? ""
     }
     guard let raw = start["dateTime"] as? String,
-      let date = ISO8601DateFormatter().date(from: raw)
+      let date = Self.parseDateTime(raw)
     else {
       return ""
     }
@@ -186,6 +185,15 @@ enum GoogleOAuthCalendarReader {
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
     formatter.timeZone = TimeZone(identifier: "UTC")
     return formatter.string(from: date)
+  }
+
+  /// Google `dateTime` strings can carry fractional seconds; the default
+  /// ISO8601 formatter rejects them, which silently dropped the event times.
+  private static func parseDateTime(_ raw: String) -> Date? {
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractional.date(from: raw) { return date }
+    return ISO8601DateFormatter().date(from: raw)
   }
 
   static func attendees(_ raw: [[String: Any]]) -> [String] {

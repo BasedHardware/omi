@@ -872,6 +872,10 @@ func loadGmailAccounts() async {
     guard accounts.count > 1 else { return }
     gmailAccounts = accounts
     gmailAwaitingSelection = true
+    // Surface the picker automatically; nothing else ever reacts to
+    // gmailAwaitingSelection, so without this the gmail background task would
+    // suspend forever and onboarding research would never finish.
+    showingGmailAccountPicker = true
     await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         gmailSelectionWaiter = continuation
@@ -888,6 +892,13 @@ func loadGmailAccounts() async {
     gmailSelectionWaiter = nil
     gmailAwaitingSelection = false
     waiter.resume()
+  }
+
+/// Dismissing the picker without a choice must not strand the gmail
+  /// background task: fall back to the automatic (first readable) account.
+  func cancelGmailAccountSelection() {
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
   }
 
   func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {

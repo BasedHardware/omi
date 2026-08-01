@@ -47,8 +47,8 @@ enum GoogleOAuth {
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
   ]
-  static let clientIdKey = "googleOauthClientId"
-  static let clientSecretKey = "googleOauthClientSecret"
+  static let clientIdKey = DefaultsKey.googleOauthClientId.rawValue
+  static let clientSecretKey = DefaultsKey.googleOauthClientSecret.rawValue
 
   static var clientId: String? {
     get { UserDefaults.standard.string(forKey: clientIdKey) }
@@ -68,7 +68,9 @@ enum GoogleOAuth {
 /// [DesktopKeychainStore], never UserDefaults, never plain files.
 final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
   static let shared = GoogleOAuthStore()
-  static let service = "com.omi.desktop.google-oauth"
+  // Team+bundle scoped so a dev/ad-hoc build cannot create an item the signed
+  // app cannot silently access (and vice versa).
+  static let service = DesktopKeychainStore.scopedService("com.omi.desktop.google-oauth")
   static let account = "connections"
 
   func readAll() -> [GoogleOAuthConnection] {
@@ -84,16 +86,22 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
     return decoded
   }
 
-  func write(_ connections: [GoogleOAuthConnection]) {
+  func write(_ connections: [GoogleOAuthConnection]) -> Bool {
     guard
       let data = try? JSONEncoder().encode(connections),
       let raw = String(data: data, encoding: .utf8)
     else {
       log("GoogleOAuthStore: failed to encode connections")
-      return
+      return false
     }
-    DesktopKeychainStore.setString(
-      raw, service: Self.service, account: Self.account)
+    guard
+      DesktopKeychainStore.setString(
+        raw, service: Self.service, account: Self.account)
+    else {
+      log("GoogleOAuthStore: keychain write failed")
+      return false
+    }
+    return true
   }
 
   func deleteAll() {
@@ -103,5 +111,8 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
 
 protocol GoogleOAuthStoring {
   func readAll() -> [GoogleOAuthConnection]
-  func write(_ connections: [GoogleOAuthConnection])
+  /// Persist the full connection list. Returns false when the keychain write
+  /// fails so callers can surface the failure instead of reporting success
+  /// for a grant that was never stored.
+  func write(_ connections: [GoogleOAuthConnection]) -> Bool
 }
