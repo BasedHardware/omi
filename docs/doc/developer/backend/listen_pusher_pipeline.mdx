@@ -455,15 +455,23 @@ conversation: `MAX_VERIFICATIONS_PER_CONVERSATION` (6) refutation calls and
 - It is an async coordinator, driven on a shared daemon event-loop thread rather than a
   `postprocess_executor` worker. Each blocking step inside borrows a db/llm/storage thread
   for that step alone, so a burst of finalized conversations cannot pin postprocess slots
-  and starve memory extraction, action items or vector indexing.
+  and starve memory extraction, action items or vector indexing. Each pass is a tracked
+  task (`utils.async_tasks.create_named_task`) and `drain_speaker_resolution` — registered
+  with `atexit`, like `shutdown_executors` — waits it out at process exit, so a shutdown
+  cannot abandon a pass midway through creating a Person or writing segments.
 - It is handed a deep copy of the conversation. It reassigns `person_id` on the segments it
   names and persists them itself, so the live object that `_extract_memories` reads
   concurrently on `postprocess_executor` is never mutated underneath it.
 - Verified assignments are written through `update_conversation_segments`. The refuted and
   unverified names are persisted on the conversation document under
-  `speaker_label_suggestions` (`{speaker_id, person_name, evidence_quote, confidence,
-  segment_ids}`). This is not the live `speaker_label_suggestion` WebSocket event — the
-  listen session is already gone by finalization.
+  `speaker_label_suggestions` (`{speaker_id, person_name, confidence, segment_ids}`). The
+  evidence quote the pass reasoned from is deliberately not stored: these are plain
+  Firestore fields and `_prepare_conversation_for_write` encrypts only
+  `transcript_segments`, so a verbatim line here would leave transcript content readable
+  on an enhanced-protection conversation. `segment_ids` address the same evidence inside
+  the encrypted transcript the client already holds. This is not the live
+  `speaker_label_suggestion` WebSocket event — the listen session is already gone by
+  finalization.
 
 ## 5. Private Cloud Sync (Audio Upload)
 

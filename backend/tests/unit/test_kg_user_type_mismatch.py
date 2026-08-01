@@ -263,6 +263,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.memory.canonical_memory_adapter",
         "utils.memory.memory_api_contract",
         "utils.executors",
+        "utils.async_tasks",
     ]:
         add(name)
 

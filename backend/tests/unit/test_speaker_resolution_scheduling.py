@@ -1,6 +1,6 @@
 """How the finalization-time speaker naming pass is scheduled by process_conversation.
 
-Three guarantees are asserted here, each one a review finding:
+Five guarantees are asserted here, each one a review finding:
 
 1. The pass never occupies a ``postprocess_executor`` worker for its whole run — it is
    driven by a shared event loop thread, so a burst of finalized conversations cannot
@@ -9,11 +9,20 @@ Three guarantees are asserted here, each one a review finding:
    ``_extract_memories`` running concurrently on ``postprocess_executor``.
 3. It is scheduled after the private-cloud audio files are written, because enrolment
    reads them back and silently gives up when there are none.
+4. What it persists carries no transcript text. The suggestions land as plain Firestore
+   fields and only ``transcript_segments`` is encrypted, so a verbatim evidence quote
+   in that payload would publish transcript content an enhanced-protection conversation
+   exists to keep opaque. Segment ids address the same evidence inside the encrypted
+   transcript the client already holds.
+5. Every pass is a tracked task the process-exit drain waits on, so a shutdown cannot
+   abandon one midway through creating a Person or writing segment assignments, and
+   nothing it raises is lost with the discarded ``Future``.
 
 Plus the delivery guarantee: the suggestions it returns are persisted on the
 conversation document instead of being dropped with the discarded return value.
 """
 
+import asyncio
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +31,7 @@ from unittest.mock import patch
 
 import pytest
 
-from models.conversation import Conversation
+from models.conversation import Conversation, SpeakerLabelSuggestion
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import process_conversation as pc
@@ -121,7 +130,6 @@ class TestScheduleSpeakerResolution:
                 {
                     'speaker_id': 0,
                     'person_name': "Ana",
-                    'evidence_quote': "hi Ana",
                     'confidence': 0.8,
                     'segment_ids': ["seg-1"],
                 }
@@ -153,6 +161,81 @@ class TestScheduleSpeakerResolution:
             future.result(timeout=10)
 
         update.assert_not_called()
+
+
+class TestSuggestionsStayInsideTheEncryptionBoundary:
+    """A suggestion is stored as plain Firestore fields; only segments are encrypted.
+
+    Whatever the pass writes here is readable by anyone who can read the document,
+    which for an enhanced-protection conversation is exactly the audience the
+    protection level exists to exclude from transcript content.
+    """
+
+    def test_no_transcript_text_is_written(self):
+        payload = pc._speaker_suggestion_payload([_suggestion()])
+        assert payload == [{'speaker_id': 0, 'person_name': "Ana", 'confidence': 0.8, 'segment_ids': ["seg-1"]}]
+
+    def test_the_stored_model_cannot_carry_a_quote(self):
+        """`extra` is ignored by default, so the field's absence is the guarantee."""
+        assert 'evidence_quote' not in SpeakerLabelSuggestion.model_fields
+        stored = SpeakerLabelSuggestion(speaker_id=0, person_name="Ana", confidence=0.8, segment_ids=["seg-1"])
+        assert 'evidence_quote' not in stored.model_dump()
+
+    def test_the_evidence_stays_addressable_by_segment_id(self):
+        """Dropping the quote must not drop the client's ability to render the evidence."""
+        conversation = _conversation()
+        payload = pc._speaker_suggestion_payload([_suggestion()])
+        known = {segment.id for segment in conversation.transcript_segments}
+        assert payload[0]['segment_ids']
+        assert set(payload[0]['segment_ids']) <= known
+
+
+class TestTheDrainOwnsInFlightPasses:
+    """A shutdown must not abandon a pass that has already created a Person."""
+
+    def test_the_pass_is_a_tracked_task(self):
+        """Observed from inside the pass, so the task is necessarily still in flight."""
+        tracked = {}
+
+        async def _fake(uid, conv):
+            tracked['names'] = {task.get_name() for task in pc._speaker_resolution_tasks}
+            tracked['self'] = asyncio.current_task() in pc._speaker_resolution_tasks
+            return SimpleNamespace(suggested=[])
+
+        with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
+            'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
+        ):
+            future = pc.schedule_speaker_resolution("uid", _conversation())
+            assert future is not None
+            future.result(timeout=10)
+
+        assert tracked == {'names': {'speaker_resolution:conv-1'}, 'self': True}
+        assert not pc._speaker_resolution_tasks
+
+    def test_drain_is_registered_for_process_exit(self):
+        assert "atexit.register(drain_speaker_resolution)" in SOURCE
+
+    def test_drain_waits_for_an_in_flight_pass_then_retires_the_loop(self):
+        finished = []
+
+        async def _fake(uid, conv):
+            await asyncio.sleep(0.05)
+            finished.append(conv.id)
+            return SimpleNamespace(suggested=[])
+
+        with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
+            'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
+        ):
+            loop = pc._get_speaker_resolution_loop()
+            assert pc.schedule_speaker_resolution("uid", _conversation()) is not None
+            assert pc.drain_speaker_resolution(timeout=5.0) == 0
+
+        assert finished == ["conv-1"]
+        assert not loop.is_running()
+
+    def test_drain_without_a_loop_is_a_no_op(self):
+        pc.drain_speaker_resolution(timeout=1.0)
+        assert pc.drain_speaker_resolution(timeout=1.0) == 0
 
 
 if __name__ == "__main__":

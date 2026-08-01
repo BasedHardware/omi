@@ -1147,18 +1147,25 @@ def assign_segments_bulk(
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
 
+    displaced_person_ids: Set[str] = set()
+
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
         if data.assign_type == 'is_user':
+            if segment.person_id:
+                displaced_person_ids.add(segment.person_id)
             segment.is_user = bool(value) if value is not None else False
             segment.person_id = None
         else:
+            if segment.person_id and segment.person_id != value:
+                displaced_person_ids.add(segment.person_id)
             segment.is_user = False
             segment.person_id = value
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
+    _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:
@@ -1190,7 +1197,23 @@ def _revoke_contradicted_inferences(
     if not displaced_person_ids:
         return
     still_speaking = {segment.person_id for segment in conversation.transcript_segments if segment.person_id}
-    for person_id in sorted(displaced_person_ids - still_speaking):
+    _schedule_inference_revocations(uid, displaced_person_ids, still_speaking, background_tasks)
+
+
+def _schedule_inference_revocations(
+    uid: str,
+    displaced_person_ids: Set[str],
+    still_speaking_person_ids: Set[str],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Queue the revocations for displaced people who hold no segment of this conversation.
+
+    The rule of `_revoke_contradicted_inferences` over a transcript the caller
+    already holds, for callers whose write settled the transcript in a
+    transaction and who therefore know the post-write state rather than the one
+    they read.
+    """
+    for person_id in sorted(displaced_person_ids - still_speaking_person_ids):
         background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=person_id)
 
 
@@ -1206,13 +1229,11 @@ def _resolve_suggested_person_id(uid: str, person_name: str) -> str:
     return person['id']
 
 
-def _drop_speaker_label_suggestion(uid: str, conversation: Conversation, speaker_id: int) -> None:
-    """Take the settled suggestion off the conversation, in memory and in storage."""
-    remaining = [item for item in conversation.speaker_label_suggestions if item.speaker_id != speaker_id]
-    conversation.speaker_label_suggestions = remaining
-    conversations_db.update_conversation(
-        uid, conversation.id, {'speaker_label_suggestions': [item.model_dump() for item in remaining]}
-    )
+def _forget_speaker_label_suggestion(conversation: Conversation, speaker_id: int) -> None:
+    """Take a suggestion the database has already settled off the in-memory conversation."""
+    conversation.speaker_label_suggestions = [
+        item for item in conversation.speaker_label_suggestions if item.speaker_id != speaker_id
+    ]
 
 
 @router.post(
@@ -1237,6 +1258,13 @@ def accept_speaker_label_suggestion(
     inference, so the voiceprint is tagged `user_tagged` rather than `llm_inferred`
     and carries none of the restrictions an inferred sample does.
 
+    The assignment and the removal of the suggestion are one transaction rather
+    than two writes computed from this request's snapshot. Two accepts landing
+    together would otherwise each replace the whole segment array and the whole
+    suggestion array, so the later write would undo the earlier speaker and
+    resurrect the suggestion it had settled, while both still enrolled a
+    voiceprint against a transcript no longer naming them.
+
     :return: The updated conversation.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
@@ -1249,23 +1277,18 @@ def accept_speaker_label_suggestion(
     person_id = _resolve_suggested_person_id(uid, suggestion.person_name)
     logger.info(f'accept_speaker_label_suggestion {conversation_id} {speaker_id} {person_id} {uid}')
 
-    displaced_person_ids: Set[str] = set()
-    assigned_segment_ids: List[str] = []
+    applied = conversations_db.accept_conversation_speaker_suggestion(uid, conversation_id, speaker_id, person_id)
+    if applied is None:
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+
+    _forget_speaker_label_suggestion(conversation, speaker_id)
     for segment in conversation.transcript_segments:
         if segment.speaker_id != speaker_id:
             continue
-        if segment.person_id and segment.person_id != person_id:
-            displaced_person_ids.add(segment.person_id)
         segment.is_user = False
         segment.person_id = person_id
-        if segment.id:
-            assigned_segment_ids.append(segment.id)
 
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
-    )
-    _drop_speaker_label_suggestion(uid, conversation, speaker_id)
-
+    assigned_segment_ids = list(applied.get('segment_ids') or [])
     if assigned_segment_ids:
         background_tasks.add_task(
             extract_speaker_samples,
@@ -1275,7 +1298,12 @@ def accept_speaker_label_suggestion(
             segment_ids=assigned_segment_ids,
             attribution=SPEAKER_ATTRIBUTION_USER_TAGGED,
         )
-    _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
+    _schedule_inference_revocations(
+        uid,
+        set(applied.get('displaced_person_ids') or []),
+        set(applied.get('still_speaking_person_ids') or []),
+        background_tasks,
+    )
 
     return conversation
 
@@ -1294,7 +1322,10 @@ def dismiss_speaker_label_suggestion(
     Drop the name proposed for a numbered speaker without assigning anyone.
 
     Nothing but the suggestion is touched: no Person is created or resolved, no
-    segment changes hands, no voiceprint is enrolled or revoked.
+    segment changes hands, no voiceprint is enrolled or revoked. The removal is
+    transactional for the same reason accept's is: a dismiss that wrote back a
+    whole array computed from its own snapshot would resurrect a suggestion a
+    concurrent accept had already settled.
 
     :return: The updated conversation.
     """
@@ -1305,7 +1336,10 @@ def dismiss_speaker_label_suggestion(
     if not any(item.speaker_id == speaker_id for item in conversation.speaker_label_suggestions):
         raise HTTPException(status_code=404, detail="Speaker suggestion not found")
 
-    _drop_speaker_label_suggestion(uid, conversation, speaker_id)
+    if conversations_db.remove_conversation_speaker_suggestion(uid, conversation_id, speaker_id) is None:
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+
+    _forget_speaker_label_suggestion(conversation, speaker_id)
     return conversation
 
 

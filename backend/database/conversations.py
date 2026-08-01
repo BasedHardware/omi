@@ -1563,6 +1563,143 @@ def assign_conversation_segment_people(
     return run_transactional(client, _assign)
 
 
+def accept_conversation_speaker_suggestion(
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    person_id: str,
+    *,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Bind a suggested speaker to the person the user accepted, and settle the suggestion with it.
+
+    ``assign_conversation_segment_people`` refuses a speaker that already holds a
+    resolved segment, because an inference must never overrule a decision the
+    user made. Accept is the opposite direction: the user is the one deciding, so
+    an earlier assignment is exactly what they are overruling and the write goes
+    through. What the two share is that eligibility and the write must be settled
+    under one transaction.
+
+    Dropping the accepted suggestion is part of that same transaction. Written
+    separately, two concurrent accepts each replace the whole suggestion array
+    from their own stale snapshot, and the later write resurrects the suggestion
+    the earlier one had already settled.
+
+    Returns:
+        ``None`` when the suggestion is no longer on the conversation -- it was
+        dismissed or accepted by a request that got there first -- and nothing is
+        written. Otherwise a mapping of the segment ids actually assigned, the
+        people this assignment took segments away from, and the people still
+        holding a segment once it landed, so the caller can enrol and revoke
+        against what the transaction wrote rather than what it read earlier.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    if not isinstance(person_id, str) or not person_id:
+        return None
+    if not isinstance(speaker_id, int) or isinstance(speaker_id, bool):
+        return None
+
+    @firestore.transactional
+    def _accept(transaction) -> Optional[Dict[str, Any]]:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return None
+        conversation_data = _prepare_conversation_for_read(doc_snapshot.to_dict(), uid)
+        if not conversation_data:
+            return None
+
+        stored_suggestions = conversation_data.get('speaker_label_suggestions')
+        if not isinstance(stored_suggestions, list):
+            stored_suggestions = []
+        remaining = [
+            item for item in stored_suggestions if not (isinstance(item, dict) and item.get('speaker_id') == speaker_id)
+        ]
+        if len(remaining) == len(stored_suggestions):
+            return None
+
+        segments = conversation_data.get('transcript_segments')
+        if not isinstance(segments, list):
+            segments = []
+
+        assigned_segment_ids: List[str] = []
+        displaced_person_ids: set = set()
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            if segment.get('speaker_id') != speaker_id:
+                continue
+            previous_person_id = segment.get('person_id')
+            if isinstance(previous_person_id, str) and previous_person_id and previous_person_id != person_id:
+                displaced_person_ids.add(previous_person_id)
+            segment['is_user'] = False
+            segment['person_id'] = person_id
+            stored_segment_id = segment.get('id')
+            if isinstance(stored_segment_id, str) and stored_segment_id:
+                assigned_segment_ids.append(stored_segment_id)
+
+        still_speaking_person_ids = {
+            segment.get('person_id')
+            for segment in segments
+            if isinstance(segment, dict) and isinstance(segment.get('person_id'), str) and segment.get('person_id')
+        }
+
+        doc_level = conversation_data.get('data_protection_level', 'standard')
+        payload = {'transcript_segments': segments, 'speaker_label_suggestions': remaining}
+        transaction.update(doc_ref, _prepare_conversation_for_write(payload, uid, doc_level))
+        return {
+            'segment_ids': assigned_segment_ids,
+            'displaced_person_ids': sorted(displaced_person_ids),
+            'still_speaking_person_ids': sorted(still_speaking_person_ids),
+            'remaining_suggestions': remaining,
+        }
+
+    return run_transactional(client, _accept)
+
+
+def remove_conversation_speaker_suggestion(
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    *,
+    firestore_client: Any = None,
+) -> Optional[List[Any]]:
+    """Drop one suggested speaker name, deciding inside the transaction that it is still there.
+
+    Dismiss replaces the whole suggestion array, so a caller that computed that
+    array from an earlier read hands back the entry a concurrent accept has
+    already settled. Reading the array inside the write closes that window from
+    the dismiss side, the way ``accept_conversation_speaker_suggestion`` closes
+    it from the accept side.
+
+    Returns:
+        The suggestions left on the conversation, or ``None`` when this speaker
+        no longer had one, in which case nothing is written.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def _remove(transaction) -> Optional[List[Any]]:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return None
+        conversation_data = doc_snapshot.to_dict() or {}
+        stored_suggestions = conversation_data.get('speaker_label_suggestions')
+        if not isinstance(stored_suggestions, list):
+            stored_suggestions = []
+        remaining = [
+            item for item in stored_suggestions if not (isinstance(item, dict) and item.get('speaker_id') == speaker_id)
+        ]
+        if len(remaining) == len(stored_suggestions):
+            return None
+        transaction.update(doc_ref, {'speaker_label_suggestions': remaining})
+        return remaining
+
+    return run_transactional(client, _remove)
+
+
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************

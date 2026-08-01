@@ -524,14 +524,12 @@ class GeneratedCalendarEventLink {
 
 class GeneratedSpeakerLabelSuggestion {
   final double confidence;
-  final String evidenceQuote;
   final String personName;
   final List<String> segmentIds;
   final int speakerId;
 
   const GeneratedSpeakerLabelSuggestion({
     this.confidence = 0.0,
-    this.evidenceQuote = "",
     required this.personName,
     this.segmentIds = const [],
     required this.speakerId,
@@ -540,7 +538,6 @@ class GeneratedSpeakerLabelSuggestion {
   factory GeneratedSpeakerLabelSuggestion.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerLabelSuggestion(
       confidence: _required(_readFieldValue<double>(_readField(json, const ["confidence"]), "confidence", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "confidence"),
-      evidenceQuote: _required(_readFieldValue<String>(_readField(json, const ["evidence_quote"]), "evidence_quote", _readString, requiredField: false, nullable: false, defaultValue: ""), "evidence_quote"),
       personName: _required(_readFieldValue<String>(_readField(json, const ["person_name"]), "person_name", _readString, requiredField: true, nullable: false), "person_name"),
       segmentIds: _required(_readFieldValue<List<String>>(_readField(json, const ["segment_ids"]), "segment_ids", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "segment_ids"),
       speakerId: _required(_readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: true, nullable: false), "speaker_id"),
@@ -550,7 +547,6 @@ class GeneratedSpeakerLabelSuggestion {
   Map<String, dynamic> toJson() {
     return {
       'confidence': confidence,
-      'evidence_quote': evidenceQuote,
       'person_name': personName,
       'segment_ids': segmentIds,
       'speaker_id': speakerId,
