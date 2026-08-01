@@ -4,7 +4,8 @@ use omi_agent_runtime::journal::{
 use omi_agent_runtime::provider_policy::ManagedTransport;
 use omi_agent_runtime::tool_relay::{Identity, ToolRelay};
 use omi_agent_runtime::{
-    emit_line, parse_line, select_execution_mode, ExecutionMode, Message, PROTOCOL_VERSION,
+    emit_line, parse_line, select_execution_mode, wait_for_cancellation, ExecutionMode, Message,
+    PROTOCOL_VERSION,
 };
 use rx4::{Agent, Event};
 use serde_json::{json, Map, Value};
@@ -12,12 +13,14 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 const MAX_JSONL_LINE_BYTES: usize = 1024 * 1024;
+const IDLE_RUNTIME_PRUNE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 mod tool_authority;
 use tool_authority::{RunningQuery, ToolRequest};
@@ -1149,6 +1152,12 @@ impl Runtime {
             return;
         };
         if !self.establish_owner(&owner_id) {
+            self.emit_error(
+                string_field(&fields, "requestId"),
+                string_field(&fields, "clientId"),
+                "authentication",
+                "request owner does not match the active runtime owner",
+            );
             return;
         }
         self.credentials = Some(ManagedCredentials {
@@ -1162,9 +1171,16 @@ impl Runtime {
         let Some(owner_id) = string_field(&fields, "ownerId") else {
             return;
         };
-        if self.establish_owner(&owner_id) {
-            self.last_revocation = None;
+        if !self.establish_owner(&owner_id) {
+            self.emit_error(
+                string_field(&fields, "requestId"),
+                string_field(&fields, "clientId"),
+                "authentication",
+                "request owner does not match the active runtime owner",
+            );
+            return;
         }
+        self.last_revocation = None;
     }
 
     fn establish_owner(&mut self, owner_id: &str) -> bool {
@@ -1482,36 +1498,35 @@ impl Runtime {
                 });
                 agent.prompt(&prompt).await
             };
-            tokio::pin!(prompt_run);
-            tokio::select! {
-                result = &mut prompt_run => match result {
-                    Ok(()) => {
-                        let text = text.lock().map(|text| text.clone()).unwrap_or_default();
-                        send_result(
-                            &output,
-                            &request_id,
-                            &client_id,
-                            &session_id,
-                            &result_identity,
-                            &text,
-                            "succeeded",
-                        )
-                    }
-                    Err(error) => send_error(&output, &request_id, &client_id, "transport_interruption", &error.to_string()),
-                },
-                changed = cancelled.changed() => {
-                    if changed.is_ok() && *cancelled.borrow() {
-                        send_result(
-                            &output,
-                            &request_id,
-                            &client_id,
-                            &session_id,
-                            &result_identity,
-                            "",
-                            "cancelled",
-                        );
-                    }
+            match race_prompt_against_cancel(&mut cancelled, prompt_run).await {
+                PromptRace::Cancelled => send_result(
+                    &output,
+                    &request_id,
+                    &client_id,
+                    &session_id,
+                    &result_identity,
+                    "",
+                    "cancelled",
+                ),
+                PromptRace::Succeeded => {
+                    let text = text.lock().map(|text| text.clone()).unwrap_or_default();
+                    send_result(
+                        &output,
+                        &request_id,
+                        &client_id,
+                        &session_id,
+                        &result_identity,
+                        &text,
+                        "succeeded",
+                    )
                 }
+                PromptRace::Failed(error) => send_error(
+                    &output,
+                    &request_id,
+                    &client_id,
+                    "transport_interruption",
+                    &error.to_string(),
+                ),
             }
             let _ = completed.send(request_id);
         });
@@ -1558,8 +1573,20 @@ impl Runtime {
     }
 
     fn stop(&mut self) {
-        for running in self.running.values() {
-            let _ = running.cancel.send(true);
+        let running: Vec<_> = self.running.values().cloned().collect();
+        for running in running {
+            match self.tool_relay.revoke_owner_run(
+                &mut self.journal,
+                &running.owner_id,
+                Some(&running.run_id),
+            ) {
+                Ok(_) => {
+                    let _ = running.cancel.send(true);
+                }
+                Err(error) => {
+                    self.emit_error(None, None, "runtime_state", &error);
+                }
+            }
         }
         self.emit(
             "cancel_ack",
@@ -1858,14 +1885,7 @@ async fn main() {
             return;
         }
     };
-    if let Err(error) = journal.reconcile_pending_tool_claims(None) {
-        eprintln!("unable to reconcile Omi tool claims: {error}");
-        return;
-    }
-    if let Err(error) = journal.prune_expired_runtime_state() {
-        eprintln!("unable to prune expired Omi runtime state: {error}");
-        return;
-    }
+    warm_journal_on_boot(&mut journal);
     let daemon_boot_epoch = Uuid::new_v4().to_string();
     let mut runtime = Runtime::new(
         env::var("OMI_API_BASE_URL").ok(),
@@ -1885,6 +1905,9 @@ async fn main() {
     );
     let mut stdin = BufReader::new(tokio::io::stdin());
     let mut stdout = tokio::io::stdout();
+    let mut prune_interval = tokio::time::interval(IDLE_RUNTIME_PRUNE_INTERVAL);
+    prune_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    prune_interval.tick().await;
     loop {
         tokio::select! {
             line = read_bounded_jsonl_line(&mut stdin, MAX_JSONL_LINE_BYTES) => match line {
@@ -1908,6 +1931,47 @@ async fn main() {
                     }
                 }
             },
+            _ = prune_interval.tick() => {
+                if let Err(error) = runtime.journal.prune_expired_runtime_state() {
+                    eprintln!("unable to prune expired Omi runtime state: {error}");
+                }
+            },
+        }
+    }
+}
+
+fn warm_journal_on_boot(journal: &mut JournalStore) {
+    if let Err(error) = journal.reconcile_pending_tool_claims(None) {
+        eprintln!("unable to reconcile Omi tool claims: {error}");
+    }
+    if let Err(error) = journal.prune_expired_runtime_state() {
+        eprintln!("unable to prune expired Omi runtime state: {error}");
+    }
+}
+
+enum PromptRace<E> {
+    Cancelled,
+    Succeeded,
+    Failed(E),
+}
+
+async fn race_prompt_against_cancel<E>(
+    cancelled: &mut watch::Receiver<bool>,
+    prompt_run: impl std::future::Future<Output = Result<(), E>>,
+) -> PromptRace<E> {
+    tokio::pin!(prompt_run);
+    tokio::select! {
+        biased;
+        _ = wait_for_cancellation(cancelled) => PromptRace::Cancelled,
+        result = &mut prompt_run => {
+            if *cancelled.borrow() {
+                PromptRace::Cancelled
+            } else {
+                match result {
+                    Ok(()) => PromptRace::Succeeded,
+                    Err(error) => PromptRace::Failed(error),
+                }
+            }
         }
     }
 }
@@ -2649,13 +2713,119 @@ mod tests {
         );
         assert_eq!(runtime.owner_id.as_deref(), Some("owner-a"));
         assert!(runtime.credentials.is_none());
-
-        runtime.handle(
-            parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner-b","adapterId":"rx4","modelProfile":null,"workingDirectory":"/tmp/omi"}"#)
-                .expect("profile fixture must parse"),
-        );
         let error = receiver.recv().await.expect("owner mismatch must reject");
+        assert_eq!(error.kind, "error");
         assert_eq!(error.fields["failure"]["failureCode"], "authentication");
+    }
+
+    #[tokio::test]
+    async fn owner_refresh_cannot_replace_an_established_owner() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner-a"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner-b"}"#)
+                .expect("owner fixture must parse"),
+        );
+        assert_eq!(runtime.owner_id.as_deref(), Some("owner-a"));
+        let error = receiver.recv().await.expect("owner mismatch must reject");
+        assert_eq!(error.kind, "error");
+        assert_eq!(error.fields["failure"]["failureCode"], "authentication");
+    }
+
+    #[tokio::test]
+    async fn stop_revokes_pending_tool_claims_for_running_queries() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let run = runtime
+            .journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
+        let (cancel, cancel_receiver) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: "session".into(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime.authorize_tool_request(ToolRequest {
+            request_id: "request".into(),
+            client_id: "client".into(),
+            call: rx4::ToolCall {
+                id: "invoke-before-stop".into(),
+                name: "search".into(),
+                arguments: r#"{"q":"before"}"#.into(),
+            },
+        });
+        let authorized = receiver.recv().await.expect("pre-stop tool must authorize");
+        assert_eq!(authorized.kind, "authorized_tool_execution");
+
+        runtime.handle(parse_line(r#"{"type":"stop"}"#).expect("stop fixture must parse"));
+        let ack = receiver.recv().await.expect("stop must acknowledge");
+        assert_eq!(ack.kind, "cancel_ack");
+        assert_eq!(ack.fields["accepted"], true);
+        assert!(*cancel_receiver.borrow());
+        assert!(runtime
+            .journal
+            .pending_tool_claim("invoke-before-stop")
+            .expect("claim lookup must succeed")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelled_prompt_completion_emits_cancelled_terminal_status() {
+        let (cancel, mut cancelled) = watch::channel(true);
+        let outcome =
+            race_prompt_against_cancel(&mut cancelled, async { Ok::<(), String>(()) }).await;
+        assert!(matches!(outcome, PromptRace::Cancelled));
+        drop(cancel);
+    }
+
+    #[test]
+    fn warm_journal_on_boot_continues_after_successful_reconcile_and_prune() {
+        let mut journal = JournalStore::in_memory().expect("journal must open");
+        let run = journal
+            .admit_run("owner", "session", "conversation", 1)
+            .expect("run must admit");
+        journal
+            .authorize_tool_claim(
+                "pending-boot",
+                "owner",
+                "session",
+                &run.run_id,
+                &run.attempt_id,
+                1,
+                "boot",
+                1,
+                "search",
+                "hash",
+            )
+            .expect("claim must authorize");
+        warm_journal_on_boot(&mut journal);
+        assert!(journal
+            .pending_tool_claim("pending-boot")
+            .expect("claim lookup must succeed")
+            .is_none());
+    }
+
+    #[test]
+    fn idle_runtime_prune_interval_is_configured() {
+        assert!(IDLE_RUNTIME_PRUNE_INTERVAL.as_secs() >= 60);
     }
 
     #[tokio::test]
