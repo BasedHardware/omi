@@ -868,11 +868,6 @@ func loadGmailAccounts() async {
 
   private func awaitGmailAccountSelectionIfNeeded() async {
     guard !GmailSelectionStore.hasMadeChoice else { return }
-    // Re-check after the probe: the user may have picked an account from the
-    // manual picker while the probe was still running, before this waiter
-    // exists. Installing a continuation after a choice is already persisted
-    // would suspend the gmail task forever.
-    guard !GmailSelectionStore.hasMadeChoice else { return }
     let accounts: [GmailAccountOption]
     do {
       accounts = try await GmailAccountProbe.availableAccounts()
@@ -884,6 +879,11 @@ func loadGmailAccounts() async {
       log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
       return
     }
+    // Re-check after the probe: the user may have picked an account from the
+    // manual picker while the probe was still running, before this waiter
+    // exists. Installing a continuation after a choice is already persisted
+    // would suspend the gmail task forever.
+    guard !GmailSelectionStore.hasMadeChoice else { return }
     guard accounts.count > 1 else { return }
     gmailAccounts = accounts
     gmailAwaitingSelection = true
