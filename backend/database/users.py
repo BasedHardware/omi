@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, List, Literal, Optional, TypedDict
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -906,8 +906,26 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+SPEECH_SAMPLE_ATTRIBUTION_USER_TAGGED = 'user_tagged'
+
+SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'
+
+LLM_INFERRED_SPEECH_SAMPLES_FIELD = 'llm_inferred_speech_samples'
+"""Paths of the speech samples that were stored from an LLM-inferred identity.
+
+Kept as a path-keyed set rather than a third array parallel to `speech_samples`
+and `speech_sample_transcripts`. Those two already have to be padded and popped
+in lockstep, and every index-alignment invariant added to that pair is another
+way for the arrays to drift apart the way #10453 did. A sample path is unique
+and is already the key callers hold, so membership answers "was this sample
+inferred?" with no index arithmetic at all, and a sample removal that forgets to
+touch this field leaves a harmless orphan path rather than shifting an
+attribution onto somebody else's sample.
+"""
+
+
 @transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
+def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, attribution=None):
     """Transaction to atomically add sample and transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
@@ -924,6 +942,12 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         'speech_samples': samples,
         'updated_at': datetime.now(timezone.utc),
     }
+
+    if attribution == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+        inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD, []))
+        if sample_path not in inferred:
+            inferred.append(sample_path)
+        update_data[LLM_INFERRED_SPEECH_SAMPLES_FIELD] = inferred
 
     if transcript is not None:
         transcripts = person_data.get('speech_sample_transcripts', [])
@@ -943,7 +967,12 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 
 
 def add_person_speech_sample(
-    uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
+    uid: str,
+    person_id: str,
+    sample_path: str,
+    transcript: Optional[str] = None,
+    max_samples: int = 5,
+    attribution: Optional[str] = None,
 ) -> bool:
     """
     Append speech sample path to person's speech_samples list.
@@ -958,13 +987,30 @@ def add_person_speech_sample(
         sample_path: GCS path to the speech sample
         transcript: Optional transcript text for the sample
         max_samples: Maximum number of samples to keep (default 5)
+        attribution: How the person was identified for this audio
+            ('user_tagged', 'llm_inferred', ...). An 'llm_inferred' sample is
+            recorded in `llm_inferred_speech_samples` so it is never used to
+            rebuild a speaker embedding, since rebuilding from it would
+            resurrect an enrolment the user (or a later pass) had cleared.
+            Anything else is left unmarked, which is the trusted default.
 
     Returns:
         True if sample was added, False if limit reached or person not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, attribution)
+
+
+def is_person_speech_sample_llm_inferred(person_data: dict, sample_path: str) -> bool:
+    """Report whether a sample path was stored from an LLM-inferred identity.
+
+    Takes the already-loaded person document so callers on the hot listen path
+    do not pay an extra Firestore read for a field they were handed.
+    """
+    if not sample_path:
+        return False
+    return sample_path in (person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -999,14 +1045,17 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
     if idx < len(transcripts):
         transcripts.pop(idx)
 
-    transaction.update(
-        person_ref,
-        {
-            'speech_samples': samples,
-            'speech_sample_transcripts': transcripts,
-            'updated_at': datetime.now(timezone.utc),
-        },
-    )
+    update_data = {
+        'speech_samples': samples,
+        'speech_sample_transcripts': transcripts,
+        'updated_at': datetime.now(timezone.utc),
+    }
+
+    inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD, []))
+    if sample_path in inferred:
+        update_data[LLM_INFERRED_SPEECH_SAMPLES_FIELD] = [path for path in inferred if path != sample_path]
+
+    transaction.update(person_ref, update_data)
     return True
 
 
@@ -1225,10 +1274,36 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
     person_ref.update(
         {
             'speaker_embedding': firestore.DELETE_FIELD,
+            'speaker_embedding_attribution': firestore.DELETE_FIELD,
             'updated_at': datetime.now(timezone.utc),
         }
     )
     return True
+
+
+def clear_person_llm_inferred_enrolment(uid: str, person_id: str) -> List[str]:
+    """Undo an enrolment that came from an LLM-inferred identity, completely.
+
+    Clearing only the embedding does not undo the enrolment: the sample it was
+    built from stays at speech_samples_version 3, and the next listen session
+    rebuilds the embedding straight back out of it. Both artifacts have to go,
+    so this removes every sample marked `llm_inferred` and then clears the
+    embedding those samples produced. Samples the user taught are untouched.
+
+    Returns the removed sample paths so the caller can delete the objects from
+    storage; an empty list means the person had nothing inferred to revoke.
+    """
+    person_data = get_person(uid, person_id)
+    if not person_data:
+        return []
+
+    inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
+    if not inferred:
+        return []
+
+    removed = [path for path in inferred if remove_person_speech_sample(uid, person_id, path)]
+    clear_person_speaker_embedding(uid, person_id)
+    return removed
 
 
 def update_person_speech_samples_version(uid: str, person_id: str, version: int) -> bool:
