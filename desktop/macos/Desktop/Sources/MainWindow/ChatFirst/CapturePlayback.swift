@@ -137,6 +137,7 @@ final class CapturePlaybackController: ObservableObject {
   private let provider: any CapturePlaybackProviding
   private var player: AVPlayer?
   private var activeCaptureID: String?
+  private var activeResolutionToken: UUID?
 
   init(provider: any CapturePlaybackProviding = LiveCapturePlaybackProvider()) {
     self.provider = provider
@@ -145,13 +146,20 @@ final class CapturePlaybackController: ObservableObject {
   func prepare(
     for capture: ServerConversation,
     forceRefresh: Bool = false
-  ) async -> CapturePlaybackResolution {
+  ) async -> CapturePlaybackResolution? {
     if !forceRefresh, activeCaptureID == capture.id, let resolution { return resolution }
+    let token = UUID()
+    activeResolutionToken = token
+    activeCaptureID = capture.id
     isResolving = true
-    defer { isResolving = false }
+    defer {
+      if activeResolutionToken == token {
+        isResolving = false
+      }
+    }
 
     let next = await provider.resolvePlayback(for: capture)
-    activeCaptureID = capture.id
+    guard activeResolutionToken == token, activeCaptureID == capture.id, !Task.isCancelled else { return nil }
     resolution = next
     switch next {
     case .readyAggregate(let artifact):
@@ -162,6 +170,17 @@ final class CapturePlaybackController: ObservableObject {
       player = nil
     }
     return next
+  }
+
+  /// Selection owns playback identity. Clearing pauses the old capture before
+  /// the new detail request begins and invalidates every outstanding resolver.
+  func clear() {
+    activeResolutionToken = nil
+    activeCaptureID = nil
+    resolution = nil
+    isResolving = false
+    player?.pause()
+    player = nil
   }
 
   func playOrPause() {

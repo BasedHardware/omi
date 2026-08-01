@@ -91,6 +91,16 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
+  func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
+    let focus = ChatFirstPendingFocus.memory(id: "memory-1")
+
+    XCTAssertEqual(
+      ChatFirstMemoryFocusPolicy.focusToAcknowledge(pendingFocus: focus, visibleMemoryID: "memory-1"),
+      focus
+    )
+    XCTAssertNil(ChatFirstMemoryFocusPolicy.focusToAcknowledge(pendingFocus: focus, visibleMemoryID: "memory-2"))
+  }
+
   func testRouteIsNotVisibleUntilTheMountedDestinationAcknowledgesIt() throws {
     let suiteName = "ChatFirstShellTests.visible-route.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

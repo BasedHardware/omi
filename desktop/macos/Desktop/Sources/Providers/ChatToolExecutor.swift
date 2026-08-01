@@ -58,6 +58,13 @@ private final class CancellablePermissionContinuation<Value: Sendable>: @uncheck
 @MainActor
 class ChatToolExecutor {
 
+  struct CanonicalGoalCreationInput: Equatable {
+    let title: String
+    let desiredOutcome: String
+    let whyItMatters: String?
+    let successCriteria: [String]
+  }
+
   nonisolated static var currentOwnerAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? {
     ChatToolOwnerAuthorization.snapshot
   }
@@ -267,6 +274,14 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createCanonicalGoal:
+      return await executeCreateCanonicalGoal(
+        toolCall.arguments,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
         toolCall.arguments,
@@ -472,6 +487,65 @@ class ChatToolExecutor {
       return String(data: data, encoding: .utf8) ?? #"{"goals":[]}"#
     } catch {
       return #"{"ok":false,"error":"canonical_goals_unavailable"}"#
+    }
+  }
+
+  static func canonicalGoalCreationInput(_ arguments: [String: Any]) -> CanonicalGoalCreationInput? {
+    func requiredText(_ name: String) -> String? {
+      guard let value = arguments[name] as? String else { return nil }
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    }
+
+    let whyItMatters = (arguments["why_it_matters"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let successCriteria = ((arguments["success_criteria"] as? [String]) ?? [])
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    guard let title = requiredText("title"), let desiredOutcome = requiredText("desired_outcome") else { return nil }
+    return CanonicalGoalCreationInput(
+      title: title,
+      desiredOutcome: desiredOutcome,
+      whyItMatters: whyItMatters?.isEmpty == false ? whyItMatters : nil,
+      successCriteria: successCriteria
+    )
+  }
+
+  private static func executeCreateCanonicalGoal(
+    _ arguments: [String: Any],
+    controlGeneration: Int?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    api: APIClient
+  ) async -> String {
+    guard let expectedOwnerID, let authorizationSnapshot, let controlGeneration else {
+      return #"{"ok":false,"error":"chat_first_capability_unavailable"}"#
+    }
+    guard let input = canonicalGoalCreationInput(arguments) else {
+      return #"{"ok":false,"error":"invalid_canonical_goal"}"#
+    }
+    do {
+      let goal = try await api.createCanonicalGoal(
+        title: input.title,
+        desiredOutcome: input.desiredOutcome,
+        whyItMatters: input.whyItMatters,
+        successCriteria: input.successCriteria,
+        accountGeneration: controlGeneration,
+        idempotencyKey: "chat-first-goal:\(UUID().uuidString.lowercased())"
+      )
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      let data = try JSONSerialization.data(
+        withJSONObject: [
+          "goal_id": goal.goalId,
+          "title": goal.title,
+          "status": goal.status.rawValue,
+        ]
+      )
+      return String(data: data, encoding: .utf8) ?? #"{"ok":false,"error":"canonical_goal_unavailable"}"#
+    } catch {
+      return #"{"ok":false,"error":"canonical_goal_unavailable"}"#
     }
   }
 

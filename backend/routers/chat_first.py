@@ -34,6 +34,7 @@ from models.chat_first import (
     stable_block_id,
 )
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
+from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
 from utils.task_intelligence.chat_first_eligibility import resolve_chat_first_eligibility
@@ -127,7 +128,7 @@ def _maybe_persist_daily_opener(uid: str, *, control_generation: int, now: datet
         )
     except Exception as exc:
         # No product content enters this log. A later foreground request may retry.
-        logger.warning('chat_first_daily_opener_prepare_failed uid=%s error=%s', uid, type(exc).__name__)
+        logger.warning('chat_first_daily_opener_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
 
 
 def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetime) -> None:
@@ -156,7 +157,7 @@ def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetim
     except Exception as exc:
         # First-run preparation is retryable and must not turn an ordinary
         # foreground Chat fetch into an error or leak product content.
-        logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', uid, type(exc).__name__)
+        logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
 
 
 def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:

@@ -32,6 +32,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
   case getWorkContext = "get_work_context"
+  case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
   case showRewindEvidence = "show_rewind_evidence"
@@ -45,7 +46,7 @@ enum GeneratedSwiftToolExecutor: String {
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
   static let manifestDigest = "sha256:63a4895fd703c99bd01ea56ed74a06c003ffe23d5dd20a18c1499975a7b04e34"
-  static let chatFirstManifestDigest = "sha256:513cc48122bb1084c720c787c2177e02b6b2fd4410c2e30b9c7da9912cadd221"
+  static let chatFirstManifestDigest = "sha256:eb4878f3e2a98d3e51130e3b4a7c06b644b7c1c84eb87c72f3ba870b1a4e86ba"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -84,6 +85,7 @@ enum GeneratedToolExecutors {
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
     .getWorkContext: .chatToolExecutor,
+    .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
     .showRewindEvidence: .chatToolExecutor
@@ -143,6 +145,7 @@ enum GeneratedToolExecutors {
     case getEmailInsights
     case createCalendarEvent
     case getWorkContext
+    case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
     case showRewindEvidence
@@ -179,6 +182,7 @@ enum GeneratedToolExecutors {
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
     case .getWorkContext: return .getWorkContext
+    case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks
     case .showRewindEvidence: return .showRewindEvidence

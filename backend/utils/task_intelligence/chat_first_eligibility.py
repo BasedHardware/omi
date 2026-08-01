@@ -5,6 +5,7 @@ from typing import Callable
 
 import database.task_intelligence_control as task_control_db
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl
+from utils.observability.fallback import record_fallback
 from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
 
 
@@ -40,6 +41,13 @@ def resolve_chat_first_eligibility(
             return ChatFirstEligibility(enabled=False)
         return ChatFirstEligibility(enabled=True, account_generation=control.account_generation)
     except Exception:
+        record_fallback(
+            component='other',
+            from_mode='chat_first',
+            to_mode='capability_unavailable',
+            reason='other',
+            outcome='exhausted',
+        )
         return ChatFirstEligibility(enabled=False)
 
 

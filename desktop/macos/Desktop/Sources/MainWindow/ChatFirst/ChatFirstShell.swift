@@ -138,17 +138,30 @@ struct ChatFirstShell: View {
     case .memories:
       MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
         .accessibilityIdentifier("chat-first-route-memories")
-        .onAppear {
-          navigation.markRouteVisible(.memories)
-          if case .memory(let id) = navigation.pendingFocus {
-            _ = navigation.acknowledgeFocus(.memory(id: id))
-          }
-        }
+        .onAppear { navigation.markRouteVisible(.memories) }
+        .task(id: pendingMemoryFocusID) { await resolvePendingMemoryFocus() }
     case .more(let page):
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
         .onAppear { navigation.markRouteVisible(.more(page)) }
     }
+  }
+
+  private var pendingMemoryFocusID: String? {
+    guard case .memory(let id) = navigation.pendingFocus else { return nil }
+    return id
+  }
+
+  private func resolvePendingMemoryFocus() async {
+    guard case .memory(let id) = navigation.pendingFocus else { return }
+    guard await viewModelContainer.memoriesViewModel.openMemory(id: id) else { return }
+    guard
+      let focus = ChatFirstMemoryFocusPolicy.focusToAcknowledge(
+        pendingFocus: navigation.pendingFocus,
+        visibleMemoryID: id
+      )
+    else { return }
+    _ = navigation.acknowledgeFocus(focus)
   }
 
   @ViewBuilder
@@ -227,6 +240,16 @@ struct ChatFirstShell: View {
       case .settings: return .settings
       }
     }
+  }
+}
+
+enum ChatFirstMemoryFocusPolicy {
+  static func focusToAcknowledge(
+    pendingFocus: ChatFirstPendingFocus?,
+    visibleMemoryID: String
+  ) -> ChatFirstPendingFocus? {
+    guard case .memory(let memoryID) = pendingFocus, memoryID == visibleMemoryID else { return nil }
+    return pendingFocus
   }
 }
 

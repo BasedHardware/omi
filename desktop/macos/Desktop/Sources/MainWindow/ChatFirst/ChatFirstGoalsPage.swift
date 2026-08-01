@@ -42,7 +42,10 @@ struct ChatFirstGoalsPage: View {
             goalContent
           }
         default:
-          if goalsStore.activeGoals.isEmpty {
+          if !ChatFirstGoalPresentationPolicy.shouldShowGoalContent(
+            activeGoalCount: goalsStore.activeGoals.count,
+            displayedGoalID: displayedDetail?.goal.goalId
+          ) {
             emptyState
           } else {
             goalContent
@@ -428,5 +431,11 @@ enum ChatFirstGoalProgressPolicy {
   private static func formatted(_ value: Double) -> String {
     if value.rounded() == value { return String(Int(value)) }
     return String(format: "%.1f", value)
+  }
+}
+
+enum ChatFirstGoalPresentationPolicy {
+  static func shouldShowGoalContent(activeGoalCount: Int, displayedGoalID: String?) -> Bool {
+    activeGoalCount > 0 || displayedGoalID != nil
   }
 }

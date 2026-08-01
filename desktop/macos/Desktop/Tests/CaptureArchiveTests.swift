@@ -168,10 +168,30 @@ final class CaptureArchiveTests: XCTestCase {
     let capture = archiveCapture(id: "omi-1")
 
     let firstResolution = await controller.prepare(for: capture)
-    XCTAssertEqual(firstResolution, pending)
+    XCTAssertEqual(firstResolution, Optional(pending))
     let refreshedResolution = await controller.prepare(for: capture, forceRefresh: true)
-    XCTAssertEqual(refreshedResolution, ready)
+    XCTAssertEqual(refreshedResolution, Optional(ready))
     XCTAssertEqual(provider.resolveCount, 2)
+  }
+
+  func testPlaybackClearDiscardsALateResolutionFromThePreviouslySelectedCapture() async throws {
+    let provider = DeferredCapturePlaybackProvider()
+    let controller = CapturePlaybackController(provider: provider)
+    let capture = archiveCapture(id: "omi-a")
+    let lateResolution = CapturePlaybackResolution.fileFallback(
+      CapturePlaybackFile(
+        id: "part-a", signedURL: try XCTUnwrap(URL(string: "https://example.test/part-a.mp3")), duration: 12
+      ))
+
+    let preparation = Task { @MainActor in await controller.prepare(for: capture) }
+    await provider.waitForRequest(id: capture.id)
+    controller.clear()
+    await provider.resolve(id: capture.id, with: lateResolution)
+
+    let result = await preparation.value
+    XCTAssertNil(result)
+    XCTAssertNil(controller.resolution)
+    XCTAssertFalse(controller.isResolving)
   }
 
   func testFocusRequiresSuccessfulAggregateSeekBeforeAcknowledgement() {
@@ -351,6 +371,32 @@ private final class CapturePlaybackProviderFake: CapturePlaybackProviding, @unch
   func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution {
     resolveCount += 1
     return resolutions.removeFirst()
+  }
+}
+
+private actor DeferredCapturePlaybackProvider: CapturePlaybackProviding {
+  private var pending: [String: CheckedContinuation<CapturePlaybackResolution, Never>] = [:]
+  private var requestWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+
+  func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution {
+    let waiters = requestWaiters.removeValue(forKey: capture.id) ?? []
+    for waiter in waiters {
+      waiter.resume()
+    }
+    return await withCheckedContinuation { continuation in
+      pending[capture.id] = continuation
+    }
+  }
+
+  func waitForRequest(id: String) async {
+    guard pending[id] == nil else { return }
+    await withCheckedContinuation { continuation in
+      requestWaiters[id, default: []].append(continuation)
+    }
+  }
+
+  func resolve(id: String, with resolution: CapturePlaybackResolution) {
+    pending.removeValue(forKey: id)?.resume(returning: resolution)
   }
 }
 

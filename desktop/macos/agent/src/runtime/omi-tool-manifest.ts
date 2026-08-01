@@ -1578,6 +1578,41 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
  */
 export const chatFirstToolManifest: OmiToolManifestEntry[] = [
   {
+    name: "create_canonical_goal",
+    label: "Create Canonical Goal",
+    description: "Create a canonical goal for this Chat-first user when they explicitly ask to turn an intention into a goal. Return the opaque goal ID and render it as a goalLink in the same response.",
+    promptSnippet: "create_canonical_goal - Create a canonical goal from the user's explicit intention",
+    promptGuidelines: [
+      "Use only after the user explicitly asks to create a goal or confirms the proposed goal.",
+      "After creation, render the returned goal as a goalLink in the same response.",
+      "Do not create a local or inferred substitute goal.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        title: { type: "string", description: "Concise goal title." },
+        desired_outcome: { type: "string", description: "Concrete outcome the user wants." },
+        why_it_matters: { type: "string", description: "Optional user-stated reason this goal matters." },
+        success_criteria: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional concrete criteria that define success.",
+        },
+      },
+      ["title", "desired_outcome"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Create Canonical Goal", "Create a user-confirmed canonical goal in Chat-first.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
+    adapters: piAndStdio(),
+  },
+  {
     name: "get_canonical_goals",
     label: "Get Canonical Goals",
     description: "Retrieve canonical goals for this Chat-first user. For any question about the user's goals, goal progress, or focus, call this first. It returns opaque canonical goal IDs that must be rendered as goalLink blocks with render_chat_blocks. Do not use execute_sql, legacy local goals, memories, or inferred goals as a substitute.",

@@ -60,6 +60,7 @@ final class CanonicalGoalsStore: ObservableObject {
   private var ownerID: String?
   private var ownerRevision: UInt = 0
   private var activeLoadToken: UUID?
+  private var activeLoadWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(
     client: any CanonicalGoalsClient = APIClient.shared,
@@ -132,6 +133,7 @@ final class CanonicalGoalsStore: ObservableObject {
     ownerID = nil
     ownerRevision &+= 1
     activeLoadToken = nil
+    resumeActiveLoadWaiters()
     goals = []
     selectedGoalDetail = nil
     focusMutationGoalID = nil
@@ -150,6 +152,7 @@ final class CanonicalGoalsStore: ObservableObject {
     defer {
       if activeLoadToken == token {
         activeLoadToken = nil
+        resumeActiveLoadWaiters()
       }
     }
 
@@ -230,6 +233,8 @@ final class CanonicalGoalsStore: ObservableObject {
         authorizationSnapshot: scope.authorizationSnapshot
       )
       guard scopeIsCurrent(scope) else { return false }
+      await waitForActiveLoadToFinish()
+      guard scopeIsCurrent(scope) else { return false }
       await load()
       guard scopeIsCurrent(scope) else { return false }
       return true
@@ -253,6 +258,25 @@ final class CanonicalGoalsStore: ObservableObject {
     )
   }
 
+  private func waitForActiveLoadToFinish() async {
+    guard activeLoadToken != nil else { return }
+    await withCheckedContinuation { continuation in
+      guard activeLoadToken != nil else {
+        continuation.resume()
+        return
+      }
+      activeLoadWaiters.append(continuation)
+    }
+  }
+
+  private func resumeActiveLoadWaiters() {
+    let waiters = activeLoadWaiters
+    activeLoadWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
+
   private func scopeIsCurrent(_ scope: Scope) -> Bool {
     scope.ownerID == ownerID
       && scope.capability == capability
@@ -267,6 +291,7 @@ final class CanonicalGoalsStore: ObservableObject {
     ownerID = nil
     ownerRevision &+= 1
     activeLoadToken = nil
+    resumeActiveLoadWaiters()
     goals = []
     selectedGoalDetail = nil
     focusMutationGoalID = nil

@@ -49,6 +49,38 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     XCTAssertEqual(store.primaryFocusedGoal?.goalId, "background")
   }
 
+  func testSetFocusWaitsForAnInFlightLoadBeforeReconcilingThePostMutationProjection() async throws {
+    let api = FakeCanonicalGoalsClient()
+    api.goals = [
+      goal(id: "focused", status: .focused, rank: 0),
+      goal(id: "background", status: .background, rank: nil),
+    ]
+    api.goalsAfterFocus = [
+      goal(id: "focused", status: .background, rank: nil),
+      goal(id: "background", status: .focused, rank: 0),
+    ]
+    let owner = TestOwner("owner-a")
+    let store = CanonicalGoalsStore(client: api, ownerIDProvider: { owner.value })
+
+    store.activate(capability: try capability(generation: 12))
+    await store.load()
+
+    api.holdGoalFetches = true
+    let staleLoad = Task { @MainActor in await store.load() }
+    await api.waitForHeldGoalFetch()
+
+    let focusMutation = Task { @MainActor in await store.setAsFocus(goalID: "background") }
+    await api.waitForFocusMutation()
+    api.holdGoalFetches = false
+    api.releaseHeldGoalFetches()
+
+    await staleLoad.value
+    let updated = await focusMutation.value
+    XCTAssertTrue(updated)
+    XCTAssertEqual(store.primaryFocusedGoal?.goalId, "background")
+    XCTAssertEqual(api.goalRequestOwnerIDs.count, 3)
+  }
+
   func testUnavailableProjectionClearsCanonicalDataAndDoesNotRetainPriorOwnerState() async throws {
     let api = FakeCanonicalGoalsClient()
     api.goals = [goal(id: "owner-a", status: .focused, rank: 0)]
@@ -115,6 +147,11 @@ final class CanonicalGoalsStoreTests: XCTestCase {
         visibleGoalID: "goal-b"
       )
     )
+  }
+
+  func testEndedGoalDetailRemainsRenderableWithoutAnActiveGoal() {
+    XCTAssertTrue(ChatFirstGoalPresentationPolicy.shouldShowGoalContent(activeGoalCount: 0, displayedGoalID: "ended"))
+    XCTAssertFalse(ChatFirstGoalPresentationPolicy.shouldShowGoalContent(activeGoalCount: 0, displayedGoalID: nil))
   }
 
   private func capability(generation: Int) throws -> ChatFirstCapabilityProjection {
@@ -186,7 +223,29 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
   var focusRequests: [FocusRequest] = []
   var goalRequestOwnerIDs: [String?] = []
   var goalFetchError: FakeError?
+  var holdGoalFetches = false
   private var hasFocused = false
+  private var heldGoalFetches: [([OmiAPI.GoalResponse], CheckedContinuation<[OmiAPI.GoalResponse], Error>)] = []
+  private var goalFetchWaiters: [CheckedContinuation<Void, Never>] = []
+  private var focusMutationWaiters: [CheckedContinuation<Void, Never>] = []
+
+  func waitForHeldGoalFetch() async {
+    guard heldGoalFetches.isEmpty else { return }
+    await withCheckedContinuation { goalFetchWaiters.append($0) }
+  }
+
+  func releaseHeldGoalFetches() {
+    let held = heldGoalFetches
+    heldGoalFetches.removeAll()
+    for (response, continuation) in held {
+      continuation.resume(returning: response)
+    }
+  }
+
+  func waitForFocusMutation() async {
+    guard focusRequests.isEmpty else { return }
+    await withCheckedContinuation { focusMutationWaiters.append($0) }
+  }
 
   func getCanonicalGoals(
     includeEnded: Bool,
@@ -195,10 +254,18 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
   ) async throws -> [OmiAPI.GoalResponse] {
     goalRequestOwnerIDs.append(expectedOwnerId)
     if let goalFetchError { throw goalFetchError }
-    if hasFocused, let goalsAfterFocus {
-      return goalsAfterFocus
+    let response = hasFocused && goalsAfterFocus != nil ? goalsAfterFocus! : goals
+    if holdGoalFetches {
+      let waiters = goalFetchWaiters
+      goalFetchWaiters.removeAll()
+      for waiter in waiters {
+        waiter.resume()
+      }
+      return try await withCheckedThrowingContinuation { continuation in
+        heldGoalFetches.append((response, continuation))
+      }
     }
-    return goals
+    return response
   }
 
   func getCanonicalGoalDetail(
@@ -227,6 +294,11 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
         idempotencyKey: idempotencyKey,
         expectedOwnerID: expectedOwnerId
       ))
+    let waiters = focusMutationWaiters
+    focusMutationWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
     guard let goal = goals.first(where: { $0.goalId == goalID }) else { throw FakeError.missing }
     hasFocused = true
     return goal

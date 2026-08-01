@@ -348,15 +348,19 @@ struct CaptureArchivePage: View {
   }
 
   private func select(_ capture: ServerConversation) async {
+    playback.clear()
     repository.select(capture)
-    guard let detail = await repository.loadDetail(id: capture.id) else { return }
+    guard let detail = await repository.loadDetail(id: capture.id), repository.selectedCapture?.id == capture.id else {
+      return
+    }
     _ = await playback.prepare(for: detail)
   }
 
   private func resolvePendingFocusIfNeeded() async {
     guard case .capture(let id, let momentTimestamp) = navigation.pendingFocus else { return }
-    guard let detail = await repository.loadDetail(id: id) else { return }
-    let resolution = await playback.prepare(for: detail)
+    playback.clear()
+    guard let detail = await repository.loadDetail(id: id), repository.selectedCapture?.id == id else { return }
+    guard let resolution = await playback.prepare(for: detail), repository.selectedCapture?.id == id else { return }
     if let momentTimestamp {
       let didCompleteSeek = await playback.seekToMoment(wallOffset: momentTimestamp)
       guard
@@ -374,8 +378,12 @@ struct CaptureArchivePage: View {
     automationRuntime?.registerCapturePage(
       openCapture: { [repository, playback] in
         guard let capture = repository.captures.first else { return false }
+        playback.clear()
         repository.select(capture)
-        guard let detail = await repository.loadDetail(id: capture.id) else { return false }
+        guard let detail = await repository.loadDetail(id: capture.id), repository.selectedCapture?.id == capture.id
+        else {
+          return false
+        }
         _ = await playback.prepare(for: detail)
         return true
       },

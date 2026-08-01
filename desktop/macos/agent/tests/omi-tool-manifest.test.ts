@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildToolAvailabilitySnapshot,
+  chatFirstToolManifest,
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   omiToolManifest,
@@ -9,6 +10,16 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("registers canonical goal creation for Chat-first main Chat", () => {
+    const tool = chatFirstToolManifest.find((entry) => entry.name === "create_canonical_goal");
+
+    expect(tool).toMatchObject({
+      executor: { kind: "swiftTool" },
+      surfaces: ["desktop_chat"],
+      annotations: expect.objectContaining({ readOnlyHint: false }),
+    });
+    expect(tool?.inputSchema.required).toEqual(["title", "desired_outcome"]);
+  });
   it("projects agent-management tools out of leaf worker contexts", () => {
     for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
       const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });

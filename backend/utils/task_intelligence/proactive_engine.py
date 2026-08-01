@@ -15,6 +15,7 @@ from models.chat_first import (
     QuestionCardSpec,
     QuestionOption,
 )
+from utils.log_sanitizer import sanitize_pii
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility, resolve_chat_first_eligibility
 
@@ -223,7 +224,11 @@ def wake_after_commit(
             except Exception as exc:
                 # The source mutation has already committed. Preserve its result;
                 # control-generation rollover also makes the old reservation inert.
-                logger.warning('chat_first_proactive_admission_release_failed uid=%s error=%s', uid, type(exc).__name__)
+                logger.warning(
+                    'chat_first_proactive_admission_release_failed uid=%s error=%s',
+                    sanitize_pii(uid),
+                    type(exc).__name__,
+                )
 
 
 def run_post_commit_wake(
@@ -236,7 +241,7 @@ def run_post_commit_wake(
     try:
         return wake_after_commit(uid, trigger, **kwargs)
     except Exception as exc:
-        logger.warning('chat_first_proactive_wake_failed uid=%s error=%s', uid, type(exc).__name__)
+        logger.warning('chat_first_proactive_wake_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
         _meter('wake_failed', trigger.kind)
         return ProactiveWakeResult(outcome='declined')
 
@@ -281,7 +286,11 @@ def persist_capture_arrival_intent(
             _meter('intent_created', 'capture_arrival')
         return intent
     except Exception as exc:
-        logger.warning('chat_first_capture_arrival_intent_failed uid=%s error=%s', uid, type(exc).__name__)
+        logger.warning(
+            'chat_first_capture_arrival_intent_failed uid=%s error=%s',
+            sanitize_pii(uid),
+            type(exc).__name__,
+        )
         return None
 
 

@@ -789,7 +789,7 @@ class SignalPortabilityTests(unittest.TestCase):
         child = Mock(pid=4321)
         windows_job = Mock()
         windows_job.terminate.return_value = True
-        preflight_runner.signal_child(child, signal.SIGINT, windows_job)
+        preflight_runner.signal_child(child, signal.SIGINT, windows_job=windows_job)
         windows_job.terminate.assert_called_once_with()
         child.send_signal.assert_not_called()
 

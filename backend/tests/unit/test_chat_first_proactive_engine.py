@@ -1,6 +1,7 @@
 """Failure-isolated, content-free proactive-judgment contracts."""
 
 from datetime import datetime, timezone
+import logging
 
 import pytest
 
@@ -139,6 +140,44 @@ def test_capture_arrival_is_failure_isolated_and_bounds_the_persisted_summary(mo
 
     assert result is None
     assert created[0]['blocks'][0].summary == 'x' * 200
+
+
+def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):
+    uid = 'sensitive-user-123456'
+    monkeypatch.setattr(
+        engine,
+        'wake_after_commit',
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError('timeout')),
+    )
+    caplog.set_level(logging.WARNING, logger=engine.__name__)
+
+    result = engine.run_post_commit_wake(uid, _trigger())
+
+    assert result.outcome == 'declined'
+    assert uid not in caplog.text
+    assert 'error=TimeoutError' in caplog.text
+
+
+def test_capture_arrival_failure_logs_redact_authenticated_uid(monkeypatch, caplog):
+    uid = 'sensitive-user-123456'
+    monkeypatch.setattr(
+        engine.intent_db,
+        'create_intent',
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError('store unavailable')),
+    )
+    caplog.set_level(logging.WARNING, logger=engine.__name__)
+
+    result = engine.persist_capture_arrival_intent(
+        uid,
+        conversation_id='capture-1',
+        summary='New Omi capture',
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert result is None
+    assert uid not in caplog.text
+    assert 'error=TimeoutError' in caplog.text
 
 
 def test_exhausted_budget_short_circuits_before_judge(monkeypatch):

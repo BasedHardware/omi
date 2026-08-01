@@ -1,10 +1,12 @@
 """API contracts for the journal-owned materialization fetch/ack boundary."""
 
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from models.chat_first import ChatFirstSubject, ProactiveIntent, QuestionCardSpec, QuestionOption
 from models.task_intelligence import TaskWorkflowControl
@@ -187,6 +189,39 @@ def test_daily_opener_waits_for_an_active_sparse_cold_start_sequence(monkeypatch
         control_generation=7,
         now=datetime(2026, 7, 15, tzinfo=timezone.utc),
     )
+
+
+@pytest.mark.parametrize(
+    ('handler_name', 'failing_dependency'),
+    [
+        ('_maybe_persist_daily_opener', 'has_active_sparse_cold_start_sequence'),
+        ('_maybe_persist_cold_start', 'get_user_goals'),
+    ],
+)
+def test_preparation_failures_do_not_log_raw_authenticated_uid(monkeypatch, caplog, handler_name, failing_dependency):
+    uid = 'sensitive-user-123456'
+    if failing_dependency == 'has_active_sparse_cold_start_sequence':
+        monkeypatch.setattr(
+            chat_first_router.chat_first_intents_db,
+            failing_dependency,
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('unavailable')),
+        )
+    else:
+        monkeypatch.setattr(
+            chat_first_router.goals_db,
+            failing_dependency,
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('unavailable')),
+        )
+
+    caplog.set_level(logging.WARNING, logger=chat_first_router.__name__)
+    getattr(chat_first_router, handler_name)(
+        uid,
+        control_generation=7,
+        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+
+    assert uid not in caplog.text
+    assert 'error=RuntimeError' in caplog.text
 
 
 def test_deferral_receiver_is_capability_gated_before_its_store(monkeypatch):

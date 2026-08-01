@@ -173,11 +173,13 @@ final class CaptureArchiveRepository: ObservableObject {
   /// It never falls back to a generic list request if the detail read fails.
   func loadDetail(id: String) async -> ServerConversation? {
     if let cached = try? await local.detail(id: id), cached.isOmiCaptureArchiveRecord {
+      guard selectedCapture == nil || selectedCapture?.id == id else { return nil }
       selectedCapture = cached
     }
 
     do {
       let detail = try await remote.detail(id: id)
+      guard selectedCapture == nil || selectedCapture?.id == id else { return nil }
       guard detail.isOmiCaptureArchiveRecord else {
         errorMessage = "This capture is no longer available."
         return nil
