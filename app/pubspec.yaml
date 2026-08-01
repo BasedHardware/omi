@@ -77,7 +77,7 @@ dependencies:
   googleapis_auth: 2.0.0
   envied: 1.1.1
   awesome_notifications_core: ^0.9.3
-  awesome_notifications: any
+  awesome_notifications: ^0.10.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
@@ -98,7 +98,7 @@ dependencies:
   opus_dart:
     git:
       url: https://github.com/mdmohsin7/opus_dart.git
-      ref: dev
+      ref: e2202b0f38cf6c9e70ab7807b4cdaa3304b145ec
   flutter_timezone: 3.0.1
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0
@@ -140,11 +140,12 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_ios
-      ref: dev
+      ref: 04696ff930a464bd47677026d45c3c3004f6daab
   opus_flutter_android:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
+      ref: c3e5118079075c351ec8eb2cf975434e458bad59
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1

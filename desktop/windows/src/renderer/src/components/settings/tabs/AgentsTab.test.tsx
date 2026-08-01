@@ -29,7 +29,14 @@ const codingAgentSignOut = vi.fn()
 const codingAgentDetect = vi.fn()
 const codingAgentCodexKeyStatus = vi.fn()
 const codingAgentSetCodexKey = vi.fn()
+const codingAgentGetCommands = vi.fn()
+const codingAgentSetCommands = vi.fn()
+const codingAgentMigrateCommands = vi.fn()
 const onCodingAgentEvent = vi.fn(() => () => {})
+
+// preferences.ts's localStorage key — the legacy home of the launch commands,
+// which the tab migrates out of on mount.
+const PREFS_KEY = 'omi-windows-prefs-v1'
 
 const allNotInstalled = {
   codex: { installed: false },
@@ -54,6 +61,10 @@ beforeEach(() => {
   codingAgentDetect.mockReset().mockResolvedValue(allNotInstalled)
   codingAgentCodexKeyStatus.mockReset().mockResolvedValue({ hasKey: false })
   codingAgentSetCodexKey.mockReset().mockResolvedValue({ ok: true, hasKey: true })
+  // The launch commands live in main now; the store echoes back what it stored.
+  codingAgentGetCommands.mockReset().mockResolvedValue({})
+  codingAgentSetCommands.mockReset().mockImplementation(async (next) => next)
+  codingAgentMigrateCommands.mockReset().mockImplementation(async (legacy) => legacy)
   onCodingAgentEvent.mockReset().mockReturnValue(() => {})
   __resetClaudeSignIn()
   ;(globalThis as unknown as { window: { omi: unknown } }).window.omi = {
@@ -65,6 +76,9 @@ beforeEach(() => {
     codingAgentDetect,
     codingAgentCodexKeyStatus,
     codingAgentSetCodexKey,
+    codingAgentGetCommands,
+    codingAgentSetCommands,
+    codingAgentMigrateCommands,
     onCodingAgentEvent
   }
 })
@@ -134,16 +148,34 @@ describe('AgentsTab', () => {
     expect(screen.queryByText('Install OpenClaw')).toBeNull()
   })
 
-  it('one-click Connect fills the known launch command, saves it, and runs the handshake', async () => {
+  it('one-click Connect saves the known launch command to main, then runs the handshake', async () => {
     renderTab()
     // Externals are unconnected → each shows a Connect button (order: openclaw,
     // hermes, codex). Click OpenClaw's.
     const connects = await screen.findAllByText('Connect')
     fireEvent.click(connects[0])
+    // The command is persisted in the MAIN-process store...
+    await waitFor(() => expect(codingAgentSetCommands).toHaveBeenCalled())
+    expect(codingAgentSetCommands.mock.calls[0][0]).toMatchObject({ openclaw: 'openclaw acp' })
+    // ...and the handshake is then asked for by agent id ALONE. The command must
+    // not ride along on the test call: a renderer-supplied command string is the
+    // path that made a localStorage write into persistent code execution.
     await waitFor(() => expect(codingAgentTest).toHaveBeenCalled())
-    const [id, overrides] = codingAgentTest.mock.calls[0]
-    expect(id).toBe('openclaw')
-    expect(overrides.openclaw).toBe('openclaw acp')
+    expect(codingAgentTest.mock.calls[0][0]).toBe('openclaw')
+    expect(codingAgentTest.mock.calls[0][1]).toBeUndefined()
+  })
+
+  it('adopts a pre-migration localStorage command once, then clears the renderer copy', async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ agentCommands: { hermes: 'hermes acp' } }))
+    renderTab()
+    await waitFor(() =>
+      expect(codingAgentMigrateCommands).toHaveBeenCalledWith({ hermes: 'hermes acp' })
+    )
+    // The renderer copy is dropped after a successful hand-off — leaving it would
+    // preserve the attacker-writable persistence the move exists to remove.
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}').agentCommands).toBeUndefined()
+    )
   })
 
   it('validates and stores the Codex OpenAI API key', async () => {

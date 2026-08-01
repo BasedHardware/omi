@@ -352,6 +352,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`)
       this.processIsExternal = true
+      // `command` is a full command LINE, not a program path, and it reaches here
+      // only from main's own settings store (appSettings.agentCommands) or an
+      // OMI_*_ADAPTER_COMMAND env var — never from the renderer, which sends an
+      // agent id and nothing else. `shell: true` stays: the shipped adapter
+      // commands are npm-launcher based (`npx …`), and on Windows a .cmd/.bat
+      // shim cannot be spawned without a shell, so splitting this into an
+      // execFile argv would break every default external adapter. The shell is
+      // therefore part of the contract with a user-authored command line, not an
+      // injection sink for untrusted input.
       this.process = spawn(command, {
         shell: true,
         env: externalEnv,

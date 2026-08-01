@@ -19,6 +19,7 @@ import {
   type ClaudeOAuthFlowHandle
 } from '../codingAgent/claudeOAuth'
 import { messageFrom } from '../codingAgent/failures'
+import { getAppSettings, setAppSettings, type AgentCommands } from '../appSettings'
 import { detectAgents } from '../codingAgent/agentDetect'
 import { codexApiKeyStatus, saveCodexApiKey } from '../codingAgent/codexAuth'
 import type { ProductionAdapterId } from '../codingAgent/interface'
@@ -42,11 +43,26 @@ function broadcast(event: CodingAgentEvent): void {
   }
 }
 
+// The configured external-agent launch commands, read from the main-process
+// settings store.
+//
+// SECURITY: this is the ONLY source of the strings acp.ts spawns. It used to be
+// whatever the renderer passed in (backed by localStorage), which turned one
+// write to that origin's storage into persistent code execution, re-run on every
+// agent turn. Renderer-supplied overrides are now ignored outright rather than
+// merged — a merge would leave the same injection path open.
+function configuredCommands(): AdapterCommandOverrides {
+  return getAppSettings().agentCommands
+}
+
 export function registerCodingAgentHandlers(): void {
   ipcMain.handle(
     'codingAgent:list',
-    (_e, commandOverrides?: AdapterCommandOverrides): CodingAgentInfo[] => {
-      const overrides = commandOverrides ?? {}
+    // The legacy `commandOverrides` argument is accepted and DISCARDED: older
+    // renderer call sites still send it, and silently ignoring it is what makes
+    // the command string unreachable from the renderer.
+    (): CodingAgentInfo[] => {
+      const overrides = configuredCommands()
       return PRODUCTION_ADAPTER_IDS.map((id) => {
         const connected = adapterIsActivated(id, overrides)
         return {
@@ -62,18 +78,42 @@ export function registerCodingAgentHandlers(): void {
   ipcMain.handle(
     'codingAgent:run',
     (_e, args: CodingAgentRunArgs): Promise<CodingAgentResult> =>
-      runCodingAgentTask(args, broadcast, (message) => console.log(`[codingAgent] ${message}`))
+      // Overwrite (never merge) any commandOverrides the renderer put on `args`:
+      // the task prompt and agent id are the renderer's to choose, the command
+      // that gets spawned is not.
+      runCodingAgentTask(
+        { ...args, commandOverrides: configuredCommands() },
+        broadcast,
+        (message) => console.log(`[codingAgent] ${message}`)
+      )
   )
 
   ipcMain.handle('codingAgent:cancel', (_e, taskId: string): boolean => cancelTask(taskId))
 
-  ipcMain.handle(
-    'codingAgent:test',
-    (_e, agentId: ProductionAdapterId, commandOverrides?: AdapterCommandOverrides) =>
-      testAgentConnection(agentId, commandOverrides ?? {}, (message) =>
-        console.log(`[codingAgent] ${message}`)
-      )
+  // Only the agent id crosses from the renderer; the command comes from settings.
+  ipcMain.handle('codingAgent:test', (_e, agentId: ProductionAdapterId) =>
+    testAgentConnection(agentId, configuredCommands(), (message) =>
+      console.log(`[codingAgent] ${message}`)
+    )
   )
+
+  // Settings → Agents reads and writes the launch commands through these two
+  // handlers instead of keeping its own copy. setAppSettings runs the store's
+  // sanitizer, which drops unknown ids and over-long values.
+  ipcMain.handle('codingAgent:getCommands', (): AgentCommands => configuredCommands())
+
+  ipcMain.handle('codingAgent:setCommands', (_e, next: AgentCommands): AgentCommands => {
+    return setAppSettings({ agentCommands: next ?? {} }).agentCommands
+  })
+
+  // One-time import of the pre-migration renderer-stored commands. Applied only
+  // while main's own store is still empty, so it cannot be replayed later to
+  // overwrite (or re-inject) a command the user has since set here.
+  ipcMain.handle('codingAgent:migrateCommands', (_e, legacy: AgentCommands): AgentCommands => {
+    const current = configuredCommands()
+    if (Object.keys(current).length > 0) return current
+    return setAppSettings({ agentCommands: legacy ?? {} }).agentCommands
+  })
 
   ipcMain.handle('codingAgent:authStatus', (): CodingAgentAuthStatus => claudeAuthStatus())
 

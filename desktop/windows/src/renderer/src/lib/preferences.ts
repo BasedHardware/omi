@@ -111,10 +111,13 @@ export type Preferences = {
   // (opt-in), matching macOS's default: PTT/voice-originated replies are always
   // spoken; a typed bar question is spoken only when this is true.
   floatingBarTypedVoiceEnabled?: boolean
-  // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
-  // Set in Settings → Agents; undefined = not connected (the matching
-  // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
-  // Claude Code is built in and needs no command.
+  // LEGACY, read-only: the external coding agents' launch commands used to live
+  // here. They are spawned, so storing them in localStorage meant a single write
+  // to this origin's storage was persistent code execution, re-run on every agent
+  // turn. They now live in the main-process settings store (appSettings
+  // `agentCommands`), reachable only through codingAgentGet/SetCommands. This
+  // field survives solely so migrateAgentCommands() can hand the old value over
+  // once; nothing reads it for execution and nothing writes it any more.
   agentCommands?: { openclaw?: string; hermes?: string; codex?: string }
   // Global UI font-scale multiplier (macOS FontScaleSettings parity), applied as
   // a root rem multiplier in lib/fontScale.ts. Range [0.5, 2.0], clamped on
@@ -215,6 +218,29 @@ export function setPreferences(patch: Partial<Preferences>): void {
 export function onPreferencesChange(cb: (p: Preferences) => void): () => void {
   listeners.add(cb)
   return () => listeners.delete(cb)
+}
+
+/**
+ * Hand the legacy localStorage agent launch commands to the main-process store,
+ * once, so a user who configured an external agent before the move doesn't have
+ * to reconfigure it. Clears the renderer copy afterwards — leaving it behind
+ * would preserve the attacker-writable persistence this move exists to remove.
+ *
+ * Safe to call from several places and several windows: it no-ops when there is
+ * nothing to migrate, and main applies the value only while its own store is
+ * still empty, so it can never clobber a command the user has since edited.
+ */
+export async function migrateAgentCommands(): Promise<void> {
+  const legacy = load().agentCommands
+  if (!legacy || Object.keys(legacy).length === 0) return
+  try {
+    await window.omi.codingAgentMigrateCommands(legacy)
+  } catch {
+    // Main unreachable (or an older build): keep the legacy copy so the next
+    // attempt can still migrate it rather than dropping the user's config.
+    return
+  }
+  setPreferences({ agentCommands: undefined })
 }
 
 export function isOnboardingComplete(): boolean {

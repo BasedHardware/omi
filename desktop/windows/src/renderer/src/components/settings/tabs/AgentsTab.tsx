@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
-import { getPreferences, setPreferences } from '../../../lib/preferences'
+import { migrateAgentCommands } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
 import { CLAUDE_SIGN_IN_FAILED } from '../../../lib/claudeSignIn'
 import type {
@@ -76,9 +76,10 @@ type CodexKeyUi = {
 
 export function AgentsTab(): React.JSX.Element {
   const { agents, refresh } = useCodingAgents()
-  const [commands, setCommands] = useState<Partial<Record<ExternalAgentId, string>>>(
-    () => getPreferences().agentCommands ?? {}
-  )
+  // Mirrors the main-process store rather than owning the value: these strings
+  // are spawned, so main is the authority and this is only the edit buffer the
+  // inputs bind to. Starts empty and is filled by refreshCommands() on mount.
+  const [commands, setCommands] = useState<Partial<Record<ExternalAgentId, string>>>({})
   const [tests, setTests] = useState<Partial<Record<CodingAgentId, TestState>>>({})
   const [claudeAuth, setClaudeAuth] = useState<ClaudeAuthUi>({ status: null, busy: false })
   const [detection, setDetection] = useState<Partial<AgentDetectionMap>>({})
@@ -107,6 +108,29 @@ export function AgentsTab(): React.JSX.Element {
       .catch(() => {})
   }
 
+  // Adopt any pre-migration localStorage commands first, then load the
+  // authoritative set from main — migration before read, so a legacy command
+  // isn't briefly rendered as "not connected" before it lands. No refresh() here:
+  // a migration that actually moved something clears the legacy preference, and
+  // useCodingAgents re-lists on that preference change by itself.
+  const refreshCommands = (): void => {
+    void migrateAgentCommands()
+      .then(() => window.omi.codingAgentGetCommands())
+      .then(setCommands)
+      .catch(() => {})
+  }
+
+  // Every edit round-trips through main, and the local buffer is reset from what
+  // was actually stored (post-sanitizer) rather than what we hoped to store.
+  const persistCommands = (next: Partial<Record<ExternalAgentId, string>>): Promise<void> =>
+    window.omi
+      .codingAgentSetCommands(next)
+      .then((stored) => {
+        setCommands(stored)
+        refresh()
+      })
+      .catch(() => {})
+
   // Load the Claude Code sign-in state on mount, and re-check whenever a
   // delegated task reports it needs auth (so the row flips to "Sign in" the
   // moment the user's token is rejected mid-task). Also PATH-detect the external
@@ -115,6 +139,7 @@ export function AgentsTab(): React.JSX.Element {
     refreshClaudeAuth()
     refreshDetection()
     refreshCodexKey()
+    refreshCommands()
     return window.omi.onCodingAgentEvent((event) => {
       if (event.type === 'auth_required' && event.adapterId === 'acp') refreshClaudeAuth()
     })
@@ -154,18 +179,17 @@ export function AgentsTab(): React.JSX.Element {
 
   const saveCommand = (id: ExternalAgentId): void => {
     const trimmed = commands[id]?.trim()
-    const next = { ...(getPreferences().agentCommands ?? {}) }
+    const next = { ...commands }
     if (trimmed) next[id] = trimmed
     else delete next[id]
-    setPreferences({ agentCommands: next })
     setTests((t) => ({ ...t, [id]: {} }))
-    refresh()
+    void persistCommands(next)
   }
 
   const runTest = (id: CodingAgentId): void => {
     setTests((t) => ({ ...t, [id]: { running: true } }))
     void window.omi
-      .codingAgentTest(id, getPreferences().agentCommands)
+      .codingAgentTest(id)
       .then((r) => {
         // A needs-auth verdict for Claude Code means the token is gone/expired —
         // reflect it in the sign-in row rather than as a bare test failure.
@@ -185,24 +209,17 @@ export function AgentsTab(): React.JSX.Element {
   // Test line then confirms the agent actually answered.
   const connect = (id: ExternalAgentId): void => {
     const cmd = EXTERNAL_AGENT_GUIDES[id].suggestedCommand
-    const next = { ...(getPreferences().agentCommands ?? {}), [id]: cmd }
     setCommands((c) => ({ ...c, [id]: cmd }))
-    setPreferences({ agentCommands: next })
-    refresh()
-    runTest(id)
+    // Test only after the command is persisted — main reads what it spawns from
+    // the store, so testing before the write would exercise the previous value.
+    void persistCommands({ ...commands, [id]: cmd }).then(() => runTest(id))
   }
 
   const disconnect = (id: ExternalAgentId): void => {
-    const next = { ...(getPreferences().agentCommands ?? {}) }
+    const next = { ...commands }
     delete next[id]
-    setCommands((c) => {
-      const n = { ...c }
-      delete n[id]
-      return n
-    })
-    setPreferences({ agentCommands: next })
     setTests((t) => ({ ...t, [id]: {} }))
-    refresh()
+    void persistCommands(next)
   }
 
   const copyInstall = (id: ExternalAgentId): void => {

@@ -1240,7 +1240,9 @@ export type OmiBridgeApi = {
   screenSynthAdvanceWatermark: (ts: number) => Promise<void>
   screenSynthRecordRun: (run: ScreenSynthRun) => Promise<void>
   // --- Coding agents (Claude Code / OpenClaw / Hermes / Codex) ---
-  /** Connection status for every known agent (commandOverrides come from prefs). */
+  /** Connection status for every known agent. The launch commands come from the
+   *  main-process settings store, never from the caller: `commandOverrides` is a
+   *  vestigial parameter that preload drops and main ignores. */
   codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) => Promise<CodingAgentInfo[]>
   /** Run one delegated task; resolves with the final outcome. Streaming
    *  progress arrives via onCodingAgentEvent, keyed by taskId. */
@@ -1254,6 +1256,19 @@ export type OmiBridgeApi = {
     agentId: CodingAgentId,
     commandOverrides?: CodingAgentCommandOverrides
   ) => Promise<CodingAgentTestResult>
+  /** The external agents' configured launch commands (Settings → Agents). These
+   *  are spawned by main, so main owns them; the renderer edits them through
+   *  these handlers rather than holding its own copy. */
+  codingAgentGetCommands: () => Promise<CodingAgentCommandOverrides>
+  /** Persist the launch commands; resolves with the sanitized stored value. */
+  codingAgentSetCommands: (
+    next: CodingAgentCommandOverrides
+  ) => Promise<CodingAgentCommandOverrides>
+  /** One-time import of the pre-migration localStorage commands. Main applies it
+   *  only while its own store is empty, so it cannot overwrite a later edit. */
+  codingAgentMigrateCommands: (
+    legacy: CodingAgentCommandOverrides
+  ) => Promise<CodingAgentCommandOverrides>
   /** Whether the built-in Claude Code agent has usable credentials. */
   codingAgentAuthStatus: () => Promise<CodingAgentAuthStatus>
   /** Run the Claude Code sign-in: loopback PKCE flow + open the browser, then

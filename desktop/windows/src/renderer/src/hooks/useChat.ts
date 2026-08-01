@@ -23,7 +23,7 @@ import {
   clearAttachments,
   getPendingAttachments
 } from '../lib/chatAttachments'
-import { getPreferences } from '../lib/preferences'
+import { getPreferences, migrateAgentCommands } from '../lib/preferences'
 import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
@@ -498,10 +498,17 @@ export function useChat(): UseChat {
     const myGen = genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
 
-    const prefs = getPreferences()
+    // Adopt any pre-migration localStorage commands before asking main what is
+    // connected: a user who configured an external agent before the store moved
+    // and has not opened Settings since would otherwise look disconnected here.
+    await migrateAgentCommands()
+
     let agents: Awaited<ReturnType<typeof window.omi.codingAgentList>>
     try {
-      agents = await window.omi.codingAgentList(prefs.agentCommands)
+      // No command overrides: the launch commands are spawned by main, so main
+      // reads them from its own settings store. Passing them from here would put
+      // an attacker-writable localStorage string on the path to spawn().
+      agents = await window.omi.codingAgentList()
     } catch {
       return false // bridge unavailable — let normal chat answer
     }
@@ -607,8 +614,7 @@ export function useChat(): UseChat {
         taskId,
         prompt: detection.prompt,
         cwd,
-        agentId,
-        commandOverrides: prefs.agentCommands
+        agentId
       })
       if (!result.ok) {
         statusNotes += `_${result.error ?? 'The agent could not finish the task.'}_\n`

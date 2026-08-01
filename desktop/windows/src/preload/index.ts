@@ -374,12 +374,21 @@ const omi: OmiBridgeApi = {
   rewindSaveFrame: (data: Uint8Array, sourceId: string) =>
     ipcRenderer.invoke('rewind:saveFrame', data, sourceId),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
-  codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) =>
-    ipcRenderer.invoke('codingAgent:list', commandOverrides),
+  // The legacy `commandOverrides` parameters are still accepted so unmigrated
+  // call sites keep compiling, but they are NOT forwarded: the launch command is
+  // spawned by main, so it lives in main's settings store and must never make
+  // the trip back across this bridge. Main ignores the argument regardless.
+  codingAgentList: (_commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:list'),
   codingAgentRun: (args: CodingAgentRunArgs) => ipcRenderer.invoke('codingAgent:run', args),
   codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
-  codingAgentTest: (agentId: CodingAgentId, commandOverrides?: CodingAgentCommandOverrides) =>
-    ipcRenderer.invoke('codingAgent:test', agentId, commandOverrides),
+  codingAgentTest: (agentId: CodingAgentId, _commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:test', agentId),
+  codingAgentGetCommands: () => ipcRenderer.invoke('codingAgent:getCommands'),
+  codingAgentSetCommands: (next: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:setCommands', next),
+  codingAgentMigrateCommands: (legacy: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:migrateCommands', legacy),
   codingAgentAuthStatus: () => ipcRenderer.invoke('codingAgent:authStatus'),
   codingAgentStartAuth: () => ipcRenderer.invoke('codingAgent:startAuth'),
   codingAgentSignOut: () => ipcRenderer.invoke('codingAgent:signOut'),

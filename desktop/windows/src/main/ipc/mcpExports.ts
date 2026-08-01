@@ -12,6 +12,7 @@ import { ipcMain, webContents, clipboard, shell } from 'electron'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import { McpExportsService } from '../mcp/mcpExportsService'
 import { buildCloudConnectors } from '../mcp/cloudConnectors'
+import { isAllowedExternalScheme } from '../externalUrl'
 import { buildMemoryPack, memoryPackChatUrl, type MemoryPackProvider } from '../mcp/memoryPack'
 import type { ExportMemory } from '../../shared/types'
 import type { McpCloudConnectorInfo } from '../../shared/mcpExports'
@@ -179,9 +180,26 @@ function openMemoryPack(provider: MemoryPackProvider, memories: ExportMemory[]):
   return url
 }
 
-/** Open a cloud connector's provider connector page (the assisted "open & guide"). */
+/**
+ * Open a cloud connector's provider connector page (the assisted "open & guide").
+ *
+ * SECURITY: this string arrives from the renderer and shell.openExternal hands it
+ * straight to the OS, so an unvalidated value is code execution (`file:///…exe`)
+ * or an NTLM hash leak (`\\attacker\share`). The only legitimate values are the
+ * fixed connector pages main itself builds in cloudConnectors.ts, so match the
+ * URL against that exact set — a scheme allowlist alone would still let the
+ * renderer pick any https destination it liked. The scheme check stays as a
+ * second gate so a future connector constant can't silently widen this.
+ */
 function openCloudConnector(url: string): void {
-  if (!process.env.OMI_E2E) void shell.openExternal(url)
+  const target = String(url)
+  const allowed = cloudInfo().some((connector) => connector.connectorUrl === target)
+  if (!allowed || !isAllowedExternalScheme(target, ['https'])) {
+    console.warn('[main] mcp: blocked external open of an unrecognized connector URL')
+    return
+  }
+  // Don't spawn a real browser under E2E (keeps the screenshot harness hermetic).
+  if (!process.env.OMI_E2E) void shell.openExternal(target)
 }
 
 export function registerMcpExportsHandlers(): void {

@@ -49,7 +49,10 @@ const prefs = vi.hoisted(() => ({
   automationConsentedAt: null as string | null,
   agentCommands: {} as Record<string, unknown>
 }))
-vi.mock('../lib/preferences', () => ({ getPreferences: () => prefs }))
+vi.mock('../lib/preferences', () => ({
+  getPreferences: () => prefs,
+  migrateAgentCommands: async () => {}
+}))
 // The session-thread message reader (R3 rehydrate). Controllable per-test.
 const sessionMocks = vi.hoisted(() => ({
   getMessages: vi.fn(async (): Promise<unknown[]> => [])

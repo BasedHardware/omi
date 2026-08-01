@@ -44,9 +44,9 @@ vi.mock('../lib/agentTask', () => ({
 vi.mock('../lib/preferences', () => ({
   getPreferences: () => ({
     chatHistoryMode: 'per-launch',
-    automationConsentedAt: prefMocks.automationConsentedAt,
-    agentCommands: {}
-  })
+    automationConsentedAt: prefMocks.automationConsentedAt
+  }),
+  migrateAgentCommands: async () => {}
 }))
 vi.mock('../lib/voice/voiceController', () => ({ speakText: vi.fn(() => Promise.resolve()) }))
 vi.mock('../lib/desktopChatMessages', () => ({

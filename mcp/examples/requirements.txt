@@ -120,7 +120,7 @@ pyjwt==2.12.1
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
-python-multipart==0.0.29
+python-multipart==0.0.31
 pytz==2026.2
 pyyaml==6.0.3
 referencing==0.37.0
@@ -146,7 +146,7 @@ threadpoolctl==3.6.0
 tiktoken==0.13.0
 tokenizers==0.23.1
 toml==0.10.2
-tornado==6.5.5
+tornado==6.5.7
 tqdm==4.67.3
 typeguard==4.4.3
 typer==0.25.1
@@ -154,7 +154,7 @@ types-requests==2.33.0.20260518
 typing-extensions==4.15.0
 typing-inspection==0.4.2
 tzdata==2026.2
-ujson==5.12.1
+ujson==5.13.0
 urllib3==2.7.0
 uuid-utils==0.16.0
 uvicorn==0.47.0

@@ -37,9 +37,9 @@ vi.mock('../lib/agentTask', () => ({
 vi.mock('../lib/preferences', () => ({
   getPreferences: () => ({
     chatHistoryMode: 'per-launch',
-    automationConsentedAt: null,
-    agentCommands: {}
-  })
+    automationConsentedAt: null
+  }),
+  migrateAgentCommands: async () => {}
 }))
 vi.mock('../lib/voice/voiceController', () => ({ speakText: async () => {} }))
 // INV-CHAT-1 shared-thread persistence — spied so we can assert the app_id + count.

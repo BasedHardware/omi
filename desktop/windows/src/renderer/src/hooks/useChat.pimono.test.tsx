@@ -43,9 +43,9 @@ const prefsState = vi.hoisted(() => ({
 vi.mock('../lib/preferences', () => ({
   getPreferences: () => ({
     chatHistoryMode: prefsState.chatHistoryMode,
-    automationConsentedAt: null,
-    agentCommands: {}
-  })
+    automationConsentedAt: null
+  }),
+  migrateAgentCommands: async () => {}
 }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
