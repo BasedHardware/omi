@@ -201,6 +201,18 @@ class LiveConversationController:
             )
             if action == RecordingSessionReconnectAction.resume_current:
                 self.host.state.current_conversation_id = conversation_id
+                # Persist the custom-STT marker on resume so a conversation that
+                # started under normal STT but continues under custom STT (or vice
+                # versa) cannot bypass the Omi-paid LLM cost gate: once any session
+                # was custom-STT, the conversation must not run Omi-paid enrichment
+                # without an LLM BYOK key.
+                if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
+                    await self.host.persistence.call(
+                        conversations_db.update_conversation,
+                        request.uid,
+                        conversation_id,
+                        {'uses_custom_stt': True},
+                    )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return

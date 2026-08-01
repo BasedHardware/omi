@@ -1238,13 +1238,24 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
     # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
     monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: None)
+    # The completed status must be durably persisted, not left in `processing`.
+    persisted = {}
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service,
+        'persist_processed_conversation',
+        lambda uid, data: persisted.update(uid=uid, status=data.get('status')) or True,
+    )
 
     result = process_conversation.process_conversation('uid', 'en', completed_conversation)
 
-    # The gate returns the conversation untouched (no LLM work, no persistence).
+    # The gate returns the conversation with no LLM work, but the completed
+    # status is durably persisted so the record is not stuck in `processing`.
     assert result is completed_conversation
     assert structured_calls == [], 'LLM structuring ran for a custom-STT conversation without an LLM key'
     assert completed_conversation.status == ConversationStatus.completed
+    assert (
+        persisted.get('status') == ConversationStatus.completed
+    ), f'custom-STT skip path did not durably persist the completed status: {persisted}'
 
 
 def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):

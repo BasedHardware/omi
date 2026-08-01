@@ -1553,8 +1553,11 @@ def process_conversation(
     # (the user then pays their own LLM bill — the same discriminator
     # enforce_chat_quota uses). Mirrors the trial-paywall gate: keep the
     # conversation valid and completed, but do no LLM / Pinecone / app work.
-    if should_skip_custom_stt_postprocessing(
-        uses_custom_stt=getattr(conversation, 'uses_custom_stt', False) is True,
+    # The BYOK lookup is deferred until after the custom-STT check so the hot
+    # Omi-STT path never pays for the uncached users/... document read.
+    uses_custom_stt = getattr(conversation, 'uses_custom_stt', False) is True
+    if uses_custom_stt and should_skip_custom_stt_postprocessing(
+        uses_custom_stt=True,
         has_llm_byok_key=bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic'))),
     ):
         logger.info(
@@ -1565,9 +1568,20 @@ def process_conversation(
         if isinstance(conversation, Conversation):
             try:
                 conversation.status = ConversationStatus.completed
+                # Durably persist the completed status so the conversation is not
+                # left stuck in `processing` (the finalizer is told nothing more
+                # will be persisted). A fresh listen creation is written through
+                # the completed-lifecycle path; existing conversations go through
+                # the processing-result persist path.
+                if is_initial_creation:
+                    lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+                else:
+                    lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+                report_persistence(True)
             except Exception:
-                pass
-        report_persistence(False)
+                report_persistence(False)
+        else:
+            report_persistence(False)
         return cast(Conversation, conversation)
 
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
