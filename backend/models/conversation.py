@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional
+from typing import ClassVar, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -396,9 +396,11 @@ class TestPromptRequest(BaseModel):
 class MergeConversationsRequest(BaseModel):
     """Request model for merging multiple conversations."""
 
-    conversation_ids: List[str] = Field(
-        description="IDs of conversations to merge (minimum 2)", min_length=2, max_length=50
-    )
+    # The upper bound is enforced in the validator rather than as a schema ``max_length``:
+    # adding ``maxItems`` to a released app-client contract is a breaking change.
+    MAX_MERGE_CONVERSATION_IDS: ClassVar[int] = 50
+
+    conversation_ids: List[str] = Field(description="IDs of conversations to merge (minimum 2)", min_length=2)
     reprocess: bool = Field(default=True, description="Whether to regenerate summary from merged transcript")
 
     @field_validator('conversation_ids')
@@ -407,6 +409,10 @@ class MergeConversationsRequest(BaseModel):
         # Deduplicating silently could drop the list below min_length, so duplicates are rejected.
         if len(conversation_ids) != len(set(conversation_ids)):
             raise ValueError('conversation_ids must not contain duplicates')
+        if len(conversation_ids) > MergeConversationsRequest.MAX_MERGE_CONVERSATION_IDS:
+            raise ValueError(
+                f'conversation_ids must contain at most {MergeConversationsRequest.MAX_MERGE_CONVERSATION_IDS} ids'
+            )
         return conversation_ids
 
 

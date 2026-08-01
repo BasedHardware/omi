@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -58,12 +58,22 @@ class MoveConversationRequest(BaseModel):
 class BulkMoveConversationsRequest(BaseModel):
     """Request model for moving multiple conversations to a folder."""
 
-    conversation_ids: List[str] = Field(..., max_length=100)
+    # Bound enforced in the validator, not as a schema ``max_length`` — adding ``maxItems``
+    # to a released app-client contract is a breaking change.
+    MAX_BULK_MOVE_CONVERSATION_IDS: ClassVar[int] = 100
+
+    conversation_ids: List[str] = Field(...)
 
     @field_validator('conversation_ids')
     @classmethod
     def deduplicate_conversation_ids(cls, conversation_ids: List[str]) -> List[str]:
-        return list(dict.fromkeys(conversation_ids))
+        deduplicated = list(dict.fromkeys(conversation_ids))
+        if len(deduplicated) > BulkMoveConversationsRequest.MAX_BULK_MOVE_CONVERSATION_IDS:
+            raise ValueError(
+                'conversation_ids must contain at most '
+                f'{BulkMoveConversationsRequest.MAX_BULK_MOVE_CONVERSATION_IDS} unique ids'
+            )
+        return deduplicated
 
 
 class ReorderFoldersRequest(BaseModel):
