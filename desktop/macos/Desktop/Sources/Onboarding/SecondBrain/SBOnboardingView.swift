@@ -532,7 +532,7 @@ struct SBOnboardingView: View {
     return VStack(alignment: .leading, spacing: 9) {
       ForEach(options, id: \.id) { opt in
         Button {
-          model.beginShortcutRecording(isTalk: isTalk)
+          model.pickShortcut(opt.shortcut, isTalk: isTalk)
         } label: {
           HStack(spacing: 8) {
             HStack(spacing: 5) {
