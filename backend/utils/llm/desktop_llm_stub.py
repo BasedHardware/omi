@@ -18,6 +18,7 @@ from typing import Any, Literal
 DEFAULT_ASSISTANT_TEXT = 'Hermetic LLM stub response.'
 EXACT_MEMORY_AGENT_REQUEST = "Have an agent look through my memories today and surface one surprising insight."
 PACED_STREAMING_REPLY = 'Paced streaming reveals this response in visible increments before the terminal event arrives.'
+FAST_TERMINAL_REPLY = 'Fast terminal response delivers a large delta and settles immediately, without the pacing gap.'
 _USER_MESSAGE_BOUNDARY = '\n\n# User Message\n'
 _HARNESS_TOKEN_RE = re.compile(r'(?:GAUNTLET|RESILIENCE)-[A-Z0-9_-]*')
 _MARKER_RE = re.compile(r'\[\[MARKER:([^\]]+)\]\]')
@@ -185,6 +186,10 @@ def is_paced_streaming_probe(user_text: str) -> bool:
     return '[[STREAMING:chat-hermetic]]' in user_text
 
 
+def is_fast_terminal_probe(user_text: str) -> bool:
+    return '[[STREAMING:chat-hermetic-fast]]' in user_text
+
+
 def memory_tool_arguments_for_date(day: str) -> dict[str, Any]:
     return {'limit': 50, 'start_date': day, 'end_date': day}
 
@@ -275,6 +280,9 @@ def stub_directive(body: Mapping[str, object]) -> StubDirective:
 
     if is_paced_streaming_probe(user_text):
         return _TextDirective(PACED_STREAMING_REPLY)
+
+    if is_fast_terminal_probe(user_text):
+        return _TextDirective(FAST_TERMINAL_REPLY)
 
     exact = exact_reply_token(user_text)
     if exact:

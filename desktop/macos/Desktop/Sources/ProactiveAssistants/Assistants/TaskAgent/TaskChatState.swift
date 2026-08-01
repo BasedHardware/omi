@@ -668,9 +668,18 @@ class TaskChatState: ObservableObject {
       }
       let terminalDisposition = TaskChatTerminalDisposition.classify(queryResult.terminalStatus)
 
-      // Flush remaining streaming buffers
+      // Keep the metered reveal draining until the visible backlog is
+      // exhausted: a fast terminal response (large delta then immediate
+      // terminal) must still render progressively instead of jumping to the
+      // full settled text.
+      while streamingBuffer.hasPendingSegments {
+        flushStreamingBuffer(revealAll: false)
+        if streamingBuffer.hasPendingSegments {
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+      }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
+      streamingBuffer.discardAllPendingSegments()
 
       // Finalize AI message
       if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
