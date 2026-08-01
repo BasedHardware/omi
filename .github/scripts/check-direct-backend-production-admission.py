@@ -108,7 +108,7 @@ def validate_gateway_break_glass_hatch(text: str) -> list[str]:
             "gateway break-glass use must be recorded by a dedicated job",
         ),
         (
-            "release-gate-failure",
+            "--label release-gate-failure",
             "gateway break-glass tracking issue must carry the release-gate-failure label",
         ),
     ):
