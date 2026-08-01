@@ -9,6 +9,43 @@ import Foundation
 /// guessing, matching the shape `permissionRequiredMessage` already uses.
 extension ChatToolExecutor {
 
+  /// Tools whose arguments are the user's private content rather than a
+  /// description of the request.
+  ///
+  /// `send_message` carries the recipient and the exact message body;
+  /// `run_applescript` carries the whole script. Both are reachable in release
+  /// builds, so logging the raw arguments wrote private message text to the
+  /// production log on ordinary use. These log their shape instead — enough to
+  /// debug a malformed call, nothing anyone would mind keeping.
+  private static let sensitiveArgumentTools: Set<String> = [
+    "send_message", "run_applescript", "read_message_history", "list_mail_messages",
+  ]
+
+  static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
+    guard sensitiveArgumentTools.contains(toolCall.name) else { return "\(toolCall.arguments)" }
+    let shape = toolCall.arguments.keys.sorted().map { key -> String in
+      let value = toolCall.arguments[key]
+      if let text = value as? String { return "\(key)=<\(text.count) chars>" }
+      if value == nil { return "\(key)=<null>" }
+      return "\(key)=<\(type(of: value!))>"
+    }
+    return "[redacted: \(shape.joined(separator: ", "))]"
+  }
+
+  /// Full Disk Access status with the restart case spelled out.
+  ///
+  /// `not_granted` is the wrong thing to tell the model when the user has
+  /// already granted the permission — it sends them back to System Settings to
+  /// toggle something that is already on. The grant only takes effect for a
+  /// process started after it, so the fix is to relaunch.
+  nonisolated static func fullDiskAccessStatus() -> String {
+    switch FullDiskAccessProbe.currentState() {
+    case .granted: return "granted"
+    case .grantedPendingRestart: return "granted_pending_restart"
+    case .denied: return "not_granted"
+    }
+  }
+
   static func deviceToolJSON(_ payload: [String: Any]) -> String {
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
