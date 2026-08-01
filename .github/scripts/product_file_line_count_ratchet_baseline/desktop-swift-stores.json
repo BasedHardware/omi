@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3273
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3320
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Unsynced local task mutations, Chat-first task-card rollback, 404-safe local recovery, 500-capped API refresh with uncapped local reload, owner-scoped paginated recovery, marker invalidation-before-acknowledgment, reconciliation gates, and destructive server-reconciliation authority remain with the authoritative task persistence and owner-fence transitions."
