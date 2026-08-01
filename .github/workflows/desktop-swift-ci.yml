@@ -35,7 +35,10 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            DIFF_BASE="${{ github.event.pull_request.base.sha }}"
+            # Resolve the base live against the checkout (matching detect-changes)
+            # rather than the event-payload base.sha, which can be stale for a
+            # queued run (FC-stale-event-payload-diff-base, #10785).
+            DIFF_BASE="origin/${{ github.base_ref }}"
           else
             DIFF_BASE="${{ github.event.before }}"
           fi

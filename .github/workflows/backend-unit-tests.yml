@@ -135,7 +135,10 @@ jobs:
         working-directory: backend
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            ../scripts/changed-files "${{ github.event.pull_request.base.sha }}"...HEAD > /tmp/backend-changed-files.txt
+            # Resolve the base live against the checkout (matching detect-changes)
+            # rather than the event-payload base.sha, which can be stale for a
+            # queued run (FC-stale-event-payload-diff-base, #10785).
+            ../scripts/changed-files "origin/${{ github.base_ref }}"...HEAD > /tmp/backend-changed-files.txt
             bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt
           else
             bash scripts/run-unit-ci.sh --all
