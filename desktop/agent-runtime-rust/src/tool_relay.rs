@@ -107,7 +107,7 @@ fn inspect(name: &str, input: &Map<String, Value>) -> Option<String> {
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
         ),
-        "write" | "edit" | "edit_diff" => (
+        "write" | "edit" | "edit_diff" | "edit-diff" => (
             ToolKind::Write,
             input
                 .get("path")
@@ -189,6 +189,26 @@ mod tests {
             daemon_boot_epoch: "b".into(),
             execution_generation: 1,
         }
+    }
+
+    #[test]
+    fn hyphenated_edit_diff_is_subject_to_write_denylist() {
+        let mut journal = JournalStore::in_memory().unwrap_or_else(|error| panic!("{error}"));
+        let relay = ToolRelay::new();
+        let identity = identity(&mut journal);
+        let denied = relay
+            .dispatch(
+                &mut journal,
+                identity,
+                "edit-diff".into(),
+                serde_json::from_value(json!({"path":"/etc/hosts"})).unwrap_or_default(),
+                "main_chat".into(),
+                None,
+                None,
+                "act".into(),
+            )
+            .expect_err("hyphenated edit-diff must hit the write denylist");
+        assert!(!denied.is_empty());
     }
 
     #[test]
