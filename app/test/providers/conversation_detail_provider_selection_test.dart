@@ -13,41 +13,51 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  test('conversation getter resolves when startedAt and createdAt fall on different days', () {
+  test('conversation getter resolves at every hour of the day, whatever the viewer timezone', () {
     // Regression for "Bad state: No conversation available": conversations are
-    // grouped by their effective date (startedAt ?? createdAt), and tapping a
-    // list item selects that group's date. When startedAt lands on an earlier
-    // calendar day than createdAt (session spanning midnight / timezone edge),
-    // the detail provider must still resolve the conversation instead of
-    // throwing from the non-null `conversation` getter.
-    final convo = ServerConversation(
-      id: 'c1',
-      startedAt: DateTime.utc(2026, 7, 18, 23, 30),
-      createdAt: DateTime.utc(2026, 7, 19, 0, 15),
-      structured: Structured('Title', 'Overview'),
-      status: ConversationStatus.completed,
-    );
+    // grouped by the *local* calendar day of their effective date
+    // (`conversationLocalDayKey` over startedAt ?? createdAt), and tapping a
+    // list item selects that group's key. The getter used to validate the raw
+    // UTC year/month/day instead, so it rejected a conversation that is present
+    // in the selected group whenever the local day and the UTC day disagree —
+    // an evening conversation for a UTC+ viewer, a post-UTC-midnight one for a
+    // UTC- viewer — blanking the detail page (#10976).
+    //
+    // Sweeping every hour rather than pinning one timestamp keeps this honest
+    // in whatever timezone the suite runs in; a single fixed hour only trips
+    // the bug at some UTC offsets, which is how it reached main green.
+    for (var hour = 0; hour < 24; hour++) {
+      final startedAt = DateTime.utc(2026, 7, 18, hour, 30);
+      final convo = ServerConversation(
+        id: 'c1',
+        startedAt: startedAt,
+        // Later than startedAt, so the last hour still spans UTC midnight.
+        createdAt: startedAt.add(const Duration(minutes: 45)),
+        structured: Structured('Title', 'Overview'),
+        status: ConversationStatus.completed,
+      );
 
-    final conversationProvider = ConversationProvider(
-      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-      isSignedIn: () => true,
-    );
-    addTearDown(conversationProvider.dispose);
-    conversationProvider.conversations = [convo];
-    conversationProvider.groupConversationsByDate();
+      final conversationProvider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        isSignedIn: () => true,
+      );
+      addTearDown(conversationProvider.dispose);
+      conversationProvider.conversations = [convo];
+      conversationProvider.groupConversationsByDate();
 
-    // The date key the list item passes on tap is the group key.
-    final groupDate = conversationProvider.groupedConversations.keys.single;
+      // The date key the list item passes on tap is the group key.
+      final groupDate = conversationProvider.groupedConversations.keys.single;
 
-    final detailProvider = ConversationDetailProvider();
-    addTearDown(detailProvider.dispose);
-    detailProvider.conversationProvider = conversationProvider;
+      final detailProvider = ConversationDetailProvider();
+      addTearDown(detailProvider.dispose);
+      detailProvider.conversationProvider = conversationProvider;
 
-    detailProvider.updateConversation(convo.id, groupDate);
+      detailProvider.updateConversation(convo.id, groupDate);
 
-    expect(detailProvider.conversationOrNull, isNotNull);
-    expect(detailProvider.conversation.id, 'c1');
-    expect(detailProvider.conversation.structured.title, 'Title');
+      expect(detailProvider.conversationOrNull, isNotNull, reason: 'startedAt ${startedAt.toIso8601String()}');
+      expect(detailProvider.conversation.id, 'c1');
+      expect(detailProvider.conversation.structured.title, 'Title');
+    }
   });
 
   test('selected conversation is never replaced by another one in the day group', () {
