@@ -66,3 +66,32 @@ steps:
     log.expect:
       absent:
         - "DesktopAutomationBridge: failed"
+
+  - id: S7
+    name: Send a fast-terminal streaming query into the task thread
+    bridge.action:
+      name: task_thread_send_message
+      params:
+        query: "Return the fast terminal response [[STREAMING:chat-hermetic-fast]]."
+    expect:
+      result.detail.accepted: "true"
+
+  - id: S8
+    name: Observe progressive reveal before the fast terminal settles
+    bridge.action:
+      name: wait_task_thread_streaming_reveal
+      params:
+        timeoutMs: "10000"
+        pollMs: "25"
+    expect:
+      result.detail.streaming_reveal_observed: "true"
+      result.detail.is_streaming: "true"
+
+  - id: S9
+    name: Assert the fast terminal response settles to its complete reply
+    bridge.action:
+      name: wait_task_thread_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.last_assistant_text: "Fast terminal response delivers a large delta and settles immediately, without the pacing gap."
