@@ -19,6 +19,11 @@ class _DocSnapshot:
         return dict(self._data or {})
 
 
+def _seed_user(db, uid="user-1"):
+    """The auth path rejects a key whose owning user document is gone."""
+    db.collection("users").document(uid).set({"uid": uid})
+
+
 def _deep_merge(target, patch):
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(target.get(key), dict):
@@ -204,6 +209,7 @@ def test_legacy_mcp_key_auth_repairs_identity_scopes_and_memory_grant(monkeypatc
             "scopes": ["memories.read"],
         }
     )
+    _seed_user(db)
     redis = _Redis()
     monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
@@ -238,6 +244,7 @@ def test_stale_cached_mcp_key_auth_repairs_once_and_rewrites_cache(monkeypatch):
             "scopes": ["memories.read"],
         }
     )
+    _seed_user(db)
     redis = _Redis()
     redis.auth_context = {
         "user_id": "user-1",
@@ -342,3 +349,44 @@ def test_backfill_grant_check_requires_all_memory_grant_scopes():
         )
         is True
     )
+
+
+def test_mcp_key_whose_owner_was_deleted_does_not_authenticate(monkeypatch):
+    """Account deletion regression: MCP keys live in a top-level collection, so
+    the users/{uid} subcollection wipe never reached them. A key that outlives
+    its owner must not authenticate, and must not recreate the deleted user's
+    documents via its last_used_at / memory-grant writes."""
+    db = _DB()
+    db.collection("mcp_api_keys").document("orphan-key").set(
+        {
+            "id": "orphan-key",
+            "user_id": "deleted-user",
+            "hashed_key": "hashed",
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": list(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        }
+    )
+    redis = _Redis()
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
+    monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
+
+    assert mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret") is None
+    assert db.collection("mcp_api_keys").update_count == 0
+    assert redis.cached == []
+
+
+def test_delete_all_mcp_keys_for_user_removes_every_key_and_cache_entry(monkeypatch):
+    db = _DB()
+    for key_id in ("key-1", "key-2"):
+        db.collection("mcp_api_keys").document(key_id).set({"id": key_id, "user_id": "user-1", "hashed_key": "a" * 64})
+    db.collection("mcp_api_keys").document("other-user-key").set(
+        {"id": "other-user-key", "user_id": "user-2", "hashed_key": "b" * 64}
+    )
+    redis = _Redis()
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
+
+    assert mcp_api_key_db.delete_all_mcp_keys_for_user("user-1") == 2
+    remaining = db.collection("mcp_api_keys")._docs
+    assert set(remaining) == {"other-user-key"}

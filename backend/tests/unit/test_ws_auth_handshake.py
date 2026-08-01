@@ -53,6 +53,10 @@ class RevokedIdTokenError(Exception):
     pass
 
 
+class UserNotFoundError(Exception):
+    pass
+
+
 # Populated by the ``_ws_auth_isolation`` module fixture. Tests resolve these module
 # globals at call time (after the fixture has run).
 get_current_user_uid_ws_listen = None
@@ -76,7 +80,13 @@ def _build_fakes():
     firebase_admin_stub = types.ModuleType("firebase_admin")
     firebase_auth_stub = types.ModuleType("firebase_admin.auth")
     firebase_admin_stub.auth = firebase_auth_stub
-    for err_cls in (CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError):
+    for err_cls in (
+        CertificateFetchError,
+        ExpiredIdTokenError,
+        InvalidIdTokenError,
+        RevokedIdTokenError,
+        UserNotFoundError,
+    ):
         setattr(firebase_auth_stub, err_cls.__name__, err_cls)
     firebase_auth_stub.verify_id_token = MagicMock(side_effect=InvalidIdTokenError("Invalid token"))
     firebase_auth_stub.get_user = MagicMock()
@@ -90,6 +100,10 @@ def _build_fakes():
     database_redis_stub.check_rate_limit = MagicMock(return_value=True)
     database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
     database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+    database_redis_stub.FIREBASE_TOKEN_WATERMARK_TTL_SECONDS = 60
+    database_redis_stub.cache_firebase_token_watermark = MagicMock()
+    database_redis_stub.get_cached_firebase_token_watermark = MagicMock(return_value=None)
+    database_redis_stub.delete_cached_firebase_token_watermark = MagicMock()
 
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()

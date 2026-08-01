@@ -812,6 +812,9 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          ADMIN_KEY_AUTH_ENABLED:
+            value: 'false'
+            category: runtime_identity
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1031,6 +1034,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
+              category: runtime_identity
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -1200,6 +1206,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
+              category: runtime_identity
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -1297,6 +1306,9 @@ environments:
               value: 'true'
             OMI_ENV_STAGE:
               value: prod
+              category: runtime_identity
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
               category: runtime_identity
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID

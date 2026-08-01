@@ -44,6 +44,7 @@ def _get_redis() -> Optional['redis.Redis']:
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 TOKENS_FILE = os.path.join(DATA_DIR, "tokens.json")
 USER_SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
+OAUTH_STATES_FILE = os.path.join(DATA_DIR, "oauth_states.json")
 
 
 def _ensure_data_dir():
@@ -132,6 +133,52 @@ def is_token_expired(uid: str) -> bool:
     expires_at = tokens.get("expires_at", 0)
     # Add 60 seconds buffer
     return datetime.utcnow().timestamp() > (expires_at - 60)
+
+
+# ============================================
+# OAuth State Management
+# ============================================
+
+OAUTH_STATE_TTL_SECONDS = 600
+
+
+def store_oauth_state(state: str, uid: str, ttl_seconds: int = OAUTH_STATE_TTL_SECONDS):
+    """Store an OAuth state token bound to a uid, expiring after ttl_seconds."""
+    r = _get_redis()
+
+    if r:
+        r.setex(f"linear:oauth_state:{state}", ttl_seconds, uid)
+    else:
+        states = _load_json(OAUTH_STATES_FILE)
+        now = int(datetime.utcnow().timestamp())
+        states = {s: v for s, v in states.items() if v.get("expires_at", 0) > now}
+        states[state] = {"uid": uid, "expires_at": now + ttl_seconds}
+        _save_json(OAUTH_STATES_FILE, states)
+
+
+def consume_oauth_state(state: str) -> Optional[str]:
+    """Atomically consume an OAuth state token, returning the bound uid or None.
+
+    An OAuth state is single-use: reading and deleting it must be one operation so a
+    replayed callback carrying the same state can never resolve to a uid twice.
+    """
+    if not state:
+        return None
+
+    r = _get_redis()
+
+    if r:
+        return r.getdel(f"linear:oauth_state:{state}")
+
+    states = _load_json(OAUTH_STATES_FILE)
+    entry = states.pop(state, None)
+    now = int(datetime.utcnow().timestamp())
+    states = {s: v for s, v in states.items() if v.get("expires_at", 0) > now}
+    _save_json(OAUTH_STATES_FILE, states)
+
+    if not entry or entry.get("expires_at", 0) <= now:
+        return None
+    return entry.get("uid")
 
 
 # ============================================

@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +20,7 @@ from database.announcements import (
     update_announcement,
 )
 from models.announcement import Announcement, AnnouncementType, Display, Targeting
+from utils.admin_auth import require_admin_authorization
 from utils.other import endpoints as auth_endpoints
 
 router = APIRouter()
@@ -196,13 +196,6 @@ def dismiss_announcement_endpoint(
 # ----------------------------
 
 
-def _verify_admin_key(secret_key: str):
-    """Verify the secret key matches the ADMIN_KEY environment variable."""
-    admin_key = os.getenv("ADMIN_KEY")
-    if not admin_key or secret_key != admin_key:
-        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
-
-
 class CreateAnnouncementRequest(BaseModel):
     """Request body for creating an announcement."""
 
@@ -247,7 +240,7 @@ def list_all_announcements(
 
     Useful for admin dashboard to see all announcements.
     """
-    _verify_admin_key(secret_key)
+    require_admin_authorization(secret_key)
 
     announcements = get_all_announcements(
         announcement_type=announcement_type,
@@ -265,7 +258,7 @@ def get_announcement(
     Get a single announcement by ID.
     Requires admin authentication via secret-key header.
     """
-    _verify_admin_key(secret_key)
+    require_admin_authorization(secret_key)
 
     announcement = get_announcement_by_id(announcement_id)
     if not announcement:
@@ -288,7 +281,7 @@ def create_announcement_endpoint(
     - feature: {"title": "...", "steps": [{"title": "...", "description": "...", "image_url": "...", "highlight_text": "..."}, ...]}
     - announcement: {"title": "...", "body": "...", "image_url": "...", "cta": {"text": "...", "action": "..."}}
     """
-    _verify_admin_key(secret_key)
+    require_admin_authorization(secret_key)
 
     # Check if announcement with this ID already exists
     existing = get_announcement_by_id(data.id)
@@ -324,7 +317,7 @@ def update_announcement_endpoint(
     Requires admin authentication via secret-key header.
     Only provided fields will be updated.
     """
-    _verify_admin_key(secret_key)
+    require_admin_authorization(secret_key)
 
     existing = get_announcement_by_id(announcement_id)
     if not existing:
@@ -369,7 +362,7 @@ def delete_announcement_endpoint(
     By default, performs a soft delete (sets active=false).
     Set soft_delete=false to permanently remove the announcement.
     """
-    _verify_admin_key(secret_key)
+    require_admin_authorization(secret_key)
 
     existing = get_announcement_by_id(announcement_id)
     if not existing:

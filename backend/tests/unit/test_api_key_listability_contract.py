@@ -261,6 +261,8 @@ def _mcp_grant_keys(db: _Firestore, user_id: str) -> dict[str, Any]:
 def test_mcp_key_authentication_metadata_projection_and_revocation_share_document_identity(monkeypatch):
     raw_token = "omi_mcp_0123456789abcdef0123456789abcdef"
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "canonical-mcp-id",
@@ -327,6 +329,8 @@ def test_mcp_key_authentication_metadata_projection_and_revocation_share_documen
 def test_developer_key_authentication_metadata_projection_and_revocation_share_document_identity(monkeypatch):
     raw_token = "omi_dev_0123456789abcdef0123456789abcdef"
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "dev_api_keys",
         "canonical-dev-id",
@@ -400,6 +404,8 @@ def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listabl
     raw_token = "omi_mcp_fedcba9876543210fedcba9876543210"
     overflowing_datetime = datetime.max.replace(tzinfo=timezone(-timedelta(hours=23)))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "poisoned-mcp-id",
@@ -431,6 +437,8 @@ def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listabl
 
 def test_missing_created_at_uses_snapshot_time_then_epoch_with_deterministic_ties(monkeypatch):
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     for collection, prefix in (("mcp_api_keys", "mcp"), ("dev_api_keys", "dev")):
         for doc_id, create_time in (
             (f"{prefix}-b-epoch", None),
@@ -458,6 +466,8 @@ def test_missing_created_at_uses_snapshot_time_then_epoch_with_deterministic_tie
 
 def test_equivalent_reordered_scope_lists_keep_canonical_order_without_repairs(monkeypatch):
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     mcp_token = "omi_mcp_11111111111111111111111111111111"
     dev_token = "omi_dev_22222222222222222222222222222222"
     mcp_scopes = sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES)
@@ -515,6 +525,8 @@ def test_authentication_fails_when_auth_critical_user_identity_is_whitespace(mon
     mcp_token = "omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     dev_token = "omi_dev_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "mcp-whitespace-user",
@@ -544,6 +556,8 @@ def test_authentication_fails_when_auth_critical_user_identity_is_whitespace(mon
 def test_developer_auth_survives_redis_cache_write_failure(monkeypatch):
     raw_token = "omi_dev_cccccccccccccccccccccccccccccccc"
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "dev_api_keys",
         "dev-cache-failure",
@@ -578,6 +592,8 @@ def test_mcp_auth_reports_redis_cache_write_failure_after_full_recovery(monkeypa
     raw_token = "omi_mcp_33333333333333333333333333333333"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "mcp-cache-failure",
@@ -604,6 +620,8 @@ def test_mcp_auth_reports_cache_read_error_after_firestore_recovery(monkeypatch)
     raw_token = "omi_mcp_44444444444444444444444444444444"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "mcp-cache-read-failure",
@@ -630,6 +648,8 @@ def test_developer_auth_reports_cache_read_error_after_firestore_recovery(monkey
     raw_token = "omi_dev_55555555555555555555555555555555"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "dev_api_keys",
         "dev-cache-read-failure",
@@ -655,6 +675,8 @@ def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monk
     raw_token = "omi_mcp_dddddddddddddddddddddddddddddddd"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "mcp-revoke-failure",
@@ -697,6 +719,8 @@ def test_cache_delete_failure_preserves_developer_document_and_current_auth(monk
     raw_token = "omi_dev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "dev_api_keys",
         "dev-revoke-failure",
@@ -735,6 +759,8 @@ def test_corrupt_hash_blocks_mcp_revocation_before_document_grant_or_current_cac
     raw_token = "omi_mcp_66666666666666666666666666666666"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "mcp_api_keys",
         "mcp-corrupt-hash",
@@ -775,6 +801,8 @@ def test_corrupt_hash_blocks_developer_revocation_before_document_grant_or_curre
     raw_token = "omi_dev_77777777777777777777777777777777"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     db.seed(
         "dev_api_keys",
         "dev-corrupt-hash",
@@ -811,6 +839,8 @@ def test_corrupt_hash_blocks_developer_revocation_before_document_grant_or_curre
 
 def test_raw_token_names_are_rejected_before_generation_or_write(monkeypatch):
     db = _Firestore()
+    # The auth paths reject a key whose owning user document is gone.
+    db.seed("users", "user-1", {"uid": "user-1"})
     mcp_generate = MagicMock()
     dev_generate = MagicMock()
     monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)

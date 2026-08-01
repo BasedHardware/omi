@@ -23,7 +23,7 @@ from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from utils.other.endpoints import check_rate_limit_inline
+from utils.other.endpoints import check_rate_limit_inline, enforce_token_not_revoked
 from utils.executors import critical_executor, db_executor, run_blocking
 
 import database.memories as memories_db
@@ -1629,6 +1629,9 @@ def mcp_authorize_consent(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
         decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        # A revoked sign-in token must not mint a fresh OAuth grant, whose
+        # refresh token then outlives it by up to a year.
+        enforce_token_not_revoked(decoded_token)
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)

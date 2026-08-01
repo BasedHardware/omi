@@ -169,6 +169,31 @@ extension SettingsContentView {
               Text("30 days").tag(30)
             }
           }
+
+          HStack {
+            Image(systemName: "text.bubble.fill")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.textSecondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Transcript Retention")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text("How long to keep conversation transcripts and screen observations")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+
+            Spacer()
+
+            SettingsMenuPicker(selection: $rewindSettings.transcriptRetentionDays) {
+              Text("30 days").tag(30)
+              Text("90 days").tag(90)
+              Text("180 days").tag(180)
+              Text("365 days").tag(365)
+            }
+          }
         }
       }
     }

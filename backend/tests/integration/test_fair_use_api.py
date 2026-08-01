@@ -112,9 +112,10 @@ class TestAdminEndpoints:
         assert data['fair_use_enabled'] is True
 
     def test_flagged_users_requires_admin_key(self):
-        """GET without admin key should 422 (missing header)."""
+        """GET without admin key should 403, same as every other admin route —
+        never a 422 that names the header back to an unauthenticated caller."""
         resp = client.get('/v1/admin/fair-use/flagged')
-        assert resp.status_code == 422
+        assert resp.status_code == 403
 
     def test_flagged_users_rejects_bad_key(self):
         """GET with wrong admin key should 403."""

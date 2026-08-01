@@ -41,6 +41,17 @@ def _db() -> Any:
     return get_firestore_client()
 
 
+def _owner_exists(user_id: str) -> bool:
+    """Whether the key's owning user document still exists.
+
+    Defence in depth for account deletion: the credential purge is the primary
+    control, but a key that outlives its owner must not authenticate — and must
+    not have its ``last_used_at``/memory-grant writes recreate the deleted
+    user's documents.
+    """
+    return _db().collection("users").document(user_id).get().exists
+
+
 def _seed_mcp_memory_grant(
     user_id: str,
     key_id: str,
@@ -278,6 +289,38 @@ def delete_mcp_key(user_id: str, key_id: str) -> None:
             key_ref.delete()
 
 
+def delete_all_mcp_keys_for_user(user_id: str) -> int:
+    """Delete every MCP API key owned by ``user_id`` and purge its auth cache.
+
+    MCP keys live in the top-level ``mcp_api_keys`` collection, so the
+    ``users/{uid}`` subcollection wipe does not reach them. Without this an
+    account-deleted user's key keeps authenticating with full scopes forever,
+    and they can no longer sign in to revoke it.
+
+    Unlike :func:`delete_mcp_key`, a document whose credential metadata is
+    unusable is still deleted: a malformed hash can never match a presented
+    key, so leaving the document behind protects nothing and would permanently
+    block the account wipe.
+    """
+    firestore_client = _db()
+    docs = list(firestore_client.collection("mcp_api_keys").where("user_id", "==", user_id).stream())
+    deleted = 0
+    for doc in docs:
+        raw: object = doc.to_dict()
+        key_data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        hashed_key = key_data.get("hashed_key")
+        if is_valid_api_key_hash(hashed_key):
+            try:
+                cache_deleted = redis_db.delete_cached_mcp_api_key_strict(cast(str, hashed_key))
+            except Exception as exc:
+                raise ApiKeyRevocationUnavailableError("MCP API key cache invalidation failed") from exc
+            if cache_deleted is not True:
+                raise ApiKeyRevocationUnavailableError("MCP API key cache invalidation was not confirmed")
+        doc.reference.delete()
+        deleted += 1
+    return deleted
+
+
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:
     """
     Verifies an API key and returns the associated user ID.
@@ -327,6 +370,9 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     user_id = api_key_auth_user_id(key_data)
     key_id = key_doc.id if isinstance(key_doc.id, str) and key_doc.id else None
     if user_id is None or key_id is None:
+        return ApiKeyAuthLookupResult(context=None)
+    if not _owner_exists(user_id):
+        logger.warning("MCP API key presented for a user that no longer exists; rejecting")
         return ApiKeyAuthLookupResult(context=None)
     repairs: set[ApiKeyAuthRepair] = set()
     if cache_read.mode == ApiKeyCacheReadMode.ERROR:

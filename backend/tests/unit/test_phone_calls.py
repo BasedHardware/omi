@@ -306,3 +306,47 @@ def test_twiml_free_tier_rejects_when_atomic_quota_reservation_fails(
     reserve.assert_called_once_with(TEST_UID)
     assert 'Monthly phone call limit reached' in resp.text
     assert '<Dial' not in resp.text
+
+
+def test_reserve_phone_call_quota_denies_when_reservation_is_refused(monkeypatch):
+    """A refused reservation (quota spent or Redis down) must not read as has_access."""
+    from utils import phone_calls as phone_calls_utils
+
+    monkeypatch.setattr(phone_calls_utils.users_db, 'get_user_valid_subscription', lambda uid: None)
+    monkeypatch.setattr(
+        phone_calls_utils,
+        'get_config_for_plan',
+        lambda paid: {'monthly_call_limit': 5, 'max_duration_seconds': 60, 'allowed_countries': ['US']},
+    )
+    monkeypatch.setattr(
+        phone_calls_utils.phone_call_usage_db,
+        'reserve_current_month_slot',
+        lambda uid, monthly_limit: (False, 0, 1234),
+    )
+
+    snapshot = phone_calls_utils.reserve_phone_call_quota(TEST_UID)
+
+    assert snapshot.reservation_denied is True
+    assert snapshot.has_access is False
+    assert snapshot.to_client_dict()['has_access'] is False
+
+
+def test_reserve_phone_call_quota_grants_when_reservation_succeeds(monkeypatch):
+    from utils import phone_calls as phone_calls_utils
+
+    monkeypatch.setattr(phone_calls_utils.users_db, 'get_user_valid_subscription', lambda uid: None)
+    monkeypatch.setattr(
+        phone_calls_utils,
+        'get_config_for_plan',
+        lambda paid: {'monthly_call_limit': 5, 'max_duration_seconds': 60, 'allowed_countries': ['US']},
+    )
+    monkeypatch.setattr(
+        phone_calls_utils.phone_call_usage_db,
+        'reserve_current_month_slot',
+        lambda uid, monthly_limit: (True, 2, 1234),
+    )
+
+    snapshot = phone_calls_utils.reserve_phone_call_quota(TEST_UID)
+
+    assert snapshot.has_access is True
+    assert snapshot.monthly_used == 2

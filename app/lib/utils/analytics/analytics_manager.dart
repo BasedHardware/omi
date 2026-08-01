@@ -247,7 +247,6 @@ class AnalyticsManager {
         return;
       }
       _instance.setPeopleValues();
-      setNameAndEmail();
     });
   }
 
@@ -262,12 +261,7 @@ class AnalyticsManager {
       } catch (_) {
         return;
       }
-      setNameAndEmail();
     });
-  }
-
-  void setNameAndEmail() {
-    _setUserPropertiesBatch({'\$name': SharedPreferencesUtil().fullName, '\$email': SharedPreferencesUtil().email});
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -1093,7 +1087,6 @@ class AnalyticsManager {
     required int conversationIndexInResults,
   }) {
     var properties = getConversationEventProperties(conversation);
-    properties['search_query'] = searchQuery;
     properties['search_query_length'] = searchQuery.length;
     properties['conversation_index_in_results'] = conversationIndexInResults;
     track('Conversation Opened From Search', properties: properties);
@@ -1331,10 +1324,31 @@ class AnalyticsManager {
     );
   }
 
+  /// Buckets a raw error string into one of a fixed set of classes, mirroring the desktop
+  /// client's `PostHogManager.diagnosticErrorClass`. Raw messages interpolate file paths and
+  /// document names, so only the class is safe to send off-device.
+  static String diagnosticErrorClass(String value) {
+    final normalized = value.toLowerCase();
+    bool has(List<String> needles) => needles.any(normalized.contains);
+    if (has(['timeout', 'timed out'])) return 'timeout';
+    if (has(['cancel', 'stopped'])) return 'cancelled';
+    if (has(['429', 'rate limit', 'quota'])) return 'rate_limit';
+    if (has(['403', 'forbidden', 'permission', 'denied'])) return 'permission';
+    if (has(['401', 'unauthorized', 'auth', 'sign in'])) return 'authentication';
+    if (has(['offline', 'network', 'connection', 'socket'])) return 'network';
+    if (has(['409', 'conflict', 'aborted'])) return 'conflict';
+    if (has(['decode', 'encoding', 'invalid json', 'invalid response'])) return 'invalid_response';
+    if (normalized.contains('memory') && normalized.contains('available')) return 'resource_exhausted';
+    return 'unknown';
+  }
+
   void audioShareFailed({required String conversationId, String? errorMessage}) {
     track(
       'Audio Share Failed',
-      properties: {'conversation_id': conversationId, if (errorMessage != null) 'error_message': errorMessage},
+      properties: {
+        'conversation_id': conversationId,
+        if (errorMessage != null) 'error_class': diagnosticErrorClass(errorMessage),
+      },
     );
   }
 

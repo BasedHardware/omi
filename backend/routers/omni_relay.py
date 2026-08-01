@@ -61,10 +61,14 @@ def _acquire_relay_slot(uid: str) -> bool:
     """Reserve one concurrent-relay slot for uid. Fail-closed on Redis errors."""
     key = _slot_key(uid)
     count = int(redis_db.r.incr(key))
-    redis_db.r.expire(key, _SLOT_TTL_SECONDS)
     if count > _MAX_CONCURRENT_RELAYS:
         redis_db.r.decr(key)
         return False
+    # Only arm the TTL on the counter's first holder. Re-arming on every acquire
+    # (including rejected ones) lets a reconnect loop keep a stuck counter alive
+    # indefinitely, which locks the uid out until the key is deleted by hand.
+    if count == 1:
+        redis_db.r.expire(key, _SLOT_TTL_SECONDS)
     return True
 
 
@@ -165,8 +169,9 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1008, reason="too many concurrent relay sessions")
         return
 
-    await websocket.accept()
     try:
+        # accept() lives inside the try so a failed handshake still releases the slot.
+        await websocket.accept()
         async with websockets.connect(
             url, extra_headers=headers or None, max_size=None, ping_interval=20, ping_timeout=20
         ) as upstream:

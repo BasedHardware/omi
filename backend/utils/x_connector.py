@@ -41,6 +41,7 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils.oauth_revocation import revoke_integration_upstream
 from utils import social
 from utils.integration_telemetry import (
     IntegrationTelemetryContext,
@@ -134,10 +135,13 @@ def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) ->
 
 
 def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
-    raw = redis_db.r.get(f'{_STATE_PREFIX}{state}')
+    # Atomic get-and-delete: an OAuth state is single-use, so consuming it must be one operation.
+    # A separate GET then DELETE lets two concurrent callbacks carrying the same state both read the
+    # value before either delete runs, weakening replay protection. GETDEL removes it atomically, so
+    # only one caller ever receives the value.
+    raw = redis_db.r.getdel(f'{_STATE_PREFIX}{state}')
     if not raw:
         return None
-    redis_db.r.delete(f'{_STATE_PREFIX}{state}')
     if isinstance(raw, bytes):
         raw = raw.decode('utf-8')
     parts = raw.split('\n')
@@ -571,6 +575,10 @@ def connection_status(uid: str) -> Dict:
 
 
 def disconnect(uid: str) -> None:
+    # Revoke at X BEFORE the stored tokens are blanked — afterwards there is no
+    # credential left to revoke with and the grant would stay live at X forever.
+    # Best-effort: an X outage must not stop the user from disconnecting.
+    revoke_integration_upstream(uid, INTEGRATION_KEY)
     users_db.set_integration(uid, INTEGRATION_KEY, {'connected': False, 'access_token': '', 'refresh_token': ''})
     _unregister_user(uid)
 

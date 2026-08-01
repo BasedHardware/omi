@@ -7,6 +7,7 @@ import stripe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional
 import time
+import uuid
 from urllib.parse import urljoin
 
 from database import (
@@ -69,6 +70,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Window over which a repeated checkout POST collapses onto one Stripe session.
+# Long enough to absorb double-taps and client retries, short enough that a key
+# never outlives the account state it was derived from by much.
+_CHECKOUT_IDEMPOTENCY_BUCKET_SECONDS = 600
 
 
 class CreateCheckoutRequest(BaseModel):
@@ -566,16 +572,36 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # subscriptions, and DELETE /v1/payments/subscription only cancels the one
     # Firestore kept. Derive the key from the request so a retry collapses onto
     # the same Stripe session.
-    idempotency_key = f'checkout:{uid}:{request.price_id}:{request.promotion_code or ""}'
+    # Every input that changes the Stripe request body belongs in the key, or a
+    # retry after the customer id or promo resolves differently reuses the key
+    # with a different body and Stripe answers IdempotencyError. The short bucket
+    # bounds how long a key outlives the state it was derived from (Stripe keeps
+    # keys for 24h).
     existing_customer_id = users_db.get_stripe_customer_id(uid)
+    idempotency_bucket = int(time.time()) // _CHECKOUT_IDEMPOTENCY_BUCKET_SECONDS
+    idempotency_key = (
+        f'checkout:{uid}:{request.price_id}:{request.promotion_code or ""}'
+        f':{resolved_checkout_promo_id or ""}:{existing_customer_id or ""}:{idempotency_bucket}'
+    )
     try:
-        session = stripe_utils.create_subscription_checkout_session(
-            uid,
-            request.price_id,
-            idempotency_key,
-            customer_id=existing_customer_id,
-            promotion_code_id=resolved_checkout_promo_id,
-        )
+        try:
+            session = stripe_utils.create_subscription_checkout_session(
+                uid,
+                request.price_id,
+                idempotency_key,
+                customer_id=existing_customer_id,
+                promotion_code_id=resolved_checkout_promo_id,
+            )
+        except stripe.error.IdempotencyError:
+            # The key was already spent on a different body; retry once unkeyed-by-state
+            # rather than leaving the user unable to subscribe until the key expires.
+            session = stripe_utils.create_subscription_checkout_session(
+                uid,
+                request.price_id,
+                f'{idempotency_key}:{uuid.uuid4()}',
+                customer_id=existing_customer_id,
+                promotion_code_id=resolved_checkout_promo_id,
+            )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
         raise HTTPException(status_code=400, detail=detail)

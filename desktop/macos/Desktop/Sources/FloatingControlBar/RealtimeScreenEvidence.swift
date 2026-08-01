@@ -19,6 +19,73 @@ enum RealtimeScreenEvidenceTarget: String, Equatable, Sendable {
 enum RealtimeScreenEvidenceCaptureFailure: String, Equatable, Sendable {
   case screenRecordingPermissionRequired = "screen_recording_permission_required"
   case captureUnavailable = "capture_unavailable"
+  case privacyExcluded = "privacy_excluded"
+}
+
+/// The single privacy decision every push-to-talk pixel path must ask before it captures.
+///
+/// Screen monitoring being off, or the frontmost app being on the Rewind exclusion list,
+/// blocks the capture entirely: a whole-display grab of an excluded window leaks exactly
+/// the same secrets as a window grab, so the full-screen fallback is gated on the same
+/// answer. Bundle identifiers are matched in addition to the display name because
+/// `RewindSettings.isAppExcluded` compares localized names, which change with locale and
+/// with the user renaming the app bundle.
+@MainActor
+enum ScreenCapturePrivacyGate {
+  enum Decision: Equatable {
+    case allowed
+    case monitoringDisabled
+    case appExcluded(String)
+  }
+
+  /// Bundle-identifier prefixes for credential stores that must never reach OCR or a model,
+  /// covering managers absent from the localized-name exclusion list.
+  static let excludedBundleIDPrefixes: [String] = [
+    "com.omi.computer-macos",
+    "com.apple.passwords",
+    "com.apple.keychainaccess",
+    "com.1password",
+    "com.agilebits.onepassword",
+    "com.bitwarden",
+    "com.lastpass",
+    "com.dashlane",
+    "com.callpod.keeper",
+    "io.enpass",
+    "in.sinew.enpass",
+    "org.keepassxc",
+    "me.proton.pass",
+    "com.nordpass",
+    "com.nordsec.nordpass",
+    "com.markmcguill.strongbox",
+    "com.roboform",
+    "com.sticky-password",
+  ]
+
+  static func decide(appName: String?, bundleID: String?) -> Decision {
+    if !AssistantSettings.shared.screenAnalysisEnabled {
+      return .monitoringDisabled
+    }
+    if let appName, !appName.isEmpty, RewindSettings.shared.isAppExcluded(appName) {
+      return .appExcluded(appName)
+    }
+    if let bundleID, isExcludedBundleID(bundleID) {
+      return .appExcluded(bundleID)
+    }
+    return .allowed
+  }
+
+  static func isExcludedBundleID(_ bundleID: String) -> Bool {
+    let normalized = bundleID.lowercased()
+    return excludedBundleIDPrefixes.contains { normalized.hasPrefix($0) }
+  }
+
+  /// Resolves the frontmost app identity and the privacy decision in one main-thread hop.
+  static func frontmostDecision() -> (appName: String?, bundleID: String?, decision: Decision) {
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    let appName = frontmost?.localizedName
+    let bundleID = frontmost?.bundleIdentifier
+    return (appName, bundleID, decide(appName: appName, bundleID: bundleID))
+  }
 }
 
 struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
@@ -360,7 +427,7 @@ enum RealtimeScreenGroundingPolicy {
       // initializing. That must degrade the visual tool result, never consume
       // the user's PTT turn or replace native voice with a local terminal path.
       return .providerContinuation
-    case nil:
+    case .privacyExcluded, nil:
       return .authoritativeLocalResult
     }
   }
@@ -476,6 +543,7 @@ enum RealtimeScreenGroundingPolicy {
 enum RealtimeScreenEvidenceCapture {
   /// Performs only the unavoidable pre-overlay compositor capture. JPEG encoding and hashing
   /// run after microphone capture begins so a first PTT is not blocked on image processing.
+  @MainActor
   static func capture(for turnID: VoiceTurnID) -> RealtimeScreenEvidence {
     let capturedAt = Date()
     let frontmostApplication = NSWorkspace.shared.frontmostApplication
@@ -489,7 +557,15 @@ enum RealtimeScreenEvidenceCapture {
     // On an ambiguous multi-display desktop we fail closed instead of describing the wrong one.
     let captureFailure: RealtimeScreenEvidenceCaptureFailure?
     let image: CGImage?
-    if !CGPreflightScreenCaptureAccess() {
+    let privacyDecision = ScreenCapturePrivacyGate.decide(appName: appName, bundleID: bundleID)
+    if privacyDecision != .allowed {
+      // The display capture would include the excluded window, so there is no narrower
+      // capture to fall back to. The turn proceeds without visual evidence.
+      log(
+        "RealtimeScreenEvidenceCapture: capture blocked by privacy gate (\(privacyDecision))")
+      image = nil
+      captureFailure = .privacyExcluded
+    } else if !CGPreflightScreenCaptureAccess() {
       log("RealtimeScreenEvidenceCapture: Screen Recording permission not granted at PTT capture")
       image = nil
       captureFailure = .screenRecordingPermissionRequired

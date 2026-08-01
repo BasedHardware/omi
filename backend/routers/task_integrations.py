@@ -15,6 +15,7 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import db_executor, run_blocking
+from utils.oauth_revocation import revoke_task_integration_upstream
 from utils.task_integrations_ops import (
     OAUTH_CONFIGS,
     close_http_client,
@@ -149,8 +150,39 @@ class TaskIntegrationData(BaseModel):
 class TaskIntegrationsResponse(BaseModel):
     """Response containing all task integrations"""
 
-    integrations: Dict[str, Any] = Field(description="Map of app_key to connection details")
+    integrations: Dict[str, Any] = Field(description="Map of app_key to non-secret connection details")
     default_app: Optional[str] = Field(description="Default task integration app key")
+
+
+# Only these keys are ever sent to the client. Credentials (access_token, refresh_token, and anything
+# a future provider adds) are never in this allowlist, so they cannot leak by default.
+PUBLIC_TASK_INTEGRATION_FIELDS = (
+    'connected',
+    'expires_at',
+    'created_at',
+    'updated_at',
+    'user_gid',
+    'workspace_gid',
+    'workspace_name',
+    'project_gid',
+    'project_name',
+    'default_list_id',
+    'default_list_title',
+    'user_id',
+    'team_id',
+    'team_name',
+    'space_id',
+    'space_name',
+    'list_id',
+    'list_name',
+)
+
+
+def project_task_integration(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Project a stored task integration document down to its non-secret display fields."""
+    projected = {key: data[key] for key in PUBLIC_TASK_INTEGRATION_FIELDS if key in data}
+    projected['connected'] = bool(data.get('connected'))
+    return projected
 
 
 class DefaultTaskIntegrationRequest(BaseModel):
@@ -201,7 +233,11 @@ def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
     integrations = users_db.get_task_integrations(uid)
     default_app = users_db.get_default_task_integration(uid)
 
-    return TaskIntegrationsResponse(integrations=integrations, default_app=default_app)
+    safe_integrations = {
+        app_key: project_task_integration(data or {}) for app_key, data in (integrations or {}).items()
+    }
+
+    return TaskIntegrationsResponse(integrations=safe_integrations, default_app=default_app)
 
 
 @router.get("/v1/task-integrations/default", response_model=DefaultTaskIntegrationResponse, tags=['task-integrations'])
@@ -234,6 +270,11 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
 @router.delete("/v1/task-integrations/{app_key}", status_code=204, tags=['task-integrations'])
 def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a task integration connection."""
+    # Revoke at the provider BEFORE the local record is dropped — once the
+    # document is gone there is no credential left to revoke with. Best-effort:
+    # a provider outage must not stop the user from disconnecting.
+    revoke_task_integration_upstream(uid, app_key)
+
     success = users_db.delete_task_integration(uid, app_key)
 
     if not success:

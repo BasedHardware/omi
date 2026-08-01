@@ -609,12 +609,24 @@ actor RewindIndexer {
   /// capture pauses, permission revocation, and write failures.
   func startRetentionSchedulerIfNeeded() {
     guard retentionSchedulerTask == nil else { return }
-    retentionSchedulerTask = Task { [retentionCleanupInterval] in
+    retentionSchedulerTask = Task { [weak self, retentionCleanupInterval] in
       while !Task.isCancelled {
-        self.scheduleRetentionCleanupIfDue()
+        guard let self else { return }
+        await self.scheduleRetentionCleanupIfDue()
         try? await Task.sleep(nanoseconds: UInt64(retentionCleanupInterval / 12 * 1_000_000_000))
       }
     }
+  }
+
+  /// Stop the retention loop. Without this the sweep (and its VACUUM) kept
+  /// running every 6h after Rewind was disabled.
+  func stopRetentionScheduler() {
+    retentionSchedulerTask?.cancel()
+    retentionSchedulerTask = nil
+  }
+
+  deinit {
+    retentionSchedulerTask?.cancel()
   }
 
   /// Run cleanup to remove old screenshots
@@ -660,6 +672,7 @@ actor RewindIndexer {
       }
 
       await runDerivedDataRetention(cutoffDate: cutoffDate)
+      await runTranscriptRetention()
 
       // Deleted pages are only returned to the filesystem by an explicit
       // incremental vacuum; without it the DB file keeps its high-water mark
@@ -668,6 +681,26 @@ actor RewindIndexer {
 
     } catch {
       logError("RewindIndexer: Cleanup failed: \(error)")
+    }
+  }
+
+  /// Age out conversation transcripts and screen observations on their own,
+  /// much longer window. These are the user's durable record, so they are
+  /// deliberately not governed by the screen-recording retention setting.
+  private func runTranscriptRetention() async {
+    let days = RewindSettings.shared.transcriptRetentionDays
+    guard days > 0, let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+    else { return }
+
+    do {
+      let result = try await RewindDatabase.shared.deleteTranscriptsAndObservationsOlderThan(cutoffDate)
+      if result.observations + result.transcriptionSessions > 0 {
+        log(
+          "RewindIndexer: Transcript retention (\(days)d) removed \(result.observations) observations, "
+            + "\(result.transcriptionSessions) synced transcription sessions")
+      }
+    } catch {
+      logError("RewindIndexer: Transcript retention failed", error: error)
     }
   }
 
@@ -694,6 +727,8 @@ actor RewindIndexer {
   /// Stop the indexer and return whether pending video frames flushed successfully.
   @discardableResult
   func stop() async -> Bool {
+    stopRetentionScheduler()
+
     // Flush any pending video frames before stopping
     do {
       _ = try await RewindStorage.shared.flushCurrentVideoChunk()

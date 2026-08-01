@@ -6,7 +6,7 @@ import redis
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routers import desktop_core
+from routers import desktop_core, fair_use_admin
 from utils.other.endpoints import get_current_user_uid
 
 
@@ -154,8 +154,13 @@ def test_sentry_poll_classifies_auth_failure(monkeypatch):
     monkeypatch.setenv("SENTRY_ADMIN_UID", "admin")
     monkeypatch.setenv("SENTRY_AUTH_TOKEN", "token")
     monkeypatch.setattr(desktop_core, "get_webhook_client", Client)
+    monkeypatch.setattr(fair_use_admin, "ADMIN_KEY", "admin-key")
+    client = make_client()
 
-    response = make_client().post("/v1/webhooks/sentry/poll")
+    # A missing admin key is a 403, not a 422 that names the header.
+    assert client.post("/v1/webhooks/sentry/poll").status_code == 403
+
+    response = client.post("/v1/webhooks/sentry/poll", headers={"X-Admin-Key": "admin-key"})
 
     assert response.status_code == 200
     assert response.json() == {

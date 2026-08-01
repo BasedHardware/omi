@@ -125,6 +125,11 @@ def _mcp_oauth_module():
         yield module
 
 
+def _seed_user(uid):
+    """validate_access_token rejects a token whose owning user document is gone."""
+    mcp_oauth.db.collection('users').document(uid).set({'uid': uid})
+
+
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     client = mcp_oauth.get_client('omi-chatgpt-prod')
     assert client['token_endpoint_auth_method'] == 'none'
@@ -134,6 +139,7 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
 
     scopes = mcp_oauth.normalize_scopes('memories.read conversations.read', client)
     verifier = 'a' * 64
+    _seed_user('user-1')
     grant = mcp_oauth.create_or_update_grant('user-1', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     code = mcp_oauth.issue_authorization_code(
         'user-1',
@@ -178,6 +184,7 @@ def test_public_client_uses_pkce_without_shared_secret():
 
     scopes = mcp_oauth.normalize_scopes('memories.read', client)
     verifier = 'b' * 64
+    _seed_user('user-public')
     grant = mcp_oauth.create_or_update_grant('user-public', 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, scopes)
     code = mcp_oauth.issue_authorization_code(
         'user-public',
@@ -464,6 +471,7 @@ def test_legacy_omi_client_id_is_not_registered_by_default():
 
 def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
     scopes = ['memories.read']
+    _seed_user('user-2')
     grant = mcp_oauth.create_or_update_grant('user-2', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     first_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
 
@@ -507,3 +515,17 @@ def test_pkce_rejects_malformed_values():
         pass
     else:
         raise AssertionError('non-ASCII verifier should fail closed')
+
+
+def test_access_token_stops_validating_once_its_owner_is_deleted():
+    """MCP OAuth grants live in top-level collections, so the users/{uid} wipe
+    never reached them. A token that outlives its owner must not authenticate."""
+    scopes = mcp_oauth.normalize_scopes('memories.read')
+    _seed_user('doomed-user')
+    grant = mcp_oauth.create_or_update_grant('doomed-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    tokens = mcp_oauth.issue_token_pair(grant, scopes)
+    assert mcp_oauth.validate_access_token(tokens['access_token'])['uid'] == 'doomed-user'
+
+    del mcp_oauth.db.collection('users')._docs['doomed-user']
+
+    assert mcp_oauth.validate_access_token(tokens['access_token']) is None

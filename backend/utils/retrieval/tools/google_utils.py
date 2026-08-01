@@ -5,12 +5,14 @@ Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
-import database.users as users_db
+from database._client import db
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.integration_telemetry import (
@@ -85,15 +87,32 @@ class GoogleAPIError(Exception):
         return self.status_code in _RETRYABLE_STATUS_CODES
 
 
-async def _mark_google_integration_reauth_required(
-    uid: str, integration: dict[str, Any], integration_key: str, reason: str
-) -> None:
-    updated = dict(integration)
-    updated['connected'] = False
-    updated['reauth_required'] = True
-    updated['reauth_reason'] = reason
-    updated['access_token'] = firestore.DELETE_FIELD
-    await run_blocking(db_executor, users_db.set_integration, uid, integration_key, updated)
+def _update_google_integration(uid: str, integration_key: str, fields: dict[str, Any]) -> None:
+    """Write *fields* onto an existing integration document.
+
+    Uses ``update`` rather than ``set(..., merge=True)``: a merge-set creates the
+    document when it is missing, so a refresh racing a disconnect would recreate
+    the integration with live credentials. ``update`` raises ``NotFound`` instead,
+    which is the disconnect winning and is a no-op. Only the changed fields are
+    written so a concurrent edit is not clobbered by a stale in-memory snapshot.
+    """
+    integration_ref = db.collection('users').document(uid).collection('integrations').document(integration_key)
+    payload = dict(fields)
+    payload['updated_at'] = datetime.now(timezone.utc)
+    try:
+        integration_ref.update(payload)
+    except NotFound:
+        logger.info(f"🔄 Skipped {integration_key} write for uid={uid}: integration no longer connected")
+
+
+async def _mark_google_integration_reauth_required(uid: str, integration_key: str, reason: str) -> None:
+    updated = {
+        'connected': False,
+        'reauth_required': True,
+        'reauth_reason': reason,
+        'access_token': firestore.DELETE_FIELD,
+    }
+    await run_blocking(db_executor, _update_google_integration, uid, integration_key, updated)
 
 
 async def refresh_google_token(
@@ -126,7 +145,7 @@ async def refresh_google_token(
     if not refresh_token:
         logger.warning(f"🔄 No refresh_token stored for uid={uid}, cannot refresh")
         emit_auth_refresh_failed(telemetry_context, 'missing_token')
-        await _mark_google_integration_reauth_required(uid, integration, integration_key, 'missing_refresh_token')
+        await _mark_google_integration_reauth_required(uid, integration_key, 'missing_refresh_token')
         return None
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -158,7 +177,13 @@ async def refresh_google_token(
                 # DB executor so it does not block the event loop during
                 # concurrent chat/tool streaming.
                 integration['access_token'] = new_access_token
-                await run_blocking(db_executor, users_db.set_integration, uid, integration_key, integration)
+                await run_blocking(
+                    db_executor,
+                    _update_google_integration,
+                    uid,
+                    integration_key,
+                    {'access_token': new_access_token},
+                )
                 logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
                 emit_auth_refresh_succeeded(telemetry_context)
                 return new_access_token
@@ -170,7 +195,7 @@ async def refresh_google_token(
                 f"🔄 Google refresh token revoked for uid={uid} (invalid_grant). "
                 f"User needs to reconnect. Response: {error_body}"
             )
-            await _mark_google_integration_reauth_required(uid, integration, integration_key, 'invalid_grant')
+            await _mark_google_integration_reauth_required(uid, integration_key, 'invalid_grant')
         else:
             logger.error(
                 f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"

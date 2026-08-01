@@ -50,9 +50,13 @@ def _build_fakes():
     firebase_admin_stub = types.ModuleType("firebase_admin")
     firebase_auth_stub = types.ModuleType("firebase_admin.auth")
     firebase_admin_stub.auth = firebase_auth_stub
-    for name in ("CertificateFetchError", "ExpiredIdTokenError", "RevokedIdTokenError"):
+    for name in ("CertificateFetchError", "ExpiredIdTokenError", "UserNotFoundError"):
         setattr(firebase_auth_stub, name, type(name, (Exception,), {}))
     firebase_auth_stub.InvalidIdTokenError = InvalidIdTokenError
+    # Mirrors the real hierarchy: RevokedIdTokenError subclasses
+    # InvalidIdTokenError, which is why verify_token must raise it outside the
+    # LOCAL_DEVELOPMENT fallback's except block.
+    firebase_auth_stub.RevokedIdTokenError = type("RevokedIdTokenError", (InvalidIdTokenError,), {})
     # Every test here exercises the invalid-token fallback paths (ADMIN_KEY or
     # LOCAL_DEVELOPMENT), so an always-invalid token is the right default.
     firebase_auth_stub.verify_id_token = MagicMock(side_effect=InvalidIdTokenError("Invalid token"))
@@ -66,6 +70,10 @@ def _build_fakes():
     database_redis_stub.check_rate_limit = MagicMock(return_value=True)
     database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
     database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+    database_redis_stub.FIREBASE_TOKEN_WATERMARK_TTL_SECONDS = 60
+    database_redis_stub.cache_firebase_token_watermark = MagicMock()
+    database_redis_stub.get_cached_firebase_token_watermark = MagicMock(return_value=None)
+    database_redis_stub.delete_cached_firebase_token_watermark = MagicMock()
 
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
@@ -92,6 +100,7 @@ def _endpoints_isolation():
         endpoints = importlib.import_module("utils.other.endpoints")
         mod = sys.modules[__name__]
         mod.verify_token = endpoints.verify_token
+        mod.endpoints_module = endpoints
         yield
 
 
@@ -191,3 +200,149 @@ def test_local_development_flag_off_raises_regardless_of_credentials(monkeypatch
 
     with pytest.raises(InvalidIdTokenError):
         verify_token('any-invalid-token')
+
+
+# ---------------------------------------------------------------------------
+# Token revocation enforcement
+#
+# verify_id_token() alone never observes revocation, so before this a token
+# stolen ahead of an account deletion or password change stayed valid until its
+# own `exp`. RevokedIdTokenError is also what makes the WebSocket 4004
+# "re-login required" close code reachable at all.
+# ---------------------------------------------------------------------------
+
+
+def _valid_token_env(monkeypatch, *, uid='live-uid', iat=2000):
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.delenv('FIREBASE_TOKEN_REVOCATION_CHECK_ENABLED', raising=False)
+    auth_stub = sys.modules['firebase_admin.auth']
+    auth_stub.verify_id_token = MagicMock(return_value={'uid': uid, 'iat': iat})
+    redis_stub = sys.modules['database.redis_db']
+    redis_stub.get_cached_firebase_token_watermark = MagicMock(return_value=None)
+    redis_stub.cache_firebase_token_watermark = MagicMock()
+    return auth_stub, redis_stub
+
+
+def _fake_firebase_user(*, disabled=False, valid_after_ms=0):
+    user = MagicMock()
+    user.disabled = disabled
+    user.tokens_valid_after_timestamp = valid_after_ms
+    return user
+
+
+def test_live_user_with_fresh_token_is_accepted(monkeypatch):
+    auth_stub, _ = _valid_token_env(monkeypatch)
+    auth_stub.get_user = MagicMock(return_value=_fake_firebase_user(valid_after_ms=1000 * 1000))
+
+    assert verify_token('a-real-token') == 'live-uid'
+
+
+def test_token_issued_before_revocation_watermark_is_rejected(monkeypatch):
+    auth_stub, _ = _valid_token_env(monkeypatch, iat=1000)
+    # revoke_refresh_tokens() moves the watermark past the token's iat.
+    auth_stub.get_user = MagicMock(return_value=_fake_firebase_user(valid_after_ms=5000 * 1000))
+
+    with pytest.raises(auth_stub.RevokedIdTokenError):
+        verify_token('a-stolen-token')
+
+
+def test_deleted_account_token_is_rejected(monkeypatch):
+    auth_stub, _ = _valid_token_env(monkeypatch)
+    auth_stub.get_user = MagicMock(side_effect=auth_stub.UserNotFoundError('gone'))
+
+    with pytest.raises(auth_stub.RevokedIdTokenError):
+        verify_token('a-token-for-a-deleted-account')
+
+
+def test_disabled_account_token_is_rejected(monkeypatch):
+    auth_stub, _ = _valid_token_env(monkeypatch)
+    auth_stub.get_user = MagicMock(return_value=_fake_firebase_user(disabled=True))
+
+    with pytest.raises(auth_stub.RevokedIdTokenError):
+        verify_token('a-token-for-a-disabled-account')
+
+
+def test_revocation_check_fails_open_when_firebase_is_unreachable(monkeypatch):
+    """A Firebase outage must not log every user out."""
+    auth_stub, redis_stub = _valid_token_env(monkeypatch)
+    auth_stub.get_user = MagicMock(side_effect=RuntimeError('firebase unreachable'))
+
+    assert verify_token('a-real-token') == 'live-uid'
+    redis_stub.cache_firebase_token_watermark.assert_not_called()
+
+
+def test_cached_watermark_avoids_the_firebase_lookup(monkeypatch):
+    auth_stub, redis_stub = _valid_token_env(monkeypatch, iat=1000)
+    redis_stub.get_cached_firebase_token_watermark = MagicMock(
+        return_value={'exists': True, 'disabled': False, 'valid_after_ms': 5000 * 1000}
+    )
+    auth_stub.get_user = MagicMock()
+
+    with pytest.raises(auth_stub.RevokedIdTokenError):
+        verify_token('a-stolen-token')
+    auth_stub.get_user.assert_not_called()
+
+
+def test_revocation_check_can_be_disabled_by_env_flag(monkeypatch):
+    auth_stub, _ = _valid_token_env(monkeypatch, iat=1000)
+    monkeypatch.setenv('FIREBASE_TOKEN_REVOCATION_CHECK_ENABLED', 'false')
+    auth_stub.get_user = MagicMock(side_effect=AssertionError('must not be consulted when disabled'))
+
+    assert verify_token('a-stolen-token') == 'live-uid'
+
+
+def test_admin_key_impersonation_skips_the_revocation_check(monkeypatch):
+    """The ADMIN_KEY path returns before Firebase is ever consulted."""
+    auth_stub, _ = _valid_token_env(monkeypatch)
+    monkeypatch.setenv('ADMIN_KEY', ADMIN_KEY)
+    monkeypatch.setenv('ADMIN_KEY_AUTH_ENABLED', 'true')
+    auth_stub.get_user = MagicMock(side_effect=AssertionError('must not be consulted'))
+
+    assert verify_token(ADMIN_KEY + 'target-uid') == 'target-uid'
+
+
+# ---------------------------------------------------------------------------
+# ADMIN_KEY strength gate at startup
+# ---------------------------------------------------------------------------
+
+
+def _clear_stage_env(monkeypatch):
+    _clear_admin_env(monkeypatch)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+
+
+def test_startup_rejects_weak_admin_key_when_impersonation_is_enabled(monkeypatch):
+    _clear_stage_env(monkeypatch)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('ADMIN_KEY', 'short-key')
+
+    with pytest.raises(RuntimeError):
+        endpoints_module.validate_admin_key_auth_configuration()
+
+
+def test_startup_allows_weak_admin_key_when_impersonation_is_disabled(monkeypatch):
+    _clear_stage_env(monkeypatch)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('ADMIN_KEY', 'short-key')
+    monkeypatch.setenv('ADMIN_KEY_AUTH_ENABLED', 'false')
+
+    endpoints_module.validate_admin_key_auth_configuration()
+
+
+def test_startup_allows_strong_admin_key_with_impersonation_enabled(monkeypatch):
+    _clear_stage_env(monkeypatch)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('ADMIN_KEY', 'x' * 32)
+
+    endpoints_module.validate_admin_key_auth_configuration()
+
+
+def test_startup_gate_is_inert_for_local_and_test_stages(monkeypatch):
+    """Local harnesses and CI deliberately use short, well-known ADMIN_KEYs."""
+    _clear_stage_env(monkeypatch)
+    monkeypatch.setenv('ADMIN_KEY', 'short-key')
+
+    endpoints_module.validate_admin_key_auth_configuration()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    endpoints_module.validate_admin_key_auth_configuration()

@@ -93,6 +93,7 @@ class QuotaSnapshot:
         'max_duration_seconds',
         'allowed_countries',
         'reset_at',
+        'reservation_denied',
     )
 
     def __init__(
@@ -104,6 +105,7 @@ class QuotaSnapshot:
         max_duration_seconds: Optional[int],
         allowed_countries: List[str],
         reset_at: int,
+        reservation_denied: bool = False,
     ):
         self.plan = plan
         self.is_paid = is_paid
@@ -112,10 +114,15 @@ class QuotaSnapshot:
         self.max_duration_seconds = max_duration_seconds
         self.allowed_countries = allowed_countries or []
         self.reset_at = reset_at
+        self.reservation_denied = reservation_denied
 
     @property
     def has_access(self) -> bool:
         """True iff the user can currently place a call under this plan."""
+        # A refused reservation is authoritative: the counter says nothing about
+        # whether the slot was actually granted (Redis may have been unreachable).
+        if self.reservation_denied:
+            return False
         if self.is_paid:
             return True
         if self.monthly_limit is None:
@@ -169,10 +176,11 @@ def reserve_phone_call_quota(uid: str) -> QuotaSnapshot:
     config = get_config_for_plan(paid)
     monthly_limit = config.get('monthly_call_limit')
 
+    reserved = True
     if paid or monthly_limit is None:
         used, reset_at = phone_call_usage_db.get_current_month_count(uid)
     else:
-        _, used, reset_at = phone_call_usage_db.reserve_current_month_slot(uid, monthly_limit)
+        reserved, used, reset_at = phone_call_usage_db.reserve_current_month_slot(uid, monthly_limit)
 
     return QuotaSnapshot(
         plan=plan,
@@ -182,6 +190,7 @@ def reserve_phone_call_quota(uid: str) -> QuotaSnapshot:
         max_duration_seconds=config.get('max_duration_seconds'),
         allowed_countries=config.get('allowed_countries') or [],
         reset_at=reset_at,
+        reservation_denied=not reserved,
     )
 
 

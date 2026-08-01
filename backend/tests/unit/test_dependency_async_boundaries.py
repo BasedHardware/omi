@@ -56,7 +56,11 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         'database.dev_api_key',
         get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
     )
-    endpoints = _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None)
+    endpoints = _module(
+        'utils.other.endpoints',
+        check_api_key_rate_limit=lambda **_kwargs: None,
+        enforce_token_not_revoked=lambda _decoded: None,
+    )
     mcp_memories = _module(
         'utils.mcp_memories',
         McpVerifiedAuth=_McpVerifiedAuth,
@@ -119,7 +123,14 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
         assert result == 'user-1'
-        assert calls == [(dependencies.critical_executor, verify_id_token, ('firebase-token',), {})]
+        # Both blocking steps are offloaded: the token verification and the
+        # revocation-watermark check that follows it.
+        assert [(executor, args) for executor, _fn, args, _kwargs in calls] == [
+            (dependencies.critical_executor, ('firebase-token',)),
+            (dependencies.critical_executor, ({'uid': 'user-1'},)),
+        ]
+        assert calls[0][1] is verify_id_token
+        assert calls[1][1] is dependencies.enforce_token_not_revoked
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:

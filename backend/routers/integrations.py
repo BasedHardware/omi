@@ -20,6 +20,7 @@ from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import run_blocking, db_executor
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
+from utils.oauth_revocation import revoke_integration_upstream
 from utils.retrieval.tools.google_utils import (
     GMAIL_READONLY_SCOPE,
     GOOGLE_INTEGRATION_KEY,
@@ -255,6 +256,12 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     """
     if app_key in DERIVED_INTEGRATIONS:
         app_key = DERIVED_INTEGRATIONS[app_key][0]
+
+    # Revoke at the provider BEFORE the local record is dropped — once the
+    # document is gone there is no credential left to revoke with, and the
+    # user's Google/X grant would stay live forever. Best-effort: a provider
+    # outage must not stop the user from disconnecting.
+    revoke_integration_upstream(uid, app_key)
 
     success = users_db.delete_integration(uid, app_key)
 

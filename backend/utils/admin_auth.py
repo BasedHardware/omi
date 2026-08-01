@@ -22,7 +22,9 @@ def has_admin_authorization(secret_key: Optional[str]) -> bool:
     admin_key = os.getenv('ADMIN_KEY')
     if not admin_key or not secret_key:
         return False
-    return hmac.compare_digest(secret_key, admin_key)
+    # compare_digest rejects str with non-ASCII code points, and Starlette decodes
+    # headers as latin-1, so compare the encoded bytes instead of raising TypeError.
+    return hmac.compare_digest(secret_key.encode('utf-8', 'surrogatepass'), admin_key.encode('utf-8', 'surrogatepass'))
 
 
 def require_admin_authorization(secret_key: Optional[str]) -> None:

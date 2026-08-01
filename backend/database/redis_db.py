@@ -597,6 +597,45 @@ def get_user_data_protection_level(uid: str) -> Optional[str]:
 
 
 # ******************************************************
+# ************ FIREBASE TOKEN WATERMARKS ***************
+# ******************************************************
+
+# Bounds how long a revoked/deleted principal can keep authenticating. Short
+# enough that revocation is meaningful, long enough that the per-uid Firebase
+# get_user() lookup stays off the hot path for normal traffic.
+FIREBASE_TOKEN_WATERMARK_TTL_SECONDS = 60
+
+
+def cache_firebase_token_watermark(uid: str, watermark: Dict[str, Any], ttl: int) -> None:
+    """Cache the uid's revocation watermark. Fail-open: a Redis outage is logged."""
+    try:
+        r.set(f'firebase_token_watermark:{uid}', json.dumps(watermark), ex=ttl)
+    except Exception as e:
+        logger.error('Error writing Firebase token watermark cache: %s', e)
+
+
+def get_cached_firebase_token_watermark(uid: str) -> Optional[Dict[str, Any]]:
+    """Read the uid's cached revocation watermark, or None on miss/failure."""
+    try:
+        cached = r.get(f'firebase_token_watermark:{uid}')
+        if not cached:
+            return None
+        loaded: object = json.loads(_decode_redis_value(cached))
+        return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
+    except Exception as e:
+        logger.error('Error reading Firebase token watermark cache: %s', e)
+        return None
+
+
+def delete_cached_firebase_token_watermark(uid: str) -> None:
+    """Drop the cached watermark so the next verification re-reads Firebase."""
+    try:
+        r.delete(f'firebase_token_watermark:{uid}')
+    except Exception as e:
+        logger.error('Error deleting Firebase token watermark cache: %s', e)
+
+
+# ******************************************************
 # ******************* MCP API KEYS *********************
 # ******************************************************
 

@@ -56,6 +56,11 @@ class TestAdminKeyFailsClosed:
         assert has_admin_authorization('wrong') is False
         assert has_admin_authorization('') is False
 
+    def test_non_ascii_header_value_is_rejected_not_raised(self, monkeypatch):
+        """Starlette decodes headers as latin-1, so a non-ASCII key must compare, not TypeError."""
+        monkeypatch.setenv('ADMIN_KEY', 'real-secret')
+        assert has_admin_authorization('ké') is False
+
     def test_require_raises_403_when_admin_key_is_empty(self, monkeypatch):
         from fastapi import HTTPException
 

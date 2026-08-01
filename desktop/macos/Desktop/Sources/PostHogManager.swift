@@ -57,19 +57,13 @@ class PostHogManager {
     guard isInitialized else { return }
 
     var userId: String?
-    var email: String?
-    var name: String?
 
     // Try Firebase Auth first, but only after Firebase has been configured.
     if FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
       userId = user.uid
-      email = user.email
-      name = user.displayName
     } else if AuthState.shared.isSignedIn, let storedUserId = AuthState.shared.userId {
       // Fall back to stored auth state (when Firebase SDK auth failed but REST API auth succeeded)
       userId = storedUserId
-      email = AuthState.shared.userEmail
-      name = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
       log("PostHog: Using stored auth state (Firebase SDK auth not available)")
     }
 
@@ -78,20 +72,17 @@ class PostHogManager {
       return
     }
 
-    var properties: [String: Any] = [
+    let properties: [String: Any] = [
       "platform": "macos",
       "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
       "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "update_channel": AppBuild.currentUpdateChannel,
     ]
 
-    if let email = email {
-      properties["email"] = email
-    }
-
-    if let name = name {
-      properties["name"] = name
-    }
+    // The Firebase UID is the only identity that leaves the device. Email and display name
+    // would turn a pseudonymous analytics profile into a directly identified one at a third
+    // party, and this codebase already treats an email address as sensitive enough to strip
+    // from diagnostics logs.
 
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")

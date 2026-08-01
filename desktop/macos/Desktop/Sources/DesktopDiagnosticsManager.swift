@@ -1004,7 +1004,7 @@ final class DesktopDiagnosticsManager {
       sections.append("## Health snapshots\n\(json)")
     }
 
-    let tail = redactedLogTail(logPath: logPath, maxLines: maxLogLines)
+    let tail = redactedLogTail(logPath: logPath, maxLines: maxLogLines, strictCloudRedaction: true)
     sections.append("## Recent log (redacted, last \(maxLogLines) lines)\n\(tail)")
 
     return sections.joined(separator: "\n\n") + "\n"

@@ -100,6 +100,9 @@ class _FakeUserDoc:
     def collection(self, name):
         return _FakeGrantCollection(self.parent, self.user_id, name)
 
+    def get(self):
+        return SimpleNamespace(exists=getattr(self.parent, 'user_exists', True))
+
 
 class _FakeGrantCollection:
     def __init__(self, parent, user_id, collection_name):

@@ -6,6 +6,7 @@ and chat tools for managing issues, projects, and workflows.
 """
 import os
 import base64
+import secrets
 import urllib.parse
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -25,6 +26,8 @@ from db import (
     store_default_team,
     get_default_team,
     get_user_settings,
+    store_oauth_state,
+    consume_oauth_state,
 )
 from models import (
     ChatToolResponse,
@@ -338,12 +341,15 @@ async def linear_auth(uid: str):
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
     
+    state = secrets.token_urlsafe(32)
+    store_oauth_state(state, uid)
+
     params = {
         "client_id": LINEAR_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": LINEAR_REDIRECT_URI,
         "scope": ",".join(LINEAR_SCOPES),
-        "state": uid,
+        "state": state,
         "prompt": "consent",
     }
     
@@ -368,8 +374,14 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "error": "Invalid callback parameters"
         })
     
-    uid = state
-    
+    uid = consume_oauth_state(state)
+    if not uid:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid or expired authorization state. Please start the connection again."
+        })
+
     # Exchange code for tokens
     response = requests.post(
         LINEAR_TOKEN_URL,

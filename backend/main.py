@@ -95,6 +95,7 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.other.endpoints import validate_admin_key_auth_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
@@ -238,6 +239,7 @@ app.add_middleware(BYOKMiddleware)
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     validate_account_deletion_dispatch_configuration()
+    validate_admin_key_auth_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.

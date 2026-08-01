@@ -90,6 +90,11 @@ def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
     return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
 
 
+def _owner_exists(uid: str) -> bool:
+    """Whether the grant's owning user document still exists."""
+    return db.collection("users").document(uid).get().exists
+
+
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for Firestore DocumentSnapshot.to_dict()."""
     raw: object = doc.to_dict()
@@ -644,6 +649,12 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
         return None
     grant = get_active_grant(cast(str, data.get("grant_id")))
     if not grant:
+        return None
+    # Defence in depth for account deletion: grants live in a top-level
+    # collection, so a token that outlives its owner must not authenticate, and
+    # the last_used_at write below must not recreate a deleted user's state.
+    uid = data.get("uid")
+    if not isinstance(uid, str) or not uid or not _owner_exists(uid):
         return None
     db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
     return {

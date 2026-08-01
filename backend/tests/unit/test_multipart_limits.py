@@ -8,7 +8,7 @@ from starlette.datastructures import Headers
 from starlette.formparsers import MultiPartException, MultiPartParser
 from starlette.requests import Request
 
-from utils.multipart import FileSizeLimitedMultiPartParser, parse_multipart_form
+from utils.multipart import MAX_MULTIPART_FILES, FileSizeLimitedMultiPartParser, parse_multipart_form
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -181,6 +181,37 @@ def test_parse_multipart_form_rejects_oversized_urlencoded_body():
 
 def test_starlette_global_multipart_limit_is_not_mutated():
     assert MultiPartParser.max_part_size == 1024 * 1024
+
+
+def _module_constant(relative_path: str, name: str) -> int:
+    tree = ast.parse((BACKEND_DIR / relative_path).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return node.value.value
+    raise AssertionError(f'{name} not found in {relative_path}')
+
+
+def test_multipart_file_cap_admits_the_sync_batch_contract():
+    assert MAX_MULTIPART_FILES >= _module_constant('routers/sync.py', '_MAX_SYNC_FILES_PER_REQUEST')
+
+
+def test_multipart_parser_rejects_batch_over_file_cap():
+    boundary = 'test-boundary'
+    parts = b''.join(
+        (f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{i}.wav"\r\n' f'\r\nx\r\n').encode()
+        for i in range(MAX_MULTIPART_FILES + 1)
+    )
+    body = parts + f'--{boundary}--\r\n'.encode()
+    headers = Headers({'Content-Type': f'multipart/form-data; boundary={boundary}'})
+
+    with pytest.raises(MultiPartException, match='Too many files'):
+        asyncio.run(
+            FileSizeLimitedMultiPartParser(
+                headers, _body_stream(body), max_files=MAX_MULTIPART_FILES, max_part_size=1024
+            ).parse()
+        )
 
 
 def test_production_multipart_routes_have_declared_limits():

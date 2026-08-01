@@ -5,9 +5,12 @@ import logging
 import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
+from database import mcp_oauth
 from database import vector_db
 from database import users as users_db
 from database.action_items import get_action_item_ids
+from database.dev_api_key import delete_all_dev_keys_for_user
+from database.mcp_api_key import delete_all_mcp_keys_for_user
 from database.conversations import get_conversation_ids
 from database.memories import get_memory_ids
 from database.screen_activity import get_screen_activity_ids
@@ -25,6 +28,7 @@ from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
+from utils.oauth_revocation import revoke_user_integrations
 from utils.other import storage as storage_utils
 from utils.other.storage import delete_all_conversation_recordings, delete_blobs_with_prefix
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
@@ -50,7 +54,7 @@ ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
 def purge_derived_user_data(uid: str) -> PurgeResult:
-    """Purge a user's derived data outside Firestore.
+    """Purge a user's derived data and credentials outside ``users/{uid}``.
 
     Required failures must block the Firestore wipe because those IDs are
     stored in Firestore and may become unrecoverable after ``delete_user_data``.
@@ -75,6 +79,42 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     def require_vector_index(operation: str):
         if vector_db.index is None:
             raise RuntimeError(f'Pinecone index not initialized for {operation}')
+
+    # Tell every OAuth provider to invalidate the grant while the tokens still
+    # exist — after the Firestore wipe there is no credential left to revoke
+    # with, and the user's Google/X/Asana grant would stay live forever.
+    # Best-effort by contract: a provider outage must never strand a deletion.
+    try:
+        revoke_user_integrations(uid)
+    except Exception as e:
+        record_failure('best_effort_failures', 'upstream_oauth_revocation', e)
+        logger.error(f'delete_account upstream OAuth revocation failed for {uid}: {sanitize(str(e))}')
+
+    # API keys and MCP OAuth grants live in TOP-LEVEL collections, so
+    # ``delete_user_data`` (which only walks users/{uid} subcollections) never
+    # reaches them. Required, not best-effort: leaving one behind means a
+    # deleted account keeps a fully-scoped credential it can no longer sign in
+    # to revoke.
+    try:
+        delete_all_mcp_keys_for_user(uid)
+    except Exception as e:
+        record_failure('required_failures', 'mcp_api_keys', e)
+        logger.error(f'delete_account purge MCP API keys failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        delete_all_dev_keys_for_user(uid)
+    except Exception as e:
+        record_failure('required_failures', 'dev_api_keys', e)
+        logger.error(f'delete_account purge developer API keys failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        for grant in mcp_oauth.list_user_grants(uid):
+            grant_id = grant.get('id')
+            if isinstance(grant_id, str) and grant_id:
+                mcp_oauth.revoke_user_grant(uid, grant_id)
+    except Exception as e:
+        record_failure('required_failures', 'mcp_oauth_grants', e)
+        logger.error(f'delete_account purge MCP OAuth grants failed for {uid}: {sanitize(str(e))}')
 
     try:
         conversation_ids = get_conversation_ids(uid)
@@ -255,6 +295,10 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         _cancel_subscription_for_account_deletion(uid)
         current_operation = 'firebase_auth'
         try:
+            # Revoke first: deleting the Auth user does not invalidate ID
+            # tokens already minted for it, so without this a token stolen
+            # before deletion keeps authenticating until its own expiry.
+            auth.revoke_user_refresh_tokens(uid)
             auth.delete_account(uid)
         except Exception as e:
             err = str(e).upper()

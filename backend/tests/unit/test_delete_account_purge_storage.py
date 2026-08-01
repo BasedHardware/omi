@@ -34,6 +34,9 @@ def users_service():
         "database": _pkg("database"),
         "database.users": AutoMockModule("database.users"),
         "database.action_items": AutoMockModule("database.action_items"),
+        "database.dev_api_key": AutoMockModule("database.dev_api_key"),
+        "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
+        "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
         "database.conversations": AutoMockModule("database.conversations"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
@@ -49,6 +52,7 @@ def users_service():
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.oauth_revocation": AutoMockModule("utils.oauth_revocation"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -75,6 +79,9 @@ def _purge_patches(users_service, **overrides):
             users_service, name, create=True, **(overrides.get(name) or {"return_value": ids})
         )
     for name in (
+        "revoke_user_integrations",
+        "delete_all_mcp_keys_for_user",
+        "delete_all_dev_keys_for_user",
         "delete_conversation_vectors_batch",
         "delete_transcript_chunk_vectors_batch",
         "delete_memory_vectors_batch",
@@ -84,6 +91,15 @@ def _purge_patches(users_service, **overrides):
         "delete_user_caller_ids",
     ):
         patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
+    patchers["list_user_grants"] = patch.object(
+        users_service.mcp_oauth,
+        "list_user_grants",
+        create=True,
+        **(overrides.get("list_user_grants") or {"return_value": []})
+    )
+    patchers["revoke_user_grant"] = patch.object(
+        users_service.mcp_oauth, "revoke_user_grant", create=True, **(overrides.get("revoke_user_grant") or {})
+    )
     patchers["delete_user_data"] = patch.object(
         users_service.users_db, "delete_user_data", create=True, **(overrides.get("delete_user_data") or {})
     )
@@ -164,3 +180,76 @@ def test_enumeration_failure_is_isolated(users_service):
     m["delete_memory_vectors_batch"].assert_called_once_with("uid1", ["m1"])
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Credential purge
+#
+# users_db.delete_user_data only walks users/{uid} subcollections. MCP keys,
+# Developer keys and MCP OAuth grants live in TOP-LEVEL collections, so before
+# this a deleted account kept a fully-scoped credential it could no longer sign
+# in to revoke.
+# ---------------------------------------------------------------------------
+
+
+def test_credentials_are_purged_before_the_firestore_wipe(users_service):
+    order = []
+    patchers, m = _purge_patches(
+        users_service,
+        delete_all_mcp_keys_for_user={"side_effect": lambda uid: order.append("mcp_keys")},
+        delete_all_dev_keys_for_user={"side_effect": lambda uid: order.append("dev_keys")},
+        list_user_grants={"side_effect": lambda uid: order.append("grants") or [{"id": "g1"}]},
+        delete_user_data={"side_effect": lambda uid: order.append("wipe")},
+    )
+    try:
+        users_service.background_wipe_user_data("uid1")
+    finally:
+        _stop(patchers)
+
+    m["delete_all_mcp_keys_for_user"].assert_called_once_with("uid1")
+    m["delete_all_dev_keys_for_user"].assert_called_once_with("uid1")
+    m["revoke_user_grant"].assert_called_once_with("uid1", "g1")
+    assert order.index("wipe") > order.index("mcp_keys")
+    assert order.index("wipe") > order.index("dev_keys")
+    assert order.index("wipe") > order.index("grants")
+
+
+def test_api_key_purge_failure_blocks_the_firestore_wipe(users_service):
+    """A surviving API key is worse than a retryable partial wipe: the user can
+    no longer sign in to revoke it."""
+    patchers, m = _purge_patches(
+        users_service, delete_all_mcp_keys_for_user={"side_effect": Exception("firestore down")}
+    )
+    try:
+        users_service.background_wipe_user_data("uid1")
+    finally:
+        _stop(patchers)
+    m["delete_user_data"].assert_not_called()
+
+
+def test_upstream_oauth_revocation_is_best_effort(users_service):
+    """A dead provider must never strand an account deletion."""
+    patchers, m = _purge_patches(
+        users_service, revoke_user_integrations={"side_effect": Exception("google unreachable")}
+    )
+    try:
+        users_service.background_wipe_user_data("uid1")
+    finally:
+        _stop(patchers)
+    m["revoke_user_integrations"].assert_called_once_with("uid1")
+    m["delete_user_data"].assert_called_once_with("uid1")
+
+
+def test_refresh_tokens_are_revoked_before_the_auth_user_is_deleted(users_service):
+    """Deleting the Auth user does not invalidate already-minted ID tokens."""
+    order = []
+    patchers, m = _purge_patches(users_service)
+    users_service.auth.revoke_user_refresh_tokens.side_effect = lambda uid: order.append("revoke")
+    users_service.auth.delete_account.side_effect = lambda uid: order.append("delete")
+    try:
+        users_service.background_wipe_user_data("uid1")
+    finally:
+        _stop(patchers)
+        users_service.auth.revoke_user_refresh_tokens.side_effect = None
+        users_service.auth.delete_account.side_effect = None
+    assert order == ["revoke", "delete"], order

@@ -61,7 +61,11 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, _KeyLookupSpy, _KeyLook
             'firebase_admin.auth': _module('firebase_admin.auth', verify_id_token=lambda _token: {'uid': 'user-1'}),
             'database.mcp_api_key': _module('database.mcp_api_key', get_api_key_auth_result=mcp_lookup),
             'database.dev_api_key': _module('database.dev_api_key', get_api_key_auth_result=dev_lookup),
-            'utils.other.endpoints': _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None),
+            'utils.other.endpoints': _module(
+                'utils.other.endpoints',
+                check_api_key_rate_limit=lambda **_kwargs: None,
+                enforce_token_not_revoked=lambda _decoded: None,
+            ),
             'utils.mcp_memories': _module(
                 'utils.mcp_memories',
                 McpVerifiedAuth=_McpVerifiedAuth,

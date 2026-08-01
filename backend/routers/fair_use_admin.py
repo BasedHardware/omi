@@ -110,12 +110,15 @@ class FairUseCaseLookupResponse(BaseModel):
     event_id: str = Field(description='Event identifier.')
 
 
-def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
+def _verify_admin_key(x_admin_key: Optional[str] = Header(None, alias='X-Admin-Key')) -> str:
     """Validate admin key from request header using constant-time comparison.
 
     Returns a short hash of the key for audit logging (not the key itself).
+
+    The header is Optional so a missing one falls through to the same 403 every
+    other admin route returns, instead of a 422 that names the header.
     """
-    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
+    if not ADMIN_KEY or not x_admin_key or not hmac.compare_digest(x_admin_key.encode(), ADMIN_KEY.encode()):
         raise HTTPException(status_code=403, detail='Invalid admin key')
     return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
 

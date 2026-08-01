@@ -120,6 +120,17 @@ enum RealtimeHubTools {
           ],
         ])
       }
+      if captureFailure == .privacyExcluded {
+        return jsonToolResult([
+          "ok": false,
+          "error": [
+            "code": "screen_evidence_unavailable",
+            "reason": "privacy_excluded",
+            "message":
+              "Omi did not capture the screen because screen monitoring is off or the frontmost app is on the user's privacy exclusion list. Do not describe or guess the screen contents.",
+          ],
+        ])
+      }
       return jsonToolResult([
         "ok": false,
         "error": ["code": "screen_evidence_unavailable"],

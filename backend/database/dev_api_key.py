@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple, cast
@@ -27,11 +28,23 @@ from models.dev_api_key import DevApiKey
 from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
 from utils.scopes import AVAILABLE_SCOPES, READ_ONLY_SCOPES, Scopes
 
+logger = logging.getLogger(__name__)
+
 DEV_API_KEY_APP_ID = "developer_api"
 
 
 def _db() -> Any:
     return get_firestore_client()
+
+
+def _owner_exists(user_id: str) -> bool:
+    """Whether the key's owning user document still exists.
+
+    Defence in depth for account deletion: the credential purge is the primary
+    control, but a key that outlives its owner must not authenticate — and must
+    not have its ``last_used_at`` write recreate the deleted user's documents.
+    """
+    return _db().collection("users").document(user_id).get().exists
 
 
 def _normalize_dev_scopes(value: object, *, new_key_default: bool = False) -> Optional[list[str]]:
@@ -181,6 +194,37 @@ def delete_dev_key(user_id: str, key_id: str):
             remove_developer_api_key_memory_grant(user_id, key_id, db_client=firestore_client)
 
 
+def delete_all_dev_keys_for_user(user_id: str) -> int:
+    """Delete every Developer API key owned by ``user_id`` and purge its auth cache.
+
+    Developer keys live in the top-level ``dev_api_keys`` collection, so the
+    ``users/{uid}`` subcollection wipe does not reach them. Without this an
+    account-deleted user's key keeps authenticating forever.
+
+    Unlike :func:`delete_dev_key`, a document whose credential metadata is
+    unusable is still deleted: a malformed hash can never match a presented
+    key, so leaving the document behind protects nothing and would permanently
+    block the account wipe.
+    """
+    firestore_client = _db()
+    docs = list(firestore_client.collection("dev_api_keys").where("user_id", "==", user_id).stream())
+    deleted = 0
+    for doc in docs:
+        raw: object = doc.to_dict()
+        key_data: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+        hashed_key = key_data.get("hashed_key")
+        if is_valid_api_key_hash(hashed_key):
+            try:
+                cache_deleted = redis_db.delete_cached_dev_api_key_strict(cast(str, hashed_key))
+            except Exception as exc:
+                raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation failed") from exc
+            if cache_deleted is not True:
+                raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation was not confirmed")
+        doc.reference.delete()
+        deleted += 1
+    return deleted
+
+
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:
     """
     Verifies a Developer API key and returns the associated user ID.
@@ -230,6 +274,9 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     user_id = api_key_auth_user_id(key_data)
     key_id = key_doc.id if isinstance(key_doc.id, str) and key_doc.id else None
     if user_id is None or key_id is None:
+        return ApiKeyAuthLookupResult(context=None)
+    if not _owner_exists(user_id):
+        logger.warning("Developer API key presented for a user that no longer exists; rejecting")
         return ApiKeyAuthLookupResult(context=None)
     repairs: set[ApiKeyAuthRepair] = set()
     if cache_read.mode == ApiKeyCacheReadMode.ERROR:

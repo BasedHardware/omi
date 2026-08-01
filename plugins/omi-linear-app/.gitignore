@@ -20,6 +20,7 @@ env/
 # Data files (local development)
 data/tokens.json
 data/user_settings.json
+data/oauth_states.json
 
 # OS files
 .DS_Store

@@ -394,6 +394,20 @@ class RewindSettings: ObservableObject {
     }
   }
 
+  /// Default retention for conversation transcripts and screen observations.
+  /// Deliberately much longer than `retentionDays`: that setting governs bulky
+  /// screen-recording media, while transcripts are the user's durable record.
+  static let defaultTranscriptRetentionDays = 90
+
+  /// How long to keep conversation transcripts and screen observations.
+  /// Separate from `retentionDays` so shortening the screen-recording window
+  /// never deletes transcripts.
+  @Published var transcriptRetentionDays: Int {
+    didSet {
+      defaults.set(transcriptRetentionDays, forKey: "rewindTranscriptRetentionDays")
+    }
+  }
+
   @Published var captureInterval: Double {
     didSet {
       defaults.set(captureInterval, forKey: "rewindCaptureInterval")
@@ -418,6 +432,9 @@ class RewindSettings: ObservableObject {
   private init() {
     // Load settings with defaults
     self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
+    self.transcriptRetentionDays =
+      defaults.object(forKey: "rewindTranscriptRetentionDays") as? Int
+      ?? Self.defaultTranscriptRetentionDays
     self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
     self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 

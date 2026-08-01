@@ -41,18 +41,17 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
         // Update service authentication status based on Firebase data
         TodoistService().setAuthenticated(
-          _connectionDetails['todoist']?['connected'] == true && _connectionDetails['todoist']?['access_token'] != null,
+          _connectionDetails['todoist']?['connected'] == true,
         );
         AsanaService().setAuthenticated(
-          _connectionDetails['asana']?['connected'] == true && _connectionDetails['asana']?['access_token'] != null,
+          _connectionDetails['asana']?['connected'] == true,
           userGid: _connectionDetails['asana']?['user_gid'],
         );
         GoogleTasksService().setAuthenticated(
-          _connectionDetails['google_tasks']?['connected'] == true &&
-              _connectionDetails['google_tasks']?['access_token'] != null,
+          _connectionDetails['google_tasks']?['connected'] == true,
         );
         ClickUpService().setAuthenticated(
-          _connectionDetails['clickup']?['connected'] == true && _connectionDetails['clickup']?['access_token'] != null,
+          _connectionDetails['clickup']?['connected'] == true,
           userId: _connectionDetails['clickup']?['user_id'],
         );
 

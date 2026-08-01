@@ -59,6 +59,16 @@ enum PTTContextVocabularyProvider {
   }
 
   private static func captureImmediateScreenText(preferredImage: CGImage?) async -> String? {
+    // Ask the privacy gate before any pixels are read. This covers the pre-overlay image, the
+    // active-window grab, and the full-screen fallback: a whole-display capture of a password
+    // manager leaks the same secrets as its window, so none of the three may run when the
+    // frontmost app is excluded or screen monitoring is off.
+    let frontmost = await MainActor.run { ScreenCapturePrivacyGate.frontmostDecision() }
+    if frontmost.decision != .allowed {
+      log("PTTContextVocabulary: immediate OCR blocked by privacy gate (\(frontmost.decision))")
+      return nil
+    }
+
     if let preferredImage,
       let text = await extractVisibleText(from: preferredImage)
     {
@@ -69,6 +79,15 @@ enum PTTContextVocabularyProvider {
     let screenCaptureService = ScreenCaptureService()
     let activeWindowInfo = await ScreenCaptureService.getActiveWindowInfoAsync()
     let activeAppName = activeWindowInfo.appName?.lowercased() ?? ""
+    // The frontmost app can change between the gate check and the window resolution, so the
+    // window we are about to capture is re-checked against the same exclusion list.
+    let activeWindowDecision = await MainActor.run {
+      ScreenCapturePrivacyGate.decide(appName: activeWindowInfo.appName, bundleID: nil)
+    }
+    if activeWindowDecision != .allowed {
+      log("PTTContextVocabulary: immediate OCR blocked by privacy gate (\(activeWindowDecision))")
+      return nil
+    }
     let shouldCaptureActiveWindow = !isOmiApp(activeAppName)
     let activeWindowImage: CGImage?
     if shouldCaptureActiveWindow, let windowID = activeWindowInfo.windowID {

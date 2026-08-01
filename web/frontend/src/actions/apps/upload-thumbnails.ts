@@ -8,6 +8,13 @@ const MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const FETCH_TIMEOUT_MS = 10_000;
 
+const ALLOWED_IMAGE_MIME_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
 function isBlockedIpv4(ip: string): boolean {
   const parts = ip.split('.').map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return true;
@@ -82,6 +89,61 @@ async function assertPublicHttpsUrl(rawUrl: string): Promise<URL> {
     throw new Error('Thumbnail URL resolves to a non-public address');
   }
   return url;
+}
+
+function isDataUrl(rawUrl: string): boolean {
+  return /^data:/i.test(rawUrl.trim());
+}
+
+/**
+ * Decode a `data:` URL in-process. The browser produces these via
+ * FileReader.readAsDataURL, so there is nothing to fetch and no SSRF surface.
+ */
+function decodeDataUrl(rawUrl: string): Blob {
+  const match = /^data:([^,]*),([\s\S]*)$/i.exec(rawUrl.trim());
+  if (!match) {
+    throw new Error('Thumbnail data URL is malformed');
+  }
+
+  const meta = match[1];
+  const payload = match[2];
+  const isBase64 = /;base64$/i.test(meta);
+  const mimeType = (isBase64 ? meta.slice(0, -';base64'.length) : meta)
+    .split(';')[0]
+    .toLowerCase();
+
+  if (!ALLOWED_IMAGE_MIME_TYPES[mimeType]) {
+    throw new Error('Thumbnail data URL must be a supported image type');
+  }
+
+  let buffer: Buffer;
+  if (isBase64) {
+    buffer = Buffer.from(payload, 'base64');
+  } else {
+    const bytes: number[] = [];
+    for (let i = 0; i < payload.length; i++) {
+      const char = payload[i];
+      if (char === '%' && /^[0-9a-f]{2}$/i.test(payload.slice(i + 1, i + 3))) {
+        bytes.push(parseInt(payload.slice(i + 1, i + 3), 16));
+        i += 2;
+      } else {
+        bytes.push(char.charCodeAt(0) & 0xff);
+      }
+      if (bytes.length > MAX_THUMBNAIL_BYTES) {
+        throw new Error('Thumbnail exceeds the maximum allowed size');
+      }
+    }
+    buffer = Buffer.from(bytes);
+  }
+
+  if (buffer.byteLength === 0) {
+    throw new Error('Thumbnail data URL is empty');
+  }
+  if (buffer.byteLength > MAX_THUMBNAIL_BYTES) {
+    throw new Error('Thumbnail exceeds the maximum allowed size');
+  }
+
+  return new Blob([new Uint8Array(buffer)], { type: mimeType });
 }
 
 /** Fetch following redirects manually so every hop is re-validated. */
@@ -177,10 +239,23 @@ export default async function uploadThumbnails(
       if (typeof thumbnailUrl !== 'string') {
         continue;
       }
-      const response = await fetchThumbnail(thumbnailUrl);
-      const blob = await readCappedBlob(response);
+      let blob: Blob;
+      if (isDataUrl(thumbnailUrl)) {
+        blob = decodeDataUrl(thumbnailUrl);
+      } else {
+        const scheme = /^([a-z][a-z0-9+.-]*:)/i
+          .exec(thumbnailUrl.trim())?.[1]
+          .toLowerCase();
+        if (scheme !== 'http:' && scheme !== 'https:') {
+          throw new Error('Thumbnail URL scheme is not supported');
+        }
+        const response = await fetchThumbnail(thumbnailUrl);
+        blob = await readCappedBlob(response);
+      }
+
+      const extension = ALLOWED_IMAGE_MIME_TYPES[blob.type.toLowerCase()] ?? 'jpg';
       const thumbnailFormData = new FormData();
-      thumbnailFormData.append('file', blob, 'thumbnail.jpg');
+      thumbnailFormData.append('file', blob, `thumbnail.${extension}`);
 
       const thumbnailResult = await uploadThumbnail(thumbnailFormData, token);
 

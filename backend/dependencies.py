@@ -17,7 +17,7 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     build_mcp_default_memory_write_context,
 )
-from utils.other.endpoints import check_api_key_rate_limit
+from utils.other.endpoints import check_api_key_rate_limit, enforce_token_not_revoked
 from utils.scopes import Scopes, has_scope
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,9 @@ async def get_current_user_id(
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
+        # verify_id_token() alone never observes revocation, so a token stolen
+        # before a deletion or password change would keep working until its exp.
+        await run_blocking(critical_executor, enforce_token_not_revoked, decoded_token)
         return decoded_token["uid"]
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")

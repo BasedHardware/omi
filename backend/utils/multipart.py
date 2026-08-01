@@ -21,7 +21,10 @@ VOICE_MESSAGE_MAX_PART_SIZE = 200 * MB
 # The raised per-part caps above exist for uploaded files only. Everything else stays small,
 # and the part counts are bounded so the caps cannot be multiplied by 1000 default slots.
 NON_FILE_MAX_PART_SIZE = 1 * MB
-MAX_MULTIPART_FILES = 16
+# The parser runs before the endpoint, so this must stay at or above the largest
+# per-route batch contract (routers/sync.py::_MAX_SYNC_FILES_PER_REQUEST) or that
+# route's own count check is dead and legitimate batches 400 forever.
+MAX_MULTIPART_FILES = 64
 MAX_MULTIPART_FIELDS = 16
 
 

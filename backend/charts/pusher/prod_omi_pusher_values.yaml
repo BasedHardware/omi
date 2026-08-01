@@ -162,6 +162,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
+  # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+  # it via the `secret-key` header. This disables the separate
+  # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+  # static string authenticates as any account. Production has no caller for it.
+  - name: ADMIN_KEY_AUTH_ENABLED
+    value: "false"
   # This is the self-hosted Deepgram credential used only with dg.omi.me.
   # Hosted Deepgram is disabled by the serving policy and is not injected into
   # backend-listen or Cloud Run workloads.

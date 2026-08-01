@@ -273,15 +273,28 @@ class TranscriptionService: @unchecked Sendable {
     return base + rand() * reconnectJitterSeconds
   }
 
-  /// Whether a close is worth reconnecting for. Ported from the Windows client's
-  /// `isRetryableDropError`: quota/entitlement exhaustion (1008) and the backend's
-  /// auth-rejection codes hit the same wall on every retry, so surface them at once
-  /// instead of burning the whole backoff budget first.
-  static func isRetryableCloseCode(_ closeCode: URLSessionWebSocketTask.CloseCode) -> Bool {
-    switch closeCode.rawValue {
-    case 1008, 4001, 4004: return false
-    default: return true
-    }
+  /// Extra delay before reconnecting after a policy-violation close (1008).
+  /// The backend uses 1008 for transient conditions — idle timeout ("no audio
+  /// for 60s") and rate limiting ("Retry in Ns") — so it must reconnect, just
+  /// not immediately.
+  static let policyCloseReconnectDelay: TimeInterval = 15.0
+
+  /// Extra delay a close code demands on top of the normal backoff. 1008 is
+  /// never terminal here: treating it as terminal permanently killed
+  /// transcription for any user who held push-to-talk and paused for 60s.
+  static func extraReconnectDelay(for closeCode: URLSessionWebSocketTask.CloseCode) -> TimeInterval {
+    closeCode.rawValue == 1008 ? policyCloseReconnectDelay : 0
+  }
+
+  /// Additional delay applied to the next scheduled reconnect, consumed once.
+  private var _pendingReconnectExtraDelay: TimeInterval = 0
+
+  private func consumePendingReconnectExtraDelay() -> TimeInterval {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    let extra = _pendingReconnectExtraDelay
+    _pendingReconnectExtraDelay = 0
+    return extra
   }
 
   // Watchdog: detect stale connections where WebSocket dies silently
@@ -622,13 +635,14 @@ class TranscriptionService: @unchecked Sendable {
         WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
       else { return }
       log("TranscriptionService: WebSocket closed with code \(closeCode.rawValue)")
-      guard Self.isRetryableCloseCode(closeCode) else {
-        log("TranscriptionService: Close code \(closeCode.rawValue) is terminal — not reconnecting")
-        self.shouldReconnect = false
-        self.disconnect()
-        self.onError?(
-          TranscriptionError.webSocketError("Connection rejected by server (code \(closeCode.rawValue))"))
-        return
+      let extraDelay = Self.extraReconnectDelay(for: closeCode)
+      if extraDelay > 0 {
+        log(
+          "TranscriptionService: Close code \(closeCode.rawValue) — backing off an extra \(Int(extraDelay))s before reconnect"
+        )
+        self.stateLock.lock()
+        self._pendingReconnectExtraDelay = extraDelay
+        self.stateLock.unlock()
       }
       if self.isConnected {
         self.handleDisconnection()
@@ -752,7 +766,7 @@ class TranscriptionService: @unchecked Sendable {
 
     // Attempt reconnection if enabled
     if canRetry {
-      let delay = Self.reconnectDelay(attempt: attempt)
+      let delay = Self.reconnectDelay(attempt: attempt) + consumePendingReconnectExtraDelay()
       log("TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt))")
       scheduleReconnect(after: delay, generation: generation)
     } else if exhausted {
@@ -804,7 +818,7 @@ class TranscriptionService: @unchecked Sendable {
       return
     }
 
-    let delay = Self.reconnectDelay(attempt: attempt)
+    let delay = Self.reconnectDelay(attempt: attempt) + consumePendingReconnectExtraDelay()
     log(
       "TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt), pre-connect failure)"
     )

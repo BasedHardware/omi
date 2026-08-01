@@ -8,11 +8,18 @@ from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
 from firebase_admin import auth
-from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
+from firebase_admin.auth import (
+    CertificateFetchError,
+    ExpiredIdTokenError,
+    InvalidIdTokenError,
+    RevokedIdTokenError,
+    UserNotFoundError,
+)
 import logging
 import redis as redis_pkg
 
-from database.redis_db import check_rate_limit, try_acquire_listen_lock
+import database.redis_db as redis_db
+from database.redis_db import FIREBASE_TOKEN_WATERMARK_TTL_SECONDS, check_rate_limit, try_acquire_listen_lock
 from database.users import record_client_device, record_user_platform
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -25,9 +32,128 @@ logger = logging.getLogger(__name__)
 WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 
+# Firebase allows a small amount of clock drift between the signing service and
+# this process; without it a freshly minted token can be rejected as future-dated.
+TOKEN_CLOCK_SKEW_SECONDS = 30
+
+# Minimum ADMIN_KEY length accepted when the impersonation mechanism is enabled
+# in a deployed stage. One static string that authenticates as any user has to
+# be at least as strong as a real credential.
+MIN_ADMIN_KEY_LENGTH = 32
+
 
 def get_user(uid: str) -> Any:
     return auth.get_user(uid)  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # firebase_admin auth untyped
+
+
+def revoke_user_refresh_tokens(uid: str) -> None:
+    """Invalidate every outstanding refresh/ID token for ``uid``.
+
+    Deleting an Auth user does not by itself stop already-minted ID tokens from
+    verifying, so this is what makes deletion and password change actually
+    revoke access. The cached watermark is dropped so the revocation is visible
+    to this process immediately rather than after the cache TTL.
+    """
+    auth.revoke_refresh_tokens(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    redis_db.delete_cached_firebase_token_watermark(uid)
+
+
+def is_token_revocation_check_enabled() -> bool:
+    """Whether ID tokens are checked against the Firebase revocation watermark.
+
+    Defaults ON. The escape hatch exists only so an operator can shed the extra
+    Firebase lookup during an incident; leaving it off means a stolen token
+    stays valid until its own expiry even after deletion or a password change.
+    """
+    return os.getenv('FIREBASE_TOKEN_REVOCATION_CHECK_ENABLED', 'true').strip().lower() == 'true'
+
+
+def _load_token_watermark(uid: str) -> Optional[Dict[str, Any]]:
+    """Return ``{'exists', 'disabled', 'valid_after_ms'}`` for ``uid``, or None.
+
+    None means indeterminate (Firebase unreachable) and callers must fail open:
+    a Firebase outage must not log every user out. A confirmed
+    ``UserNotFoundError`` is a determinate answer and is cached as such — that
+    is the account-deletion case we specifically need to reject.
+
+    The result is cached in Redis so the common request does not pay an extra
+    Firebase RPC. This is the same lookup ``verify_id_token(check_revoked=True)``
+    performs internally, done here so it can be cached at all.
+    """
+    cached = redis_db.get_cached_firebase_token_watermark(uid)
+    if isinstance(cached, dict) and 'exists' in cached:
+        return cached
+
+    try:
+        user = auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    except UserNotFoundError:
+        watermark: Dict[str, Any] = {'exists': False, 'disabled': True, 'valid_after_ms': 0}
+    except Exception as e:  # noqa: BLE001 — transient Firebase failure must fail open
+        logger.warning('Firebase token watermark lookup failed for uid=%s: %s', uid, e)
+        return None
+    else:
+        watermark = {
+            'exists': True,
+            'disabled': bool(getattr(user, 'disabled', False)),
+            'valid_after_ms': int(getattr(user, 'tokens_valid_after_timestamp', 0) or 0),
+        }
+
+    redis_db.cache_firebase_token_watermark(uid, watermark, FIREBASE_TOKEN_WATERMARK_TTL_SECONDS)
+    return watermark
+
+
+def enforce_token_not_revoked(decoded_token: Dict[str, Any]) -> None:
+    """Reject an ID token whose principal was deleted, disabled, or revoked.
+
+    Mirrors firebase-admin's own ``check_revoked`` comparison
+    (``iat * 1000 < tokens_valid_after_timestamp``) but against a cached
+    watermark, so the check costs one Redis read instead of a Firebase RPC on
+    every request. Raising ``RevokedIdTokenError`` is what makes the WebSocket
+    4004 "re-login required" close code reachable.
+    """
+    if not is_token_revocation_check_enabled():
+        return
+
+    uid = decoded_token.get('uid')
+    if not isinstance(uid, str) or not uid:
+        return
+
+    watermark = _load_token_watermark(uid)
+    if watermark is None:
+        return
+
+    if not watermark.get('exists', True):
+        raise RevokedIdTokenError('The Firebase ID token belongs to a deleted account.')
+    if watermark.get('disabled'):
+        raise RevokedIdTokenError('The Firebase ID token belongs to a disabled account.')
+
+    issued_at = decoded_token.get('iat')
+    valid_after_ms = watermark.get('valid_after_ms') or 0
+    if isinstance(issued_at, (int, float)) and valid_after_ms and int(issued_at) * 1000 < int(valid_after_ms):
+        raise RevokedIdTokenError('The Firebase ID token has been revoked.')
+
+
+def validate_admin_key_auth_configuration() -> None:
+    """Reject a deployed process that enables ADMIN_KEY impersonation weakly.
+
+    ``ADMIN_KEY`` concatenated with a uid authenticates as *any* account, so a
+    deployed stage that leaves the mechanism on must at least back it with a
+    credential-strength secret. Local/dev/CI stages are exempt: their harnesses
+    deliberately use short, well-known keys.
+    """
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if stage not in ('prod', 'dev'):
+        return
+    if os.getenv('ADMIN_KEY_AUTH_ENABLED', 'true').strip().lower() != 'true':
+        return
+    admin_key = os.getenv('ADMIN_KEY') or ''
+    if not admin_key:
+        return
+    if len(admin_key) < MIN_ADMIN_KEY_LENGTH:
+        raise RuntimeError(
+            f'ADMIN_KEY_AUTH_ENABLED is on in stage {stage!r} with an ADMIN_KEY shorter than '
+            f'{MIN_ADMIN_KEY_LENGTH} characters; set ADMIN_KEY_AUTH_ENABLED=false or rotate ADMIN_KEY'
+        )
 
 
 def verify_token(token: str) -> str:
@@ -66,8 +192,10 @@ def verify_token(token: str) -> str:
 
     # Verify Firebase token
     try:
-        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-        return decoded_token['uid']
+        decoded_token = cast(
+            Any,
+            auth.verify_id_token(token, clock_skew_seconds=TOKEN_CLOCK_SKEW_SECONDS),  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        )
     except InvalidIdTokenError:
         # Only honored when no real Firebase credential is configured — every
         # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
@@ -80,6 +208,12 @@ def verify_token(token: str) -> str:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
+
+    # Deliberately outside the block above: RevokedIdTokenError subclasses
+    # InvalidIdTokenError, so raising it inside would be swallowed by the
+    # LOCAL_DEVELOPMENT fallback and silently downgraded to uid '123'.
+    enforce_token_not_revoked(decoded_token)
+    return decoded_token['uid']
 
 
 def get_current_user_uid(

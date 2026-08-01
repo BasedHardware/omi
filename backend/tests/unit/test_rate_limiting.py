@@ -40,6 +40,7 @@ def _rate_limit_stubs():
     firebase_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
     firebase_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
     firebase_auth.RevokedIdTokenError = type("RevokedIdTokenError", (Exception,), {})
+    firebase_auth.UserNotFoundError = type("UserNotFoundError", (Exception,), {})
 
     google_pkg = ModuleType("google")
     google_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -70,6 +71,10 @@ def _rate_limit_stubs():
         return allowed, remaining, retry_after
 
     redis_db_stub.check_rate_limit = _check_rate_limit
+    redis_db_stub.FIREBASE_TOKEN_WATERMARK_TTL_SECONDS = 60
+    redis_db_stub.cache_firebase_token_watermark = MagicMock()
+    redis_db_stub.get_cached_firebase_token_watermark = MagicMock(return_value=None)
+    redis_db_stub.delete_cached_firebase_token_watermark = MagicMock()
 
     database_auth = ModuleType("database.auth")
     database_users = ModuleType("database.users")

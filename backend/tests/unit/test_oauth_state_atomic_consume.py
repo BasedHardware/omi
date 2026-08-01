@@ -5,8 +5,11 @@ concurrent callbacks carrying the same state can both read the value before eith
 weakens replay protection. It now uses an atomic Redis GETDEL, so only one caller ever receives the
 value and a second consume of the same state returns None.
 
-routers/integrations.py has a heavy import graph, so it is imported under a stub finder that
-auto-mocks those namespaces (keeping models/fastapi/pydantic real), then the helper is called
+utils/x_connector.py had the same GET-then-DELETE shape and was not covered here, so it is
+exercised too: one uncovered consume path is enough to reintroduce the replay window.
+
+Both modules have a heavy import graph, so they are imported under a stub finder that
+auto-mocks those namespaces (keeping models/fastapi/pydantic real), then the helpers are called
 directly with the redis client patched.
 """
 
@@ -94,8 +97,27 @@ _finder = _Finder()
 _snap = _snapshot()
 _clear()
 sys.meta_path.insert(0, _finder)
+
+
+def _load_by_path(module_name, relative_path):
+    """Load a module that lives inside a stubbed namespace, so its own code is real."""
+    spec = importlib.util.spec_from_file_location(
+        module_name, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), relative_path)
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        # Do not leave a stub-wired module behind for other test files in this process.
+        sys.modules.pop(module_name, None)
+    return module
+
+
 try:
     from routers import integrations as integ
+
+    x_conn = _load_by_path('utils.x_connector', 'utils/x_connector.py')
 finally:
     sys.meta_path.remove(_finder)
     _restore(_snap)
@@ -126,4 +148,29 @@ def test_consume_is_single_use():
         second = integ.validate_and_consume_oauth_state('tok')
 
     assert first == {'uid': 'u1', 'app_key': 'a1'}
+    assert second is None
+
+
+def test_x_connector_consume_uses_atomic_getdel_not_get_then_delete():
+    fake_r = MagicMock()
+    fake_r.getdel.return_value = b'u1\nverifier-1\nhttps://example.test/done'
+    with patch.object(x_conn.redis_db, 'r', fake_r):
+        result = x_conn.consume_oauth_state('tok')
+
+    assert result == {'uid': 'u1', 'verifier': 'verifier-1', 'success_redirect_url': 'https://example.test/done'}
+    fake_r.getdel.assert_called_once_with('x_oauth_state:tok')
+    fake_r.get.assert_not_called()
+    fake_r.delete.assert_not_called()
+
+
+def test_x_connector_consume_is_single_use():
+    store = {'x_oauth_state:tok': b'u1\nverifier-1\n'}
+    fake_r = MagicMock()
+    fake_r.getdel.side_effect = lambda key: store.pop(key, None)
+
+    with patch.object(x_conn.redis_db, 'r', fake_r):
+        first = x_conn.consume_oauth_state('tok')
+        second = x_conn.consume_oauth_state('tok')
+
+    assert first == {'uid': 'u1', 'verifier': 'verifier-1', 'success_redirect_url': ''}
     assert second is None

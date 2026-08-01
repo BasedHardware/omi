@@ -88,6 +88,10 @@ def create_subscription_checkout_session(
 
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
+    except stripe.error.IdempotencyError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
+        # Callers own the key, so they are the only ones who can retry with a new
+        # one; swallowing this into None turns a retryable conflict into a 500.
+        raise
     except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
         raise
     except Exception as e:

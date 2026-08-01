@@ -188,7 +188,7 @@ final class ClientDeviceService {
     ]
     let attributes: [String: Any] = [
       kSecValueData as String: data,
-      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
     ]
     let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
     if updateStatus == errSecSuccess {
@@ -202,7 +202,7 @@ final class ClientDeviceService {
     }
     var addQuery = query
     addQuery[kSecValueData as String] = data
-    addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
     let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
     if addStatus != errSecSuccess {
       log("ClientDeviceService: keychain add unavailable (status \(addStatus))")

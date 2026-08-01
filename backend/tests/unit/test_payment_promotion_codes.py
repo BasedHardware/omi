@@ -352,3 +352,66 @@ def test_release_attached_schedules_swallows_list_errors():
         # Should not raise
         router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
     mock_ss.release.assert_not_called()
+
+
+# --- Checkout idempotency key ---
+
+
+def test_checkout_idempotency_key_covers_customer_and_resolved_promo():
+    """The key must change with every input that changes the Stripe request body,
+    or a retry after the customer id materialises reuses it with a different body
+    and Stripe answers IdempotencyError."""
+    client, router = _setup_payment_module()
+
+    mock_session = MagicMock()
+    mock_session.url = "https://checkout.stripe.com/test"
+    mock_session.id = "cs_test_789"
+    mock_promo_obj = MagicMock()
+    mock_promo_obj.id = "promo_abc123"
+    router.stripe_utils.create_subscription_checkout_session.reset_mock()
+    router.stripe_utils.create_subscription_checkout_session.return_value = mock_session
+    router.subscription_utils.can_user_make_payment.return_value = (True, None)
+
+    keys = []
+    for customer_id in (None, "cus_live"):
+        router.users_db.get_stripe_customer_id.return_value = customer_id
+        with patch.object(router.stripe, "PromotionCode") as mock_promo:
+            mock_promo.list.return_value = MagicMock(data=[mock_promo_obj])
+            with patch.object(router, "_try_reactivate_subscription", return_value=None):
+                response = client.post(
+                    "/v1/payments/checkout-session",
+                    json={"price_id": "price_123", "promotion_code": "WELCOME50"},
+                )
+        assert response.status_code == 200
+        keys.append(router.stripe_utils.create_subscription_checkout_session.call_args[0][2])
+
+    assert keys[0] != keys[1]
+    assert "cus_live" in keys[1]
+    assert "promo_abc123" in keys[1]
+
+
+def test_checkout_retries_once_with_fresh_key_on_idempotency_error():
+    """An IdempotencyError must retry rather than surface as a 500 that blocks the user."""
+    client, router = _setup_payment_module()
+
+    mock_session = MagicMock()
+    mock_session.url = "https://checkout.stripe.com/test"
+    mock_session.id = "cs_test_retry"
+    router.stripe_utils.create_subscription_checkout_session.reset_mock()
+    router.stripe_utils.create_subscription_checkout_session.side_effect = [
+        router.stripe.error.IdempotencyError("key reused with a different body"),
+        mock_session,
+    ]
+    router.subscription_utils.can_user_make_payment.return_value = (True, None)
+    router.users_db.get_stripe_customer_id.return_value = "cus_live"
+
+    with patch.object(router, "_try_reactivate_subscription", return_value=None):
+        response = client.post("/v1/payments/checkout-session", json={"price_id": "price_123"})
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "cs_test_retry"
+    calls = router.stripe_utils.create_subscription_checkout_session.call_args_list
+    assert len(calls) == 2
+    first_key, retry_key = calls[0][0][2], calls[1][0][2]
+    assert retry_key != first_key
+    assert retry_key.startswith(f"{first_key}:")

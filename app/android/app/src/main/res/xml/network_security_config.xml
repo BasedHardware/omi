@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
+    <!--
+      The local-Whisper STT provider POSTs to a user-entered LAN host over http
+      (app/lib/models/stt_provider.dart). Android's network-security-config has
+      no CIDR or wildcard support for IP ranges, so RFC1918 space cannot be
+      enumerated in a <domain> element; permitting cleartext in the base-config
+      is the only way that feature can work on a real device.
+      Every first-party endpoint is pinned back to https-only below so app and
+      backend traffic can never be downgraded.
+    -->
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">omi.me</domain>
+        <domain includeSubdomains="true">google.com</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">firebaseio.com</domain>
+        <domain includeSubdomains="true">gstatic.com</domain>
     </domain-config>
 </network-security-config>

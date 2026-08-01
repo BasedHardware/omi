@@ -3485,25 +3485,6 @@ actor RewindDatabase {
           arguments: [date]
         )
 
-        // `observations` references screenshots with ON DELETE SET NULL, so the
-        // sweep above only nulls the FK and leaves every LLM-written prose
-        // summary of the user's screen on disk forever. Retention promises the
-        // screen record is gone, so age the observations out by their own
-        // timestamp (this also covers rows whose screenshotId was already null).
-        try db.execute(
-          sql: "DELETE FROM observations WHERE createdAt < ?",
-          arguments: [date]
-        )
-
-        // Transcription sessions were only removed once they had zero segments,
-        // so a successfully-synced transcript (segments cascade-deleted, backend
-        // holds the copy) was kept locally forever. Age out synced sessions;
-        // unsynced ones are still pending upload and must survive.
-        try db.execute(
-          sql: "DELETE FROM transcription_sessions WHERE backendSynced = 1 AND startedAt < ?",
-          arguments: [date]
-        )
-
         var orphaned: [String] = []
         for chunkPath in videoChunksToCheck {
           let remainingCount =
@@ -3522,6 +3503,58 @@ actor RewindDatabase {
       return deleteResult
     } catch {
       await recoverFromMaintenanceError(error, operation: "retention_cleanup")
+      throw error
+    }
+  }
+
+  /// Result of the transcript/observation retention sweep.
+  struct TranscriptRetentionResult {
+    let observations: Int
+    let transcriptionSessions: Int
+  }
+
+  /// Delete conversation transcripts and screen observations older than the
+  /// specified date.
+  ///
+  /// This runs on its own, much longer window (`RewindSettings.transcriptRetentionDays`)
+  /// than the screenshot sweep: screenshots are bulky media governed by "how long
+  /// to keep screen recordings", while transcripts and observations are the
+  /// user's durable record and must never be destroyed by shortening the
+  /// screen-recording window.
+  ///
+  /// `observations` references screenshots with ON DELETE SET NULL, so the
+  /// screenshot sweep only nulls the FK and leaves every LLM-written prose
+  /// summary of the user's screen on disk; age them out by their own timestamp
+  /// (this also covers rows whose screenshotId was already null).
+  ///
+  /// Transcription sessions were only removed once they had zero segments, so a
+  /// successfully-synced transcript (segments cascade-deleted, backend holds the
+  /// copy) was kept locally forever. Age out synced sessions; unsynced ones are
+  /// still pending upload and must survive.
+  @discardableResult
+  func deleteTranscriptsAndObservationsOlderThan(_ date: Date) async throws -> TranscriptRetentionResult {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    do {
+      return try await dbQueue.write { db -> TranscriptRetentionResult in
+        try db.execute(
+          sql: "DELETE FROM observations WHERE createdAt < ?",
+          arguments: [date]
+        )
+        let observations = db.changesCount
+
+        try db.execute(
+          sql: "DELETE FROM transcription_sessions WHERE backendSynced = 1 AND startedAt < ?",
+          arguments: [date]
+        )
+        let sessions = db.changesCount
+
+        return TranscriptRetentionResult(observations: observations, transcriptionSessions: sessions)
+      }
+    } catch {
+      await recoverFromMaintenanceError(error, operation: "transcript_retention_cleanup")
       throw error
     }
   }
