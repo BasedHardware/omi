@@ -272,3 +272,9 @@ htmlcov/
 
 # pnpm store
 .pnpm-store/
+
+# The lefthook dispatcher probes `pnpm lefthook -h`, and pnpm answers by
+# writing a lockfile and an unanswered allowBuilds manifest at the root. The
+# repo installs with npm, so these are hook debris, never a dependency record.
+/pnpm-lock.yaml
+/pnpm-workspace.yaml
