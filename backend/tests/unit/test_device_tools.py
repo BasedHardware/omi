@@ -12,6 +12,7 @@ from utils.device_tools import (
     build_device_tools,
     device_tool_result_key,
 )
+from utils.retrieval.agentic import STANDARD_TOOL_NAMES, _extract_app_id
 
 
 class FakeCallback:
@@ -207,8 +208,6 @@ def test_device_tool_names_are_excluded_from_app_tool_detection():
     # Device tools are named like core tools (propose_message). Without this
     # exclusion _extract_app_id reads "propose" as an app id and routes the call
     # to a non-existent app.
-    from utils.retrieval.agentic import STANDARD_TOOL_NAMES, _extract_app_id
-
     for name in DEVICE_TOOL_NAMES:
         assert name in STANDARD_TOOL_NAMES
         assert _extract_app_id(name) is None
