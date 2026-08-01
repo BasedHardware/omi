@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
-import { translateToGlosses, defaultSignOpts } from './signLanguage'
-import { isSignLanguageEnabled, setSignLanguageEnabled } from '../integrations'
+import { translateToGlosses, defaultSignOpts, clearNegativeCache } from './signLanguage'
+import { isSignLanguageEnabled, setSignLanguageEnabled } from '../ipc/integrations'
 
 vi.mock('axios')
 
@@ -10,6 +10,7 @@ const mockedAxios = vi.mocked(axios)
 describe('translateToGlosses', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearNegativeCache()
   })
 
   it('returns empty result for empty input', async () => {
@@ -67,7 +68,10 @@ describe('translateToGlosses', () => {
     })
 
     const callArg = mockedAxios.get.mock.calls[0][0] as string
-    expect(callArg.length).toBeLessThanOrEqual(256 + 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose?text='.length)
+    const urlPrefix = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose?text='
+    const encodedText = encodeURIComponent(longText.slice(0, 256))
+    const expectedMaxLen = urlPrefix.length + encodedText.length + '&spoken=en&signed=ase'.length
+    expect(callArg.length).toBeLessThanOrEqual(expectedMaxLen)
   })
 
   it('returns TRANSLATION_UNAVAILABLE when both pose and video APIs fail', async () => {

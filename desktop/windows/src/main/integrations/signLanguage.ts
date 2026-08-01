@@ -217,11 +217,14 @@ export async function translateToGlosses(
       originalText: text,
       poseUrl: '',
       assetType: 'pose',
-      swrFull: 'TRANSLATION_UNAVAILABLE',
-      glosses: []
-    }
-  }
+       swrFull: 'TRANSLATION_UNAVAILABLE',
+       glosses: []
+     }
+   }
 }
 
+export function clearNegativeCache(): void {
+  negativeCache.clear()
+}
 
 
