@@ -455,7 +455,13 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                 }
 
                 emitDisplayState("attaching")
-                let capability = try session.addDisplay()
+                let capability: MWDATDisplay.Display
+                do {
+                    capability = try session.addDisplay()
+                } catch {
+                    emitDisplayState("error")
+                    throw error
+                }
                 display = capability
 
                 displayStateToken = capability.statePublisher.listen { [weak self] state in
@@ -509,7 +515,16 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         func clearDisplay() throws {
             #if canImport(MWDATDisplay)
                 guard let capability = display else { return }
-                Task { try? await capability.clearDisplay() }
+                Task { [weak self] in
+                    do {
+                        try await capability.clearDisplay()
+                    } catch {
+                        self?.emitError(
+                            code: "display_clear_failed",
+                            message: (error as? DisplayError)?.description ?? error.localizedDescription
+                        )
+                    }
+                }
             #endif
         }
 
