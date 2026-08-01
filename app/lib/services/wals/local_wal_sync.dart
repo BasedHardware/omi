@@ -57,11 +57,27 @@ bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
 
 SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
-        ? SyncUploadLane.fresh
-        : SyncUploadLane.backfill;
+    ? SyncUploadLane.fresh
+    : SyncUploadLane.backfill;
 
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
     syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
+
+/// The upload lanes [pending] would actually use.
+///
+/// Rate-limit cooldowns are per lane, so callers deciding whether uploading is possible at all
+/// must ask about the lanes the work needs — a fresh-lane cooldown says nothing about a backlog
+/// that uploads through backfill.
+Set<SyncUploadLane> pendingSyncUploadLanes(List<Wal> pending, int nowSeconds) =>
+    pending.map((wal) => _syncLaneForWal(wal, nowSeconds)).toSet();
+
+/// True only when every lane in [lanes] is in cooldown. With nothing pending there is no lane to
+/// judge, so [fallback] decides.
+bool allSyncLanesLimited(
+  Set<SyncUploadLane> lanes,
+  bool Function(String lane) isLaneLimited, {
+  required bool fallback,
+}) => lanes.isEmpty ? fallback : lanes.every((lane) => isLaneLimited(lane.name));
 
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
@@ -82,8 +98,8 @@ List<Wal> nextSyncUploadBatch(
 }) {
   SyncUploadLane effectiveLane(Wal wal) =>
       wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-          ? SyncUploadLane.backfill
-          : _syncLaneForWal(wal, nowSeconds);
+      ? SyncUploadLane.backfill
+      : _syncLaneForWal(wal, nowSeconds);
 
   final ordered = List<Wal>.from(pending)
     ..sort((a, b) {
@@ -668,8 +684,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       forcedBackfillConversationIds.addAll(oversizedFreshConversationIds(candidates, batchNowSeconds));
       SyncUploadLane effectiveLane(Wal wal) =>
           wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(wal, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(wal, batchNowSeconds);
       final pending = candidates
           .where(
             (wal) =>
@@ -687,8 +703,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchLane =
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(batch.first, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(batch.first, batchNowSeconds);
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {

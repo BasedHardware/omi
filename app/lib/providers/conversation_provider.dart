@@ -15,13 +15,14 @@ import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      String? speakerId,
+    });
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
 ///
@@ -103,10 +104,10 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -344,8 +345,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -428,8 +430,10 @@ class ConversationProvider extends ChangeNotifier {
     // can be missed (socket drop, app backgrounded on Android), and unlike
     // fetchConversations this path never rebuilt processingConversations — so a
     // stale card stayed pinned at the top of the list indefinitely.
-    final resolvedIds =
-        newConversations.where((c) => c.status != ConversationStatus.processing).map((c) => c.id).toSet();
+    final resolvedIds = newConversations
+        .where((c) => c.status != ConversationStatus.processing)
+        .map((c) => c.id)
+        .toSet();
     if (resolvedIds.isNotEmpty) {
       processingConversations.removeWhere((c) => resolvedIds.contains(c.id));
     }
@@ -981,8 +985,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -995,8 +999,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -1070,6 +1074,28 @@ class ConversationProvider extends ChangeNotifier {
     if (idx == -1) return null;
 
     return (date, idx);
+  }
+
+  /// Same lookup as [getConversationDateAndIndex] for callers that only hold an
+  /// id (a chat message's conversation reference, a memory's `conversationId`).
+  /// Resolving through the loaded conversation keeps the day key derived from
+  /// `startedAt ?? createdAt` in local time — the contract the groups use.
+  (DateTime, int)? getConversationDateAndIndexById(String conversationId) {
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return null;
+    return getConversationDateAndIndex(conversations[idx]);
+  }
+
+  /// Places [conversation] in its local-day group if it isn't there yet and
+  /// returns that group's key, so a caller navigating straight to a detail page
+  /// selects the same day the list groups it under.
+  DateTime ensureConversationInGroup(ServerConversation conversation) {
+    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+    final group = groupedConversations.putIfAbsent(date, () => []);
+    if (!group.any((c) => c.id == conversation.id)) {
+      group.insert(0, conversation);
+    }
+    return date;
   }
 
   int getConversationIndexById(String id, DateTime date) {

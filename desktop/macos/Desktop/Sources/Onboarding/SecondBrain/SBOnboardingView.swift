@@ -28,6 +28,7 @@ struct SBOnboardingView: View {
   @State private var selectedImportConnector: ImportConnector?
   /// Language step: false shows the detected default + Continue; true reveals the picker.
   @State private var languageChanging = false
+  @State private var showAIAssistants = false
 
   /// Same dune background as sign-in, for a continuous entry experience.
   private static let backgroundImage: NSImage? = {
@@ -171,6 +172,7 @@ struct SBOnboardingView: View {
       }
       .buttonStyle(.plain)
       .help("Go back and change an earlier answer")
+      .padding(.trailing, 12)
     }
   }
 
@@ -262,7 +264,7 @@ struct SBOnboardingView: View {
           }
         }
         Divider().overlay(sb.ink(.w08))
-        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.") }
+        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.").lineLimit(1) }
         Divider().overlay(sb.ink(.w08))
         trustRow("YOURS") { Text("Pause me anytime. Delete anything, forever.") }
       }
@@ -538,7 +540,9 @@ struct SBOnboardingView: View {
             }
             Text(opt.sub).geist(size: 13).foregroundStyle(sb.ink(.w45))
             Spacer()
-            if model.chosenShortcut == opt.shortcut {
+            if model.shortcutRecording {
+              Text("Press a key").geist(size: 12).foregroundStyle(sb.ink(.w45))
+            } else if model.chosenShortcut == opt.shortcut {
               Text("✓").geist(size: 14).foregroundStyle(sb.ink(.w7))
             }
           }
@@ -551,7 +555,12 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(.plain)
       }
-      if model.shortcutPicked {
+      if model.shortcutRecording {
+        Text("Press the shortcut you want to use.")
+          .geist(size: 15, weight: .medium)
+          .foregroundStyle(sb.ink(.w6))
+          .padding(.top, 6)
+      } else if model.shortcutPicked {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
             ForEach(model.shortcutTokens, id: \.self) { tok in keycap(tok, active: model.shortcutPressed) }
@@ -559,7 +568,7 @@ struct SBOnboardingView: View {
           Text(
             model.shortcutPressed
               ? "Perfect, that works."
-              : (isTalk ? "Now hold it and say something." : "Now give it a tap.")
+              : "Now press it to test."
           )
           .geist(size: 15, weight: .medium)
           .foregroundStyle(model.shortcutPressed ? sb.ink(.w85) : sb.ink(.w6))
@@ -599,7 +608,7 @@ struct SBOnboardingView: View {
             Text("and ask me about it, out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
           }
           Text(
-            "Try \u{201c}what's on my screen right now?\u{201d} I can see it, and I answer at the top of your screen."
+            "Ask me what’s on your screen in \(model.selectedResponseLanguageName). I can see it, and I answer at the top of your screen."
           )
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
@@ -649,11 +658,27 @@ struct SBOnboardingView: View {
   private var agentsWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
-        ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
-            model.connectAgent(row.id)
+        Button {
+          showAIAssistants.toggle()
+        } label: {
+          HStack {
+            Text("AI assistants").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+            Spacer()
+            Image(systemName: showAIAssistants ? "chevron.up" : "chevron.down")
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(sb.ink(.w45))
           }
-          if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 12)
+        if showAIAssistants {
+          Divider().overlay(sb.ink(.w08))
+          ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
+            connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
+              model.connectAgent(row.id)
+            }
+            if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
+          }
         }
       }
       .padding(.horizontal, 14)

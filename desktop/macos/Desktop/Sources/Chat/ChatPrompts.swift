@@ -772,6 +772,12 @@ struct ChatPromptBuilder {
     datetimeFormatter.string(from: date)
   }
 
+  static func currentTimePrompt(for prompt: String, at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = timeZone
+    return "# Current Time\n\(formatter.string(from: date)) (\(timeZone.identifier))\n\n\(prompt)"
+  }
+
   /// Build a system prompt with the given variables
   static func build(
     template: String,

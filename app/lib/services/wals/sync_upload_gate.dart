@@ -8,12 +8,13 @@ import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/mutex.dart';
 
-typedef SyncFilesUploader = Future<UploadFilesResult> Function(
-  List<File> files, {
-  UploadProgressCallback? onUploadProgress,
-  String? conversationId,
-  SyncUploadLane syncLane,
-});
+typedef SyncFilesUploader =
+    Future<UploadFilesResult> Function(
+      List<File> files, {
+      UploadProgressCallback? onUploadProgress,
+      String? conversationId,
+      SyncUploadLane syncLane,
+    });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 
 /// Account-global admission gate for every `/v2/sync-local-files` upload.
@@ -27,9 +28,9 @@ class SyncUploadGate {
     required SyncRateLimiter limiter,
     required SyncFilesUploader uploader,
     required FairUseStatusLoader fairUseStatusLoader,
-  })  : _limiter = limiter,
-        _uploader = uploader,
-        _fairUseStatusLoader = fairUseStatusLoader;
+  }) : _limiter = limiter,
+       _uploader = uploader,
+       _fairUseStatusLoader = fairUseStatusLoader;
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
@@ -48,7 +49,10 @@ class SyncUploadGate {
   /// Reconciles a previously confirmed fair-use restriction with the server.
   /// Returns whether uploads are currently allowed after all cooldowns.
   Future<bool> prepareToUpload({SyncUploadLane lane = SyncUploadLane.fresh}) async {
-    if (lane == SyncUploadLane.fresh && _limiter.hasPersistedFairUseState) {
+    // Reconcile on every lane, not just fresh. A persisted fair-use cooldown does not gate
+    // backfill, but it keeps the account in a limited state that nothing else clears, so a user
+    // whose whole backlog is backfill never reaches the self-heal.
+    if (_limiter.hasPersistedFairUseState) {
       await reconcileFairUseStatus();
     }
     return !_limiter.isLimitedForLane(lane.name);
@@ -107,8 +111,8 @@ class SyncUploadGate {
           kind: _limiter.reason == RateLimitReason.backendBusy
               ? SyncRateLimitKind.backendCapacity
               : lane == SyncUploadLane.backfill
-                  ? SyncRateLimitKind.backfillPaced
-                  : SyncRateLimitKind.fairUse,
+              ? SyncRateLimitKind.backfillPaced
+              : SyncRateLimitKind.fairUse,
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
         );
       }

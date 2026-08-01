@@ -57,6 +57,10 @@ enum DefaultsKey: String {
   case rewindDisableContentCache = "rewindDisableContentCache"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  // Task-order migration keys are typed so TasksPage and its tests share the
+  // migration contract instead of repeating raw UserDefaults literals.
+  case tasksCategoryOrder = "TasksCategoryOrder"
+  case tasksSortOrderMigrated = "TasksSortOrderMigrated"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -70,6 +74,19 @@ struct ScopedDefaultsKey {
 
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+  }
+
+  static func tasksFullSyncCompleted(ownerID: String) -> Self {
+    Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
+  }
+
+  static func restoreLegacyConversationItemsCompleted(ownerID: String) -> Self {
+    Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
+  }
+
+  /// Owner-scoped key for the legacy task-order migration completion marker.
+  static func tasksSortOrderMigrated(ownerID: String) -> Self {
+    Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }
 }
 

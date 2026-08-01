@@ -3,6 +3,17 @@ import XCTest
 @testable import Omi_Computer
 
 final class DashboardCaptureStateTests: XCTestCase {
+  @MainActor
+  func testListeningModeTitlePreservesOakleyMetaName() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.recordingInputDeviceName = "Oakley Meta Vanguard"
+
+    XCTAssertEqual(
+      CaptureListeningLogic.listeningModeTitle(appState: appState, raw: "always"),
+      "Oakley Meta Vanguard")
+  }
+
   func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
