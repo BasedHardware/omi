@@ -94,6 +94,30 @@ class ProbeWindowsUpdateFeedTests(unittest.TestCase):
         with self.assertRaisesRegex(PROBE.ProbeError, "missing /v2/desktop/update-feed/windows"):
             PROBE.probe_channel("https://api.omi.me", "beta", fetch=fetch_missing)
 
+    def test_probe_multiple_channels(self) -> None:
+        def fetch(url: str) -> tuple[int, object]:
+            if "channel=beta" in url:
+                return 200, ok_payload(requested="beta", served="beta")
+            if "channel=stable" in url:
+                return 200, ok_payload(requested="stable", served="stable")
+            raise AssertionError(f"unexpected url: {url}")
+
+        results = PROBE.probe("https://api.omi.me", channels=("beta", "stable"), fetch=fetch)
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["served_channel"], "beta")
+        self.assertEqual(results[1]["served_channel"], "stable")
+
+    def test_probe_stable_missing_fails_without_fallthrough(self) -> None:
+        """If stable has no feed it must NOT fall through to beta."""
+        def fetch(url: str) -> tuple[int, object]:
+            if "channel=beta" in url:
+                return 200, ok_payload(requested="beta", served="beta")
+            # stable absent → backend returns 404 per its non-fallthrough contract
+            return 404, {"detail": "No Windows update feed found for channel: stable"}
+
+        with self.assertRaisesRegex(PROBE.ProbeError, "stable"):
+            PROBE.probe("https://api.omi.me", channels=("beta", "stable"), fetch=fetch)
+
     def test_main_exits_nonzero_when_route_missing(self) -> None:
         with mock.patch.object(
             PROBE,

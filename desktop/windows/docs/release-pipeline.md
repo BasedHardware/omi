@@ -96,10 +96,18 @@ any Windows build that contains the client change is published. The client fails
 closed when the route is missing (intentional — it must not fall back to the
 broken repository-wide provider). `desktop_windows_release.yml` runs
 `.github/scripts/probe_windows_update_feed.py` against production **before**
-tagging so a missing deploy cannot mint another broken cohort. If the probe
+tagging so a missing deploy cannot mint another broken cohort. The probe covers
+both channels that real clients can request (`beta` and `stable`), because the
+backend deliberately does not fall stable through to beta. If the probe
 fails with "missing /v2/desktop/update-feed/windows", deploy backend `main` via
 `gcp_backend.yml` (`environment=prod`, `deploy_targets=cloud-run-only`, and a
 release-eligible main SHA) and re-run the release.
+
+**Break-glass.** If the probe itself is broken or the GitHub runner cannot reach
+`api.omi.me`, supply a `bypass_update_feed_probe_reason` (a tracking-issue URL or
+short rationale) when dispatching the workflow. That skips the probe for that one
+release while leaving the reason in the run log for audit. Do not use this to
+ship when the route is genuinely absent.
 
 The workflow marks new Windows builds **prerelease**. Stable users receive only
 releases that have been promoted by clearing that flag; beta users receive the

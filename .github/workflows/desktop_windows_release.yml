@@ -40,6 +40,10 @@ on:
         description: 'Optional explicit version to tag (for example, 1.2.0)'
         required: false
         type: string
+      bypass_update_feed_probe_reason:
+        description: 'Emergency only: type a tracking-issue/reason to skip the production update-feed probe. Empty = probe runs.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -69,10 +73,30 @@ jobs:
           fetch-depth: 0
 
       # Windows clients since #10610 fail closed without this production route.
-      # Probe before tagging so a missing deploy cannot mint another broken cohort.
-      - name: Probe production Windows update-feed
+      # Probe BOTH channels that real clients can request: beta (opt-in) and
+      # stable (the default for fresh installs and un-toggled settings). The
+      # backend never falls stable through to beta, so a beta-only probe passing
+      # while stable 404s would still ship a broken default cohort.
+      - name: Probe production Windows update-feed (beta + stable)
+        if: ${{ github.event.inputs.bypass_update_feed_probe_reason == '' }}
         shell: bash
-        run: python3 .github/scripts/probe_windows_update_feed.py --channel beta
+        run: |
+          python3 .github/scripts/probe_windows_update_feed.py \
+            --channel beta \
+            --channel stable
+
+      # Break-glass: probe itself broken, or the GitHub runner cannot reach
+      # api.omi.me. Requires a non-empty reason (tracked in the run log) so a
+      # transient probe failure cannot indefinitely block Windows hotfixes,
+      # while still preventing an un-audited release when the route is genuinely
+      # absent.
+      - name: Probe bypassed (audited emergency release)
+        if: ${{ github.event.inputs.bypass_update_feed_probe_reason != '' }}
+        shell: bash
+        run: |
+          echo "::warning::Windows update-feed probe BYPASSED."
+          echo "Reason: ${{ github.event.inputs.bypass_update_feed_probe_reason }}"
+          echo "This is recorded for audit. The route deploy (#10610) is still required."
 
       - name: Plan release (compute next version, tag, sync back to main)
         id: plan
