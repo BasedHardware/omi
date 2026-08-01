@@ -69,4 +69,20 @@ void main() {
       expect(request.arguments['text'], body);
     });
   });
+
+  group('DeviceToolRequest.recoverCallId', () {
+    test('recovers the call id from a frame too damaged to execute', () {
+      // The server is blocked on this id. Refusing to run the call is right;
+      // refusing to answer it makes the user wait out the whole timeout.
+      final raw = jsonEncode({'call_id': 'abc-123', 'tool': ''});
+
+      expect(DeviceToolRequest.tryParse(raw), isNull);
+      expect(DeviceToolRequest.recoverCallId(raw), 'abc-123');
+    });
+
+    test('returns null when there is no id to answer', () {
+      expect(DeviceToolRequest.recoverCallId('{not json'), isNull);
+      expect(DeviceToolRequest.recoverCallId(jsonEncode({'tool': 'propose_message'})), isNull);
+    });
+  });
 }

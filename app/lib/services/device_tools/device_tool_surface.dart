@@ -121,6 +121,22 @@ class DeviceToolSurface {
     ];
   }
 
+  /// The tools this specific device can actually run, as opposed to the ones
+  /// the platform defines.
+  ///
+  /// `tools` describes iOS; this asks the device. A simulator, an iPod touch, or
+  /// an iPad with no messaging service reports `can_send_text: false`, and
+  /// offering `propose_message` there would send the model on a round trip that
+  /// can only come back `messaging_unavailable`. The per-request contract says
+  /// the client declares what it can run, so the check belongs here rather than
+  /// in the model's error handling.
+  Future<List<DeviceToolDescriptor>> availableTools() async {
+    if (!isSupported) return const [];
+    final capabilities = await this.capabilities();
+    final canSendText = capabilities['can_send_text'] == true;
+    return tools.where((tool) => tool.name != proposeMessageTool || canSendText).toList();
+  }
+
   Future<Map<String, dynamic>> capabilities() async {
     if (!isSupported) {
       return {
