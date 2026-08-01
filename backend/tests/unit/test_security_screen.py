@@ -10,6 +10,7 @@ from utils.security.screen import (
     MAX_SCREEN_CHARS,
     SCREEN_CHUNK_CHARS,
     SCREEN_CHUNK_OVERLAP_CHARS,
+    SECURITY_SCREEN_SYSTEM_PROMPT,
     UNSCREENED_PREFIX,
     ContentSource,
     LabelledContent,
@@ -29,8 +30,8 @@ def _screener(answers, **kwargs):
     remaining = list(answers)
     calls = []
 
-    async def classifier(prompt, cancel):
-        calls.append(prompt)
+    async def classifier(system, prompt, cancel):
+        calls.append((system, prompt))
         return remaining.pop(0) if remaining else None
 
     return SecurityScreener(classifier, retry_delays_seconds=FAST_RETRIES, **kwargs), calls
@@ -183,7 +184,24 @@ async def test_a_clean_tool_result_screens_auto():
     assert outcome.kind is ScreenOutcomeKind.SCREENED
     assert outcome.verdict is not None and outcome.verdict.decision is SecurityPosture.AUTO
     assert len(calls) == 1
-    assert calls[0].startswith('You are a security boundary classifier.')
+    system, prompt = calls[0]
+    assert system.startswith('You are a security boundary classifier.')
+    assert 'Q3 revenue was up.' in prompt
+
+
+async def test_the_policy_is_a_system_message_and_the_chunk_a_user_message():
+    seen = []
+
+    async def classifier(system, prompt, cancel):
+        seen.append((system, prompt))
+        return '{"decision":"auto"}'
+
+    screener = SecurityScreener(classifier, retry_delays_seconds=FAST_RETRIES)
+    outcome = await screener.screen(_tool_result('hello'))
+    assert outcome.kind is ScreenOutcomeKind.SCREENED
+    system, prompt = seen[0]
+    assert system == SECURITY_SCREEN_SYSTEM_PROMPT
+    assert 'tool_result:get_gmail_messages_tool' in prompt
 
 
 async def test_the_strictest_chunk_wins():
@@ -217,7 +235,7 @@ async def test_an_oversized_classifier_response_is_rejected():
 
 
 async def test_a_raising_classifier_is_unavailable_not_an_exception():
-    async def classifier(prompt, cancel):
+    async def classifier(system, prompt, cancel):
         raise RuntimeError('provider down')
 
     screener = SecurityScreener(classifier, retry_delays_seconds=FAST_RETRIES)
@@ -226,7 +244,7 @@ async def test_a_raising_classifier_is_unavailable_not_an_exception():
 
 
 async def test_a_hung_classifier_times_out_to_unavailable():
-    async def classifier(prompt, cancel):
+    async def classifier(system, prompt, cancel):
         await asyncio.sleep(10)
         return '{"decision":"auto"}'
 
@@ -248,7 +266,7 @@ async def test_cancellation_during_the_retry_backoff_stops_the_screen():
     cancel = asyncio.Event()
     calls = []
 
-    async def classifier(prompt, token):
+    async def classifier(system, prompt, token):
         calls.append(prompt)
         cancel.set()
         return None
@@ -260,16 +278,55 @@ async def test_cancellation_during_the_retry_backoff_stops_the_screen():
 
 
 async def test_a_shadow_classifier_never_changes_the_verdict():
-    async def authoritative(prompt, cancel):
+    async def authoritative(system, prompt, cancel):
         return '{"decision":"auto"}'
 
-    async def shadow(prompt, cancel):
+    async def shadow(system, prompt, cancel):
         return '{"decision":"strict","reason":"candidate"}'
 
     screener = SecurityScreener(authoritative, shadow=shadow, retry_delays_seconds=FAST_RETRIES)
     outcome = await screener.screen(_tool_result('hello'))
     assert outcome.kind is ScreenOutcomeKind.SCREENED
     assert outcome.verdict is not None and outcome.verdict.decision is SecurityPosture.AUTO
+
+
+async def test_a_truncated_payload_fails_closed_to_strict():
+    screener, calls = _screener(['{"decision":"auto"}'])
+    outcome = await screener.screen(_tool_result('a' * 40_000))
+    assert outcome.kind is ScreenOutcomeKind.SCREENED
+    assert outcome.verdict is not None and outcome.verdict.decision is SecurityPosture.STRICT
+    assert calls == []
+
+
+async def test_a_strict_verdict_is_not_downgraded_by_a_later_unavailable_chunk():
+    answers = ['{"decision":"strict","reason":"exfiltration"}', None, None, None, None, '{"decision":"auto"}']
+    screener, calls = _screener(answers)
+    outcome = await screener.screen(_tool_result('a' * (SCREEN_CHUNK_CHARS + 1)))
+    assert outcome.kind is ScreenOutcomeKind.SCREENED
+    assert outcome.verdict is not None and outcome.verdict.decision is SecurityPosture.STRICT
+    assert outcome.verdict.reason == 'exfiltration'
+
+
+async def test_an_unavailable_chunk_without_a_strict_verdict_is_still_unavailable():
+    screener, calls = _screener([None, None, None, None, '{"decision":"auto"}'])
+    outcome = await screener.screen(_tool_result('a' * (SCREEN_CHUNK_CHARS + 1)))
+    assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
+
+
+async def test_the_total_screen_budget_bounds_all_retries():
+    calls = []
+
+    async def classifier(system, prompt, cancel):
+        calls.append(prompt)
+        await asyncio.sleep(10)
+        return '{"decision":"auto"}'
+
+    screener = SecurityScreener(
+        classifier, retry_delays_seconds=FAST_RETRIES, timeout_seconds=None, total_timeout_seconds=0.01
+    )
+    outcome = await screener.screen(_tool_result('hello'))
+    assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
+    assert len(calls) == 1
 
 
 def test_the_unscreened_notice_names_the_kind_and_forbids_instructions():

@@ -228,7 +228,7 @@ class ScreenPayload:
     truncated: bool
 
 
-SecurityClassifier = Callable[[str, asyncio.Event], Awaitable[Optional[str]]]
+SecurityClassifier = Callable[[str, str, asyncio.Event], Awaitable[Optional[str]]]
 
 
 def unscreened_notice(noun: str) -> str:
@@ -364,11 +364,13 @@ class SecurityScreener:
         shadow: Optional[SecurityClassifier] = None,
         retry_delays_seconds: Sequence[float] = SCREEN_RETRY_DELAYS_SECONDS,
         timeout_seconds: Optional[float] = None,
+        total_timeout_seconds: Optional[float] = None,
     ) -> None:
         self._classifier = classifier
         self._shadow = shadow
         self._retry_delays = tuple(retry_delays_seconds)
         self._timeout_seconds = timeout_seconds
+        self._total_timeout_seconds = total_timeout_seconds
 
     async def screen(
         self,
@@ -378,20 +380,29 @@ class SecurityScreener:
         """Screen a batch of labelled content.
 
         Chunks are classified :data:`SCREEN_CHUNK_CONCURRENCY` at a time and the
-        strictest verdict wins; a single chunk the classifier never answers
-        makes the whole screen unavailable.
+        strictest verdict wins. A payload whose middle was cut out is unexamined
+        in that span, so it fails closed to strict. A chunk the classifier never
+        answers makes the screen unavailable unless a strict verdict was already
+        established — the known verdict is never downgraded by a later failure.
         """
         payload = screen_payload(sources)
         if payload is None:
             return ScreenOutcome.nothing_to_screen()
+        if payload.truncated:
+            return ScreenOutcome.screened(SecurityScreenVerdict.strict('input truncated'))
         token = cancel if cancel is not None else asyncio.Event()
         chunks = screen_chunks(payload.content)
-        authoritative = self._classify_chunks(self._classifier, chunks, token)
+        deadline = (
+            None
+            if self._total_timeout_seconds is None
+            else asyncio.get_running_loop().time() + self._total_timeout_seconds
+        )
+        authoritative = self._classify_chunks(self._classifier, chunks, token, deadline)
         if self._shadow is None:
             return await authoritative
         return await run_shadow_screen(
             authoritative,
-            self._classify_chunks(self._shadow, chunks, token),
+            self._classify_chunks(self._shadow, chunks, token, deadline),
             lambda _authoritative, _shadow: None,
         )
 
@@ -400,18 +411,26 @@ class SecurityScreener:
         classifier: SecurityClassifier,
         chunks: Sequence[str],
         cancel: asyncio.Event,
+        deadline: Optional[float],
     ) -> ScreenOutcome:
         verdict = SecurityScreenVerdict.auto()
+        saw_unavailable = False
         for start in range(0, len(chunks), SCREEN_CHUNK_CONCURRENCY):
             if cancel.is_set():
                 return ScreenOutcome.unavailable()
             batch = chunks[start : start + SCREEN_CHUNK_CONCURRENCY]
-            results = await asyncio.gather(*(self._classify_chunk(classifier, chunk, cancel) for chunk in batch))
+            results = await asyncio.gather(
+                *(self._classify_chunk(classifier, chunk, cancel, deadline) for chunk in batch)
+            )
             for chunk_verdict in results:
                 if chunk_verdict is None:
-                    return ScreenOutcome.unavailable()
-                if chunk_verdict.decision is SecurityPosture.STRICT:
+                    saw_unavailable = True
+                elif chunk_verdict.decision is SecurityPosture.STRICT:
                     verdict = chunk_verdict
+        if verdict.decision is SecurityPosture.STRICT:
+            return ScreenOutcome.screened(verdict)
+        if saw_unavailable:
+            return ScreenOutcome.unavailable()
         return ScreenOutcome.screened(verdict)
 
     async def _classify_chunk(
@@ -419,32 +438,45 @@ class SecurityScreener:
         classifier: SecurityClassifier,
         chunk: str,
         cancel: asyncio.Event,
+        deadline: Optional[float],
     ) -> Optional[SecurityScreenVerdict]:
-        prompt = f'{SECURITY_SCREEN_SYSTEM_PROMPT}\n\n{chunk}'
         for attempt in range(len(self._retry_delays) + 1):
             if cancel.is_set():
                 return None
-            answer = await self._invoke(classifier, prompt, cancel)
+            remaining = None if deadline is None else deadline - asyncio.get_running_loop().time()
+            if remaining is not None and remaining <= 0:
+                return None
+            answer = await self._invoke(classifier, SECURITY_SCREEN_SYSTEM_PROMPT, chunk, cancel, remaining)
             if answer is not None and len(answer) <= MAX_SCREEN_RESPONSE_CHARS:
                 verdict = parse_security_screen_verdict(answer)
                 if verdict is not None:
                     return verdict
             if attempt < len(self._retry_delays):
-                if await self._sleep_or_cancel(self._retry_delays[attempt], cancel):
+                delay = self._retry_delays[attempt]
+                if remaining is not None:
+                    delay = min(delay, remaining)
+                    if delay <= 0:
+                        return None
+                if await self._sleep_or_cancel(delay, cancel):
                     return None
         return None
 
     async def _invoke(
         self,
         classifier: SecurityClassifier,
-        prompt: str,
+        system: str,
+        user: str,
         cancel: asyncio.Event,
+        remaining: Optional[float],
     ) -> Optional[str]:
-        call = classifier(prompt, cancel)
+        call = classifier(system, user, cancel)
         try:
-            if self._timeout_seconds is None:
+            if self._timeout_seconds is None and remaining is None:
                 return await call
-            return await asyncio.wait_for(call, self._timeout_seconds)
+            timeout = self._timeout_seconds
+            if remaining is not None:
+                timeout = remaining if timeout is None else min(timeout, remaining)
+            return await asyncio.wait_for(call, timeout)
         except Exception:
             return None
 
