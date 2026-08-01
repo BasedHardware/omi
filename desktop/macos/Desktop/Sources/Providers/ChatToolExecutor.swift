@@ -127,6 +127,20 @@ class ChatToolExecutor {
     ]
   }
 
+  /// Full Disk Access status with the restart case spelled out.
+  ///
+  /// `not_granted` is the wrong thing to tell the model when the user has
+  /// already granted the permission — it sends them back to System Settings to
+  /// toggle something that is already on. The grant only takes effect for a
+  /// process started after it, so the fix is to relaunch.
+  nonisolated static func fullDiskAccessStatus() -> String {
+    switch FullDiskAccessProbe.currentState() {
+    case .granted: return "granted"
+    case .grantedPendingRestart: return "granted_pending_restart"
+    case .denied: return "not_granted"
+    }
+  }
+
   struct LocalFileScanOutcome {
     let hasReadableUserFileTarget: Bool
     let didCompleteSuccessfully: Bool
@@ -410,6 +424,9 @@ class ChatToolExecutor {
 
     case .readMessageHistory:
       return await executeReadMessageHistory(toolCall.arguments)
+
+    case .listMailMessages:
+      return await executeListMailMessages(toolCall.arguments)
 
     // send_message and run_applescript actuate the machine. The kernel already
     // resolved a dispatch or scoped grant before dispatching here; the owner
@@ -2240,18 +2257,7 @@ class ChatToolExecutor {
   }
 
   private static func checkFullDiskAccessDirectly() -> Bool {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let protectedPaths = [
-      "\(home)/Library/Safari",
-      "\(home)/Library/Mail",
-      "\(home)/Library/Messages",
-    ]
-    for path in protectedPaths {
-      if FileManager.default.fileExists(atPath: path) {
-        return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
-      }
-    }
-    return false
+    FullDiskAccessProbe.currentState() == .granted
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
