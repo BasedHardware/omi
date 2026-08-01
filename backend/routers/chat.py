@@ -84,8 +84,8 @@ from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
+    billable_duration_ms,
     compute_pcm_duration_ms,
-    read_wav_duration_ms,
     try_consume_budget,
     check_budget,
     record_actual_duration,
@@ -620,11 +620,13 @@ def create_voice_message_stream(
         # A quota rejection is not an STT attempt and therefore is not an
         # invalid-input or provider-outcome metric.
         first_wav = wav_paths[0]
-        duration_ms = read_wav_duration_ms(first_wav)
-        if duration_ms is not None:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        # billable_duration_ms never returns None: an unreadable duration falls back
+        # to a conservative size-derived estimate so stripping duration metadata
+        # cannot skip the budget entirely.
+        duration_ms = billable_duration_ms(first_wav)
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -924,9 +926,8 @@ async def transcribe_voice_message(
         # so do it before recording an accepted transcription attempt.
         total_duration_ms = 0
         for wav_path in wav_paths:
-            duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
-            if duration_ms is not None:
-                total_duration_ms += duration_ms
+            duration_ms = await run_blocking(storage_executor, billable_duration_ms, wav_path)
+            total_duration_ms += duration_ms
         if total_duration_ms > 0:
             allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
             if not allowed:

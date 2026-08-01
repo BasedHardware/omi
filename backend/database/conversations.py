@@ -333,10 +333,9 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
     if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
         try:
             data['base64'] = encryption.decrypt(data['base64'], uid)
-        except Exception:
-            # If decryption fails, it might be already decrypted or not encrypted.
-            # We can log this, but for now, we'll just pass.
-            pass
+        except encryption.DecryptionError:
+            logger.error(f"conversations: photo base64 decryption failed for {uid}")
+            data['base64'] = ''
     return data
 
 

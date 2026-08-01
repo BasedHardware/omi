@@ -763,6 +763,66 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     return True
 
 
+def claim_action_item_export(uid: str, action_item_id: str, platform: str) -> Optional[bool]:
+    """Atomically claim an action item for external export.
+
+    The claim IS the write: ``exported`` is flipped False->True inside a single
+    transaction *before* the external task is created, so two concurrent retries
+    cannot both observe ``exported=False`` while the first delivery is still
+    blocked in the provider POST and create two real external tasks.
+
+    Returns True when this caller won the claim, False when the item was already
+    exported, and None when the item does not exist (nothing to dedup against).
+    """
+    user_ref = db.collection('users').document(uid)
+    action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
+    now = datetime.now(timezone.utc)
+
+    @firestore.transactional
+    def claim(write_transaction):
+        snapshot = action_item_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None
+        if _typed_doc(snapshot).get('exported'):
+            return False
+        write_transaction.update(
+            action_item_ref,
+            {
+                'exported': True,
+                'export_platform': platform,
+                'export_date': now,
+                'updated_at': now,
+            },
+        )
+        return True
+
+    return cast(
+        Optional[bool],
+        run_with_transaction_contention_retry(
+            db.transaction,
+            claim,
+            operation_name="action_item_export_claim",
+        ),
+    )
+
+
+def release_action_item_export_claim(uid: str, action_item_id: str) -> None:
+    """Undo a claim taken by ``claim_action_item_export`` when delivery failed."""
+    user_ref = db.collection('users').document(uid)
+    action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
+    try:
+        action_item_ref.update(
+            {
+                'exported': False,
+                'export_platform': None,
+                'export_date': None,
+                'updated_at': datetime.now(timezone.utc),
+            }
+        )
+    except NotFound:
+        pass
+
+
 def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> BatchMutationResult:
     """
 

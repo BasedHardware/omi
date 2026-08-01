@@ -67,8 +67,8 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     if 'text' in data and isinstance(data['text'], str):
         try:
             data['text'] = encryption.decrypt(data['text'], uid)
-        except Exception:
-            pass
+        except encryption.DecryptionError:
+            logger.error(f"chat: message text decryption failed for {uid}")
 
     return data
 
@@ -783,8 +783,17 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         if current_level == target_level:
             continue
 
-        plain_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
-        plain_text = plain_data.get('text')
+        raw_text = message_data.get('text')
+        plain_text = raw_text
+        if current_level == 'enhanced' and isinstance(raw_text, str):
+            try:
+                plain_text = encryption.decrypt(raw_text, uid)
+            except encryption.DecryptionError:
+                # Never re-encrypt or re-persist a value we could not authenticate: doing so
+                # would double-encrypt the ciphertext and destroy any chance of recovery.
+                logger.error(f"Message {doc_snapshot.id} could not be decrypted, skipping migration.")
+                continue
+
         migrated_text = plain_text
         if target_level == 'enhanced':
             if isinstance(plain_text, str):

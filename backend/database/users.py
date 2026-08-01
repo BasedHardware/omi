@@ -1339,7 +1339,8 @@ def get_data_protection_level(uid: str) -> str:
         uid: User ID
 
     Returns:
-        'enhanced' or 'e2ee'. Defaults to 'enhanced'.
+        The stored level, or 'enhanced' when unset. Legacy documents may still
+        hold 'e2ee'; ``set_data_protection_level`` no longer accepts it.
     """
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
@@ -1357,10 +1358,13 @@ def set_data_protection_level(uid: str, level: str) -> None:
 
     Args:
         uid: User ID
-        level: 'enhanced', or 'e2ee'
+        level: 'enhanced'
     """
-    if level not in ['enhanced', 'e2ee']:
-        raise ValueError("Invalid data protection level. Only 'enhanced' or 'e2ee' are supported.")
+    # 'e2ee' is rejected until a real client-side-key write path exists. Every write
+    # path branches on `level == 'enhanced'`, so persisting 'e2ee' stores plaintext
+    # under the name of the strongest setting.
+    if level not in ['enhanced']:
+        raise ValueError("Invalid data protection level. Only 'enhanced' is supported.")
     user_ref = db.collection('users').document(uid)
     user_ref.set({'data_protection_level': level}, merge=True)
 

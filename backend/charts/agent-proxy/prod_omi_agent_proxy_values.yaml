@@ -58,6 +58,11 @@ env:
     value: "/secrets/google-credentials.json"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ENCRYPTION_SECRET
 
 volumes:
   - name: gcp-credentials

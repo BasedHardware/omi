@@ -57,7 +57,8 @@ def reserve_current_month_slot(uid: str, monthly_limit: int) -> Tuple[bool, int,
     """Atomically reserve one free-tier call slot.
 
     Returns (reserved, used_before_reservation, reset_at_epoch). Redis failures
-    fail open to match the non-critical quota posture used by this module.
+    fail CLOSED: every reservation spends real Twilio money, so an unverifiable
+    quota must not grant a free-tier call.
     """
     now = datetime.now(timezone.utc)
     reset_at = _period_reset_epoch(now)
@@ -74,7 +75,7 @@ def reserve_current_month_slot(uid: str, monthly_limit: int) -> Tuple[bool, int,
         return True, used_after - 1, reset_at
     except Exception as e:
         logger.error(f'Error reserving phone call quota {e}')
-        return True, 0, reset_at
+        return False, 0, reset_at
 
 
 @try_catch_decorator

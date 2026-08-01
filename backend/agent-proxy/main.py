@@ -55,9 +55,14 @@ VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
 # failure than a one-time duplicate).
 VM_HELLO_TIMEOUT = 3.0  # seconds
 
-# Encryption — optional; required for users with enhanced data protection.
+# Encryption — mandatory. A missing or short secret used to silently downgrade
+# enhanced-protection users to plaintext writes, so fail at import instead
+# (mirrors backend/utils/encryption.py).
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
-_encryption_ok = len(ENCRYPTION_SECRET) >= 32
+if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
+    raise ValueError(
+        "ENCRYPTION_SECRET environment variable not set or is too short. " "It must be a securely managed 32-byte key."
+    )
 _firebase_init_lock = threading.RLock()
 _firestore_db: Any = None
 
@@ -465,7 +470,7 @@ def _derive_key(uid: str) -> bytes:
 
 
 def _encrypt_text(text: str, uid: str) -> str:
-    if not text or not _encryption_ok:
+    if not text:
         return text
     key = _derive_key(uid)
     aesgcm = AESGCM(key)
@@ -474,16 +479,20 @@ def _encrypt_text(text: str, uid: str) -> str:
     return base64.b64encode(nonce + ciphertext).decode('utf-8')
 
 
+class DecryptionError(ValueError):
+    """Raised when stored ciphertext cannot be authenticated."""
+
+
 def _decrypt_text(text: str, uid: str) -> str:
-    if not text or not _encryption_ok:
+    if not text:
         return text
     try:
         key = _derive_key(uid)
         aesgcm = AESGCM(key)
         payload = base64.b64decode(text.encode('utf-8'))
         return aesgcm.decrypt(payload[:12], payload[12:], None).decode('utf-8')
-    except Exception:
-        return text
+    except Exception as exc:
+        raise DecryptionError(f"decryption failed for user {uid}") from exc
 
 
 # --------------- chat session helpers ---------------
@@ -540,7 +549,13 @@ def _fetch_chat_history(uid: str, chat_session_id: str) -> List[Dict[str, Any]]:
         data: Dict[str, Any] = _typed_doc(doc)
         text = data.get('text', '')
         if data.get('data_protection_level') == 'enhanced':
-            text = _decrypt_text(cast(str, text), uid)
+            try:
+                text = _decrypt_text(cast(str, text), uid)
+            except DecryptionError:
+                # Never feed unauthenticated ciphertext back into the prompt as if it
+                # were the user's own message.
+                logger.error('agent_proxy: chat history decryption failed for %s', uid)
+                continue
         messages.append({'sender': data.get('sender', ''), 'text': text})
     return list(reversed(messages))
 
@@ -551,10 +566,7 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
     store_text = text
     level = data_protection_level
     if level == 'enhanced':
-        if _encryption_ok:
-            store_text = _encrypt_text(text, uid)
-        else:
-            level = 'standard'
+        store_text = _encrypt_text(text, uid)
 
     msg_data: Dict[str, Any] = {
         'id': msg_id,

@@ -394,10 +394,12 @@ def rate_limit_dependency(
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
+def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool) -> None:
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
-    One Redis round-trip per call (Lua script). Fail-open on Redis errors.
+    One Redis round-trip per call (Lua script). ``fail_closed`` is required so every
+    call site states its Redis-outage posture explicitly rather than inheriting the
+    permissive default.
     """
     max_requests, window = get_effective_limit(policy_name)
     try:
@@ -465,7 +467,8 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        # Deliberate fail-open: first-party user paths must survive a Redis outage.
+        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=False)
         return uid
 
     return dependency
@@ -503,8 +506,11 @@ def check_rate_limit_inline(key: str, policy_name: str) -> None:
     """Check rate limit inline (for endpoints with custom auth).
 
     Use when auth is not a standard Depends() pattern (e.g., MCP, integration).
+
+    Fail-closed: these are third-party surfaces (MCP clients, marketplace
+    integrations, relay). A Redis outage must not make them unmetered.
     """
-    _enforce_rate_limit(key, policy_name)
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
 F = TypeVar("F", bound=Callable[..., Any])

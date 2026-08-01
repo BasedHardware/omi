@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, cast
 
@@ -18,6 +17,7 @@ from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
 )
+from utils.admin_auth import require_admin_authorization
 from utils.other import endpoints as auth
 from models.app import App
 
@@ -92,8 +92,7 @@ def save_token(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
     uid = cast(str, data['uid'])

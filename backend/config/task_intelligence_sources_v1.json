@@ -136,7 +136,9 @@
         "desktop/macos/Desktop/Sources/MemoryExportExecutor.swift"
       ],
       "test_adapter": "direct_command_contract",
-      "writer_anchors": [{"path": "backend/utils/task_sync.py", "symbol": "action_items_db.update_action_item", "discover": true}]
+      "writer_anchors": [
+        {"path": "backend/utils/task_sync.py", "symbol": "action_items_db.claim_action_item_export", "discover": true}
+      ]
     },
     {
       "id": "goal_manual_api",

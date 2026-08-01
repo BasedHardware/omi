@@ -4,7 +4,6 @@ Neutral ``memory_admin`` is the source of truth. Legacy ``memory_admin``
 remains an importable alias. Registers ``/memory/admin/*`` paths.
 """
 
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +14,7 @@ from models.memory_admin import MemoryReadRolloutObservabilityReport, ShortTermL
 from database._client import db
 from jobs.short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
 from utils.memory.non_active_route_audit import NonActiveRouteAuditReport, fetch_non_active_route_audit_report
+from utils.admin_auth import has_admin_authorization
 from utils.memory.default_read_rollout import (
     build_default_read_rollout_observability_report,
     read_default_read_rollout_decisions,
@@ -32,7 +32,7 @@ def _parse_expected_source_ids(expected_source_ids: Optional[str]) -> Optional[L
 
 
 def _require_admin_key(secret_key: str) -> None:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
 

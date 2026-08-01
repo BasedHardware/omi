@@ -49,6 +49,7 @@ REQUIRED_SOURCE_IDS = {
 ALLOWED_POLICY_CLASSES = {'direct_command', 'shared_capture_policy', 'compatibility_migration'}
 BACKEND_WRITER_METHODS = {
     'action_items_db': {
+        'claim_action_item_export',
         'create_action_item',
         'create_action_items_batch',
         'delete_action_item',

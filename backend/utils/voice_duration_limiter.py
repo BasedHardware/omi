@@ -17,6 +17,7 @@ Constants:
 """
 
 import logging
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -103,10 +104,24 @@ return {1, used + request, math.max(0, budget - used - request)}
 """
 
 _consume_lua: Optional[Any] = None
-try:
-    _consume_lua = r.register_script(_CONSUME_LUA_SRC)
-except Exception:
-    logger.warning('voice_duration_limiter: failed to register Lua script (Redis unavailable?)')
+
+
+def _get_consume_lua() -> Optional[Any]:
+    """Return the registered Lua script, registering it lazily on first use.
+
+    Registering once at import meant a pod that started while Redis was down kept
+    ``_consume_lua`` None for its whole lifetime and served unmetered transcription
+    long after Redis recovered. Cache only on success so a later call retries.
+    """
+    global _consume_lua
+    if _consume_lua is not None:
+        return _consume_lua
+    try:
+        _consume_lua = r.register_script(_CONSUME_LUA_SRC)
+    except Exception:
+        logger.warning('voice_duration_limiter: failed to register Lua script (Redis unavailable?)')
+        return None
+    return _consume_lua
 
 
 def _budget_key(uid: str) -> str:
@@ -127,11 +142,12 @@ def try_consume_budget(uid: str, duration_ms: int) -> tuple[bool, int, int]:
     if duration_ms < 0:
         return True, 0, DAILY_BUDGET_MS
 
-    if _consume_lua is None:
+    consume_lua = _get_consume_lua()
+    if consume_lua is None:
         return True, 0, DAILY_BUDGET_MS
 
     try:
-        result = _consume_lua(
+        result = consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms],
         )
@@ -167,11 +183,12 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
     if duration_ms <= 0:
         return True
 
-    if _consume_lua is None:
+    consume_lua = _get_consume_lua()
+    if consume_lua is None:
         return True
 
     try:
-        _consume_lua(
+        consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms, 1],  # force=1
         )
@@ -239,3 +256,35 @@ def read_wav_duration_ms(file_path: str) -> int | None:
     except Exception as e:
         logger.warning(f'voice_duration_limiter: failed to read audio duration from {file_path}: {e}')
         return None
+
+
+# Bytes per second of the narrowest decoded WAV this service produces
+# (16 kHz, 16-bit, mono). Assuming the lowest plausible byte rate makes the
+# size-derived estimate an upper bound on the real duration, so a caller that
+# strips duration metadata is charged at least what it actually used.
+_MIN_WAV_BYTES_PER_SECOND = 16000 * 2 * 1
+
+
+def billable_duration_ms(file_path: str) -> int:
+    """Duration to charge against the budget, never zero for a real file.
+
+    ``read_wav_duration_ms`` returns None on four paths (PyAV cannot open the file,
+    no audio stream, no duration metadata, non-positive duration), all of which are
+    attacker-controllable. Falling back to "skip the budget" makes stripping duration
+    metadata a free-transcription bypass, so fall back to a conservative size-derived
+    estimate instead.
+    """
+    duration_ms = read_wav_duration_ms(file_path)
+    if duration_ms is not None and duration_ms > 0:
+        return duration_ms
+    try:
+        size_bytes = os.path.getsize(file_path)
+    except OSError:
+        size_bytes = 0
+    estimated_ms = (size_bytes * 1000) // _MIN_WAV_BYTES_PER_SECOND
+    logger.warning(
+        'voice_duration_limiter: unreadable duration for %s; charging size-derived estimate %dms',
+        file_path,
+        estimated_ms,
+    )
+    return max(estimated_ms, 1)

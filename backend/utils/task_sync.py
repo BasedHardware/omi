@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import httpx
@@ -57,39 +56,38 @@ async def _sync_to_cloud_service(
 ) -> Dict[str, Any]:
     """Create task in external service using shared task integration ops."""
     # A retried POST /v1/action-items dedups the Firestore document by idempotency key but still
-    # submits auto-sync, and create_task_internal has no idempotency key of its own. Re-read the
-    # persisted export state and skip the external call when the item was already exported, so a
-    # retry does not create a second task in the user's Todoist/Asana/ClickUp/Google Tasks.
+    # submits auto-sync, and create_task_internal has no idempotency key of its own. A read-then-write
+    # check loses the race (both retries read exported=False while delivery 1 is blocked in the
+    # provider POST), so claim the export transactionally BEFORE calling out, and release the claim
+    # if delivery fails.
     item_id = action_item.get("id")
+    claimed = False
     if item_id:
-        existing = await run_blocking(db_executor, action_items_db.get_action_item, uid, item_id)
-        if existing and existing.get("exported"):
+        claim = await run_blocking(db_executor, action_items_db.claim_action_item_export, uid, item_id, app_key)
+        if claim is False:
             return {"synced": True, "platform": app_key, "reason": "already_exported"}
+        claimed = claim is True
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        result = await create_task_internal(
-            uid=uid,
-            app_key=app_key,
-            integration=integration,
-            title=action_item["description"],
-            due_date=action_item.get("due_at"),
-            client=client,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            result = await create_task_internal(
+                uid=uid,
+                app_key=app_key,
+                integration=integration,
+                title=action_item["description"],
+                due_date=action_item.get("due_at"),
+                client=client,
+            )
+    except Exception:
+        if claimed and item_id:
+            await run_blocking(db_executor, action_items_db.release_action_item_export_claim, uid, item_id)
+        raise
 
     if result.get("success"):
-        # Mark action item as exported
-        await run_blocking(
-            db_executor,
-            action_items_db.update_action_item,
-            uid,
-            action_item["id"],
-            {
-                "exported": True,
-                "export_platform": app_key,
-                "export_date": datetime.now(timezone.utc),
-            },
-        )
         return {"synced": True, "platform": app_key, "external_task_id": result.get("external_task_id")}
+
+    if claimed and item_id:
+        await run_blocking(db_executor, action_items_db.release_action_item_export_claim, uid, item_id)
 
     return {"synced": False, "platform": app_key, "error": result.get("error")}
 

@@ -17,6 +17,14 @@ if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
     )
 
 
+class DecryptionError(ValueError):
+    """Raised when ciphertext cannot be authenticated or decoded.
+
+    Subclasses ``ValueError`` so existing decode boundaries that already treat a
+    malformed stored payload as unreadable keep their behaviour.
+    """
+
+
 def derive_key(uid: str) -> bytes:
     """
     Derives a user-specific 32-byte key from the master secret and user ID (salt).
@@ -55,6 +63,11 @@ def encrypt(data: str, uid: str) -> str:
 def decrypt(encrypted_data: str, uid: str) -> str:
     """
     Decrypts a base64 encoded string using a user-specific key.
+
+    Raises ``DecryptionError`` when the payload cannot be authenticated. Returning
+    the input unchanged would make tampering and a wrong master key look like a
+    successful read, and the resulting ciphertext could then be re-persisted as
+    if it were plaintext.
     """
     if not encrypted_data:
         return encrypted_data
@@ -73,11 +86,8 @@ def decrypt(encrypted_data: str, uid: str) -> str:
 
         return decrypted_bytes.decode('utf-8')
     except Exception as e:
-        # If decryption fails (e.g., wrong key, corrupted data), return the original encrypted data
-        # to avoid data loss and to make debugging easier. In a production system, you might want
-        # to log this error.
-        logger.error(f"Decryption failed for user {uid}: {e}")
-        return encrypted_data
+        logger.error(f"Decryption failed for user {uid}: {type(e).__name__}")
+        raise DecryptionError(f"decryption failed for user {uid}") from e
 
 
 def encrypt_audio_chunk(data: bytes, uid: str) -> bytes:

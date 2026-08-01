@@ -147,14 +147,14 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
     if 'content' in data and isinstance(data['content'], str):
         try:
             data['content'] = encryption.decrypt(data['content'], uid)
-        except Exception:
-            pass
+        except encryption.DecryptionError:
+            logger.error(f"memories: content decryption failed for {uid}")
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
             decrypted = encryption.decrypt(data['evidence'], uid)
             data['evidence'] = json.loads(decrypted)
-        except Exception:
-            pass
+        except (encryption.DecryptionError, json.JSONDecodeError, TypeError):
+            logger.error(f"memories: evidence decryption failed for {uid}")
     return data
 
 
@@ -1087,11 +1087,10 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
         # re-encrypt with the new user's key before copying, so the new owner can read them.
         content = memory.get('content')
         if memory.get('data_protection_level') == 'enhanced' and isinstance(content, str) and content:
-            plaintext = encryption.decrypt(content, prev_uid)
-            if plaintext == content:
-                # encryption.decrypt returns its input unchanged when it cannot decrypt (wrong key or
-                # corrupted ciphertext) rather than raising, so an unchanged value means decryption
-                # failed. Copy the memory as-is and log it, rather than re-encrypting the still-
+            try:
+                plaintext = encryption.decrypt(content, prev_uid)
+            except encryption.DecryptionError:
+                # Copy the memory as-is and log it, rather than re-encrypting the still-
                 # encrypted content under new_uid (which the new owner could "decrypt" back to the old
                 # ciphertext, masking the corruption).
                 logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")

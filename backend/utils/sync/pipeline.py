@@ -1947,13 +1947,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             'event=sync_fair_use outcome=soft_cap_triggered cap_count=%d',
                             len(triggered_caps),
                         )
-                        try:
-                            asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
-                        except Exception as e:
-                            logger.error(
-                                'event=sync_classifier outcome=schedule_failed exception_type=%s',
-                                _bounded_exception_type(e),
-                            )
+                        # start_background_task keeps a reference and logs failures; the
+                        # previous try/except was inert because scheduling a coroutine
+                        # never raises for a failure inside it.
+                        start_background_task(
+                            trigger_classifier_if_needed(uid, triggered_caps),
+                            name='sync_pipeline_fair_use_classifier',
+                        )
 
             # DG budget gate
             fair_use_restrict_dg = False
