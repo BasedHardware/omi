@@ -1072,28 +1072,6 @@ class ConversationProvider extends ChangeNotifier {
     return (date, idx);
   }
 
-  /// Same lookup as [getConversationDateAndIndex] for callers that only hold an
-  /// id (a chat message's conversation reference, a memory's `conversationId`).
-  /// Resolving through the loaded conversation keeps the day key derived from
-  /// `startedAt ?? createdAt` in local time — the contract the groups use.
-  (DateTime, int)? getConversationDateAndIndexById(String conversationId) {
-    final idx = conversations.indexWhere((c) => c.id == conversationId);
-    if (idx == -1) return null;
-    return getConversationDateAndIndex(conversations[idx]);
-  }
-
-  /// Places [conversation] in its local-day group if it isn't there yet and
-  /// returns that group's key, so a caller navigating straight to a detail page
-  /// selects the same day the list groups it under.
-  DateTime ensureConversationInGroup(ServerConversation conversation) {
-    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
-    final group = groupedConversations.putIfAbsent(date, () => []);
-    if (!group.any((c) => c.id == conversation.id)) {
-      group.insert(0, conversation);
-    }
-    return date;
-  }
-
   int getConversationIndexById(String id, DateTime date) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
     final list = groupedConversations[normalizedDate] ?? [];

@@ -208,7 +208,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         provider.updateConversation(widget.conversation.id, date);
       } else {
         final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
-        provider.selectedDate = conversationLocalDayKey(effectiveDate);
+        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
       }
 
       await provider.initConversation();
