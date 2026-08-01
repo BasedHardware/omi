@@ -24,7 +24,10 @@ class DeviceToolsService: NSObject {
     case "capabilities":
       result(capabilities())
     case "contactsPermissionStatus":
-      result(["status": contactsPermissionStatus()])
+      // `ok` marks that the status was read, not that access was granted. The
+      // common result contract treats a missing `ok` as failure, so omitting it
+      // made every successful status check read as one.
+      result(["ok": true, "status": contactsPermissionStatus()])
     case "requestContactsPermission":
       requestContactsPermission(result: result)
     case "searchContacts":
@@ -53,19 +56,9 @@ class DeviceToolsService: NSObject {
   // MARK: - Contacts
 
   private func contactsPermissionStatus() -> String {
-    switch CNContactStore.authorizationStatus(for: .contacts) {
-    case .authorized: return "granted"
-    case .notDetermined: return "not_determined"
-    case .restricted: return "restricted"
-    case .denied: return "denied"
-    default:
-      // iOS 18 lets the user share a subset of contacts. Lookups still work
-      // against that subset, so this is a usable grant, not a denial.
-      if #available(iOS 18.0, *), CNContactStore.authorizationStatus(for: .contacts) == .limited {
-        return "limited"
-      }
-      return "unknown"
-    }
+    // iOS 18 lets the user share a subset of contacts. Lookups still work
+    // against that subset, so `limited` is a usable grant, not a denial.
+    Self.describe(CNContactStore.authorizationStatus(for: .contacts))
   }
 
   private static func contactsAccessUsable(_ status: CNAuthorizationStatus) -> Bool {
@@ -75,14 +68,40 @@ class DeviceToolsService: NSObject {
   }
 
   private func requestContactsPermission(result: @escaping FlutterResult) {
-    CNContactStore().requestAccess(for: .contacts) { granted, error in
-      DispatchQueue.main.async {
-        result([
-          "ok": granted,
-          "status": granted ? "granted" : "denied",
-          "error": error?.localizedDescription ?? "",
-        ])
-      }
+    Self.requestContactsAccess { status, error in
+      let usable = Self.contactsAccessUsable(status)
+      result([
+        "ok": usable,
+        "status": Self.describe(status),
+        "error": error?.localizedDescription ?? "",
+      ])
+    }
+  }
+
+  /// Prompts for Contacts and reports the resulting authorization status.
+  ///
+  /// The `granted` boolean alone cannot distinguish full access from the iOS 18
+  /// limited grant — both come back `true` — so the status is re-read afterwards
+  /// rather than inferred. Reporting `limited` as `granted` would tell the model
+  /// it had the whole address book when it can only see a subset.
+  private static func requestContactsAccess(
+    completion: @escaping (CNAuthorizationStatus, Error?) -> Void
+  ) {
+    CNContactStore().requestAccess(for: .contacts) { _, error in
+      let status = CNContactStore.authorizationStatus(for: .contacts)
+      DispatchQueue.main.async { completion(status, error) }
+    }
+  }
+
+  private static func describe(_ status: CNAuthorizationStatus) -> String {
+    switch status {
+    case .authorized: return "granted"
+    case .notDetermined: return "not_determined"
+    case .restricted: return "restricted"
+    case .denied: return "denied"
+    default:
+      if #available(iOS 18.0, *), status == .limited { return "limited" }
+      return "unknown"
     }
   }
 
@@ -97,15 +116,43 @@ class DeviceToolsService: NSObject {
     let limit = min(max((args["limit"] as? Int) ?? 10, 1), 50)
 
     let status = CNContactStore.authorizationStatus(for: .contacts)
+    if status == .notDetermined {
+      // The mobile surface exposes only search_contacts and propose_message, so
+      // nothing in this flow can call request_permission on the model's behalf.
+      // Without prompting here, a fresh install can never resolve a name: the
+      // first lookup would report not_determined and every retry would too.
+      Self.requestContactsAccess { [weak self] granted, _ in
+        guard let self else {
+          result(
+            Self.failure(
+              reason: "surface_unavailable",
+              message: "The app closed the tool surface before Contacts access was resolved."))
+          return
+        }
+        guard Self.contactsAccessUsable(granted) else {
+          result(
+            self.failure(
+              reason: "authorization_denied",
+              message: "Omi needs Contacts access to resolve names to phone numbers.",
+              permission: "contacts"))
+          return
+        }
+        self.searchGrantedContacts(query: query, limit: limit, result: result)
+      }
+      return
+    }
     guard Self.contactsAccessUsable(status) else {
       result(
         failure(
-          reason: status == .notDetermined ? "not_determined" : "authorization_denied",
+          reason: "authorization_denied",
           message: "Omi needs Contacts access to resolve names to phone numbers.",
           permission: "contacts"))
       return
     }
+    searchGrantedContacts(query: query, limit: limit, result: result)
+  }
 
+  private func searchGrantedContacts(query: String, limit: Int, result: @escaping FlutterResult) {
     let keys: [CNKeyDescriptor] = [
       CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
       CNContactPhoneNumbersKey as CNKeyDescriptor,
@@ -169,21 +216,30 @@ class DeviceToolsService: NSObject {
           message: "This device is not configured to send messages."))
       return
     }
-    // One sheet at a time: a second proposal while the user is still deciding
-    // would replace the first and strand its result callback.
-    guard pendingComposeResult == nil else {
-      result(
-        failure(
-          reason: "compose_already_open",
-          message: "A message is already awaiting the user's confirmation."))
-      return
-    }
-
+    // The overlap check and the reservation both have to happen on the main
+    // queue, in that order, without anything in between. Checking here and
+    // reserving inside the async block let two calls both observe a nil pending
+    // slot, and the second would overwrite the first — stranding a Flutter
+    // method call that never gets a reply. `pendingComposeResult` is only ever
+    // touched on the main queue for the same reason.
     DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
+      guard let self else {
+        result(
+          Self.failure(
+            reason: "surface_unavailable",
+            message: "The app closed the tool surface before the composer opened."))
+        return
+      }
+      guard self.pendingComposeResult == nil else {
+        result(
+          Self.failure(
+            reason: "compose_already_open",
+            message: "A message is already awaiting the user's confirmation."))
+        return
+      }
       guard let presenter = Self.topViewController() else {
         result(
-          failure(reason: "no_presenter", message: "The app is not in the foreground."))
+          Self.failure(reason: "no_presenter", message: "The app is not in the foreground."))
         return
       }
 
@@ -216,9 +272,20 @@ class DeviceToolsService: NSObject {
   }
 
   private func failure(reason: String, message: String, permission: String? = nil) -> [String: Any] {
+    Self.failure(reason: reason, message: message, permission: permission)
+  }
+
+  /// The shared failure shape. A permission failure also names the tool that
+  /// recovers from it, matching the Dart wrapper and the macOS executors — the
+  /// model is told how to fix the problem rather than left to guess.
+  private static func failure(
+    reason: String, message: String, permission: String? = nil
+  ) -> [String: Any] {
     var payload: [String: Any] = ["ok": false, "reason": reason, "error": message]
     if let permission {
       payload["permission"] = permission
+      payload["next_tool"] = "request_permission"
+      payload["next_tool_arguments"] = ["type": permission]
     }
     return payload
   }
