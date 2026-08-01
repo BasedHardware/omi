@@ -78,3 +78,81 @@ def test_multichannel_client_pcm_reaches_optional_parity_capture():
     asyncio.run(_feed(recv, [(0, pcm)]))
 
     assert captured == [pcm]
+
+
+def _make_photo_receiver(*, use_custom_stt: bool):
+    async def _noop_event(_event):
+        return None
+
+    recv = SimpleNamespace(
+        host=SimpleNamespace(
+            use_custom_stt=use_custom_stt,
+            request=SimpleNamespace(uid='test-uid'),
+            asend_event=_noop_event,
+            transcripts=SimpleNamespace(photo_buffer=[]),
+        ),
+        image_chunks={},
+    )
+    return recv
+
+
+async def _process_photo(recv, image_b64: str = 'ZmFrZS1pbWFnZQ=='):
+    await receiver.ListenReceiver._process_photo(recv, image_b64, 'temp-1')
+
+
+def test_custom_stt_photo_skips_omi_description_without_llm_byok_key(monkeypatch):
+    """#7690: a custom-STT session without an LLM BYOK key must not pay for
+    describe_image; the photo is still stored with a placeholder description."""
+    recv = _make_photo_receiver(use_custom_stt=True)
+    described = []
+
+    async def _describe(_uid, _img):
+        described.append(1)
+        return 'a description'
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: None)
+
+    asyncio.run(_process_photo(recv))
+
+    assert described == [], 'describe_image ran for a custom-STT session without an LLM BYOK key'
+    assert len(recv.host.transcripts.photo_buffer) == 1
+    photo = recv.host.transcripts.photo_buffer[0]
+    assert photo.discarded is False
+    assert 'Custom STT' in photo.description
+
+
+def test_custom_stt_photo_runs_description_with_llm_byok_key(monkeypatch):
+    """A custom-STT user with an OpenAI/Anthropic BYOK key pays their own bill,
+    so photo descriptions must still run."""
+    recv = _make_photo_receiver(use_custom_stt=True)
+    described = []
+
+    async def _describe(_uid, _img):
+        described.append(1)
+        return 'a description'
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+    monkeypatch.setattr(receiver, 'get_byok_key', lambda provider: 'sk-test' if provider == 'openai' else None)
+
+    asyncio.run(_process_photo(recv))
+
+    assert described, 'describe_image was skipped despite an LLM BYOK key'
+    assert recv.host.transcripts.photo_buffer[0].description == 'a description'
+
+
+def test_omi_stt_photo_always_runs_description(monkeypatch):
+    """Omi-STT sessions are unaffected: descriptions always run."""
+    recv = _make_photo_receiver(use_custom_stt=False)
+    described = []
+
+    async def _describe(_uid, _img):
+        described.append(1)
+        return 'a description'
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: None)
+
+    asyncio.run(_process_photo(recv))
+
+    assert described, 'describe_image was skipped for an Omi-STT session'
