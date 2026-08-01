@@ -3,6 +3,7 @@ from enum import Enum
 import json
 from typing import List, Optional
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 import requests
 import logging
 from mcp.server import Server
@@ -10,11 +11,44 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from pydantic import BaseModel, Field
 
-# Shared FieldInfo for the api_key parameter repeated across every MCP tool.
-_API_KEY_FIELD = Field(
-    description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
-    default=None,
-)
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def resolve_api_key() -> str:
+    """Return the MCP API key from the environment.
+
+    The credential is never a tool argument: a model-visible `api_key` field lets
+    injected content substitute an attacker's key (redirecting the user's writes)
+    or exfiltrate the real one by echoing it back. Reading it only here keeps it
+    out of every `inputSchema` and out of model context entirely.
+    """
+
+    api_key = os.getenv("OMI_API_KEY")
+    if not api_key:
+        raise ValueError("OMI_API_KEY environment variable not set.")
+    return api_key
+
+
+def resolve_base_url() -> str:
+    """Return the Omi API base URL, pinned to https outside loopback.
+
+    `OMI_API_BASE_URL` exists for self-hosted backends. Allowing a plaintext
+    remote endpoint would put the bearer token and every memory on the wire in
+    clear, so http is accepted only for loopback development hosts.
+    """
+
+    url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
+    if not url:
+        raise Exception("Base URL not found")
+
+    parts = urlsplit(url)
+    if parts.scheme == "https":
+        return url
+    if parts.scheme == "http" and parts.hostname in LOOPBACK_HOSTS:
+        return url
+    raise Exception(
+        f"OMI_API_BASE_URL must use https (got scheme '{parts.scheme}'); http is allowed only for loopback hosts."
+    )
 
 
 class MemoryCategory(str, Enum):
@@ -65,9 +99,7 @@ class ConversationCategory(str, Enum):
     other = "other"
 
 
-base_url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
-if not base_url or base_url == "":
-    raise Exception("Base URL not found")
+base_url = resolve_base_url()
 
 
 class OmiTools(str, Enum):
@@ -82,37 +114,31 @@ class OmiTools(str, Enum):
 
 
 class GetMemories(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     categories: List[MemoryCategory] = Field(description="The categories of memories to filter by.", default=[])
     limit: int = Field(description="The number of memories to retrieve.", default=100)
     offset: int = Field(description="The offset of the memories to retrieve.", default=0)
 
 
 class CreateMemory(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     content: str = Field(description="The content of the memory.")
     category: MemoryCategory = Field(description="The category of the memory to create.")
 
 
 class DeleteMemory(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     memory_id: str = Field(description="The ID of the memory to delete.")
 
 
 class EditMemory(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     memory_id: str = Field(description="The ID of the memory to edit.")
     content: str = Field(description="The new content for the memory.")
 
 
 class SearchMemories(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     query: str = Field(description="Natural language search query to find relevant memories.")
     limit: int = Field(description="Maximum number of results to return.", default=10)
 
 
 class GetConversations(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd)", default=None)
     end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd)", default=None)
     categories: List[ConversationCategory] = Field(description="Filter by conversation categories.", default=[])
@@ -121,12 +147,10 @@ class GetConversations(BaseModel):
 
 
 class GetConversationById(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     conversation_id: str = Field(description="The ID of the conversation to retrieve.")
 
 
 class SearchConversations(BaseModel):
-    api_key: Optional[str] = _API_KEY_FIELD
     query: str = Field(description="Natural language search query to find relevant conversations.")
     limit: int = Field(description="Maximum number of results to return.", default=10)
     start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd).", default=None)
@@ -320,11 +344,13 @@ async def serve(uid: str | None) -> None:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+        if "api_key" in arguments:
+            logger.warning("Ignoring caller-supplied api_key argument; the key is read from the environment only.")
+            arguments = {key: value for key, value in arguments.items() if key != "api_key"}
+
         logger.info(f"Calling tool: {name} with arguments: {arguments}")
 
-        api_key = arguments.get("api_key") or os.getenv("OMI_API_KEY")
-        if not api_key:
-            raise ValueError("API key not provided and OMI_API_KEY environment variable not set.")
+        api_key = resolve_api_key()
 
         if name == OmiTools.GET_MEMORIES:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]

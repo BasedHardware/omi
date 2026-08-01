@@ -168,6 +168,9 @@ static bool sd_write_blocked;
 static bool sd_write_paused;
 static bool ble_connected;
 
+#define UNSYNCED_DROP_LOG_INTERVAL 100U
+static uint32_t unsynced_time_drops;
+
 static uint32_t disk_sector_count;
 static uint32_t data_batch_count;
 static uint32_t meta_next_slot;
@@ -677,13 +680,19 @@ static void process_write_data_req(const sd_req_t *req)
         return;
     }
 
-    if (!rtc_is_valid()) {
+    if (!rtc_is_valid() || get_utc_time() < (uint32_t) RTC_MIN_VALID_EPOCH_S) {
+        unsynced_time_drops++;
+        if ((unsynced_time_drops % UNSYNCED_DROP_LOG_INTERVAL) == 1U) {
+            LOG_WRN("dropping audio: clock not synchronized (%u packets dropped so far)", unsynced_time_drops);
+        }
         return;
     }
 
     uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < 1700000000U) {
-        return;
+
+    if (unsynced_time_drops != 0U) {
+        LOG_WRN("clock synchronized, resuming capture after %u dropped packets", unsynced_time_drops);
+        unsynced_time_drops = 0U;
     }
 
     if (!current_batch_loaded) {

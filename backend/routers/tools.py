@@ -28,7 +28,10 @@ from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
-from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.tool_result_boundaries import (
+    preserve_chat_memory_tool_result_boundary,
+    wrap_untrusted_tool_result,
+)
 from utils.retrieval.tool_services.action_items import (
     get_action_items_text,
     create_action_item_text,
@@ -51,7 +54,15 @@ class ToolResponse(BaseModel):
 
 
 def _ok(tool_name: str, text: str) -> dict:
-    return {"tool_name": tool_name, "result_text": text, "is_error": text.startswith("Error")}
+    # `result_text` is relayed straight into a model's context by the desktop agent
+    # kernels, so it carries the same second-order injection risk as an in-process
+    # tool result. Classify the status from the raw text first, then hand the model
+    # the bounded form.
+    return {
+        "tool_name": tool_name,
+        "result_text": wrap_untrusted_tool_result(f"{tool_name}_tool", text),
+        "is_error": text.startswith("Error"),
+    }
 
 
 # --------------- request models ---------------
@@ -89,6 +100,13 @@ class CreateCalendarEventRequest(BaseModel):
     description: Optional[str] = Field(default=None, description="Event description")
     location: Optional[str] = Field(default=None, description="Event location")
     attendees: Optional[str] = Field(default=None, description="Comma-separated attendee names or email addresses")
+    confirm: bool = Field(
+        default=False,
+        description=(
+            "Set only after the user explicitly approved inviting an address that is not one of "
+            "their known contacts. Leave false and relay the returned confirmation request otherwise."
+        ),
+    )
 
     @field_validator('start_time', 'end_time')
     @classmethod
@@ -274,11 +292,12 @@ async def create_calendar_event(
             "description": body.description,
             "location": body.location,
             "attendees": body.attendees,
+            "confirm": body.confirm,
         },
         config={"configurable": {"user_id": uid}},
     )
     return {
         "tool_name": "create_calendar_event",
-        "result_text": result,
+        "result_text": wrap_untrusted_tool_result("create_calendar_event_tool", result),
         "is_error": not result.startswith("✅ Successfully created calendar event:"),
     }

@@ -74,7 +74,7 @@ function installAcpTransport(proc: ReturnType<typeof createMockProcess>, failExe
           proc.stdout.write(`${JSON.stringify({
             jsonrpc: "2.0",
             method: "session/update",
-            params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "conformance" } } },
+            params: { sessionId: "conformance-native", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "conformance" } } },
           })}\n`);
           proc.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { usage: { inputTokens: 1, outputTokens: 1 } } })}\n`);
         }

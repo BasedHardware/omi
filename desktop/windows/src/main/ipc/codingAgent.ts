@@ -2,7 +2,7 @@
 // invoke-style handlers plus a broadcast channel for streaming task events
 // (both the main window and the overlay may render the same task's progress).
 
-import { ipcMain, BrowserWindow, shell } from 'electron'
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import {
   ADAPTER_PROFILES,
   adapterActivationError,
@@ -19,7 +19,13 @@ import {
   type ClaudeOAuthFlowHandle
 } from '../codingAgent/claudeOAuth'
 import { messageFrom } from '../codingAgent/failures'
-import { getAppSettings, setAppSettings, type AgentCommands } from '../appSettings'
+import {
+  AGENT_COMMAND_IDS,
+  getAppSettings,
+  setAppSettings,
+  type AgentCommands
+} from '../appSettings'
+import { SUGGESTED_AGENT_COMMANDS, type ExternalCodingAgentId } from '../../shared/agentCommands'
 import { detectAgents } from '../codingAgent/agentDetect'
 import { codexApiKeyStatus, saveCodexApiKey } from '../codingAgent/codexAuth'
 import type { ProductionAdapterId } from '../codingAgent/interface'
@@ -53,6 +59,63 @@ function broadcast(event: CodingAgentEvent): void {
 // merged — a merge would leave the same injection path open.
 function configuredCommands(): AdapterCommandOverrides {
   return getAppSettings().agentCommands
+}
+
+/** Decides whether a command line the renderer proposed may be stored. */
+export type AgentCommandApproval = (
+  id: ExternalCodingAgentId,
+  command: string
+) => boolean | Promise<boolean>
+
+// SECURITY: the write side of the same boundary. `sanitizeAgentCommands` bounds
+// the KEY set and the length, never the content, and the stored string is what
+// acp.ts hands to spawn(shell: true) — so an unrestricted write is an arbitrary
+// command line, re-run on every agent turn. A renderer request may therefore
+// install only a value that is already trusted:
+//   * the built-in SUGGESTED_AGENT_COMMANDS entry (what Connect offers), or
+//   * the command already stored (idempotent re-save of a value main accepted), or
+//   * anything the user approved in a native dialog that named the exact line.
+// A rejected entry leaves the stored command untouched instead of clearing it;
+// omitting an id still removes it (disconnecting spawns nothing).
+export async function authorizeAgentCommands(
+  next: unknown,
+  current: AgentCommands,
+  approve: AgentCommandApproval
+): Promise<AgentCommands> {
+  const out: AgentCommands = {}
+  const src = next && typeof next === 'object' ? (next as Record<string, unknown>) : {}
+  for (const id of AGENT_COMMAND_IDS) {
+    const raw = src[id]
+    const command = typeof raw === 'string' ? raw.trim() : ''
+    if (!command) continue
+    if (command === SUGGESTED_AGENT_COMMANDS[id] || command === current[id]) {
+      out[id] = command
+    } else if (await approve(id, command)) {
+      out[id] = command
+    } else if (current[id]) {
+      out[id] = current[id]
+    }
+  }
+  return out
+}
+
+// The native approval prompt. It names the exact command line, so "yes" is a
+// decision about that string and not about an opaque "connect this agent".
+async function approveAgentCommandInDialog(
+  id: ExternalCodingAgentId,
+  command: string
+): Promise<boolean> {
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Omi — approve agent command',
+    message: `Run this command as the ${ADAPTER_PROFILES[id].displayName} agent?`,
+    detail: `${command}\n\nOmi will run this command line on your computer every time this agent starts. Approve it only if you typed it yourself.`,
+    buttons: ['Approve', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  })
+  return response === 0
 }
 
 export function registerCodingAgentHandlers(): void {
@@ -102,18 +165,37 @@ export function registerCodingAgentHandlers(): void {
   // sanitizer, which drops unknown ids and over-long values.
   ipcMain.handle('codingAgent:getCommands', (): AgentCommands => configuredCommands())
 
-  ipcMain.handle('codingAgent:setCommands', (_e, next: AgentCommands): AgentCommands => {
-    return setAppSettings({ agentCommands: next ?? {} }).agentCommands
-  })
+  ipcMain.handle(
+    'codingAgent:setCommands',
+    async (_e, next: AgentCommands): Promise<AgentCommands> => {
+      const agentCommands = await authorizeAgentCommands(
+        next,
+        configuredCommands(),
+        approveAgentCommandInDialog
+      )
+      return setAppSettings({ agentCommands }).agentCommands
+    }
+  )
 
   // One-time import of the pre-migration renderer-stored commands. Applied only
   // while main's own store is still empty, so it cannot be replayed later to
   // overwrite (or re-inject) a command the user has since set here.
-  ipcMain.handle('codingAgent:migrateCommands', (_e, legacy: AgentCommands): AgentCommands => {
-    const current = configuredCommands()
-    if (Object.keys(current).length > 0) return current
-    return setAppSettings({ agentCommands: legacy ?? {} }).agentCommands
-  })
+  ipcMain.handle(
+    'codingAgent:migrateCommands',
+    async (_e, legacy: AgentCommands): Promise<AgentCommands> => {
+      const current = getAppSettings().agentCommands
+      if (Object.keys(current).length > 0) return current
+      // Same gate as setCommands: the legacy blob came out of renderer storage,
+      // so an attacker who wrote it there gets no free pass just because main's
+      // store is still empty.
+      const agentCommands = await authorizeAgentCommands(
+        legacy,
+        current,
+        approveAgentCommandInDialog
+      )
+      return setAppSettings({ agentCommands }).agentCommands
+    }
+  )
 
   ipcMain.handle('codingAgent:authStatus', (): CodingAgentAuthStatus => claudeAuthStatus())
 

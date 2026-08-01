@@ -534,8 +534,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params);
       if (signal.aborted || method !== "session/update") return;
+      const notification = params as Record<string, unknown>;
+      if (notification.sessionId !== adapterSessionId) {
+        this.log(
+          `Dropped session/update for ${String(notification.sessionId)} on binding ${adapterSessionId}`
+        );
+        return;
+      }
       const didProgress = this.translateSessionUpdate(
-        params as Record<string, unknown>,
+        notification,
         pendingTools,
         () => `acp-tool-${++syntheticToolIdCounter}`,
         sink,

@@ -263,8 +263,12 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
 
     response = tools_router.ToolResponse.model_validate(tools_router.get_memories(limit=10, offset=0, uid='uid-route'))
 
-    assert response.result_text == 'No memories available for this request.'
+    # The fail-closed substitution still replaces the whole result; it is then handed
+    # to the model inside the untrusted-data boundary like every other tool result.
+    assert 'No memories available for this request.' in response.result_text
+    assert 'memory_id=mem-route' not in response.result_text
     assert 'SYSTEM:' not in response.result_text
+    assert response.result_text.startswith('<untrusted_tool_output tool="get_memories_tool">')
     assert response.is_error is False
 
 
@@ -310,9 +314,11 @@ def test_agent_execute_tool_route_fail_closed_response_shape_for_partial_memory_
         )
     )
 
-    assert response.result == 'No memories available for this request.'
+    assert 'No memories available for this request.' in response.result
+    assert 'memory_id=mem-route' not in response.result
     assert response.error is None
     assert 'SYSTEM:' not in response.result
+    assert response.result.startswith('<untrusted_tool_output tool="search_memories_tool">')
 
 
 class _BlockingTool:
@@ -405,6 +411,7 @@ def test_execute_tool_runs_sync_tools_off_the_event_loop(loaded_route_modules):
     raw_response = asyncio.run(scenario())
     elapsed = time.monotonic() - began
 
-    assert raw_response == {'result': 'done'}
+    assert 'done' in raw_response['result']
+    assert raw_response['result'].startswith('<untrusted_tool_output tool="blocking_tool">')
     pool.shutdown(wait=False)
     assert elapsed < 1.0, f'event loop was blocked for {elapsed:.2f}s by a sync tool invoke'

@@ -32,7 +32,15 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
-import { unlinkSync, appendFileSync } from "fs";
+import {
+  unlinkSync,
+  appendFileSync,
+  chmodSync,
+  closeSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+} from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
@@ -1164,13 +1172,40 @@ function requireControlSessionPolicy(sessionId: string | undefined, ownerId: str
  * EPIPE re-entry loop).
  */
 const CRASH_LOG_MAX_LINES = 100;
+const CRASH_LOG_PATH = join(homedir(), "Library", "Logs", "Omi", "agent-crash.log");
 let crashLogLineCount = 0;
+
+function ensureCrashLogOwnerOnly(path: string): boolean {
+  try {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    let existing: ReturnType<typeof lstatSync> | null = null;
+    try {
+      existing = lstatSync(path);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") return false;
+    }
+    if (existing) {
+      const ownerUid = process.getuid?.();
+      if (existing.isFile() && ownerUid !== undefined && existing.uid === ownerUid) {
+        chmodSync(path, 0o600);
+        return true;
+      }
+      unlinkSync(path);
+    }
+    closeSync(openSync(path, "a", 0o600));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function logCrash(msg: string): void {
   if (crashLogLineCount >= CRASH_LOG_MAX_LINES) return;
   crashLogLineCount += 1;
   try {
+    if (!ensureCrashLogOwnerOnly(CRASH_LOG_PATH)) return;
     const ts = new Date().toISOString();
-    appendFileSync("/tmp/agent-crash.log", `[${ts}] ${msg}\n`);
+    appendFileSync(CRASH_LOG_PATH, `[${ts}] ${sanitizeProcessDiagnostic(msg)}\n`, { mode: 0o600 });
   } catch {
     // ignore
   }

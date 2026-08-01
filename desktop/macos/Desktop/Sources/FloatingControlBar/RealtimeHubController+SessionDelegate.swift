@@ -594,6 +594,9 @@ extension RealtimeHubController {
         return .succeeded(
           "Could not click: point_click requires finite numeric x and y coordinates.")
       }
+      guard ensureSyntheticInputArmed() else {
+        return .succeeded(AgentToolConsentPolicy.syntheticInputDeclinedResult)
+      }
       guard
         Self.click(
           at: CGPoint(x: x, y: y),

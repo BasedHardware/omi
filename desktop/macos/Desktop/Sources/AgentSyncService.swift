@@ -728,6 +728,17 @@ actor AgentSyncService {
     }
   }
 
+  static func syncReceiptMatches(responseBody: Data, table: String, rowCount: Int) -> Bool {
+    guard let object = try? JSONSerialization.jsonObject(with: responseBody),
+      let payload = object as? [String: Any],
+      let applied = payload["applied"] as? Int,
+      let acknowledgedTable = payload["table"] as? String
+    else {
+      return false
+    }
+    return applied == rowCount && acknowledgedTable == table
+  }
+
   private func pushRows(
     _ table: String,
     _ rows: [[String: Any]],
@@ -765,6 +776,11 @@ actor AgentSyncService {
       let retryAfter = Self.parseRetryAfter(httpResponse.value(forHTTPHeaderField: "Retry-After"))
 
       if httpResponse.statusCode == 200 {
+        guard Self.syncReceiptMatches(responseBody: data, table: table, rowCount: rows.count) else {
+          let body = String(data: data, encoding: .utf8) ?? ""
+          log("AgentSync: push \(table) unacknowledged — HTTP 200 without a matching applied/table receipt: \(body)")
+          return .networkError
+        }
         return .success
       } else if httpResponse.statusCode == 429 {
         let body = String(data: data, encoding: .utf8) ?? ""

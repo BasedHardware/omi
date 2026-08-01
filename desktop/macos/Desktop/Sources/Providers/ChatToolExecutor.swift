@@ -211,6 +211,18 @@ class ChatToolExecutor {
       return message
     }
 
+    if let consentRequest = AgentToolConsentPolicy.request(
+      forToolNamed: toolCall.name,
+      arguments: toolCall.arguments),
+      !AgentToolConsentGate.confirm(consentRequest)
+    {
+      log("Tool \(toolCall.name) refused: the user declined the consent prompt")
+      return toolCall.name == "fill_cloud_connector_form"
+        ? AgentToolConsentPolicy.cloudConnectorDeclinedResult
+        : "Error: the user declined this action."
+    }
+    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+
     switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
     case .executeSql:
       return await executeSQL(toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -748,6 +760,16 @@ class ChatToolExecutor {
     // Block UPDATE/DELETE without WHERE
     if (isUpdate || isDelete) && !upper.contains("WHERE") {
       return "Error: \(isUpdate ? "UPDATE" : "DELETE") without WHERE clause is not allowed"
+    }
+
+    // This surface is read-only by default: a mutation only proceeds on an
+    // explicit per-statement user approval, never on prompt text alone.
+    if (isSelect || isInsert || isUpdate || isDelete) && !isReadOnlySQLStatement(trimmed) {
+      guard AgentToolConsentGate.confirm(AgentToolConsentPolicy.sqlWriteRequest(query: trimmed))
+      else {
+        log("Tool execute_sql refused: the user declined the write")
+        return AgentToolConsentPolicy.sqlWriteDeclinedResult
+      }
     }
 
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }

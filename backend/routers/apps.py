@@ -144,6 +144,7 @@ from models.app import (
     AppBaseModel,
     AppReview,
     AppCatalogItem,
+    compute_app_manifest_hash,
 )
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
@@ -426,6 +427,22 @@ def _safe_upload_filename(filename: Optional[str]) -> str:
     if not safe_name or safe_name in ('.', '..'):
         raise HTTPException(status_code=400, detail='Invalid filename')
     return safe_name
+
+
+def _pin_app_manifest_hash(app_id: str) -> Optional[str]:
+    """Pin the reviewed tool manifest digest so a post-approval swap is detectable.
+
+    The manifest is re-fetched from a developer-controlled URL after review, so the
+    digest reviewed at approval is stored on the app record; `load_app_tools` refuses
+    to expose tools whose digest no longer matches.
+    """
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        return None
+    manifest_hash = compute_app_manifest_hash(app_data.get('chat_tools'))
+    update_app_in_db({'id': app_id, 'approved_manifest_hash': manifest_hash})
+    logger.info(f'Pinned manifest hash {manifest_hash} for approved app {app_id}')
+    return manifest_hash
 
 
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
@@ -2296,6 +2313,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     require_admin_authorization(secret_key)
+    _pin_app_manifest_hash(app_id)
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)

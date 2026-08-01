@@ -8,35 +8,50 @@ def test_chat_memory_tool_caller_wires_boundary_guard_before_returning_tool_outp
     agentic_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'agentic.py'
     contents = agentic_py.read_text(encoding='utf-8')
 
-    assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
+    assert 'from utils.retrieval.tool_result_boundaries import (' in contents
+    assert 'preserve_chat_memory_tool_result_boundary,' in contents
     assert 'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))' in contents
     assert contents.index('result = await tool_obj.ainvoke(tool_input, config=config)') < contents.index(
         'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))'
     )
+    # The memory boundary guard still runs before anything is handed back; the generalized
+    # untrusted-data wrapper is applied on top of its output, never instead of it.
     assert contents.index(
         'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))'
-    ) < contents.index('return result')
+    ) < contents.index('return wrap_untrusted_tool_result(tool_name, result)')
 
 
 def test_agent_execute_tool_route_guards_memory_tool_result_before_returning_to_agent():
     agent_tools_py = Path(__file__).resolve().parents[2] / 'routers' / 'agent_tools.py'
     contents = agent_tools_py.read_text(encoding='utf-8')
 
-    assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
+    assert 'from utils.retrieval.tool_result_boundaries import (' in contents
+    assert 'preserve_chat_memory_tool_result_boundary,' in contents
+    assert 'wrap_untrusted_tool_result,' in contents
     assert 'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))' in contents
     assert contents.index(
         'result = await run_blocking(db_executor, target.invoke, params, config=config)'
     ) < contents.index('result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))')
+    # This route hands any tool — including every app/MCP tool — straight back to an agent
+    # VM's model context, so the generalized untrusted-data wrapper runs on top of the
+    # memory guard before the response is built.
     assert contents.index(
         'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))'
-    ) < contents.index('return {"result": result}')
+    ) < contents.index('result = wrap_untrusted_tool_result(body.tool_name, result)')
+    assert contents.index('result = wrap_untrusted_tool_result(body.tool_name, result)') < contents.index(
+        'return {"result": result}'
+    )
 
 
 def test_tools_rest_memory_routes_guard_results_before_response_envelope():
     tools_py = Path(__file__).resolve().parents[2] / 'routers' / 'tools.py'
     contents = tools_py.read_text(encoding='utf-8')
 
-    assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
+    assert 'from utils.retrieval.tool_result_boundaries import (' in contents
+    assert 'preserve_chat_memory_tool_result_boundary,' in contents
+    # `result_text` is relayed verbatim into a model by the desktop agent kernels, so the
+    # shared envelope wraps every one of these routes' output, not just the memory ones.
+    assert '"result_text": wrap_untrusted_tool_result(f"{tool_name}_tool", text),' in contents
     assert "preserve_chat_memory_tool_result_boundary('get_memories_tool', result)" in contents
     assert "preserve_chat_memory_tool_result_boundary('search_memories_tool', result)" in contents
     assert contents.index('result = get_memories_text(') < contents.index(

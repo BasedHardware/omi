@@ -6,6 +6,7 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
+import re
 from typing import Any, Dict, List, Optional, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
@@ -26,11 +27,12 @@ from database.webhook_health import (
     ENDPOINT_CHAT_TOOL,
     ENDPOINT_MCP_TOOL,
 )
-from models.app import App, ChatTool
+from models.app import App, ChatTool, compute_app_manifest_hash
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
+from utils.prompt_safety import escape_untrusted_prompt_text, untrusted_app_tool_description
 import logging
 
 logger = logging.getLogger(__name__)
@@ -110,6 +112,30 @@ def _remember_tool_status(tool_name: str, status_message: str) -> None:
     _tool_status_messages[tool_name] = status_message
 
 
+def app_manifest_matches_approval(app: App) -> bool:
+    """Whether an app's current tool manifest still matches the digest pinned at approval.
+
+    Apps approved before manifest pinning existed carry no pinned digest and stay
+    usable; once a digest is pinned, a manifest swap fails closed.
+    """
+    pinned = app.approved_manifest_hash
+    if not pinned:
+        return True
+    return compute_app_manifest_hash(app.chat_tools) == pinned
+
+
+_TOOL_NAME_UNSAFE_CHARS = re.compile(r'[^A-Za-z0-9_-]')
+
+
+def _safe_tool_name_part(name: str) -> str:
+    """Reduce an app-authored tool name to the identifier charset model APIs accept.
+
+    An app author cannot smuggle prose or markup into the model-facing tool name.
+    Well-formed names (letters, digits, `_`, `-`) are returned unchanged.
+    """
+    return _TOOL_NAME_UNSAFE_CHARS.sub('_', str(name or ''))
+
+
 def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type[BaseModel]:
     """
     Create a Pydantic model from a JSON schema parameters definition.
@@ -128,7 +154,7 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
 
     for param_name, param_schema in properties.items():
         param_type = param_schema.get('type', 'string')
-        param_desc = param_schema.get('description', '')
+        param_desc = escape_untrusted_prompt_text(param_schema.get('description', ''))
         is_required = param_name in required
 
         # Map JSON schema types to Python types
@@ -182,7 +208,7 @@ def create_app_tool(
     Returns:
         A LangChain StructuredTool
     """
-    tool_name = f"{app_id}_{app_tool.name}"
+    tool_name = f"{app_id}_{_safe_tool_name_part(app_tool.name)}"
 
     # Store status message in global mapping for UI display (if provided)
     if app_tool.status_message:
@@ -232,7 +258,7 @@ def create_app_tool(
 
         return StructuredTool(
             name=tool_name,
-            description=f"{app_tool.description} (from {app_name} app)",
+            description=untrusted_app_tool_description(app_tool.description, app_name),
             func=_sync_noop,
             coroutine=mcp_tool_function,
             args_schema=args_schema,
@@ -247,7 +273,7 @@ def create_app_tool(
     # Create StructuredTool with the schema
     return StructuredTool(
         name=tool_name,
-        description=f"{app_tool.description} (from {app_name} app)",
+        description=untrusted_app_tool_description(app_tool.description, app_name),
         func=_sync_noop,  # Sync placeholder (async coroutine is used instead)
         coroutine=tool_function,
         args_schema=args_schema,
@@ -432,6 +458,13 @@ def load_app_tools(uid: str) -> List[BaseTool]:
             app = App(**app_data)
         except Exception as e:
             logger.error(f"Error parsing app {app_id}: {e}")
+            continue
+
+        if not app_manifest_matches_approval(app):
+            logger.error(
+                f'🚫 App {app_id} tool manifest does not match the digest pinned at approval; '
+                'refusing to expose its tools'
+            )
             continue
 
         # Only load tools if app has chat_tools defined

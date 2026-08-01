@@ -95,9 +95,11 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
     await restoreOriginalOwnerDefaults()
+    await MainActor.run { AgentToolConsentGate.setPresenterForTesting { _ in .approved } }
   }
 
   override func tearDown() async throws {
+    await MainActor.run { AgentToolConsentGate.setPresenterForTesting(nil) }
     await restoreOriginalOwnerDefaults()
     try await super.tearDown()
   }

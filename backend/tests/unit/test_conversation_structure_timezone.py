@@ -134,6 +134,10 @@ if _conversation_processing_stub is not None and not hasattr(_conversation_proce
 # discard_parser only needs pydantic and langchain_core, so load the real module.
 _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
 
+# prompt_safety is a stdlib-only leaf module; load the real one so the escaped/delimited
+# app-authored prompt boundaries are exercised rather than stubbed.
+_load_module_from_file("utils.prompt_safety", BACKEND_DIR / "utils" / "prompt_safety.py")
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

@@ -1,1 +1,14 @@
 backend/google-credentials.json
+
+# Keep secrets, credentials and local build state out of image layers.
+.git
+**/.env*
+**/*.pem
+**/node_modules
+**/.venv
+**/.openapi-venv
+**/__pycache__
+
+!**/.env.template
+!**/.env.example
+!**/.env.sample

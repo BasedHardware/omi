@@ -96,12 +96,13 @@ int mount_sd_card(void)
     LOG_INF("result of opendir: %d", err);
     initialize_audio_file(1);
     struct fs_dirent file_count_entry;
-    file_count = get_file_contents(&audio_dir_entry, &file_count_entry);
-    file_count = 1;
-    if (file_count < 0) {
+    int found_files = get_file_contents(&audio_dir_entry, &file_count_entry);
+    if (found_files < 0) {
         LOG_ERR(" error getting file count");
+        fs_closedir(&audio_dir_entry);
         return -1;
     }
+    file_count = 1;
 
     fs_closedir(&audio_dir_entry);
     // file_count++;
@@ -138,6 +139,10 @@ int mount_sd_card(void)
 uint32_t get_file_size(uint8_t num)
 {
     char *ptr = generate_new_audio_header(num);
+    if (ptr == NULL) {
+        LOG_ERR("invalid file number in get file size");
+        return 0;
+    }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
     k_free(ptr);
     struct fs_dirent entry;
@@ -152,6 +157,10 @@ uint32_t get_file_size(uint8_t num)
 int move_read_pointer(uint8_t num)
 {
     char *read_ptr = generate_new_audio_header(num);
+    if (read_ptr == NULL) {
+        LOG_ERR("invalid file number in move read ptr");
+        return -1;
+    }
     snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
     k_free(read_ptr);
     struct fs_dirent entry;
@@ -166,6 +175,10 @@ int move_read_pointer(uint8_t num)
 int move_write_pointer(uint8_t num)
 {
     char *write_ptr = generate_new_audio_header(num);
+    if (write_ptr == NULL) {
+        LOG_ERR("invalid file number in move write pointer");
+        return -1;
+    }
     snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
     k_free(write_ptr);
     struct fs_dirent entry;
@@ -229,9 +242,9 @@ int initialize_audio_file(uint8_t num)
     if (header == NULL) {
         return -1;
     }
+    int res = create_file(header);
     k_free(header);
-    create_file(header);
-    return 0;
+    return res;
 }
 
 char *generate_new_audio_header(uint8_t num)
@@ -239,6 +252,9 @@ char *generate_new_audio_header(uint8_t num)
     if (num > 99)
         return NULL;
     char *ptr_ = k_malloc(14);
+    if (ptr_ == NULL) {
+        return NULL;
+    }
     ptr_[0] = 'a';
     ptr_[1] = 'u';
     ptr_[2] = 'd';
@@ -270,7 +286,7 @@ int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
     LOG_INF("file numarray %d %d ", count, file_num_array[count]);
     LOG_INF("file name is %s ", entry->name);
     count++;
-    while (zdp->mp->fs->readdir(zdp, entry) == 0) {
+    while ((size_t) count < ARRAY_SIZE(file_num_array) && zdp->mp->fs->readdir(zdp, entry) == 0) {
         if (entry->name[0] == 0) {
             break;
         }
@@ -285,6 +301,10 @@ int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
 int clear_audio_file(uint8_t num)
 {
     char *clear_header = generate_new_audio_header(num);
+    if (clear_header == NULL) {
+        LOG_ERR("invalid file number in clear audio file");
+        return -1;
+    }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, clear_header);
     k_free(clear_header);
     int res = fs_unlink(current_full_path);
@@ -294,6 +314,10 @@ int clear_audio_file(uint8_t num)
     }
 
     char *create_file_header = generate_new_audio_header(num);
+    if (create_file_header == NULL) {
+        LOG_ERR("invalid file number in clear audio file");
+        return -1;
+    }
     k_msleep(10);
     res = create_file(create_file_header);
     k_free(create_file_header);
@@ -308,6 +332,10 @@ int clear_audio_file(uint8_t num)
 int delete_audio_file(uint8_t num)
 {
     char *ptr = generate_new_audio_header(num);
+    if (ptr == NULL) {
+        LOG_ERR("invalid file number in delete audio file");
+        return -1;
+    }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
     k_free(ptr);
     int res = fs_unlink(current_full_path);

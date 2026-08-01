@@ -318,9 +318,12 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         uint16_t offset,
                                         uint8_t flags)
 {
+    if (len == 0 || len > SPEAKER_MAX_WRITE_SIZE) {
+        LOG_WRN("Invalid speaker write length: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
     uint16_t amount = 400;
-    int16_t *int16_buf = (int16_t *) buf;
-    uint8_t *data = (uint8_t *) buf;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
@@ -538,6 +541,14 @@ static bool read_from_tx_queue()
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
     // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
 
+    if (tx_buffer_size > CODEC_OUTPUT_MAX_BYTES) {
+        LOG_ERR("Frame length %u exceeds the %u byte codec frame, dropping",
+                tx_buffer_size,
+                (uint32_t) CODEC_OUTPUT_MAX_BYTES);
+        tx_buffer_size = 0;
+        return false;
+    }
+
     return true;
 }
 
@@ -613,6 +624,8 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
+BUILD_ASSERT(CODEC_OUTPUT_MAX_BYTES + OPUS_PREFIX_LENGTH <= MAX_WRITE_SIZE,
+             "A single codec frame plus its length prefix must fit in storage_temp_data");
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
@@ -647,7 +660,7 @@ bool write_to_storage(void)
     }
 
     uint8_t *buffer = tx_buffer + 2;
-    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+    uint32_t packet_size = tx_buffer_size + OPUS_PREFIX_LENGTH;
 
     // buffer_offset = buffer_offset+amount_to_fill;
     // check if adding the new packet will cause a overflow

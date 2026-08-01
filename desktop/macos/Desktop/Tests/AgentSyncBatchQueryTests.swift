@@ -121,7 +121,11 @@ private actor AgentSyncDelayedTokenGate {
         if table == "transcription_sessions" {
           return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
         }
-        return (Data(), response(url, status: 200))
+        let rows = try XCTUnwrap(json["rows"] as? [[String: Any]])
+        return (
+          try JSONSerialization.data(withJSONObject: ["applied": rows.count, "table": table]),
+          response(url, status: 200)
+        )
       case "/health":
         return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
       default:
@@ -198,7 +202,11 @@ private actor AgentSyncDelayedTokenGate {
         if missingTables.contains(table) {
           return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
         }
-        return (Data(), response(url, status: 200))
+        let rows = try XCTUnwrap(json["rows"] as? [[String: Any]])
+        return (
+          try JSONSerialization.data(withJSONObject: ["applied": rows.count, "table": table]),
+          response(url, status: 200)
+        )
       case "/health":
         healthChecks += 1
         switch healthResponse {
@@ -237,6 +245,71 @@ private actor AgentSyncDelayedTokenGate {
 
     func counts() -> (healthChecks: Int, uploads: Int, syncedTables: [String]) {
       (healthChecks, uploads, syncedTables)
+    }
+
+    private func response(_ url: URL, status: Int) -> URLResponse {
+      HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+        ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+    }
+  }
+
+  /// Models an endpoint that answers `/sync` with HTTP 200 while forwarding
+  /// nothing: the row range is lost unless the client verifies the VM's
+  /// `{ applied, table }` receipt before advancing its cursor.
+  private actor AgentSyncReceiptProbe {
+    enum Receipt {
+      case honest
+      case appliedZero
+      case wrongTable
+      case empty
+    }
+
+    private let receipt: Receipt
+    private var batches: [(table: String, ids: [Int64])] = []
+
+    init(receipt: Receipt) {
+      self.receipt = receipt
+    }
+
+    func respond(to request: URLRequest) throws -> (Data, URLResponse) {
+      let url = try XCTUnwrap(request.url)
+      switch url.path {
+      case "/auth":
+        return (Data(), response(url, status: 200))
+      case "/sync":
+        let payload = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        let table = try XCTUnwrap(json["table"] as? String)
+        let rows = try XCTUnwrap(json["rows"] as? [[String: Any]])
+        batches.append((table, rows.compactMap { ($0["id"] as? NSNumber)?.int64Value }))
+        switch receipt {
+        case .honest:
+          return (
+            try JSONSerialization.data(withJSONObject: ["applied": rows.count, "table": table]),
+            response(url, status: 200)
+          )
+        case .appliedZero:
+          return (
+            try JSONSerialization.data(withJSONObject: ["applied": 0, "table": table]),
+            response(url, status: 200)
+          )
+        case .wrongTable:
+          return (
+            try JSONSerialization.data(withJSONObject: ["applied": rows.count, "table": "something_else"]),
+            response(url, status: 200)
+          )
+        case .empty:
+          return (Data(), response(url, status: 200))
+        }
+      case "/health":
+        return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
+      default:
+        return (Data(), response(url, status: 404))
+      }
+    }
+
+    func batchedIds(for table: String) -> [[Int64]] {
+      batches.filter { $0.table == table }.map(\.ids)
     }
 
     private func response(_ url: URL, status: Int) -> URLResponse {

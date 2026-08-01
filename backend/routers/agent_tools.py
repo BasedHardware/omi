@@ -24,7 +24,10 @@ from pydantic import BaseModel
 from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
-from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.tool_result_boundaries import (
+    preserve_chat_memory_tool_result_boundary,
+    wrap_untrusted_tool_result,
+)
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
@@ -428,6 +431,7 @@ async def execute_tool(
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
             result = await run_blocking(db_executor, target.invoke, params, config=config)
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
+        result = wrap_untrusted_tool_result(body.tool_name, result)
         return {"result": result}
     except Exception as error:
         # Exception text can embed caller params (pydantic renders

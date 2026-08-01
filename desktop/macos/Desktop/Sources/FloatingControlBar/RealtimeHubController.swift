@@ -85,6 +85,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// bridge. This lets a PTT probe distinguish a provider wait from a local lifecycle failure.
   var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
+  /// Synthetic HID input is disarmed until the user opts in for one physical
+  /// session. The binding is keyed to the socket that was live when the user
+  /// agreed, so arming cannot outlive the session and no model-reachable tool
+  /// can set it.
+  var syntheticInputArming = SyntheticInputArmingState()
   var screenFailurePresented = false
   let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()
   var turnPreparationTask: Task<Void, Never>?

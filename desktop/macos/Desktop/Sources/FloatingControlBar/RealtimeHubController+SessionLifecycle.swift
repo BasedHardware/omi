@@ -1001,6 +1001,7 @@ extension RealtimeHubController {
       clearBargeInReplacementState()
     }
     clearRealtimeToolTracking()
+    syntheticInputArming.disarm()
     return detachedSession
   }
 

@@ -87,6 +87,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
           jsonrpc: "2.0",
           method: "session/update",
           params: {
+            sessionId: "hermes-native-session",
             update: {
               sessionUpdate: "agent_message_chunk",
               content: { type: "text", text: "OMI_HERMES_DOGFOOD_OK" },
@@ -174,6 +175,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
           jsonrpc: "2.0",
           method: "session/update",
           params: {
+            sessionId: "openclaw-native-session",
             update: {
               sessionUpdate: "agent_message_chunk",
               content: { type: "text", text: "OMI_OPENCLAW_DOGFOOD_OK" },
@@ -257,6 +259,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
             jsonrpc: "2.0",
             method: "session/update",
             params: {
+              sessionId: "openclaw-native-session",
               update: {
                 sessionUpdate: "agent_message_chunk",
                 content: { type: "text", text: promptCount === 1 ? "remembered" : "BLUEFJORD" },

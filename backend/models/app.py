@@ -1,8 +1,9 @@
+import hashlib
 import json
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Mapping, Optional, Set
+from typing import Any, Iterable, List, Literal, Mapping, Optional, Set
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -118,6 +119,42 @@ class ChatTool(BaseModel):
         return v
 
 
+MANIFEST_HASHED_TOOL_FIELDS = ('name', 'description', 'endpoint', 'method', 'parameters', 'is_mcp', 'transport')
+
+
+def compute_app_manifest_hash(chat_tools: Optional[Iterable[Any]]) -> str:
+    """sha256 over the canonical serialization of an app's model-facing tool manifest.
+
+    Only the fields that reach the model or the outbound request are hashed, so a
+    post-approval manifest swap changes the digest while unrelated bookkeeping does not.
+    Accepts `ChatTool` instances or raw manifest dicts.
+    """
+    canonical: List[dict[str, Any]] = []
+    for tool in chat_tools or []:
+        if isinstance(tool, BaseModel):
+            raw = tool.model_dump(mode='json')
+        else:
+            # Raw Firestore manifest dicts are parsed first so model defaults (is_mcp,
+            # transport, method) hash identically to the parsed tools verified at read time.
+            try:
+                raw = ChatTool(**dict(tool or {})).model_dump(mode='json')
+            except Exception:
+                raw = dict(tool or {})
+        entry: dict[str, Any] = {}
+        for field in MANIFEST_HASHED_TOOL_FIELDS:
+            value = raw.get(field)
+            if field == 'parameters' and isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            entry[field] = value
+        canonical.append(entry)
+    canonical.sort(key=lambda entry: str(entry.get('name') or ''))
+    serialized = json.dumps(canonical, sort_keys=True, separators=(',', ':'), default=str)
+    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+
+
 class ApiKey(BaseModel):
     id: str
     hashed: str
@@ -161,6 +198,9 @@ class AppBaseModel(BaseModel):
     is_popular: Optional[bool] = False
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
+    # sha256 of the tool manifest pinned at approval; None for apps approved before pinning
+    # existed, which stay unpinned rather than losing their tools.
+    approved_manifest_hash: Optional[str] = None
     source_code_url: Optional[str] = None
     disabled: Optional[bool] = False
     disabled_reason: Optional[str] = None

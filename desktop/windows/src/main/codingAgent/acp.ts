@@ -354,8 +354,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       this.processIsExternal = true
       // `command` is a full command LINE, not a program path, and it reaches here
       // only from main's own settings store (appSettings.agentCommands) or an
-      // OMI_*_ADAPTER_COMMAND env var — never from the renderer, which sends an
-      // agent id and nothing else. `shell: true` stays: the shipped adapter
+      // OMI_*_ADAPTER_COMMAND env var. A renderer write can put a string in that
+      // store only when it is the built-in suggested command for the agent or
+      // the user approved that exact line in a native dialog (see
+      // ipc/codingAgent.ts authorizeAgentCommands). `shell: true` stays: the shipped adapter
       // commands are npm-launcher based (`npx …`), and on Windows a .cmd/.bat
       // shim cannot be spawned without a shell, so splitting this into an
       // execFile argv would break every default external adapter. The shell is

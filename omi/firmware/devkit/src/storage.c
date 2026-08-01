@@ -142,9 +142,23 @@ static int setup_storage_tx()
 
     LOG_INF("current read ptr %d", current_read_num);
 
+    if (current_read_num == 0 || (size_t) current_read_num > ARRAY_SIZE(file_num_array)) {
+        LOG_ERR("read index %d out of range", current_read_num);
+        transport_started = 0;
+        current_read_num = 1;
+        remaining_length = 0;
+        return -1;
+    }
+
     remaining_length = file_num_array[current_read_num - 1];
     if (current_read_num == file_count) {
         remaining_length = get_file_size(file_count);
+    }
+
+    if (offset >= remaining_length) {
+        LOG_INF("offset %u is at or past file length %u, nothing to send", offset, remaining_length);
+        remaining_length = 0;
+        return -1;
     }
 
     remaining_length = remaining_length - offset;
@@ -179,7 +193,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
         LOG_INF("invalid file count 0");
         return INVALID_FILE_SIZE;
     }
-    if (file_num > file_count) // invalid file count
+    if (file_num > file_count || (size_t) file_num > ARRAY_SIZE(file_num_array)) // invalid file count
     {
         LOG_INF("invalid file count");
         return INVALID_FILE_SIZE;
@@ -190,21 +204,21 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
         uint32_t temp = file_num_array[file_num - 1];
         if (file_num == (file_count)) {
             LOG_INF("file_count == final file");
-            offset = size - (size % SD_BLE_SIZE); // round down to nearest SD_BLE_SIZE
-            current_read_num = file_num;
-            transport_started = 1;
         } else if (temp == 0) {
             LOG_INF("file size is 0");
             return ZERO_FILE_SIZE;
-        } else if (size > temp) {
+        }
+        // temp is the last cached size; the authoritative bound is re-checked
+        // against the on-disk size in setup_storage_tx before anything is sent.
+        if (temp != 0 && size > temp) {
             LOG_INF("requested size is too large");
             return 5;
-        } else {
-            LOG_INF("valid command, setting up ");
-            offset = size - (size % SD_BLE_SIZE);
-            current_read_num = file_num;
-            transport_started = 1;
         }
+        // round down to nearest SD_BLE_SIZE
+        offset = size - (size % SD_BLE_SIZE);
+        LOG_INF("valid command, setting up ");
+        current_read_num = file_num;
+        transport_started = 1;
     } else if (command == DELETE_COMMAND) {
         delete_num = file_num;
         delete_started = 1;
@@ -272,15 +286,32 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
 static void write_to_gatt(struct bt_conn *conn)
 { // unsafe. designed for max speeds. udp?
 
-    uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
+    uint32_t chunk = MIN(remaining_length, SD_BLE_SIZE);
+    if (chunk == 0) {
+        return;
+    }
 
-    int r = read_audio_data(storage_write_buffer, packet_size, offset);
-    offset = offset + packet_size;
-    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
+    memset(storage_write_buffer, 0, sizeof(storage_write_buffer));
+    int r = read_audio_data(storage_write_buffer, chunk, offset);
+    if (r <= 0) {
+        LOG_PRINTK("storage read returned %d, ending transfer\n", r);
+        remaining_length = 0;
+        return;
+    }
+
+    const bool short_read = ((uint32_t) r < chunk);
+    chunk = (uint32_t) r;
+
+    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, chunk);
     if (err) {
         LOG_PRINTK("error writing to gatt: %d\n", err);
-    } else {
-        remaining_length = remaining_length - SD_BLE_SIZE;
+        return;
+    }
+
+    offset = offset + chunk;
+    remaining_length = remaining_length - chunk;
+    if (short_read) {
+        remaining_length = 0;
     }
     // LOG_PRINTK("wrote to gatt %d\n",err);
 }

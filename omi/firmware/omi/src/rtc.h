@@ -13,6 +13,21 @@
 #define RTC_UTC_DATETIME_STRLEN 20
 
 /**
+ * @brief Oldest UTC epoch (seconds) accepted as a real wall-clock time.
+ *
+ * 1700000000 == 2023-11-14. Audio capture drops packets stamped before this,
+ * so anything older must never reach the RTC or persisted settings.
+ */
+#define RTC_MIN_VALID_EPOCH_S 1700000000ULL
+
+/**
+ * @brief Newest UTC epoch (seconds) accepted as a real wall-clock time.
+ *
+ * 2524608000 == 2050-01-01.
+ */
+#define RTC_MAX_VALID_EPOCH_S 2524608000ULL
+
+/**
  * @brief Initialize application timekeeping.
  *
  * Restores RTC from persisted settings if available.

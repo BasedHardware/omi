@@ -258,6 +258,25 @@ class TranscriptionService: @unchecked Sendable {
   let maxReconnectAttempts = 10
   private var _reconnectTask: Task<Void, Never>?
 
+  /// How long a socket must stay continuously connected to count as a working session.
+  /// The reconnect budget is only spent by sessions that never worked, so it is reset by
+  /// evidence of work — the first transcript segment, or this much uninterrupted time.
+  /// Resetting on socket open instead made the cap unreachable: the backend accepts the
+  /// WebSocket before every 1008 close, so the counter zeroed on every rejected attempt.
+  /// Matches the Windows client's "connected long enough / got a segment" reset.
+  static let healthySessionSeconds: TimeInterval = 30.0
+
+  /// Reset the reconnect budget on evidence that this session actually worked.
+  private func markSessionHealthy(_ evidence: String) {
+    stateLock.lock()
+    let hadSpentBudget = _reconnectAttempts > 0
+    _reconnectAttempts = 0
+    stateLock.unlock()
+    if hadSpentBudget {
+      log("TranscriptionService: Reconnect budget reset (\(evidence))")
+    }
+  }
+
   /// Up-to jitter added to every reconnect delay. Ported from the Windows client's
   /// `RECONNECT_JITTER_MS` — without it every client dropped by the same backend
   /// incident wakes at the same instant and re-storms it.
@@ -280,14 +299,53 @@ class TranscriptionService: @unchecked Sendable {
   static let policyCloseReconnectDelay: TimeInterval = 15.0
 
   /// Extra delay a close code demands on top of the normal backoff. 1008 is
-  /// never terminal here: treating it as terminal permanently killed
-  /// transcription for any user who held push-to-talk and paused for 60s.
+  /// never terminal by code alone here: treating it as terminal permanently killed
+  /// transcription for any user who held push-to-talk and paused for 60s. What makes a
+  /// 1008 terminal is its `reason`, not its code — see `isPermanentCloseReason`.
   static func extraReconnectDelay(for closeCode: URLSessionWebSocketTask.CloseCode) -> TimeInterval {
     closeCode.rawValue == 1008 ? policyCloseReconnectDelay : 0
   }
 
+  /// Close reasons a reconnect can never clear. The backend accepts the WebSocket first and
+  /// only then closes with 1008, so every one of these otherwise looks like a healthy socket
+  /// that dropped, and retries forever (one Firestore read per cycle) with nothing shown to
+  /// the user. Kept in step with the Windows client's terminal classification
+  /// (`isQuotaExhaustedMessage` / `isRetryableDropError`), plus the fixed audio-format
+  /// rejections `/v2/voice-message/transcribe-stream` closes with.
+  static let permanentCloseReasons: [String] = [
+    "trial_expired",
+    "quota",
+    "freemium",
+    "daily transcription budget exhausted",
+    "unsupported codec",
+    "sample_rate must be between",
+    "only mono",
+    "channels must be",
+    "not signed in",
+    "requires sign-in",
+  ]
+
+  static func isPermanentCloseReason(_ reason: String?) -> Bool {
+    guard let reason, !reason.isEmpty else { return false }
+    let normalized = reason.lowercased()
+    return permanentCloseReasons.contains { normalized.contains($0) }
+  }
+
+  /// A user-visible message for a terminal close. The bare reason is backend wire text;
+  /// prefixing it keeps the error actionable rather than a silent stall.
+  static func terminalCloseMessage(_ reason: String) -> String {
+    "Transcription stopped: \(reason)"
+  }
+
   /// Additional delay applied to the next scheduled reconnect, consumed once.
   private var _pendingReconnectExtraDelay: TimeInterval = 0
+
+  /// The close code and reason of the current connection, recorded wherever the close is
+  /// FIRST observed. The delegate callback and the `receive` failure handler race: the
+  /// receive path used to win, nil the task, and make the delegate guard out, so the 1008
+  /// backoff (and the reason entirely) were lost.
+  private var _observedCloseCode: Int?
+  private var _observedCloseReason: String?
 
   private func consumePendingReconnectExtraDelay() -> TimeInterval {
     stateLock.lock()
@@ -295,6 +353,37 @@ class TranscriptionService: @unchecked Sendable {
     let extra = _pendingReconnectExtraDelay
     _pendingReconnectExtraDelay = 0
     return extra
+  }
+
+  /// Decode a WebSocket close `reason` payload into text.
+  static func closeReasonText(_ reason: Data?) -> String? {
+    guard let reason, !reason.isEmpty, let text = String(data: reason, encoding: .utf8) else { return nil }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  /// Record a close exactly once per connection, from whichever path sees it first.
+  func noteObservedClose(code: URLSessionWebSocketTask.CloseCode, reason: String?) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    guard _observedCloseCode == nil else { return }
+    guard code != .invalid || reason != nil else { return }
+    _observedCloseCode = code.rawValue
+    _observedCloseReason = reason
+    let extraDelay = Self.extraReconnectDelay(for: code)
+    if extraDelay > 0 {
+      _pendingReconnectExtraDelay = extraDelay
+      log(
+        "TranscriptionService: Close code \(code.rawValue) — backing off an extra \(Int(extraDelay))s before reconnect"
+      )
+    }
+    log("TranscriptionService: WebSocket closed with code \(code.rawValue) reason=\(reason ?? "none")")
+  }
+
+  /// The terminal close reason for the connection that just ended, if any.
+  /// Caller must hold `stateLock`.
+  private func terminalCloseReasonLocked() -> String? {
+    Self.isPermanentCloseReason(_observedCloseReason) ? _observedCloseReason : nil
   }
 
   // Watchdog: detect stale connections where WebSocket dies silently
@@ -617,6 +706,8 @@ class TranscriptionService: @unchecked Sendable {
     _webSocketConnectionObserver = delegate
     _urlSession = session
     _webSocketTask = task
+    _observedCloseCode = nil
+    _observedCloseReason = nil
     stateLock.unlock()
 
     delegate.onOpen = { [weak self, weak task] in
@@ -630,20 +721,17 @@ class TranscriptionService: @unchecked Sendable {
         self.handleWebSocketOpen()
       }
     }
-    delegate.onClose = { [weak self, weak task] closeCode in
-      guard let self,
-        WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
-      else { return }
-      log("TranscriptionService: WebSocket closed with code \(closeCode.rawValue)")
-      let extraDelay = Self.extraReconnectDelay(for: closeCode)
-      if extraDelay > 0 {
-        log(
-          "TranscriptionService: Close code \(closeCode.rawValue) — backing off an extra \(Int(extraDelay))s before reconnect"
-        )
-        self.stateLock.lock()
-        self._pendingReconnectExtraDelay = extraDelay
-        self.stateLock.unlock()
+    delegate.onClose = { [weak self, weak task] closeCode, closeReason in
+      guard let self else { return }
+      let current = self.webSocketTask
+      // Record before the identity guard: the reason must survive even when the `receive`
+      // failure handler already nil'd the task and this callback is otherwise a no-op.
+      // `current == nil` is exactly that case; a *different* live task means this delegate
+      // belongs to a superseded connection and must not overwrite the new one's state.
+      if current == nil || WebSocketConnectionAttempt.matches(task, current: current) {
+        self.noteObservedClose(code: closeCode, reason: closeReason)
       }
+      guard WebSocketConnectionAttempt.matches(task, current: current) else { return }
       if self.isConnected {
         self.handleDisconnection()
       } else if self.shouldReconnect {
@@ -673,10 +761,21 @@ class TranscriptionService: @unchecked Sendable {
   private func handleWebSocketOpen() {
     guard !isConnected else { return }
     isConnected = true
-    reconnectAttempts = 0
     lastDataReceivedAt = Date()
     log("TranscriptionService: WebSocket opened (handshake complete)")
     startWatchdog()
+
+    // A socket that opens proves nothing: the backend accepts before every 1008 close.
+    // Only a session that stays up this long counts as working.
+    stateLock.lock()
+    let generation = _connectionGeneration
+    stateLock.unlock()
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(Self.healthySessionSeconds * 1_000_000_000))
+      guard let self, self.isConnected, self.isCurrentAttempt(generation) else { return }
+      self.markSessionHealthy("connected \(Int(Self.healthySessionSeconds))s")
+    }
+
     onConnected?()
   }
 
@@ -826,7 +925,8 @@ class TranscriptionService: @unchecked Sendable {
   }
 
   private func receiveMessage() {
-    webSocketTask?.receive { [weak self] result in
+    guard let receivingTask = webSocketTask else { return }
+    receivingTask.receive { [weak self, weak receivingTask] result in
       guard let self = self else { return }
 
       switch result {
@@ -836,6 +936,14 @@ class TranscriptionService: @unchecked Sendable {
         self.receiveMessage()
 
       case .failure(let error):
+        // This handler routinely wins the race against `delegate.onClose`. Record the
+        // close it is reporting here, before `handleDisconnection()` nils the task and
+        // the delegate callback guards itself out.
+        if let receivingTask {
+          self.noteObservedClose(
+            code: receivingTask.closeCode,
+            reason: Self.closeReasonText(receivingTask.closeReason))
+        }
         guard self.isConnected else { return }
         logError("TranscriptionService: Receive error", error: error)
         self.handleDisconnection()
@@ -896,7 +1004,11 @@ class TranscriptionService: @unchecked Sendable {
 
 final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
   var onOpen: (() -> Void)?
-  var onClose: ((URLSessionWebSocketTask.CloseCode) -> Void)?
+  /// The close *reason* is carried alongside the code because the backend distinguishes a
+  /// transient 1008 (idle timeout, rate limit) from a permanent one (`trial_expired`,
+  /// budget exhausted, unsupported codec) only in this string. Dropping it, as this
+  /// delegate previously did, is what made every permanent rejection retry forever.
+  var onClose: ((URLSessionWebSocketTask.CloseCode, String?) -> Void)?
 
   func urlSession(
     _ session: URLSession,
@@ -912,7 +1024,7 @@ final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate, 
     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
     reason: Data?
   ) {
-    onClose?(closeCode)
+    onClose?(closeCode, reason.flatMap { String(data: $0, encoding: .utf8) })
   }
 }
 

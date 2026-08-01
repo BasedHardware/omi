@@ -4,8 +4,50 @@ import Foundation
 import OmiSupport
 import VoiceTurnDomain
 
+/// Per-session arming record for synthetic HID input. Owner identity says who is
+/// driving the session; this says whether the user agreed to let the model move
+/// the pointer at all. It is keyed to one physical session so it cannot survive
+/// the session that granted it.
+struct SyntheticInputArmingState: Equatable {
+  private(set) var armedSessionKey: ObjectIdentifier?
+
+  func isArmed(forSessionKey key: ObjectIdentifier?) -> Bool {
+    guard let key, let armedSessionKey else { return false }
+    return key == armedSessionKey
+  }
+
+  /// Arms only when the supplied user confirmation returns true. No tool argument
+  /// reaches this call, so the model cannot arm itself.
+  mutating func armIfUserConfirms(
+    sessionKey: ObjectIdentifier?,
+    confirm: () -> Bool
+  ) -> Bool {
+    if isArmed(forSessionKey: sessionKey) { return true }
+    guard let sessionKey, confirm() else { return false }
+    armedSessionKey = sessionKey
+    return true
+  }
+
+  mutating func disarm() {
+    armedSessionKey = nil
+  }
+}
+
 extension RealtimeHubController {
   // MARK: - Tools
+
+  var syntheticInputSessionKey: ObjectIdentifier? {
+    session.map(ObjectIdentifier.init)
+  }
+
+  /// Asks the user once per physical session before any synthetic click is posted.
+  func ensureSyntheticInputArmed() -> Bool {
+    syntheticInputArming.armIfUserConfirms(
+      sessionKey: syntheticInputSessionKey,
+      confirm: {
+        AgentToolConsentGate.confirm(AgentToolConsentPolicy.syntheticInputArmingRequest())
+      })
+  }
 
   /// ask_higher_model — reuse the EXISTING prompt-cached /v2/chat/completions
   /// (no new backend route). Returns the assistant text for the model to speak.

@@ -26,6 +26,29 @@ git config --global --add safe.directory '*'
 # MCUboot image signing needs the `ecdsa` python package (per BUILD.md).
 pip3 install --quiet ecdsa 2>/dev/null || pip3 install --quiet --break-system-packages ecdsa
 
+# The VERSION file drives MCUboot image signing, and CONFIG_MCUBOOT_DOWNGRADE_PREVENTION
+# only means anything if that version is real and matches the advertised firmware
+# revision. Keep the two in lockstep here rather than discovering the drift in the field.
+APP_VERSION=$(awk -F'=' '
+  /^VERSION_MAJOR/ {major=$2}
+  /^VERSION_MINOR/ {minor=$2}
+  /^PATCHLEVEL/    {patch=$2}
+  END {gsub(/ /,"",major); gsub(/ /,"",minor); gsub(/ /,"",patch); print major "." minor "." patch}
+' "$FW/omi/VERSION")
+DIS_VERSION=$(sed -n 's/^CONFIG_BT_DIS_FW_REV_STR="\(.*\)"$/\1/p' "$FW/omi/omi.conf")
+
+if [ -z "$APP_VERSION" ] || [ "$APP_VERSION" = "0.0.0" ]; then
+  echo "ERROR: omi/firmware/omi/VERSION is missing or 0.0.0; MCUboot downgrade prevention would be a no-op." >&2
+  exit 1
+fi
+
+if [ "$APP_VERSION" != "$DIS_VERSION" ]; then
+  echo "ERROR: VERSION ($APP_VERSION) does not match CONFIG_BT_DIS_FW_REV_STR ($DIS_VERSION)." >&2
+  exit 1
+fi
+
+echo "Building firmware version $APP_VERSION"
+
 cd "$FW"
 mkdir -p "$NCS_VERSION"
 cd "$NCS_VERSION"
@@ -52,6 +75,26 @@ west build -b "$BOARD" "$FW/omi" --sysbuild -d build --pristine always \
 test -s build/dfu_application.zip
 test -s build/merged.hex
 test -s build/merged_CPUNET.hex
+
+# CONFIG_MCUBOOT_DOWNGRADE_PREVENTION compares the signed image version. If the
+# VERSION file did not reach imgtool every build signs 0.0.0+0, every image
+# compares equal, and any older release artifact can be flashed back.
+IMGTOOL="bootloader/mcuboot/scripts/imgtool.py"
+SIGNED_IMAGE=$(find build -name 'zephyr.signed.bin' -print -quit)
+if [ -z "$SIGNED_IMAGE" ]; then
+  echo "ERROR: no signed image found; cannot verify the MCUboot image version." >&2
+  exit 1
+fi
+
+SIGNED_VERSION=$(python3 "$IMGTOOL" verify "$SIGNED_IMAGE" | sed -n 's/.*[Ii]mage version: *//p' | head -n1)
+echo "signed image version: ${SIGNED_VERSION:-<unreported>}"
+case "$SIGNED_VERSION" in
+  "" | 0.0.0*)
+    echo "ERROR: signed image version is '${SIGNED_VERSION:-<unreported>}'." >&2
+    echo "       MCUboot downgrade prevention is a no-op at 0.0.0. Check omi/firmware/omi/VERSION." >&2
+    exit 1
+    ;;
+esac
 
 echo "CV1 build complete:"
 ls -l build/dfu_application.zip build/merged.hex build/merged_CPUNET.hex

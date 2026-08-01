@@ -137,7 +137,7 @@ uint64_t rtc_get_utc_time_ms(void)
 
 int rtc_set_utc_time(uint64_t utc_epoch_s)
 {
-    if (utc_epoch_s == 0) {
+    if (utc_epoch_s < RTC_MIN_VALID_EPOCH_S || utc_epoch_s > RTC_MAX_VALID_EPOCH_S) {
         return -EINVAL;
     }
 
@@ -161,7 +161,7 @@ int rtc_set_utc_time(uint64_t utc_epoch_s)
 
 int rtc_set_utc_time_ms(uint64_t utc_epoch_ms)
 {
-    if (utc_epoch_ms == 0) {
+    if (utc_epoch_ms < (RTC_MIN_VALID_EPOCH_S * 1000ULL) || utc_epoch_ms > (RTC_MAX_VALID_EPOCH_S * 1000ULL)) {
         return -EINVAL;
     }
 
@@ -200,11 +200,11 @@ void init_rtc(void)
 
     uint64_t saved_epoch_s = app_settings_get_rtc_epoch();
     LOG_INF("RTC init: persisted rtc_epoch=%llu", saved_epoch_s);
-    if (saved_epoch_s == 0) {
+    if (saved_epoch_s < RTC_MIN_VALID_EPOCH_S || saved_epoch_s > RTC_MAX_VALID_EPOCH_S) {
         k_mutex_lock(&rtc_lock, K_FOREVER);
         utc_valid = false;
         k_mutex_unlock(&rtc_lock);
-        LOG_WRN("RTC not synchronized yet (no persisted epoch)");
+        LOG_WRN("RTC not synchronized yet (no usable persisted epoch: %llu)", saved_epoch_s);
         return;
     }
 

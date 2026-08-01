@@ -108,11 +108,9 @@ class TestSearchConversationsModel:
         assert model.limit == 10
         assert model.start_date is None
         assert model.end_date is None
-        assert model.api_key is None
 
     def test_all_fields_accepted(self):
         model = SearchConversations(
-            api_key="omi_mcp_test",
             query="search term",
             limit=5,
             start_date="2026-01-01",

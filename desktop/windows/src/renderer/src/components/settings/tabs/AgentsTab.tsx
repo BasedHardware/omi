@@ -14,6 +14,7 @@ import { SettingRow } from '../SettingRow'
 import { migrateAgentCommands } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
 import { CLAUDE_SIGN_IN_FAILED } from '../../../lib/claudeSignIn'
+import { SUGGESTED_AGENT_COMMANDS } from '../../../../../shared/agentCommands'
 import type {
   AgentDetectionMap,
   CodingAgentAuthStatus,
@@ -41,7 +42,7 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
   openclaw: {
     description: 'Open-source AI coding assistant with its own gateway and model routing.',
     installCommands: ['npm install -g openclaw@latest'],
-    suggestedCommand: 'openclaw acp',
+    suggestedCommand: SUGGESTED_AGENT_COMMANDS.openclaw,
     docsUrl: 'https://docs.openclaw.ai/install',
     authNote: 'After installing, sign in: run `openclaw onboard` in a terminal.'
   },
@@ -49,14 +50,14 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
     description: "Nous Research's Hermes agent, connected over its ACP server mode.",
     installCommands: [],
     installNote: 'Install the Hermes CLI from its documentation.',
-    suggestedCommand: 'hermes acp',
+    suggestedCommand: SUGGESTED_AGENT_COMMANDS.hermes,
     docsUrl: 'https://hermes-agent.nousresearch.com/docs',
     authNote: 'After installing, sign in: run `hermes login` in a terminal.'
   },
   codex: {
     description: "OpenAI's Codex agent, driven through the official codex-acp bridge.",
     installCommands: ['npm install -g @openai/codex'],
-    suggestedCommand: 'npx -y @agentclientprotocol/codex-acp',
+    suggestedCommand: SUGGESTED_AGENT_COMMANDS.codex,
     docsUrl: 'https://github.com/agentclientprotocol/codex-acp',
     authNote: 'Sign in with `codex login`, or add your OpenAI API key below.',
     supportsApiKey: true

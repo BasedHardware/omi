@@ -2,6 +2,9 @@
 #define SPEAKER_H
 
 #include <zephyr/kernel.h>
+
+#define SPEAKER_MAX_WRITE_SIZE 400
+
 /**
  * @brief Initialize the Speaker
  *

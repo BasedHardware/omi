@@ -103,8 +103,29 @@ jobs:
       name: pypi
       url: https://pypi.org/project/omi-cli/
     permissions:
+      contents: read  # checkout, for the merged-into-main ancestry proof below
       id-token: write  # the ONLY elevated permission, scoped to this job
     steps:
+      # Runs before the artifact download: actions/checkout wipes the workspace.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify the tagged commit is merged into main
+        env:
+          PUBLISH_SHA: ${{ github.sha }}
+        run: |
+          # A tag push is not branch-protected, so the tag name and the version
+          # it claims are both attacker-controlled. Reachability from main is
+          # the only part of this workflow that required review to produce.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          MAIN_SHA="$(git rev-parse --verify 'origin/main^{commit}')"
+          if ! git merge-base --is-ancestor "$PUBLISH_SHA" "$MAIN_SHA"; then
+            echo "::error::Refusing to publish $PUBLISH_SHA: it is not an ancestor of origin/main ($MAIN_SHA). Tag only commits that are merged into main."
+            exit 1
+          fi
+          echo "verified: $PUBLISH_SHA is reachable from origin/main ($MAIN_SHA)"
+
       - name: Download dist artifact
         uses: actions/download-artifact@v8
         with:
@@ -112,7 +133,7 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           packages-dir: dist/
           print-hash: true
