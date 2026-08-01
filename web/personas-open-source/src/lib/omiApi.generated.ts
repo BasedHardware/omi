@@ -196,6 +196,7 @@ export type AnnouncementType = "changelog" | "feature" | "announcement";
 
 export interface App {
   approved?: boolean;
+  approved_manifest_hash?: string | null;
   author: string;
   capabilities: Array<string>;
   category: string;
@@ -254,6 +255,7 @@ export interface AppApiKeyResponse {
 
 export interface AppBaseModel {
   approved?: boolean;
+  approved_manifest_hash?: string | null;
   author: string;
   capabilities: Array<string>;
   category: string;
