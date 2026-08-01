@@ -5,6 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/conversation_sync_utils.dart';
 
 /// Regression coverage for #10980: call sites that look a conversation up by day
 /// derived the key from the timestamp's raw UTC `year/month/day` instead of
@@ -69,6 +70,25 @@ void main() {
 
     provider.groupedConversations = {};
     expect(provider.getConversationDateAndIndexById(convo.id), isNull);
+  });
+
+  test('the synced-conversation pointer carries the same key grouping uses', () {
+    for (var hour = 0; hour < 24; hour++) {
+      final startedAt = DateTime.utc(2026, 7, 18, hour, 30);
+      final convo = _conversationAt(startedAt);
+      final reason = 'startedAt ${startedAt.toIso8601String()}';
+
+      final grouped = _providerWith([convo]);
+      addTearDown(grouped.dispose);
+      grouped.groupConversationsByDate();
+
+      final pointer = ConversationSyncUtils.createPointer(convo, SyncedConversationType.newConversation);
+
+      // The sync page hands this key to ConversationDetailProvider on tap; it
+      // must address the group the conversation is actually in.
+      expect(pointer.key, grouped.groupedConversations.keys.single, reason: reason);
+      expect(grouped.groupedConversations[pointer.key]!.single.id, convo.id, reason: reason);
+    }
   });
 
   test('ensureConversationInGroup files the conversation under the same key grouping uses', () {
