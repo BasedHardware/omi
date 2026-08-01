@@ -352,6 +352,8 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.model_dump())
+    for f in message.files:
+        f.thumbnail = storage.get_chat_file_thumbnail_url(f.thumbnail)
     _record_chat_quota_question_safe(
         uid,
         idempotency_key=f'v2_messages:{message.id}',
@@ -1414,7 +1416,11 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    response = []
+    for fc in files_chat:
+        item = fc.model_dump()
+        item['thumbnail'] = storage.get_chat_file_thumbnail_url(item.get('thumbnail'))
+        response.append(item)
 
     return response
 
@@ -1473,7 +1479,11 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    response = []
+    for fc in files_chat:
+        item = fc.model_dump()
+        item['thumbnail'] = storage.get_chat_file_thumbnail_url(item.get('thumbnail'))
+        response.append(item)
 
     return response
 

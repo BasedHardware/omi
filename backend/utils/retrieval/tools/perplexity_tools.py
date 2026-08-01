@@ -9,7 +9,7 @@ import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.http_client import get_webhook_client
 from utils.llm.gateway_client import feature_auto_lane_id, get_llm_gateway_base_url, llm_gateway_headers
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ async def perplexity_web_search_tool(
         query="What are the latest developments in AI in 2025?"
         Returns web search results with citations about recent AI developments
     """
-    logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
+    logger.info(f"🔍 perplexity_web_search_tool called - query: {sanitize_pii(query)}")
 
     return await _perplexity_gateway_search(query)
 

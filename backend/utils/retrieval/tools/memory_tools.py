@@ -26,6 +26,7 @@ from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.retrieval.hybrid import rrf_rerank
 from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
+from utils.log_sanitizer import sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -315,7 +316,7 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    logger.info(f"🔧 search_memories_tool called with query: {query}")
+    logger.info(f"🔧 search_memories_tool called with query: {sanitize_pii(query)}")
 
     # Get config from parameter or context variable
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -338,7 +339,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {sanitize_pii(query)}, limit: {limit}")
 
     # Cap limit at 20
     limit = min(limit, 20)
@@ -392,7 +393,7 @@ def search_memories_tool(
         fetch_limit = min(limit * 3, 60)
         matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
 
-        logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
+        logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{sanitize_pii(query)}'")
 
         if not matches:
             msg = (

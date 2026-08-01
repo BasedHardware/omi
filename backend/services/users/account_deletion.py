@@ -17,6 +17,7 @@ from database.vector_db import (
     delete_memory_vectors_batch,
     delete_screen_activity_vectors,
     delete_transcript_chunk_vectors_batch,
+    delete_x_post_vectors,
 )
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import enqueue_account_deletion_wipe, is_account_deletion_dispatch_enabled
@@ -24,7 +25,8 @@ from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
-from utils.other.storage import delete_all_conversation_recordings
+from utils.other import storage as storage_utils
+from utils.other.storage import delete_all_conversation_recordings, delete_blobs_with_prefix
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 
@@ -131,6 +133,32 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        delete_blobs_with_prefix(storage_utils.speech_profiles_bucket, f'{uid}/')
+    except Exception as e:
+        record_failure('required_failures', 'speech_profiles', e)
+        logger.error(f'delete_account purge speech profiles failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        for prefix in (f'chunks/{uid}/', f'audio/{uid}/', f'merged/{uid}/', f'playback/{uid}/'):
+            delete_blobs_with_prefix(storage_utils.private_cloud_sync_bucket, prefix)
+    except Exception as e:
+        record_failure('required_failures', 'private_cloud_sync_audio', e)
+        logger.error(f'delete_account purge private cloud sync audio failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        delete_blobs_with_prefix(storage_utils.chat_files_bucket, f'{uid}/')
+    except Exception as e:
+        record_failure('required_failures', 'chat_files', e)
+        logger.error(f'delete_account purge chat files failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        require_vector_index('x_post_vectors')
+        delete_x_post_vectors(uid)
+    except Exception as e:
+        record_failure('required_failures', 'x_post_vectors', e)
+        logger.error(f'delete_account purge x post vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
         canonical_result = purge_canonical_derived_user_data(uid)

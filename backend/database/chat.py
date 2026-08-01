@@ -266,6 +266,8 @@ def get_messages(
         ]
 
     # Fetch file chat
+    from utils.other.storage import get_chat_file_thumbnail_url
+
     files: Dict[str, Any] = {}
     files_ref = user_ref.collection('files')
     files_ref = [files_ref.document(str(file_id)) for file_id in files_id]
@@ -273,6 +275,8 @@ def get_messages(
     for doc in doc_files:
         if doc.exists:
             file: Dict[str, Any] = _typed_doc(doc)
+            if file.get('thumbnail'):
+                file['thumbnail'] = get_chat_file_thumbnail_url(file['thumbnail'])
             files[file['id']] = file
 
     # Attach files to messages

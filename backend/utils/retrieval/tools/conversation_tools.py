@@ -17,6 +17,7 @@ from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
 from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
+from utils.log_sanitizer import sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -364,7 +365,7 @@ def search_conversations_tool(
         Formatted string with semantically matching conversations ranked by relevance, including transcripts,
         summaries, action items, events, and metadata.
     """
-    logger.info(f"🔧 search_conversations_tool called with query: {query}")
+    logger.info(f"🔧 search_conversations_tool called with query: {sanitize_pii(query)}")
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -387,7 +388,7 @@ def search_conversations_tool(
     if not uid:
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"✅ search_conversations_tool - uid: {uid}, query: {sanitize_pii(query)}, limit: {limit}")
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:

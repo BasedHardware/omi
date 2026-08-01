@@ -768,6 +768,16 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
     ]
 
 
+def delete_x_post_vectors(uid: str) -> bool:
+    """Delete every X post vector owned by ``uid`` from the ns_x namespace."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping x_post vector filter delete')
+        return False
+    index.delete(filter={'uid': uid}, namespace=X_POSTS_NAMESPACE)
+    logger.info('delete_x_post_vectors uid=%s', uid)
+    return True
+
+
 # ==========================================
 # Screen Activity Vector Functions
 # For screenshot embeddings (Gemini embedding-001, 3072-dim)

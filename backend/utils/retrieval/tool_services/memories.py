@@ -22,6 +22,7 @@ from utils.memory.chat_memory_adapter import (
 )
 from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.retrieval.tool_services.conversations import parse_iso_date
+from utils.log_sanitizer import sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ def search_memories_text(
     limit: int = 5,
 ) -> str:
     """Semantic vector search for memories, formatted as LLM-ready text."""
-    logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"search_memories_text - uid: {uid}, query: {sanitize_pii(query)}, limit: {limit}")
 
     limit = max(1, min(limit, 20))
 

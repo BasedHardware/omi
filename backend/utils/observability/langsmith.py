@@ -117,7 +117,7 @@ def get_chat_tracer_callbacks(
     Returns:
         List containing LangChainTracer callback if API key is set, else empty list
     """
-    if not has_langsmith_api_key():
+    if not (is_langsmith_enabled() and has_langsmith_api_key()):
         return []
 
     try:

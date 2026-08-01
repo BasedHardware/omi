@@ -16,6 +16,7 @@ from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
 from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
+from utils.log_sanitizer import sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -157,7 +158,7 @@ def search_conversations_text(
     include_timestamps: bool = False,
 ) -> str:
     """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
-    logger.info(f"search_conversations_text - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"search_conversations_text - uid: {uid}, query: {sanitize_pii(query)}, limit: {limit}")
 
     # Cap limits
     if max_transcript_segments != -1:

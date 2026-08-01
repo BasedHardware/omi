@@ -15,6 +15,7 @@ import database.vector_db as vector_db
 import database.notifications as notification_db
 from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
+from utils.log_sanitizer import sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -235,7 +236,9 @@ def search_screen_activity_tool(
     Returns:
         Matching screen activity entries with timestamps, app names, and text snippets.
     """
-    logger.info(f"search_screen_activity_tool called - query='{query}', start_date={start_date}, end_date={end_date}")
+    logger.info(
+        f"search_screen_activity_tool called - query='{sanitize_pii(query)}', start_date={start_date}, end_date={end_date}"
+    )
 
     uid = _get_uid(config)
     if not uid:

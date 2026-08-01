@@ -363,6 +363,21 @@ def delete_all_conversation_recordings(uid: str) -> int:
     return deleted
 
 
+def delete_blobs_with_prefix(bucket_name: Optional[str], prefix: str) -> int:
+    """Delete every object under ``prefix`` in ``bucket_name`` and return the count deleted."""
+    if not bucket_name or not prefix:
+        return 0
+    # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
+    if not prefix.endswith('/'):
+        prefix = f'{prefix}/'
+    bucket = _get_storage_client().bucket(bucket_name)
+    deleted = 0
+    for blob in bucket.list_blobs(prefix=prefix):
+        blob.delete()
+        deleted += 1
+    return deleted
+
+
 # ********************************************
 # ************* SYNCING FILES **************
 # ********************************************
@@ -1545,7 +1560,7 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
         uid: User ID to use as part of the storage path
 
     Returns:
-        dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
+        dict: A dictionary mapping original filenames to their Google Cloud Storage blob paths
     """
     bucket = _get_storage_client().bucket(chat_files_bucket)
     dictFiles: Dict[str, str] = {}
@@ -1554,14 +1569,28 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
             blob = bucket.blob(f'{uid}/{name}')
             blob.cache_control = 'public, no-cache'
             blob.upload_from_filename(f'./{name}')
-            try:
-                blob.make_public()
-            except Exception as e:
-                logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-            dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+            dictFiles[name] = blob.name
         except Exception as e:
             logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles
+
+
+def get_chat_file_thumbnail_url(thumbnail: Optional[str]) -> str:
+    """Mint a short-lived signed URL for a stored chat thumbnail blob path.
+
+    Records written before thumbnails were stored as blob paths hold an absolute URL; those are
+    returned unchanged so historical chat images keep resolving.
+    """
+    if not thumbnail:
+        return ""
+    if thumbnail.startswith('http://') or thumbnail.startswith('https://'):
+        return thumbnail
+    try:
+        blob = _get_storage_client().bucket(chat_files_bucket).blob(thumbnail)
+        return _get_signed_url(blob, 60)
+    except Exception as e:
+        logger.error("Failed to sign chat thumbnail {} due to exception: {}".format(thumbnail, e))
+        return ""
 
 
 # **************************************************
