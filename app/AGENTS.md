@@ -52,14 +52,14 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
 - Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
 - Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
-- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
 ### MethodChannel (On-device tool surface)
 - Channel `com.omi.device_tools`; Dart `lib/services/device_tools/device_tool_surface.dart`; iOS `ios/Runner/DeviceToolsService.swift`. Tools: `search_contacts`, `propose_message`, `request_permission`.
-- iOS cannot send silently, so the verb is **propose**: the prefilled `MFMessageComposeViewController` sheet *is* the approval. Never add a second in-app confirmation, and never treat a cancelled sheet as delivered.
-- The model calls these mid-turn: the client declares `device_tools` on `POST /v2/messages`, the backend emits a `tool:` SSE frame on the already-open stream, and `device_tool_dispatcher.dart` executes it and POSTs to `/v2/messages/device-tool/{call_id}/result`. Never surface a `tool:` frame to the chat UI — the server is still waiting on that turn.
-- Details, macOS parity, and the transport contract: `desktop/macos/docs/device-tool-surface.md`.
+- iOS cannot send silently, so the verb is **propose**: the prefilled `MFMessageComposeViewController` sheet *is* the approval. Never add a second confirmation, and never treat a cancelled sheet as delivered.
+- The model calls these mid-turn: the client declares `device_tools` on `POST /v2/messages`, the backend emits a `tool:` SSE frame on the already-open stream, and `device_tool_dispatcher.dart` executes it and POSTs to `/v2/messages/device-tool/{call_id}/result`. Never surface a `tool:` frame to the chat UI — the server still waits on that turn.
+- Details, macOS parity, transport contract: `desktop/macos/docs/device-tool-surface.md`.
 
 ## Permission Matrix
 
