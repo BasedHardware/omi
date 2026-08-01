@@ -153,6 +153,7 @@ struct DesktopHomeView: View {
     )
   }
 
+  // State 3: Signed in and onboarded.
   private var mainContentPresentation: AnyView {
     AnyView(
       mainContent
