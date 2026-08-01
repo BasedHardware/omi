@@ -11,12 +11,18 @@ on:
 run-name: Qualify desktop beta ${{ inputs.release_tag }}
 permissions:
   contents: read
+
+env:
+  DEVELOPMENT_GCP_PROJECT_ID: based-hardware-dev
+  FIREBASE_AUTH_PROJECT_ID: based-hardware
+
 concurrency:
   group: desktop-beta-qualification-m1
   cancel-in-progress: false
 
 jobs:
   qualify-m1-studio:
+    environment: beta
     runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
     timeout-minutes: 250
     permissions:
@@ -146,6 +152,39 @@ jobs:
             > "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
           rm -f "$QUALIFICATION_STAGE/python-backend-health.json"
           rm -f "$QUALIFICATION_STAGE/desktop-backend-health.json"
+      - name: Authenticate release probe for production Firebase continuity
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Stage production Firebase probe signer
+        env:
+          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          signer_file="$QUALIFICATION_STAGE/firebase-probe-signer.json"
+          test ! -e "$signer_file"
+          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
+          chmod 600 "$signer_file"
+      - name: Prove production Firebase UID continuity on Beta development authorities
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          token_file="$QUALIFICATION_STAGE/firebase-probe-token"
+          test ! -e "$token_file"
+          umask 077
+          : > "$token_file"
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "$DEVELOPMENT_GCP_PROJECT_ID" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --signer-credentials-file="$QUALIFICATION_STAGE/firebase-probe-signer.json" \
+            --token-output "$token_file"
+          python3 backend/scripts/probe_beta_uid_continuity.py \
+            --bearer-token-file "$token_file" \
+            --evidence "$QUALIFICATION_STAGE/beta-uid-continuity.json"
+          rm -f "$token_file"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
@@ -210,7 +249,7 @@ jobs:
           if [ -f "$QUALIFICATION_STAGE/assets/Omi.Beta.zip" ] && [ -f "$QUALIFICATION_STAGE/assets/omi-beta.dmg" ]; then
             BETA_ASSETS=(--asset Omi.Beta.zip="$QUALIFICATION_STAGE/assets/Omi.Beta.zip" --asset omi-beta.dmg="$QUALIFICATION_STAGE/assets/omi-beta.dmg")
           fi
-          python3 .github/scripts/desktop_qualification_evidence.py build --release-json "$QUALIFICATION_STAGE/release.json" --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" --candidate-gate "$QUALIFICATION_STAGE/candidate-gate.json" --qualification-run-id "$GITHUB_RUN_ID" --asset Omi.zip="$QUALIFICATION_STAGE/assets/Omi.zip" --asset omi.dmg="$QUALIFICATION_STAGE/assets/omi.dmg" "${BETA_ASSETS[@]}" --evidence "$QUALIFICATION_STAGE/qualification-evidence.json"
+          python3 .github/scripts/desktop_qualification_evidence.py build --release-json "$QUALIFICATION_STAGE/release.json" --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" --candidate-gate "$QUALIFICATION_STAGE/candidate-gate.json" --qualification-run-id "$GITHUB_RUN_ID" --asset Omi.zip="$QUALIFICATION_STAGE/assets/Omi.zip" --asset omi.dmg="$QUALIFICATION_STAGE/assets/omi.dmg" "${BETA_ASSETS[@]}" --beta-uid-continuity-evidence "$QUALIFICATION_STAGE/beta-uid-continuity.json" --evidence "$QUALIFICATION_STAGE/qualification-evidence.json"
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -249,6 +288,7 @@ jobs:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          rm -f "$QUALIFICATION_STAGE/firebase-probe-signer.json" "$QUALIFICATION_STAGE/firebase-probe-token"
           expected="$RUNNER_TEMP/desktop-beta-qualification/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           test -n "$QUALIFICATION_STAGE"
           test "$QUALIFICATION_STAGE" = "$expected"

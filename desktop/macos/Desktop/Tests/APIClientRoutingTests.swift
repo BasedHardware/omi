@@ -159,7 +159,10 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
-    let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
+    let url = DesktopBackendEnvironment.authBaseURL(
+      bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+      environmentValue: nil
+    )
     XCTAssertEqual(url, "https://api.omi.me/")
   }
 
@@ -337,22 +340,55 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   func testGeminiAndEmbeddingProxyRespectBetaIdentityRouting() {
-    let originalRust = ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
-    defer {
-      if let originalRust {
-        setenv("OMI_DESKTOP_API_URL", originalRust, 1)
-      } else {
-        unsetenv("OMI_DESKTOP_API_URL")
-      }
-    }
-    setenv("OMI_DESKTOP_API_URL", DesktopBackendEnvironment.productionRustBackendURL, 1)
+    let contaminatedEndpoint = DesktopBackendEnvironment.productionRustBackendURL
+    XCTAssertEqual(
+      GeminiClient.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertEqual(
+      EmbeddingService.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+  }
 
-    // The test host is a non-production identity, so the raw process environment
-    // remains a supported local override. The identity-bound Beta contract itself
-    // is exercised above; these proxies must delegate to that same resolver rather
-    // than bypass it with getenv.
-    XCTAssertEqual(GeminiClient.proxyBaseURL, DesktopBackendEnvironment.rustBackendURL())
-    XCTAssertEqual(EmbeddingService.proxyBaseURL, DesktopBackendEnvironment.rustBackendURL())
+  func testBetaKeepsMCPIdentityEndpointsOnProductionWhileServingMCPFromDevelopment() {
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omiapi.com/v1/mcp/sse"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpAuthorizeURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/authorize"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpTokenURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/token"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omi.me/"),
+      "omi-chatgpt-prod"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omiapi.com/"),
+      "omi-chatgpt-dev"
+    )
   }
 
   func testNonProductionBundlesDefaultToDevelopmentBackends() {

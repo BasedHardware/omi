@@ -1,6 +1,9 @@
 # INV-DATA-1: Production-family customer data-plane continuity
 
-**Status:** locked
+**Status:** proposed
+
+This revision is proposed as of 2026-08-01. It must remain unchanged for seven
+days, with its routing and qualification guards, before a follow-up can lock it.
 
 **Statement:** A production-family artifact preserves one canonical customer
 identity/data plane: Stable, Beta, internal, alpha, TestFlight, and Play Internal

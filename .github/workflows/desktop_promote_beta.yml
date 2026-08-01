@@ -10,6 +10,14 @@ on:
         description: 'Qualified v*-macos candidate tag to promote to beta'
         required: true
         type: string
+      qualification_run_id:
+        description: 'Trusted qualification run that produced the retained evidence artifact'
+        required: true
+        type: string
+      qualification_run_attempt:
+        description: 'Trusted qualification run attempt that produced the retained evidence artifact'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -40,13 +48,14 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
-          QUALIFICATION_RUN_ID: ${{ github.event.workflow_run.id || '' }}
-          QUALIFICATION_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || '' }}
+          QUALIFICATION_RUN_ID: ${{ github.event.workflow_run.id || inputs.qualification_run_id || '' }}
+          QUALIFICATION_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || inputs.qualification_run_attempt || '' }}
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag || '' }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+          requested_release_tag="$RELEASE_TAG"
+          if [[ "$EVENT_NAME" == "workflow_run" || "$EVENT_NAME" == "workflow_call" ]]; then
             artifacts="$RUNNER_TEMP/qualification-artifacts.json"
             archive="$RUNNER_TEMP/qualification-evidence.zip"
             evidence="$RUNNER_TEMP/qualification-evidence.json"
@@ -95,6 +104,37 @@ jobs:
                 end
             ' "$evidence")
             test "$EVIDENCE_RUN_ID" = "$QUALIFICATION_RUN_ID"
+            jq -e '
+              .beta_uid_continuity == {
+                schema_version: 1,
+                status: "passed",
+                firebase_auth: {
+                  project: "based-hardware",
+                  release_probe_uid: "omi-release-probe",
+                  token_claims: "production_project_verified"
+                },
+                development_serving_reads: {
+                  python: {
+                    url: "https://api.omiapi.com/",
+                    operation: "authenticated_firestore_user_read",
+                    status: "passed"
+                  },
+                  desktop_backend: {
+                    url: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                    operation: "authenticated_proxy_authority_read",
+                    status: "passed"
+                  }
+                },
+                redaction: {customer_content_printed: false, tokens_printed: false}
+              }
+            ' "$evidence" >/dev/null || {
+              echo "qualification evidence lacks production Firebase UID continuity proof" >&2
+              exit 1
+            }
+            if [[ -n "$requested_release_tag" && "$requested_release_tag" != "$RELEASE_TAG" ]]; then
+              echo "requested tag $requested_release_tag does not match qualification evidence $RELEASE_TAG" >&2
+              exit 1
+            fi
           fi
           if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
             echo "Invalid immutable macOS release tag: $RELEASE_TAG" >&2
@@ -103,7 +143,7 @@ jobs:
 
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TAG_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          if [[ "$EVENT_NAME" == "workflow_run" && "$TAG_SHA" != "$EVIDENCE_SOURCE_SHA" ]]; then
+          if [[ ( "$EVENT_NAME" == "workflow_run" || "$EVENT_NAME" == "workflow_call" ) && "$TAG_SHA" != "$EVIDENCE_SOURCE_SHA" ]]; then
             echo "Tag $RELEASE_TAG at $TAG_SHA does not match qualification evidence source $EVIDENCE_SOURCE_SHA." >&2
             exit 1
           fi

@@ -883,6 +883,9 @@ def check_desktop_qualification_runner() -> list[str]:
         "github.event.workflow_run.id",
         "qualification-evidence.json",
         "EVIDENCE_SOURCE_SHA",
+        "qualification_run_id",
+        "qualification_run_attempt",
+        "beta_uid_continuity",
         "/v2/desktop/beta/promote-qualified",
         "environment: beta",
     ):
@@ -904,23 +907,32 @@ def check_desktop_qualification_runner() -> list[str]:
 
 
 def check_desktop_update_docs() -> list[str]:
-    """Keep operator docs aligned with the single retained artifact identity."""
+    """Keep operator docs aligned with Stable/Beta's qualified artifact identities."""
     path = ROOT / "docs/doc/developer/desktop-updates.mdx"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     errors: list[str] = []
-    required = ("Omi.app", "com.omi.computer-macos", "Omi.zip", "`omi.dmg`", "independent pointers")
+    required = (
+        "Omi.app",
+        "com.omi.computer-macos",
+        "Omi.zip",
+        "`omi.dmg`",
+        "Omi Beta.app",
+        "com.omi.computer-macos.beta",
+        "Omi.Beta.zip",
+        "omi-beta.dmg",
+        "production Firebase Auth/Firestore",
+        "Beta OAuth remains on the production identity authority",
+    )
     forbidden = (
-        "separately installable",
-        "own bundle identity",
-        "all four artifacts",
-        "Stable/Beta URLs",
+        "Beta is a server-side distribution channel, not a second app",
+        "Every\nqualified macOS release has one identity",
     )
     for fragment in required:
         if fragment not in text:
-            errors.append(f"desktop update docs are missing single-artifact contract: {fragment}")
+            errors.append(f"desktop update docs are missing Stable/Beta artifact contract: {fragment}")
     for fragment in forbidden:
         if fragment in text:
-            errors.append(f"desktop update docs retain forbidden dual-identity claim: {fragment}")
+            errors.append(f"desktop update docs retain forbidden single-identity claim: {fragment}")
     return errors
 
 

@@ -169,6 +169,11 @@ make_signed_smoke_fixture() {
 PLIST
   printf 'OMI_PYTHON_API_URL=%s\nOMI_DESKTOP_API_URL=%s\n' "$python_api_url" "$desktop_api_url" \
     > "$app/Contents/Resources/.env"
+  cat > "$app/Contents/Resources/GoogleService-Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>PROJECT_ID</key><string>based-hardware</string></dict></plist>
+PLIST
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
   chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
@@ -300,6 +305,23 @@ fi
 grep -q "app bundle name for com.omi.computer-macos.beta must be Omi Beta.app, got Anything Beta.app" \
   /tmp/omi-smoke-renamed-beta.err \
   || fail "renamed beta rejection should bind Omi Beta.app to its bundle identity"
+
+mkdir -p "$tmp_root/wrong-firebase"
+wrong_firebase_beta="$tmp_root/wrong-firebase/Omi Beta.app"
+cp -R "$signed_beta_app" "$wrong_firebase_beta"
+/usr/libexec/PlistBuddy -c 'Set :PROJECT_ID based-hardware-dev' \
+  "$wrong_firebase_beta/Contents/Resources/GoogleService-Info.plist"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$wrong_firebase_beta" \
+  "$SMOKE" --app "$wrong_firebase_beta" --tag v0.12.34+12034-macos \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
+  >/tmp/omi-smoke-beta-wrong-firebase.out 2>/tmp/omi-smoke-beta-wrong-firebase.err; then
+  fail "beta smoke must reject a non-production Firebase project"
+fi
+grep -q "Firebase project must be based-hardware" /tmp/omi-smoke-beta-wrong-firebase.err \
+  || fail "Firebase project rejection should be explicit"
 
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation

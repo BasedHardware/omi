@@ -468,7 +468,19 @@ assert_backend_routing_config() {
   ! grep -Eq 'localhost|127[.]0[.]0[.]1|0[.]0[.]0[.]0|ngrok|dev-serve' "$env_file" \
     || fail "artifact .env contains a local/dev tunnel backend reference"
 
+  if [[ "$IS_EXTERNAL_PREVIEW" != true ]]; then
+    local firebase_plist firebase_project
+    firebase_plist="$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    [[ -f "$firebase_plist" ]] || fail "production-family artifact is missing GoogleService-Info.plist"
+    firebase_project="$(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' "$firebase_plist" 2>/dev/null || true)"
+    [[ "$firebase_project" == "based-hardware" ]] \
+      || fail "production-family artifact Firebase project must be based-hardware"
+    ! grep -q '^OMI_AUTH_API_URL=' "$env_file" \
+      || fail "production-family artifact must not bundle an OMI_AUTH_API_URL override"
+  fi
+
   pass "Backend routing config matches the declared external backend"
+  pass "Production Firebase identity matches the declared release authority"
 }
 
 assert_sparkle_and_artifacts() {

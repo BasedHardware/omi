@@ -2934,6 +2934,7 @@ workflows:
       - build/*.zip
       - build/*.dSYM
       - build/desktop-smoke-result.json
+      - build/desktop-smoke-result-beta.json
     publishing:
       email:
         recipients:

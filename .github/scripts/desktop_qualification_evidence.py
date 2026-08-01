@@ -54,11 +54,49 @@ def _url(asset: dict[str, Any]) -> str:
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
+    with path.open("rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
+
+
+def _beta_uid_continuity(path: Path) -> dict[str, object]:
+    try:
+        proof = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("qualification evidence has unreadable Beta UID-continuity proof") from error
+    expected = {
+        "schema_version": 1,
+        "status": "passed",
+        "firebase_auth": {
+            "project": "based-hardware",
+            "release_probe_uid": "omi-release-probe",
+            "token_claims": "production_project_verified",
+        },
+        "development_serving_reads": {
+            "python": {
+                "url": "https://api.omiapi.com/",
+                "operation": "authenticated_firestore_user_read",
+                "status": "passed",
+            },
+            "desktop_backend": {
+                "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                "operation": "authenticated_proxy_authority_read",
+                "status": "passed",
+            },
+        },
+        "redaction": {"customer_content_printed": False, "tokens_printed": False},
+    }
+    if proof != expected:
+        _fail("contains an invalid Beta UID-continuity proof")
+    return proof
 
 
 def build_evidence(
-    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path], qualification_run_id: int | None = None
+    release: dict[str, Any],
+    release_tag: str,
+    source_sha: str,
+    files: dict[str, Path],
+    qualification_run_id: int | None = None,
+    beta_uid_continuity_path: Path | None = None,
 ) -> dict[str, Any]:
     if release.get("tagName") != release_tag:
         _fail("release ID does not match requested tag")
@@ -115,6 +153,10 @@ def build_evidence(
         if qualification_run_id <= 0:
             _fail("has an invalid qualification run identity")
         evidence["qualification_run_id"] = qualification_run_id
+    if "Omi.Beta.zip" in artifacts:
+        if beta_uid_continuity_path is None:
+            _fail("requires Beta UID-continuity proof when Beta artifacts are qualified")
+        evidence["beta_uid_continuity"] = _beta_uid_continuity(beta_uid_continuity_path)
     return evidence
 
 
@@ -139,6 +181,34 @@ def verify_evidence(
         _fail("does not prove exact signed artifact verification")
     if signed_artifacts.get("subject") != "exact signed ZIP/DMG bytes":
         _fail("must not claim signed production bytes ran T2")
+    if "Omi.Beta.zip" in digests:
+        continuity = evidence.get("beta_uid_continuity")
+        if not isinstance(continuity, dict):
+            _fail("does not prove Beta UID continuity")
+        expected_continuity = {
+            "schema_version": 1,
+            "status": "passed",
+            "firebase_auth": {
+                "project": "based-hardware",
+                "release_probe_uid": "omi-release-probe",
+                "token_claims": "production_project_verified",
+            },
+            "development_serving_reads": {
+                "python": {
+                    "url": "https://api.omiapi.com/",
+                    "operation": "authenticated_firestore_user_read",
+                    "status": "passed",
+                },
+                "desktop_backend": {
+                    "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                    "operation": "authenticated_proxy_authority_read",
+                    "status": "passed",
+                },
+            },
+            "redaction": {"customer_content_printed": False, "tokens_printed": False},
+        }
+        if continuity != expected_continuity:
+            _fail("contains invalid Beta UID continuity")
     artifacts = evidence.get("artifacts")
     if not isinstance(artifacts, dict):
         _fail("does not contain artifacts")
@@ -166,6 +236,7 @@ def main() -> int:
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--candidate-gate")
     parser.add_argument("--qualification-run-id", type=int)
+    parser.add_argument("--beta-uid-continuity-evidence")
     parser.add_argument("--asset", action="append", default=[])
     args = parser.parse_args()
     release = json.loads(Path(args.release_json).read_text(encoding="utf-8"))
@@ -179,7 +250,14 @@ def main() -> int:
         if not args.candidate_gate:
             raise SystemExit("build requires --candidate-gate")
         files["__candidate_gate__"] = Path(args.candidate_gate)
-        result = build_evidence(release, args.release_tag, args.source_sha, files, args.qualification_run_id)
+        result = build_evidence(
+            release,
+            args.release_tag,
+            args.source_sha,
+            files,
+            args.qualification_run_id,
+            Path(args.beta_uid_continuity_evidence) if args.beta_uid_continuity_evidence else None,
+        )
         Path(args.evidence).write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     else:
         evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))

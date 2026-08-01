@@ -10,8 +10,6 @@ covers:
   - desktop/macos/Desktop/Sources/AppBuild.swift
   - desktop/macos/Desktop/Sources/BundleEnvironment.swift
   - desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/Auth/OAuthLoopbackCallbackServer.swift
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift

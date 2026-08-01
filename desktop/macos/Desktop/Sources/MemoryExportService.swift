@@ -22,19 +22,75 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     DesktopBackendEnvironment.pythonBaseURL()
   }
 
+  /// MCP data serving follows the selected Python serving plane, but OAuth grant
+  /// issuance and readback belong to the production identity authority for every
+  /// production-family app (including Beta).
+  static var mcpOAuthBaseURL: String {
+    DesktopBackendEnvironment.authBaseURL()
+  }
+
+  static func mcpServerURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "v1/mcp/sse"
+  }
+
+  static func mcpAuthorizeURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "authorize"
+  }
+
+  static func mcpTokenURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "token"
+  }
+
   /// The hosted Omi MCP SSE endpoint every client connects to.
   static var mcpServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
 
   /// OAuth endpoints exposed by the same backend for MCP custom-connector setup.
-  static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
-  static var mcpTokenURL: String { "\(mcpBaseURL)token" }
+  static var mcpAuthorizeURL: String { "\(mcpOAuthBaseURL)authorize" }
+  static var mcpTokenURL: String { "\(mcpOAuthBaseURL)token" }
 
   /// Registered OAuth client for ChatGPT custom connectors on this backend.
   /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
   /// endpoint rejects any client secret for it, so setup must leave the
   /// secret blank. Dev registers `omi-chatgpt-dev`.
   static var chatgptOAuthClientID: String {
-    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+    chatgptOAuthClientID(forOAuthBaseURL: mcpOAuthBaseURL)
+  }
+
+  static func chatgptOAuthClientID(forOAuthBaseURL baseURL: String) -> String {
+    URL(string: baseURL)?.host == "api.omi.me" ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
   }
 
   /// The approved ChatGPT directory listing. This is the primary ChatGPT
@@ -807,7 +863,7 @@ actor MemoryExportService {
     var observation = "authoritative_grant_check"
     do {
       let response: OAuthGrantsResponse = try await APIClient.shared.get(
-        "v1/mcp/oauth/grants", includeBYOK: false)
+        "v1/mcp/oauth/grants", customBaseURL: MemoryExportDestination.mcpOAuthBaseURL, includeBYOK: false)
       let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
 
       if isAuthorized {

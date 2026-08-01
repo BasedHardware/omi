@@ -38,7 +38,23 @@ actor EmbeddingService {
   /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
   /// development serving endpoint even when an inherited environment is stale.
   static var proxyBaseURL: String {
-    DesktopBackendEnvironment.rustBackendURL()
+    proxyBaseURL(bundleIdentifier: AppBuild.bundleIdentifier)
+  }
+
+  static func proxyBaseURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil,
+    launchEnvironmentValue: String? = nil
+  ) -> String {
+    DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: bundleIdentifier,
+        updateChannel: AppBuild.currentUpdateChannel
+      ),
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+      launchEnvironmentValue: launchEnvironmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    )
   }
 
   /// Get Firebase auth header for proxy requests

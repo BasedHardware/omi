@@ -131,6 +131,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             '.status == "ok"',
             "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/health",
             "desktop-backend-compatibility.json",
+            "Prove production Firebase UID continuity on Beta development authorities",
+            "probe_beta_uid_continuity.py",
+            "beta-uid-continuity.json",
+            "FIREBASE_AUTH_PROJECT_ID: based-hardware",
         ):
             self.assertIn(fragment, self.workflow)
         compatibility = self.workflow.index("Verify live desktop-backend chat compatibility")

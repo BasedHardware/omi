@@ -175,10 +175,13 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             'if [[ "$GITHUB_REF" != "refs/heads/main" ]]',
             'if [[ "$source_sha" != "$main_sha" ]]',
             "EXPECTED_GCP_PROJECT_ID: based-hardware-dev",
+            "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
             "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+            "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
+            "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
             'chmod 600 "$signer_file"',
             "base64 --decode",
@@ -198,6 +201,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
             )
+        if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
+            errors.append(f"{workflow}: development serving must retain the production Firebase project")
     return errors
 
 
@@ -226,6 +231,10 @@ def validate_desktop_release_gates(qualification: str, stable: str) -> list[str]
         "https://api.omiapi.com/v1/health",
         '.status == "ok"',
         'python_status: "ok"',
+        "Prove production Firebase UID continuity on Beta development authorities",
+        "probe_beta_uid_continuity.py",
+        "FIREBASE_AUTH_PROJECT_ID: based-hardware",
+        "firebase_release_probe_token.py",
     ):
         if fragment not in qualification:
             errors.append(f"desktop_qualify_beta.yml: missing development Python compatibility gate {fragment!r}")

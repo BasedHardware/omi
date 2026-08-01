@@ -18,6 +18,14 @@ on:
         description: 'Why automatic Beta promotion needs recovery'
         required: true
         type: string
+      qualification_run_id:
+        description: 'Trusted qualification run ID that produced this candidate evidence'
+        required: true
+        type: string
+      qualification_run_attempt:
+        description: 'Trusted qualification run attempt that produced this candidate evidence'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,6 +39,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
           REASON: ${{ inputs.reason }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          QUALIFICATION_RUN_ATTEMPT: ${{ inputs.qualification_run_attempt }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = recover-beta || { echo 'confirm must be exactly: recover-beta' >&2; exit 1; }
@@ -38,6 +48,12 @@ jobs:
             echo 'release_tag must be an exact immutable macOS candidate tag' >&2; exit 1;
           }
           test -n "${REASON//[[:space:]]/}" || { echo 'reason is required' >&2; exit 1; }
+          printf '%s\n' "$QUALIFICATION_RUN_ID" | grep -qE '^[1-9][0-9]*$' || {
+            echo 'qualification_run_id must be a positive GitHub Actions run ID' >&2; exit 1;
+          }
+          printf '%s\n' "$QUALIFICATION_RUN_ATTEMPT" | grep -qE '^[1-9][0-9]*$' || {
+            echo 'qualification_run_attempt must be a positive GitHub Actions run attempt' >&2; exit 1;
+          }
           {
             echo '### Beta recovery request'
             echo
@@ -52,3 +68,5 @@ jobs:
     uses: ./.github/workflows/desktop_promote_beta.yml
     with:
       release_tag: ${{ inputs.release_tag }}
+      qualification_run_id: ${{ inputs.qualification_run_id }}
+      qualification_run_attempt: ${{ inputs.qualification_run_attempt }}
