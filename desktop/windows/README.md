@@ -70,8 +70,8 @@ Everything below is blank in `.env.example` and safe to leave unset:
 ## Coding agents (Claude Code, OpenClaw, Hermes, Codex)
 
 Omi can delegate tasks to external coding agents over ACP (Agent Client
-Protocol). Name an agent in chat or push-to-talk — *"ask Codex to fix the
-failing test in my omi repo"*, *"use Claude Code to add a readme"* — and Omi
+Protocol). Name an agent in chat or push-to-talk — _"ask Codex to fix the
+failing test in my omi repo"_, _"use Claude Code to add a readme"_ — and Omi
 hands the task over, streaming the agent's progress into the conversation. If
 the agent you named fails to start, Omi falls back to the next connected one;
 if it isn't connected at all, the reply tells you how to set it up.
