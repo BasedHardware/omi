@@ -31,6 +31,11 @@ describe('parseRewindNaturalSearch', () => {
     expect(parsed.query).toBe('')
   })
 
+  it('treats happened questions as time-only searches', () => {
+    expect(parseRewindNaturalSearch('What happened yesterday?', NOW).query).toBe('')
+    expect(parseRewindNaturalSearch('what happens today', NOW).query).toBe('')
+  })
+
   it('treats contractions in time-only questions as boilerplate', () => {
     expect(parseRewindNaturalSearch("What's on my screen today?", NOW).query).toBe('')
   })
