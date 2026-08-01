@@ -54147,7 +54147,7 @@
     },
     "/v2/messages/device-tool/{call_id}/result": {
       "post": {
-        "description": "Deliver a client's result for an in-flight device tool call.\n\nThe awaiting tool coroutine may be on a different worker than this request,\nso the result is handed over through Redis rather than an in-process future.\nThe key is scoped by uid, so one user cannot answer another user's call.",
+        "description": "Deliver a client's result for an in-flight device tool call.\n\nThe awaiting tool coroutine may be on a different worker than this request,\nso the result is handed over through Redis rather than an in-process future.\nThe key is scoped by uid, so one user cannot answer another user's call.\n\nA result is only accepted for a call that is actually in flight for this uid.\nWithout that check the endpoint is a write primitive: an authenticated caller\ncould invent call ids and park an oversized value in shared Redis for each\none, at the full rate limit, for the length of the TTL.",
         "operationId": "submit_device_tool_result_v2_messages_device_tool__call_id__result_post",
         "parameters": [
           {
