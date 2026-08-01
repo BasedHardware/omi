@@ -133,8 +133,16 @@ extension ChatToolExecutor {
     let limit = boundedInt(args, "limit", default: 10)
 
     // A first-use prompt is the normal path here; only a hard denial is a failure.
+    // The TCC callback may arrive long after the tool is cancelled or the owner
+    // changes, so the prompt rides the same once-guard adapter as the other
+    // permission waits — cancellation resumes it instead of leaving owner-bound
+    // work suspended behind an unanswered prompt.
     if ContactsReaderService.authorizationStatus() == .notDetermined {
-      _ = await ContactsReaderService.requestAccess()
+      _ = await awaitCancellablePermissionRequest { completion in
+        Task {
+          completion(await ContactsReaderService.requestAccess())
+        }
+      }
     }
 
     do {
