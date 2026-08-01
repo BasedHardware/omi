@@ -40,6 +40,7 @@ enum MessagesSenderError: LocalizedError {
   case emptyBody
   case attachmentNotFound(path: String)
   case allServicesFailed(detail: String)
+  case partiallySent(service: String, detail: String)
 
   var errorDescription: String? {
     switch self {
@@ -48,6 +49,9 @@ enum MessagesSenderError: LocalizedError {
     case .attachmentNotFound(let path): return "Attachment not found at \(path)."
     case .allServicesFailed(let detail):
       return "Messages.app could not send to that recipient: \(detail)"
+    case .partiallySent(let service, let detail):
+      return
+        "The message text was sent over \(service) but the attachment was not: \(detail). The recipient has already received the text — do not resend it. Ask whether they still want the file."
     }
   }
 
@@ -57,26 +61,46 @@ enum MessagesSenderError: LocalizedError {
     case .emptyBody: return "empty_body"
     case .attachmentNotFound: return "attachment_not_found"
     case .allServicesFailed: return "send_failed"
+    case .partiallySent: return "partially_sent"
     }
   }
 }
 
 enum MessagesSenderService {
+  /// Reported by the script when the body went out but the attachment did not.
+  static let partialSendMarker = "omi_partial:"
+
   /// `argv` order: handle, body, attachment path ("" when absent).
+  ///
+  /// The body and the attachment are two separate effects. If the body is
+  /// delivered and the attachment is then rejected — an unreadable path, a
+  /// directory, an unsupported type — an uncaught error would abort the script
+  /// with a non-zero exit, and `auto` would move on to SMS and deliver the body
+  /// a second time. The attachment failure is therefore caught and reported as a
+  /// partial send, so the caller can stop instead of retrying.
   private static func sendScript(serviceType: String) -> String {
     """
     on run argv
       set targetHandle to item 1 of argv
       set messageBody to item 2 of argv
       set attachmentPath to item 3 of argv
+      set bodySent to false
       tell application "Messages"
         set targetAccount to 1st account whose service type = \(serviceType)
         set targetParticipant to participant targetHandle of targetAccount
         if messageBody is not "" then
           send messageBody to targetParticipant
+          set bodySent to true
         end if
         if attachmentPath is not "" then
-          send (POSIX file attachmentPath) to targetParticipant
+          try
+            send (POSIX file attachmentPath) to targetParticipant
+          on error attachmentError
+            if bodySent then
+              return "\(partialSendMarker)" & attachmentError
+            end if
+            error attachmentError
+          end try
         end if
       end tell
       return "sent"
@@ -113,6 +137,13 @@ enum MessagesSenderService {
           arguments: [trimmedHandle, text, attachment],
           timeoutSeconds: timeoutSeconds)
         if result.succeeded {
+          // The body reached the recipient but the attachment did not. Retrying
+          // on another service would send the body twice, so this stops here and
+          // says plainly what did and did not happen.
+          if result.output.hasPrefix(Self.partialSendMarker) {
+            let detail = String(result.output.dropFirst(Self.partialSendMarker.count))
+            throw MessagesSenderError.partiallySent(service: serviceType, detail: detail)
+          }
           return MessageSendOutcome(
             handle: trimmedHandle,
             service: serviceType,

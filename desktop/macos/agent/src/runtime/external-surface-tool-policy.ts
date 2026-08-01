@@ -40,6 +40,14 @@ const PERMISSION_TYPES: ReadonlyArray<{ type: string; phrases: readonly string[]
   { type: "accessibility", phrases: ["accessibility permission", "accessibility access"] },
   { type: "automation", phrases: ["automation permission", "automation access"] },
   { type: "full_disk_access", phrases: ["full disk access"] },
+  // The device tool surface advertises these four in request_permission and
+  // names them in its failure hints. Without an entry here the request is
+  // rejected as permission_route_rejected before it reaches Swift, so the
+  // recovery path the tools point the model at could never be taken.
+  { type: "contacts", phrases: ["contacts permission", "contacts access", "address book"] },
+  { type: "calendars", phrases: ["calendar permission", "calendars permission", "calendar access"] },
+  { type: "reminders", phrases: ["reminders permission", "reminders access"] },
+  { type: "photos", phrases: ["photos permission", "photo library", "photos access"] },
 ];
 
 const PERMISSION_CAPABILITY_SUBJECTS = new Set([

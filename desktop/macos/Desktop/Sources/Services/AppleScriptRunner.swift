@@ -18,6 +18,9 @@ struct AppleScriptResult: Sendable {
 
 enum AppleScriptRunnerError: LocalizedError {
   case notPermitted(detail: String)
+  /// UI scripting refused for want of Accessibility, which is a different
+  /// System Settings pane and a different grant from Automation.
+  case assistiveAccessDenied(detail: String)
   case executionFailed(detail: String)
 
   var errorDescription: String? {
@@ -25,6 +28,9 @@ enum AppleScriptRunnerError: LocalizedError {
     case .notPermitted(let detail):
       return
         "macOS refused the automation request. Grant Automation permission for the target app in System Settings > Privacy & Security > Automation, then try again. Detail: \(detail)"
+    case .assistiveAccessDenied(let detail):
+      return
+        "macOS refused UI scripting. Grant Omi Accessibility permission in System Settings > Privacy & Security > Accessibility, then try again. Detail: \(detail)"
     case .executionFailed(let detail):
       return "AppleScript failed: \(detail)"
     }
@@ -33,7 +39,20 @@ enum AppleScriptRunnerError: LocalizedError {
   var reasonCode: String {
     switch self {
     case .notPermitted: return "automation_not_permitted"
+    case .assistiveAccessDenied: return "accessibility_not_permitted"
     case .executionFailed: return "execution_failed"
+    }
+  }
+
+  /// The grant the user has to change. Reporting Automation for an Accessibility
+  /// denial sent the model to `request_permission(type: "automation")`, which
+  /// probes Apple Events against System Events, answers "granted", and leaves
+  /// the actual block in place — so every retry failed the same way.
+  var requiredPermission: String {
+    switch self {
+    case .notPermitted: return "automation"
+    case .assistiveAccessDenied: return "accessibility"
+    case .executionFailed: return "automation"
     }
   }
 }
@@ -45,7 +64,15 @@ enum AppleScriptRunner {
   /// as -1728. Both are permission problems the user can act on.
   static func isPermissionError(_ stderr: String) -> Bool {
     stderr.contains("-1743") || stderr.localizedCaseInsensitiveContains("not authorized")
-      || stderr.localizedCaseInsensitiveContains("not allowed assistive access")
+      || isAssistiveAccessError(stderr)
+  }
+
+  /// UI scripting blocked by a missing Accessibility grant, which osascript
+  /// reports in its own words and which no amount of Automation permission
+  /// will fix.
+  static func isAssistiveAccessError(_ stderr: String) -> Bool {
+    stderr.localizedCaseInsensitiveContains("not allowed assistive access")
+      || stderr.localizedCaseInsensitiveContains("assistive access")
   }
 
   static func run(
@@ -54,10 +81,23 @@ enum AppleScriptRunner {
     timeoutSeconds: TimeInterval = 30
   ) throws -> AppleScriptResult {
     let bounded = max(1, min(timeoutSeconds, 120))
-    let result = try PipeProcessRunner.run(
-      executableURL: osascriptURL,
-      arguments: ["-e", script] + (arguments.isEmpty ? [] : ["--"] + arguments),
-      timeoutSeconds: bounded)
+    let result: PipeProcessResult
+    do {
+      result = try PipeProcessRunner.run(
+        executableURL: osascriptURL,
+        arguments: ["-e", script] + (arguments.isEmpty ? [] : ["--"] + arguments),
+        timeoutSeconds: bounded)
+    } catch let error as PipeProcessRunnerError {
+      // PipeProcessRunner throws on timeout rather than returning a result with
+      // timedOut set, so the branch below could never be reached and a hung
+      // osascript escaped as a generic failure. That matters most for
+      // send_message: Messages may have accepted the send before osascript
+      // hung, and a clean-looking failure invites the model to retry and send
+      // the message twice. Translated back into the ambiguous result the
+      // callers are written to handle.
+      guard case .timedOut = error else { throw error }
+      return AppleScriptResult(output: "", errorOutput: error.localizedDescription, exitCode: -1, timedOut: true)
+    }
 
     let output = String(data: result.stdout, encoding: .utf8) ?? ""
     let errorOutput = String(data: result.stderr, encoding: .utf8) ?? ""
@@ -71,8 +111,10 @@ enum AppleScriptRunner {
     }
 
     if result.terminationStatus != 0, isPermissionError(errorOutput) {
-      throw AppleScriptRunnerError.notPermitted(
-        detail: errorOutput.trimmingCharacters(in: .whitespacesAndNewlines))
+      let detail = errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+      throw isAssistiveAccessError(errorOutput)
+        ? AppleScriptRunnerError.assistiveAccessDenied(detail: detail)
+        : AppleScriptRunnerError.notPermitted(detail: detail)
     }
 
     return AppleScriptResult(

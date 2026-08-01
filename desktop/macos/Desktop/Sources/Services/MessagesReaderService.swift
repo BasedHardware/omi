@@ -98,6 +98,69 @@ actor MessagesReaderService {
     return Date(timeIntervalSince1970: seconds + appleEpochOffset)
   }
 
+  /// Whether the store is there, missing, or being withheld.
+  ///
+  /// `FileManager.fileExists` cannot tell the last two apart: when TCC refuses
+  /// the lookup for a protected path it reports false for a file that is really
+  /// there. Reading errno directly keeps a missing store ("Messages was never
+  /// signed in here") distinct from a withheld one ("grant Full Disk Access"),
+  /// which is the difference between a dead end and a fixable prompt.
+  enum StorePresence {
+    case present
+    case absent
+    case denied
+  }
+
+  static func storePresence(atPath path: String) -> StorePresence {
+    if access(path, F_OK) == 0 { return .present }
+    switch errno {
+    case ENOENT, ENOTDIR: return .absent
+    default:
+      // EACCES/EPERM, and anything else TCC surfaces. Treating an unknown errno
+      // as a denial points the user at a permission they can grant instead of
+      // telling them their message history does not exist.
+      return .denied
+    }
+  }
+
+  /// Recovers a message body from `message.attributedBody`.
+  ///
+  /// Modern Messages stores leave `message.text` null on ordinary messages and
+  /// keep the content here instead, so reading only `text` returns a thread that
+  /// looks empty — worse than an error, because the agent believes it.
+  ///
+  /// The column holds an `NSArchiver` typedstream, not a keyed archive, so
+  /// `NSKeyedUnarchiver` cannot read it and `NSUnarchiver` is unavailable in
+  /// Swift. What is stable across versions is the layout around the archived
+  /// `NSString`: the class name, a short header, then a length-prefixed UTF-8
+  /// run. Lengths of 128 and over switch to a 16-bit little-endian count behind
+  /// an `0x81` marker. Anything that does not match returns nil and the caller
+  /// falls back to the empty body rather than guessing.
+  static func decodeAttributedBody(_ data: Data) -> String? {
+    guard let marker = data.range(of: Data("NSString".utf8)) else { return nil }
+    var cursor = marker.upperBound + 5
+    guard cursor < data.count else { return nil }
+
+    var length = Int(data[cursor])
+    cursor += 1
+    if length == 0x81 {
+      guard cursor + 1 < data.count else { return nil }
+      length = Int(data[cursor]) | (Int(data[cursor + 1]) << 8)
+      cursor += 2
+    }
+
+    guard length > 0, cursor + length <= data.count else { return nil }
+    return String(data: data[cursor..<(cursor + length)], encoding: .utf8)
+  }
+
+  /// The body to show for a row, preferring `text` and falling back to the
+  /// attributed blob.
+  static func body(text: String?, attributedBody: Data?) -> String {
+    if let text, !text.isEmpty { return text }
+    guard let attributedBody, !attributedBody.isEmpty else { return "" }
+    return decodeAttributedBody(attributedBody) ?? ""
+  }
+
   static func classifyReadError(_ error: Error, path: String) -> MessagesReaderError {
     if let readerError = error as? MessagesReaderError { return readerError }
     let nsError = error as NSError
@@ -111,8 +174,8 @@ actor MessagesReaderService {
       // SQLITE_CANTOPEN/SQLITE_PERM/SQLITE_AUTH against an existing file is TCC
       // refusing the read, not a corrupt store.
       if [SQLITE_CANTOPEN, SQLITE_PERM, SQLITE_AUTH].contains(dbError.resultCode.rawValue) {
-        return FileManager.default.fileExists(atPath: path)
-          ? .authorizationDenied(path: path) : .storeNotFound(path: path)
+        return storePresence(atPath: path) == .absent
+          ? .storeNotFound(path: path) : .authorizationDenied(path: path)
       }
       if dbError.resultCode.rawValue == SQLITE_ERROR,
         dbError.message?.localizedCaseInsensitiveContains("no such table") == true
@@ -126,7 +189,10 @@ actor MessagesReaderService {
 
   private func openReadOnlyStore(at override: URL? = nil) throws -> DatabaseQueue {
     let url = override ?? Self.storeURL()
-    guard FileManager.default.fileExists(atPath: url.path) else {
+    // Only an absent store short-circuits. A denial has to reach GRDB so the
+    // error carries the full_disk_access permission and its recovery hint,
+    // rather than being reported as a store that was never created.
+    guard Self.storePresence(atPath: url.path) != .absent else {
       throw MessagesReaderError.storeNotFound(path: url.path)
     }
     var configuration = Configuration()
@@ -156,13 +222,21 @@ actor MessagesReaderService {
               COALESCE(chat.service_name, '') AS service,
               MAX(message.date) AS last_date,
               (
-                SELECT COALESCE(m2.text, '')
+                SELECT m2.text
                 FROM message m2
                 JOIN chat_message_join cmj2 ON cmj2.message_id = m2.ROWID
                 WHERE cmj2.chat_id = chat.ROWID
                 ORDER BY m2.date DESC
                 LIMIT 1
               ) AS last_text,
+              (
+                SELECT m3.attributedBody
+                FROM message m3
+                JOIN chat_message_join cmj3 ON cmj3.message_id = m3.ROWID
+                WHERE cmj3.chat_id = chat.ROWID
+                ORDER BY m3.date DESC
+                LIMIT 1
+              ) AS last_attributed_body,
               (
                 SELECT GROUP_CONCAT(h.id, ', ')
                 FROM chat_handle_join chj
@@ -189,7 +263,9 @@ actor MessagesReaderService {
             handles: handles,
             service: row["service"] as String? ?? "",
             lastMessageAt: Self.date(fromAppleTimestamp: row["last_date"] as Int64? ?? 0),
-            lastMessagePreview: row["last_text"] as String? ?? "")
+            lastMessagePreview: Self.body(
+              text: row["last_text"] as String?,
+              attributedBody: row["last_attributed_body"] as Data?))
         }
       }
     } catch {
@@ -207,16 +283,41 @@ actor MessagesReaderService {
       return try await dbQueue.read { db in
         let resolvedChatID: Int64
         if let chatID {
+          // A stale or invented chat_id used to read back as ok with an empty
+          // message list, which is indistinguishable from a real quiet thread —
+          // and the agent would answer as if it had the context it asked for.
+          guard
+            try Int64.fetchOne(db, sql: "SELECT ROWID FROM chat WHERE ROWID = ?", arguments: [chatID])
+              != nil
+          else { throw MessagesReaderError.chatNotFound(reference: "chat_id \(chatID)") }
           resolvedChatID = chatID
         } else if let handle, !handle.isEmpty {
+          // One address can belong to a direct thread and any number of group
+          // chats. LIMIT 1 with no ordering picked among them arbitrarily, so
+          // "read my thread with Sam" could return an unrelated group — the
+          // wrong people's messages, and the wrong context to reply from.
+          //
+          // Direct chats come first (one participant), then the most recently
+          // active, so the choice is both right and repeatable.
           guard
             let found = try Int64.fetchOne(
               db,
               sql: """
-                SELECT chj.chat_id
-                FROM chat_handle_join chj
+                SELECT chat.ROWID
+                FROM chat
+                JOIN chat_handle_join chj ON chj.chat_id = chat.ROWID
                 JOIN handle h ON h.ROWID = chj.handle_id
                 WHERE h.id = ?
+                GROUP BY chat.ROWID
+                ORDER BY
+                  (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chat.ROWID) ASC,
+                  (
+                    SELECT MAX(m.date)
+                    FROM message m
+                    JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+                    WHERE cmj.chat_id = chat.ROWID
+                  ) DESC,
+                  chat.ROWID ASC
                 LIMIT 1
                 """,
               arguments: [handle])
@@ -231,7 +332,8 @@ actor MessagesReaderService {
           sql: """
             SELECT
               message.ROWID AS message_id,
-              COALESCE(message.text, '') AS text,
+              message.text AS text,
+              message.attributedBody AS attributed_body,
               message.is_from_me AS is_from_me,
               message.date AS date,
               COALESCE(message.service, '') AS service,
@@ -257,7 +359,8 @@ actor MessagesReaderService {
             id: row["message_id"],
             chatID: resolvedChatID,
             handle: row["handle"] as String? ?? "",
-            text: row["text"] as String? ?? "",
+            text: Self.body(
+              text: row["text"] as String?, attributedBody: row["attributed_body"] as Data?),
             isFromMe: (row["is_from_me"] as Int64? ?? 0) == 1,
             sentAt: Self.date(fromAppleTimestamp: row["date"] as Int64? ?? 0),
             service: row["service"] as String? ?? "",

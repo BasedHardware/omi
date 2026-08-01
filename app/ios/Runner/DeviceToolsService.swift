@@ -166,17 +166,26 @@ class DeviceToolsService: NSObject {
         let phones = contact.phoneNumbers.map { entry -> [String: String] in
           [
             "label": entry.label.map { CNLabeledValue<NSString>.localizedString(forLabel: $0) } ?? "",
+            "raw_label": entry.label ?? "",
             "value": entry.value.stringValue,
           ]
         }
         let emails = contact.emailAddresses.map { entry -> [String: String] in
           [
             "label": entry.label.map { CNLabeledValue<NSString>.localizedString(forLabel: $0) } ?? "",
+            "raw_label": entry.label ?? "",
             "value": entry.value as String,
           ]
         }
+        // Matched on the CNLabelPhoneNumber constant, not the localized label:
+        // localizedString(forLabel:) returns the user's language, so a substring
+        // test for "mobile" only worked on an English device and everywhere else
+        // fell through to whatever number came first — often a home or work
+        // line. Preparing a message to the wrong number is a real error.
         let preferred =
-          phones.first(where: { $0["label"]?.localizedCaseInsensitiveContains("mobile") == true })?["value"]
+          phones.first(where: {
+            $0["raw_label"] == CNLabelPhoneNumberMobile || $0["raw_label"] == CNLabelPhoneNumberiPhone
+          })?["value"]
           ?? phones.first?["value"] ?? emails.first?["value"] ?? ""
         return [
           "id": contact.identifier,

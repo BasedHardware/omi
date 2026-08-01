@@ -193,6 +193,29 @@ class ChatToolExecutor {
     }
   }
 
+  /// Tools whose arguments are the user's private content rather than a
+  /// description of the request.
+  ///
+  /// `send_message` carries the recipient and the exact message body;
+  /// `run_applescript` carries the whole script. Both are reachable in release
+  /// builds, so logging the raw arguments wrote private message text to the
+  /// production log on ordinary use. These log their shape instead — enough to
+  /// debug a malformed call, nothing anyone would mind keeping.
+  private static let sensitiveArgumentTools: Set<String> = [
+    "send_message", "run_applescript", "read_message_history",
+  ]
+
+  static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
+    guard sensitiveArgumentTools.contains(toolCall.name) else { return "\(toolCall.arguments)" }
+    let shape = toolCall.arguments.keys.sorted().map { key -> String in
+      let value = toolCall.arguments[key]
+      if let text = value as? String { return "\(key)=<\(text.count) chars>" }
+      if value == nil { return "\(key)=<null>" }
+      return "\(key)=<\(type(of: value!))>"
+    }
+    return "[redacted: \(shape.joined(separator: ", "))]"
+  }
+
   private static func executeUnchecked(
     _ toolCall: ToolCall,
     originatingChatMode: ChatMode?,
@@ -203,7 +226,7 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     backendAPIClient: APIClient
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    log("Executing tool: \(toolCall.name) with args: \(redactedArgumentSummary(for: toolCall))")
     let telemetryContext = ScreenContextTelemetryContext.from(
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
