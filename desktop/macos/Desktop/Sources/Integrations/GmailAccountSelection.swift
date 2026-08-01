@@ -7,8 +7,8 @@ struct GmailAccountOption: Identifiable, Equatable {
 }
 
 enum GmailSelectionStore {
-  private static let selectedPathKey = "gmailSelectedCookiePath"
-  private static let selectedLabelKey = "gmailSelectedAccountLabel"
+  private static let selectedPathKey = DefaultsKey.gmailSelectedCookiePath.rawValue
+  private static let selectedLabelKey = DefaultsKey.gmailSelectedAccountLabel.rawValue
 
   static var selectedCookiePath: String? {
     get { UserDefaults.standard.string(forKey: selectedPathKey) }
@@ -34,9 +34,27 @@ enum GmailSelectionStore {
   }
 
   static func filter(_ configs: [[String: String]]) -> [[String: String]] {
+    filter(configs, selectedCookiePath: selectedCookiePath)
+  }
+
+  /// Filter with an explicit snapshot of the selected profile. Callers that
+  /// run several fetches for one logical read pass the snapshot captured at
+  /// read entry, so a picker change mid-read cannot mix two accounts' mail.
+  static func filter(_ configs: [[String: String]], selectedCookiePath: String?) -> [[String: String]] {
     guard let selected = selectedCookiePath, !selected.isEmpty else { return configs }
     let narrowed = configs.filter { $0["db_path"] == selected }
-    return narrowed.isEmpty ? configs : narrowed
+    guard narrowed.isEmpty else { return narrowed }
+    // The stored selection no longer matches any configured profile (cookies
+    // deleted, profile removed, path changed). Widening back to every profile
+    // silently changes which inbox is read while Settings still shows the old
+    // label — record the fail-open so it is not invisible.
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "gmail_account_selection",
+      from: "selected_account",
+      to: "first_readable_profile",
+      reason: "selected_profile_missing",
+      outcome: .recovered)
+    return configs
   }
 }
 
@@ -50,7 +68,7 @@ enum GmailAccountProbe {
       let data = try JSONSerialization.data(withJSONObject: configs)
       configJSON = String(data: data, encoding: .utf8) ?? "[]"
     } catch {
-      return []
+      throw error
     }
 
     let pythonScript = """
@@ -90,22 +108,37 @@ enum GmailAccountProbe {
         script: pythonScript,
         arguments: [],
         stdinData: Data(configJSON.utf8),
-        timeoutSeconds: 45
+        // Two sequential AccountInfo probes per profile with a 15s request
+        // timeout; give the process budget for every configured profile so a
+        // slow Google endpoint cannot zero out all discovered accounts.
+        timeoutSeconds: 45 + 30 * max(configs.count, 1)
       )
       let outputPath =
         String(data: result.stdout, encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
-        return []
+        throw GmailAccountProbeError.noOutput
       }
       defer { try? FileManager.default.removeItem(atPath: outputPath) }
       let data = try Data(contentsOf: URL(fileURLWithPath: outputPath))
       guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        return []
+        throw GmailAccountProbeError.invalidOutput
       }
       return Self.parseAccounts(json)
-    } catch {
-      return []
+    }
+  }
+
+  enum GmailAccountProbeError: LocalizedError {
+    case noOutput
+    case invalidOutput
+
+    var errorDescription: String? {
+      switch self {
+      case .noOutput:
+        return "Gmail account probe produced no output."
+      case .invalidOutput:
+        return "Gmail account probe returned unreadable output."
+      }
     }
   }
 

@@ -55,6 +55,8 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

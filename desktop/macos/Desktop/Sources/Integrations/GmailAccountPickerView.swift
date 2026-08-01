@@ -4,6 +4,7 @@ import SwiftUI
 struct GmailAccountPickerView: View {
   let accounts: [GmailAccountOption]
   let selectedCookiePath: String?
+  let hasMadeChoice: Bool
   let onSelect: (String?, String) -> Void
   let onCancel: () -> Void
 
@@ -33,7 +34,11 @@ struct GmailAccountPickerView: View {
               .foregroundColor(OmiColors.textTertiary)
           }
           Spacer()
-          if selectedCookiePath == nil {
+          // Only an explicit choice may show the checkmark: before any
+          // selection, selectedCookiePath is nil but the user has not chosen
+          // Automatic, and showing it as pre-selected invites a dismiss that
+          // would strand the onboarding wait.
+          if hasMadeChoice && selectedCookiePath == nil {
             Image(systemName: "checkmark")
               .foregroundColor(OmiColors.accent)
           }

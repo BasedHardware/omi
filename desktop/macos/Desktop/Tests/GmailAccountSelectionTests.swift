@@ -50,6 +50,33 @@ final class GmailAccountSelectionTests: XCTestCase {
     XCTAssertFalse(GmailSelectionStore.hasMadeChoice)
   }
 
+  func testSnapshotFilterUsesProvidedPathNotCurrentSelection() {
+    let configs = [
+      config("Chrome (Default)", "/a/Default/Network/Cookies"),
+      config("Chrome (Work)", "/a/Profile 1/Network/Cookies"),
+    ]
+    // A snapshot taken before the selection changed must still resolve against
+    // the snapshot's profile, not the freshly persisted one.
+    let snapshot = GmailSelectionStore.selectedCookiePath
+    GmailSelectionStore.persist(cookiePath: "/a/Profile 1/Network/Cookies", label: "work@corp.com")
+
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: snapshot),
+      configs)
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: "/a/Profile 1/Network/Cookies"),
+      [config("Chrome (Work)", "/a/Profile 1/Network/Cookies")])
+  }
+
+  func testSnapshotFilterFallsBackWhenSnapshotProfileIsGone() {
+    let configs = [
+      config("Chrome (Default)", "/a/Default/Network/Cookies")
+    ]
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: "/gone/Profile 9/Network/Cookies"),
+      configs)
+  }
+
   func testHasMadeChoiceAfterPersist() {
     XCTAssertFalse(GmailSelectionStore.hasMadeChoice)
     GmailSelectionStore.persist(cookiePath: nil, label: "Automatic")
