@@ -14,22 +14,23 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-typedef ActionItemsFetcher =
-    Future<ActionItemsResponse?> Function({
-      int limit,
-      int offset,
-      bool? completed,
-      String? conversationId,
-      DateTime? startDate,
-      DateTime? endDate,
-    });
+typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
+  int limit,
+  int offset,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+});
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 
 class ActionItemsProvider extends ChangeNotifier {
-  ActionItemsProvider({ActionItemsFetcher? getActionItems, DeleteActionItemRequest? deleteActionItemRequest})
-    : _getActionItems = getActionItems ?? api.tryGetActionItems,
-      _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+  ActionItemsProvider({
+    ActionItemsFetcher? getActionItems,
+    DeleteActionItemRequest? deleteActionItemRequest,
+  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
     unawaited(_preload());
   }
 
