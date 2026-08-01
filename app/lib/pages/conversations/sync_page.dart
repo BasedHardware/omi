@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -496,7 +497,7 @@ class _SyncPageState extends State<SyncPage> {
     final isActive = syncProvider.isSyncing;
     final uploaded = syncProvider.uploadedWals.length;
     final readyToSync = syncProvider.missingWals.length;
-    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimitedForPendingUploads;
+    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;
     String? subtitle;
@@ -533,12 +534,8 @@ class _SyncPageState extends State<SyncPage> {
           }
           break;
       }
-    } else if (syncProvider.isRateLimitedForPendingUploads) {
-      title = switch (syncProvider.rateLimitReason) {
-        RateLimitReason.backendBusy => l.syncCardBackendBusy,
-        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToSync),
-        _ => l.syncCardRateLimited,
-      };
+    } else if (syncProvider.isRateLimited) {
+      title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;

@@ -153,33 +153,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Recordings that the storage sheet's Clear All action can remove.
   int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
 
-  /// True while any cooldown is active, in any lane.
-  ///
-  /// Prefer [isRateLimitedForPendingUploads] for anything that decides whether the user can act:
-  /// cooldowns are per lane, and this is true even when the lane the pending work needs is free.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
-
-  /// The upload lanes the recordings still to back up would use.
-  Set<SyncUploadLane> get pendingUploadLanes => pendingSyncUploadLanes(
-        displaySortedWals
-            .where((wal) =>
-                wal.syncDisplayState == WalSyncDisplayState.waiting ||
-                wal.syncDisplayState == WalSyncDisplayState.retrying ||
-                wal.syncDisplayState == WalSyncDisplayState.failed)
-            .toList(),
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      );
-
-  /// True only when every lane the pending recordings need is in cooldown.
-  ///
-  /// The upload path gates per lane (`SyncRateLimiter.isLimitedForLane`), so a UI that gates on
-  /// the global flag hides the Sync control for work the sync layer would happily accept — a
-  /// fresh-lane cooldown stranding a backlog that uploads through backfill.
-  bool get isRateLimitedForPendingUploads => allSyncLanesLimited(
-        pendingUploadLanes,
-        SyncRateLimiter.instance.isLimitedForLane,
-        fallback: SyncRateLimiter.instance.isLimited,
-      );
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
   RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
@@ -292,8 +266,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
   bool _isDisposed = false;
-  late bool _freshRateLimitWasActive;
-  late bool _backfillRateLimitWasActive;
+  late bool _rateLimitWasActive;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -358,8 +331,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
-    _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
-    _backfillRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
+    _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
     SyncRateLimiter.instance.addListener(_onRateLimiterChanged);
     initialized = _initializeProvider();
   }
@@ -380,12 +352,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _onRateLimiterChanged() {
     if (_isDisposed) return;
-    final freshActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
-    final backfillActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
-    final cooldownEnded =
-        (_freshRateLimitWasActive && !freshActive) || (_backfillRateLimitWasActive && !backfillActive);
-    _freshRateLimitWasActive = freshActive;
-    _backfillRateLimitWasActive = backfillActive;
+    final active = SyncRateLimiter.instance.isLimited;
+    final cooldownEnded = _rateLimitWasActive && !active;
+    _rateLimitWasActive = active;
     notifyListeners();
     if (cooldownEnded && _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
@@ -446,6 +415,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     final hadEligibleWals = missingWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
+
+    // Reconciles a persisted fair-use cooldown the server may already have
+    // lifted; without it a stale local deadline outlives the restriction.
+    if (!await _uploadGate.prepareToUpload()) {
+      notifyListeners();
+      return const RecordingTransferDrainResult.skipped();
+    }
 
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -534,6 +510,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> _syncWalsDirect() async {
+    if (!await _uploadGate.prepareToUpload()) {
+      notifyListeners();
+      return;
+    }
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -548,6 +528,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // race a coordinator drain (or device download) on the same WAL stack.
     if (_startBackgroundSync && _isTransferSeamBusy()) {
       await _wakeTransfer(WakeTrigger.userRetry);
+      return;
+    }
+    if (!await _uploadGate.prepareToUpload()) {
+      notifyListeners();
       return;
     }
     _updateSyncState(_syncState.toIdle());
