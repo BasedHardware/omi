@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
+> Last updated: 2026-08-01 (conversation start-location provenance)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -106,6 +106,24 @@ custom upgrade headers, so `/v4/web/listen` carries the hash in its required
 first auth message; the backend fixes its platform to `web` before creating
 the conversation. Missing provenance remains unknown rather than being
 assigned to a different device.
+
+## Conversation start location
+
+Mobile clients may send one bounded `X-Omi-Conversation-Geolocation` header on
+the authenticated WebSocket upgrade. It contains the position captured at
+recording start, its capture timestamp/source, and optional accuracy. The
+backend validates the coordinates and persists the snapshot on the initial
+conversation document; it never logs the header. A last-known position is used
+only when the client cannot obtain a fresh fix and the OS timestamp is no more
+than 15 minutes old.
+
+The same snapshot is stored with local WAL metadata and sent on a later
+`/v2/sync-local-files` upload, so delayed/offline processing uses the recording's
+own location instead of whichever user location happens to be newest. Existing
+conversation location always wins. The 30-minute Redis user-location cache is
+retained only for compatibility with older clients. Missing permission, invalid
+coordinates, stale fixes, upload failure, and reverse-geocode failure all fail
+open; raw valid coordinates remain usable even without an address.
 
 ```mermaid
 sequenceDiagram

@@ -1,8 +1,10 @@
 package com.friend.ios.phonemic
 
 import com.friend.ios.batch.BaseBatchAudioWriter
+import com.friend.ios.batch.persistNativeBatchGeolocationSidecar
 
 import android.content.Context
+import java.io.File
 
 /**
  * Batch (transcribe-later) capture sink for the phone microphone — the Kotlin peer of
@@ -49,6 +51,11 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
     // controller's heartbeat so a single onCaptureError fires per storage-full event.
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
+
+    override fun onOpenedLocked(partFile: File) {
+        val audioFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
+        persistNativeBatchGeolocationSidecar(audioFile, stringPref("phoneBatchGeolocation"), TAG)
+    }
 
     /**
      * Append the opus packets for one converted PCM chunk. Called on the writer's serial

@@ -19,18 +19,28 @@ os.environ.setdefault(
 import asyncio  # noqa: E402
 
 from models.geolocation import Geolocation  # noqa: E402
+from models.geolocation import geolocation_from_private_header  # noqa: E402
 
 import utils.conversations.location as loc  # noqa: E402
 
 
 def _raw():
-    return Geolocation(latitude=37.78, longitude=-122.41)  # coordinates, no google_place_id
+    return Geolocation(
+        latitude=37.78,
+        longitude=-122.41,
+        captured_at='2026-08-01T12:00:00Z',
+        capture_source='current_position',
+        accuracy=8,
+    )  # coordinates, no google_place_id
 
 
 def test_resolve_geolocation_keeps_enrichment():
     enriched = Geolocation(latitude=37.78, longitude=-122.41, google_place_id="ChIJ_test", address="1 St")
     with patch.object(loc, "get_google_maps_location", return_value=enriched):
-        assert loc.resolve_geolocation(_raw()).google_place_id == "ChIJ_test"
+        result = loc.resolve_geolocation(_raw())
+        assert result.google_place_id == "ChIJ_test"
+        assert result.capture_source == 'current_position'
+        assert result.accuracy == 8
 
 
 def test_resolve_geolocation_keeps_raw_on_miss():
@@ -63,6 +73,7 @@ def test_async_resolve_geolocation_keeps_enrichment():
     with patch.object(loc, "async_get_google_maps_location", new=AsyncMock(return_value=enriched)):
         result = asyncio.run(loc.async_resolve_geolocation(_raw()))
     assert result.google_place_id == "ChIJ_async"
+    assert result.capture_source == 'current_position'
 
 
 def test_async_resolve_geolocation_keeps_raw_on_miss():
@@ -70,3 +81,7 @@ def test_async_resolve_geolocation_keeps_raw_on_miss():
         raw = _raw()
         result = asyncio.run(loc.async_resolve_geolocation(raw))
     assert result is raw  # cached coordinates preserved on a miss, not dropped to None
+
+
+def test_private_header_parser_treats_non_string_sentinels_as_absent():
+    assert geolocation_from_private_header(object()) is None

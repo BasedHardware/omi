@@ -75,7 +75,16 @@ def resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocat
     except Exception as e:
         logger.error('resolve_geolocation enrichment failed: %s', e)
         return geolocation
-    return enriched or geolocation
+    if not enriched:
+        return geolocation
+    return enriched.model_copy(
+        update={
+            'captured_at': geolocation.captured_at,
+            'capture_source': geolocation.capture_source,
+            'accuracy': geolocation.accuracy,
+            'altitude': geolocation.altitude,
+        }
+    )
 
 
 async def async_get_google_maps_location(latitude: float, longitude: float) -> Optional[Geolocation]:
@@ -141,7 +150,16 @@ async def async_resolve_geolocation(geolocation: Optional[Geolocation]) -> Optio
     except Exception as e:
         logger.error('async_resolve_geolocation enrichment failed: %s', e)
         return geolocation
-    return enriched or geolocation
+    if not enriched:
+        return geolocation
+    return enriched.model_copy(
+        update={
+            'captured_at': geolocation.captured_at,
+            'capture_source': geolocation.capture_source,
+            'accuracy': geolocation.accuracy,
+            'altitude': geolocation.altitude,
+        }
+    )
 
 
 async def async_get_google_maps_city(latitude: float, longitude: float) -> Optional[str]:

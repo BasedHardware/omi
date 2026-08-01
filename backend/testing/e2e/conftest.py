@@ -275,6 +275,14 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     old_r = redis_db.r
     db_client.db = fake_firestore_instance
     redis_db.r = fake_redis_instance
+    # Redis Script objects retain the client that registered them. Relinking
+    # only redis_db.r leaves rate limits and other Lua-backed paths talking to
+    # the developer's localhost Redis, which both violates hermeticity and leaks
+    # counters across wrapper runs. Re-register every module script on FakeRedis.
+    for attr_name, attr_value in list(vars(redis_db).items()):
+        script = getattr(attr_value, 'script', None)
+        if attr_name.endswith('_LUA') and isinstance(script, str):
+            setattr(redis_db, attr_name, fake_redis_instance.register_script(script))
     for module in list(sys.modules.values()):
         if module is None:
             continue

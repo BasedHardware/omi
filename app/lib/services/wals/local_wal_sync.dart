@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -61,11 +62,21 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
     batch.isNotEmpty && isLiveCaptureWal(batch.first, nowSeconds) && pendingForConversation.length <= batch.length;
 
 @visibleForTesting
+String? _walLocationBatchKey(Wal wal) {
+  final geolocation = wal.geolocation;
+  if (geolocation == null) return null;
+  return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
+}
+
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   if (ordered.isEmpty) return const [];
   final conversationId = ordered.first.conversationId;
-  return ordered.where((wal) => wal.conversationId == conversationId).take(_syncUploadBatchLimit).toList();
+  final locationKey = _walLocationBatchKey(ordered.first);
+  return ordered
+      .where((wal) => wal.conversationId == conversationId && _walLocationBatchKey(wal) == locationKey)
+      .take(_syncUploadBatchLimit)
+      .toList();
 }
 
 class LocalWalSyncImpl implements LocalWalSync {
@@ -83,6 +94,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   BleAudioCodec _codec = BleAudioCodec.opus;
   String? _deviceId;
   String? _deviceModel;
+  Geolocation? _sessionGeolocation;
+  int? _sessionGeolocationSetAt;
 
   bool _isCancelled = false;
 
@@ -121,6 +134,15 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal) async {
+    // Native-storage recovery can surface old WALs while a new recording is
+    // active. Only inherit the current session's location for WALs that began
+    // at (or after) this session, never for historical recordings.
+    if (wal.geolocation == null &&
+        _sessionGeolocation != null &&
+        _sessionGeolocationSetAt != null &&
+        wal.timerStart >= _sessionGeolocationSetAt! - 60) {
+      wal.geolocation = _sessionGeolocation;
+    }
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
@@ -205,6 +227,12 @@ class LocalWalSyncImpl implements LocalWalSync {
     _deviceModel = deviceModel;
   }
 
+  @override
+  void setSessionGeolocation(Geolocation? geolocation) {
+    _sessionGeolocation = geolocation;
+    _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  }
+
   Future _chunk() async {
     if (_frames.isEmpty) {
       Logger.debug("Frames are empty");
@@ -268,6 +296,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
+          geolocation: _sessionGeolocation,
         );
         _wals.add(wal);
       } else {
@@ -454,6 +483,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
+            geolocation: _sessionGeolocation,
           ),
         );
     }
@@ -548,8 +578,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals =
-        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    final corruptedWals = _wals
+        .where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow)
+        .toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -638,7 +669,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture =
+          !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
@@ -738,6 +770,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           files,
           conversationId: batchWals.first.conversationId,
           claimLiveCapture: claimLiveCapture,
+          geolocation: batchWals.first.geolocation,
         );
 
         if (result.completed != null) {
@@ -912,6 +945,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         [walFile],
         conversationId: walToSync.conversationId,
         claimLiveCapture: claimLiveCapture,
+        geolocation: walToSync.geolocation,
       );
 
       if (result.completed != null) {

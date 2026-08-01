@@ -283,14 +283,22 @@ class GeneratedStructured {
 }
 
 class GeneratedGeolocation {
+  final double? accuracy;
   final String? address;
+  final double? altitude;
+  final String? captureSource;
+  final DateTime? capturedAt;
   final String? googlePlaceId;
   final double latitude;
   final String? locationType;
   final double longitude;
 
   const GeneratedGeolocation({
+    this.accuracy,
     this.address,
+    this.altitude,
+    this.captureSource,
+    this.capturedAt,
     this.googlePlaceId,
     required this.latitude,
     this.locationType,
@@ -299,7 +307,11 @@ class GeneratedGeolocation {
 
   factory GeneratedGeolocation.fromJson(Map<String, dynamic> json) {
     return GeneratedGeolocation(
+      accuracy: _readFieldValue<double>(_readField(json, const ["accuracy"]), "accuracy", _readDouble, requiredField: false, nullable: true),
       address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString, requiredField: false, nullable: true),
+      altitude: _readFieldValue<double>(_readField(json, const ["altitude"]), "altitude", _readDouble, requiredField: false, nullable: true),
+      captureSource: _readFieldValue<String>(_readField(json, const ["capture_source"]), "capture_source", _readString, requiredField: false, nullable: true),
+      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: false, nullable: true),
       googlePlaceId: _readFieldValue<String>(_readField(json, const ["google_place_id", "googlePlaceId"]), "google_place_id", _readString, requiredField: false, nullable: true),
       latitude: _required(_readFieldValue<double>(_readField(json, const ["latitude"]), "latitude", _readDouble, requiredField: true, nullable: false), "latitude"),
       locationType: _readFieldValue<String>(_readField(json, const ["location_type", "locationType"]), "location_type", _readString, requiredField: false, nullable: true),
@@ -309,7 +321,11 @@ class GeneratedGeolocation {
 
   Map<String, dynamic> toJson() {
     return {
+      'accuracy': accuracy,
       'address': address,
+      'altitude': altitude,
+      'capture_source': captureSource,
+      'captured_at': capturedAt?.toUtc().toIso8601String(),
       'google_place_id': googlePlaceId,
       'latitude': latitude,
       'location_type': locationType,
