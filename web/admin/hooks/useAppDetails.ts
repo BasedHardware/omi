@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useAuthToken, authenticatedFetcher } from '@/hooks/useAuthToken';
+import { useAuthToken, authenticatedFetcher, AUTH_SCOPE } from '@/hooks/useAuthToken';
 
 // Define a type for the detailed app data. Adjust as per your Firestore structure.
 // For now, using a generic Record.
@@ -15,7 +15,7 @@ export function useAppDetails(appId: string | null) {
   const { token, loading: tokenLoading } = useAuthToken();
 
   // Construct SWR key: only fetch if appId and token are available
-  const swrKey = appId && token ? [`/api/omi/apps/${appId}/details`, token] : null;
+  const swrKey = appId && token ? [`/api/omi/apps/${appId}/details`, AUTH_SCOPE] : null;
 
   const { data, error, isLoading, mutate } = useSWR<OmiAppDetailedData, Error>(swrKey, authenticatedFetcher, {
     revalidateOnFocus: false,

@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useAuthToken, authenticatedFetcher, useAuthFetch } from '@/hooks/useAuthToken';
+import { useAuthToken, authenticatedFetcher, useAuthFetch, AUTH_SCOPE } from '@/hooks/useAuthToken';
 
 export type AnnouncementType = 'changelog' | 'feature' | 'announcement';
 
@@ -111,7 +111,7 @@ export function useAnnouncements(typeFilter?: AnnouncementType) {
 
   const url = typeFilter ? `/api/omi/announcements?type=${typeFilter}` : '/api/omi/announcements';
 
-  const swrKey = token ? [url, token] : null;
+  const swrKey = token ? [url, AUTH_SCOPE] : null;
   const { data, error, isLoading, mutate } = useSWR<Announcement[]>(swrKey, authenticatedFetcher, {
     revalidateOnFocus: false,
   });

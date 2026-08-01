@@ -315,7 +315,9 @@ export default function Chat({
                   >
                     {message.role === 'assistant' ? (
                       <div className="prose prose-sm max-w-none text-gray-100 dark:prose-invert prose-headings:text-gray-100 prose-p:leading-relaxed prose-p:text-gray-100 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-blue-500 prose-blockquote:text-gray-100 prose-strong:text-gray-100 prose-code:text-blue-300 prose-pre:bg-zinc-900 prose-pre:text-gray-200 prose-ol:text-gray-100 prose-ul:text-gray-100 prose-li:text-gray-100">
-                        <Markdown>{message.content}</Markdown>
+                        <Markdown options={{ disableParsingRawHTML: true }}>
+                          {message.content}
+                        </Markdown>
                       </div>
                     ) : (
                       <p className="whitespace-pre-wrap text-sm leading-relaxed md:text-base">

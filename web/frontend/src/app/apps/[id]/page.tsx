@@ -67,6 +67,15 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   };
 }
 
+// JSON.stringify does not escape `<`, `>` or `&`, so developer-submitted app
+// metadata could otherwise close the <script> tag and inject markup.
+function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
 // Add a separate function to handle JSON-LD
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
@@ -76,7 +85,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
     'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
   return {
-    __html: JSON.stringify([
+    __html: serializeJsonLd([
       {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',

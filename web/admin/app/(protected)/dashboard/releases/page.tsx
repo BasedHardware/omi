@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
-import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { useAuthToken, authenticatedFetcher, AUTH_SCOPE } from "@/hooks/useAuthToken";
 import {
   Table,
   TableBody,
@@ -179,7 +179,7 @@ function LifecycleCell({ row }: { row: ReleaseRow }) {
 export default function ReleasesPage() {
   const { token } = useAuthToken();
   const { data, error, isLoading } = useSWR<ReleasesResponse>(
-    token ? ["/api/omi/releases", token] : null,
+    token ? ["/api/omi/releases", AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false, refreshInterval: 5 * 60 * 1000 },
   );

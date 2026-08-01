@@ -29,6 +29,7 @@ import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
 import { ulid } from 'ulid';
 import { auth, googleProvider } from '@/lib/firebase';
+import { authedJsonHeaders } from '@/lib/api-auth';
 import { Header } from '@/components/Header';
 import { InputArea } from '@/components/InputArea';
 import { ChatbotList } from '@/components/ChatbotList';
@@ -693,8 +694,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       try {
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid: uid }), // Use real UID
+          headers: await authedJsonHeaders(),
         });
         if (!enableRes.ok) {
           console.error('Failed to enable plugins via API:', await enableRes.text());
@@ -839,8 +839,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         try {
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: uid }), // Use real UID
+            headers: await authedJsonHeaders(),
           });
           if (!enableRes.ok) {
             console.error('Failed to enable plugins via API:', await enableRes.text());
@@ -882,13 +881,12 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
     // Initiate the background fact storage - DO NOT await this
     try {
+      const headers = await authedJsonHeaders();
       fetch('/api/store-facts', {
         // No await here!
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ uid, memories }),
+        headers,
+        body: JSON.stringify({ memories }),
       })
         .then((response) => {
           if (!response.ok) {
@@ -998,8 +996,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       );
       fetch('/api/enable-plugins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: uid }),
+        headers: await authedJsonHeaders(),
       })
         .then(async (response) => {
           if (!response.ok) {

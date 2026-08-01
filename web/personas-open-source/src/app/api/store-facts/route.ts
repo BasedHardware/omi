@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
+import { authenticateRequest } from '@/lib/firebase-auth';
 
 // ... Redis client config ...
 
 interface PostBody {
-  uid: string;
   memories: string[];
 }
 
@@ -12,18 +12,27 @@ export async function POST(req: Request) {
   const connectedRedis = false;
   try {
     console.log('[store-facts] Received request');
-    const { uid, memories } = (await req.json()) as PostBody;
-    console.log(
-      `[store-facts] Processing request for UID: ${uid}, Memories count: ${memories?.length}`,
-    );
 
-    if (!uid || !Array.isArray(memories) || memories.length === 0) {
-      console.warn('[store-facts] Invalid request body:', { uid, memories });
+    // Identity comes from the verified Firebase ID token only. Any `uid` in
+    // the body is ignored — this route writes with a privileged API key.
+    const auth = await authenticateRequest(req);
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    const uid = auth.uid;
+
+    const { memories } = (await req.json()) as PostBody;
+    console.log(`[store-facts] Processing request, memories count: ${memories?.length}`);
+
+    if (!Array.isArray(memories) || memories.length === 0) {
+      console.warn('[store-facts] Invalid request body');
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
     const appId = process.env.OMI_APP_ID || process.env.NEXT_PUBLIC_OMI_APP_ID;
-    const apiKey = process.env.OMI_API_KEY || process.env.NEXT_PUBLIC_OMI_API_KEY;
+    // No NEXT_PUBLIC_ fallback: the integration key is privileged and must
+    // never be inlined into the client bundle.
+    const apiKey = process.env.OMI_API_KEY;
 
     if (!appId || !apiKey) {
       console.error('[store-facts] OMI_APP_ID or OMI_API_KEY missing!');
@@ -33,7 +42,9 @@ export async function POST(req: Request) {
     // The Omi integration API exposes memories/facts via /user/memories
     // (POST), validated against integration-public-openapi.json. The legacy
     // /user/facts path did not exist on the backend.
-    const url = `https://api.omi.me/v2/integrations/${appId}/user/memories?uid=${uid}`;
+    const url = `https://api.omi.me/v2/integrations/${encodeURIComponent(
+      appId,
+    )}/user/memories?uid=${encodeURIComponent(uid)}`;
     const headers = {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -44,6 +55,9 @@ export async function POST(req: Request) {
       [];
 
     for (const memory of memories) {
+      if (typeof memory !== 'string' || memory.length === 0) {
+        continue;
+      }
       const payload = JSON.stringify({ text: memory, text_source: 'other' });
       console.log(`[store-facts] Sending memory to OMI: ${memory.substring(0, 50)}...`);
       try {
@@ -87,9 +101,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ results });
   } catch (err: any) {
     console.error('[store-facts] Unexpected error in route handler:', err);
-    return NextResponse.json(
-      { error: 'Unknown server error', details: err.message, stack: err.stack },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Unknown server error' }, { status: 500 });
   }
 }

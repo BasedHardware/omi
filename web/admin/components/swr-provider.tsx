@@ -11,7 +11,24 @@ import { ReactNode, useMemo } from 'react';
 //
 // We cap each entry at ~1MB and the total payload at ~5MB, because the
 // iOS/desktop webkit localStorage quota is 5MB per origin.
-const STORAGE_KEY = 'omi-admin-swr-cache-v5';
+// Bumped to v6: v5 and earlier persisted SWR keys that embedded the admin
+// Firebase ID token. Renaming the key orphans those entries so they are never
+// read back, and clearSwrCache() removes them on sign-out.
+export const SWR_CACHE_STORAGE_KEY = 'omi-admin-swr-cache-v6';
+const STORAGE_KEY = SWR_CACHE_STORAGE_KEY;
+const LEGACY_STORAGE_KEYS = ['omi-admin-swr-cache-v5'];
+
+/** Drop every persisted SWR response. Called on sign-out. */
+export function clearSwrCache() {
+  if (typeof window === 'undefined') return;
+  for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* noop */
+    }
+  }
+}
 const MAX_ENTRY_BYTES = 1_000_000;
 const MAX_TOTAL_BYTES = 5_000_000;
 
@@ -20,6 +37,14 @@ type CacheEntry = { data: unknown; error: unknown; isValidating: boolean; isLoad
 function createLocalStorageProvider(): Map<string, CacheEntry> {
   if (typeof window === 'undefined') {
     return new Map();
+  }
+
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* noop */
+    }
   }
 
   let hydrated: [string, CacheEntry][] = [];

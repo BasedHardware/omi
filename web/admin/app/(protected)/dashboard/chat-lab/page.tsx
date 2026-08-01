@@ -33,7 +33,7 @@ import {
   ThumbsDown,
 } from "lucide-react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { useAuthToken, authenticatedFetcher, AUTH_SCOPE } from "@/hooks/useAuthToken";
 import {
   Bar,
   XAxis,
@@ -175,7 +175,7 @@ export default function ChatLabPage() {
 
   // --- Ratings ---
   const { data: ratingsData, isLoading: ratingsLoading } = useSWR<RatingsData>(
-    token ? ["/api/omi/chat-lab/ratings", token] : null,
+    token ? ["/api/omi/chat-lab/ratings", AUTH_SCOPE] : null,
     authenticatedFetcher
   );
 
@@ -189,7 +189,7 @@ export default function ChatLabPage() {
 
   // --- Prompts ---
   const { data: promptsData, isLoading: promptsLoading } = useSWR<PromptsData>(
-    token ? ["/api/omi/chat-lab/prompts", token] : null,
+    token ? ["/api/omi/chat-lab/prompts", AUTH_SCOPE] : null,
     authenticatedFetcher
   );
 
@@ -289,7 +289,7 @@ export default function ChatLabPage() {
     isLoading: questionsLoading,
     mutate: mutateQuestions,
   } = useSWR<QuestionsData>(
-    token ? ["/api/omi/chat-lab/questions", token] : null,
+    token ? ["/api/omi/chat-lab/questions", AUTH_SCOPE] : null,
     authenticatedFetcher
   );
 

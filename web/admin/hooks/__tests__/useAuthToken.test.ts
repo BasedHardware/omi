@@ -11,7 +11,7 @@ vi.mock('@/components/auth-provider', () => ({
 }));
 
 import { useAuth } from '@/components/auth-provider';
-import { useAuthToken, authenticatedFetcher, useAuthFetch } from '../useAuthToken';
+import { useAuthToken, authenticatedFetcher, useAuthFetch, AUTH_SCOPE } from '../useAuthToken';
 
 describe('useAuthToken', () => {
   beforeEach(() => {
@@ -45,14 +45,20 @@ describe('authenticatedFetcher', () => {
     vi.restoreAllMocks();
   });
 
-  it('sends Authorization header and returns JSON', async () => {
+  it('sends Authorization header from module state, not the key', async () => {
+    mockUser.getIdToken.mockResolvedValue('my-token');
+    vi.mocked(useAuth).mockReturnValue({ user: mockUser, loading: false, isAdmin: true } as any);
+    const { result: hook } = renderHook(() => useAuthToken());
+    await waitFor(() => expect(hook.current.token).toBe('my-token'));
+
     const mockResponse = { data: 'test' };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(mockResponse),
     });
 
-    const result = await authenticatedFetcher(['/api/test', 'my-token']);
+    // The key carries no credential — only the url and the scope marker.
+    const result = await authenticatedFetcher(['/api/test', AUTH_SCOPE]);
     expect(global.fetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
       headers: {
         Authorization: 'Bearer my-token',
@@ -60,6 +66,34 @@ describe('authenticatedFetcher', () => {
       },
     }));
     expect(result).toEqual(mockResponse);
+  });
+
+  it('ignores any token embedded in the key', async () => {
+    mockUser.getIdToken.mockResolvedValue('real-token');
+    vi.mocked(useAuth).mockReturnValue({ user: mockUser, loading: false, isAdmin: true } as any);
+    const { result: hook } = renderHook(() => useAuthToken());
+    await waitFor(() => expect(hook.current.token).toBe('real-token'));
+
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+
+    await authenticatedFetcher(['/api/test', 'attacker-supplied-token']);
+    expect(global.fetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer real-token' }),
+    }));
+  });
+
+  it('accepts a plain string key', async () => {
+    mockUser.getIdToken.mockResolvedValue('string-key-token');
+    vi.mocked(useAuth).mockReturnValue({ user: mockUser, loading: false, isAdmin: true } as any);
+    const { result: hook } = renderHook(() => useAuthToken());
+    await waitFor(() => expect(hook.current.token).toBe('string-key-token'));
+
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+
+    await authenticatedFetcher('/api/test');
+    expect(global.fetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer string-key-token' }),
+    }));
   });
 
   it('throws on non-ok response', async () => {

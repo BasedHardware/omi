@@ -6,6 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
 import { DEV_BYPASS_ENABLED, DEV_BYPASS_TOKEN, DEV_BYPASS_UID } from '@/lib/dev-auth';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
+import { clearSwrCache } from '@/components/swr-provider';
 
 interface AuthContextProps {
   user: User | null;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       await firebaseSignOut(getFirebaseAuth());
+      clearSwrCache(); // Don't leave admin data on disk for the next user
       setUser(null);
       setIsAdmin(false);
       router.push('/login'); // Redirect to login after sign out
@@ -71,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             console.warn(`User ${currentUser.email} is not an admin. Signing out.`);
             await firebaseSignOut(auth);
+            clearSwrCache();
             setUser(null);
             setIsAdmin(false);
             router.push('/login?error=unauthorized'); // Redirect non-admin to login
@@ -78,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.error('Error checking admin status:', error);
           await firebaseSignOut(auth);
+          clearSwrCache();
           setUser(null);
           setIsAdmin(false);
           router.push('/login?error=check_failed'); // Redirect on error

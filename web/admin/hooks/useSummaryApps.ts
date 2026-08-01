@@ -1,13 +1,13 @@
 'use client';
 
 import useSWR from 'swr';
-import { useAuthToken, authenticatedFetcher, useAuthFetch } from '@/hooks/useAuthToken';
+import { useAuthToken, authenticatedFetcher, useAuthFetch, AUTH_SCOPE } from '@/hooks/useAuthToken';
 
 export function useSummaryApps() {
   const { token, loading: tokenLoading } = useAuthToken();
   const { fetchWithAuth } = useAuthFetch();
 
-  const swrKey = token ? ['/api/omi/summary-apps', token] : null;
+  const swrKey = token ? ['/api/omi/summary-apps', AUTH_SCOPE] : null;
   const { data, error, isLoading, mutate } = useSWR<any[]>(swrKey, authenticatedFetcher, {
     revalidateOnFocus: false,
   });

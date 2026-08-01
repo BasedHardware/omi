@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Loader2, MessageSquare, CreditCard, Smartphone, AlertTriangle } from "lucide-react";
 import useSWR from 'swr';
-import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { useAuthToken, authenticatedFetcher, AUTH_SCOPE } from "@/hooks/useAuthToken";
 
 interface AppStats {
   total: number;
@@ -52,7 +52,7 @@ export function DashboardStats() {
     error: appStatsError,
     isLoading: appStatsLoading 
   } = useSWR<AppStats>(
-    token ? ['/api/omi/apps/stats', token] : null,
+    token ? ['/api/omi/apps/stats', AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false }
   );
@@ -63,7 +63,7 @@ export function DashboardStats() {
     error: conversationError,
     isLoading: conversationLoading
   } = useSWR<{ totalConversations: number }>(
-    token ? ['/api/omi/stats/conversation-count', token] : null,
+    token ? ['/api/omi/stats/conversation-count', AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false }
   );
@@ -74,7 +74,7 @@ export function DashboardStats() {
     error: subscriptionError,
     isLoading: subscriptionLoading
   } = useSWR<SubscriptionStats>(
-    token ? ['/api/omi/stats/subscriptions', token] : null,
+    token ? ['/api/omi/stats/subscriptions', AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false }
   );
@@ -85,7 +85,7 @@ export function DashboardStats() {
     error: appSubscriptionError,
     isLoading: appSubscriptionLoading
   } = useSWR<AppSubscriptionStats>(
-    token ? ['/api/omi/stats/app-subscriptions', token] : null,
+    token ? ['/api/omi/stats/app-subscriptions', AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false }
   );

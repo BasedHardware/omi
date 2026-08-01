@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
+import { authenticateRequest } from '@/lib/firebase-auth';
 
 // Configure Redis client - credentials should be in environment variables
 console.log('Initializing Redis client configuration...');
@@ -33,23 +34,19 @@ redisClient.on('close', () => console.log('Redis client connection closed.'));
 redisClient.on('reconnecting', () => console.log('Redis client reconnecting...'));
 redisClient.on('end', () => console.log('Redis client connection ended.'));
 
-interface PostBody {
-  uid: string;
-}
-
 export async function POST(req: Request) {
   console.log('[API /api/enable-plugins] Received POST request');
   let currentUid = 'unknown'; // For logging in catch block
   try {
-    console.log('[API /api/enable-plugins] Parsing request body...');
-    const { uid } = (await req.json()) as PostBody;
-    currentUid = uid; // Assign after parsing
-    console.log(`[API /api/enable-plugins] Parsed UID: ${uid}`);
-
-    if (!uid) {
-      console.error('[API /api/enable-plugins] Error: Missing UID in request body');
-      return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+    // Identity comes from the verified Firebase ID token only. Any `uid` in
+    // the body is ignored, so a caller cannot force-enable apps on another
+    // account or inject into the Redis key namespace.
+    const auth = await authenticateRequest(req);
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const uid = auth.uid;
+    currentUid = uid;
 
     const key = `users:${uid}:enabled_plugins`;
     const pluginsToAdd = [
@@ -76,9 +73,6 @@ export async function POST(req: Request) {
       err,
     );
     console.error('[API /api/enable-plugins] Error Stack:', err.stack);
-    return NextResponse.json(
-      { error: 'Failed to enable plugins', details: err.message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Failed to enable plugins' }, { status: 500 });
   }
 }

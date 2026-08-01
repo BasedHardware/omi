@@ -10,6 +10,18 @@ import { useAuth } from '@/components/auth-provider';
 let _forceRefreshCallback: (() => Promise<string | null>) | null = null;
 let _forceRefreshRefCount = 0;
 
+// The current Firebase ID token, held at module level so it never has to
+// appear inside an SWR key. SWR keys are persisted to localStorage by
+// swr-provider, so a token in the key would be written to disk.
+let _currentToken: string | null = null;
+
+/**
+ * Opaque placeholder used in place of the token in SWR keys. It only marks
+ * the key as belonging to the authenticated scope; the real credential is
+ * supplied by the fetcher.
+ */
+export const AUTH_SCOPE = 'auth';
+
 const REQUEST_TIMEOUT_MS = 300_000;
 
 /** Fetch with a timeout. Aborts the request if it exceeds the deadline. */
@@ -37,8 +49,15 @@ async function buildResponseError(response: Response): Promise<Error> {
  */
 export function useAuthToken() {
   const { user, loading: authLoading } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setTokenState] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState(true);
+
+  // Mirror every token update into the module-level slot so the standalone
+  // fetcher can read it without the token ever entering an SWR key.
+  const setToken = useCallback((next: string | null) => {
+    _currentToken = next;
+    setTokenState(next);
+  }, []);
 
   useEffect(() => {
     const getToken = async () => {
@@ -70,7 +89,7 @@ export function useAuthToken() {
       }, 10 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, setToken]);
 
   /** Force-refresh the token (e.g. after a 401). Returns the new token or null. */
   const forceRefresh = useCallback(async (): Promise<string | null> => {
@@ -82,7 +101,7 @@ export function useAuthToken() {
     } catch {
       return null;
     }
-  }, [user]);
+  }, [user, setToken]);
 
   // Register the forceRefresh callback at module level so authenticatedFetcher
   // (a non-hook standalone function) can trigger token refresh on 401.
@@ -103,10 +122,14 @@ export function useAuthToken() {
 }
 
 /**
- * Authenticated fetcher for SWR — expects key to be [url, token].
+ * Authenticated fetcher for SWR — accepts a url string or a [url, AUTH_SCOPE]
+ * key. The bearer token is read from module state, never from the key, so it
+ * is never persisted into the localStorage-backed SWR cache.
  * Includes 5min timeout.
  */
-export const authenticatedFetcher = async ([url, token]: [string, string]) => {
+export const authenticatedFetcher = async (key: string | readonly unknown[]) => {
+  const url = Array.isArray(key) ? (key[0] as string) : (key as string);
+  const token = _currentToken;
   const response = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${token}`,

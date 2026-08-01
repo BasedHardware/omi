@@ -119,8 +119,9 @@ export async function GET(request: NextRequest) {
       totalCount: allPayoutsWithAppInfo.length,
     });
 
-    // Set caching headers for better performance
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    // Per-developer payout amounts and uids are per-admin data: never cache
+    // in a shared/CDN cache or on disk.
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error) {

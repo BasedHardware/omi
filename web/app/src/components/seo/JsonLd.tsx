@@ -2,11 +2,20 @@ interface JsonLdProps {
   data: Record<string, unknown>;
 }
 
+// JSON.stringify does not escape `<`, `>` or `&`, so developer-submitted app
+// metadata could otherwise close the <script> tag and inject markup.
+function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
 export function JsonLd({ data }: JsonLdProps) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }

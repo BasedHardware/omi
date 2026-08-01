@@ -21,7 +21,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import useSWR from "swr";
-import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { useAuthToken, authenticatedFetcher, AUTH_SCOPE } from "@/hooks/useAuthToken";
 import {
   Bar,
   Line,
@@ -388,46 +388,46 @@ export default function AnalyticsPage() {
   const swrOpts = { revalidateOnFocus: false };
 
   const { data: revenue, isLoading: revenueLoading, error: revenueError } = useSWR<RevenueData>(
-    token ? ["/api/omi/stats/revenue", token] : null, authFetcher, swrOpts
+    token ? ["/api/omi/stats/revenue", AUTH_SCOPE] : null, authFetcher, swrOpts
   );
 
   const { data: mrrTrends, isLoading: mrrLoading, error: mrrError } = useSWR<{
     data: MrrTrendPoint[];
-  }>(token ? [`/api/omi/stats/mrr-trends?months=${months}`, token] : null, authFetcher, swrOpts);
+  }>(token ? [`/api/omi/stats/mrr-trends?months=${months}`, AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: subTrends, isLoading: subTrendsLoading, error: subTrendsError } = useSWR<{
     data: SubscriptionTrendPoint[];
-  }>(token ? [`/api/omi/stats/subscription-trends?months=${months}`, token] : null, authFetcher, swrOpts);
+  }>(token ? [`/api/omi/stats/subscription-trends?months=${months}`, AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: subCounts, isLoading: subCountsLoading, error: subCountsError } =
-    useSWR<SubscriptionCounts>(token ? ["/api/omi/stats/subscriptions", token] : null, authFetcher, swrOpts);
+    useSWR<SubscriptionCounts>(token ? ["/api/omi/stats/subscriptions", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: convCount, isLoading: convLoading, error: convError } =
-    useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", token] : null, authFetcher, swrOpts);
+    useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } =
-    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=all", token] : null, authFetcher, swrOpts);
+    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=all", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: dauTrends, isLoading: dauLoading } =
-    useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", token] : null, authFetcher, swrOpts);
+    useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: messageRatings, isLoading: ratingsLoading } =
-    useSWR<MessageRatingsData>(token ? ["/api/omi/stats/message-ratings?days=30", token] : null, authFetcher, swrOpts);
+    useSWR<MessageRatingsData>(token ? ["/api/omi/stats/message-ratings?days=30", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: floatingBarUsage, isLoading: fbUsageLoading } =
-    useSWR<FloatingBarUsageData>(token ? ["/api/omi/stats/floating-bar-usage?days=30", token] : null, authFetcher, swrOpts);
+    useSWR<FloatingBarUsageData>(token ? ["/api/omi/stats/floating-bar-usage?days=30", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: notificationStats, isLoading: notificationStatsLoading } =
-    useSWR<NotificationStats>(token ? ["/api/omi/stats/notifications?days=30", token] : null, authFetcher, swrOpts);
+    useSWR<NotificationStats>(token ? ["/api/omi/stats/notifications?days=30", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: viralMetrics, isLoading: viralLoading } =
-    useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", token] : null, authFetcher, swrOpts);
+    useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
-    useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
+    useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const { data: crashRate, isLoading: crashRateLoading } =
-    useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", token] : null, authFetcher, swrOpts);
+    useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", AUTH_SCOPE] : null, authFetcher, swrOpts);
 
   const profitQuery = useMemo(() => {
     const dc = parseFloat(desktopCostInput);
@@ -439,7 +439,7 @@ export default function AnalyticsPage() {
 
   const { data: profitability, isLoading: profitLoading, error: profitError } =
     useSWR<ProfitabilityData>(
-      token ? [`/api/omi/stats/profitability?${profitQuery}`, token] : null,
+      token ? [`/api/omi/stats/profitability?${profitQuery}`, AUTH_SCOPE] : null,
       authFetcher,
       swrOpts,
     );
@@ -457,7 +457,7 @@ export default function AnalyticsPage() {
     };
   }
   const { data: infraCosts } = useSWR<InfraCostsData>(
-    token ? [`/api/omi/stats/infra-costs?days=${profitDays}`, token] : null,
+    token ? [`/api/omi/stats/infra-costs?days=${profitDays}`, AUTH_SCOPE] : null,
     authFetcher,
     swrOpts,
   );
@@ -466,7 +466,7 @@ export default function AnalyticsPage() {
 
   const { data: retention, isLoading: retLoading } =
     useSWR<RetentionData>(
-      token ? [`/api/omi/stats/retention/posthog?days=${retentionDays}&intervals=${retentionDays}${retentionPlatformParam}`, token] : null,
+      token ? [`/api/omi/stats/retention/posthog?days=${retentionDays}&intervals=${retentionDays}${retentionPlatformParam}`, AUTH_SCOPE] : null,
       authFetcher, swrOpts
     );
 
@@ -2314,11 +2314,11 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
   const [groupBy, setGroupBy] = useState<"week" | "version">("week");
 
   const { data: weekData, isLoading: weekLoading } = useSWR<ChatRatingsWeekData>(
-    token && groupBy === "week" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=week`, token] : null,
+    token && groupBy === "week" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=week`, AUTH_SCOPE] : null,
     authenticatedFetcher
   );
   const { data: versionData, isLoading: versionLoading } = useSWR<ChatRatingsVersionData>(
-    token && groupBy === "version" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=version`, token] : null,
+    token && groupBy === "version" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=version`, AUTH_SCOPE] : null,
     authenticatedFetcher
   );
 

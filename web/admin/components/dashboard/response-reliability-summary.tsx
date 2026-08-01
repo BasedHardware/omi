@@ -15,7 +15,7 @@ import {
 } from "recharts";
 
 import type { ChartItem } from "@/components/dashboard/resizable-chart-grid";
-import { authenticatedFetcher } from "@/hooks/useAuthToken";
+import { authenticatedFetcher, AUTH_SCOPE } from "@/hooks/useAuthToken";
 import {
   trimDailyToCoverage,
   type ReliabilityDailyPoint,
@@ -182,7 +182,7 @@ export function useResponseReliabilityItems({
   token: string | null;
 }): ChartItem[] {
   const { data, error, isLoading } = useSWR<ResponseReliabilityPayload>(
-    token ? ["/api/omi/stats/response-reliability?days=30", token] : null,
+    token ? ["/api/omi/stats/response-reliability?days=30", AUTH_SCOPE] : null,
     authenticatedFetcher,
     { revalidateOnFocus: false },
   );
