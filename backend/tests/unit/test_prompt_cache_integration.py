@@ -204,6 +204,8 @@ setattr(
     "preserve_chat_memory_tool_result_boundary",
     MagicMock(side_effect=lambda _tool_name, result: result),
 )
+setattr(boundaries_mod, "chat_memory_content_for_classification", MagicMock(side_effect=lambda result: result))
+setattr(boundaries_mod, "CHAT_MEMORY_TOOL_NAMES", frozenset())
 
 # --- MCP client stub ---
 mcp_mod = _stub_module("utils.mcp_client")

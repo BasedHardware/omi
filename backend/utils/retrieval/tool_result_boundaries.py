@@ -6,6 +6,17 @@ CHAT_MEMORY_TOOL_NAMES = frozenset({'get_memories_tool', 'search_memories_tool'}
 CHAT_MEMORY_SAFE_NO_RESULT = "No memories available for this request."
 
 
+def chat_memory_content_for_classification(result: str) -> str:
+    """The untrusted evidence of a memory result, for security screening.
+
+    The adapter wraps evidence with a server-authored boundary notice and policy
+    marker telling the model the data is untrusted; that trusted imperative
+    would otherwise be classified as an embedded instruction in the tool output.
+    """
+    trusted_lines = {CHAT_MEMORY_BOUNDARY_NOTICE, CHAT_MEMORY_POLICY_MARKER}
+    return '\n'.join(line for line in str(result).splitlines() if line not in trusted_lines)
+
+
 def preserve_chat_memory_tool_result_boundary(tool_name: str, result: str) -> str:
     """Fail closed if memory memory evidence markers appear without the full quoted boundary.
 

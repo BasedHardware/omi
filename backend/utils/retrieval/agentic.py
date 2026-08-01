@@ -49,7 +49,11 @@ from utils.retrieval.tools import (
     traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
-from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.tool_result_boundaries import (
+    CHAT_MEMORY_TOOL_NAMES,
+    chat_memory_content_for_classification,
+    preserve_chat_memory_tool_result_boundary,
+)
 from utils.security.tool_results import screen_tool_result
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -366,7 +370,8 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
-    result = await screen_tool_result(tool_name, result)
+    classify = chat_memory_content_for_classification(result) if tool_name in CHAT_MEMORY_TOOL_NAMES else result
+    result = await screen_tool_result(tool_name, result, classify_content=classify)
     return result
 
 
@@ -654,6 +659,7 @@ async def _run_anthropic_agent_stream(
             except Exception as e:
                 logger.error(f"Tool execution error ({block.name}): {e}")
                 result = f"Error executing tool: {str(e)}"
+                result = await screen_tool_result(block.name, result)
 
             logger.info(f"Tool ended: {block.name}")
 
