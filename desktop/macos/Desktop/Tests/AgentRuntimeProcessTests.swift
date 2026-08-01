@@ -930,12 +930,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
-    // Discovery shares its curated search dirs with the detector; the inherited
-    // PATH is used only to assemble the subprocess PATH, never for discovery.
+    XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
     XCTAssertTrue(source.contains("Self.localAdapterSearchDirectories(home: home)"))
-    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init)"))
-    XCTAssertTrue(source.contains("for path in pathDirs + adapterSearchDirs"))
-    XCTAssertFalse(source.contains("sharedSearchDirs + pathDirs"))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + adapterPathDirs"))
+    XCTAssertFalse(source.contains("+ trustedPathDirs + adapterPathDirs"))
+    XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
@@ -1082,6 +1081,30 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
+  func testOpenClawDiscoveryFindsXDGFnmInstall() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-fnm-home-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let bin =
+      home
+      .appendingPathComponent(".local/share/fnm/node-versions/v24.12.0/installation/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let openClaw = bin.appendingPathComponent("openclaw")
+    FileManager.default.createFile(atPath: openClaw.path, contents: Data("#!/bin/sh\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClaw.path)
+
+    let directories = AgentRuntimeProcess.localAdapterSearchDirectories(home: home.path)
+    let discovered = AgentRuntimeProcess.firstExecutable(named: "openclaw", in: directories)
+
+    XCTAssertEqual(discovered, openClaw.path)
+    XCTAssertLessThan(
+      try XCTUnwrap(directories.firstIndex(of: openClaw.deletingLastPathComponent().path)),
+      try XCTUnwrap(directories.firstIndex(of: "/opt/homebrew/bin")),
+      "A home-scoped FNM installation must take precedence over machine-wide Homebrew."
+    )
+  }
+
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -1089,19 +1112,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    // Stdout chunks must reach the actor strictly in pipe order: a single
-    // AsyncStream consumer guarantees FIFO, whereas one unstructured Task per
-    // readability callback does not (actor hops can reorder under bursty
-    // adapter output, reassembling JSONL lines out of order and corrupting
-    // the runtime protocol mid-run).
-    XCTAssertTrue(source.contains("AsyncStream.makeStream(of: Data.self)"))
-    XCTAssertTrue(source.contains("for await chunk in stream"))
-    XCTAssertFalse(source.contains("await self?.processStdoutData(data"))
+    let readerStart = try XCTUnwrap(source.range(of: "private func startReadingStdout()"))
+    let readerEnd = try XCTUnwrap(source.range(of: "private func processStdoutData("))
+    let reader = String(source[readerStart.lowerBound..<readerEnd.lowerBound])
+
+    XCTAssertTrue(reader.contains("handle.readabilityHandler = { [weak self] handle in"))
     // The implementation now uses a generation-guarded signature; match the current
     // function name without coupling the test to the exact parameter list.
     XCTAssertTrue(source.contains("func processStdoutData("))
-    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
-    XCTAssertFalse(source.contains("while !Task.isCancelled"))
+    XCTAssertFalse(reader.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(reader.contains("while !Task.isCancelled"))
   }
 
   func testStdoutChunksAreReorderedBeforeJSONLFraming() {
