@@ -1439,6 +1439,17 @@
             "title": "Approved",
             "type": "boolean"
           },
+          "approved_manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Manifest Hash"
+          },
           "author": {
             "title": "Author",
             "type": "string"
@@ -1944,6 +1955,17 @@
             "default": false,
             "title": "Approved",
             "type": "boolean"
+          },
+          "approved_manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Manifest Hash"
           },
           "author": {
             "title": "Author",
