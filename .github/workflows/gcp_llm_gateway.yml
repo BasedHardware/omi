@@ -261,6 +261,13 @@ jobs:
           BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
+          # A missing release-gate-failure label made gh issue create fail hard,
+          # so the audit issue was never filed (see #10301 / #10389). Ensure the
+          # label exists first — idempotent, so a concurrent run cannot race it.
+          gh label create release-gate-failure \
+            --repo "$REPO" \
+            --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
+            --color "b60205" 2>/dev/null || true
           gh issue create --repo "$REPO" \
             --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
             --label release-gate-failure \
