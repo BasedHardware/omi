@@ -81,6 +81,7 @@ _MCP_STUB_NAMES = [
     'utils.log_sanitizer',
     'utils.executors',
     'utils.mcp_data',
+    'utils.mcp_memories',
     'dependencies',
     'routers.mcp',
     'routers.mcp_sse',
