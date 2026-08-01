@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import AlreadyExists, Conflict
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -414,7 +414,7 @@ def restore_legacy_conversation_items(
         batch.delete(staged_col.document(staged_snapshot.id))
         try:
             batch.commit()
-        except AlreadyExists:
+        except (AlreadyExists, Conflict):
             # A current action item has the authoritative identity. Preserve it
             # and preserve the staged row for manual inspection rather than
             # deleting either record after a race.
