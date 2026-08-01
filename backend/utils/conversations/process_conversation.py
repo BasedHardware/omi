@@ -1,9 +1,11 @@
 import os
 import random
 import re
+import threading
 import uuid
 import logging
 import asyncio
+from concurrent.futures import Future
 from datetime import timezone, timedelta, datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -65,7 +67,7 @@ from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
-from utils.executors import llm_executor, postprocess_executor, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -1399,6 +1401,100 @@ def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
+SPEAKER_RESOLUTION_SUGGESTIONS_FIELD = 'speaker_label_suggestions'
+
+_speaker_resolution_loop: Optional[asyncio.AbstractEventLoop] = None
+_speaker_resolution_loop_lock = threading.Lock()
+
+
+def _get_speaker_resolution_loop() -> asyncio.AbstractEventLoop:
+    """Return the shared event loop that drives finalization-time speaker naming.
+
+    The pass is an async coordinator: every blocking step inside it already borrows a
+    db/llm/storage thread for that step alone. Driving it from a `postprocess_executor`
+    worker would instead pin one of that pool's slots for the whole pipeline — an LLM
+    proposal, up to six refutations, then up to four serial audio enrolments — so a
+    burst of finalized conversations could starve memory extraction, action items and
+    vector indexing. One daemon loop thread runs every conversation's pass and costs
+    the pools nothing while the coordinator is only awaiting.
+    """
+    global _speaker_resolution_loop
+    with _speaker_resolution_loop_lock:
+        loop = _speaker_resolution_loop
+        if loop is not None and not loop.is_closed():
+            return loop
+        loop = asyncio.new_event_loop()
+        threading.Thread(target=loop.run_forever, name='speaker-resolution-loop', daemon=True).start()
+        _speaker_resolution_loop = loop
+        return loop
+
+
+def _speaker_suggestion_payload(suggestions: List[Any]) -> List[Dict[str, Any]]:
+    """Serialize the names that were proposed but not verified, for the client to accept."""
+    return [
+        {
+            'speaker_id': suggestion.speaker_id,
+            'person_name': suggestion.person_name,
+            'evidence_quote': suggestion.evidence_quote,
+            'confidence': suggestion.confidence,
+            'segment_ids': list(suggestion.segment_ids),
+        }
+        for suggestion in suggestions
+    ]
+
+
+async def _run_speaker_resolution(uid: str, conversation: Conversation) -> None:
+    """Name the numbered speakers, then persist the names that stayed suggestions.
+
+    `resolve_conversation_speakers` writes the verified assignments itself but returns
+    the refuted and unverified ones in memory only. Persisting them on the conversation
+    document is what makes them reachable: without this write the tap-to-accept
+    suggestion never leaves the worker that computed it.
+    """
+    from utils.conversations.speaker_resolution import resolve_conversation_speakers
+
+    try:
+        outcome = await resolve_conversation_speakers(uid, conversation)
+    except Exception as e:
+        logger.error(f"Speaker resolution failed: {e} {uid} {conversation.id}")
+        return
+    if not outcome.suggested:
+        return
+    try:
+        await run_blocking(
+            db_executor,
+            conversations_db.update_conversation,
+            uid,
+            conversation.id,
+            {SPEAKER_RESOLUTION_SUGGESTIONS_FIELD: _speaker_suggestion_payload(list(outcome.suggested))},
+        )
+    except Exception as e:
+        logger.error(f"Error persisting speaker label suggestions: {e} {uid} {conversation.id}")
+
+
+def schedule_speaker_resolution(uid: str, conversation: Conversation) -> Optional[Future]:
+    """Start the speaker naming pass for a finalized conversation.
+
+    Called only after the conversation's audio files are durable, because enrolment
+    reads them back and silently gives up when there are none.
+
+    The pass is handed a deep copy. It reassigns `person_id` on the segments it names
+    and persists them itself, so letting it touch the live object would let memory
+    extraction — queued on `postprocess_executor` with no ordering relative to this —
+    read half-updated speaker labels.
+    """
+    from utils.conversations.speaker_resolution import SPEAKER_RESOLUTION_ENABLED
+
+    if not SPEAKER_RESOLUTION_ENABLED:
+        return None
+    try:
+        snapshot = conversation.model_copy(deep=True)
+    except Exception as e:
+        logger.error(f"Error snapshotting conversation for speaker resolution: {e} {uid} {conversation.id}")
+        return None
+    return asyncio.run_coroutine_threadsafe(_run_speaker_resolution(uid, snapshot), _get_speaker_resolution_loop())
+
+
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid) or ''
@@ -1721,10 +1817,6 @@ def process_conversation(
                         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
-            if not is_reprocess:
-                from utils.conversations.speaker_resolution import resolve_conversation_speakers_sync
-
-                submit_with_context(postprocess_executor, resolve_conversation_speakers_sync, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -1746,6 +1838,9 @@ def process_conversation(
                         )
             except Exception as e:
                 logger.error(f"Error creating audio files: {e}")
+
+        if not discarded and not is_reprocess:
+            schedule_speaker_resolution(uid, cast(Conversation, conversation))
 
         # Update folder conversation count after conversation is saved
         if assigned_folder_id:
