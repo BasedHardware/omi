@@ -177,6 +177,20 @@ jobs:
             echo "Sync PR #$PR_NUMBER needs a manual merge (release already published)."
           fi
 
+          # --- Best-effort: retire superseded version-sync PRs ---
+          # The release tag is authoritative, so any older open sync PR for a
+          # release/windows-v* branch is stale once the current release has a PR.
+          # Close them (with a pointer to the newest) to cut review noise; a
+          # failure here must never block the release, which is already tagged.
+          if [ -n "$PR_NUMBER" ]; then
+            python3 .github/scripts/retire_superseded_sync_prs.py \
+              --current-pr "$PR_NUMBER" \
+              --version "$VERSION" \
+              --base main \
+              --search-head "release/windows-v" || \
+              echo "Could not retire superseded sync PRs (non-fatal)."
+          fi
+
   build-and-publish:
     needs: [plan-and-tag]
     if: needs.plan-and-tag.outputs.should_release == 'true'
