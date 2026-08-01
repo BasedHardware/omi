@@ -55,6 +55,7 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  case appleRemindersExportJournal = "apple_reminders_export_journal"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
