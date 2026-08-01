@@ -28,6 +28,7 @@ export type Memory = {
   manually_added?: boolean
   capture_confidence?: number | null
   app_id?: string | null
+  evidence?: Array<{ source_type?: string | null }>
 }
 
 // Axios lowercases response header keys.

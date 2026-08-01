@@ -11,6 +11,7 @@ import {
   isProtectedContent,
   layerLabel
 } from '../../lib/memoryFilters'
+import { memorySourceLabel } from '../../lib/memoryProvenance'
 import { Badge } from '../ui/Badge'
 import { NewBadge } from './NewBadge'
 
@@ -25,7 +26,7 @@ function InfoRows({ memory }: { memory: Memory }): React.JSX.Element {
   if (typeof memory.capture_confidence === 'number')
     rows.push(['Confidence', `${Math.round(memory.capture_confidence * 100)}%`])
   if (memory.app_id) rows.push(['App', memory.app_id])
-  if (memory.conversation_id) rows.push(['Source', 'Conversation'])
+  rows.push(['Source', memorySourceLabel(memory)])
   rows.push(['Created', formatMemoryDate(memory.created_at)])
   const tags = displayTags(memory)
   return (
@@ -71,6 +72,7 @@ function MemoryCardImpl({ memory, onOpen, now }: MemoryCardProps): React.JSX.Ele
   const isNew = isNewMemory(memory, now)
   const protectedMem = isProtectedContent(memory.content)
   const layer = layerLabel(memory)
+  const source = memorySourceLabel(memory)
   const open = (): void => onOpen(memory)
 
   return (
@@ -103,6 +105,7 @@ function MemoryCardImpl({ memory, onOpen, now }: MemoryCardProps): React.JSX.Ele
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
         <time>{formatMemoryDate(memory.created_at, now)}</time>
+        <span className="text-text-quaternary">{source}</span>
         <Badge tone="neutral" size="xs">
           {CATEGORY_LABEL[categoryOf(memory)]}
         </Badge>
