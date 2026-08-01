@@ -498,7 +498,7 @@ class _SyncPageState extends State<SyncPage> {
     final isActive = syncProvider.isSyncing;
     final uploaded = syncProvider.uploadedWals.length;
     final readyToSync = syncProvider.missingWals.length;
-    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimitedForPendingUploads;
+    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;
     String? subtitle;
@@ -535,7 +535,7 @@ class _SyncPageState extends State<SyncPage> {
           }
           break;
       }
-    } else if (syncProvider.isRateLimitedForPendingUploads) {
+    } else if (syncProvider.isRateLimited) {
       title = switch (syncProvider.rateLimitReason) {
         RateLimitReason.backendBusy => l.syncCardBackendBusy,
         RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToSync),

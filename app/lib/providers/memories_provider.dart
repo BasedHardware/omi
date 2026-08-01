@@ -223,11 +223,6 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> loadMemories({int limit = 100}) async {
     final generation = _sessionGeneration;
-    // Snapshot the pending-deletion ID before any await: a refresh that
-    // started during the undo window must still suppress the deleted item
-    // even if _finalizeDeletion() clears the field while the fetch is in
-    // flight.
-    final tombstoneId = _pendingDeletionId;
     _loading = true;
     notifyListeners();
 
@@ -256,21 +251,15 @@ class MemoriesProvider extends ChangeNotifier {
       }
       offset += result.memories.length;
     }
-    // Keep an optimistic delete hidden throughout its undo window. Use the
-    // snapshot taken before the fetch so a concurrent finalization that
-    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
-    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
-    // after loadMemories() started (tombstoneId was null at snapshot), the
-    // stale response still contains it and would reinsert the row.
-    final currentTombstoneId = _pendingDeletionId;
-    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
-    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    // Keep an optimistic delete hidden throughout its undo window. A refresh
+    // can otherwise reinsert the still-live server row before finalization.
+    _memories = all.where((memory) => memory.id != _pendingDeletionId).toList();
     _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != _pendingDeletionId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }
