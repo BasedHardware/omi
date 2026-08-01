@@ -254,7 +254,12 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
   ) async throws -> [OmiAPI.GoalResponse] {
     goalRequestOwnerIDs.append(expectedOwnerId)
     if let goalFetchError { throw goalFetchError }
-    let response = hasFocused && goalsAfterFocus != nil ? goalsAfterFocus! : goals
+    let response: [OmiAPI.GoalResponse]
+    if hasFocused, let goalsAfterFocus {
+      response = goalsAfterFocus
+    } else {
+      response = goals
+    }
     if holdGoalFetches {
       let waiters = goalFetchWaiters
       goalFetchWaiters.removeAll()
