@@ -40,12 +40,40 @@ logger = logging.getLogger(__name__)
 # A device tool call is bounded by how long a person plausibly takes to answer a
 # system sheet. Beyond this the model gets a timeout result and can respond
 # without it, rather than the whole turn hanging on an unanswered prompt.
-DEVICE_TOOL_TIMEOUT_SECONDS = 180
+#
+# That bound only means anything if it is reached before the turn's own deadline.
+# The agent stream cancels the producer at a hard wall clock, so a tool that
+# waits past it never returns a timeout result at all: the stream dies with
+# `idle_timeout` while the user is still looking at the sheet, and they can go on
+# to send the message afterwards — exactly the ambiguous outcome this surface
+# exists to avoid. The wait is therefore derived from the stream budget rather
+# than written down beside it, so the two cannot drift apart.
 DEVICE_TOOL_POLL_INTERVAL_SECONDS = 0.25
 
+# Reserved out of the stream budget: the model still has to reason and dispatch
+# the call before the wait starts, and still has to say something about the
+# result after it ends. A tool that consumed the whole budget would leave no room
+# for the sentence explaining what happened.
+DEVICE_TOOL_STREAM_HEADROOM_SECONDS = 30
+
+# Below this a sheet cannot realistically be answered, so a budget that tight
+# means the deployment has no room for device tools rather than a shorter wait.
+DEVICE_TOOL_MIN_TIMEOUT_SECONDS = 15
+
+
+def device_tool_timeout_for_stream_budget(stream_budget_seconds: float) -> int:
+    """The longest wait that still lets the tool time out before the turn does."""
+    return max(
+        DEVICE_TOOL_MIN_TIMEOUT_SECONDS,
+        int(stream_budget_seconds - DEVICE_TOOL_STREAM_HEADROOM_SECONDS),
+    )
+
+
 # Results outlive the poll window slightly so a result that arrives just as the
-# tool gives up is still readable for diagnostics rather than vanishing.
-DEVICE_TOOL_RESULT_TTL_SECONDS = DEVICE_TOOL_TIMEOUT_SECONDS + 60
+# tool gives up is still readable for diagnostics rather than vanishing. The
+# write side has no view of the turn's budget, so this is sized against the
+# longest wait any budget can produce.
+DEVICE_TOOL_RESULT_TTL_SECONDS = 600
 
 
 class ProposeMessageInput(BaseModel):
@@ -145,7 +173,7 @@ def build_device_tools(
     uid: str,
     available_tool_names: set[str],
     callback: Any,
-    timeout_seconds: int = DEVICE_TOOL_TIMEOUT_SECONDS,
+    timeout_seconds: int,
 ) -> list:
     """Build LangChain tools for the device capabilities this client declared.
 
@@ -153,6 +181,11 @@ def build_device_tools(
     this turn. A tool the client did not declare is never advertised, so the
     model cannot call a capability the device in hand does not have — an iPad
     with no messaging service, or an Android build with no implementation.
+
+    ``timeout_seconds`` has no default on purpose. Only the caller knows the
+    turn's stream budget, and a wait that outlives it silently converts a
+    user-cancelled sheet into a dead turn; requiring it makes the caller state
+    the bound rather than inherit a stale one.
     """
     tools = []
     for name in sorted(DEVICE_TOOL_NAMES & set(available_tool_names)):

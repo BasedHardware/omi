@@ -9,10 +9,17 @@ import pytest
 from utils import device_tools
 from utils.device_tools import (
     DEVICE_TOOL_NAMES,
+    DEVICE_TOOL_MIN_TIMEOUT_SECONDS,
+    DEVICE_TOOL_STREAM_HEADROOM_SECONDS,
     build_device_tools,
     device_tool_result_key,
+    device_tool_timeout_for_stream_budget,
 )
 from utils.retrieval.agentic import STANDARD_TOOL_NAMES, _extract_app_id
+
+# Long enough that nothing in these tests reaches it; the tests that exercise the
+# timeout path pass timeout_seconds=0 explicitly.
+TEST_TIMEOUT = 180
 
 
 class FakeCallback:
@@ -60,7 +67,7 @@ def inline_executor():
 def test_only_declared_tools_are_built():
     callback = FakeCallback()
 
-    tools = build_device_tools('uid-1', {'propose_message'}, callback)
+    tools = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=TEST_TIMEOUT)
 
     assert [t.name for t in tools] == ['propose_message']
 
@@ -68,17 +75,17 @@ def test_only_declared_tools_are_built():
 def test_a_client_declaring_nothing_gets_no_tools():
     # An Android build or a device with no messaging service must not have the
     # model offered a capability it cannot run.
-    assert build_device_tools('uid-1', set(), FakeCallback()) == []
+    assert build_device_tools('uid-1', set(), FakeCallback(), timeout_seconds=TEST_TIMEOUT) == []
 
 
 def test_unknown_declared_names_are_ignored():
-    tools = build_device_tools('uid-1', {'run_applescript', 'rm_rf'}, FakeCallback())
+    tools = build_device_tools('uid-1', {'run_applescript', 'rm_rf'}, FakeCallback(), timeout_seconds=TEST_TIMEOUT)
 
     assert tools == []
 
 
 def test_every_spec_name_is_buildable():
-    tools = build_device_tools('uid-1', set(DEVICE_TOOL_NAMES), FakeCallback())
+    tools = build_device_tools('uid-1', set(DEVICE_TOOL_NAMES), FakeCallback(), timeout_seconds=TEST_TIMEOUT)
 
     assert {t.name for t in tools} == set(DEVICE_TOOL_NAMES)
     for tool in tools:
@@ -87,7 +94,7 @@ def test_every_spec_name_is_buildable():
 
 
 def test_propose_message_description_states_it_does_not_send():
-    tools = build_device_tools('uid-1', {'propose_message'}, FakeCallback())
+    tools = build_device_tools('uid-1', {'propose_message'}, FakeCallback(), timeout_seconds=TEST_TIMEOUT)
 
     description = tools[0].description
     assert 'does NOT send' in description
@@ -97,7 +104,7 @@ def test_propose_message_description_states_it_does_not_send():
 @pytest.mark.asyncio
 async def test_call_announces_a_request_and_returns_the_client_result(fake_redis):
     callback = FakeCallback()
-    tool = build_device_tools('uid-1', {'propose_message'}, callback)[0]
+    tool = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=TEST_TIMEOUT)[0]
 
     async def respond_once():
         # Wait for the bridge to announce the call, then answer it the way the
@@ -128,7 +135,7 @@ async def test_a_cancelled_sheet_is_returned_verbatim(fake_redis):
     # The model must be able to tell "user declined" from "delivered"; the
     # bridge may not normalize a cancellation into a generic failure.
     callback = FakeCallback()
-    tool = build_device_tools('uid-1', {'propose_message'}, callback)[0]
+    tool = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=TEST_TIMEOUT)[0]
 
     async def respond_once():
         while not callback.requests:
@@ -149,7 +156,7 @@ async def test_a_cancelled_sheet_is_returned_verbatim(fake_redis):
 @pytest.mark.asyncio
 async def test_the_result_is_consumed_so_a_later_call_cannot_reuse_it(fake_redis):
     callback = FakeCallback()
-    tool = build_device_tools('uid-1', {'search_contacts'}, callback)[0]
+    tool = build_device_tools('uid-1', {'search_contacts'}, callback, timeout_seconds=TEST_TIMEOUT)[0]
 
     async def respond_once():
         while not callback.requests:
@@ -211,3 +218,26 @@ def test_device_tool_names_are_excluded_from_app_tool_detection():
     for name in DEVICE_TOOL_NAMES:
         assert name in STANDARD_TOOL_NAMES
         assert _extract_app_id(name) is None
+
+
+def test_the_tool_gives_up_before_the_turn_does():
+    # The wait shipped at 180s against a 150s stream cap, so the stream cancelled
+    # the producer first: the model never saw a timed_out result, the turn died
+    # with idle_timeout, and the user could still send the message afterwards.
+    from utils.retrieval.agentic import AGENT_STREAM_MAX_DURATION_SECONDS
+
+    timeout = device_tool_timeout_for_stream_budget(AGENT_STREAM_MAX_DURATION_SECONDS)
+    assert timeout < AGENT_STREAM_MAX_DURATION_SECONDS
+
+
+def test_the_wait_leaves_room_to_report_what_happened():
+    # Reaching the timeout is not enough on its own; the model still has to say
+    # the user did not respond, which needs budget left after the tool returns.
+    budget = 150
+    assert device_tool_timeout_for_stream_budget(budget) == budget - DEVICE_TOOL_STREAM_HEADROOM_SECONDS
+
+
+def test_a_budget_too_small_for_a_sheet_does_not_produce_a_negative_wait():
+    # A misconfigured deployment should not turn every device tool call into an
+    # instant timeout with a negative deadline.
+    assert device_tool_timeout_for_stream_budget(5) == DEVICE_TOOL_MIN_TIMEOUT_SECONDS
