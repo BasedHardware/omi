@@ -1192,7 +1192,7 @@ def delete_user_data(uid: str):
 
 
 def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
-    doc_id = document_id_from_seed('memory_summary' + conversation_id)
+    doc_id = document_id_from_seed('memory_summary' + uid + conversation_id)
     db.collection('analytics').document(doc_id).set(
         {
             'id': doc_id,
@@ -1205,8 +1205,8 @@ def set_conversation_summary_rating_score(uid: str, conversation_id: str, value:
     )
 
 
-def get_conversation_summary_rating_score(conversation_id: str):
-    doc_id = document_id_from_seed('memory_summary' + conversation_id)
+def get_conversation_summary_rating_score(uid: str, conversation_id: str):
+    doc_id = document_id_from_seed('memory_summary' + uid + conversation_id)
     doc_ref = db.collection('analytics').document(doc_id)
     doc = doc_ref.get()
     if doc.exists:

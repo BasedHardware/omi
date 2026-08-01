@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 import database.action_items as action_items_db
 from database import redis_db
+from routers.fair_use_admin import _verify_admin_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.other.endpoints import get_current_user_uid
@@ -213,7 +214,7 @@ async def sentry_webhook(request: Request) -> dict[str, str]:
         return {"status": "ok"}
     body = await request.body()
     secret = os.getenv("SENTRY_WEBHOOK_SECRET")
-    if secret and not _sentry_signature_matches(secret, body, request.headers.get("sentry-hook-signature")):
+    if not secret or not _sentry_signature_matches(secret, body, request.headers.get("sentry-hook-signature")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     try:
         payload = await request.json()
@@ -245,7 +246,7 @@ def _sentry_poll_skip(reason: str, sentry_status: int | None = None) -> dict[str
 
 
 @router.post("/v1/webhooks/sentry/poll")
-async def sentry_poll() -> dict[str, object]:
+async def sentry_poll(admin_id: str = Depends(_verify_admin_key)) -> dict[str, object]:
     uid = os.getenv("SENTRY_ADMIN_UID")
     token = os.getenv("SENTRY_AUTH_TOKEN")
     if not uid or not token:

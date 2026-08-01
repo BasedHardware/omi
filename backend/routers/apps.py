@@ -415,6 +415,13 @@ def _write_file(path: str, data: bytes):
         f.write(data)
 
 
+def _safe_upload_filename(filename: Optional[str]) -> str:
+    safe_name = os.path.basename(filename or '')
+    if not safe_name or safe_name in ('.', '..'):
+        raise HTTPException(status_code=400, detail='Invalid filename')
+    return safe_name
+
+
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
     """Fetch and process chat tools manifest, updating and returning app_dict.
 
@@ -833,7 +840,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
     os.makedirs(f'_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    safe_name = _safe_upload_filename(file.filename)
+    file_path = f"_temp/apps/{safe_name}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
     img_url = upload_app_logo(file_path, data['id'])
@@ -890,7 +898,8 @@ async def create_persona(
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     os.makedirs(f'_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    safe_name = _safe_upload_filename(file.filename)
+    file_path = f"_temp/apps/{safe_name}"
     contents = await file.read()
     await run_blocking(storage_executor, _write_file, file_path, contents)
     img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
@@ -931,7 +940,8 @@ async def update_persona(
         ):
             await run_blocking(storage_executor, delete_app_logo, persona['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        safe_name = _safe_upload_filename(file.filename)
+        file_path = f"_temp/apps/{safe_name}"
         contents = await file.read()
         await run_blocking(storage_executor, _write_file, file_path, contents)
         img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
@@ -950,7 +960,10 @@ async def update_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
+    payload = update_app.model_dump(exclude_unset=True)
+    payload['id'] = persona_id
+    payload.pop('uid', None)
+    await run_blocking(db_executor, update_app_in_db, payload)
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         await run_blocking(db_executor, invalidate_approved_apps_cache)
@@ -1046,7 +1059,8 @@ def update_app(
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        safe_name = _safe_upload_filename(file.filename)
+        file_path = f"_temp/apps/{safe_name}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
@@ -1077,15 +1091,17 @@ def update_app(
         update_dict.setdefault('disabled_at', '')
         update_dict.setdefault('disabled_failure_duration_hours', 0)
 
+    update_dict['id'] = app_id
+    update_dict.pop('uid', None)
     update_app_in_db(update_dict)
 
     # payment link
     upsert_app_payment_link(
-        data.get('id'),
+        app_id,
         data.get('is_paid', False),
         data.get('price'),
         data.get('payment_plan'),
-        data.get('uid'),
+        uid,
         previous_price=app.get("price", 0),
     )
 

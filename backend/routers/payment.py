@@ -1185,8 +1185,11 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
     """
     Generate a fresh account link if the previous one expired
     """
+    owned_account_id = get_stripe_connect_account_id(uid)
+    if not owned_account_id or owned_account_id != account_id:
+        raise HTTPException(status_code=403, detail='Not authorized for this Stripe account')
     try:
-        account = refresh_connect_account_link(account_id)
+        account = refresh_connect_account_link(owned_account_id)
         return account
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
