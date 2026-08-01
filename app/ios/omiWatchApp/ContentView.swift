@@ -1,9 +1,9 @@
 import SwiftUI
 
-struct WatchRecorderView: View {
-    @ObservedObject var viewModel: WatchAudioRecorderViewModel
+struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
+    @ObservedObject var viewModel: Recorder
+    @StateObject private var presentationController = RecordingPresentationController()
     @State private var isPressed = false
-    @State private var showsRecordingAnimation = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -33,7 +33,7 @@ struct WatchRecorderView: View {
                         }
                     }) {
                         ZStack {
-                            if showsRecordingAnimation {
+                            if presentationController.phase.showsRecordingRipple {
                                 RecordingRippleView()
                             }
                             
@@ -53,21 +53,25 @@ struct WatchRecorderView: View {
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .accessibilityLabel(viewModel.isRecording ? "Stop recording" : "Start recording")
+                    .accessibilityLabel(
+                        viewModel.isRecording
+                            ? Text("watch.accessibility.stopRecording")
+                            : Text("watch.accessibility.startRecording")
+                    )
                     
                     Spacer()
                     
                     Group {
                         if viewModel.isRecording, let startedAt = viewModel.recordingStartedAt {
-                            if showsRecordingAnimation {
+                            if presentationController.phase.showsRecordingRipple {
                                 Text("Listening")
                                     .font(.system(size: 16, weight: .medium))
-                                    .accessibilityLabel("Recording in progress")
+                                    .accessibilityLabel(Text("watch.accessibility.recordingInProgress"))
                             } else {
                                 Text(startedAt, style: .timer)
                                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                                     .monospacedDigit()
-                                    .accessibilityLabel("Elapsed recording time")
+                                    .accessibilityLabel(Text("watch.accessibility.elapsedRecordingTime"))
                                     .accessibilityValue(Text(startedAt, style: .timer))
                             }
                         } else {
@@ -83,23 +87,10 @@ struct WatchRecorderView: View {
             }
         }
         .task(id: viewModel.recordingStartedAt) {
-            guard viewModel.isRecording, let startedAt = viewModel.recordingStartedAt else {
-                showsRecordingAnimation = false
-                return
-            }
-
-            let remaining = RecordingPresentation.animationTimeRemaining(startedAt: startedAt, now: Date())
-            showsRecordingAnimation = remaining > 0
-            guard remaining > 0 else { return }
-
-            do {
-                try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            } catch {
-                return
-            }
-
-            guard viewModel.isRecording, viewModel.recordingStartedAt == startedAt else { return }
-            showsRecordingAnimation = false
+            await presentationController.update(
+                isRecording: viewModel.isRecording,
+                startedAt: viewModel.recordingStartedAt
+            )
         }
     }
 }
@@ -131,6 +122,8 @@ private struct RecordingRippleView: View {
     }
 }
 
-#Preview {
-    WatchRecorderView(viewModel: WatchAudioRecorderViewModel())
-}
+#if canImport(WatchConnectivity)
+    #Preview {
+        WatchRecorderView(viewModel: WatchAudioRecorderViewModel())
+    }
+#endif

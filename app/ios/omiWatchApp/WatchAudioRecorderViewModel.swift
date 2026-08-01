@@ -1,9 +1,10 @@
 import Foundation
+import Combine
 import WatchConnectivity
 import AVFoundation
 
 @MainActor
-class WatchAudioRecorderViewModel: NSObject, ObservableObject {
+class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     @Published var isRecording: Bool = false
     @Published private(set) var recordingStartedAt: Date?
 
@@ -385,4 +386,3 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
 }
-

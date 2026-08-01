@@ -246,10 +246,10 @@ checks:
     reason: "Ray-Ban DAT builds must strip mcumgr before CocoaPods and restore the exact default graph even after interruption"
   - id: watch-recording-presentation
     command: ["ruby", "app/ios/test/watch_recording_presentation_test.rb"]
-    triggers: ["app/ios/omiWatchApp/ContentView.swift", "app/ios/omiWatchApp/RecordingPresentation.swift", "app/ios/omiWatchApp/WatchAudioRecorderViewModel.swift", "app/ios/omiWatchApp/omiwatchApp.swift", "app/ios/test/watch_recording_presentation_test.rb", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/omiWatchApp/ContentView.swift", "app/ios/omiWatchApp/Localizable.xcstrings", "app/ios/omiWatchApp/RecordingPresentation.swift", "app/ios/omiWatchApp/WatchAudioRecorderViewModel.swift", "app/ios/omiWatchApp/WatchRecorderControlling.swift", "app/ios/omiWatchApp/omiwatchApp.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/watch_recording_presentation_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
-    reason: "SCA-273: the watch must stop its continuous recording animation after five seconds while elapsed time remains anchored to the original recording start"
+    reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
