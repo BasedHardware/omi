@@ -15,15 +15,25 @@ void main() {
 
   test('conversation getter resolves when startedAt and createdAt fall on different days', () {
     // Regression for "Bad state: No conversation available": conversations are
-    // grouped by their effective date (startedAt ?? createdAt), and tapping a
-    // list item selects that group's date. When startedAt lands on an earlier
-    // calendar day than createdAt (session spanning midnight / timezone edge),
-    // the detail provider must still resolve the conversation instead of
-    // throwing from the non-null `conversation` getter.
+    // grouped by the *local* day of their effective date (startedAt ??
+    // createdAt), and tapping a list item selects that group's date. When
+    // startedAt lands on an earlier calendar day than createdAt (session
+    // spanning midnight / timezone edge), the detail provider must still
+    // resolve the conversation instead of throwing from the non-null
+    // `conversation` getter.
+    //
+    // The instant is derived from the host's UTC offset rather than pinned, so
+    // the case actually under test — an effective date whose local calendar day
+    // differs from its UTC one — is constructed on hosts either side of UTC.
+    // The previously pinned 23:30 UTC only diverged ahead of UTC, so the
+    // getter comparing raw (UTC) date components against the local day key
+    // stayed green everywhere behind it. On a host at UTC the two days can
+    // never diverge and this asserts plain resolution.
+    final startedAt = _instantSplittingUtcAndLocalDay();
     final convo = ServerConversation(
       id: 'c1',
-      startedAt: DateTime.utc(2026, 7, 18, 23, 30),
-      createdAt: DateTime.utc(2026, 7, 19, 0, 15),
+      startedAt: startedAt,
+      createdAt: startedAt.add(const Duration(minutes: 45)),
       structured: Structured('Title', 'Overview'),
       status: ConversationStatus.completed,
     );
@@ -110,6 +120,16 @@ void main() {
 
     expect(detailProvider.conversationOrNull?.id, 'selected');
   });
+}
+
+/// A UTC instant whose *local* calendar day differs from its UTC one, as
+/// server timestamps do for real users on both sides of UTC: late in the UTC
+/// day lands on the next local day ahead of UTC, the start of it on the
+/// previous local day behind. The offset is read at that instant, not now, so
+/// a DST boundary between the two cannot flip which side it falls on.
+DateTime _instantSplittingUtcAndLocalDay() {
+  final offset = DateTime.utc(2026, 7, 18, 12).toLocal().timeZoneOffset;
+  return offset.isNegative ? DateTime.utc(2026, 7, 18, 0, 0) : DateTime.utc(2026, 7, 18, 23, 59);
 }
 
 ServerConversation _conversationAt(String id, DateTime startedAt) {
