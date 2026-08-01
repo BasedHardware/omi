@@ -612,6 +612,7 @@ class GeneratedChatTool {
 
 class GeneratedAppBaseModel {
   final bool approved;
+  final String? approvedManifestHash;
   final String author;
   final List<String> capabilities;
   final String category;
@@ -650,6 +651,7 @@ class GeneratedAppBaseModel {
 
   const GeneratedAppBaseModel({
     this.approved = false,
+    this.approvedManifestHash,
     required this.author,
     required this.capabilities,
     required this.category,
@@ -690,6 +692,7 @@ class GeneratedAppBaseModel {
   factory GeneratedAppBaseModel.fromJson(Map<String, dynamic> json) {
     return GeneratedAppBaseModel(
       approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      approvedManifestHash: _readFieldValue<String>(_readField(json, const ["approved_manifest_hash"]), "approved_manifest_hash", _readString, requiredField: false, nullable: true),
       author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
       capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
@@ -731,6 +734,7 @@ class GeneratedAppBaseModel {
   Map<String, dynamic> toJson() {
     return {
       'approved': approved,
+      'approved_manifest_hash': approvedManifestHash,
       'author': author,
       'capabilities': capabilities,
       'category': category,
@@ -856,6 +860,7 @@ class GeneratedAppCatalogItem {
 
 class GeneratedApp {
   final bool approved;
+  final String? approvedManifestHash;
   final String author;
   final List<String> capabilities;
   final String category;
@@ -906,6 +911,7 @@ class GeneratedApp {
 
   const GeneratedApp({
     this.approved = false,
+    this.approvedManifestHash,
     required this.author,
     required this.capabilities,
     required this.category,
@@ -958,6 +964,7 @@ class GeneratedApp {
   factory GeneratedApp.fromJson(Map<String, dynamic> json) {
     return GeneratedApp(
       approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      approvedManifestHash: _readFieldValue<String>(_readField(json, const ["approved_manifest_hash"]), "approved_manifest_hash", _readString, requiredField: false, nullable: true),
       author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
       capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
@@ -1011,6 +1018,7 @@ class GeneratedApp {
   Map<String, dynamic> toJson() {
     return {
       'approved': approved,
+      'approved_manifest_hash': approvedManifestHash,
       'author': author,
       'capabilities': capabilities,
       'category': category,
