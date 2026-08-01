@@ -67,4 +67,25 @@ final class ChatPromptsTests: XCTestCase {
     )
     XCTAssertNil(ChatProvider.responseLanguageInstruction(languageCodes: []))
   }
+
+  /// The adapter registers every advertised tool with its own description,
+  /// promptGuidelines, and input schema. Restating those in the system prompt
+  /// shipped the same content twice per turn and let the two copies drift, so
+  /// the prompt must carry only cross-tool guidance.
+  func testDesktopToolPromptDoesNotRestatePerToolDocs() {
+    let prompt = DesktopCapabilityRegistry.desktopToolPrompt
+    for capability in DesktopCapabilityRegistry.capabilities(for: .desktopChat) {
+      XCTAssertFalse(
+        prompt.contains(capability.summary),
+        "\(capability.toolName) summary is duplicated in the system prompt; the tool definition already carries it"
+      )
+    }
+  }
+
+  /// Cross-tool guidance has nowhere else to live, so it must survive.
+  func testDesktopToolPromptKeepsCrossToolGuidance() {
+    let prompt = DesktopCapabilityRegistry.desktopToolPrompt
+    XCTAssertTrue(prompt.contains("When to use which tool:"))
+    XCTAssertFalse(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+  }
 }
