@@ -5,7 +5,85 @@ struct ActionItemIdsResponse: Decodable {
   let ids: [String]
 }
 
+struct AppleRemindersPendingSync: Decodable, @unchecked Sendable {
+  let pendingExport: [OmiAPI.ActionItemResponse]
+  let syncedItems: [OmiAPI.ActionItemResponse]
+
+  enum CodingKeys: String, CodingKey {
+    case pendingExport = "pending_export"
+    case syncedItems = "synced_items"
+  }
+}
+
+struct AppleRemindersSyncUpdate: Encodable, Sendable {
+  let id: String
+  var description: String?
+  var completed: Bool?
+  var dueAt: String?
+  /// When true, encode an explicit JSON null for `due_at` so the sync-batch
+  /// endpoint's model_fields_set path clears the backend deadline (omission leaves it).
+  var clearDueAt: Bool?
+  var exported: Bool?
+  var exportPlatform: String?
+  var appleReminderId: String?
+
+  init(
+    id: String,
+    description: String? = nil,
+    completed: Bool? = nil,
+    dueAt: String? = nil,
+    clearDueAt: Bool? = nil,
+    exported: Bool? = nil,
+    exportPlatform: String? = nil,
+    appleReminderId: String? = nil
+  ) {
+    self.id = id
+    self.description = description
+    self.completed = completed
+    self.dueAt = dueAt
+    self.clearDueAt = clearDueAt
+    self.exported = exported
+    self.exportPlatform = exportPlatform
+    self.appleReminderId = appleReminderId
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, description, completed, exported
+    case dueAt = "due_at"
+    case exportPlatform = "export_platform"
+    case appleReminderId = "apple_reminder_id"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encodeIfPresent(description, forKey: .description)
+    try container.encodeIfPresent(completed, forKey: .completed)
+    // Explicit null (not omission) so backend model_fields_set clears due_at.
+    if clearDueAt == true {
+      try container.encodeNil(forKey: .dueAt)
+    } else {
+      try container.encodeIfPresent(dueAt, forKey: .dueAt)
+    }
+    try container.encodeIfPresent(exported, forKey: .exported)
+    try container.encodeIfPresent(exportPlatform, forKey: .exportPlatform)
+    try container.encodeIfPresent(appleReminderId, forKey: .appleReminderId)
+  }
+}
+
 extension APIClient {
+  func getPendingAppleRemindersSync() async throws -> AppleRemindersPendingSync {
+    try await get("v1/action-items/pending-sync?platform=apple_reminders")
+  }
+
+  func syncAppleReminders(_ updates: [AppleRemindersSyncUpdate]) async throws {
+    struct Request: Encodable { let items: [AppleRemindersSyncUpdate] }
+    struct Response: Decodable { let status: String }
+    for chunk in updates.chunked(maxSize: 100) {
+      let _: Response = try await patch("v1/action-items/sync-batch", body: Request(items: chunk))
+    }
+  }
+
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
   func getActionItems(

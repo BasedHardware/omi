@@ -69,6 +69,10 @@ struct ScopedDefaultsKey {
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
   }
+
+  static func appleRemindersExportJournal(ownerHash: String) -> Self {
+    Self(rawValue: "apple_reminders_export_journal.v1.\(ownerHash)")
+  }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

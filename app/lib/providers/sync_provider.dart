@@ -162,10 +162,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// The upload lanes the recordings still to back up would use.
   Set<SyncUploadLane> get pendingUploadLanes => pendingSyncUploadLanes(
         displaySortedWals
-            .where((wal) =>
-                wal.syncDisplayState == WalSyncDisplayState.waiting ||
-                wal.syncDisplayState == WalSyncDisplayState.retrying ||
-                wal.syncDisplayState == WalSyncDisplayState.failed)
+            .where(
+              (wal) =>
+                  wal.syncDisplayState == WalSyncDisplayState.waiting ||
+                  wal.syncDisplayState == WalSyncDisplayState.retrying ||
+                  wal.syncDisplayState == WalSyncDisplayState.failed,
+            )
             .toList(),
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
       );
