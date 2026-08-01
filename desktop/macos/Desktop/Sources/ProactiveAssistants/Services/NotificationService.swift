@@ -409,21 +409,35 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
     }
 
-    FloatingControlBarManager.shared.showNotification(
-      ownerID: ownerID,
-      title: title,
-      message: message,
-      assistantId: assistantId,
-      sound: sound,
-      context: context,
-      action: action,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
-      screenshotData: screenshotData
-    )
+    let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
+
+    if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
+    ) {
+      FloatingControlBarManager.shared.showNotification(
+        ownerID: ownerID,
+        title: title,
+        message: message,
+        assistantId: assistantId,
+        sound: sound,
+        context: context,
+        action: action,
+        suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+        screenshotData: screenshotData
+      )
+    }
 
     // Default path: floating-bar only. Functional callers opt-in via
-    // `deliverSystemBanner: true` (see the parameter doc above).
-    guard deliverSystemBanner else { return }
+    // `deliverSystemBanner: true` (see the parameter doc above). When the
+    // in-bar preview is muted (or the bar itself is disabled), fall back to
+    // the system banner so the notification is never fully silenced.
+    guard
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
+    else { return }
 
     UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {

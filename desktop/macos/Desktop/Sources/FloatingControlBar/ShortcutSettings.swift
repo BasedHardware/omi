@@ -319,6 +319,13 @@ class ShortcutSettings: ObservableObject {
     }
   }
 
+  @Published var floatingBarNotificationPreviewsEnabled: Bool {
+    didSet {
+      UserDefaults.standard.set(
+        floatingBarNotificationPreviewsEnabled, forKey: "shortcut_floatingBarNotificationPreviewsEnabled")
+    }
+  }
+
   /// Keeps the registration owner from observing a half-applied Ask Omi selection.
   /// The individual published values still update for SwiftUI, but the hotkey owner
   /// receives one notification only after both persisted values are final.
@@ -588,6 +595,8 @@ class ShortcutSettings: ObservableObject {
       ) ?? Self.defaultAskOmiShortcut
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
+    self.floatingBarNotificationPreviewsEnabled =
+      UserDefaults.standard.object(forKey: "shortcut_floatingBarNotificationPreviewsEnabled") as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
     self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
