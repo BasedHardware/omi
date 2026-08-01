@@ -26,6 +26,17 @@ SPEAKER_ATTRIBUTION_USER_TAGGED = 'user_tagged'
 SPEAKER_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'
 
 
+async def revoke_inferred_speaker_enrolment(uid: str, person_id: str) -> List[str]:
+    """Undo an enrolment made from an LLM-inferred identity.
+
+    Clearing the stored embedding alone does not undo it: the inferred sample
+    survives at speech_samples_version 3 and the next listen session rebuilds
+    the embedding from it. This removes the sample and the embedding together,
+    so a contradicted inference stays gone. Returns the removed sample paths.
+    """
+    return await run_blocking(db_executor, users_db.clear_person_llm_inferred_enrolment, uid, person_id)
+
+
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
     """
     Convert PCM16 mono audio to WAV format bytes.
@@ -257,6 +268,11 @@ async def extract_speaker_samples(
     Extract speech samples from segments and store as speaker profiles.
     Fetches conversation from DB to get started_at and segment details.
     Processes each segment one by one, stops when sample limit reached.
+
+    `attribution` is recorded on the stored sample as well as on the embedding.
+    Tagging only the embedding would make an inferred enrolment look reversible
+    while the sample it was built from stayed behind for the listen session to
+    rebuild the embedding from.
     """
     try:
         # Run lazy migration for samples before checking count
@@ -436,7 +452,13 @@ async def extract_speaker_samples(
             )
 
             success = await run_blocking(
-                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+                db_executor,
+                users_db.add_person_speech_sample,
+                uid,
+                person_id,
+                path,
+                transcript=transcript,
+                attribution=attribution,
             )
             if success:
                 samples_added += 1

@@ -117,10 +117,18 @@ class SpeakerMatcher:
         Only reached for `speech_samples_version >= 3` samples, which already passed
         verify_and_transcribe_sample when they were stored, so this restores a lost
         embedding without reopening the quality gate that deliberately drops bad samples.
+
+        A sample stored from an LLM-inferred identity is refused: passing the quality
+        gate says the audio is clean, not that it belongs to the person the model named.
+        Rebuilding from one would resurrect an enrolment whose embedding was cleared
+        precisely because that inference was wrong, silently and on the next session.
         """
         person_id = person.get('id')
         samples = person.get('speech_samples') or []
         if not samples:
+            return None
+        if user_db.is_person_speech_sample_llm_inferred(person, samples[0]):
+            logger.info('Speaker ID skipped recovery from inferred sample person=%s', person_id)
             return None
         try:
             audio = await run_blocking(storage_executor, download_sample_audio, samples[0])

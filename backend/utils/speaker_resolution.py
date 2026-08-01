@@ -50,6 +50,7 @@ class RejectionReason(str, Enum):
     LOW_CONFIDENCE = "low_confidence"
     AMBIGUOUS_SPEAKER = "ambiguous_speaker"
     AMBIGUOUS_NAME = "ambiguous_name"
+    SINGLE_SPEAKER_TRANSCRIPT = "single_speaker_transcript"
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,35 @@ def _segment_field(segment: Any, field: str) -> Any:
     return getattr(segment, field, None)
 
 
+def _normalized_tokens(value: object) -> Tuple[str, ...]:
+    """Split normalized text into whole words.
+
+    Grounding compares token sequences rather than raw strings, so the unit of
+    comparison has to be produced once and used on both sides.
+    """
+    return tuple(normalize_text(value).split())
+
+
+def _contains_token_sequence(haystack: Sequence[str], needle: Sequence[str]) -> bool:
+    """Whether ``needle`` occurs in ``haystack`` as a contiguous run of whole words.
+
+    A substring test over normalized text matches across token boundaries:
+    ``"im ann"`` is a substring of ``"im annette"``, so a truncated quote would
+    ground against an utterance that never contained those words, and the claim
+    could carry a wrong name all the way to enrolment. Comparing token slices
+    keeps the tolerance for punctuation and case drift -- normalization already
+    absorbed that -- while requiring the words themselves to line up on their
+    boundaries and in order.
+    """
+    span = len(needle)
+    if span == 0 or span > len(haystack):
+        return False
+    for start in range(len(haystack) - span + 1):
+        if list(haystack[start : start + span]) == list(needle):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class _SegmentView:
     index: int
@@ -150,7 +180,7 @@ class _SegmentView:
     speaker_id: Optional[int]
     is_user: bool
     person_id: Optional[str]
-    normalized_text: str
+    normalized_tokens: Tuple[str, ...]
 
 
 def _view_segments(segments: Sequence[Any]) -> List[_SegmentView]:
@@ -169,7 +199,7 @@ def _view_segments(segments: Sequence[Any]) -> List[_SegmentView]:
                 speaker_id=speaker_id,
                 is_user=bool(_segment_field(segment, "is_user")),
                 person_id=person_id if isinstance(person_id, str) and person_id else None,
-                normalized_text=normalize_text(_segment_field(segment, "text")),
+                normalized_tokens=_normalized_tokens(_segment_field(segment, "text")),
             )
         )
     return views
@@ -190,20 +220,45 @@ def _resolved_speaker_ids(views: Sequence[_SegmentView]) -> Set[int]:
     return resolved
 
 
+def _has_diarization(known_speakers: Set[int]) -> bool:
+    """Whether the transcript actually distinguishes speakers.
+
+    ``TranscriptSegment`` sets ``speaker_id`` to 0 whenever the ``speaker``
+    field is missing or unparseable, so a conversation that was never diarized
+    arrives as every segment at speaker 0 -- one speaker covering everybody in
+    the room. A single grounded quote would then bind the whole transcript to
+    one Person and enrol a voiceprint built from a mixture of every voice
+    present, which is exactly the unrecoverable failure this module exists to
+    prevent.
+
+    The fix is not to exclude speaker 0: 0 is also a legitimate diarized id
+    (``SPEAKER_00``), and dropping it would blind the gate to a real speaker in
+    every properly diarized conversation. What marks an undiarized transcript is
+    the collapse to a *single* distinct speaker id. That test costs nothing on
+    the diarized side either: with one speaker there is no mapping to resolve,
+    so there is nothing worth suggesting.
+    """
+    return len(known_speakers) > 1
+
+
 def _quote_segments(views: Sequence[_SegmentView], quote: str) -> List[_SegmentView]:
-    normalized_quote = normalize_text(quote)
-    if not normalized_quote:
+    quote_tokens = _normalized_tokens(quote)
+    if not quote_tokens:
         return []
-    return [view for view in views if normalized_quote and normalized_quote in view.normalized_text]
+    return [view for view in views if _contains_token_sequence(view.normalized_tokens, quote_tokens)]
 
 
 def _name_in_quote(name: str, quote: str) -> bool:
-    normalized_quote = normalize_text(quote)
-    normalized_name = normalize_text(name)
-    if not normalized_quote or not normalized_name:
+    """Whether every word of the name appears as a whole word of the quote.
+
+    Membership is over tokens, not characters, so ``"Ann"`` is not carried by a
+    quote that only ever said ``"Annette"``.
+    """
+    quote_words = _normalized_tokens(quote)
+    name_words = _normalized_tokens(name)
+    if not quote_words or not name_words:
         return False
-    quote_words = normalized_quote.split()
-    return all(part in quote_words for part in normalized_name.split())
+    return all(part in quote_words for part in name_words)
 
 
 def _ground_claim(claim: SpeakerClaim, views: Sequence[_SegmentView]) -> Optional[RejectionReason]:
@@ -297,9 +352,17 @@ def plan_speaker_resolution(
     Returns:
         A ``ResolutionPlan``. Nothing in it may be written or enrolled until a
         refutation pass has been run over it.
+
+    A transcript carrying fewer than two distinct speaker ids is rejected
+    wholesale; see ``_has_diarization`` for why that is the test rather than an
+    exclusion of speaker 0.
     """
     views = _view_segments(segments)
     known_speakers = {view.speaker_id for view in views if view.speaker_id is not None}
+    if not _has_diarization(known_speakers):
+        return ResolutionPlan(
+            rejected=tuple(RejectedClaim(claim, RejectionReason.SINGLE_SPEAKER_TRANSCRIPT) for claim in claims)
+        )
     already_resolved = _resolved_speaker_ids(views)
     normalized_user_name = normalize_text(user_name)
 
