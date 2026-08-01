@@ -77,8 +77,20 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 
   // A device tool request. Base64 because the payload carries arbitrary message
   // text that must not be parsed as part of the line-delimited SSE grammar.
+  //
+  // A frame that will not decode yields an empty payload rather than throwing.
+  // decodeBase64 throwing here would tear down the whole stream mid-turn, so a
+  // single corrupt frame would cost the user the entire reply instead of one
+  // tool call; the dispatcher fails that call closed on its own.
   if (line.startsWith('tool: ')) {
-    return ServerMessageChunk(messageId, decodeBase64(line.substring(6)), MessageChunkType.tool);
+    String payload;
+    try {
+      payload = decodeBase64(line.substring(6));
+    } catch (e) {
+      Logger.error('Discarding undecodable device tool frame: $e');
+      payload = '';
+    }
+    return ServerMessageChunk(messageId, payload, MessageChunkType.tool);
   }
 
   if (line.startsWith('done: ')) {
@@ -146,7 +158,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
     body: jsonEncode({
       'text': text,
       'file_ids': filesId,
-      'device_tools': dispatcher.declaredToolNames,
+      'device_tools': await dispatcher.declaredToolNames(),
     }),
   )) {
     if (line.startsWith('error:402:')) {

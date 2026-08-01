@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/device_tools/device_tool_surface.dart';
 import 'package:omi/utils/logger.dart';
@@ -34,6 +35,22 @@ class DeviceToolRequest {
       return null;
     }
   }
+
+  /// The call id alone, recovered from a frame too malformed to execute.
+  ///
+  /// Refusing to run such a frame is right; staying silent about it is not.
+  /// The server is blocked on this call id, so when the id itself survived we
+  /// answer with a failure instead of making the user wait out the timeout.
+  static String? recoverCallId(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final callId = decoded['call_id'];
+      return callId is String && callId.isNotEmpty ? callId : null;
+    } on FormatException {
+      return null;
+    }
+  }
 }
 
 /// Executes device tool requests arriving on the chat stream and returns the
@@ -43,14 +60,25 @@ class DeviceToolRequest {
 /// eventually sees already accounts for what happened on the device — including
 /// them cancelling the compose sheet.
 class DeviceToolDispatcher {
-  DeviceToolDispatcher({DeviceToolSurface? surface}) : _surface = surface ?? DeviceToolSurface();
+  DeviceToolDispatcher({DeviceToolSurface? surface, String Function()? currentOwnerUid})
+      : _surface = surface ?? DeviceToolSurface(),
+        // Injectable so the account-change path is exercised in tests without a
+        // real sign-out.
+        _currentOwnerUid = currentOwnerUid ?? (() => SharedPreferencesUtil().uid);
 
   final DeviceToolSurface _surface;
+  final String Function() _currentOwnerUid;
 
   /// The tool names to declare when opening a chat turn. The backend offers the
   /// model only what appears here, so a device that cannot message never gets
   /// asked to.
-  List<String> get declaredToolNames => _surface.tools.map((tool) => tool.name).toList();
+  ///
+  /// Asynchronous because it asks the device what it can do rather than assuming
+  /// the platform's full capability set.
+  Future<List<String>> declaredToolNames() async {
+    final available = await _surface.availableTools();
+    return available.map((tool) => tool.name).toList();
+  }
 
   /// Handles one `tool:` frame end to end. Never throws: a failure here has to
   /// come back to the model as a result, or the turn hangs until the server's
@@ -58,15 +86,39 @@ class DeviceToolDispatcher {
   Future<void> handleFrame(String rawFrame) async {
     final request = DeviceToolRequest.tryParse(rawFrame);
     if (request == null) {
-      Logger.error('Discarding malformed device tool frame');
+      // The frame will not execute, but the server is still blocked on it. When
+      // the call id survived the damage, say so; otherwise there is no address
+      // to answer and the server's own timeout is the only way out.
+      final callId = DeviceToolRequest.recoverCallId(rawFrame);
+      if (callId == null) {
+        Logger.error('Discarding malformed device tool frame with no recoverable call id');
+        return;
+      }
+      Logger.error('Rejecting malformed device tool frame call_id=$callId');
+      await _postResult(
+        callId,
+        DeviceToolResult.failure('malformed_request', 'The device could not read this tool call.'),
+      );
       return;
     }
+
+    // The effect and its result must both belong to the account that opened the
+    // turn. A sheet can stay open across a sign-out or an account switch, and
+    // posting the outcome afterwards would attribute it to whoever is signed in
+    // now — or fail, leaving the original turn to time out on a message that may
+    // well have been sent.
+    final owner = _currentOwnerUid();
 
     DeviceToolResult result;
     try {
       result = await _surface.execute(request.tool, request.arguments);
     } catch (e) {
       result = DeviceToolResult.failure('execution_failed', e.toString());
+    }
+
+    if (_currentOwnerUid() != owner) {
+      Logger.error('Dropping device tool result after an account change call_id=${request.callId}');
+      return;
     }
 
     await _postResult(request.callId, result);

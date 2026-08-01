@@ -42,6 +42,33 @@ void main() {
       );
     });
 
+    test('withholds propose_message on a device that cannot send text', () async {
+      // A simulator, an iPod touch, or an iPad with no messaging service. The
+      // model should never be offered a tool whose only possible answer is
+      // messaging_unavailable.
+      nextResponse = {'ok': true, 'can_send_text': false};
+
+      final available = await supportedSurface().availableTools();
+
+      expect(available.map((tool) => tool.name), [DeviceToolSurface.searchContactsTool]);
+    });
+
+    test('offers both tools on a device that can send text', () async {
+      nextResponse = {'ok': true, 'can_send_text': true};
+
+      final available = await supportedSurface().availableTools();
+
+      expect(
+        available.map((tool) => tool.name),
+        [DeviceToolSurface.searchContactsTool, DeviceToolSurface.proposeMessageTool],
+      );
+    });
+
+    test('advertises nothing on an unsupported platform without touching the channel', () async {
+      expect(await unsupportedSurface().availableTools(), isEmpty);
+      expect(calls, isEmpty);
+    });
+
     test('marks propose_message as platform-confirmed and search_contacts as not', () {
       final tools = {for (final tool in supportedSurface().tools) tool.name: tool};
 
