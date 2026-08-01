@@ -41,7 +41,7 @@ def _local_fixture_canonical_uids() -> frozenset[str]:
     return frozenset(uid.strip() for uid in os.getenv('MEMORY_CANONICAL_USERS', '').split(',') if uid.strip())
 
 
-def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
+def resolve_memory_system(uid: object, *, db_client: Any = None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     ``CANONICAL_MEMORY_USERS`` is the production entitlement selector. The
@@ -57,5 +57,7 @@ def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
     """
     del db_client  # reserved for callers/tests; cohort is code-defined today
 
-    is_canonical = canonical_memory_cohort.is_canonical_memory_user(uid) or uid in _local_fixture_canonical_uids()
+    is_canonical = canonical_memory_cohort.is_canonical_memory_user(uid) or (
+        isinstance(uid, str) and uid in _local_fixture_canonical_uids()
+    )
     return MemorySystem.CANONICAL if is_canonical else MemorySystem.LEGACY
