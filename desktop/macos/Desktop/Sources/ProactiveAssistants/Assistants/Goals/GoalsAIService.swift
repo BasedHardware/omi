@@ -274,7 +274,7 @@ actor GoalsAIService {
     log(
       "GoalsAI: Context sizes — memories: \(ctx.memories.count) chars, conversations: \(ctx.conversations.count) chars, tasks: \(ctx.actionItems.count) chars, persona: \(ctx.persona.count) chars, existing goals: \(ctx.existingGoals), completed: \(ctx.completedGoals.count) chars, abandoned: \(ctx.abandonedGoals.count) chars"
     )
-    log("GoalsAI: Full prompt:\n\(prompt)")
+    log("GoalsAI: Prompt size — \(prompt.count) chars")
 
     // Call Gemini
     let responseText = try await client.sendRequest(

@@ -93,8 +93,14 @@ class TaskAgentManager: ObservableObject {
       return
     }
 
-    let sessionName = "omi-task-\(task.id.prefix(8))"
+    let safeTaskId = String(task.id.filter { $0.isLetter || $0.isNumber }.prefix(8))
+    guard !safeTaskId.isEmpty else {
+      logMessage("TaskAgentManager: Refusing to launch agent — task id has no alphanumeric characters")
+      throw AgentError.invalidSessionName
+    }
+    let sessionName = "omi-task-\(safeTaskId)"
     let prompt = buildPrompt(for: task, context: context)
+    let skipPermissions = TaskAgentSettings.shared.skipPermissions
 
     logMessage("TaskAgentManager: Launching agent for task \(task.id) (\(task.description))")
 
@@ -116,7 +122,12 @@ class TaskAgentManager: ObservableObject {
 
     // Launch tmux session with Claude
     do {
-      try await Self.launchTmuxSession(sessionName: sessionName, prompt: prompt, workingDir: context.workingDirectory)
+      try await Self.launchTmuxSession(
+        sessionName: sessionName,
+        prompt: prompt,
+        workingDir: context.workingDirectory,
+        skipPermissions: skipPermissions
+      )
 
       await MainActor.run {
         activeSessions[task.id]?.status = .processing
@@ -151,6 +162,11 @@ class TaskAgentManager: ObservableObject {
   func updatePromptAndRestart(taskId: String, newPrompt: String, context: TaskAgentContext) async throws {
     guard let session = activeSessions[taskId] else { return }
     let sessionName = session.sessionName
+    guard Self.isSafeSessionName(sessionName) else {
+      logMessage("TaskAgentManager: Refusing to restart agent — unsafe session name")
+      throw AgentError.invalidSessionName
+    }
+    let skipPermissions = TaskAgentSettings.shared.skipPermissions
 
     logMessage("TaskAgentManager: Restarting agent for task \(taskId) with new prompt")
 
@@ -173,7 +189,12 @@ class TaskAgentManager: ObservableObject {
     }
     if let s = activeSessions[taskId] { persistSession(s) }
 
-    try await Self.launchTmuxSession(sessionName: sessionName, prompt: newPrompt, workingDir: context.workingDirectory)
+    try await Self.launchTmuxSession(
+      sessionName: sessionName,
+      prompt: newPrompt,
+      workingDir: context.workingDirectory,
+      skipPermissions: skipPermissions
+    )
 
     await MainActor.run {
       activeSessions[taskId]?.status = .processing
@@ -241,60 +262,107 @@ class TaskAgentManager: ObservableObject {
   // static + nonisolated: blocking Process/waitUntilExit work runs off the main
   // actor, and being static means Task.detached call sites capture only Sendable
   // values (never the main-actor-isolated `self`).
-  nonisolated private static func launchTmuxSession(sessionName: String, prompt: String, workingDir: String)
+  /// tmux session names are interpolated into shell and AppleScript commands, so only
+  /// a conservative alphanumeric/dash/underscore alphabet is ever accepted.
+  nonisolated static func isSafeSessionName(_ name: String) -> Bool {
+    !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+  }
+
+  /// Resolve an executable through the user's login shell, returning its absolute path.
+  nonisolated private static func resolveCommandPath(_ command: String) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    process.arguments = [
+      "-c", "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; command -v \(command)",
+    ]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+
+    do {
+      try process.run()
+    } catch {
+      return nil
+    }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+
+    let resolved =
+      String(data: data, encoding: .utf8)?
+      .components(separatedBy: .newlines)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .first(where: { !$0.isEmpty }) ?? ""
+    return resolved.hasPrefix("/") ? resolved : nil
+  }
+
+  /// The PATH the user's login shell would provide, used to give the tmux pane the
+  /// same tool visibility without running the prompt through a shell.
+  nonisolated private static func resolveLoginShellPath() -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    process.arguments = [
+      "-c", "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; printf '%s' \"$PATH\"",
+    ]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+
+    do {
+      try process.run()
+    } catch {
+      return nil
+    }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+
+    let path = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return path.isEmpty ? nil : path
+  }
+
+  nonisolated private static func launchTmuxSession(
+    sessionName: String,
+    prompt: String,
+    workingDir: String,
+    skipPermissions: Bool
+  )
     async throws
   {
+    guard isSafeSessionName(sessionName) else {
+      throw AgentError.invalidSessionName
+    }
+
     // Kill any stale tmux session with the same name (e.g. survived an app restart)
     killTmuxSession(sessionName: sessionName)
 
-    // Check if tmux is available (source user's shell config to get full PATH)
-    let tmuxCheck = Process()
-    tmuxCheck.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    tmuxCheck.arguments = ["-c", "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; which tmux"]
-    let tmuxCheckPipe = Pipe()
-    tmuxCheck.standardOutput = tmuxCheckPipe
-    tmuxCheck.standardError = tmuxCheckPipe
-
-    try tmuxCheck.run()
-    tmuxCheck.waitUntilExit()
-
-    guard tmuxCheck.terminationStatus == 0 else {
+    // Resolve the binaries explicitly (source user's shell config to get full PATH)
+    // so the launch below runs argv directly, with no shell parsing the prompt.
+    guard let tmuxPath = resolveCommandPath("tmux") else {
       throw AgentError.tmuxNotInstalled
     }
-
-    // Check if claude is available (source user's shell config to get full PATH)
-    let claudeCheck = Process()
-    claudeCheck.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    claudeCheck.arguments = ["-c", "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; which claude"]
-    let claudeCheckPipe = Pipe()
-    claudeCheck.standardOutput = claudeCheckPipe
-    claudeCheck.standardError = claudeCheckPipe
-
-    try claudeCheck.run()
-    claudeCheck.waitUntilExit()
-
-    guard claudeCheck.terminationStatus == 0 else {
+    guard let claudePath = resolveCommandPath("claude") else {
       throw AgentError.claudeNotInstalled
     }
 
-    // Write prompt to a temp file to avoid escaping issues
-    let tempDir = FileManager.default.temporaryDirectory
-    let promptFile = tempDir.appendingPathComponent("omi-task-prompt-\(UUID().uuidString).txt")
-    try prompt.write(to: promptFile, atomically: true, encoding: .utf8)
-
-    // Escape working directory for shell
-    let escapedWorkingDir = workingDir.replacingOccurrences(of: "'", with: "'\\''")
-
-    // Build command that reads prompt from file
-    // Source shell profiles INSIDE the tmux session so claude (via nvm) is in PATH
-    // Note: \\" produces \" in the output (escaped quote for the shell), NOT just "
-    let command = """
-      tmux new-session -d -s '\(sessionName)' "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '\(escapedWorkingDir)' && claude --dangerously-skip-permissions \\"$(cat '\(promptFile.path)')\\" ; rm -f '\(promptFile.path)'"
-      """
+    // The pane still needs the user's PATH (claude is often a node shim under nvm),
+    // so hand it to `env` as an argument instead of sourcing profiles in a shell.
+    var arguments = ["new-session", "-d", "-s", sessionName]
+    if !workingDir.isEmpty {
+      arguments += ["-c", workingDir]
+    }
+    if let loginPath = resolveLoginShellPath(), !loginPath.isEmpty {
+      arguments += ["/usr/bin/env", "PATH=\(loginPath)"]
+    }
+    arguments.append(claudePath)
+    if skipPermissions {
+      arguments.append("--dangerously-skip-permissions")
+    }
+    arguments.append(prompt)
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    process.arguments = ["-c", "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; \(command)"]
+    process.executableURL = URL(fileURLWithPath: tmuxPath)
+    process.arguments = arguments
 
     let pipe = Pipe()
     process.standardOutput = pipe
@@ -532,6 +600,10 @@ class TaskAgentManager: ObservableObject {
 
   // static + nonisolated: blocking Process work (isSessionAlive) — off-main, Sendable-capture-safe.
   nonisolated private static func openTmuxSessionInTerminal(sessionName: String) {
+    guard isSafeSessionName(sessionName) else {
+      log("TaskAgentManager: Refusing to open terminal for unsafe session name")
+      return
+    }
     // Check if session is alive before opening terminal
     guard isSessionAlive(sessionName: sessionName) else {
       log("TaskAgentManager: Cannot open terminal - session '\(sessionName)' does not exist")
@@ -539,7 +611,7 @@ class TaskAgentManager: ObservableObject {
     }
 
     // Create flag file to skip .zshrc auto-resume (which hijacks the shell via exec)
-    let flagPath = "/tmp/.omi-skip-resume"
+    let flagPath = FileManager.default.temporaryDirectory.appendingPathComponent(".omi-skip-resume").path
     FileManager.default.createFile(atPath: flagPath, contents: nil)
 
     let script = """
@@ -647,6 +719,13 @@ class TaskAgentManager: ObservableObject {
           continue
         }
 
+        // Persisted rows are re-fed to tmux/AppleScript on every launch — revalidate
+        // the session name rather than trusting the database column.
+        guard Self.isSafeSessionName(sessionName) else {
+          logMessage("TaskAgentManager: Skipping restored session with unsafe session name")
+          continue
+        }
+
         let taskId = record.backendId ?? "local_\(record.id ?? 0)"
 
         let session = AgentSession(
@@ -717,9 +796,12 @@ class TaskAgentManager: ObservableObject {
     case tmuxNotInstalled
     case claudeNotInstalled
     case launchFailed(String)
+    case invalidSessionName
 
     var errorDescription: String? {
       switch self {
+      case .invalidSessionName:
+        return "Cannot start agent: the task identifier is not a valid session name."
       case .tmuxNotInstalled:
         return "tmux is not installed. Install with: brew install tmux"
       case .claudeNotInstalled:

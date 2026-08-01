@@ -632,7 +632,7 @@ actor InsightAssistant: ProactiveAssistant {
     prompt +=
       "\n\nInvestigate the activity summary. Scan OCR from the TOP 3-5 apps (not just the dominant one) — the best insights often come from browsers, communication apps, and notes, not just the app with the most screenshots. Skip apps with < 10 screenshots. When you've identified the most interesting screenshot, call request_screenshot with the ID and your findings. Or call no_advice if nothing qualifies."
 
-    log("Insight: --- PROMPT ---\n\(prompt)")
+    log("Insight: prompt built (\(prompt.count) chars)")
 
     // Build system prompt
     var currentSystemPrompt = await systemPrompt
@@ -689,7 +689,8 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P1 execute_sql iter \(iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let sqlToolCall = ToolCall(
+          name: "execute_sql", arguments: ["query": query, "read_only": true], thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P1 sql result (\(resultStr.count) chars): \(truncated)")
@@ -853,7 +854,8 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P2 execute_sql iter \(p2Iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let sqlToolCall = ToolCall(
+          name: "execute_sql", arguments: ["query": query, "read_only": true], thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P2 sql result (\(resultStr.count) chars): \(truncated)")

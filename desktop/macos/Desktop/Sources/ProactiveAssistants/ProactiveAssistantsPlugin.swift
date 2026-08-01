@@ -1142,6 +1142,9 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// Listen for distributed notifications from CLI to trigger test runs
   private func setupTestNotificationListeners() {
+    // DistributedNotificationCenter carries no sender identity, so any local process could
+    // drive these test hooks. Keep them out of production builds entirely.
+    guard AppBuild.isNonProduction else { return }
     // Distributed notifications may arrive on the posting thread, so entering a selector on this
     // MainActor-isolated plugin can trap before a Task-based actor hop executes.
     let observers = [

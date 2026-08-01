@@ -60,7 +60,8 @@ final class NotionMCPConnector: @unchecked Sendable {
   /// Full browser OAuth: register a client for a fresh loopback port, open the
   /// consent page, await the redirect, exchange the code, store tokens.
   func connect() async throws {
-    let listener = try OAuthCallbackListener()
+    let state = Self.randomURLSafe(24)
+    let listener = try OAuthCallbackListener(expectedState: state)
     defer { listener.cancel() }
     let redirectURI = "http://localhost:\(listener.port)/callback"
 
@@ -79,7 +80,6 @@ final class NotionMCPConnector: @unchecked Sendable {
 
     let verifier = Self.randomURLSafe(64)
     let challenge = Self.codeChallenge(for: verifier)
-    let state = Self.randomURLSafe(24)
 
     guard
       var components = URLComponents(
@@ -358,14 +358,19 @@ private final class OAuthCallbackListener: @unchecked Sendable {
   private let listener: NWListener
   private let lock = NSLock()
   private var continuation: CheckedContinuation<[String: String], Error>?
+  private let expectedState: String
 
-  init() throws {
+  init(expectedState: String) throws {
+    self.expectedState = expectedState
     var created: (NWListener, UInt16)?
     for _ in 0..<4 {
       let candidate = UInt16.random(in: 45_000...59_000)
-      if let endpointPort = NWEndpoint.Port(rawValue: candidate),
-        let attempt = try? NWListener(using: .tcp, on: endpointPort)
-      {
+      guard let endpointPort = NWEndpoint.Port(rawValue: candidate) else { continue }
+      // Confine the redirect listener to loopback: without a required local
+      // endpoint NWListener accepts connections on every interface.
+      let parameters = NWParameters.tcp
+      parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: endpointPort)
+      if let attempt = try? NWListener(using: parameters) {
         created = (attempt, candidate)
         break
       }
@@ -421,9 +426,10 @@ private final class OAuthCallbackListener: @unchecked Sendable {
       connection.send(
         content: Data(response.utf8),
         completion: .contentProcessed { _ in connection.cancel() })
-      if !params.isEmpty {
-        self.finish(with: .success(params))
-      }
+      // Only the redirect carrying our own state resolves the flow; anything else
+      // that reaches the port is answered and ignored.
+      guard params["state"] == self.expectedState, params["code"] != nil else { return }
+      self.finish(with: .success(params))
     }
   }
 

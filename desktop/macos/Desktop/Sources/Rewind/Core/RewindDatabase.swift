@@ -455,8 +455,15 @@ actor RewindDatabase {
     // never drift to the next owner's path or publish its old pool later.
     let omiDir = userBaseDirectory(for: expectedUserId)
 
-    // Create directory if needed (withIntermediateDirectories creates parents too)
-    try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
+    // Create directory if needed (withIntermediateDirectories creates parents too).
+    // Owner-only: this directory holds every screen OCR string and transcript in
+    // plaintext, so it must not be world- or group-readable.
+    try FileManager.default.createDirectory(
+      at: omiDir,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: omiDir.path)
 
     // Migrate data from legacy path if this is first launch with per-user paths
     migrateFromLegacyPathIfNeeded(to: omiDir)
@@ -566,6 +573,10 @@ actor RewindDatabase {
       try? activeQueue.close()
       throw CancellationError()
     }
+
+    // SQLite creates omi.db (and its WAL/SHM sidecars) at 0644. The contents are
+    // unencrypted screen OCR and transcripts, so restrict them to the owner.
+    restrictDatabaseFilePermissions(at: dbPath)
 
     dbQueue = activeQueue
     // Bump the pool epoch on every (re)open so storage actors that cached the
@@ -810,6 +821,18 @@ actor RewindDatabase {
       try? fileManager.removeItem(atPath: walPath)
       try? fileManager.removeItem(atPath: shmPath)
       log("RewindDatabase: Cleaned up stale empty WAL/SHM files")
+    }
+  }
+
+  /// Restrict omi.db and its WAL/SHM sidecars to owner-only access.
+  private func restrictDatabaseFilePermissions(at dbPath: String) {
+    let fileManager = FileManager.default
+    for path in [dbPath, dbPath + "-wal", dbPath + "-shm"] where fileManager.fileExists(atPath: path) {
+      do {
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+      } catch {
+        log("RewindDatabase: Could not restrict permissions on \((path as NSString).lastPathComponent): \(error)")
+      }
     }
   }
 

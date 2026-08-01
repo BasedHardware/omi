@@ -164,9 +164,10 @@ actor RewindStorage {
       throw RewindError.storageError("Storage not initialized")
     }
 
-    let fullPath = screenshotsDirectory.appendingPathComponent(relativePath)
-
-    guard fileManager.fileExists(atPath: fullPath.path) else {
+    guard
+      let fullPath = Self.confinedURL(relativePath: relativePath, in: screenshotsDirectory),
+      fileManager.fileExists(atPath: fullPath.path)
+    else {
       throw RewindError.screenshotNotFound
     }
 
@@ -179,9 +180,10 @@ actor RewindStorage {
       return nil
     }
 
-    let fullPath = screenshotsDirectory.appendingPathComponent(relativePath)
-
-    guard fileManager.fileExists(atPath: fullPath.path) else {
+    guard
+      let fullPath = Self.confinedURL(relativePath: relativePath, in: screenshotsDirectory),
+      fileManager.fileExists(atPath: fullPath.path)
+    else {
       return nil
     }
 
@@ -220,9 +222,10 @@ actor RewindStorage {
       return cached
     }
 
-    let fullPath = videosDirectory.appendingPathComponent(videoPath)
-
-    guard fileManager.fileExists(atPath: fullPath.path) else {
+    guard
+      let fullPath = Self.confinedURL(relativePath: videoPath, in: videosDirectory),
+      fileManager.fileExists(atPath: fullPath.path)
+    else {
       throw RewindError.screenshotNotFound
     }
 
@@ -757,6 +760,14 @@ actor RewindStorage {
   /// (e.g. "../outside.jpg") so retention cleanup can never delete a file
   /// outside the screenshot store.
   static func screenshotDeletionURL(relativePath: String, in root: URL) -> URL? {
+    confinedURL(relativePath: relativePath, in: root)
+  }
+
+  /// Resolve a stored relative path against `root`, returning `nil` when the path
+  /// is empty, resolves to the root itself, or escapes the root (via `..` or a
+  /// symlinked component). Every path that arrives from a database column is
+  /// routed through this before it is read from or written to disk.
+  static func confinedURL(relativePath: String, in root: URL) -> URL? {
     let trimmed = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     // Use the trimmed value for the component too (not the raw relativePath),
@@ -766,12 +777,48 @@ actor RewindStorage {
     // Require the candidate to sit strictly inside the root: reject the root
     // itself, and require the root path + "/" as a prefix so a standardized
     // "../" escape (which lands beside or above the root) is refused.
-    let rootPath = standardizedRoot.path
-    let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-    guard candidate.path != rootPath, candidate.path.hasPrefix(rootPrefix) else {
+    guard isPath(candidate.path, strictlyInside: standardizedRoot.path) else {
+      return nil
+    }
+    // Re-check after resolving symlinks so a symlinked day directory (or file)
+    // cannot point outside the store. Both sides resolve their deepest existing
+    // ancestor, so the comparison stays consistent for not-yet-created files.
+    guard
+      isPath(
+        symlinkResolvedPath(for: candidate),
+        strictlyInside: symlinkResolvedPath(for: standardizedRoot))
+    else {
       return nil
     }
     return candidate
+  }
+
+  private static func isPath(_ path: String, strictlyInside rootPath: String) -> Bool {
+    let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+    return path != rootPath && path.hasPrefix(rootPrefix)
+  }
+
+  /// Resolve symlinks on the deepest existing ancestor of `url`, then re-append the
+  /// components that do not exist yet. `resolvingSymlinksInPath()` behaves
+  /// differently for existing and missing paths, so resolving the existing prefix
+  /// keeps root and candidate comparable.
+  private static func symlinkResolvedPath(for url: URL) -> String {
+    let fileManager = FileManager.default
+    var missingComponents: [String] = []
+    var current = url.standardizedFileURL
+
+    while !fileManager.fileExists(atPath: current.path) {
+      let parent = current.deletingLastPathComponent().standardizedFileURL
+      if parent.path == current.path { break }
+      missingComponents.append(current.lastPathComponent)
+      current = parent
+    }
+
+    var resolved = current.resolvingSymlinksInPath()
+    for component in missingComponents.reversed() {
+      resolved.appendPathComponent(component)
+    }
+    return resolved.standardizedFileURL.path
   }
 
   /// Delete a screenshot file
@@ -807,7 +854,9 @@ actor RewindStorage {
       throw RewindError.storageError("Videos directory not initialized")
     }
 
-    let fullPath = videosDirectory.appendingPathComponent(relativePath)
+    guard let fullPath = Self.confinedURL(relativePath: relativePath, in: videosDirectory) else {
+      return
+    }
 
     // Invalidate cache entries for this chunk (we can't iterate NSCache, so just clear relevant entries by rebuilding)
     // The cache will naturally evict old entries

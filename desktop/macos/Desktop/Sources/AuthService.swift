@@ -1354,7 +1354,8 @@ class AuthService {
   /// Called by AppDelegate when the app receives an OAuth callback URL
   @MainActor
   func handleOAuthCallback(url: URL) {
-    NSLog("OMI AUTH: Received OAuth callback: %@", url.absoluteString)
+    // Never log the query string: it carries the authorization code and state.
+    NSLog("OMI AUTH: Received OAuth callback: %@://%@%@", url.scheme ?? "?", url.host ?? "", url.path)
 
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
       NSLog("OMI AUTH: Failed to parse callback URL")
@@ -2564,7 +2565,14 @@ class AuthService {
     let parts = state.split(separator: "|", maxSplits: 1).map(String.init)
     guard parts.count == 2 else { return nil }
     let bundleId = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-    return bundleId.isEmpty ? nil : bundleId
+    guard !bundleId.isEmpty else { return nil }
+    // The state travels through the browser, so the forwarding target is attacker
+    // controlled. Only ever forward to this app or another Omi bundle.
+    guard bundleId == Bundle.main.bundleIdentifier || bundleId.hasPrefix("com.omi.") else {
+      NSLog("OMI AUTH: Refusing to forward callback to unexpected bundle %@", bundleId)
+      return nil
+    }
+    return bundleId
   }
 
   private func authFlowId(from state: String) -> String? {
