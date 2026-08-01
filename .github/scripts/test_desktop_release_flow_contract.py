@@ -193,6 +193,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("qualification evidence lacks production Firebase UID continuity proof", self.promotion)
 
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
+        # omi-test-quality: source-inspection -- static tripwire: the guard's
+        # behavioral contract (it must reject a promotion that drops the
+        # trusted-repository gate) is executed in
+        # backend/tests/unit/test_desktop_release_scripts.py, which runs in
+        # the desktop-release-process-guards lane; this tripwire only catches
+        # the run-isolated checkout constant drifting out of the guard.
         tree = ast.parse(self.release_guard)
         guard = next(
             node
