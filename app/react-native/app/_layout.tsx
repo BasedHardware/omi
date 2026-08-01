@@ -32,7 +32,7 @@ export default function RootLayout() {
   const uid = useAuthStore((s) => s.uid);
   useEffect(() => {
     try {
-      init();
+      return init();
     } catch (e) {
       console.error('init failed', e);
     }
