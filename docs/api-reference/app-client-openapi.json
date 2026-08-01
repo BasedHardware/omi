@@ -6589,6 +6589,14 @@
             ],
             "default": "omi"
           },
+          "speaker_label_suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerLabelSuggestion"
+            },
+            "title": "Speaker Label Suggestions",
+            "type": "array"
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -18126,6 +18134,14 @@
             ],
             "default": "omi"
           },
+          "speaker_label_suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerLabelSuggestion"
+            },
+            "title": "Speaker Label Suggestions",
+            "type": "array"
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -18615,6 +18631,43 @@
           "talk_share"
         ],
         "title": "SpeakerAnalytics",
+        "type": "object"
+      },
+      "SpeakerLabelSuggestion": {
+        "description": "A name the finalization pass proposed but did not apply.\n\nSpeaker naming assigns a person only when a second model fails to refute\nthe identification. Everything short of that is offered here instead, with\nthe line it was inferred from, so the user can accept it rather than having\nthe backend guess on their behalf.",
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "evidence_quote": {
+            "default": "",
+            "title": "Evidence Quote",
+            "type": "string"
+          },
+          "person_name": {
+            "title": "Person Name",
+            "type": "string"
+          },
+          "segment_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "person_name"
+        ],
+        "title": "SpeakerLabelSuggestion",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {

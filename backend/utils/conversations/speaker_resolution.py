@@ -14,7 +14,6 @@ way are tagged ``llm_inferred`` so an embedding that came from an inference
 stays distinguishable from one the user confirmed by hand.
 """
 
-import asyncio
 import logging
 import os
 import uuid

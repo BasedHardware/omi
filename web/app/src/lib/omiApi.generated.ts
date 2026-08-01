@@ -1030,6 +1030,7 @@ export interface Conversation {
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
   source?: ConversationSource | null;
+  speaker_label_suggestions?: Array<SpeakerLabelSuggestion>;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -2987,6 +2988,7 @@ export interface SharedConversationResponse {
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
   source?: ConversationSource | null;
+  speaker_label_suggestions?: Array<SpeakerLabelSuggestion>;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -3070,6 +3072,14 @@ export interface SpeakerAnalytics {
   talk_share: number;
   word_count: number;
   words_per_minute: number;
+}
+
+export interface SpeakerLabelSuggestion {
+  confidence?: number;
+  evidence_quote?: string;
+  person_name: string;
+  segment_ids?: Array<string>;
+  speaker_id: number;
 }
 
 export interface SpeechProfileMutationResponse {
@@ -4297,6 +4307,7 @@ export interface OmiApiSchemas {
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
   "SnapshotReceipt": SnapshotReceipt;
   "SpeakerAnalytics": SpeakerAnalytics;
+  "SpeakerLabelSuggestion": SpeakerLabelSuggestion;
   "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
   "SpeechProfileResponse": SpeechProfileResponse;
   "SpeechProfileUploadResponse": SpeechProfileUploadResponse;

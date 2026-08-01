@@ -518,6 +518,42 @@ class GeneratedCalendarEventLink {
   }
 }
 
+class GeneratedSpeakerLabelSuggestion {
+  final double confidence;
+  final String evidenceQuote;
+  final String personName;
+  final List<String> segmentIds;
+  final int speakerId;
+
+  const GeneratedSpeakerLabelSuggestion({
+    this.confidence = 0.0,
+    this.evidenceQuote = "",
+    required this.personName,
+    this.segmentIds = const [],
+    required this.speakerId,
+  });
+
+  factory GeneratedSpeakerLabelSuggestion.fromJson(Map<String, dynamic> json) {
+    return GeneratedSpeakerLabelSuggestion(
+      confidence: _required(_readFieldValue<double>(_readField(json, const ["confidence"]), "confidence", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "confidence"),
+      evidenceQuote: _required(_readFieldValue<String>(_readField(json, const ["evidence_quote"]), "evidence_quote", _readString, requiredField: false, nullable: false, defaultValue: ""), "evidence_quote"),
+      personName: _required(_readFieldValue<String>(_readField(json, const ["person_name"]), "person_name", _readString, requiredField: true, nullable: false), "person_name"),
+      segmentIds: _required(_readFieldValue<List<String>>(_readField(json, const ["segment_ids"]), "segment_ids", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "segment_ids"),
+      speakerId: _required(_readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: true, nullable: false), "speaker_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'confidence': confidence,
+      'evidence_quote': evidenceQuote,
+      'person_name': personName,
+      'segment_ids': segmentIds,
+      'speaker_id': speakerId,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
@@ -544,6 +580,7 @@ class GeneratedConversation {
   final String? processingConversationId;
   final String? processingMemoryId;
   final String? source;
+  final List<GeneratedSpeakerLabelSuggestion> speakerLabelSuggestions;
   final bool starred;
   final DateTime? startedAt;
   final String? status;
@@ -580,6 +617,7 @@ class GeneratedConversation {
     this.processingConversationId,
     this.processingMemoryId,
     this.source = "omi",
+    this.speakerLabelSuggestions = const [],
     this.starred = false,
     required this.startedAt,
     this.status = "completed",
@@ -618,6 +656,7 @@ class GeneratedConversation {
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
+      speakerLabelSuggestions: _required(_readFieldValue<List<GeneratedSpeakerLabelSuggestion>>(_readField(json, const ["speaker_label_suggestions"]), "speaker_label_suggestions", (value) => _readObjectList(value, GeneratedSpeakerLabelSuggestion.fromJson), requiredField: false, nullable: false, defaultValue: const []), "speaker_label_suggestions"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
@@ -657,6 +696,7 @@ class GeneratedConversation {
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
       'source': source,
+      'speaker_label_suggestions': speakerLabelSuggestions.map((value) => value.toJson()).toList(),
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'status': status,
