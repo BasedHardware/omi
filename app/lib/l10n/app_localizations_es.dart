@@ -1869,6 +1869,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get signInWithGoogle => 'Iniciar sesión con Google';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Al continuar, aceptas nuestros ';
 
   @override

@@ -3669,6 +3669,12 @@ abstract class AppLocalizations {
   /// **'Sign in with Google'**
   String get signInWithGoogle;
 
+  /// Button text for OIDC/SSO Sign In (ADR-0038)
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with SSO'**
+  String get signInWithSSO;
+
   /// Legal disclaimer prefix text
   ///
   /// In en, this message translates to:

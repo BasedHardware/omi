@@ -1845,6 +1845,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signInWithGoogle => 'Google로 로그인';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => '계속하면 다음에 동의하는 것입니다 ';
 
   @override

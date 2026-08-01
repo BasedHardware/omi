@@ -1877,6 +1877,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get signInWithGoogle => 'Kirjaudu Googlella';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Jatkamalla hyväksyt ';
 
   @override

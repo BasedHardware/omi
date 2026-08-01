@@ -1829,6 +1829,10 @@
     "@signInWithGoogle": {
         "description": "Button text for Google Sign In"
     },
+    "signInWithSSO": "Sign in with SSO",
+    "@signInWithSSO": {
+        "description": "Button text for OIDC/SSO Sign In (ADR-0038)"
+    },
     "byContinuingAgree": "By continuing, you agree to our ",
     "@byContinuingAgree": {
         "description": "Legal disclaimer prefix text"

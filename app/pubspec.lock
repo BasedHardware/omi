@@ -614,6 +614,22 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_appauth:
+    dependency: "direct main"
+    description:
+      name: flutter_appauth
+      sha256: "0aa449d8991f70e7847d55b8bff0890fb41dc62c1d8526337e4073e806813bcb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "8.0.3"
+  flutter_appauth_platform_interface:
+    dependency: transitive
+    description:
+      name: flutter_appauth_platform_interface
+      sha256: ccf5e1d8c40dd35b297290b33cc1896648b4b92a2ec3f62a436c62a8eef9a9db
+      url: "https://pub.dev"
+    source: hosted
+    version: "8.0.0"
   flutter_archive:
     dependency: "direct main"
     description:
@@ -1369,10 +1385,10 @@ packages:
     dependency: transitive
     description:
       name: matcher
-      sha256: "12956d0ad8390bbcc63ca2e1469c0619946ccb52809807067a7020d57e647aa6"
+      sha256: dc0b7dc7651697ea4ff3e69ef44b0407ea32c487a39fff6a4004fa585e901861
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.18"
+    version: "0.12.19"
   material_color_utilities:
     dependency: transitive
     description:
@@ -2145,10 +2161,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
+      sha256: "8161c84903fd860b26bfdefb7963b3f0b68fee7adea0f59ef805ecca346f0c7a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.9"
+    version: "0.7.10"
   time:
     dependency: transitive
     description:

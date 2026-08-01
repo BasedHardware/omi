@@ -47,6 +47,8 @@ dependencies:
   # Auth
   google_sign_in: 6.2.2
   sign_in_with_apple: ^6.1.1
+  # OIDC client (ADR-0038) — additive; active only when AUTH_BACKEND=oidc.
+  flutter_appauth: ^8.0.1
 
   # Analytics and Support
   intercom_flutter: 9.4.22

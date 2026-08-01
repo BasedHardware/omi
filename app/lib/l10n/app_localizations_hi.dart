@@ -1859,6 +1859,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get signInWithGoogle => 'Google के साथ साइन इन करें';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'जारी रखकर, आप हमारी शर्तों से सहमत होते हैं ';
 
   @override

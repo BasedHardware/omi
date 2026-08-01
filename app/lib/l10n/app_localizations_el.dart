@@ -1894,6 +1894,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get signInWithGoogle => 'Σύνδεση με Google';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Συνεχίζοντας, συμφωνείτε με την ';
 
   @override

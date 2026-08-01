@@ -12,6 +12,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -67,37 +68,48 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    final refreshResult = await AuthService.instance.refreshIdToken();
-    switch (refreshResult) {
-      case AuthTokenSuccess(:final token):
-        SharedPreferencesUtil().authToken = token;
-        break;
-      case AuthTokenTransientFailure():
-        if (expiry.isBefore(DateTime.now())) {
-          // Preserve a still-valid token during transient refresh trouble, but
-          // never reuse one whose expiration has already passed.
-          SharedPreferencesUtil().authToken = '';
-        }
-        break;
-      case AuthTokenMissingUser():
-        throw AuthTokenUnavailableException(refreshResult);
-      case AuthTokenMissingToken():
-        if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
-            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
-          );
-        }
-        throw AuthTokenUnavailableException(refreshResult);
-      case AuthTokenTerminalFailure(:final code):
-        if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
-            AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
-          );
-        }
-        throw AuthTokenUnavailableException(refreshResult);
+    if (Env.useOidc) {
+      // OIDC (ADR-0038): refresh through the OIDC provider, not Firebase.
+      final outcome = await OidcAuthService.instance.refresh();
+      if (!outcome.ok && expiry.isBefore(DateTime.now())) {
+        // Expired with no usable refresh token: drop it, forcing re-login.
+        SharedPreferencesUtil().authToken = '';
+      }
+      hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+      if (!hasAuthToken) throw AuthTokenUnavailableException(const AuthTokenMissingToken());
+    } else {
+      final refreshResult = await AuthService.instance.refreshIdToken();
+      switch (refreshResult) {
+        case AuthTokenSuccess(:final token):
+          SharedPreferencesUtil().authToken = token;
+          break;
+        case AuthTokenTransientFailure():
+          if (expiry.isBefore(DateTime.now())) {
+            // Preserve a still-valid token during transient refresh trouble, but
+            // never reuse one whose expiration has already passed.
+            SharedPreferencesUtil().authToken = '';
+          }
+          break;
+        case AuthTokenMissingUser():
+          throw AuthTokenUnavailableException(refreshResult);
+        case AuthTokenMissingToken():
+          if (expireTerminalSession) {
+            await AuthService.instance.expireSession(
+              const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
+            );
+          }
+          throw AuthTokenUnavailableException(refreshResult);
+        case AuthTokenTerminalFailure(:final code):
+          if (expireTerminalSession) {
+            await AuthService.instance.expireSession(
+              AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
+            );
+          }
+          throw AuthTokenUnavailableException(refreshResult);
+      }
+      hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+      if (!hasAuthToken) throw AuthTokenUnavailableException(refreshResult);
     }
-    hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
-    if (!hasAuthToken) throw AuthTokenUnavailableException(refreshResult);
   }
 
   if (!hasAuthToken) throw AuthTokenUnavailableException(const AuthTokenMissingToken());

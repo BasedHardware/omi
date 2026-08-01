@@ -51,4 +51,21 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
+
+  // Additive OIDC client (ADR-0038). Default 'firebase' → existing flow untouched.
+  @override
+  @EnviedField(varName: 'AUTH_BACKEND', obfuscate: false, defaultValue: 'firebase')
+  final String? authBackend = _ProdEnv.authBackend;
+
+  @override
+  @EnviedField(varName: 'OIDC_ISSUER', obfuscate: false, defaultValue: '')
+  final String? oidcIssuer = _ProdEnv.oidcIssuer;
+
+  @override
+  @EnviedField(varName: 'OIDC_CLIENT_ID', obfuscate: false, defaultValue: '')
+  final String? oidcClientId = _ProdEnv.oidcClientId;
+
+  @override
+  @EnviedField(varName: 'OIDC_REDIRECT_SCHEME', obfuscate: false, defaultValue: '')
+  final String? oidcRedirectScheme = _ProdEnv.oidcRedirectScheme;
 }

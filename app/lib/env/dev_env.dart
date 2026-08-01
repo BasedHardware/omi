@@ -51,4 +51,21 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
+
+  // Additive OIDC client (ADR-0038). Default 'firebase' → existing flow untouched.
+  @override
+  @EnviedField(varName: 'AUTH_BACKEND', obfuscate: false, defaultValue: 'firebase')
+  final String? authBackend = _DevEnv.authBackend;
+
+  @override
+  @EnviedField(varName: 'OIDC_ISSUER', obfuscate: false, defaultValue: '')
+  final String? oidcIssuer = _DevEnv.oidcIssuer;
+
+  @override
+  @EnviedField(varName: 'OIDC_CLIENT_ID', obfuscate: false, defaultValue: '')
+  final String? oidcClientId = _DevEnv.oidcClientId;
+
+  @override
+  @EnviedField(varName: 'OIDC_REDIRECT_SCHEME', obfuscate: false, defaultValue: '')
+  final String? oidcRedirectScheme = _DevEnv.oidcRedirectScheme;
 }

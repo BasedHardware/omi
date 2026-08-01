@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/utils/logger.dart';
@@ -137,7 +138,13 @@ class AuthService {
         'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
       };
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  bool isSignedIn() {
+    // OIDC (ADR-0038): no Firebase user; the session is the stored token.
+    if (Env.useOidc) {
+      return OidcAuthService.instance.hasStoredSession();
+    }
+    return FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  }
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
@@ -256,6 +263,11 @@ class AuthService {
   Future<void> signOut() async {
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
+    // OIDC (ADR-0038): no Firebase session; end the OIDC session + clear the token.
+    if (Env.useOidc) {
+      await OidcAuthService.instance.logout();
+      return;
+    }
     await _tokenGateway.signOut();
   }
 
@@ -311,6 +323,23 @@ class AuthService {
   Future<AuthTokenResult> refreshIdToken() {
     if (_sessionExpired) {
       return Future<AuthTokenResult>.value(const AuthTokenMissingUser());
+    }
+    // OIDC (ADR-0038): refresh via the OIDC provider, not Firebase. Never return
+    // MissingUser (there is no Firebase user) — the 401-recovery/getIdToken paths
+    // would treat it as terminal and expire+clear the session on every restart.
+    if (Env.useOidc) {
+      return OidcAuthService.instance.refresh().then<AuthTokenResult>((o) {
+        final prefs = SharedPreferencesUtil();
+        if (o.ok && prefs.authToken.isNotEmpty) {
+          return AuthTokenSuccess(
+            token: prefs.authToken,
+            expirationTime:
+                prefs.tokenExpirationTime > 0 ? DateTime.fromMillisecondsSinceEpoch(prefs.tokenExpirationTime) : null,
+          );
+        }
+        // Keep the stored session on a transient miss; do not expire/clear it.
+        return const AuthTokenTransientFailure(failureClass: 'oidc_refresh_failed');
+      });
     }
     final currentUid = _tokenGateway.currentUser?.uid;
     if (_refreshUserUid != currentUid) {

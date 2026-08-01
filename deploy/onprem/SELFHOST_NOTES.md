@@ -451,6 +451,54 @@ branch-point and unrelated to the self-host work:
   other files rely on the dev-auth bypass; a single global env cannot satisfy both. The file passes
   in isolation with `LOCAL_DEVELOPMENT` unset.
 
+## OIDC client (Flutter app) — end-to-end (ADR-0038)
+
+The app can authenticate against the same on-prem Keycloak the backend validates (ADR-0034), with
+**zero Firebase**. It is **additive**: the default (`AUTH_BACKEND=firebase`) is byte-identical to
+upstream; the OIDC path is a compile-time flavor.
+
+**App build config** (Envied compile-time, in `app/.dev.env` / `.prod.env`):
+```
+AUTH_BACKEND=oidc
+OIDC_ISSUER=http://<lan-ip>:8090/realms/omi   # must be reachable from the DEVICE, not 127.0.0.1
+OIDC_CLIENT_ID=omi-app
+OIDC_REDIRECT_SCHEME=omiauth
+API_BASE_URL=http://<lan-ip>:10151/
+```
+**Native redirect config** (must match `OIDC_REDIRECT_SCHEME`): Android
+`app/android/app/build.gradle` → `manifestPlaceholders += [appAuthRedirectScheme: 'omiauth']`; iOS
+`Info.plist` → `CFBundleURLTypes` with the same scheme. The client is `flutter_appauth` (Auth Code +
+PKCE via the system browser). When `OIDC_ISSUER` is `http://`, `OidcAuthService` auto-passes
+`allowInsecureConnections: true` (AppAuth refuses cleartext otherwise); `https://` stays strict.
+
+**Keycloak client for the mobile flow** (distinct from the direct-access contract client above — this
+one is **public + standard flow + PKCE**):
+```bash
+# realm 'omi' + public client 'omi-app' with the app's custom-scheme redirect
+curl -X POST "$KC/admin/realms/omi/clients" -H "$AUTH" -H "Content-Type: application/json" -d '{
+  "clientId":"omi-app","publicClient":true,"standardFlowEnabled":true,
+  "redirectUris":["omiauth:/oidc-callback","omiauth:/*"],
+  "attributes":{"pkce.code.challenge.method":"S256"}}'
+# a user with email + first/last name so the token carries email/given_name claims
+```
+
+**Backend for the app test** — `AUTH_BACKEND=oidc` + `OIDC_ISSUER`/`OIDC_JWKS_URL` pointing at the same
+LAN issuer, and **`LOCAL_DEVELOPMENT=false`** (otherwise the dev-bypass uid `123` accepts anything and
+never exercises JWKS). Two gotchas proved live:
+- **Issuer consistency:** the token `iss` equals the URL the device used; it must equal the backend's
+  `OIDC_ISSUER`. Use the same LAN IP on both sides (a token minted via `127.0.0.1` is rejected).
+- **Cleartext:** see `allowInsecureConnections` above.
+
+**Proven E2E (emulator, 2026-08-01):** app → `Sign in with SSO` → Keycloak login page in a Chrome
+Custom Tab → redirect `omiauth:/oidc-callback?code=…` → token stored → authenticated calls reach the
+backend with the Keycloak Bearer, validated via JWKS: `GET /v3/speech-profile 200`,
+`PATCH /v1/users/language 200` (from the device IP, not loopback).
+
+**Session persistence** (proved: force-stop + relaunch keeps the session): all Firebase-auth behavior is
+gated under `Env.useOidc` — the `idTokenChanges`/session-expired listeners are not attached, and
+`refreshIdToken()` refreshes via the OIDC provider (returning a transient failure, never `MissingUser`,
+so the 401-recovery paths never call `expireSession()` and wipe the token). See `docs/BACKLOG.md` D20.
+
 ## Git notes
 
 Work happens on the `fullonprem` branch (ADR-0013). `backend.env` is ignored (`*.env`); the

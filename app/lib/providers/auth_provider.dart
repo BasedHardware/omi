@@ -12,6 +12,7 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -55,6 +56,11 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void _initializeAuthListeners() {
+    // OIDC (ADR-0038): there is no Firebase session. Attaching these listeners
+    // would clear the stored OIDC token on the perpetual `user==null` branch of
+    // idTokenChanges, forcing re-login on every restart. The OIDC session lives
+    // in SharedPreferences (OidcAuthService) and refreshes via getAuthHeader.
+    if (Env.useOidc) return;
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
@@ -120,6 +126,10 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
+    // OIDC (ADR-0038): there is no Firebase user; the session is the stored token.
+    if (Env.useOidc) {
+      return OidcAuthService.instance.hasStoredSession();
+    }
     return !_requiresReauthentication && _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
   }
 
@@ -198,6 +208,37 @@ class AuthenticationProvider extends BaseProvider {
       }
       setLoadingState(false);
     }
+  }
+
+  /// Additive OIDC login (ADR-0038), active only when AUTH_BACKEND=oidc.
+  /// `OidcAuthService.login()` writes authToken+uid to SharedPreferences; here
+  /// we only mirror the tail of `_signIn` (analytics, notify, advance onboarding).
+  Future<void> onOidcSignIn(Function() onSignIn) async {
+    if (loading) return;
+    setLoadingState(true);
+    try {
+      final outcome = await OidcAuthService.instance.login();
+      if (outcome.ok) {
+        authToken = SharedPreferencesUtil().authToken;
+        _requiresReauthentication = false;
+        NotificationService.instance.saveNotificationToken();
+        PlatformManager.instance.analytics.identify();
+        notifyListeners();
+        onSignIn();
+      } else {
+        Logger.debug('OIDC sign in failed: ${outcome.error}');
+        AppSnackbar.showSnackbarError(
+          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+        );
+      }
+    } catch (e, stackTrace) {
+      Logger.debug('OIDC sign in error: $e');
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+      );
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    }
+    setLoadingState(false);
   }
 
   Future<String?> _getIdToken() async {

@@ -1883,6 +1883,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get signInWithGoogle => 'Влезте с Google';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Като продължавате, вие се съгласявате с нашата ';
 
   @override

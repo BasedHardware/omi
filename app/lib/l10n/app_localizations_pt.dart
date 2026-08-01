@@ -1861,6 +1861,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get signInWithGoogle => 'Entrar com Google';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Ao continuar, você concorda com nossos ';
 
   @override

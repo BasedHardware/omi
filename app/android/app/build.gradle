@@ -105,6 +105,8 @@ android {
         multiDexEnabled true
         buildConfigField("String", "INTERCOM_APP_ID", "\"${env.getProperty('INTERCOM_APP_ID', '')}\"")
         buildConfigField("String", "INTERCOM_ANDROID_API_KEY", "\"${env.getProperty('INTERCOM_ANDROID_API_KEY', '')}\"")
+        // flutter_appauth OIDC redirect (ADR-0038); must match OIDC_REDIRECT_SCHEME in the env.
+        manifestPlaceholders += [appAuthRedirectScheme: 'omiauth']
     }
 
     signingConfigs {

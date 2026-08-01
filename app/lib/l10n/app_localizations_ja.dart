@@ -1845,6 +1845,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signInWithGoogle => 'Googleでサインイン';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => '続行することで、';
 
   @override

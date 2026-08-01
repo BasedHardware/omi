@@ -1882,6 +1882,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get signInWithGoogle => 'Увійти через Google';
 
   @override
+  String get signInWithSSO => 'Sign in with SSO';
+
+  @override
   String get byContinuingAgree => 'Продовжуючи, ви погоджуєтесь з нашою ';
 
   @override

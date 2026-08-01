@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -70,14 +71,15 @@ class _AuthComponentState extends State<AuthComponent> {
                     const SizedBox(height: 32),
 
                     // Sign in buttons
-                    if (Platform.isIOS || Platform.isAndroid) ...[
+                    if (Env.useOidc) ...[
+                      // OIDC SSO login (ADR-0038) — shown only when AUTH_BACKEND=oidc.
                       SizedBox(
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            provider.onAppleSignIn(widget.onSignIn);
+                            provider.onOidcSignIn(widget.onSignIn);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -87,50 +89,81 @@ class _AuthComponentState extends State<AuthComponent> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const FaIcon(FontAwesomeIcons.apple, size: 24),
+                              const FaIcon(FontAwesomeIcons.key, size: 20),
                               const SizedBox(width: 8),
                               Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
+                                context.l10n.signInWithSSO,
+                                style:
+                                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Google sign in button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          provider.onGoogleSignIn(widget.onSignIn);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                    ] else ...[
+                      if (Platform.isIOS || Platform.isAndroid) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              provider.onAppleSignIn(widget.onSignIn);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                             ),
-                          ],
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const FaIcon(FontAwesomeIcons.apple, size: 24),
+                                const SizedBox(width: 8),
+                                Text(
+                                  context.l10n.signInWithApple,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'Manrope',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Google sign in button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            provider.onGoogleSignIn(widget.onSignIn);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const FaIcon(FontAwesomeIcons.google, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                context.l10n.signInWithGoogle,
+                                style:
+                                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
 
                     const SizedBox(height: 24),
 
