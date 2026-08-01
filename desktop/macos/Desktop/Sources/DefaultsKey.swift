@@ -63,11 +63,13 @@ enum DefaultsKey: String {
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
-  // Task-order migration keys are typed so TasksPage and its tests share the
+// Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

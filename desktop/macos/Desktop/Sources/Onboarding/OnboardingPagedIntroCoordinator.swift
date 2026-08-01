@@ -868,10 +868,29 @@ func loadGmailAccounts() async {
 
   private func awaitGmailAccountSelectionIfNeeded() async {
     guard !GmailSelectionStore.hasMadeChoice else { return }
-    let accounts = (try? await GmailAccountProbe.availableAccounts()) ?? []
+    // Re-check after the probe: the user may have picked an account from the
+    // manual picker while the probe was still running, before this waiter
+    // exists. Installing a continuation after a choice is already persisted
+    // would suspend the gmail task forever.
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    let accounts: [GmailAccountOption]
+    do {
+      accounts = try await GmailAccountProbe.availableAccounts()
+    } catch {
+      // Probe failure is not "zero or one account": a transient failure would
+      // otherwise silently fall back to the first readable profile — the
+      // exact junk-account behavior this feature exists to prevent. Fall back
+      // to the automatic default but record the fail-open.
+      log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      return
+    }
     guard accounts.count > 1 else { return }
     gmailAccounts = accounts
     gmailAwaitingSelection = true
+    // Surface the picker automatically; nothing else ever reacts to
+    // gmailAwaitingSelection, so without this the gmail background task would
+    // suspend forever and onboarding research would never finish.
+    showingGmailAccountPicker = true
     await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         gmailSelectionWaiter = continuation
@@ -888,6 +907,13 @@ func loadGmailAccounts() async {
     gmailSelectionWaiter = nil
     gmailAwaitingSelection = false
     waiter.resume()
+  }
+
+/// Dismissing the picker without a choice must not strand the gmail
+  /// background task: fall back to the automatic (first readable) account.
+  func cancelGmailAccountSelection() {
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
   }
 
   func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {

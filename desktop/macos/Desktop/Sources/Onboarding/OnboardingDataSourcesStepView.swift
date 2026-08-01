@@ -71,10 +71,11 @@ struct OnboardingDataSourcesStepView: View {
         GmailAccountPickerView(
           accounts: coordinator.gmailAccounts,
           selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+          hasMadeChoice: GmailSelectionStore.hasMadeChoice,
           onSelect: { cookiePath, label in
             coordinator.selectGmailAccount(cookiePath, label: label)
           },
-          onCancel: { coordinator.showingGmailAccountPicker = false }
+          onCancel: { coordinator.cancelGmailAccountSelection() }
         )
       }
     }
