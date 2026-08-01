@@ -16,10 +16,10 @@ if ! BACKEND_PYTHON="$(dev_harness_canonical_python)" \
   fi
 fi
 
-"$BACKEND_PYTHON" "$ROOT_DIR/.github/scripts/check-release-process-guards.py" "$@"
-
 # The guard's behavioral contract lives in the backend unit suite (it executes
 # check_desktop_qualification_runner against a mutated promotion workflow). Run
 # it here so a guard-only diff cannot weaken the trusted-repository gate without
 # exercising the mutation test.
 "$BACKEND_PYTHON" -m pytest -q "$ROOT_DIR/backend/tests/unit/test_desktop_release_scripts.py"
+
+exec "$BACKEND_PYTHON" "$ROOT_DIR/.github/scripts/check-release-process-guards.py" "$@"
