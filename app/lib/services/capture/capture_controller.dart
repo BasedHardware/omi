@@ -18,6 +18,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -29,6 +30,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -71,6 +73,7 @@ class CaptureController extends ChangeNotifier
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
   final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
+  Geolocation? _sessionGeolocation;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -661,6 +664,7 @@ class CaptureController extends ChangeNotifier
           force: force,
           source: source,
           customSttConfig: effectiveConfig,
+          geolocation: _sessionGeolocation,
         );
     if (_socket == null) {
       _startKeepAliveServices();
@@ -1064,16 +1068,19 @@ class CaptureController extends ChangeNotifier
 
     await SharedPreferencesUtil().saveString(
       'nativeBleStreamConfig',
-      jsonEncode({
-        'deviceId': device.id,
-        'codec': codec.toString(),
-        'sampleRate': mapCodecToSampleRate(codec),
-        'source': _getConversationSourceFromDevice(),
-        'apiBaseUrl': Env.apiBaseUrl ?? 'https://api.omiapi.com/',
-        'serviceUuid': audioTarget.key,
-        'characteristicUuid': audioTarget.value,
-        'deviceType': device.type.name,
-      }),
+      jsonEncode(
+        buildNativeBleStreamConfig(
+          deviceId: device.id,
+          codec: codec.toString(),
+          sampleRate: mapCodecToSampleRate(codec),
+          source: _getConversationSourceFromDevice(),
+          apiBaseUrl: Env.apiBaseUrl ?? 'https://api.omiapi.com/',
+          serviceUuid: audioTarget.key,
+          characteristicUuid: audioTarget.value,
+          deviceType: device.type.name,
+          geolocation: _sessionGeolocation,
+        ),
+      ),
     );
     // Batch (offline) capture: tell the native writer where to store .bin files
     // and ensure the native realtime socket is disabled while batch mode is on
@@ -1320,11 +1327,15 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<void> _captureSessionLocation() async {
+    _sessionGeolocation = await _conversationLocationCapture.captureAndUpload();
+    _wal.getSyncs().phone.setSessionGeolocation(_sessionGeolocation);
+  }
+
   streamRecording() async {
-    // The backend snapshots its cached location when finalizing a conversation.
-    // Complete this bounded update before any live or batch capture path can
-    // create/finalize that conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    // Capture once at session start. The snapshot is carried privately in the
+    // live handshake and inherited by any WAL written for delayed/offline sync.
+    await _captureSessionLocation();
 
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
@@ -1452,6 +1463,12 @@ class CaptureController extends ChangeNotifier
     final docs = await getApplicationDocumentsDirectory();
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     await SharedPreferencesUtil().saveBool('phoneBatchAuto', auto);
+    final geolocation = _sessionGeolocation;
+    if (geolocation == null) {
+      await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    } else {
+      await SharedPreferencesUtil().saveString('phoneBatchGeolocation', jsonEncode(geolocation.toJson()));
+    }
     if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
     if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
 
@@ -1521,7 +1538,7 @@ class CaptureController extends ChangeNotifier
 
     // Ensure even very short device recordings have a location in Redis before
     // the backend is able to finalize their conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    await _captureSessionLocation();
 
     await _resetStateVariables();
     await _resetState();

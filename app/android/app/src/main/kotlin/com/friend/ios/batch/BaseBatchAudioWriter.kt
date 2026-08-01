@@ -103,6 +103,7 @@ abstract class BaseBatchAudioWriter(
             currentBytes = file.length()
             currentFrames = 0
             lastFsyncMs = nowMs
+            onOpenedLocked(file)
             Log.i(tag, "opened batch file $fileName")
             true
         } catch (e: Exception) {
@@ -209,6 +210,9 @@ abstract class BaseBatchAudioWriter(
 
     /** Hook for subclasses to reset their gap/session tracking when a file closes. */
     protected open fun onClosedLocked() {}
+
+    /** Hook for recording-owned metadata that must be copied beside a new file. */
+    protected open fun onOpenedLocked(partFile: File) {}
 
     /** Notify Dart (when the engine is alive) that a file finalized, so the
      *  recordings list rescans without waiting for a BLE disconnect. */

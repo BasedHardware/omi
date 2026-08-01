@@ -99,6 +99,7 @@ class BaseBatchAudioWriter {
         currentBytes = Int64(end)
         currentFrames = 0
         lastFsyncMs = nowMs
+        onOpenedLocked(url)
         NSLog("[\(tag)] opened \(fileName)")
         return true
     }
@@ -191,6 +192,9 @@ class BaseBatchAudioWriter {
 
     /// Hook for subclasses to reset their gap/session tracking when a file closes.
     func onClosedLocked() {}
+
+    /// Hook for recording-owned metadata that must be copied beside a new file.
+    func onOpenedLocked(_ partURL: URL) {}
 
     /// Notify Dart that a file finalized, so the recordings list rescans without
     /// waiting for a BLE disconnect.

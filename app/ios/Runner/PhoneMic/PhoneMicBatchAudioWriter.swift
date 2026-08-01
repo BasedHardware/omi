@@ -28,6 +28,24 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
 
+    override func onOpenedLocked(_ partURL: URL) {
+        guard let raw = UserDefaults.standard.string(forKey: "flutter.phoneBatchGeolocation"),
+              let data = raw.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+        else { return }
+
+        let audioURL = partURL.deletingPathExtension()
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        do {
+            try data.write(to: sidecarURL, options: .atomic)
+        } catch {
+            // Location is optional: never interrupt or discard audio capture.
+            NSLog("[PhoneBatchWriter] failed to persist bounded recording location sidecar: \(type(of: error))")
+        }
+    }
+
     /// `dir` is resolved once at bring-up (a missing/empty `flutter.batchAudioDir`
     /// fails the session with batch_dir_unavailable before this writer is created),
     /// so it is never re-checked per append. The recovery prefix `audio_omibatchphone`

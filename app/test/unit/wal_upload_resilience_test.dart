@@ -86,7 +86,7 @@ void main() {
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+        uploader: (files, {onUploadProgress, conversationId, geolocation, syncLane = SyncUploadLane.fresh}) async {
           throw StateError('deterministic test upload failure');
         },
         fairUseStatusLoader: () async => {'stage': 'none'},

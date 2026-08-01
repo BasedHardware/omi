@@ -21,9 +21,11 @@ void main() {
       },
     );
 
-    expect(await capture.captureAndUpload(), isTrue);
+    final result = await capture.captureAndUpload();
+    expect(result, isNotNull);
     expect(uploaded?.latitude, 28.6139);
     expect(uploaded?.longitude, 77.2090);
+    expect(result?.captureSource, 'current_position');
   });
 
   test('uses the last known position when a fresh fix is slow', () async {
@@ -38,11 +40,14 @@ void main() {
         return true;
       },
       currentPositionTimeout: const Duration(milliseconds: 1),
+      now: () => DateTime.utc(2026, 7, 21, 0, 10),
     );
 
-    expect(await capture.captureAndUpload(), isTrue);
+    final result = await capture.captureAndUpload();
+    expect(result, isNotNull);
     expect(uploaded?.latitude, 51.5072);
     expect(uploaded?.longitude, -0.1276);
+    expect(result?.captureSource, 'last_known_position');
   });
 
   test('does not upload without location permission', () async {
@@ -58,8 +63,34 @@ void main() {
       },
     );
 
-    expect(await capture.captureAndUpload(), isFalse);
+    expect(await capture.captureAndUpload(), isNull);
     expect(uploads, 0);
+  });
+
+  test('rejects a stale last-known position', () async {
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () => Completer<Position>().future,
+      getLastKnownPosition: () async => _position(latitude: 51.5072, longitude: -0.1276),
+      upload: (_) async => true,
+      currentPositionTimeout: const Duration(milliseconds: 1),
+      now: () => DateTime.utc(2026, 7, 21, 0, 16),
+    );
+
+    expect(await capture.captureAndUpload(), isNull);
+  });
+
+  test('preserves the snapshot when the compatibility upload fails', () async {
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.always,
+      getCurrentPosition: () async => _position(latitude: 1, longitude: 2),
+      getLastKnownPosition: () async => null,
+      upload: (_) async => false,
+    );
+
+    expect((await capture.captureAndUpload())?.latitude, 1);
   });
 }
 

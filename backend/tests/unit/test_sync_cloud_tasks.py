@@ -900,6 +900,7 @@ def _load_sync_router_for_fast_path():
     import importlib.util
     from io import BytesIO
     from fastapi.routing import APIRoute
+    from models.geolocation import geolocation_from_private_header as actual_geolocation_from_private_header
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
@@ -926,6 +927,7 @@ def _load_sync_router_for_fast_path():
         'models',
         'models.conversation',
         'models.conversation_enums',
+        'models.geolocation',
         'models.sync_audio',
         'models.transcript_segment',
         'utils',
@@ -1099,6 +1101,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
     sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+    sys.modules['models.geolocation'].geolocation_from_private_header = actual_geolocation_from_private_header
 
     sys.modules.pop('routers.sync', None)
     sys.modules.pop('utils.sync.pipeline', None)
@@ -2320,6 +2323,52 @@ async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypat
         payload = module.enqueue_sync_job.call_args.args[0]
         assert payload['client_device_id'] == 'ios_a1b2c3d4'
         assert payload['client_platform'] == 'ios'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_carries_private_recording_location_into_cloud_task():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    header = json.dumps(
+        {
+            'latitude': 40.7128,
+            'longitude': -74.006,
+            'captured_at': '2026-08-01T12:30:00Z',
+            'capture_source': 'current_position',
+            'accuracy': 8.5,
+        }
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            x_omi_conversation_geolocation=header,
+        )
+
+        assert response.status_code == 202
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['geolocation'] == {
+            'latitude': 40.7128,
+            'longitude': -74.006,
+            'google_place_id': None,
+            'address': None,
+            'location_type': None,
+            'captured_at': '2026-08-01T12:30:00Z',
+            'capture_source': 'current_position',
+            'accuracy': 8.5,
+            'altitude': None,
+        }
     finally:
         sys.modules.pop('routers.sync', None)
         for mod_name, orig in saved_modules.items():

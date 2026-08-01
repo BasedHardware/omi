@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
@@ -302,6 +303,32 @@ void main() {
 
       expect(batch.length, 20);
       expect(batch.map((wal) => wal.timerStart), historical.take(20).map((wal) => wal.timerStart));
+    });
+
+    test('historical WALs with different recording locations are never uploaded as one conversation batch', () {
+      const now = 2000000000;
+      final firstCapture = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        time: DateTime.utc(2033, 5, 18, 3, 30),
+        captureSource: 'current_position',
+      );
+      final secondCapture = Geolocation(
+        latitude: 34.0522,
+        longitude: -118.2437,
+        time: DateTime.utc(2033, 5, 18, 4, 30),
+        captureSource: 'current_position',
+      );
+      final wals = [
+        Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 7 * 60 * 60 - 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: secondCapture),
+      ];
+
+      final batch = nextSyncUploadBatch(wals, now);
+
+      expect(batch, hasLength(2));
+      expect(batch.every((wal) => identical(wal.geolocation, firstCapture)), isTrue);
     });
 
     test('an oversized fresh conversation is downgraded as one unit', () {

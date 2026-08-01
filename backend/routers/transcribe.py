@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from firebase_admin.auth import InvalidIdTokenError
 
+from models.geolocation import Geolocation, geolocation_from_private_header
 from routers.listen.contracts import CustomSttMode, ListenRequest
 from routers.listen.runtime import run_listen_session
 from utils.client_device import (
@@ -47,6 +48,7 @@ async def _stream_handler(
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
     client_device_context: Optional[ClientDeviceContext] = None,
+    geolocation: Optional[Geolocation] = None,
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
     await run_listen_session(
@@ -69,6 +71,7 @@ async def _stream_handler(
             call_id=call_id,
             client_conversation_id=client_conversation_id,
             client_device_context=client_device_context,
+            geolocation=geolocation,
         )
     )
 
@@ -91,6 +94,7 @@ async def _listen(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    geolocation: Optional[Geolocation] = None,
 ) -> None:
     try:
         await websocket.accept()
@@ -115,6 +119,7 @@ async def _listen(
         vad_gate_override=vad_gate_override,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        geolocation=geolocation,
     )
 
 
@@ -138,6 +143,7 @@ async def listen_handler(
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
 ) -> None:
+    geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await _listen(
         websocket,
         uid,
@@ -156,6 +162,7 @@ async def listen_handler(
         vad_gate_override=vad_gate if vad_gate in ('enabled', 'disabled') else None,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        geolocation=geolocation,
     )
 
 
@@ -201,6 +208,7 @@ async def web_listen_handler(
         await websocket.close(code=1008, reason='Auth error')
         return
     context = resolve_client_device_from_websocket_auth_message(first_message)
+    geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await websocket.send_json({'type': 'auth_response', 'success': True})
     await _stream_handler(
         websocket,
@@ -218,4 +226,5 @@ async def web_listen_handler(
         call_id=call_id,
         client_conversation_id=client_conversation_id,
         client_device_context=context,
+        geolocation=geolocation,
     )

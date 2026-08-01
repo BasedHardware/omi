@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from utils.cloud_tasks import SYNC_JOB_TASK_PAYLOAD_KEYS
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -38,6 +40,18 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'npm run test:sync-cloud-tasks-stack:emulator' in job
 
     assert package['scripts']['test:sync-cloud-tasks-stack:emulator'] == 'backend/testing/sync_cloud_tasks_stack/run.sh'
+    run_script = (_REPO_ROOT / 'backend' / 'testing' / 'sync_cloud_tasks_stack' / 'run.sh').read_text(encoding='utf-8')
+    assert 'websocketPort' in run_script
     sync_contract = next(contract for contract in contracts['workflows'] if contract['id'] == 'sync_cloud_tasks')
     assert 'backend/testing/sync_cloud_tasks_stack/**' in sync_contract['sources']
     assert 'tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py' in sync_contract['tests']
+
+
+def test_gauntlet_recorder_shares_the_production_task_payload_schema() -> None:
+    """The recorder must accept every durable field admission can enqueue."""
+    recorder = (_REPO_ROOT / 'backend' / 'testing' / 'sync_cloud_tasks_stack' / 'cloud_tasks.py').read_text(
+        encoding='utf-8'
+    )
+
+    assert 'set(body) != SYNC_JOB_TASK_PAYLOAD_KEYS' in recorder
+    assert 'geolocation' in SYNC_JOB_TASK_PAYLOAD_KEYS

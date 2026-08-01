@@ -1066,6 +1066,54 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
 
 
 @pytest.mark.anyio
+async def test_async_finalizer_records_degraded_redis_location_fallback(monkeypatch):
+    conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.completed, language='en')
+    fallback = MagicMock()
+    resolved = MagicMock()
+    integrations = AsyncMock(return_value=[])
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.completed.value},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(
+        persisted_finalizer,
+        'get_cached_user_geolocation',
+        lambda uid: {'latitude': 37.7749, 'longitude': -122.4194},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'record_fallback', fallback)
+    monkeypatch.setattr(persisted_finalizer, 'async_resolve_geolocation', AsyncMock(return_value=resolved))
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+    )
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+
+    await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    fallback.assert_called_once_with(
+        component='conversation_finalization',
+        from_mode='conversation_snapshot',
+        to_mode='redis_user_cache',
+        reason='other',
+        outcome='degraded',
+        log=persisted_finalizer.logger,
+    )
+    assert conversation.geolocation is resolved
+
+
+@pytest.mark.anyio
 async def test_finalizer_fences_a_deleted_conversation_before_processing(monkeypatch):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)

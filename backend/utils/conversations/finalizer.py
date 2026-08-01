@@ -19,6 +19,7 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +82,25 @@ async def finalize_persisted_conversation(
         conversation.status = ConversationStatus.processing
 
     try:
-        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
-        if geolocation:
-            geolocation = Geolocation(**geolocation)
-            # Keep the cached coordinates when the geocode lookup misses instead of dropping them.
-            conversation.geolocation = await async_resolve_geolocation(geolocation)
+        # A location persisted with the recording session or WAL is the
+        # canonical start-time snapshot. Redis remains only a compatibility
+        # fallback for clients released before that contract.
+        persisted_geolocation = getattr(conversation, 'geolocation', None)
+        if isinstance(persisted_geolocation, Geolocation):
+            conversation.geolocation = await async_resolve_geolocation(persisted_geolocation)
+        else:
+            geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
+            if geolocation:
+                record_fallback(
+                    component='conversation_finalization',
+                    from_mode='conversation_snapshot',
+                    to_mode='redis_user_cache',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                geolocation = Geolocation(**geolocation)
+                conversation.geolocation = await async_resolve_geolocation(geolocation)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path

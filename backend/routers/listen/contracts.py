@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from utils.client_device import ClientDeviceContext
+from models.geolocation import Geolocation
 
 
 class CustomSttMode(str, Enum):
@@ -40,6 +41,7 @@ class ListenRequest:
     call_id: Optional[str] = None
     client_conversation_id: Optional[str] = None
     client_device_context: Optional[ClientDeviceContext] = None
+    geolocation: Optional[Geolocation] = None
 
 
 @dataclass
