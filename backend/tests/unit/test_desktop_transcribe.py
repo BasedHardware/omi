@@ -1634,15 +1634,15 @@ class TestDurationBudgetEnforcement:
             with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)) as mock_budget:
                 resp = client.post(
                     '/v2/voice-message/transcribe',
-                    # 32000 bytes at 16kHz mono = 1 second = 1000ms
-                    content=b'\x00' * 32000,
+                    # 3200 bytes at 16kHz mono = 0.1 second = 100ms
+                    content=b'\x00' * 3200,
                     headers={'Content-Type': 'application/octet-stream'},
                 )
                 assert resp.status_code == 200
                 mock_budget.assert_called_once()
                 call_args = mock_budget.call_args[0]
                 assert call_args[0] == 'test-uid'
-                assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+                assert call_args[1] == 100  # 3200 / (16000*1*2) * 1000
         finally:
             _cleanup_chat_client(saved)
 
