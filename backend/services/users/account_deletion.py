@@ -73,7 +73,7 @@ def _coerce_purge_result(value: object) -> PurgeResult:
         raw = payload.get(failure_key)
         if not isinstance(raw, list):
             continue
-        bucket = result[cast(Literal['required_failures', 'best_effort_failures'], failure_key)]
+        bucket = result[failure_key]
         for item in cast(list[object], raw):
             if isinstance(item, dict):
                 item_dict = cast(dict[str, object], item)
@@ -86,7 +86,7 @@ def _coerce_purge_result(value: object) -> PurgeResult:
     for count_key in ('vectors_deleted', 'recordings_deleted'):
         raw = payload.get(count_key)
         if isinstance(raw, int) and not isinstance(raw, bool):
-            result[cast(Literal['vectors_deleted', 'recordings_deleted'], count_key)] = raw
+            result[count_key] = raw
     return result
 
 
