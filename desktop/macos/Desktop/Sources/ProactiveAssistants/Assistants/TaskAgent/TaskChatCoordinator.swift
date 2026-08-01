@@ -685,6 +685,78 @@ final class TaskChatCoordinator: ObservableObject {
           return ["error": String(describing: error)]
         }
       }
+
+      DesktopAutomationActionRegistry.shared.register(
+        name: "task_thread_send_message",
+        summary: "Send a message into the active task thread; returns once the turn is accepted",
+        params: ["query"]
+      ) { [weak self] params in
+        guard let self, let state = self.activeTaskState else {
+          return ["error": "task thread state unavailable"]
+        }
+        let query = params["query"] ?? ""
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          return ["error": "empty query"]
+        }
+        let messagesBefore = state.messages.count
+        Task { await state.sendMessage(query) }
+        return [
+          "accepted": "true",
+          "workstream_id": state.workstreamId,
+          "messages_before": "\(messagesBefore)",
+        ]
+      }
+
+      DesktopAutomationActionRegistry.shared.register(
+        name: "wait_task_thread_streaming_reveal",
+        summary: "Wait for visible assistant text while the task-thread turn is still streaming",
+        params: ["timeoutMs", "pollMs"]
+      ) { [weak self] params in
+        guard let self, let state = self.activeTaskState else {
+          return ["error": "task thread state unavailable"]
+        }
+        let timeoutMs = max(1_000, Int(params["timeoutMs"] ?? "") ?? 10_000)
+        let pollMs = max(25, Int(params["pollMs"] ?? "") ?? 50)
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+        while Date() < deadline {
+          if let message = state.messages.last(where: {
+            $0.sender == .ai && $0.isStreaming
+              && !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          }) {
+            return [
+              "streaming_reveal_observed": "true",
+              "visible_assistant_text": message.copyableText,
+              "is_streaming": "true",
+            ]
+          }
+          try? await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+        }
+        return ["streaming_reveal_observed": "false", "error": "timeout"]
+      }
+
+      DesktopAutomationActionRegistry.shared.register(
+        name: "wait_task_thread_idle",
+        summary: "Wait for the task-thread assistant turn to finish streaming",
+        params: ["timeoutMs"]
+      ) { [weak self] params in
+        guard let self, let state = self.activeTaskState else {
+          return ["error": "task thread state unavailable"]
+        }
+        let timeoutMs = max(1_000, Int(params["timeoutMs"] ?? "") ?? 120_000)
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+        while Date() < deadline {
+          if !state.messages.contains(where: { $0.isStreaming }) {
+            let lastAssistant = state.messages.last(where: { $0.sender == .ai })
+            return [
+              "idle": "true",
+              "last_assistant_text": lastAssistant?.copyableText ?? "",
+              "message_count": "\(state.messages.count)",
+            ]
+          }
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return ["idle": "false", "error": "timeout"]
+      }
     }
 
     private func buildScenario13RuntimeProjection(

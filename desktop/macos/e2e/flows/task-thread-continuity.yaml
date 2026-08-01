@@ -1,10 +1,11 @@
 version: 2
 name: task-thread-continuity
 tier: 2
-description: Hermetic task-backed thread continuity through the app kernel
+description: Hermetic task-backed thread continuity through the app kernel, including a paced streamed task-chat turn
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
 preconditions:
   - automation_bridge_ready
 
@@ -23,6 +24,44 @@ steps:
       result.detail.runtime_bridge: "live_app_kernel"
 
   - id: S2
+    name: Send a paced streaming query into the task thread
+    bridge.action:
+      name: task_thread_send_message
+      params:
+        query: "Return the paced streaming response [[STREAMING:chat-hermetic]]."
+    expect:
+      result.detail.accepted: "true"
+
+  - id: S3
+    name: Wait for visible assistant text during task-thread streaming
+    bridge.action:
+      name: wait_task_thread_streaming_reveal
+      params:
+        timeoutMs: "10000"
+        pollMs: "25"
+    expect:
+      result.detail.streaming_reveal_observed: "true"
+      result.detail.is_streaming: "true"
+
+  - id: S4
+    name: Wait for the task-thread chat to go idle
+    bridge.action:
+      name: wait_task_thread_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S5
+    name: Assert the paced stream settles to its complete reply
+    bridge.action:
+      name: wait_task_thread_idle
+      params:
+        timeoutMs: "1000"
+    expect:
+      result.detail.last_assistant_text: "Paced streaming reveals this response in visible increments before the terminal event arrives."
+
+  - id: S6
     name: Logs clean
     log.expect:
       absent:
