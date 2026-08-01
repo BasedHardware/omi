@@ -59,8 +59,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app =
-      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -763,28 +762,28 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 ),
               )
             : widget.showTypingIndicator
-            ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-              )
-            : Builder(
-                builder: (context) {
-                  String? selectedText;
-                  return SelectionArea(
-                    onSelectionChanged: (SelectedContent? selectedContent) {
-                      selectedText = selectedContent?.plainText;
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+                  )
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                            widget.onAskOmi?.call(text);
+                          }, selectedText: selectedText);
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
                     },
-                    contextMenuBuilder: (context, selectableRegionState) {
-                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                        widget.onAskOmi?.call(text);
-                      }, selectedText: selectedText);
-                    },
-                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                  );
-                },
-              ),
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -807,9 +806,12 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
                   var memProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  var idx = -1;
-                  var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  // Groups are keyed by the local day of `startedAt ?? createdAt`; deriving the
+                  // key from the message's raw UTC `createdAt` missed the group for anyone off
+                  // UTC and the tap silently did nothing (#10980).
+                  final located = memProvider.getConversationDateAndIndexById(data.$2.id);
+                  var idx = located?.$2 ?? -1;
+                  var date = located?.$1 ?? conversationLocalDayKey(data.$2.createdAt);
 
                   if (idx != -1) {
                     context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
