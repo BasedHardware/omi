@@ -19,6 +19,10 @@ GUARDS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GUARDS)
 REVIEWED_PARENT = "4e391ee726642d99abc2c61966dcd80a836e6c1c"
 RAW_SCANNER_PARENT = "11ac6d9e9d27677d06d513364f2e658f5ed99870"
+# The reviewed parent predates the INV-BETA-1 "Create Omi Beta variant" step, so it counts 21
+# canonical script steps where main now approves 22. These probes assert what the parent's
+# narrower publisher lock accepted, not the step inventory, so its era's count is noise here.
+STALE_PARENT_STEP_COUNT_ERROR = "canonical workflow must retain exactly 21 approved script steps"
 
 
 def _copy_contract_tree(tmp_path: Path, monkeypatch) -> Path:
@@ -60,6 +64,12 @@ def _load_parent_guard(tmp_path: Path, revision: str = REVIEWED_PARENT):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _reviewed_parent_errors(parent) -> list[str]:
+    return [
+        error for error in parent.check_codemagic_release_publishers() if error != STALE_PARENT_STEP_COUNT_ERROR
+    ]
 
 
 def _append_unreviewed_workflow(
@@ -453,7 +463,7 @@ def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_r
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
-    assert parent.check_codemagic_release_publishers() == [], script
+    assert _reviewed_parent_errors(parent) == [], script
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
@@ -470,7 +480,7 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
-    assert parent.check_codemagic_release_publishers() == []
+    assert _reviewed_parent_errors(parent) == []
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
@@ -511,7 +521,7 @@ def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeyp
     parent = _load_parent_guard(tmp_path)
     _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
-    parent_errors = parent.check_codemagic_release_publishers()
+    parent_errors = _reviewed_parent_errors(parent)
     assert (parent_errors == []) is parent_accepts, parent_errors
 
     errors = GUARDS.check_codemagic_release_publishers()
@@ -532,7 +542,7 @@ def test_global_document_raw_lock_rejects_semantically_equivalent_yaml_rewrite(t
     parent = _load_parent_guard(tmp_path)
     _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
-    assert parent.check_codemagic_release_publishers() == []
+    assert _reviewed_parent_errors(parent) == []
 
     _mutate(
         codemagic,
