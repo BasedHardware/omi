@@ -259,13 +259,18 @@ class MemoriesProvider extends ChangeNotifier {
     // Keep an optimistic delete hidden throughout its undo window. Use the
     // snapshot taken before the fetch so a concurrent finalization that
     // clears _pendingDeletionId mid-fetch cannot reinsert the row.
-    _memories = tombstoneId != null ? all.where((memory) => memory.id != tombstoneId).toList() : all;
+    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
+    // after loadMemories() started (tombstoneId was null at snapshot), the
+    // stale response still contains it and would reinsert the row.
+    final currentTombstoneId = _pendingDeletionId;
+    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
+    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
     _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (pending.id != tombstoneId && !_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }

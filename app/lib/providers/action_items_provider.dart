@@ -232,9 +232,10 @@ class ActionItemsProvider extends ChangeNotifier {
         final serverIds = response.actionItems.map((e) => e.id).toSet();
         // Filter into a new list rather than mutating response.actionItems
         // in-place: the response list may be unmodifiable, and aliasing it
-        // would also retire tombstones prematurely.
+        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+        // and retire tombstones prematurely.
         _actionItems = _pendingDeletionIds.isEmpty
-            ? response.actionItems
+            ? List.of(response.actionItems)
             : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         // Lazily retire tombstones once the server confirms the item is gone:
         // any ID still tracked as pending-deletion that did not appear in the
@@ -827,6 +828,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    // Register all bulk-deleted IDs as pending so a concurrent background
+    // fetch cannot reinsert them while the server delete is in flight.
+    _pendingDeletionIds.addAll(ids);
     _selectedItems.clear();
     _isSelectionMode = false;
     notifyListeners();
@@ -840,6 +844,9 @@ class ActionItemsProvider extends ChangeNotifier {
     final deleted = await api.bulkDeleteActionItems(ids);
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      // Clear tombstones on rollback so future refreshes don't filter the
+      // re-inserted items.
+      _pendingDeletionIds.removeAll(ids);
       // Re-insert rows at their original positions, oldest index first.
       final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {

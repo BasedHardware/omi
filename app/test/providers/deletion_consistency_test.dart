@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/memories.dart';
@@ -103,6 +105,48 @@ void main() {
       expect(provider.lastDeletedMemory!.id, 'mem-4');
     });
 
+    test('consecutive deletions finalize the second memory before a refresh', () async {
+      // When two memories are deleted within the undo window, the second
+      // deleteMemory() cancels the first timer and replaces _pendingDeletionId.
+      // The second memory is finalized; the first is a known limitation of
+      // the single-pending-ID design (tracked separately). This test verifies
+      // the current pending memory is finalized and suppressed through refresh.
+      final deletedIds = <String>[];
+      final mem4 = _mem('mem-4a', content: 'second');
+
+      var deletionFinalized = false;
+      final provider = MemoriesProvider(
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+          // Before finalization, the server still has the memory (stale read).
+          // After finalization (server delete completed), it's gone.
+          if (!deletionFinalized) {
+            return GetMemoriesResult([mem4], true);
+          }
+          return const GetMemoriesResult([], true);
+        },
+        deleteMemoryRequest: (id) async {
+          deletedIds.add(id);
+          return true;
+        },
+      );
+      memoryProviders.add(provider);
+
+      provider.deleteMemory(_mem('mem-3a', content: 'first'));
+      provider.deleteMemory(mem4);
+
+      // Confirm pending deletion — this finalizes the second memory.
+      await provider.confirmPendingDeletion();
+      deletionFinalized = true;
+
+      expect(deletedIds, contains('mem-4a'),
+          reason: 'confirmPendingDeletion must finalize the current pending deletion');
+
+      // The finalized second memory must not reappear after refresh.
+      await provider.loadMemories();
+      expect(provider.memories.where((m) => m.id == 'mem-4a'), isEmpty,
+          reason: 'The finalized deletion must remain suppressed after refresh');
+    });
+
     test('loadMemories filters out a pending-deletion memory returned by the server', () async {
       // Drives the production load path through loadMemories() with a
       // controllable fetcher that still returns the deleted ID, and asserts
@@ -141,6 +185,39 @@ void main() {
 
       expect(provider.memories, isEmpty);
       expect(provider.lastDeletedMemory, isNotNull);
+    });
+
+    test('deletion during in-flight loadMemories is suppressed by apply-time re-check', () async {
+      // If the user deletes a memory after loadMemories() has already started
+      // (tombstoneId was null at snapshot), the stale response still contains
+      // the deleted ID. The apply-time re-check of _pendingDeletionId must
+      // filter it out.
+      final victim = _mem('mem-7', content: 'deleted mid-load');
+
+      final fetchCompleter = Completer<GetMemoriesResult>();
+      final provider = MemoriesProvider(
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+          return fetchCompleter.future;
+        },
+        deleteMemoryRequest: (_) async => true,
+      );
+      memoryProviders.add(provider);
+
+      // Start the load — it hangs on the uncompleted fetcher.
+      final loadFuture = provider.loadMemories();
+
+      // Delete the memory while the load is in flight. This sets
+      // _pendingDeletionId after loadMemories() already snapshotted null.
+      provider.deleteMemory(victim);
+      expect(provider.memories, isEmpty, reason: 'Optimistic removal should hide the memory immediately');
+
+      // Complete the fetch with a stale response that still contains the victim.
+      fetchCompleter.complete(GetMemoriesResult([victim], true));
+      await loadFuture;
+
+      expect(provider.memories.where((m) => m.id == 'mem-7'), isEmpty,
+          reason: 'loadMemories must re-check _pendingDeletionId at apply time '
+              'and suppress items deleted after the snapshot was taken');
     });
   });
 
@@ -211,6 +288,7 @@ void main() {
       final deleted = _item('task-3');
 
       var fetchCall = 0;
+      var staleMode = false;
       final provider = newProvider(
         fetcher: (
             {int limit = 100,
@@ -220,22 +298,29 @@ void main() {
             DateTime? startDate,
             DateTime? endDate}) async {
           fetchCall++;
-          // First fetch returns the item (it's still live on the server);
-          // second fetch (after server processed the delete) omits it.
-          if (fetchCall == 1) {
+          // In stale mode the server still returns the deleted item; once
+          // cleared, the server response omits it.
+          if (staleMode) {
             return ActionItemsResponse(actionItems: [deleted]);
           }
           return const ActionItemsResponse(actionItems: []);
         },
       );
 
+      // Let the constructor's _preload() settle so it doesn't consume our
+      // fetchCall sequence.
+      await Future.delayed(Duration.zero);
+
       await provider.deleteActionItem(deleted);
 
-      // First refresh — item still on server; tombstone prevents reinsertion.
+      // First refresh — stale server response still contains the item;
+      // tombstone prevents reinsertion.
+      staleMode = true;
       await provider.fetchActionItems();
       expect(provider.actionItems.where((i) => i.id == 'task-3'), isEmpty);
 
       // Second refresh — server confirms deletion; tombstone is retired.
+      staleMode = false;
       await provider.fetchActionItems();
       expect(provider.actionItems, isEmpty);
     });
