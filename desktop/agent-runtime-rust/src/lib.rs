@@ -343,13 +343,13 @@ impl SubagentSupervisor {
                 .take()
                 .ok_or_else(|| SubagentError::AlreadyCollected(id.0.clone()))?
         };
-        let completion = handle.await.map_err(|_| SubagentError::Join)?;
+        let completion = handle.await.map_err(|_| SubagentError::Join);
         self.entries.lock().await.remove(id);
-        Ok(completion)
+        completion
     }
 }
 
-async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
+pub async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
     if *cancelled.borrow() {
         return;
     }
@@ -502,6 +502,28 @@ mod tests {
                 )
                 .await
                 .expect_err("removed subagent must not receive messages"),
+            SubagentError::Unknown(id.as_str().into())
+        );
+    }
+
+    #[tokio::test]
+    async fn collect_removes_entry_after_join_failure() {
+        let supervisor = SubagentSupervisor::new();
+        let id = supervisor
+            .spawn(|_: SubagentContext| async {
+                panic!("subagent must abort for join failure coverage");
+            })
+            .await;
+        let error = supervisor
+            .collect(&id)
+            .await
+            .expect_err("panicked subagent must surface join failure");
+        assert_eq!(error, SubagentError::Join);
+        assert_eq!(
+            supervisor
+                .status(&id)
+                .await
+                .expect_err("join failure must clear registry entry"),
             SubagentError::Unknown(id.as_str().into())
         );
     }
