@@ -66,8 +66,8 @@ void main() {
     // wrong one. When the selected conversation leaves the group (deleted on
     // another device, merged away, or filtered out by the discarded/short
     // toggles) the getter must report a miss rather than substitute a sibling.
-    final selected = _conversationAt('selected', DateTime.utc(2026, 7, 18, 9));
-    final sibling = _conversationAt('sibling', DateTime.utc(2026, 7, 18, 11));
+    final selected = _conversationAt('selected', DateTime(2026, 7, 18, 9));
+    final sibling = _conversationAt('sibling', DateTime(2026, 7, 18, 11));
 
     final conversationProvider = ConversationProvider(
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -98,7 +98,7 @@ void main() {
   test('selected conversation survives a transient empty day group', () {
     // A refresh can momentarily empty the group; the page must keep showing the
     // conversation it was opened with instead of blanking or retargeting.
-    final selected = _conversationAt('selected', DateTime.utc(2026, 7, 18, 9));
+    final selected = _conversationAt('selected', DateTime(2026, 7, 18, 9));
 
     final conversationProvider = ConversationProvider(
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -132,6 +132,9 @@ DateTime _instantSplittingUtcAndLocalDay() {
   return offset.isNegative ? DateTime.utc(2026, 7, 18, 0, 0) : DateTime.utc(2026, 7, 18, 23, 59);
 }
 
+/// Both these fixtures must land in one day group, so they are anchored in
+/// local time: a UTC-pinned pair a couple of hours apart straddles local
+/// midnight at far-enough offsets and splits into two groups.
 ServerConversation _conversationAt(String id, DateTime startedAt) {
   return ServerConversation(
     id: id,
