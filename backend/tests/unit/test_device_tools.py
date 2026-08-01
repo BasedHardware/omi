@@ -11,9 +11,14 @@ from utils.device_tools import (
     DEVICE_TOOL_NAMES,
     DEVICE_TOOL_MIN_TIMEOUT_SECONDS,
     DEVICE_TOOL_STREAM_HEADROOM_SECONDS,
+    MAX_DEVICE_TOOL_RESULT_BYTES,
+    UnknownDeviceToolCall,
     build_device_tools,
+    device_tool_inflight_key,
     device_tool_result_key,
     device_tool_timeout_for_stream_budget,
+    mark_device_tool_inflight,
+    store_device_tool_result,
 )
 from utils.retrieval.agentic import STANDARD_TOOL_NAMES, _extract_app_id
 
@@ -43,7 +48,9 @@ class FakeRedis:
         return self.store.get(key)
 
     def delete(self, key):
-        self.store.pop(key, None)
+        # Redis reports how many keys it removed, and the in-flight claim relies
+        # on that count to be atomic.
+        return 1 if self.store.pop(key, None) is not None else 0
 
 
 @pytest.fixture
@@ -241,3 +248,88 @@ def test_a_budget_too_small_for_a_sheet_does_not_produce_a_negative_wait():
     # A misconfigured deployment should not turn every device tool call into an
     # instant timeout with a negative deadline.
     assert device_tool_timeout_for_stream_budget(5) == DEVICE_TOOL_MIN_TIMEOUT_SECONDS
+
+
+def test_a_result_for_a_call_that_was_never_made_is_refused(fake_redis):
+    # Without this the endpoint is a write primitive: any authenticated caller
+    # could invent call ids and park a value in shared Redis for each one.
+    with pytest.raises(UnknownDeviceToolCall):
+        store_device_tool_result('uid-1', 'never-dispatched', {'ok': True})
+
+    assert fake_redis.store == {}
+
+
+def test_an_oversized_result_is_refused_before_anything_is_written(fake_redis):
+    mark_device_tool_inflight('uid-1', 'call-1')
+
+    with pytest.raises(ValueError):
+        store_device_tool_result('uid-1', 'call-1', {'blob': 'x' * (MAX_DEVICE_TOOL_RESULT_BYTES + 1)})
+
+    assert device_tool_result_key('uid-1', 'call-1') not in fake_redis.store
+    # The call is still in flight: an oversized submission must not consume the
+    # marker and lock the real client out of answering.
+    assert device_tool_inflight_key('uid-1', 'call-1') in fake_redis.store
+
+
+def test_only_the_first_submission_for_a_call_is_accepted(fake_redis):
+    mark_device_tool_inflight('uid-1', 'call-1')
+
+    store_device_tool_result('uid-1', 'call-1', {'ok': True, 'status': 'sent'})
+    with pytest.raises(UnknownDeviceToolCall):
+        store_device_tool_result('uid-1', 'call-1', {'ok': True, 'status': 'sent'})
+
+
+def test_one_user_cannot_answer_a_call_dispatched_for_another(fake_redis):
+    mark_device_tool_inflight('uid-1', 'call-1')
+
+    with pytest.raises(UnknownDeviceToolCall):
+        store_device_tool_result('uid-2', 'call-1', {'ok': True})
+
+
+@pytest.mark.asyncio
+async def test_a_redis_outage_mid_wait_does_not_become_a_retriable_error(fake_redis):
+    # The compose sheet may already be open, so a failed poll says nothing about
+    # whether the user sent the message. Surfacing a generic execution error
+    # would leave the model free to retry and send it twice.
+    callback = FakeCallback()
+    tool = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=1)[0]
+
+    calls = {'n': 0}
+    real_get = fake_redis.get
+
+    def flaky_get(key):
+        calls['n'] += 1
+        if calls['n'] <= 2:
+            raise ConnectionError('redis is down')
+        return real_get(key)
+
+    fake_redis.get = flaky_get
+
+    async def respond_once():
+        while not callback.requests:
+            await asyncio.sleep(0.01)
+        fake_redis.setex(
+            device_tool_result_key('uid-1', callback.requests[0]['call_id']),
+            60,
+            json.dumps({'ok': True, 'status': 'sent'}),
+        )
+
+    responder = asyncio.create_task(respond_once())
+    raw = await tool.ainvoke({'to': ['+15550100'], 'text': 'hi'})
+    await responder
+
+    # The wait survived the outage and still delivered the real answer.
+    assert json.loads(raw) == {'ok': True, 'status': 'sent'}
+
+
+@pytest.mark.asyncio
+async def test_a_late_result_is_refused_once_the_wait_is_over(fake_redis):
+    callback = FakeCallback()
+    tool = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=0)[0]
+
+    raw = await tool.ainvoke({'to': ['+15550100'], 'text': 'hi'})
+    assert json.loads(raw)['reason'] == 'timed_out'
+
+    call_id = callback.requests[0]['call_id']
+    with pytest.raises(UnknownDeviceToolCall):
+        store_device_tool_result('uid-1', call_id, {'ok': True, 'status': 'sent'})
