@@ -318,12 +318,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
-  /// floating-bar only — users who disabled the floating bar reported clicking the
-  /// top-right system banner and getting no conversation context, which was confusing.
+  /// floating-bar only by default — users who disabled the floating bar reported clicking
+  /// the top-right system banner and getting no conversation context, which was confusing.
   /// Functional notifications (Crisp support replies, screen-recording permission
   /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.
+  ///
+  /// That default is no longer absolute: `FloatingBarNotificationPreviewPolicy` forces a
+  /// system banner anyway once the user has explicitly muted in-bar previews
+  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the Floating
+  /// Bar is still enabled, so the notification is never fully silenced (#6765). That banner
+  /// still lacks the in-bar conversation context noted above — the tradeoff is accepted only
+  /// for that explicit opt-out, not by default. Disabling the Floating Bar itself does
+  /// *not* force a banner: floating-bar-only notifications stay silent in that case, same
+  /// as before this policy existed, per the contentless-banner confusion noted above.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -429,9 +438,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     // Default path: floating-bar only. Functional callers opt-in via
-    // `deliverSystemBanner: true` (see the parameter doc above). When the
-    // in-bar preview is muted (or the bar itself is disabled), fall back to
-    // the system banner so the notification is never fully silenced.
+    // `deliverSystemBanner: true` (see the parameter doc above). When the user
+    // explicitly muted in-bar previews (bar still enabled), fall back to the
+    // system banner so the notification is never fully silenced. Disabling the
+    // Floating Bar itself does not force a banner — see the parameter doc.
     guard
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,

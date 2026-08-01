@@ -8,7 +8,12 @@ import XCTest
 /// Floating Bar in-app preview is their only delivery path today. Muting that
 /// preview without a fallback would silence those notifications entirely.
 /// These tests pin the policy that keeps a notification delivered via the
-/// native system banner whenever the in-bar preview is suppressed.
+/// native system banner only when the user *explicitly* muted in-bar previews
+/// while the Floating Bar stayed enabled. Merely disabling the Floating Bar
+/// must not force a banner: `NotificationService.sendNotification` documents
+/// that a contentless system banner (no conversation context) was previously
+/// reported as confusing, which is why floating-bar-only notifications stay
+/// silent when the bar itself is off — same as before this policy existed.
 final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
@@ -19,11 +24,11 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
         previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
   }
 
-  func testFloatingBarDisabledSkipsPreviewAndFallsBackToBanner() {
+  func testFloatingBarDisabledSkipsPreviewWithNoForcedBanner() {
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
         previewsEnabled: true, floatingBarEnabled: false))
-    XCTAssertTrue(
+    XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
   }
@@ -35,6 +40,15 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
+  }
+
+  func testFloatingBarDisabledStillNoForcedBannerEvenWithPreviewsMuted() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false, floatingBarEnabled: false))
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false))
   }
 
   func testExplicitSystemBannerAlwaysDeliversRegardlessOfPreviewState() {
