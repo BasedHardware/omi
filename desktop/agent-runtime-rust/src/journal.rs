@@ -719,6 +719,80 @@ impl JournalStore {
             generation_base_turn_seq: high_water,
         })
     }
+
+    pub fn repair(
+        &mut self,
+        surface: &Surface,
+        turn_ids: &[String],
+        active_run_ids: &[String],
+    ) -> Result<ResultPage, String> {
+        let mut unique_ids = Vec::new();
+        for turn_id in turn_ids {
+            let turn_id = turn_id.trim();
+            if turn_id.is_empty() || unique_ids.iter().any(|existing| existing == turn_id) {
+                continue;
+            }
+            unique_ids.push(turn_id.to_owned());
+            if unique_ids.len() == 100 {
+                break;
+            }
+        }
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let mut repaired = Vec::new();
+        let mut page_conversation_id = None;
+        for turn_id in unique_ids {
+            let Some((conversation_id, turn_surface, current)) =
+                find_turn_by_id(&transaction, &turn_id)?
+            else {
+                continue;
+            };
+            if turn_surface.owner_id != surface.owner_id {
+                return Err("Journal conversation is outside owner scope".into());
+            }
+            if current.role != "assistant" || terminal(&current.status) {
+                continue;
+            }
+            if current
+                .producing_run_id
+                .as_ref()
+                .is_some_and(|run_id| active_run_ids.iter().any(|active| active == run_id))
+            {
+                continue;
+            }
+            let mut patch = Map::new();
+            patch.insert("status".into(), Value::String("failed".into()));
+            let turn = mutate_turn(
+                &transaction,
+                &conversation_id,
+                &turn_surface,
+                current,
+                &patch,
+                None,
+            )?;
+            if page_conversation_id.is_none() {
+                page_conversation_id = Some(conversation_id);
+            }
+            repaired.push(turn);
+        }
+        let conversation_id = match page_conversation_id {
+            Some(conversation_id) => conversation_id,
+            None => ensure_conversation(&transaction, surface)?,
+        };
+        let (generation, base, high_water) = state(&transaction, &conversation_id)?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(ResultPage {
+            conversation_id,
+            turn: repaired.first().cloned(),
+            turns: repaired,
+            cleared_count: 0,
+            high_water_turn_seq: high_water,
+            generation,
+            generation_base_turn_seq: base,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -917,6 +991,55 @@ fn turn_row(
         params![conversation_id, turn_id],
         |row| Ok(TurnRow { turn_id: row.get(0)?, turn_seq: row.get(1)?, producer_id: row.get(2)?, payload_hash: row.get(3)?, role: row.get(4)?, content: row.get(5)?, origin: row.get(6)?, status: row.get(7)?, blocks: row.get(8)?, resources: row.get(9)?, producing_run_id: row.get(10)?, producing_attempt_id: row.get(11)?, metadata: row.get(12)?, created: row.get(13)?, updated: row.get(14)?, completed: row.get(15)? }),
     ).optional().map_err(|error| error.to_string())
+}
+
+fn find_turn_by_id(
+    connection: &Connection,
+    turn_id: &str,
+) -> Result<Option<(String, Surface, TurnRow)>, String> {
+    connection.query_row(
+        "SELECT ct.conversation_id, sc.owner_id, ct.surface_kind, ct.external_ref_kind, ct.external_ref_id,
+                ct.turn_id, ct.turn_seq, ct.producer_id, ct.payload_hash, ct.role, ct.content, ct.origin,
+                ct.status, ct.content_blocks_json, ct.resources_json, ct.producing_run_id,
+                ct.producing_attempt_id, ct.metadata_json, ct.created_at_ms, ct.updated_at_ms, ct.completed_at_ms
+         FROM rx4_journal_turns ct
+         JOIN rx4_journal_conversations sc ON sc.conversation_id = ct.conversation_id
+         WHERE ct.turn_id = ?
+         ORDER BY ct.created_at_ms ASC
+         LIMIT 1",
+        params![turn_id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                Surface {
+                    owner_id: row.get(1)?,
+                    surface_kind: row.get(2)?,
+                    external_ref_kind: row.get(3)?,
+                    external_ref_id: row.get(4)?,
+                },
+                TurnRow {
+                    turn_id: row.get(5)?,
+                    turn_seq: row.get(6)?,
+                    producer_id: row.get(7)?,
+                    payload_hash: row.get(8)?,
+                    role: row.get(9)?,
+                    content: row.get(10)?,
+                    origin: row.get(11)?,
+                    status: row.get(12)?,
+                    blocks: row.get(13)?,
+                    resources: row.get(14)?,
+                    producing_run_id: row.get(15)?,
+                    producing_attempt_id: row.get(16)?,
+                    metadata: row.get(17)?,
+                    created: row.get(18)?,
+                    updated: row.get(19)?,
+                    completed: row.get(20)?,
+                },
+            ))
+        },
+    )
+    .optional()
+    .map_err(|error| error.to_string())
 }
 
 fn row_to_turn(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
@@ -1366,5 +1489,42 @@ mod tests {
             1
         );
         assert!(must(store.pending_tool_claim("claim")).is_none());
+    }
+
+    #[test]
+    fn repair_marks_orphaned_nonterminal_turns_failed_and_skips_active_runs() {
+        let mut store = must(JournalStore::in_memory());
+        let surface = Surface {
+            owner_id: "owner".into(),
+            surface_kind: "main_chat".into(),
+            external_ref_kind: "chat".into(),
+            external_ref_id: "chat-1".into(),
+        };
+        let conversation_id = must(store.conversation_id(&surface));
+        let run = must(store.admit_run("owner", "session", &conversation_id, 1));
+        let record = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "role": "assistant",
+            "content": "partial",
+            "status": "streaming"
+        }))
+        .expect("record fixture must be valid");
+        must(store.record(&surface, &record));
+        store
+            .connection
+            .execute(
+                "UPDATE rx4_journal_turns SET producing_run_id = ?, producing_attempt_id = ? WHERE turn_id = ?",
+                params![run.run_id, run.attempt_id, "assistant-turn"],
+            )
+            .expect("producing run binding must succeed");
+
+        let skipped =
+            must(store.repair(&surface, &["assistant-turn".into()], &[run.run_id.clone()]));
+        assert!(skipped.turns.is_empty());
+
+        let repaired = must(store.repair(&surface, &["assistant-turn".into()], &[]));
+        assert_eq!(repaired.turns.len(), 1);
+        assert_eq!(repaired.turns[0]["status"], "failed");
+        assert_eq!(repaired.turns[0]["turnId"], "assistant-turn");
     }
 }
