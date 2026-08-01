@@ -211,6 +211,10 @@ getTranscriptWidget(
   VoidCallback? onTapWhenSearchEmpty,
   Function(TranscriptSegment)? onSegmentTap,
   Function(int)? onEditSegmentText,
+  Key? transcriptKey,
+  bool followLatest = false,
+  TranscriptScrollState? scrollState,
+  double jumpToLatestButtonBottom = 16,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -228,6 +232,7 @@ getTranscriptWidget(
 
   Widget buildTranscriptSegments() {
     return TranscriptWidget(
+      key: transcriptKey,
       segments: segments,
       horizontalMargin: horizontalMargin,
       topMargin: topMargin,
@@ -243,6 +248,9 @@ getTranscriptWidget(
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
       onSegmentTap: onSegmentTap,
       onEditSegmentText: onEditSegmentText,
+      followLatest: followLatest,
+      scrollState: scrollState,
+      jumpToLatestButtonBottom: jumpToLatestButtonBottom,
     );
   }
 

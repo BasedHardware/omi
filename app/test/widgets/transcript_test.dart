@@ -136,4 +136,99 @@ void main() {
       expect(find.text('Tag'), findsNothing);
     });
   });
+
+  group('Live transcript scrolling', () {
+    late ScrollController controller;
+    late TranscriptScrollState scrollState;
+    late List<TranscriptSegment> segments;
+
+    Future<void> pumpTranscript(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              height: 320,
+              child: TranscriptWidget(
+                segments: segments,
+                bottomMargin: 0,
+                followLatest: true,
+                scrollState: scrollState,
+                jumpToLatestButtonBottom: 84,
+                onScrollControllerReady: (value) => controller = value,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    setUp(() {
+      scrollState = TranscriptScrollState();
+      segments = List.generate(
+        30,
+        (index) => TranscriptSegment(
+          id: 'live-$index',
+          text: 'Transcript segment $index with enough words to make this a long conversation.',
+          speaker: 'SPEAKER_0${index % 2}',
+          isUser: false,
+          personId: null,
+          start: index.toDouble(),
+          end: index + 1.0,
+          translations: const [],
+        ),
+      );
+    });
+
+    testWidgets('a fresh long transcript opens at the latest segment', (tester) async {
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+    });
+
+    testWidgets('a user position away from the bottom survives reopening', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      final preservedOffset = controller.offset;
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(preservedOffset, 0.1));
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
+    testWidgets('the jump control animates to the latest segment and hides', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('transcript_jump_to_latest')));
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+    });
+
+    testWidgets('live controls reserve only the standard 120 point footer', (tester) async {
+      await pumpTranscript(tester);
+
+      final footer = tester.widget<SizedBox>(find.byKey(const ValueKey('transcript_bottom_spacing')));
+      expect(footer.height, 120);
+    });
+  });
 }

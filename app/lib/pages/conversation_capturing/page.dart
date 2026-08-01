@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -21,6 +22,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/transcript.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -32,12 +34,22 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
+  static String? _preservedTranscriptSessionId;
+  static TranscriptScrollState _preservedTranscriptScrollState = TranscriptScrollState();
+
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
   bool _isMuted = false;
   final ScrollController _timelineScrollController = ScrollController();
+  TranscriptScrollState? _activeTimelineScrollState;
+  String? _timelineSessionId;
+  bool _timelinePositionRestored = false;
+  bool _isTimelineAutoScrolling = false;
+  bool _timelineUserInterruptedAutoScroll = false;
+  bool _isTimelineAtBottom = true;
+  int _previousTimelineItemCount = 0;
 
   @override
   void initState() {
@@ -46,7 +58,74 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
     _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
       ..repeat(reverse: true);
+    _timelineScrollController.addListener(_onTimelineScroll);
     super.initState();
+  }
+
+  TranscriptScrollState _scrollStateFor(String sessionId) {
+    if (_preservedTranscriptSessionId != sessionId) {
+      _preservedTranscriptSessionId = sessionId;
+      _preservedTranscriptScrollState = TranscriptScrollState();
+    }
+    return _preservedTranscriptScrollState;
+  }
+
+  void _onTimelineScroll() {
+    if (!_timelineScrollController.hasClients) return;
+
+    final offset = _timelineScrollController.offset;
+    final isAtBottom = _timelineScrollController.position.maxScrollExtent - offset <= 24;
+    if (!_isTimelineAutoScrolling) {
+      _activeTimelineScrollState?.update(offset: offset, isAtBottom: isAtBottom);
+    }
+    if (_isTimelineAtBottom != isAtBottom && mounted) {
+      setState(() => _isTimelineAtBottom = isAtBottom);
+    }
+  }
+
+  Future<void> _scrollTimelineToBottom({bool animated = true}) async {
+    if (!_timelineScrollController.hasClients || _isTimelineAutoScrolling) return;
+
+    _isTimelineAutoScrolling = true;
+    _timelineUserInterruptedAutoScroll = false;
+    var firstPass = true;
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final target = _timelineScrollController.position.maxScrollExtent;
+      if (animated) {
+        await _timelineScrollController.animateTo(
+          target,
+          duration: Duration(milliseconds: firstPass ? 500 : 100),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        _timelineScrollController.jumpTo(target);
+      }
+      firstPass = false;
+
+      if (_timelineUserInterruptedAutoScroll) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_timelineScrollController.hasClients || _timelineUserInterruptedAutoScroll) return;
+
+      final remaining = _timelineScrollController.position.maxScrollExtent - _timelineScrollController.offset;
+      if (remaining.abs() <= 0.5) break;
+    }
+
+    if (!mounted || !_timelineScrollController.hasClients) return;
+    final target = _timelineScrollController.position.maxScrollExtent;
+    if ((target - _timelineScrollController.offset).abs() > 0.5) {
+      _timelineScrollController.jumpTo(target);
+    }
+    _isTimelineAutoScrolling = false;
+    _activeTimelineScrollState?.update(offset: target, isAtBottom: true);
+    if (!_isTimelineAtBottom) setState(() => _isTimelineAtBottom = true);
+  }
+
+  bool _onTimelineUserScroll(UserScrollNotification notification) {
+    if (_isTimelineAutoScrolling && notification.direction != ScrollDirection.idle) {
+      _timelineUserInterruptedAutoScroll = true;
+      _isTimelineAutoScrolling = false;
+    }
+    return false;
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
@@ -89,6 +168,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   void dispose() {
     _controller?.dispose();
     _animationController.dispose();
+    _timelineScrollController.removeListener(_onTimelineScroll);
     _timelineScrollController.dispose();
     super.dispose();
   }
@@ -177,6 +257,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         final effectivelyMuted = _isMuted || provider.isCallActive;
+        final transcriptSessionId = provider.segments.isEmpty ? null : provider.segments.first.id;
+        final transcriptScrollState = transcriptSessionId == null ? null : _scrollStateFor(transcriptSessionId);
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -244,9 +326,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           provider.segments,
                                           provider.photos,
                                           deviceProvider.connectedDevice,
-                                          bottomMargin: 150,
+                                          bottomMargin: 0,
                                           suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
+                                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                          followLatest: true,
+                                          scrollState: transcriptScrollState,
+                                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
                                           onAcceptSuggestion: (suggestion) {
                                             provider.assignSpeakerToConversation(
                                               suggestion.speakerId,
@@ -407,27 +493,88 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     }
 
     final totalItems = photoGroups.length + segments.length;
+    final sessionId =
+        segments.isNotEmpty ? segments.first.id : 'photos-${photos.first.createdAt.microsecondsSinceEpoch}';
+    final scrollState = _scrollStateFor(sessionId);
+    if (_timelineSessionId != sessionId) {
+      _timelineSessionId = sessionId;
+      _timelinePositionRestored = false;
+      _previousTimelineItemCount = 0;
+      _isTimelineAtBottom = !scrollState.hasPosition || scrollState.isAtBottom;
+    }
+    _activeTimelineScrollState = scrollState;
 
-    // Auto-scroll to bottom after frame renders
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_timelineScrollController.hasClients) {
-        _timelineScrollController.jumpTo(_timelineScrollController.position.maxScrollExtent);
-      }
-    });
+    final contentChanged = totalItems != _previousTimelineItemCount;
+    _previousTimelineItemCount = totalItems;
+    if (!_timelinePositionRestored || (contentChanged && scrollState.isAtBottom)) {
+      _timelinePositionRestored = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_timelineScrollController.hasClients) return;
 
-    return ListView.builder(
-      controller: _timelineScrollController,
-      padding: const EdgeInsets.only(top: 16, bottom: 180),
-      itemCount: totalItems,
-      itemBuilder: (context, index) {
-        // Show photo groups first, then transcript below
-        if (index < photoGroups.length) {
-          return _buildPhotoGroupTimelineItem(photoGroups[index], photos);
+        final maxExtent = _timelineScrollController.position.maxScrollExtent;
+        final shouldRestore = scrollState.hasPosition && !scrollState.isAtBottom;
+        if (shouldRestore) {
+          final target = scrollState.offset.clamp(0.0, maxExtent);
+          _isTimelineAutoScrolling = true;
+          _timelineScrollController.jumpTo(target);
+          _isTimelineAutoScrolling = false;
+          final isAtBottom = maxExtent - target <= 24;
+          scrollState.update(offset: target, isAtBottom: isAtBottom);
+          if (_isTimelineAtBottom != isAtBottom) setState(() => _isTimelineAtBottom = isAtBottom);
+        } else {
+          _scrollTimelineToBottom(animated: false);
         }
-        final segIndex = index - photoGroups.length;
-        if (segIndex >= segments.length) return const SizedBox.shrink();
-        return _buildTranscriptTimelineItem(segments[segIndex], provider);
-      },
+      });
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: NotificationListener<UserScrollNotification>(
+            onNotification: _onTimelineUserScroll,
+            child: ListView.builder(
+              controller: _timelineScrollController,
+              padding: const EdgeInsets.only(top: 16, bottom: 120),
+              itemCount: totalItems,
+              itemBuilder: (context, index) {
+                // Show photo groups first, then transcript below
+                if (index < photoGroups.length) {
+                  return _buildPhotoGroupTimelineItem(photoGroups[index], photos);
+                }
+                final segIndex = index - photoGroups.length;
+                if (segIndex >= segments.length) return const SizedBox.shrink();
+                return _buildTranscriptTimelineItem(segments[segIndex], provider);
+              },
+            ),
+          ),
+        ),
+        PositionedDirectional(
+          end: 16,
+          bottom: MediaQuery.paddingOf(context).bottom + 84,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: animation, child: child),
+            ),
+            child: _isTimelineAtBottom
+                ? const SizedBox.shrink(key: ValueKey('timeline_jump_to_latest_hidden'))
+                : Semantics(
+                    button: true,
+                    label: context.l10n.jumpToLatestMessage,
+                    child: FloatingActionButton.small(
+                      key: const ValueKey('timeline_jump_to_latest'),
+                      heroTag: null,
+                      tooltip: context.l10n.jumpToLatestMessage,
+                      backgroundColor: const Color(0xFF35343B),
+                      foregroundColor: Colors.white,
+                      onPressed: () => _scrollTimelineToBottom(),
+                      child: const Icon(Icons.keyboard_arrow_down_rounded),
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
