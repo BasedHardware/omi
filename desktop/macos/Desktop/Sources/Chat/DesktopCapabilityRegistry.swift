@@ -19,18 +19,17 @@ enum DesktopCapabilityRegistry {
     let filteredCapabilities = capabilities(for: .desktopChat)
       .filter { !excludedToolNames.contains($0.toolName) }
     let availableToolNames = Set(filteredCapabilities.map(\.toolName))
+    let docs =
+      filteredCapabilities
+      .map { toolDoc($0, excluding: excludedToolNames) }
+      .joined(separator: "\n\n")
     let taskAgentAwareness = taskAgentAwarenessPrompt(availableToolNames: availableToolNames)
     let proactiveGuidance = proactiveGuidancePrompt(availableToolNames: availableToolNames)
     let usageGuidance = usageGuidancePrompt(availableToolNames: availableToolNames)
-    // Per-tool name/summary/bullets are deliberately absent. The adapter already
-    // registers every advertised tool with its description, promptGuidelines,
-    // and input schema, so restating them here sent the same content twice in
-    // every turn — roughly 3.5k tokens of it — and gave the two copies room to
-    // disagree as the manifest changed. What stays is the cross-tool guidance
-    // that has nowhere else to live: when to reach for a tool at all, and how
-    // the tools relate to each other.
     return """
-      Use your Omi tools before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
+      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
+
+      \(docs)
 
       \(taskAgentAwareness)
 
@@ -64,6 +63,21 @@ enum DesktopCapabilityRegistry {
 
   static var realtimeToolNames: [String] {
     GeneratedToolCapabilities.realtimeToolNames
+  }
+
+  private static func toolDoc(_ capability: Capability, excluding excludedToolNames: Set<String>) -> String {
+    let bullets = capability.bullets
+      .filter { bullet in
+        !excludedToolNames.contains { excluded in
+          bullet.contains(excluded)
+        }
+      }
+      .map { "- \($0)" }
+      .joined(separator: "\n")
+    return """
+      **\(capability.toolName)** (\(capability.latency.rawValue)): \(capability.summary)
+      \(bullets)
+      """
   }
 
   private static func proactiveGuidancePrompt(availableToolNames: Set<String>) -> String {

@@ -92,15 +92,8 @@ final class ChatDiscoverabilityTests: XCTestCase {
 
   func testToolPromptIncludesSearchTasks() {
     let prompt = ChatPrompts.desktopChat
-    // Per-tool docs live in the tool definitions (see
-    // modelVisibleDescription in omi-tool-manifest.ts); the prompt keeps only
-    // cross-tool routing guidance.
-    XCTAssertTrue(prompt.contains("Find tasks by meaning -> search_tasks"))
-    let searchTasks = DesktopCapabilityRegistry.capabilities(for: .desktopChat).first {
-      $0.toolName == "search_tasks"
-    }
-    XCTAssertTrue(
-      searchTasks?.summary.contains("Vector similarity search on tasks") == true)
+    XCTAssertTrue(prompt.contains("**search_tasks**"))
+    XCTAssertTrue(prompt.contains("Vector similarity search on tasks"))
   }
 
   func testToolPromptDoesNotPinStaleToolCount() {
@@ -120,17 +113,13 @@ final class ChatDiscoverabilityTests: XCTestCase {
 
   func testToolPromptListsSearchTasksInWhenToUse() {
     let prompt = ChatPrompts.desktopChat
-    XCTAssertTrue(prompt.contains("Find tasks by meaning -> search_tasks"))
+    XCTAssertTrue(prompt.contains("find tasks about shopping"))
   }
 
   func testDesktopPromptMentionsEveryDesktopCapability() {
-    // The per-tool bold blocks were deliberately removed; every tool is
-    // documented in its adapter tool definition instead (covered by
-    // testDesktopCapabilitiesExistInAgentToolDeclarations). This guards the
-    // dedupe: a reintroduced per-tool block would fail here.
     let prompt = ChatPrompts.desktopChat
     for toolName in DesktopCapabilityRegistry.desktopToolNames {
-      XCTAssertFalse(prompt.contains("**\(toolName)**"), "Per-tool block crept back for \(toolName)")
+      XCTAssertTrue(prompt.contains("**\(toolName)**"), "Missing desktop capability \(toolName)")
     }
   }
 
@@ -148,15 +137,17 @@ final class ChatDiscoverabilityTests: XCTestCase {
 
   func testDesktopPromptMentionsListAgentSessionsForSubagents() {
     let prompt = ChatPrompts.desktopChat
+    XCTAssertTrue(prompt.contains("**list_agent_sessions**"))
     XCTAssertTrue(prompt.contains("your subagents"))
     XCTAssertTrue(prompt.contains("Call list_agent_sessions"))
-    XCTAssertTrue(prompt.contains("floating-bar"))
+    XCTAssertTrue(prompt.contains("floating_agent_pills"))
   }
 
   func testDesktopPromptCanSpawnFloatingAgents() {
     let prompt = ChatPrompts.desktopChat
-    XCTAssertTrue(prompt.contains("Start background work -> spawn_agent"))
-    XCTAssertTrue(prompt.contains("floating-bar"))
+    XCTAssertTrue(prompt.contains("**spawn_agent**"))
+    XCTAssertTrue(prompt.contains("call spawn_agent") || prompt.contains("Start background work -> spawn_agent"))
+    XCTAssertTrue(prompt.contains("circular floating agent pills") || prompt.contains("floating-bar"))
   }
 
   func testDesktopPromptDistinguishesSpawnFromRunAndWait() {
@@ -170,21 +161,11 @@ final class ChatDiscoverabilityTests: XCTestCase {
   func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
     let prompt = ChatPrompts.desktopChat
     XCTAssertTrue(prompt.contains("Do not guess when you can look it up"))
-    // The per-tool guidance below moved into the tool definitions
-    // (modelVisibleDescription folds capabilityDoc bullets into the adapter
-    // tool description); assert it still exists there rather than in the prompt.
-    let capabilities = DesktopCapabilityRegistry.capabilities(for: .desktopChat)
-    let executeSql = capabilities.first { $0.toolName == "execute_sql" }
-    XCTAssertTrue(
-      executeSql?.bullets.contains { $0.contains("Supports SELECT, INSERT, UPDATE, DELETE") } == true)
-    XCTAssertTrue(
-      executeSql?.bullets.contains { $0.contains("Supports FTS5 MATCH queries") } == true)
-    let searchTasks = capabilities.first { $0.toolName == "search_tasks" }
-    XCTAssertTrue(
-      searchTasks?.bullets.contains { $0.contains("More reliable than hand-writing MATCH queries") } == true)
-    let saveKnowledgeGraph = capabilities.first { $0.toolName == "save_knowledge_graph" }
-    XCTAssertTrue(
-      saveKnowledgeGraph?.bullets.contains { $0.contains("Deduplication is handled automatically") } == true)
+    XCTAssertTrue(prompt.contains("Supports SELECT, INSERT, UPDATE, DELETE"))
+    XCTAssertTrue(prompt.contains("Supports FTS5 MATCH queries"))
+    XCTAssertTrue(prompt.contains("More reliable than hand-writing MATCH queries for task search"))
+    XCTAssertTrue(prompt.contains("**save_knowledge_graph**"))
+    XCTAssertTrue(prompt.contains("Deduplication is handled automatically"))
   }
 
   func testDesktopPromptPreservesPersonalDataLookupContract() {
