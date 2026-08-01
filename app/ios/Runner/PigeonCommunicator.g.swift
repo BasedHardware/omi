@@ -116,7 +116,7 @@ func deepHashPigeonCommunicator(value: Any?, hasher: inout Hasher) {
   }
 
   if let valueDict = value as? [AnyHashable: AnyHashable] {
-    for key in valueDict.keys { 
+    for key in valueDict.keys {
       hasher.combine(key)
       deepHashPigeonCommunicator(value: valueDict[key]!, hasher: &hasher)
     }
@@ -130,7 +130,7 @@ func deepHashPigeonCommunicator(value: Any?, hasher: inout Hasher) {
   return hasher.combine(String(describing: value))
 }
 
-    
+
 
 /// Discovered BLE peripheral info passed from native to Dart.
 ///

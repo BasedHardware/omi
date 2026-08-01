@@ -53,6 +53,33 @@ Bluetooth HFP route (microphone) ───┘        │  Pigeon: RayBanMetaHost
 | iOS bridge | `app/ios/Runner/RayBanMeta/` | `RayBanMetaHostApiImpl.swift` (DAT under `#if canImport(MWDATCore)`), `RayBanMetaAudioCapture.swift` (HFP mic → PCM16/16 kHz) |
 | Backend | `backend/models/conversation_enums.py`, `backend/routers/transcribe.py` | `ConversationSource.rayban_meta`; photo-source flip preserves `rayban_meta` |
 
+### Display path
+
+DAT **0.7.0** added the Display capability and **0.8.0** ships it (plus
+`clearDisplay()`); the repo already pinned 0.8.0, so linking `MWDATDisplay`
+into `RunnerRayBanDat` was the only missing step. It stays out of default
+`Runner` for the same reason `MWDATCore` does — see the SwiftProtobuf
+duplicate-class crash in `rayban-meta-troubleshooting.md`.
+
+The HUD is gated on **capability, not device type**: `deviceSupportsDisplay()`
+returns `Device.supportsDisplay()` from the toolkit, so any display-capable
+Meta hardware lights up without a new device case, and Ray-Ban Meta Gen 1/2
+(no display) reports false. `GlassesDisplayGate` then requires a separate user
+opt-in; neither condition implies the other.
+
+Content is device-neutral. `HudScreen`/`HudLine` (`app/lib/services/devices/display/`)
+describe *what* to show; `RayBanMetaDisplayRenderer` translates that into
+Meta's `FlexBox`/`Text`/`Button`. `HudProjector` owns the line budget — a HUD
+shows about five lines, so the projector decides what survives and appends an
+explicit `+N more` rather than letting the renderer clip silently.
+
+`RayBanMetaDisplayRenderer.swift` deliberately does not import SwiftUI:
+`MWDATDisplay` exports its own `Text`, `Button`, and `Image`, and importing
+both makes those names ambiguous (Meta documents this in the 0.7.0 notes).
+
+Display requires the DAT App Model — the `DAMEnabled` key already present in
+the `MWDAT` Info.plist dictionary.
+
 ### Audio path
 
 The Meta Wearables Device Access Toolkit (DAT 0.8) has **no microphone API**.
