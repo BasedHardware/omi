@@ -1130,18 +1130,28 @@ void main() {
   // lifecycle is the authoritative signal; a connectivity change must never
   // change transcript-service readiness.
   group('transcriptServiceReady is socket-driven, not connectivity-driven (#6311)', () {
-    test('connectivity flicker does not toggle transcript readiness', () {
+    test('connectivity flicker does not toggle readiness of a ready socket', () {
       final provider = CaptureProvider();
-      // Fresh provider: socket not yet ready, so readiness must be false.
-      expect(provider.transcriptServiceReady, isFalse);
 
-      // A connectivity flip must not change readiness on its own — before the
-      // fix, onConnectionStateChanged(false) ANDed _isConnected into the getter
-      // and could manufacture a "reconnecting" state from a healthy socket.
+      // Drive the provider into the socket-subscribed state (the scenario the
+      // old getter got wrong): onConnected mirrors the transcript WebSocket
+      // subscribing, which sets _transcriptServiceReady = true.
+      provider.onConnected();
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A connectivity flicker must not toggle readiness off. Before the fix
+      // this ANDed _isConnected=false into the getter and manufactured a false
+      // "Recording, reconnecting" over a healthy socket.
       provider.onConnectionStateChanged(false);
-      expect(provider.transcriptServiceReady, isFalse);
+      expect(provider.transcriptServiceReady, isTrue, reason: 'ready socket must survive a connectivity flicker');
+
+      // And it must not depend on connectivity coming back either.
       provider.onConnectionStateChanged(true);
-      expect(provider.transcriptServiceReady, isFalse);
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A socket close is the only thing that should end readiness.
+      provider.onClosed();
+      expect(provider.transcriptServiceReady, isFalse, reason: 'socket close must end transcript readiness');
       provider.dispose();
     });
   });
