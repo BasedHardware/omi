@@ -7,8 +7,8 @@ struct GmailAccountOption: Identifiable, Equatable {
 }
 
 enum GmailSelectionStore {
-  private static let selectedPathKey = "gmailSelectedCookiePath"
-  private static let selectedLabelKey = "gmailSelectedAccountLabel"
+  private static let selectedPathKey = DefaultsKey.gmailSelectedCookiePath.rawValue
+  private static let selectedLabelKey = DefaultsKey.gmailSelectedAccountLabel.rawValue
 
   static var selectedCookiePath: String? {
     get { UserDefaults.standard.string(forKey: selectedPathKey) }

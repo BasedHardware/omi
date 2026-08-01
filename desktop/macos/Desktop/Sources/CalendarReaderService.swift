@@ -267,12 +267,18 @@ actor CalendarReaderService {
     }
     do {
       await APIKeyService.shared.waitForKeys()
-      _ = try fetchCalendarViaCookies(
-        daysBack: 1,
-        daysForward: 1,
-        maxResults: 1,
-        userInitiated: userInitiated
-      )
+if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
+        let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
+        _ = try await GoogleOAuthCalendarReader.readEvents(
+          token: token, daysBack: 1, daysForward: 1, maxResults: 1)
+      } else {
+        _ = try fetchCalendarViaCookies(
+          daysBack: 1,
+          daysForward: 1,
+          maxResults: 1,
+          userInitiated: userInitiated
+        )
+      }
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
@@ -538,10 +544,11 @@ actor CalendarReaderService {
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    let browserConfigs = BrowserGoogleSession.configsForPython(
-      logPrefix: "CalendarReaderService",
-      userInitiated: userInitiated
-    )
+let browserConfigs = GmailSelectionStore.filter(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "CalendarReaderService",
+        userInitiated: userInitiated
+      ))
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound

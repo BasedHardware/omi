@@ -60,7 +60,9 @@ extension SettingsContentView {
             .foregroundColor(OmiColors.textTertiary)
           }
 
-          ForEach(googleOAuthAccounts, id: \.account) { account in
+          // account is optional on pre-fix grants; index-based identity keeps
+          // the row list stable even if two legacy grants both lack an email.
+          ForEach(Array(googleOAuthAccounts.enumerated()), id: \.offset) { _, account in
             HStack(spacing: OmiSpacing.md) {
               Image(systemName: "envelope")
                 .foregroundColor(OmiColors.textSecondary)
@@ -75,7 +77,15 @@ extension SettingsContentView {
               }
               Spacer()
               Button(action: {
-                Task { await disconnectGoogleOAuth(account.account) }
+                Task {
+                  if account.needsReconnect {
+                    // "Reconnect" must re-run the consent flow, not revoke
+                    // and delete the stored grant.
+                    await connectGoogleOAuth()
+                  } else {
+                    await disconnectGoogleOAuth(account.account)
+                  }
+                }
               }) {
                 Text(account.needsReconnect ? "Reconnect" : "Disconnect")
                   .scaledFont(size: OmiType.caption, weight: .medium)
@@ -295,10 +305,10 @@ extension SettingsContentView {
   }
 
   func disconnectGoogleOAuth(_ account: String?) async {
+    defer { loadGoogleOAuthAccounts() }
     do {
       try await GoogleOAuthConnectionManager.shared.disconnect(account: account)
       googleOAuthMessage = nil
-      loadGoogleOAuthAccounts()
     } catch {
       googleOAuthMessage = error.localizedDescription
     }

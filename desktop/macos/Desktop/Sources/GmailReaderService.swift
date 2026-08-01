@@ -198,9 +198,19 @@ if userInitiated {
     return emails.sorted { $0.date > $1.date }
   }
 
-  func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
+func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
+    if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
+      do {
+        let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
+        _ = try await GoogleOAuthGmailReader.readRecentEmails(token: token, maxResults: 1)
+        return .connected(verifiedAt: Date())
+      } catch {
+        return .needsSignIn(message: "Reconnect your Google account.")
+      }
+    }
     }
     do {
       _ = try fetchGmailViaAtomFeedSingle(
