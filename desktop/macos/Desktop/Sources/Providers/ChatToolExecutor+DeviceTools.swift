@@ -24,10 +24,9 @@ extension ChatToolExecutor {
   static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
     guard sensitiveArgumentTools.contains(toolCall.name) else { return "\(toolCall.arguments)" }
     let shape = toolCall.arguments.keys.sorted().map { key -> String in
-      let value = toolCall.arguments[key]
+      guard let value = toolCall.arguments[key] else { return "\(key)=<null>" }
       if let text = value as? String { return "\(key)=<\(text.count) chars>" }
-      if value == nil { return "\(key)=<null>" }
-      return "\(key)=<\(type(of: value!))>"
+      return "\(key)=<\(type(of: value))>"
     }
     return "[redacted: \(shape.joined(separator: ", "))]"
   }

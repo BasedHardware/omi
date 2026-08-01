@@ -1,10 +1,12 @@
 version: 2
 name: device-tool-surface
 tier: 2
-description: On-device tool surface probe — absent Messages store classifies deterministically, an empty send is rejected before Messages.app is contacted, and osascript receives untrusted values as argv
+description: On-device tool surface probe — absent Messages and Mail stores classify deterministically, an empty send is rejected before Messages.app is contacted, and osascript receives untrusted values as argv
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Services/MessagesReaderService.swift
+  - desktop/macos/Desktop/Sources/Services/AppleMailReaderService.swift
+  - desktop/macos/Desktop/Sources/Services/FullDiskAccessProbe.swift
   - desktop/macos/Desktop/Sources/Services/MessagesSenderService.swift
   - desktop/macos/Desktop/Sources/Services/AppleScriptRunner.swift
   - desktop/macos/Desktop/Sources/Services/ContactsReaderService.swift
