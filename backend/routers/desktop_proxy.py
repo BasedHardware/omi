@@ -12,6 +12,11 @@ from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from database import redis_db
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
+from utils.llm.desktop_llm_stub import (
+    llm_stub_enabled,
+    stub_gemini_proxy_json,
+    stub_gemini_proxy_stream_chunks,
+)
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
@@ -203,6 +208,21 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
     if len(body) > _MAX_BODY_BYTES:
         raise HTTPException(status_code=413, detail="Request body is too large")
     path, model, action = _path_parts(path)
+    if llm_stub_enabled():
+        body_text = body.decode("utf-8", errors="replace")
+        if streaming or action == "streamGenerateContent":
+            chunks = stub_gemini_proxy_stream_chunks(body_text)
+
+            async def stub_stream() -> AsyncIterator[bytes]:
+                for chunk in chunks:
+                    yield chunk.encode("utf-8")
+
+            return StreamingResponse(stub_stream(), media_type="text/event-stream")
+        payload = stub_gemini_proxy_json(body_text)
+        return Response(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            media_type="application/json",
+        )
     path = await _meter_server_request(uid, path, model, action)
     _, model, action = _path_parts(path)
     body = _sanitize(body, action)

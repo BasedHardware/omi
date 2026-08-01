@@ -355,7 +355,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.1"
+    value: "gpt-5.6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS

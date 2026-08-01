@@ -164,6 +164,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "--max-reclaim-kib 134217728",
             "33554432",
             "desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
+            "desktop-qualification-backend-compatibility-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
             "overwrite: false",
             "qualification-evidence-${TARGET_SHA}-${digest}.json",
         ):

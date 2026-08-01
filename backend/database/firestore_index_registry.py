@@ -145,6 +145,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'conversations_status_finished',
+        'conversations',
+        'COLLECTION',
+        (_asc('status'), _asc('finished_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'memory_items_tier_status_updated',
         'memory_items',
         'COLLECTION',
@@ -427,6 +433,18 @@ REVIEW_QUEUE_BY_STATUS_ID_QUERY = FirestoreQuerySpec(
     ),
 )
 
+STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_in_progress_by_finished_at',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(
+        _asc('status'),
+        _asc('finished_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -442,7 +460,11 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
+
+_INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
+
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,
     *(
@@ -451,6 +473,9 @@ INDEX_REQUIREMENTS = (
         # Firestore manages one-field indexes (including document-ID ordering)
         # itself and rejects them in the composite-index manifest.
         if len([field for field in spec.index_fields if field.field_path != '__name__']) > 1
+        # Explicit requirements own legacy manifests while their callers migrate
+        # to query specs. Avoid declaring the same composite index twice.
+        and spec.index_requirement.signature not in _INDEX_ONLY_REQUIREMENT_SIGNATURES
     ),
 )
 

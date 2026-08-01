@@ -394,7 +394,11 @@ class AppState: ObservableObject {
   var totalWordCount = 0
 
   var recordingStartTime: Date?
-  var recordingInputDeviceName: String?
+  /// Published: the capture-source label renders this, and the preferred-mic
+  /// resolution assigns it after `isTranscribing` has already published — a
+  /// plain var would leave the UI showing the default device until unrelated
+  /// state churned.
+  @Published var recordingInputDeviceName: String?
   var maxRecordingTimer: Timer? {
     get { servicesCoordinator.maxRecordingTimer }
     set { servicesCoordinator.maxRecordingTimer = newValue }

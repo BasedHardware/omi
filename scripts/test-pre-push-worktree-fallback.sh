@@ -68,6 +68,7 @@ for script in pre-push-singleflight pr-preflight; do
   out="$(
     cd "$ROOT" &&
       GIT_DIR="$BARE_ENV" \
+        PYTHON="$STUB_PYTHON" \
         BACKEND_PYTHON="$STUB_PYTHON" \
         OMI_PYTHON_EXECUTABLE="$STUB_PYTHON" \
         PATH="$STUB_BIN:$PATH" \

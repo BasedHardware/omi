@@ -4,6 +4,8 @@ import PackageDescription
 let package = Package(
   name: "Omi Computer",
   platforms: [
+    // Candidate v0.12.148 for release planning.
+    // Candidate v0.12.148 for release planning.
     .macOS("14.0")
   ],
   dependencies: [

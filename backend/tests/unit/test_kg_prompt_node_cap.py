@@ -109,3 +109,51 @@ def test_node_omitted_from_prompt_still_merges_into_its_existing_id(monkeypatch)
     kg.extract_knowledge_from_memory('uid-1', 'user likes coffee', 'memory-1')
 
     assert [node['id'] for node in upserts] == [oldest['id']]
+
+
+def test_upsert_resolved_id_is_used_for_edges_when_existing_node_was_not_loaded(monkeypatch):
+    """The GET snapshot cap must not leave extraction edges on provisional IDs."""
+    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid, db_client=None: [])
+    monkeypatch.setattr(kg, 'track_usage', lambda *args, **kwargs: nullcontext())
+
+    extraction = json.dumps(
+        {
+            'nodes': [
+                {'label': 'Legacy entity', 'node_type': 'concept', 'aliases': []},
+                {'label': 'New entity', 'node_type': 'concept', 'aliases': []},
+            ],
+            'edges': [
+                {
+                    'source_label': 'Legacy entity',
+                    'target_label': 'New entity',
+                    'label': 'relates to',
+                }
+            ],
+        }
+    )
+    client = MagicMock()
+    client.invoke.return_value = MagicMock(content=extraction)
+    monkeypatch.setattr(kg, 'get_llm', lambda feature: client)
+
+    def upsert_node(uid, node_data, db_client=None):
+        resolved_id = 'legacy-existing-id' if node_data['label'] == 'Legacy entity' else 'new-created-id'
+        return {**node_data, 'id': resolved_id}
+
+    saved_edges: list[dict] = []
+    monkeypatch.setattr(kg.kg_db, 'upsert_knowledge_node', upsert_node)
+    monkeypatch.setattr(
+        kg.kg_db,
+        'upsert_knowledge_edge',
+        lambda uid, edge_data, db_client=None: saved_edges.append(edge_data) or edge_data,
+    )
+
+    kg.extract_knowledge_from_memory('uid-1', 'legacy relates to new', 'memory-1')
+
+    assert saved_edges == [
+        {
+            'source_id': 'legacy-existing-id',
+            'target_id': 'new-created-id',
+            'label': 'relates to',
+            'memory_ids': ['memory-1'],
+        }
+    ]

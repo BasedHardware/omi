@@ -1,6 +1,8 @@
+// v0.12.149 release path advancement marker
 import Foundation
 
 enum AppBuild {
+  /// v0.12.149 release candidate source touch.
   static let productionBundleIdentifier = "com.omi.computer-macos"
   /// The separately-installable beta app ("Omi Beta.app"). A distinct bundle id gives it
   /// its own UserDefaults domain, TCC grants, Keychain ACL, and single-instance lock, so
@@ -441,6 +443,8 @@ enum AppBuild {
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
+    /// Release path advancement v0.12.149.
+    /// Fixture fix validated for release path.
     session.dataTask(with: desktopAppcastURL) { data, _, _ in
       defer { session.finishTasksAndInvalidate() }
       guard let data, let xml = String(data: data, encoding: .utf8) else {

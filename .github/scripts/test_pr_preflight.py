@@ -779,27 +779,30 @@ class SignalPortabilityTests(unittest.TestCase):
         try:
             if had_killpg:
                 delattr(os, "killpg")  # simulate Windows
-            preflight_runner.signal_child(child, signal.SIGTERM, platform_name="posix")
+            preflight_runner.signal_child(child, signal.SIGTERM)
         finally:
             if had_killpg:
                 os.killpg = original
         child.send_signal.assert_called_once_with(signal.SIGTERM)
 
-    @unittest.skipUnless(hasattr(signal, "CTRL_BREAK_EVENT"), "Windows-only")
-    def test_windows_interrupt_maps_to_child_process_group(self) -> None:
+    def test_windows_job_terminates_child_process_tree(self) -> None:
         child = Mock(pid=4321)
-        preflight_runner.signal_child(child, signal.SIGINT, platform_name="nt")
-        child.send_signal.assert_called_once_with(signal.CTRL_BREAK_EVENT)
+        windows_job = Mock()
+        windows_job.terminate.return_value = True
+        preflight_runner.signal_child(child, signal.SIGINT, windows_job)
+        windows_job.terminate.assert_called_once_with()
+        child.send_signal.assert_not_called()
 
     def test_windows_unsupported_signal_does_not_abort_runner(self) -> None:
         child = Mock(pid=4321)
         child.send_signal.side_effect = ValueError("unsupported")
-        preflight_runner.signal_child(child, signal.SIGINT, platform_name="nt")
+        with patch.object(os, "killpg", None, create=True):
+            preflight_runner.signal_child(child, signal.SIGINT)
 
     def test_forwarding_swallows_dead_child(self) -> None:
         child = Mock(pid=4321)
         with patch.object(os, "killpg", side_effect=ProcessLookupError, create=True):
-            preflight_runner.signal_child(child, signal.SIGTERM, platform_name="posix")  # must not raise
+            preflight_runner.signal_child(child, signal.SIGTERM)  # must not raise
 
 
 if __name__ == "__main__":

@@ -6,8 +6,10 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
 preconditions:
   - auth_ready
 
@@ -31,6 +33,13 @@ steps:
         - Memories
         - Conversations
         - Brain Map
+
+  - id: S2a
+    name: Return Home with Escape
+    do: "Press Escape while the Memory page is visible. Verify the app returns to Home and the top navigation bar remains visible."
+    expect:
+      text_visible:
+        - Home
 
   - id: S3
     name: Navigate to Tasks

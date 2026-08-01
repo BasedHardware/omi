@@ -2,7 +2,10 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# The pre-push gate cd's to the repo root before invoking this script, and hooks
+# run at the work-tree top, so pwd is a safe fallback when the linked-worktree
+# Git context resolves to a git dir and show-toplevel exits 128.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
 # shellcheck source=dev-harness/_resolve_python.sh

@@ -16,6 +16,11 @@ from database import redis_db
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.clients import anthropic_client
+from utils.llm.desktop_llm_stub import (
+    llm_stub_enabled,
+    stub_chat_completions_json,
+    stub_chat_completions_stream,
+)
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
 
@@ -415,6 +420,22 @@ async def chat_completions(
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
+    request_id = x_omi_request_id or str(uuid4())
+    stub_headers = {
+        'Cache-Control': 'no-cache',
+        'X-Omi-Chat-Contract-Version': '1',
+        'X-Request-Id': request_id,
+    }
+    # Hermetic offline profile: short-circuit before quota / Anthropic, matching
+    # the retired Rust llm_stub intercept so T2 chat flows stay deterministic.
+    if llm_stub_enabled():
+        if body.get('stream') is True:
+            return StreamingResponse(
+                stub_chat_completions_stream(body),
+                media_type='text/event-stream',
+                headers=stub_headers,
+            )
+        return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
@@ -423,7 +444,6 @@ async def chat_completions(
         raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    request_id = x_omi_request_id or str(uuid4())
     await run_blocking(
         db_executor,
         llm_usage_db.record_chat_quota_question,

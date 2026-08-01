@@ -346,12 +346,30 @@ class ListenSessionRuntime:
             self.onboarding_handler = OnboardingHandler(request.uid, send_onboarding, self.transcripts.enqueue)
         return True
 
+    async def _send_ping(self) -> bool:
+        """Write one keepalive frame, owning a gone peer the same way `asend_event` does.
+
+        The client can vanish between the `client_state` read and the write, so the
+        keepalive is the writer that most often observes the disconnect first. That is
+        an ordinary end of session, not a background-task crash.
+        """
+        try:
+            await self.request.websocket.send_text('ping')
+            return True
+        except WebSocketDisconnect:
+            self.state.active = False
+        except RuntimeError as error:
+            self.state.active = False
+            logger.warning('Listen heartbeat send after close type=%s', type(error).__name__)
+        return False
+
     async def _heartbeat(self) -> None:
         while self.state.active:
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
-            await self.request.websocket.send_text('ping')
+            if not await self._send_ping():
+                break
             if self.state.last_activity_time and time.time() - self.state.last_activity_time > 90:
                 self.state.close_code = 1001
                 self.state.active = False

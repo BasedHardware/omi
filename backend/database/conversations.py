@@ -19,6 +19,7 @@ from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -1212,6 +1213,46 @@ def get_processing_conversations(uid: str):
     # back to pusher for background processing — that would defeat the freemium cost saving.
     conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
+
+
+def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
+    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
+
+    A conversation owned by any live session refreshes `finished_at` on every
+    segment and that session's lifecycle loop processes it within the
+    conversation timeout, so anything idle past the cutoff has no owner.
+    Missing or non-datetime `finished_at` is excluded: without a trustworthy
+    idle clock the row cannot be proven orphaned.
+    """
+    stale = []
+    for conversation in conversations:
+        finished_at = conversation.get('finished_at')
+        if isinstance(finished_at, datetime) and finished_at < cutoff:
+            stale.append(conversation)
+    stale.sort(key=lambda conversation: conversation['finished_at'])
+    return stale[:limit]
+
+
+def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
+    """In-progress conversations whose last activity predates the cutoff (#9809).
+
+    The composite index orders by the last activity clock, so the bounded read
+    always reaches the oldest candidates. Without that ordering, an arbitrary
+    first page could keep old orphaned rows beyond it invisible forever.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': ConversationStatus.in_progress.value},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):

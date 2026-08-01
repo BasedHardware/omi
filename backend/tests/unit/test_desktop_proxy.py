@@ -75,6 +75,24 @@ def test_every_model_the_desktop_client_ships_is_proxy_allowlisted():
     assert client_models <= desktop_proxy._ALLOWED_MODELS
 
 
+def test_shared_desktop_policy_admits_every_model_the_client_ships():
+    """The same static checker over the shared Rust policy's copy of the proxy allowlist.
+
+    desktop/shared-rust carries the pre-cutover Rust gate's allowlist. Pinning only this
+    module let that copy keep the Flash-Lite gap that #10848 closed here, so the client's
+    model table is checked against every in-repo copy of the gate, not just the live one.
+    """
+    qos = BACKEND_DIR.parent / "desktop/macos/Desktop/Sources/ModelQoS.swift"
+    policy = BACKEND_DIR.parent / "desktop/shared-rust/src/model_qos.rs"
+    if not qos.exists() or not policy.exists():  # partial checkouts have no desktop tree
+        pytest.skip("desktop sources are not present in this checkout")
+    client_models = set(re.findall(r'"(gemini-[^"]+)"', qos.read_text()))
+    allowed_body = re.search(r"fn gemini_proxy_allowed\(\).*?\n\}", policy.read_text(), re.DOTALL)
+    assert allowed_body, "gemini_proxy_allowed() is no longer readable in the shared policy"
+    assert client_models
+    assert client_models <= set(re.findall(r'"(gemini-[^"]+)"', allowed_body.group()))
+
+
 def test_vertex_embedding_translation_round_trip():
     request = desktop_proxy._vertex_embedding_request(
         b'{"content":{"parts":[{"text":"hello"}]},"taskType":"RETRIEVAL_QUERY","title":"note"}'

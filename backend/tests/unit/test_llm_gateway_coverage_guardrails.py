@@ -111,7 +111,7 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
 def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     overrides = load_generated_route_overrides()
 
-    assert overrides['persona_chat'].primary.model == 'gpt-5.4-nano'
+    assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 

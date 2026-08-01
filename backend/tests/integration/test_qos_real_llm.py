@@ -59,10 +59,10 @@ def call_perplexity(model: str, prompt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gpt-5.4-mini features (flagship tier)
+# Premium profile — Luna default-intelligence features
 # ---------------------------------------------------------------------------
 class TestPremiumFlagship:
-    """Test gpt-5.4-mini features in premium profile respond to real prompts."""
+    """Test Luna features in premium profile respond to real prompts."""
 
     FLAGSHIP_FEATURES = [
         'conv_action_items',
@@ -81,7 +81,7 @@ class TestPremiumFlagship:
     @pytest.mark.parametrize("feature", FLAGSHIP_FEATURES)
     def test_flagship_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-5.4-mini', f"{feature} should be gpt-5.4-mini in premium, got {model}"
+        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -89,10 +89,10 @@ class TestPremiumFlagship:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gpt-4.1-mini features (quality-sensitive tier)
+# Premium profile — additional Luna features
 # ---------------------------------------------------------------------------
 class TestPremiumMini:
-    """Test gpt-4.1-mini features in premium profile respond to real prompts."""
+    """Test additional Luna features in premium profile respond to real prompts."""
 
     MINI_FEATURES = [
         'external_structure',
@@ -108,7 +108,7 @@ class TestPremiumMini:
     @pytest.mark.parametrize("feature", MINI_FEATURES)
     def test_mini_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-4.1-mini', f"{feature} should be gpt-4.1-mini in premium, got {model}"
+        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -116,10 +116,10 @@ class TestPremiumMini:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gpt-4.1-nano features (simple tasks tier)
+# Premium profile — gpt-5-nano light/binary features
 # ---------------------------------------------------------------------------
 class TestPremiumNano:
-    """Test gpt-4.1-nano features in premium profile respond to real prompts."""
+    """Test gpt-5-nano features in premium profile respond to real prompts."""
 
     NANO_FEATURES = [
         'conv_app_select',
@@ -134,7 +134,7 @@ class TestPremiumNano:
     @pytest.mark.parametrize("feature", NANO_FEATURES)
     def test_nano_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-4.1-nano', f"{feature} should be gpt-4.1-nano in premium, got {model}"
+        assert model == 'gpt-5-nano', f"{feature} should be gpt-5-nano in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -142,14 +142,14 @@ class TestPremiumNano:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gpt-4.1-mini features (vision/openglass)
+# Premium profile — Luna vision feature
 # ---------------------------------------------------------------------------
 class TestPremiumVision:
-    """Test gpt-4.1-mini vision-capable features in premium profile."""
+    """Test Luna vision-capable features in premium profile."""
 
     def test_openglass_feature_responds(self):
         model = get_model('openglass')
-        assert model == 'gpt-4.1-mini', f"openglass should be gpt-4.1-mini, got {model}"
+        assert model == 'gpt-5.6-luna', f"openglass should be gpt-5.6-luna, got {model}"
         llm = get_llm('openglass')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"openglass ({model}) returned empty response"

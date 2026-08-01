@@ -2060,8 +2060,10 @@ export interface InterventionRecord {
 export type InterventionSurface = "suggested" | "what_matters_now";
 
 export interface KnowledgeGraphResponse {
+  edge_count?: number;
   edge_limit?: number | null;
   edges: Array<Record<string, unknown>>;
+  node_count?: number;
   node_limit?: number | null;
   nodes: Array<Record<string, unknown>>;
   truncated?: boolean;

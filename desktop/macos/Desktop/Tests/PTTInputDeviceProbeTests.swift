@@ -30,7 +30,9 @@ final class PTTInputDeviceProbeTests: XCTestCase {
         return 99
       },
       outputIsBluetooth: { true },
-      builtInMicDeviceID: { 42 }
+      builtInMicDeviceID: { 42 },
+      defaultInputDeviceID: { nil },
+      isBluetoothInput: { _ in false }
     )
   }
 
@@ -42,7 +44,9 @@ final class PTTInputDeviceProbeTests: XCTestCase {
     PTTAudioDeviceProbe(
       inputDeviceID: { _ in selected },
       outputIsBluetooth: { bluetooth },
-      builtInMicDeviceID: { builtIn }
+      builtInMicDeviceID: { builtIn },
+      defaultInputDeviceID: { nil },
+      isBluetoothInput: { _ in false }
     )
   }
 
@@ -103,7 +107,9 @@ final class PTTInputDeviceProbeTests: XCTestCase {
         return 99
       },
       outputIsBluetooth: { true },
-      builtInMicDeviceID: { 42 }
+      builtInMicDeviceID: { 42 },
+      defaultInputDeviceID: { nil },
+      isBluetoothInput: { _ in false }
     )
 
     let finished = expectation(description: "every refresh call settled")
@@ -165,7 +171,9 @@ final class PTTInputDeviceProbeTests: XCTestCase {
         builtInMicDeviceID: {
           builtInReads.tick()
           return 42
-        }))
+        },
+        defaultInputDeviceID: { nil },
+        isBluetoothInput: { _ in false }))
 
     XCTAssertEqual(
       builtInReads.count, 0,

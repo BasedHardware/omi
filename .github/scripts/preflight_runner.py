@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -17,12 +18,7 @@ from pathlib import Path
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
 MAX_PR_BODY_FINGERPRINT_BYTES = 1024 * 1024
-
-# Signals forwarded to the owned child. SIGHUP is POSIX-only and is simply absent
-# on Windows, so the set is resolved against the host rather than assumed —
-# referencing signal.SIGHUP unconditionally raised AttributeError before any
-# pre-push check could run.
-FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP")
+FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
 FINGERPRINT_ENV_NAMES = (
     "GITHUB_HEAD_REF",
     "OMI_PR_BODY_FILE",
@@ -30,35 +26,176 @@ FINGERPRINT_ENV_NAMES = (
     "PYTHON",
     "PYTHONPATH",
 )
+IS_WINDOWS = os.name == "nt"
+HAS_PROCESS_GROUPS = os.name != "nt" and hasattr(os, "killpg")
+WINDOWS_STILL_ACTIVE = 259
+WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+WINDOWS_PROCESS_SET_QUOTA = 0x0100
+WINDOWS_PROCESS_TERMINATE = 0x0001
+WINDOWS_ERROR_ACCESS_DENIED = 5
+WINDOWS_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+WINDOWS_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+WINDOWS_CHILD_BOOTSTRAP_FLAG = "--windows-child-bootstrap"
 
 
-def forwardable_signals() -> tuple[int, ...]:
-    """Return the forwardable signals this platform actually defines."""
-    resolved = (getattr(signal, name, None) for name in FORWARDED_SIGNAL_NAMES)
-    return tuple(signum for signum in resolved if signum is not None)
+class WindowsJob:
+    """Own a Windows process tree and terminate it when the job closes."""
+
+    def __init__(self) -> None:
+        if not IS_WINDOWS:
+            raise RuntimeError("Windows jobs are only available on Windows")
+
+        from ctypes import wintypes
+
+        class BasicLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_int64),
+                ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_uint64),
+                ("WriteOperationCount", ctypes.c_uint64),
+                ("OtherOperationCount", ctypes.c_uint64),
+                ("ReadTransferCount", ctypes.c_uint64),
+                ("WriteTransferCount", ctypes.c_uint64),
+                ("OtherTransferCount", ctypes.c_uint64),
+            ]
+
+        class ExtendedLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BasicLimitInformation),
+                ("IoInfo", IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_job = kernel32.CreateJobObjectW
+        create_job.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        create_job.restype = wintypes.HANDLE
+        set_information = kernel32.SetInformationJobObject
+        set_information.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        set_information.restype = wintypes.BOOL
+        self._open_process = kernel32.OpenProcess
+        self._open_process.argtypes = [
+            wintypes.DWORD,
+            wintypes.BOOL,
+            wintypes.DWORD,
+        ]
+        self._open_process.restype = wintypes.HANDLE
+        self._assign_process = kernel32.AssignProcessToJobObject
+        self._assign_process.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        self._assign_process.restype = wintypes.BOOL
+        self._terminate_job = kernel32.TerminateJobObject
+        self._terminate_job.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        self._terminate_job.restype = wintypes.BOOL
+        self._close_handle = kernel32.CloseHandle
+        self._close_handle.argtypes = [wintypes.HANDLE]
+        self._close_handle.restype = wintypes.BOOL
+
+        self._handle = create_job(None, None)
+        self.assigned = False
+        if not self._handle:
+            raise self._last_error("CreateJobObjectW failed")
+
+        limits = ExtendedLimitInformation()
+        limits.BasicLimitInformation.LimitFlags = WINDOWS_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not set_information(
+            self._handle,
+            WINDOWS_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(limits),
+            ctypes.sizeof(limits),
+        ):
+            error = self._last_error("SetInformationJobObject failed")
+            self.close()
+            raise error
+
+    @staticmethod
+    def _last_error(message: str) -> OSError:
+        error_code = ctypes.get_last_error()
+        return OSError(error_code, f"{message}: {ctypes.FormatError(error_code).strip()}")
+
+    def assign(self, pid: int) -> None:
+        process = self._open_process(
+            WINDOWS_PROCESS_SET_QUOTA | WINDOWS_PROCESS_TERMINATE,
+            False,
+            pid,
+        )
+        if not process:
+            raise self._last_error(f"OpenProcess({pid}) failed")
+        try:
+            if not self._assign_process(self._handle, process):
+                raise self._last_error(f"AssignProcessToJobObject({pid}) failed")
+        finally:
+            self._close_handle(process)
+        self.assigned = True
+
+    def terminate(self, exit_code: int = 1) -> bool:
+        if not self._handle or not self.assigned:
+            return False
+        return bool(self._terminate_job(self._handle, exit_code))
+
+    def close(self) -> None:
+        if self._handle:
+            self._close_handle(self._handle)
+            self._handle = None
+
+
+def forwardable_signals(module: object = signal) -> tuple[int, ...]:
+    """Return only the forwarding signals the current host defines."""
+    return tuple(signum for name in FORWARDED_SIGNAL_NAMES if isinstance((signum := getattr(module, name, None)), int))
+
+
+def child_launch_command(command: list[str]) -> list[str]:
+    """Delay Windows command execution until the parent assigns its Job Object."""
+    if not IS_WINDOWS:
+        return command
+    return [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        WINDOWS_CHILD_BOOTSTRAP_FLAG,
+        *command,
+    ]
+
+
+def run_windows_child_bootstrap(command: list[str]) -> int:
+    """Forward stdin after the Job Object assignment barrier is released."""
+    if not command:
+        return 2
+    return subprocess.run(command, input=sys.stdin.buffer.read()).returncode
 
 
 def signal_child(
-    child: subprocess.Popen,
+    child: subprocess.Popen[str],
     signum: int,
-    *,
-    platform_name: str | None = None,
+    windows_job: WindowsJob | None = None,
 ) -> None:
-    """Forward a signal to the isolated child process group where supported."""
-    platform_name = platform_name or os.name
+    """Forward to the POSIX child group or terminate the Windows process tree."""
     killpg = getattr(os, "killpg", None)
     try:
-        if platform_name == "nt":
-            ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
-            if ctrl_break is not None and signum in (signal.SIGINT, signal.SIGTERM):
-                child.send_signal(ctrl_break)
-            else:
-                child.send_signal(signum)
-        elif killpg is not None:
+        if windows_job is not None and windows_job.terminate():
+            return
+        if killpg is not None:
             killpg(child.pid, signum)
         else:
             child.send_signal(signum)
-    except (ProcessLookupError, OSError, ValueError):
+    except (OSError, ValueError):
         pass
 
 
@@ -66,17 +203,6 @@ def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, path)
-
-
-def configure_console_error_handling() -> None:
-    """Keep non-console Unicode output from aborting a Windows preflight."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if callable(reconfigure):
-            options = {"errors": "replace"}
-            if os.name == "nt":
-                options["encoding"] = "utf-8"
-            reconfigure(**options)
 
 
 def read_json(path: Path) -> dict:
@@ -87,11 +213,66 @@ def read_json(path: Path) -> dict:
         return {}
 
 
-def process_exists(pid: int) -> bool:
+def windows_process_status(pid: int) -> tuple[bool, int | None]:
+    """Return Windows liveness and immutable process creation ticks."""
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_process = kernel32.OpenProcess
+    open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    open_process.restype = wintypes.HANDLE
+    get_exit_code = kernel32.GetExitCodeProcess
+    get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    get_exit_code.restype = wintypes.BOOL
+    get_process_times = kernel32.GetProcessTimes
+    get_process_times.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    get_process_times.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    handle = open_process(WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == WINDOWS_ERROR_ACCESS_DENIED, None
+    try:
+        exit_code = wintypes.DWORD()
+        if not get_exit_code(handle, ctypes.byref(exit_code)):
+            return True, None
+        if exit_code.value != WINDOWS_STILL_ACTIVE:
+            return False, None
+
+        creation = wintypes.FILETIME()
+        exit_time = wintypes.FILETIME()
+        kernel_time = wintypes.FILETIME()
+        user_time = wintypes.FILETIME()
+        if not get_process_times(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            return True, None
+        creation_ticks = (creation.dwHighDateTime << 32) | creation.dwLowDateTime
+        return True, creation_ticks
+    finally:
+        close_handle(handle)
+
+
+def process_exists(pid: int, expected_creation_ticks: int | None = None) -> bool:
     if pid <= 0:
         return False
-    if os.name == "nt":
-        return windows_process_exists(pid)
+    if IS_WINDOWS:
+        exists, creation_ticks = windows_process_status(pid)
+        if expected_creation_ticks is not None:
+            return exists and creation_ticks == expected_creation_ticks
+        return exists
     try:
         os.kill(pid, 0)
         return True
@@ -99,31 +280,6 @@ def process_exists(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-
-
-def windows_process_exists(pid: int) -> bool:
-    """Check liveness without treating signal 0 as Windows CTRL_C_EVENT."""
-    import ctypes
-    from ctypes import wintypes
-
-    synchronize = 0x00100000
-    wait_timeout = 0x00000102
-    access_denied = 5
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-    kernel32.WaitForSingleObject.restype = wintypes.DWORD
-    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    kernel32.CloseHandle.restype = wintypes.BOOL
-
-    handle = kernel32.OpenProcess(synchronize, False, pid)
-    if not handle:
-        return ctypes.get_last_error() == access_denied
-    try:
-        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
-    finally:
-        kernel32.CloseHandle(handle)
 
 
 def default_state_dir(root: Path, name: str) -> Path:
@@ -187,7 +343,8 @@ def remove_stale_lock(lock_dir: Path, expected_pid: int) -> bool:
     owner = read_json(lock_dir / "owner.json")
     if int(owner.get("pid") or 0) != expected_pid:
         return False
-    if process_exists(expected_pid):
+    expected_creation_ticks = int(owner.get("process_creation_ticks") or 0) or None
+    if process_exists(expected_pid, expected_creation_ticks):
         return False
     try:
         shutil.rmtree(lock_dir)
@@ -210,8 +367,9 @@ def join_existing(state_dir: Path, wanted_fingerprint: str) -> int | None:
             time.sleep(POLL_SECONDS)
         return None
     active_pid = int(owner.get("pid") or 0)
+    active_creation_ticks = int(owner.get("process_creation_ticks") or 0) or None
     active_fingerprint = str(owner.get("fingerprint") or "")
-    if not process_exists(active_pid):
+    if not process_exists(active_pid, active_creation_ticks):
         if remove_stale_lock(lock_dir, active_pid):
             return None
     log_path = state_dir / "preflight.log"
@@ -229,7 +387,7 @@ def join_existing(state_dir: Path, wanted_fingerprint: str) -> int | None:
     print(f"Joining identical preflight PID {active_pid}; live log: {log_path}")
     next_status = 0.0
     while lock_dir.exists():
-        if not process_exists(active_pid):
+        if not process_exists(active_pid, active_creation_ticks):
             remove_stale_lock(lock_dir, active_pid)
             break
         now = time.monotonic()
@@ -302,29 +460,27 @@ def run_owned(
     previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
     try:
+        if IS_WINDOWS:
+            windows_job = WindowsJob()
         print(f"Pre-push single-flight log: {log_path}")
         log_path.write_text("", encoding="utf-8")
         os.chmod(log_path, 0o600)
         write_status()
-        child_env = os.environ.copy()
-        child_env["PYTHONIOENCODING"] = "utf-8"
-        child_env["PYTHONUTF8"] = "1"
-        process_group_options = (
-            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
-        )
         child = subprocess.Popen(
-            command,
+            child_launch_command(command),
             cwd=root,
-            env=child_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
-            errors="replace",
+            errors="backslashreplace",
             bufsize=1,
-            **process_group_options,
+            start_new_session=HAS_PROCESS_GROUPS,
+            creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0),
         )
+        if windows_job is not None:
+            windows_job.assign(child.pid)
         if child.stdin:
             child.stdin.write(stdin_data)
             child.stdin.close()
@@ -353,8 +509,7 @@ def run_owned(
                 else ""
             )
             print(
-                f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; "
-                f"inspect {log_path}",
+                f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; inspect {log_path}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -372,6 +527,16 @@ def run_owned(
         )
         return exit_code
     finally:
+        if child is not None and child.poll() is None:
+            signal_child(child, signal.SIGTERM, windows_job)
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+        if windows_job is not None:
+            windows_job.terminate()
+            windows_job.close()
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
         shutil.rmtree(lock_dir, ignore_errors=True)
@@ -384,8 +549,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_repo_root() -> Path:
+    # Git runs hooks with the working directory at the top of the invoking work
+    # tree, and the pre-push dispatcher cd's to the repo root before invoking
+    # this runner. Fall back to that working directory when `git rev-parse
+    # --show-toplevel` cannot resolve a work tree: in a linked worktree whose
+    # git context resolves to a git dir rather than a work tree, show-toplevel
+    # exits 128 ("this operation must be run in a work tree") and this runner
+    # would otherwise abort the gate, forcing a --no-verify push.
+    try:
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        toplevel = ""
+    return Path(toplevel or Path.cwd()).resolve()
+
+
 def main() -> int:
-    configure_console_error_handling()
+    if sys.argv[1:2] == [WINDOWS_CHILD_BOOTSTRAP_FLAG]:
+        return run_windows_child_bootstrap(sys.argv[2:])
+
     args = parse_args()
     command = list(args.command)
     if command and command[0] == "--":
@@ -393,13 +582,7 @@ def main() -> int:
     if not command:
         print("FAIL: preflight runner requires a command after --", file=sys.stderr)
         return 2
-    root = Path(
-        subprocess.check_output(
-            ["git", "rev-parse", "--show-toplevel"],
-            text=True,
-            encoding="utf-8",
-        ).strip()
-    ).resolve()
+    root = resolve_repo_root()
     # Git supplies ref updates on a pipe. Manual preflight runs inherit a TTY;
     # treating that as empty input avoids waiting forever for an interactive EOF.
     stdin_data = "" if sys.stdin.isatty() else sys.stdin.read()
@@ -408,7 +591,15 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(state_dir, 0o700)
     lock_dir = state_dir / "lock"
-    owner = {"pid": os.getpid(), "fingerprint": wanted_fingerprint, "started_at_epoch": time.time()}
+    owner = {
+        "pid": os.getpid(),
+        "fingerprint": wanted_fingerprint,
+        "started_at_epoch": time.time(),
+    }
+    if IS_WINDOWS:
+        _, process_creation_ticks = windows_process_status(os.getpid())
+        if process_creation_ticks is not None:
+            owner["process_creation_ticks"] = process_creation_ticks
 
     while not acquire(lock_dir, owner):
         joined = join_existing(state_dir, wanted_fingerprint)

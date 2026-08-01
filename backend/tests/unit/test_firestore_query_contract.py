@@ -17,6 +17,7 @@ from database.firestore_index_registry import (
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
+    INDEX_ONLY_REQUIREMENTS,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
     REVIEW_QUEUE_BY_STATUS_QUERY,
@@ -25,6 +26,7 @@ from database.firestore_index_registry import (
     REQUIRED_MEMORY_PROCESSING_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
@@ -235,6 +237,11 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
             {"status": "pending"},
             [("status", "==", "pending")],
         ),
+        (
+            STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+            {"status": "in_progress"},
+            [("status", "==", "in_progress")],
+        ),
     ],
 )
 def test_registered_memory_maintenance_queries_build_the_real_filter_chains(spec, values, expected):
@@ -285,17 +292,26 @@ def test_what_matters_now_route_executes_the_registered_attention_override_query
 
 def test_generated_firestore_manifest_matches_the_checked_in_contract():
     manifest_path = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
-
-    assert manifest_path.read_text(encoding='utf-8') == generate_firestore_indexes.render_manifest()
-    assert firebase_index_manifest()['indexes'][-1] == {
-        'collectionGroup': 'task_attention_overrides',
+    expected_conversations_status_finished = {
+        'collectionGroup': 'conversations',
         'queryScope': 'COLLECTION',
         'fields': [
-            {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
-            {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': 'status', 'order': 'ASCENDING'},
+            {'fieldPath': 'finished_at', 'order': 'ASCENDING'},
             {'fieldPath': '__name__', 'order': 'ASCENDING'},
         ],
     }
+
+    assert manifest_path.read_text(encoding='utf-8') == generate_firestore_indexes.render_manifest()
+    assert any(
+        requirement.identifier == 'conversations_status_finished'
+        and requirement.to_manifest() == expected_conversations_status_finished
+        for requirement in INDEX_ONLY_REQUIREMENTS
+    )
+    assert (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.index_requirement.to_manifest() == expected_conversations_status_finished
+    )
+    assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
 
 
 @pytest.mark.slow
@@ -317,6 +333,7 @@ def test_query_inventory_registers_the_migrated_query_shapes():
         SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
         EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
         ACTIVE_ATTENTION_OVERRIDE_QUERY,
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     ):
         matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
         assert len(matching) == 1

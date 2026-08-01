@@ -63,6 +63,22 @@ SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {r
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
     syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
 
+/// The upload lanes [pending] would actually use.
+///
+/// Rate-limit cooldowns are per lane, so callers deciding whether uploading is possible at all
+/// must ask about the lanes the work needs — a fresh-lane cooldown says nothing about a backlog
+/// that uploads through backfill.
+Set<SyncUploadLane> pendingSyncUploadLanes(List<Wal> pending, int nowSeconds) =>
+    pending.map((wal) => _syncLaneForWal(wal, nowSeconds)).toSet();
+
+/// True only when every lane in [lanes] is in cooldown. With nothing pending there is no lane to
+/// judge, so [fallback] decides.
+bool allSyncLanesLimited(
+  Set<SyncUploadLane> lanes,
+  bool Function(String lane) isLaneLimited, {
+  required bool fallback,
+}) => lanes.isEmpty ? fallback : lanes.every((lane) => isLaneLimited(lane.name));
+
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
   final counts = <String, int>{};

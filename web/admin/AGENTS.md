@@ -1,14 +1,21 @@
-# Web Admin Dashboard — Developer Guide
+# Web Admin Dashboard
 
 ## Networking
 
-All fetches go through `hooks/useAuthToken.ts`. No direct `getIdToken()`, manual auth headers, or client-side Firestore reads.
+All fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth headers, or read Firestore in the client.
 
-- **SWR reads**: `useAuthToken()` + `authenticatedFetcher`
-- **Mutations**: `useAuthFetch()` → `fetchWithAuth(url, init)`
-- **Server routes**: `verifyAdmin(request)` from `lib/auth.ts` on every route
-- **Parallel fetches**: `Promise.allSettled` (not `Promise.all`), return `partial: true` on partial failure, 502 on total failure
-- **SWR config**: `components/swr-provider.tsx` — exponential backoff, skip retry on 401/403
-- **SWR keys**: `token ? [url, token] : null` — null prevents fetch until auth ready
-- **UI on partial**: amber warning. **UI on error**: clear stale data, show N/A — never display old data with error flag
-- **Banned**: custom fetchers, `useEffect` token management, direct `fetch()` with manual auth, `Promise.all` for parallel upstream calls, serving zero metrics on upstream failure
+- Reads: `useAuthToken()` + `authenticatedFetcher`; mutations: `useAuthFetch()` → `fetchWithAuth(url, init)`.
+- Server routes call `verifyAdmin(request)` from `lib/auth.ts`.
+- Parallel fetches use `Promise.allSettled`, returning `partial: true` on partial failure and 502 on total failure.
+- SWR configuration belongs in `components/swr-provider.tsx`; keys are `token ? [url, token] : null`.
+- Partial data shows an amber warning. On error, clear stale data and show N/A; never show stale data with an error flag.
+- Do not add custom fetchers, `useEffect` token handling, manual-auth `fetch()`, `Promise.all` upstream calls, or zero metrics for upstream failures.
+
+## Revenue metrics
+
+Subscription metrics use `lib/stripe-subscriptions.ts`; never list subscriptions by price ID.
+
+- `OMI_PLAN_PRODUCTS` defines the subscription scope; it excludes marketplace apps and internal test products. Add a line when launching a plan.
+- Marketplace apps are excluded by `metadata.app_id`, stamped by the backend on app checkout.
+- MRR includes `active` and `past_due`; report `trialing` separately.
+- Normalize amounts with each price's `interval` and `interval_count`; never assume monthly or annual pricing.

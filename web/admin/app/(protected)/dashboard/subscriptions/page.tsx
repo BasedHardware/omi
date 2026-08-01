@@ -235,8 +235,8 @@ export default function SubscriptionsPage() {
         const data = await response.json();
         if (data.partial) setHasPartialData(true);
         setSubscriptionCounts({
-          monthly: data.priceIdOne?.count || 0,
-          annual: data.priceIdTwo?.count || 0,
+          monthly: data.monthly || 0,
+          annual: data.annual || 0,
         });
       } else {
         setSubscriptionCounts(null);

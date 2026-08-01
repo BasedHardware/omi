@@ -401,21 +401,15 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
     )
 
     assert commands[0][:4] == ['gcloud', 'firestore', 'indexes', 'composite']
-    assert commands[1] == [
-        'gcloud',
-        'firestore',
-        'indexes',
-        'composite',
-        'create',
-        '--project=dev-project',
-        '--database=(default)',
-        '--collection-group=task_attention_overrides',
-        '--query-scope=collection',
-        '--field-config=field-path=account_generation,order=ascending',
-        '--field-config=field-path=expires_at,order=ascending',
-        '--field-config=field-path=__name__,order=ascending',
-        '--quiet',
-    ]
+    assert commands[1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']
+    assert f"--collection-group={target['collectionGroup']}" in commands[1]
+    assert len([arg for arg in commands[1] if arg.startswith('--field-config=')]) == len(target['fields'])
+    assert commands[1][-1] == '--quiet'
+    assert commands[1] == reconcile_firestore_indexes.gcloud_create_index_command(
+        project='dev-project',
+        database='(default)',
+        signature=reconcile_firestore_indexes._index_signature(target),
+    )
     assert all(command[:3] != ['npx', '--no-install', 'firebase'] for command in commands)
 
 

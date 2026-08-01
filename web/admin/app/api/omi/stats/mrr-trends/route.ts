@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import type Stripe from 'stripe';
 import { getOptionalStripe } from '@/lib/stripe';
 import { getPayload, setPayload } from '@/lib/payload-cache';
+import {
+  AllSubscriptionSourcesFailedError,
+  fetchOmiSubscriptions,
+  monthlyAmount,
+} from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
 
 function cacheKey(months: number): string {
-  return `mrr-trends:v1:${months}`;
+  return `mrr-trends:v2:${months}`;
 }
 
 export { cacheKey as mrrTrendsCacheKey };
-
-// Thrown when every Stripe leg fails — GET maps it to a 502.
-class AllSourcesFailedError extends Error {}
 
 function buildEmptyMrrData(months: number) {
   const endDate = new Date();
@@ -41,10 +42,8 @@ function buildEmptyMrrData(months: number) {
 
 export async function computeMrrTrends(months: number) {
     const stripe = getOptionalStripe();
-    const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
-    if (!stripe || !monthlyPriceId || !annualPriceId) {
+    if (!stripe) {
       return { data: buildEmptyMrrData(months), unavailable: true };
     }
 
@@ -53,53 +52,9 @@ export async function computeMrrTrends(months: number) {
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
 
-    // Fetch all subscriptions with pagination
-    const fetchAllSubscriptions = async (priceId: string) => {
-      let allSubscriptions: Stripe.Subscription[] = [];
-      let hasMore = true;
-      let startingAfter: string | undefined = undefined;
-
-      while (hasMore) {
-        const params: Stripe.SubscriptionListParams = {
-          price: priceId,
-          limit: 100,
-          expand: ['data.items.data.price'],
-        };
-
-        if (startingAfter) {
-          params.starting_after = startingAfter;
-        }
-
-        const subscriptions = await stripe.subscriptions.list(params);
-        allSubscriptions = allSubscriptions.concat(subscriptions.data);
-        
-        hasMore = subscriptions.has_more;
-        if (hasMore && subscriptions.data.length > 0) {
-          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
-        }
-      }
-
-      return allSubscriptions;
-    };
-
-    const results = await Promise.allSettled([
-      fetchAllSubscriptions(monthlyPriceId),
-      fetchAllSubscriptions(annualPriceId),
-    ]);
-
-    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
-    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
-
-    if (results[0].status === 'rejected') {
-      console.error('Error fetching monthly subscriptions for MRR:', results[0].reason);
-    }
-    if (results[1].status === 'rejected') {
-      console.error('Error fetching annual subscriptions for MRR:', results[1].reason);
-    }
-
-    if (results.every((r) => r.status === 'rejected')) {
-      throw new AllSourcesFailedError('All MRR trend data sources failed');
-    }
+    // Historical MRR needs cancelled subscriptions too, so this reads every status rather than
+    // the MRR set, and the per-month filter below decides what was live in each month.
+    const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, ['all']);
 
     // Group MRR by month
     const mrrByMonth: Record<string, number> = {};
@@ -122,49 +77,13 @@ export async function computeMrrTrends(months: number) {
 
       let monthMRR = 0;
 
-      // Process monthly subscriptions
-      monthlySubscriptions.forEach((subscription) => {
+      subscriptions.forEach((subscription) => {
         const createdDate = new Date(subscription.created * 1000);
-        const cancelDate = subscription.canceled_at 
-          ? new Date(subscription.canceled_at * 1000)
-          : null;
-        
-        // Subscription is active during this month if:
-        // - Created before or during this month
-        // - Not canceled or canceled after this month
+        const cancelDate = subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null;
+
+        // Live during this month: created on or before its end, and not cancelled before its start.
         if (createdDate <= monthEnd && (!cancelDate || cancelDate >= monthStart)) {
-          subscription.items.data.forEach((item) => {
-            const price = typeof item.price === 'string' ? null : item.price;
-            if (!price) return;
-
-            const amount = price.unit_amount || 0;
-            const quantity = item.quantity || 1;
-            const totalAmount = (amount * quantity) / 100; // Convert from cents to dollars
-            monthMRR += totalAmount;
-          });
-        }
-      });
-
-      // Process annual subscriptions (convert to monthly equivalent)
-      annualSubscriptions.forEach((subscription) => {
-        const createdDate = new Date(subscription.created * 1000);
-        const cancelDate = subscription.canceled_at 
-          ? new Date(subscription.canceled_at * 1000)
-          : null;
-        
-        // Subscription is active during this month if:
-        // - Created before or during this month
-        // - Not canceled or canceled after this month
-        if (createdDate <= monthEnd && (!cancelDate || cancelDate >= monthStart)) {
-          subscription.items.data.forEach((item) => {
-            const price = typeof item.price === 'string' ? null : item.price;
-            if (!price) return;
-
-            const amount = price.unit_amount || 0;
-            const quantity = item.quantity || 1;
-            const totalAmount = (amount * quantity) / 100; // Convert from cents to dollars
-            monthMRR += totalAmount / 12; // Convert annual to monthly equivalent
-          });
+          monthMRR += monthlyAmount(subscription);
         }
       });
 
@@ -172,7 +91,6 @@ export async function computeMrrTrends(months: number) {
     });
 
     // Format data for chart
-    const partial = results.some((r) => r.status === 'rejected');
     const data = monthKeys.map((monthKey) => {
       const [year, month] = monthKey.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1);
@@ -204,7 +122,7 @@ export async function GET(request: NextRequest) {
     await setPayload(key, payload);
     return NextResponse.json(payload);
   } catch (error) {
-    if (error instanceof AllSourcesFailedError) {
+    if (error instanceof AllSubscriptionSourcesFailedError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
     console.error('Error fetching MRR trends:', error);

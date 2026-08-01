@@ -224,7 +224,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          OmiMarkdown(text: displayText, sender: message.sender, isStreaming: message.isStreaming)
+          OmiMarkdown(text: displayText, sender: message.sender)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .background(
@@ -291,7 +291,7 @@ struct ChatBubble: View {
         return AnyView(EmptyView())
       }
       return AnyView(
-        OmiMarkdown(text: text, sender: .ai, isStreaming: message.isStreaming)
+        OmiMarkdown(text: text, sender: .ai)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
           .background(OmiColors.backgroundTertiary.opacity(0.42))

@@ -78,11 +78,23 @@ def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promote
     assert pointer["release_id"] == accepted["release_id"]
 
 
+# omi-test-quality: source-inspection -- static contract: GitHub cannot execute a workflow_run fixture locally.
 def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
     workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert "/v2/desktop/beta/promote-qualified" in workflow
     assert 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in workflow
     assert '--data "{\\"tag\\":\\"${RELEASE_TAG}\\"}"' in workflow
+    for required in (
+        "actions: read",
+        "github.event.workflow_run.id",
+        "github.event.workflow_run.run_attempt",
+        "actions/runs/$QUALIFICATION_RUN_ID/artifacts",
+        "qualification-evidence.json",
+        "EVIDENCE_SOURCE_SHA",
+    ):
+        assert required in workflow
+    assert "github.event.workflow_run.head_branch" not in workflow
+    assert "github.event.workflow_run.head_sha" not in workflow
     for forbidden in (
         "gcloud",
         "google-github-actions/auth",
@@ -160,9 +172,14 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     }
 
     admission.validate_qualification_run(trusted_tag_run, "BasedHardware/omi", tag, candidate_sha)
-    drifted_main_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "b" * 40}
-    with pytest.raises(ValueError, match="candidate tag"):
-        admission.validate_qualification_run(drifted_main_run, "BasedHardware/omi", tag, candidate_sha)
+    manual_main_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "b" * 40}
+    admission.validate_qualification_run(manual_main_run, "BasedHardware/omi", tag, candidate_sha)
+    untrusted_control_run = {**trusted_tag_run, "head_branch": "release", "head_sha": "b" * 40}
+    with pytest.raises(ValueError, match="candidate tag controls or trusted main controls"):
+        admission.validate_qualification_run(untrusted_control_run, "BasedHardware/omi", tag, candidate_sha)
+    malformed_manual_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "not-a-commit"}
+    with pytest.raises(ValueError, match="immutable dispatch SHA"):
+        admission.validate_qualification_run(malformed_manual_run, "BasedHardware/omi", tag, candidate_sha)
 
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
@@ -173,6 +190,7 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
     assert 'digest=$(shasum -a 256 "$QUALIFICATION_STAGE/qualification-evidence.json"' in qualification
     assert "gh release upload" in qualification
+    assert "desktop-qualification-backend-compatibility-" in qualification
 
 
 def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():

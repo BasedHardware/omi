@@ -319,15 +319,39 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
     def test_transient_check_state_is_bounded_then_times_out_as_blocked(self) -> None:
         waiting = planner.SourceCheckGate("waiting", "required check is missing for exact source SHA")
         with (
-            patch.object(planner, "required_source_checks_gate", return_value=waiting),
+            patch.object(planner, "required_source_checks_gate", return_value=waiting) as gate,
             patch.object(planner.time, "monotonic", side_effect=(100, 100, 121)),
             patch.object(planner.time, "sleep") as sleep,
         ):
+            result = planner.wait_for_required_source_checks(REPOSITORY, SOURCE_SHA, wait_seconds=20, poll_seconds=10)
+
+        self.assertEqual(result.state, "blocked")
+        self.assertIn("timed out after 20s", result.reason or "")
+        sleep.assert_called_once_with(10)
+        # Initial probe + post-sleep probe + final re-check before timeout.
+        self.assertEqual(gate.call_count, 3)
+
+    def test_timeout_final_recheck_admits_late_exact_sha_success(self) -> None:
+        waiting = planner.SourceCheckGate("waiting", "required check is missing for exact source SHA")
+        ready = planner.SourceCheckGate("ready")
+        with (
+            patch.object(
+                planner,
+                "required_source_checks_gate",
+                side_effect=(waiting, waiting, ready),
+            ),
+            patch.object(planner.time, "monotonic", side_effect=(100, 100, 121)),
+            patch.object(planner.time, "sleep"),
+        ):
             gate = planner.wait_for_required_source_checks(REPOSITORY, SOURCE_SHA, wait_seconds=20, poll_seconds=10)
 
-        self.assertEqual(gate.state, "blocked")
-        self.assertIn("timed out after 20s", gate.reason or "")
-        sleep.assert_called_once_with(10)
+        self.assertEqual(gate.state, "ready")
+
+    def test_ci_gate_timeout_env_overrides_default_wait_budget(self) -> None:
+        with patch.dict(os.environ, {planner.CI_GATE_TIMEOUT_ENV: "4500"}, clear=False):
+            self.assertEqual(planner.default_source_check_wait_seconds(), 4500)
+        with patch.dict(os.environ, {planner.CI_GATE_TIMEOUT_ENV: ""}, clear=False):
+            self.assertEqual(planner.default_source_check_wait_seconds(), planner.SOURCE_CHECK_WAIT_SECONDS)
 
     def test_extended_wait_admits_observed_late_exact_sha_success(self) -> None:
         # Run 30179919353 timed out at the former 12-minute boundary, then its
@@ -482,9 +506,17 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
-        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 20 * 60)
-        self.assertEqual(workflow.count("--source-check-wait-seconds 1200"), 3)
+        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 60 * 60)
+        self.assertGreaterEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 45 * 60)
+        self.assertEqual(workflow.count('--source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}"'), 3)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 3)
+        self.assertIn("CI_GATE_TIMEOUT_SECONDS:", workflow)
+        self.assertIn("vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '3600'", workflow)
+        self.assertIn("timeout-minutes: 75", workflow)
+        self.assertIn("Surface planner non-release decision", workflow)
+        self.assertIn("::error::Desktop release planner blocked:", workflow)
+        self.assertIn("::warning::Desktop release planner skipped tagging:", workflow)
+        self.assertIn('if: steps.plan.outputs.should_release != \'true\'', workflow)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
             workflow.index("Publish immutable tag from exact live main source"),

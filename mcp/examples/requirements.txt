@@ -41,7 +41,7 @@ frozenlist==1.8.0
 fsspec==2026.2.0
 gepa==0.0.27
 gitdb==4.0.12
-gitpython==3.1.50
+gitpython==3.1.55
 google-auth==2.53.0
 graphene==3.4.3
 graphql-core==3.2.8
@@ -86,7 +86,7 @@ markdown==3.10.2
 markdown-it-py==4.2.0
 markupsafe==3.0.3
 matplotlib==3.10.9
-mcp==1.27.1
+mcp==1.28.1
 mdurl==0.1.2
 mlflow-skinny==3.12.0
 multidict==6.7.1
@@ -104,16 +104,16 @@ orjson==3.11.9
 ormsgpack==1.12.2
 packaging==26.2
 pandas==3.0.3
-pillow==12.2.0
+pillow==12.3.0
 propcache==0.5.2
 protobuf==6.33.6
 pyarrow==24.0.0
-pyasn1==0.6.3
+pyasn1==0.6.4
 pyasn1-modules==0.4.2
 pycparser==3.0
 pydantic==2.13.4
 pydantic-core==2.46.4
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
 pydeck==0.9.2
 pygments==2.20.0
 pyjwt==2.12.1

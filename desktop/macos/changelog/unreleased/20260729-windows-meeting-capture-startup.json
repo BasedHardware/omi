@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Windows meeting prompts that could claim capture started when audio or transcription was unavailable."
-}

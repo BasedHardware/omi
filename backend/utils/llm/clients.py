@@ -630,7 +630,7 @@ class _LazyClientProxy:
 
 
 def _create_legacy_llm_mini() -> ChatOpenAI:
-    return ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
+    return ChatOpenAI(model=get_model('learnings'), callbacks=[_usage_callback], request_timeout=120, max_retries=1)
 
 
 llm_mini = _LazyClientProxy(_create_legacy_llm_mini)

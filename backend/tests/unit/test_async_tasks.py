@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from fastapi.websockets import WebSocketDisconnect
 from unittest.mock import patch
 
 import utils.async_tasks as async_tasks_mod
@@ -387,6 +388,39 @@ class TestSuperviseTasks:
             )
             # finite completes, then receive completes -> disconnect
             assert result.reason == "disconnect"
+
+        asyncio.run(_run())
+
+    def test_same_round_disconnect_wins_over_bg_task_observing_it(self):
+        """A bg writer that sees the same client disconnect must not report a crash.
+
+        `asyncio.wait` returns a set, so scanning it in iteration order made the
+        classification depend on hash order alone; repeat the round so a pre-fix
+        supervisor cannot pass on luck.
+        """
+
+        async def _run():
+            for _ in range(25):
+
+                async def receive():
+                    return None
+
+                async def bg():
+                    raise WebSocketDisconnect()
+
+                recv = asyncio.create_task(receive(), name="receive")
+                bg_task = asyncio.create_task(bg(), name="heartbeat")
+                # Both land in the same asyncio.wait round.
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                assert recv.done() and bg_task.done()
+
+                result = await supervise_tasks(
+                    receive_task=recv,
+                    bg_tasks=[bg_task],
+                    label="test",
+                )
+                assert result.reason == "disconnect", result
 
         asyncio.run(_run())
 

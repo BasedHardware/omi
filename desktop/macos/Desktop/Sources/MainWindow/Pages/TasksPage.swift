@@ -1063,6 +1063,8 @@ class TasksViewModel: ObservableObject {
     let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     let keyCode = event.keyCode
 
+    if keyCode == 53 { return handleEscape() }
+
     // Cmd+N: new task (inline at top)
     if modifiers == .command && keyCode == 45 {
       isInlineCreating = true
@@ -1151,19 +1153,6 @@ class TasksViewModel: ObservableObject {
         self?.inlineCreateAfterTaskId = self?.keyboardSelectedTaskId
       }
       return true
-    }
-
-    // Escape: cancel inline create, or deselect
-    if keyCode == 53 {
-      if isInlineCreating {
-        isInlineCreating = false
-        inlineCreateAfterTaskId = nil
-        return true
-      }
-      if keyboardSelectedTaskId != nil {
-        keyboardSelectedTaskId = nil
-        return true
-      }
     }
 
     return false
@@ -2571,6 +2560,7 @@ struct TasksPage: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.clear)
+    .onEscapeKey(priority: .content) { handleEscapeKey() }
     // Modal creation sheet removed — Cmd+N now creates inline at top
     .onAppear {
       Task { @MainActor in
@@ -2663,6 +2653,14 @@ struct TasksPage: View {
   /// Close the chat panel and shrink window
   private func closeChatPanel() {
     chatCoordinator.closeChat()
+  }
+
+  private func handleEscapeKey() -> Bool {
+    if viewModel.isAnyTaskEditing || viewModel.editingTaskId != nil {
+      NSApp.keyWindow?.makeFirstResponder(nil)
+      return true
+    }
+    return viewModel.handleEscape()
   }
 
   /// Expand or shrink the main window to accommodate the chat panel.

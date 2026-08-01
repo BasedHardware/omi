@@ -492,3 +492,42 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+
+
+def _heartbeat_runtime(send_text):
+    from starlette.websockets import WebSocketState
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_text=send_text)
+    )
+    runtime.state = SimpleNamespace(active=True, last_activity_time=None)
+    return runtime
+
+
+@pytest.mark.anyio
+async def test_heartbeat_treats_gone_peer_as_disconnect_not_crash():
+    """A client that vanishes between the state read and the keepalive write ends the
+    session as a disconnect; the heartbeat must not raise out of its supervised task."""
+    from fastapi.websockets import WebSocketDisconnect
+
+    async def send_text(_payload):
+        raise WebSocketDisconnect()
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_heartbeat_stops_after_close_message_instead_of_crashing():
+    """The ASGI server refuses a send once the close frame went out — same disconnect."""
+
+    async def send_text(_payload):
+        raise RuntimeError('Cannot call "send" once a close message has been sent.')
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False

@@ -3,6 +3,10 @@
   "id": "FC-workflow-script-input-contract",
   "violated_contract": "Every workflow invocation of a repository deployment script must use its declared argument grammar and provide each required workflow input.",
   "canonical_prevention": "Exercise rendered workflow callers against deterministic script seams and statically require every deployment-script caller to bind its required environment inputs before expensive deployment work begins.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_two_lane.py",
+    "backend/tests/unit/test_verify_sync_ledger_fence_transition.py"
+  ],
   "evidence_prs": [9945],
   "scope_hints": [".github/workflows/**", "backend/scripts/**", "backend/tests/unit/test_*deploy_contract.py"],
   "status": "open"

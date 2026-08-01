@@ -1,4 +1,0 @@
-{
-  "type": "internal",
-  "change": "Make pre-push and preflight contracts portable on Windows (MSYS/UTF-8 paths, Git Bash routing)"
-}

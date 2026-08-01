@@ -233,12 +233,13 @@ without its version-fenced per-memory graph representation.
 `memory_graph_assertions/{memory_id}` is graph authority for canonical memory.
 The shared knowledge graph merges current assertions with retained legacy graph
 data on read; it is a derived view, not a second LLM extraction or admission
-authority. That overlay scans at most 2,000 assertions plus the bounded legacy
-inputs, returns at most 2,000 nodes and 5,000 edges, and reports
-`truncated=true` whenever an input or merged result exceeds its cap. Returned
-edges are referentially closed over the returned node page; filtering a dangling
-edge also marks the response truncated. Public graph delete and rebuild return
-HTTP 409 for canonical or retained-assertion accounts at
+authority. That overlay reads stable document-ID-ordered pages of at most 500
+assertions plus the bounded legacy inputs, returns at most 500 nodes and 1,000
+edges, and reports `truncated=true` whenever an input or merged result exceeds
+its cap. `node_count` and `edge_count` report the records included in that
+bounded snapshot. Returned edges are referentially closed over the returned
+node page; filtering a dangling edge also marks the response truncated. Public
+graph delete and rebuild return HTTP 409 for canonical or retained-assertion accounts at
 `DELETE /v1/knowledge-graph` and `POST /v1/knowledge-graph/rebuild` because
 those assertions, not the mutable shared projection, are authority.
 

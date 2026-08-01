@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -152,8 +153,35 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Recordings that the storage sheet's Clear All action can remove.
   int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
 
-  /// True while a fair-use (429) cooldown is active — uploads are paused.
+  /// True while any cooldown is active, in any lane.
+  ///
+  /// Prefer [isRateLimitedForPendingUploads] for anything that decides whether the user can act:
+  /// cooldowns are per lane, and this is true even when the lane the pending work needs is free.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
+
+  /// The upload lanes the recordings still to back up would use.
+  Set<SyncUploadLane> get pendingUploadLanes => pendingSyncUploadLanes(
+    displaySortedWals
+        .where(
+          (wal) =>
+              wal.syncDisplayState == WalSyncDisplayState.waiting ||
+              wal.syncDisplayState == WalSyncDisplayState.retrying ||
+              wal.syncDisplayState == WalSyncDisplayState.failed,
+        )
+        .toList(),
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+  );
+
+  /// True only when every lane the pending recordings need is in cooldown.
+  ///
+  /// The upload path gates per lane (`SyncRateLimiter.isLimitedForLane`), so a UI that gates on
+  /// the global flag hides the Sync control for work the sync layer would happily accept — a
+  /// fresh-lane cooldown stranding a backlog that uploads through backfill.
+  bool get isRateLimitedForPendingUploads => allSyncLanesLimited(
+    pendingUploadLanes,
+    SyncRateLimiter.instance.isLimitedForLane,
+    fallback: SyncRateLimiter.instance.isLimited,
+  );
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
   RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
@@ -324,12 +352,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
-  })  : _walServiceOverride = walService,
-        _uploadGate = uploadGate ?? SyncUploadGate.instance,
-        _startBackgroundSync = startBackgroundSync,
-        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+  }) : _walServiceOverride = walService,
+       _uploadGate = uploadGate ?? SyncUploadGate.instance,
+       _startBackgroundSync = startBackgroundSync,
+       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');

@@ -17,6 +17,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
@@ -65,6 +66,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Track firmware update state to prevent showing dialog during updates
   bool _isCheckingFirmware = false;
   bool _isFirmwareDialogShowing = false;
+  bool _pairingLostDialogShowing = false;
   bool _isFirmwareUpdateInProgress = false;
   bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
 
@@ -91,6 +93,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader})
     : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
     ServiceManager.instance().device.subscribe(this, this);
+    BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
+  }
+
+  void _showPairingLostDialog() {
+    if (_pairingLostDialogShowing) return;
+    final context = globalNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+
+    _pairingLostDialogShowing = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => ConfirmationDialog(
+        title: dialogContext.l10n.bluetooth,
+        description: dialogContext.l10n.deviceUnpairedMessage,
+        confirmText: dialogContext.l10n.gotIt,
+        onConfirm: () => Navigator.of(dialogContext).pop(),
+        onCancel: () {},
+      ),
+    ).whenComplete(() => _pairingLostDialogShowing = false);
   }
 
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
@@ -433,6 +455,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    if (BleBridge.instance.pairingLostCallback == _showPairingLostDialog) {
+      BleBridge.instance.pairingLostCallback = null;
+    }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();

@@ -1687,10 +1687,9 @@ import XCTest
     XCTAssertFalse(tableRendererSource.contains("ScrollView"))
     XCTAssertFalse(rendererSource.contains("@State private var document"))
     XCTAssertFalse(rendererSource.contains("attrCache"))
-    XCTAssertTrue(
-      rendererSource.contains("if textSelectionEnabled {")
-        && rendererSource.contains(".textSelection(.enabled)")
-    )
+    XCTAssertTrue(rendererSource.contains(".textSelection(.disabled)"))
+    XCTAssertFalse(rendererSource.contains(".textSelection(.enabled)"))
+    XCTAssertFalse(rendererSource.contains("textSelectionEnabled"))
     XCTAssertTrue(tableRendererSource.contains(".textSelection(.disabled)"))
     XCTAssertFalse(rendererSource.contains("MarkdownTableCopyButton"))
     XCTAssertFalse(rendererSource.contains("Copy table"))

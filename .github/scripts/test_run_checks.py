@@ -29,6 +29,7 @@ from run_checks import (
     load_manifest,
     resolve_check_selections,
     resolve_checks,
+    resolve_explicit_checks,
     run_git,
     skipped_platform_checks,
     validate_manifest,
@@ -721,6 +722,38 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(selections[0].check.id, "target")
         self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
         self.assertEqual(selections[0].check.reason, "desktop source changed")
+
+    def test_explicit_check_ids_preserve_manifest_commands(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="portable",
+                    command=("python3", "check.py"),
+                    triggers=("never/**",),
+                    lanes=("ci",),
+                    reason="test",
+                ),
+            ),
+            exempt=(),
+        )
+
+        selections = resolve_explicit_checks(
+            manifest,
+            ["portable"],
+            "ci",
+            include_pr_body_checks=True,
+            platform="windows",
+        )
+
+        self.assertEqual([selection.check.id for selection in selections], ["portable"])
+        with self.assertRaisesRegex(ValueError, "unknown check id"):
+            resolve_explicit_checks(
+                manifest,
+                ["missing"],
+                "ci",
+                include_pr_body_checks=True,
+                platform="windows",
+            )
 
     def test_skipped_platform_checks_reports_macos_on_linux(self):
         manifest = Manifest(

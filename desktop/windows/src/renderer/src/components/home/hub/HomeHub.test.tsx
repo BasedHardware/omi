@@ -1,14 +1,27 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 // The Hub drives the app's ONE chat engine — asserted here by checking that a submit
 // calls the shared chat.send, not some second message array of its own.
 
 type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
-let chat: { history: ChatMsg[]; sending: boolean; send: ReturnType<typeof vi.fn> }
+let chat: {
+  history: ChatMsg[]
+  sending: boolean
+  send: ReturnType<typeof vi.fn>
+  // The multi-chat header's slice of the engine (used only by the popover suite).
+  selectedAppId?: string | null
+  currentThreadId?: string | null
+  switchThread?: ReturnType<typeof vi.fn>
+}
 vi.mock('../../../state/appState', () => ({ useAppState: () => ({ chat }) }))
+
+// The multi-chat header's session list. Stubbed so the popover suite exercises the
+// real header + real Radix popover without a live sessions backend.
+let sessions: Record<string, unknown>
+vi.mock('../../../hooks/useChatSessions', () => ({ useChatSessions: () => sessions }))
 
 let memories: { memories: { id: string }[]; loading: boolean; error?: string | null }
 vi.mock('../../../hooks/useMemories', () => ({ useMemories: () => memories }))
@@ -29,6 +42,7 @@ vi.mock('../QuickGoalsWidget', () => ({
 
 import { publishConversationsCache, invalidateConversationsCache } from '../../../lib/pageCache'
 import type { ConversationRow } from '../../../lib/pageCache'
+import { setPreferences } from '../../../lib/preferences'
 
 const convRow = (id: string, source: 'cloud' | 'local'): ConversationRow =>
   ({ id, title: id, subtitle: '', preview: '', source, sortAt: 0 }) as ConversationRow
@@ -57,6 +71,7 @@ const askBar = (): HTMLElement => screen.getByLabelText('Ask omi anything')
 
 beforeEach(() => {
   chat = { history: [], sending: false, send: vi.fn() }
+  sessions = {}
   memories = { memories: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }], loading: false }
   actionItems = [{ id: 't1' }, { id: 't2' }]
   invalidateConversationsCache()
@@ -153,6 +168,24 @@ describe('HomeHub — stage machine', () => {
     expect(mode()).toBe('hub')
   })
 
+  it('returns to the hub from the chat panel own close control', () => {
+    // Esc and a click on the paper both leave the panel, but neither is VISIBLE:
+    // users reached the chat panel and could not tell how to get back (#10894).
+    renderHub()
+    expect(screen.queryByLabelText('Close chat')).toBeNull()
+
+    fireEvent.focus(askBar())
+    expect(mode()).toBe('chat')
+
+    // A real press is mousedown → click; the click-outside listener rides mousedown.
+    const close = screen.getByLabelText('Close chat')
+    fireEvent.mouseDown(close)
+    fireEvent.click(close)
+
+    expect(mode()).toBe('hub')
+    expect(screen.getByText('omi.')).not.toBeNull()
+  })
+
   it('toggles the connect stage from the ask bar and back', () => {
     renderHub()
     const connect = screen.getByRole('button', { name: 'Connect' })
@@ -240,5 +273,126 @@ describe('HomeHub — stat ribbon counts come from the real sources', () => {
     renderHub()
     expect(cell(/Memories/).textContent).toContain('—')
     expect(cell(/Memories/).textContent).not.toContain('0')
+  })
+})
+
+describe('HomeHub — portaled panel UI does not read as a click-outside', () => {
+  // #10895 / #10896: with the multi-chat header on, clicking "+" or rename inside
+  // the chat-history popover dropped the user back on the resting hub and the
+  // button never fired. The popover is PORTALED to <body>, so the panel's
+  // click-outside check ("not inside the stage") counted a mousedown on it as a
+  // dismiss — which unmounted the popover before the click landed.
+  const SESSION = {
+    id: 's1',
+    title: 'Trip planning',
+    preview: 'where should we go',
+    createdAt: 0,
+    updatedAt: Date.now(),
+    messageCount: 2,
+    starred: false
+  }
+
+  let createNewSession: ReturnType<typeof vi.fn>
+  let renameSession: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    // Radix Popover needs a couple of DOM APIs jsdom lacks; stub them so open works.
+    if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false
+    if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
+
+    setPreferences({ multiChatEnabled: true })
+    ;(window as unknown as { omi: Record<string, unknown> }).omi.chatGetEngine = vi
+      .fn()
+      .mockResolvedValue('pi_mono')
+
+    chat.selectedAppId = null
+    chat.currentThreadId = null
+    chat.switchThread = vi.fn()
+
+    createNewSession = vi.fn().mockResolvedValue({ ...SESSION, id: 's2' })
+    renameSession = vi.fn().mockResolvedValue(undefined)
+    sessions = {
+      sessions: [SESSION],
+      filteredSessions: [SESSION],
+      groupedSessions: [{ label: 'Today', sessions: [SESSION] }],
+      currentSessionId: null,
+      loading: false,
+      error: null,
+      createError: null,
+      searchQuery: '',
+      showStarredOnly: false,
+      setSearchQuery: vi.fn(),
+      toggleStarredFilter: vi.fn(),
+      retryLoad: vi.fn(),
+      clearCreateError: vi.fn(),
+      selectSession: vi.fn(),
+      createNewSession,
+      renameSession,
+      toggleStar: vi.fn().mockResolvedValue(undefined),
+      removeSession: vi.fn().mockResolvedValue(undefined)
+    }
+  })
+  afterEach(() => setPreferences({ multiChatEnabled: false }))
+
+  /** Open the chat panel, then the chat-history popover, and return its panel. */
+  const openHistory = async (): Promise<HTMLElement> => {
+    renderHub()
+    fireEvent.focus(askBar())
+    expect(mode()).toBe('chat')
+    const trigger = await screen.findByTitle('Chat history')
+    fireEvent.click(trigger)
+    return await screen.findByRole('dialog')
+  }
+
+  it('keeps the chat panel open when "+" in the chat-history popover is pressed', async () => {
+    const popover = await openHistory()
+    const plus = within(popover).getByTitle('New chat')
+
+    // A real press is mousedown → click; the dismiss listener rides mousedown.
+    fireEvent.mouseDown(plus)
+    fireEvent.click(plus)
+
+    expect(mode()).toBe('chat')
+    expect(createNewSession).toHaveBeenCalled()
+    await waitFor(() => expect(chat.switchThread).toHaveBeenCalledWith('s2'))
+  })
+
+  it('keeps the chat panel open while renaming a chat from the popover', async () => {
+    const popover = await openHistory()
+    const rename = within(popover).getByTitle('Rename')
+
+    fireEvent.mouseDown(rename)
+    fireEvent.click(rename)
+    expect(mode()).toBe('chat')
+
+    const input = within(await screen.findByRole('dialog')).getByDisplayValue('Trip planning')
+    fireEvent.change(input, { target: { value: 'Iceland trip' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mode()).toBe('chat')
+    expect(renameSession).toHaveBeenCalledWith('s1', 'Iceland trip')
+  })
+
+  it('lays the close control out in the SAME row as the multi-chat controls', async () => {
+    // jsdom has no layout, so the only honest guard against the close control
+    // landing on top of "+" / history is structural: one flex row owns all three.
+    renderHub()
+    fireEvent.focus(askBar())
+    const history = await screen.findByTitle('Chat history')
+    const row = screen.getByLabelText('Close chat').parentElement as HTMLElement
+
+    expect(row.className).toContain('flex')
+    expect(row.contains(history)).toBe(true)
+  })
+
+  it('still dismisses the panel on a mousedown on the Hub paper outside the stage', () => {
+    // The guard above must not disable click-outside itself: the Hub's own paper
+    // (here, the floating header band) still returns the stage to the resting hub.
+    renderHub()
+    fireEvent.focus(askBar())
+    expect(mode()).toBe('chat')
+
+    fireEvent.mouseDown(screen.getByText('Capture'))
+    expect(mode()).toBe('hub')
   })
 })
