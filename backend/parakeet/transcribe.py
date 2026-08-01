@@ -219,14 +219,23 @@ def _transcribe_nim(file_path: str) -> Dict[str, Any]:
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
-    nim_language = os.getenv("NIM_LANGUAGE", "multi")
+    # Language handling across OpenAI-compatible ASR backends:
+    #   - NVIDIA NIM auto-detects with the sentinel "multi" (must be sent).
+    #   - faster-whisper / speaches auto-detect ONLY when `language` is omitted; they reject
+    #     ""/"auto"/"multi" as an enum error.
+    # So: "auto" (or empty) => omit the field (whisper-style auto-detect); "multi" or a concrete
+    # code => send it (NIM auto-detect, or a forced language on any backend).
+    nim_language = os.getenv("NIM_LANGUAGE", "multi").strip()
+    req_data: Dict[str, str] = {}
+    if nim_language and nim_language.lower() != "auto":
+        req_data["language"] = nim_language
 
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=120.0, write=30.0, pool=10.0)) as client:
             resp = client.post(
                 f"{_nim_url}/v1/audio/transcriptions",
                 files={"file": ("audio.wav", audio_bytes, "audio/wav")},
-                data={"language": nim_language},
+                data=req_data,
             )
         resp.raise_for_status()
         data: Dict[str, Any] = cast(Dict[str, Any], resp.json())
