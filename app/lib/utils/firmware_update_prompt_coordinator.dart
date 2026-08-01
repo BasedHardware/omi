@@ -14,19 +14,28 @@ class FirmwareUpdatePromptCoordinator {
   String? _deferredVersion;
   _ActiveFirmwareUpdatePrompt? _activePrompt;
 
-  void setAvailableVersion(String? version) {
-    final normalizedVersion = version?.trim();
-    if (normalizedVersion == null || normalizedVersion.isEmpty) {
-      _availableVersion = null;
-      _deferredVersion = null;
-      _requestActiveDismissal();
+  void setAvailableVersion(String version) {
+    final normalizedVersion = version.trim();
+    if (normalizedVersion.isEmpty) {
+      clearAvailableVersion();
       return;
     }
 
     if (_availableVersion != null && _availableVersion != normalizedVersion) {
       _requestActiveDismissal();
     }
+    if (_deferredVersion != null && _deferredVersion != normalizedVersion) {
+      _deferredVersion = null;
+    }
     _availableVersion = normalizedVersion;
+  }
+
+  void clearAvailableVersion({bool invalidateDeferral = false}) {
+    _availableVersion = null;
+    if (invalidateDeferral) {
+      _deferredVersion = null;
+    }
+    _requestActiveDismissal();
   }
 
   FirmwareUpdatePrompt? beginPresentation() {
@@ -55,7 +64,7 @@ class FirmwareUpdatePromptCoordinator {
 
   bool defer(FirmwareUpdatePrompt prompt) {
     final activePrompt = _activePrompt;
-    if (activePrompt == null || activePrompt.prompt.id != prompt.id) {
+    if (activePrompt == null || activePrompt.prompt.id != prompt.id || activePrompt.dismissalRequested) {
       return false;
     }
 
@@ -66,7 +75,7 @@ class FirmwareUpdatePromptCoordinator {
 
   bool accept(FirmwareUpdatePrompt prompt) {
     final activePrompt = _activePrompt;
-    if (activePrompt == null || activePrompt.prompt.id != prompt.id) {
+    if (activePrompt == null || activePrompt.prompt.id != prompt.id || activePrompt.dismissalRequested) {
       return false;
     }
 

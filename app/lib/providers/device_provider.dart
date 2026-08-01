@@ -25,6 +25,7 @@ import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
+import 'package:omi/utils/firmware_update_check_session.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -65,7 +66,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
 
   // Track firmware update state to prevent showing dialog during updates
-  bool _isCheckingFirmware = false;
+  final FirmwareUpdateCheckSessionGuard _firmwareUpdateCheckSessionGuard = FirmwareUpdateCheckSessionGuard();
+  FirmwareUpdateCheckSession? _checkingFirmwareSession;
+  String? _firmwareUpdateDeviceId;
   final FirmwareUpdatePromptCoordinator _firmwareUpdatePromptCoordinator = FirmwareUpdatePromptCoordinator();
   bool _pairingLostDialogShowing = false;
   bool _isFirmwareUpdateInProgress = false;
@@ -130,8 +133,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     connectedDevice = device;
     pairedDevice = device;
     if (isNewConnection) {
+      if (_firmwareUpdateDeviceId != null && _firmwareUpdateDeviceId != device.id) {
+        _firmwareUpdatePromptCoordinator.clearAvailableVersion(invalidateDeferral: true);
+      }
+      _firmwareUpdateDeviceId = device.id;
+      _firmwareUpdateCheckSessionGuard.start(device.id);
       _deviceSessionStartedAt = now;
     } else if (device == null) {
+      _firmwareUpdateCheckSessionGuard.invalidate();
       _deviceSessionStartedAt = null;
     }
     await getDeviceInfo();
@@ -534,7 +543,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
-    setConnectedDevice(device);
+    await setConnectedDevice(device);
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(device);
@@ -712,21 +721,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void _checkFirmwareUpdates() async {
     if (!_allowsFirmwareUpdateForPairedDevice) {
       _havingNewFirmware = false;
-      _firmwareUpdatePromptCoordinator.setAvailableVersion(null);
+      _firmwareUpdatePromptCoordinator.clearAvailableVersion(invalidateDeferral: true);
       return;
     }
-    if (_isFirmwareUpdateInProgress || _isCheckingFirmware) {
+    final checkSession = _firmwareUpdateCheckSessionGuard.capture();
+    if (checkSession == null || !_isCurrentFirmwareCheckSession(checkSession)) {
+      return;
+    }
+    if (_isFirmwareUpdateInProgress ||
+        (_checkingFirmwareSession != null && _firmwareUpdateCheckSessionGuard.isCurrent(_checkingFirmwareSession!))) {
       return;
     }
 
-    _isCheckingFirmware = true;
+    _checkingFirmwareSession = checkSession;
     try {
-      await checkFirmwareUpdates();
+      final hasUpdate = await checkFirmwareUpdates(session: checkSession);
+      if (!_isCurrentFirmwareCheckSession(checkSession)) {
+        Logger.debug('Discarding firmware update prompt from a stale device session');
+        return;
+      }
 
       // Show firmware update dialog if needed
-      if (_havingNewFirmware) {
+      if (hasUpdate && _havingNewFirmware) {
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
+          if (!_isCurrentFirmwareCheckSession(checkSession)) return;
           final context = globalNavigatorKey.currentContext;
           if (context != null && context.mounted) {
             showFirmwareUpdateDialog(context);
@@ -734,8 +753,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         });
       }
     } finally {
-      _isCheckingFirmware = false;
+      if (identical(_checkingFirmwareSession, checkSession)) {
+        _checkingFirmwareSession = null;
+      }
     }
+  }
+
+  bool _isCurrentFirmwareCheckSession(FirmwareUpdateCheckSession session) {
+    return _firmwareUpdateCheckSessionGuard.isCurrent(session) &&
+        connectedDevice?.id == session.deviceId &&
+        pairedDevice?.id == session.deviceId &&
+        isConnected;
   }
 
   bool get _isOmiGlassDevice => FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(pairedDevice);
@@ -743,9 +771,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _allowsFirmwareUpdateForPairedDevice =>
       FirmwareUpdateBuildPolicy.current.allowsFirmwareUpdateForDevice(pairedDevice);
 
-  Future checkFirmwareUpdates() async {
+  Future<bool> checkFirmwareUpdates({FirmwareUpdateCheckSession? session}) async {
+    final checkSession = session ?? _firmwareUpdateCheckSessionGuard.capture();
+    if (checkSession == null || !_isCurrentFirmwareCheckSession(checkSession)) {
+      return false;
+    }
     if (!_allowsFirmwareUpdateForPairedDevice) {
       _havingNewFirmware = false;
+      _firmwareUpdatePromptCoordinator.clearAvailableVersion(invalidateDeferral: true);
       return false;
     }
     int retryCount = 0;
@@ -753,11 +786,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     const retryDelay = Duration(seconds: 3);
 
     while (retryCount < maxRetries) {
+      if (!_isCurrentFirmwareCheckSession(checkSession)) {
+        return false;
+      }
       try {
         var (message, hasUpdate, version, firmwareDetails) = await shouldUpdateFirmware();
-        _havingNewFirmware = hasUpdate;
-        _latestFirmwareVersion = version.isNotEmpty ? version : message;
-        _firmwareUpdatePromptCoordinator.setAvailableVersion(hasUpdate ? _latestFirmwareVersion : null);
+        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+          Logger.debug('Discarding firmware update result from a stale device session');
+          return false;
+        }
+
+        final latestFirmwareVersion = version.isNotEmpty ? version : message;
+        Map<String, dynamic>? latestOmiGlassFirmwareDetails;
 
         // For OmiGlass devices, populate the firmware details for the OTA UI
         if (_isOmiGlassDevice && firmwareDetails.isNotEmpty) {
@@ -767,7 +807,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           final changelog = firmwareDetails['changelog'];
           final changelogStr = changelog is List ? changelog.join('\n') : (changelog?.toString() ?? '');
 
-          _latestOmiGlassFirmwareDetails = {
+          latestOmiGlassFirmwareDetails = {
             'version': cleanVersion,
             'download_url': firmwareDetails['zip_url'] ?? '',
             'changelog': changelogStr,
@@ -775,33 +815,65 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         }
 
         // Fetch latest stable version for rollback comparison
+        String? latestStableFirmwareVersion;
         try {
           var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          if (!_isCurrentFirmwareCheckSession(checkSession)) {
+            Logger.debug('Discarding stable firmware result from a stale device session');
+            return false;
+          }
           var stableVersion = stableDetails['version']?.toString() ?? '';
           if (stableVersion.startsWith('v')) stableVersion = stableVersion.substring(1);
-          _latestStableFirmwareVersion = stableVersion;
+          latestStableFirmwareVersion = stableVersion;
         } catch (e) {
+          if (!_isCurrentFirmwareCheckSession(checkSession)) {
+            Logger.debug('Discarding firmware update result from a stale device session');
+            return false;
+          }
           Logger.debug('Error fetching stable firmware version: $e');
         }
 
+        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+          return false;
+        }
+        _havingNewFirmware = hasUpdate;
+        _latestFirmwareVersion = latestFirmwareVersion;
+        if (hasUpdate) {
+          _firmwareUpdatePromptCoordinator.setAvailableVersion(latestFirmwareVersion);
+        } else {
+          _firmwareUpdatePromptCoordinator.clearAvailableVersion();
+        }
+        if (latestOmiGlassFirmwareDetails != null) {
+          _latestOmiGlassFirmwareDetails = latestOmiGlassFirmwareDetails;
+        }
+        if (latestStableFirmwareVersion != null) {
+          _latestStableFirmwareVersion = latestStableFirmwareVersion;
+        }
         notifyListeners();
         return hasUpdate;
       } catch (e) {
+        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+          Logger.debug('Discarding firmware check failure from a stale device session');
+          return false;
+        }
         retryCount++;
         Logger.debug('Error checking firmware update (attempt $retryCount): $e');
 
         if (retryCount == maxRetries) {
           Logger.debug('Max retries reached, giving up');
           _havingNewFirmware = false;
-          _firmwareUpdatePromptCoordinator.setAvailableVersion(null);
+          _firmwareUpdatePromptCoordinator.clearAvailableVersion();
           notifyListeners();
-          break;
+          return false;
         }
 
         await Future.delayed(retryDelay);
+        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+          return false;
+        }
       }
     }
-    return;
+    return false;
   }
 
   // Track if user is currently viewing a firmware update page
