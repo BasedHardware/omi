@@ -484,7 +484,6 @@ final class QuickActionsIconPatcher: NSObject {
     } else {
       NSLog("[AppDelegate] Phone calls plugin registrar unavailable")
     }
-
   }
 
   private func endNativeSyncTransferBackgroundTask() {
