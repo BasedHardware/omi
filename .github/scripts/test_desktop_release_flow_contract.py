@@ -127,7 +127,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         for fragment in (
             "Verify live desktop-backend chat compatibility",
             '.chat_contract_version == "1"',
-            "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            "https://api.omiapi.com/v1/health",
+            '.status == "ok"',
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/health",
             "desktop-backend-compatibility.json",
         ):
             self.assertIn(fragment, self.workflow)

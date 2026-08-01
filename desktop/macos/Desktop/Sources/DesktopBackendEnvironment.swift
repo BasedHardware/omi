@@ -26,15 +26,41 @@ enum DesktopBackendEnvironment {
       return externalPreviewBackend == .development
     }
 
+    // Beta is the production-account dogfood channel: it uses the development
+    // serving plane while retaining production Auth/Firebase/Firestore. This is
+    // an identity-bound routing rule, never an update-channel or environment
+    // override. Stable remains pinned to the production serving plane.
+    if bundleIdentifier == AppBuild.betaProductionBundleIdentifier {
+      return true
+    }
+
     // Named/dev bundles route to the dev backend by default. Explicit launch
     // URLs still win below so local harnesses and intentionally-targeted tests
-    // remain possible. The Omi Beta app is a production-family artifact, not a
-    // dev bundle: it falls through to channel-based routing like stable.
+    // remain possible.
     if !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
       return true
     }
 
     return false
+  }
+
+  static var shouldUseProductionAuth: Bool {
+    shouldUseProductionAuth(bundleIdentifier: AppBuild.bundleIdentifier)
+  }
+
+  static func shouldUseProductionAuth(bundleIdentifier: String) -> Bool {
+    // The shared Firebase project and registered OAuth callback live on the
+    // production authority. Beta must never inherit a dev auth override while
+    // its data-serving endpoints intentionally target development.
+    AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+  }
+
+  static var shouldForceDevelopmentServingEndpoints: Bool {
+    shouldForceDevelopmentServingEndpoints(bundleIdentifier: AppBuild.bundleIdentifier)
+  }
+
+  static func shouldForceDevelopmentServingEndpoints(bundleIdentifier: String) -> Bool {
+    bundleIdentifier == AppBuild.betaProductionBundleIdentifier
   }
 
   static func pythonBaseURL(
@@ -48,11 +74,18 @@ enum DesktopBackendEnvironment {
 
   static func pythonBaseURL(
     useDevelopmentBackends: Bool,
+    bundleIdentifier: String = AppBuild.bundleIdentifier,
     environmentValue: String?
   ) -> String {
     // A production-family app must not allow a launch environment or bundled
     // config to switch its customer data plane. Development identities retain
     // their explicit override seam for local and signed-preview testing.
+    if shouldForceDevelopmentServingEndpoints(bundleIdentifier: bundleIdentifier) {
+      return developmentPythonAPIURL
+    }
+    if shouldUseProductionAuth(bundleIdentifier: bundleIdentifier) {
+      return productionPythonAPIURL
+    }
     if !useDevelopmentBackends {
       return productionPythonAPIURL
     }
@@ -65,9 +98,10 @@ enum DesktopBackendEnvironment {
 
   static func authBaseURL(
     useDevelopmentBackends: Bool = shouldUseDevelopmentBackends,
+    bundleIdentifier: String = AppBuild.bundleIdentifier,
     environmentValue: String? = currentEnvironmentValue("OMI_AUTH_API_URL")
   ) -> String {
-    if !useDevelopmentBackends {
+    if shouldUseProductionAuth(bundleIdentifier: bundleIdentifier) || !useDevelopmentBackends {
       return productionPythonAPIURL
     }
     if let url = normalizedURL(environmentValue) {
@@ -93,9 +127,16 @@ enum DesktopBackendEnvironment {
 
   static func rustBackendURL(
     useDevelopmentBackends: Bool,
+    bundleIdentifier: String = AppBuild.bundleIdentifier,
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
+    if shouldForceDevelopmentServingEndpoints(bundleIdentifier: bundleIdentifier) {
+      return developmentRustBackendURL
+    }
+    if shouldUseProductionAuth(bundleIdentifier: bundleIdentifier) {
+      return productionRustBackendURL
+    }
     if !useDevelopmentBackends {
       return productionRustBackendURL
     }

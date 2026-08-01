@@ -252,19 +252,15 @@ final class APIClientRoutingTests: XCTestCase {
 
   func testStableProductionBundleKeepsConfiguredRustBackend() {
     let url = DesktopBackendEnvironment.rustBackendURL(
-      useDevelopmentBackends: false,
-      environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
-      launchEnvironmentValue: nil
+      useDevelopmentBackends: true,
+      bundleIdentifier: AppBuild.productionBundleIdentifier,
+      environmentValue: "https://evil.example.test",
+      launchEnvironmentValue: "https://evil.example.test"
     )
     XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
   }
 
-  func testBetaProductionChannelUsesProductionBackendRatherThanDevelopment() {
-    XCTAssertFalse(
-      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-        bundleIdentifier: "com.omi.computer-macos",
-        updateChannel: "beta"
-      ))
+  func testStableProductionChannelUsesProductionBackends() {
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
@@ -285,6 +281,14 @@ final class APIClientRoutingTests: XCTestCase {
       ),
       DesktopBackendEnvironment.productionRustBackendURL
     )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: "https://evil.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
   }
 
   func testStableProductionBundleKeepsProductionBackends() {
@@ -295,18 +299,60 @@ final class APIClientRoutingTests: XCTestCase {
       ))
   }
 
-  func testBetaIdentityBundleUsesTheProductionBackend() {
-    // The Omi Beta app is production-family: its isolated app identity does not
-    // create a second backend environment.
-    XCTAssertFalse(
+  func testBetaIdentityUsesDevelopmentServingEndpointsAndProductionAuth() {
+    XCTAssertTrue(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         updateChannel: "beta"
       ))
     XCTAssertEqual(
-      DesktopBackendEnvironment.pythonBaseURL(useDevelopmentBackends: false, environmentValue: nil),
-      "https://api.omi.me/"
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omi.me/"
+      ),
+      DesktopBackendEnvironment.developmentPythonAPIURL
     )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/",
+        launchEnvironmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseProductionAuth(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.authBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+  }
+
+  func testGeminiAndEmbeddingProxyRespectBetaIdentityRouting() {
+    let originalRust = ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    defer {
+      if let originalRust {
+        setenv("OMI_DESKTOP_API_URL", originalRust, 1)
+      } else {
+        unsetenv("OMI_DESKTOP_API_URL")
+      }
+    }
+    setenv("OMI_DESKTOP_API_URL", DesktopBackendEnvironment.productionRustBackendURL, 1)
+
+    // The test host is a non-production identity, so the raw process environment
+    // remains a supported local override. The identity-bound Beta contract itself
+    // is exercised above; these proxies must delegate to that same resolver rather
+    // than bypass it with getenv.
+    XCTAssertEqual(GeminiClient.proxyBaseURL, DesktopBackendEnvironment.rustBackendURL())
+    XCTAssertEqual(EmbeddingService.proxyBaseURL, DesktopBackendEnvironment.rustBackendURL())
   }
 
   func testNonProductionBundlesDefaultToDevelopmentBackends() {

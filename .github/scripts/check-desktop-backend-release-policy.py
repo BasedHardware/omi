@@ -203,21 +203,35 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
 
 def validate_desktop_release_gates(qualification: str, stable: str) -> list[str]:
     errors: list[str] = []
-    required = (
+    shared_required = (
         "Verify live desktop-backend chat compatibility",
         '.chat_contract_version == "1"',
-        "https://desktop-backend-hhibjajaja-uc.a.run.app",
     )
-    for workflow, text in (
-        ("desktop_qualify_beta.yml", qualification),
-        ("desktop_promote_prod.yml", stable),
+    for workflow, text, endpoint in (
+        (
+            "desktop_qualify_beta.yml",
+            qualification,
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+        ),
+        (
+            "desktop_promote_prod.yml",
+            stable,
+            "https://desktop-backend-hhibjajaja-uc.a.run.app",
+        ),
     ):
-        for fragment in required:
+        for fragment in (*shared_required, endpoint):
             if fragment not in text:
                 errors.append(f"{workflow}: missing desktop-backend compatibility gate {fragment!r}")
-    if qualification.find(required[0]) >= qualification.find("Qualify exact candidate on the M1 Studio"):
+    for fragment in (
+        "https://api.omiapi.com/v1/health",
+        '.status == "ok"',
+        'python_status: "ok"',
+    ):
+        if fragment not in qualification:
+            errors.append(f"desktop_qualify_beta.yml: missing development Python compatibility gate {fragment!r}")
+    if qualification.find(shared_required[0]) >= qualification.find("Qualify exact candidate on the M1 Studio"):
         errors.append("desktop_qualify_beta.yml: backend compatibility must precede candidate qualification")
-    if stable.find(required[0]) >= stable.find("Advance explicit stable pointer"):
+    if stable.find(shared_required[0]) >= stable.find("Advance explicit stable pointer"):
         errors.append("desktop_promote_prod.yml: backend compatibility must precede Stable pointer mutation")
     return errors
 

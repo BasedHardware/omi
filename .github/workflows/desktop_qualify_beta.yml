@@ -125,7 +125,11 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS --max-time 15 \
-            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
+            https://api.omiapi.com/v1/health \
+            > "$QUALIFICATION_STAGE/python-backend-health.json"
+          jq -e '.status == "ok"' "$QUALIFICATION_STAGE/python-backend-health.json" >/dev/null
+          curl -fsS --max-time 15 \
+            https://desktop-backend-dt5lrfkkoa-uc.a.run.app/health \
             > "$QUALIFICATION_STAGE/desktop-backend-health.json"
           jq -e '
             .status == "healthy"
@@ -134,11 +138,13 @@ jobs:
           ' "$QUALIFICATION_STAGE/desktop-backend-health.json" >/dev/null
           jq '{
             chat_contract_version,
+            python_status: "ok",
             schema_version: 1,
             service,
             status
           }' "$QUALIFICATION_STAGE/desktop-backend-health.json" \
             > "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
+          rm -f "$QUALIFICATION_STAGE/python-backend-health.json"
           rm -f "$QUALIFICATION_STAGE/desktop-backend-health.json"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source

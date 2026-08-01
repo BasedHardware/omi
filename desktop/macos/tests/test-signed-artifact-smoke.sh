@@ -139,6 +139,8 @@ make_signed_smoke_fixture() {
   local app="$1"
   local bundle_id="$2"
   local feed_url="$3"
+  local python_api_url="${4:-https://api.omi.me}"
+  local desktop_api_url="${5:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
 
   mkdir -p \
     "$app/Contents/MacOS" \
@@ -165,10 +167,8 @@ make_signed_smoke_fixture() {
 </dict>
 </plist>
 PLIST
-  cat > "$app/Contents/Resources/.env" <<'ENV'
-OMI_PYTHON_API_URL=https://api.omi.me
-OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/
-ENV
+  printf 'OMI_PYTHON_API_URL=%s\nOMI_DESKTOP_API_URL=%s\n' "$python_api_url" "$desktop_api_url" \
+    > "$app/Contents/Resources/.env"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
   chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
@@ -234,13 +234,17 @@ make_signed_smoke_fixture "$canonical_dmg_app" \
   https://api.omi.me/v2/desktop/appcast.xml
 make_signed_smoke_fixture "$signed_beta_app" \
   com.omi.computer-macos.beta \
-  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  https://api.omiapi.com/ \
+  https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
 make_signed_smoke_fixture "$renamed_canonical_app" \
   com.omi.computer-macos \
   https://api.omi.me/v2/desktop/appcast.xml
 make_signed_smoke_fixture "$renamed_beta_app" \
   com.omi.computer-macos.beta \
-  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  https://api.omiapi.com/ \
+  https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
 dummy_dmg="$tmp_root/fixture.dmg"
 touch "$dummy_dmg"
 
@@ -255,6 +259,8 @@ PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$signed_beta_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-beta-dmg.out 2>/tmp/omi-smoke-beta-dmg.err \
   || fail "Omi Beta.app DMG should pass: $(cat /tmp/omi-smoke-beta-dmg.err)"
 
@@ -263,6 +269,8 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$canonical_dmg_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-beta-wrong-dmg.out 2>/tmp/omi-smoke-beta-wrong-dmg.err; then
   fail "beta smoke must reject a DMG containing only Omi.app"
 fi
@@ -284,6 +292,8 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$renamed_beta_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-renamed-beta.out 2>/tmp/omi-smoke-renamed-beta.err; then
   fail "beta identity must reject a renamed app and matching DMG"
 fi

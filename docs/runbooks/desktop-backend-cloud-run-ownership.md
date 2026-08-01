@@ -85,8 +85,10 @@ Never read Secret payloads during this audit.
 A production GKE retirement is a separately authorized operation and starts only
 after this source guard is merged. Before deleting anything:
 
-1. Confirm the current signed stable and beta macOS artifacts route to the
-   canonical production Cloud Run desktop-backend URL.
+1. Confirm the current signed Stable macOS artifact routes to the production
+   Cloud Run desktop-backend URL and the signed Beta artifact routes to the
+   development Cloud Run desktop-backend URL, while Beta desktop-login OAuth and
+   Firebase Auth/Firestore remain on the production customer identity plane.
 2. Confirm both production and development Cloud Run desktop-backend services
    are Ready, serve their expected revision at 100% traffic, and have successful
    public health responses. Use the deployment evidence artifacts to bind source

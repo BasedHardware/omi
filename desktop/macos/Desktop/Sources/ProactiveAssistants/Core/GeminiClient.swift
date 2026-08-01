@@ -183,12 +183,11 @@ struct GeminiResponse: Decodable {
 actor GeminiClient {
   private let model: String
 
-  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
-  private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingCString: cString), !url.isEmpty {
-      return url.hasSuffix("/") ? url : url + "/"
-    }
-    return "https://api.omi.me/"
+  /// Backend proxy base URL resolved through the identity-bound endpoint policy.
+  /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
+  /// development serving endpoint even when an inherited environment is stale.
+  static var proxyBaseURL: String {
+    DesktopBackendEnvironment.rustBackendURL()
   }
 
   enum GeminiClientError: LocalizedError {
