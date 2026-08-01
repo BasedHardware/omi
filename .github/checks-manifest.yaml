@@ -86,6 +86,16 @@ checks:
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
+  - id: checks-manifest-shrink-ratchet
+    command: ["python3", ".github/scripts/check_checks_manifest_ratchet.py", "--base", "{base}"]
+    triggers: [".github/checks-manifest.yaml", ".github/scripts/check_checks_manifest_ratchet.py", ".github/scripts/checks_manifest_retired_ids.json"]
+    lanes: ["local", "ci"]
+    reason: "validate_manifest only proves intra-file shape, and release-eligibility re-runs the manifest from the commit being proved, so a diff deleting a check mints a proof of its own absence"
+  - id: checks-manifest-shrink-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_checks_manifest_ratchet.py"]
+    triggers: [".github/scripts/check_checks_manifest_ratchet.py", ".github/scripts/test_check_checks_manifest_ratchet.py", ".github/scripts/checks_manifest_retired_ids.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the shrink ratchet must reject a silently deleted check id and accept only an explicitly recorded retirement"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json"]

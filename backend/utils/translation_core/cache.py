@@ -226,11 +226,11 @@ def _create_redis_client() -> Any:
 
 
 def _translation_key(fingerprint: str, target_language: str) -> str:
-    return f'translate:v1:{fingerprint}:{target_language}'
+    return f'translate:v2:{fingerprint}:{target_language}'
 
 
 def _negative_key(fingerprint: str, target_language: str) -> str:
-    return f'translate:v2:neg:{fingerprint}:{target_language}'
+    return f'translate:v3:neg:{fingerprint}:{target_language}'
 
 
 def _memory_key(fingerprint: str, target_language: str) -> str:

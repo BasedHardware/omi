@@ -17,7 +17,7 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     build_mcp_default_memory_write_context,
 )
-from utils.other.endpoints import check_api_key_rate_limit, enforce_token_not_revoked
+from utils.other.endpoints import TOKEN_CLOCK_SKEW_SECONDS, check_api_key_rate_limit, enforce_token_not_revoked
 from utils.scopes import Scopes, has_scope
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,14 @@ async def get_current_user_id(
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         id_token = credentials.credentials
-        decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
+        # Same clock-skew allowance as verify_token(): without it a client whose
+        # clock runs slightly ahead of Google's is rejected on this path only.
+        decoded_token = await run_blocking(
+            critical_executor,
+            auth.verify_id_token,
+            id_token,
+            clock_skew_seconds=TOKEN_CLOCK_SKEW_SECONDS,
+        )
         # verify_id_token() alone never observes revocation, so a token stolen
         # before a deletion or password change would keep working until its exp.
         await run_blocking(critical_executor, enforce_token_not_revoked, decoded_token)

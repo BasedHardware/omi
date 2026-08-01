@@ -7,6 +7,10 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
+from database.account_deletion_projection_fence import (
+    ACCOUNT_DELETION_COLLECTION,
+    ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES,
+)
 from database.api_key_metadata import (
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
@@ -41,15 +45,23 @@ def _db() -> Any:
     return get_firestore_client()
 
 
-def _owner_exists(user_id: str) -> bool:
-    """Whether the key's owning user document still exists.
+def _owner_account_deleted(user_id: str) -> bool:
+    """Whether a durable account-deletion authority owns ``user_id``.
 
     Defence in depth for account deletion: the credential purge is the primary
     control, but a key that outlives its owner must not authenticate — and must
-    not have its ``last_used_at``/memory-grant writes recreate the deleted
-    user's documents.
+    not have its ``last_used_at``/memory-grant write recreate the deleted user's documents.
+
+    Keyed on the top-level ``account_deletions`` marker, not on the presence of
+    the ``users/{uid}`` root document. Nothing creates that root document at
+    signup, and Firestore reports a parent that holds only subcollections as
+    non-existent, so a root-document probe rejects legitimate principals that
+    simply never wrote a root field.
     """
-    return _db().collection("users").document(user_id).get().exists
+    snapshot = _db().collection(ACCOUNT_DELETION_COLLECTION).document(user_id).get()
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+    status = payload.get("wipe_status") if isinstance(payload, dict) else None
+    return isinstance(status, str) and status.strip() in ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES
 
 
 def _seed_mcp_memory_grant(
@@ -348,6 +360,12 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     cache_read = redis_db.read_cached_mcp_api_key_auth_context(hashed_key)
     cached_data = cache_read.data if cache_read.mode == ApiKeyCacheReadMode.HIT else None
     if cached_data and _valid_cached_auth_context(cached_data):
+        # The deletion gate runs before the cached early return; otherwise a key
+        # cached moments before the purge keeps authenticating for the whole
+        # cache TTL.
+        if _owner_account_deleted(cached_data["user_id"]):
+            logger.warning("MCP API key presented for a deleted account; rejecting")
+            return ApiKeyAuthLookupResult(context=None)
         return ApiKeyAuthLookupResult(
             context={
                 "user_id": cached_data["user_id"],
@@ -371,8 +389,8 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     key_id = key_doc.id if isinstance(key_doc.id, str) and key_doc.id else None
     if user_id is None or key_id is None:
         return ApiKeyAuthLookupResult(context=None)
-    if not _owner_exists(user_id):
-        logger.warning("MCP API key presented for a user that no longer exists; rejecting")
+    if _owner_account_deleted(user_id):
+        logger.warning("MCP API key presented for a deleted account; rejecting")
         return ApiKeyAuthLookupResult(context=None)
     repairs: set[ApiKeyAuthRepair] = set()
     if cache_read.mode == ApiKeyCacheReadMode.ERROR:

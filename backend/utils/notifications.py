@@ -194,7 +194,7 @@ def _send_to_user(
 
         # Remove invalid tokens in bulk
         if invalid_tokens:
-            notification_db.remove_bulk_tokens(invalid_tokens)
+            notification_db.remove_bulk_tokens(user_id, invalid_tokens)
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -227,7 +227,7 @@ async def _send_to_user_async(
         success_count, invalid_tokens = _collect_send_results(response, tokens)
 
         if invalid_tokens:
-            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, user_id, invalid_tokens)
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -365,7 +365,7 @@ def send_training_data_submitted_notification(user_id: str) -> None:
     logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
-async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
+async def send_bulk_notification(user_tokens: List[Tuple[str, str]], title: str, body: str) -> None:
     """Send notification to multiple users in batches."""
     try:
         batch_size = 500
@@ -374,17 +374,17 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
         tag = _generate_tag(f"bulk:{title}:{body}")
         notification = messaging.Notification(title=title, body=body)
 
-        def send_batch(batch_tokens: List[str]) -> Tuple[Any, List[str]]:
-            messages = [_build_message(token, tag, notification=notification) for token in batch_tokens]
+        def send_batch(batch_entries: List[Tuple[str, str]]) -> Tuple[Any, List[Tuple[str, str]]]:
+            messages = [_build_message(token, tag, notification=notification) for _uid, token in batch_entries]
             response = _send_messages(messages)
 
             # Collect permanently invalid tokens
-            invalid_tokens: List[str] = []
+            invalid_tokens: List[Tuple[str, str]] = []
             for idx, result in enumerate(response.responses):
                 if not result.success and result.exception:
                     error_code = getattr(result.exception, 'code', None)
                     if error_code in PERMANENT_FAILURE_CODES:
-                        invalid_tokens.append(batch_tokens[idx])
+                        invalid_tokens.append(batch_entries[idx])
                         logger.error(f"Invalid token found - Error: {error_code}")
 
             return response, invalid_tokens
@@ -393,13 +393,21 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
             run_blocking(postprocess_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Remove invalid tokens
-        invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
-        if invalid_tokens:
-            logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
-            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+        invalid_by_uid: Dict[str, List[str]] = {}
+        for i, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.error(f"Bulk notification batch[{i}] failed: {type(result).__name__}")
+                continue
+            _response, batch_invalid = result
+            for uid, token in batch_invalid:
+                invalid_by_uid.setdefault(uid, []).append(token)
+        if invalid_by_uid:
+            logger.error(f"Removing {sum(len(t) for t in invalid_by_uid.values())} invalid tokens")
+            for uid, uid_tokens in invalid_by_uid.items():
+                await run_blocking(db_executor, notification_db.remove_bulk_tokens, uid, uid_tokens)
 
     except Exception as e:
         logger.error(f"Error sending bulk notification: {e}")

@@ -39,7 +39,7 @@ final class TranscriptionTransportTests: XCTestCase {
     var opened = false
     var closedCode: URLSessionWebSocketTask.CloseCode?
     delegate.onOpen = { opened = true }
-    delegate.onClose = { closedCode = $0 }
+    delegate.onClose = { code, _ in closedCode = code }
 
     let session = URLSession(configuration: .default)
     let task = session.webSocketTask(with: URL(string: "wss://example.com/ws")!)

@@ -30,6 +30,7 @@ else:
     opuslib = opuslib_module
 
 from fastapi.websockets import WebSocketDisconnect
+from pydantic import ValidationError
 
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
@@ -39,6 +40,8 @@ from utils.request_validation import (
     MAX_IMAGE_TOTAL_CHARS,
     MAX_INFLIGHT_IMAGE_CHARS,
     ImageChunkEnvelope,
+    SpeakerAssignedEnvelope,
+    SuggestedTranscriptEnvelope,
 )
 from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
@@ -60,6 +63,7 @@ from utils.stt.streaming import (
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
+    USER_SELF_PERSON_ID,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -70,6 +74,7 @@ from utils.transcribe_decisions import (
 )
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
+from utils.transcribe_store import user_db
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +126,7 @@ class ListenReceiver:
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.image_chunk_bytes = 0
+        self.known_person_ids: set[str] = set()
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
@@ -494,22 +500,60 @@ class ListenReceiver:
         elif kind == 'skip_question' and self.host.onboarding_handler and not self.host.onboarding_handler.completed:
             await self.host.onboarding_handler.skip_current_question()
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:
-            segments = payload.get('segments', [])
-            provider = payload.get('stt_provider')
-            if provider:
-                for segment in segments:
-                    segment['stt_provider'] = provider
-            self.host.transcripts.enqueue(segments)
+            await self._handle_suggested_transcript(payload)
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
 
+    def _session_elapsed_seconds(self) -> float:
+        started_at = self.host.state.first_audio_byte_timestamp
+        if not started_at:
+            return 0.0
+        return max(0.0, time.time() - started_at)
+
+    async def _person_id_is_owned(self, person_id: str) -> bool:
+        if person_id == USER_SELF_PERSON_ID:
+            return True
+        if person_id in self.known_person_ids:
+            return True
+        person = await self.host.persistence.call(user_db.get_person, self.host.request.uid, person_id)
+        if not person:
+            return False
+        self.known_person_ids.add(person_id)
+        return True
+
+    async def _handle_suggested_transcript(self, payload: Dict[str, Any]) -> None:
+        try:
+            envelope = SuggestedTranscriptEnvelope.model_validate(payload)
+        except ValidationError as error:
+            logger.info('Invalid listen suggested_transcript message: %s', sanitize(str(error)))
+            return
+        elapsed = self._session_elapsed_seconds()
+        segments: List[Dict[str, Any]] = []
+        for segment in envelope.segments:
+            segment.clamp_to_elapsed(elapsed)
+            if envelope.stt_provider:
+                segment.stt_provider = envelope.stt_provider
+            if segment.person_id and not await self._person_id_is_owned(segment.person_id):
+                segment.person_id = None
+            segments.append(segment.model_dump())
+        if segments:
+            self.host.transcripts.enqueue(segments)
+
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
-        segment_ids = payload.get('segment_ids', [])
+        try:
+            envelope = SpeakerAssignedEnvelope.model_validate(payload)
+        except ValidationError as error:
+            logger.info('Invalid listen speaker_assigned message: %s', sanitize(str(error)))
+            return
+        if not await self._person_id_is_owned(envelope.person_id):
+            logger.info('Rejected listen speaker_assigned: person_id does not belong to this user')
+            return
+        segment_ids = envelope.segment_ids
         speaker = self.host.speakers
         updated = update_speaker_assignment_maps(
-            cast(int, payload.get('speaker_id')),
-            cast(str, payload.get('person_id')),
-            cast(str, payload.get('person_name')),
+            envelope.speaker_id,
+            envelope.person_id,
+            envelope.person_name,
             segment_ids,
             speaker.speaker_to_person,
             speaker.segment_assignments,
@@ -517,8 +561,7 @@ class ListenReceiver:
         if not updated:
             return
         if (
-            payload.get('person_id')
-            and payload.get('person_id') != 'user'
+            envelope.person_id != USER_SELF_PERSON_ID
             and self.host.private_cloud_sync_enabled
             and self.host.send_speaker_sample_request
             and self.host.state.current_conversation_id
@@ -526,7 +569,7 @@ class ListenReceiver:
         ):
             self.host.spawn(
                 self.host.send_speaker_sample_request(
-                    person_id=payload['person_id'],
+                    person_id=envelope.person_id,
                     conv_id=self.host.state.current_conversation_id,
                     segment_ids=segment_ids,
                 ),

@@ -13,6 +13,10 @@ from utils.request_validation import (
     NonNegativeOffset,
     PositiveLimit,
     parse_form_json,
+    MAX_SUGGESTED_TRANSCRIPT_SEGMENTS,
+    SpeakerAssignedEnvelope,
+    SuggestedTranscriptEnvelope,
+    SuggestedTranscriptSegment,
     parse_sync_filename_timestamp,
     validate_calendar_date,
 )
@@ -145,3 +149,39 @@ def test_common_query_contracts_reject_invalid_values_before_endpoint_runs():
         assert response.status_code == 422
 
     assert calls == [(1, 0, 1)]
+
+
+def test_suggested_transcript_segment_forbids_speech_profile_processed_and_client_id():
+    for field in ('speech_profile_processed', 'id'):
+        with pytest.raises(ValidationError):
+            SuggestedTranscriptSegment.model_validate({'text': 'hi', 'start': 0.0, 'end': 1.0, field: True})
+
+
+def test_suggested_transcript_segment_rejects_negative_and_inverted_times():
+    with pytest.raises(ValidationError):
+        SuggestedTranscriptSegment.model_validate({'text': 'hi', 'start': -1e9, 'end': 1.0})
+    with pytest.raises(ValidationError):
+        SuggestedTranscriptSegment.model_validate({'text': 'hi', 'start': 5.0, 'end': 1.0})
+
+
+def test_suggested_transcript_segment_clamps_to_session_elapsed():
+    segment = SuggestedTranscriptSegment.model_validate({'text': 'hi', 'start': 10.0, 'end': 99999.0})
+    segment.clamp_to_elapsed(3.0)
+    assert (segment.start, segment.end) == (3.0, 3.0)
+
+
+def test_suggested_transcript_envelope_bounds_segment_count():
+    payload = {'segments': [{'text': 'hi', 'start': 0.0, 'end': 1.0}] * (MAX_SUGGESTED_TRANSCRIPT_SEGMENTS + 1)}
+    with pytest.raises(ValidationError):
+        SuggestedTranscriptEnvelope.model_validate(payload)
+
+
+def test_speaker_assigned_envelope_requires_identity_fields():
+    with pytest.raises(ValidationError):
+        SpeakerAssignedEnvelope.model_validate({'speaker_id': 0, 'person_id': '', 'person_name': 'A'})
+    with pytest.raises(ValidationError):
+        SpeakerAssignedEnvelope.model_validate({'person_id': 'p1', 'person_name': 'A'})
+    envelope = SpeakerAssignedEnvelope.model_validate(
+        {'speaker_id': 1, 'person_id': 'p1', 'person_name': 'A', 'segment_ids': ['s1']}
+    )
+    assert envelope.segment_ids == ['s1']

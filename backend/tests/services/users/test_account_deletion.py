@@ -371,6 +371,13 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda uid: calls.append(('running', uid))
     )
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', lambda uid: None)
+    # Revocation precedes identity destruction: once the Auth user is gone the
+    # account cannot sign in to revoke a surviving credential itself.
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_user_credentials',
+        lambda uid: calls.append(('credentials', uid)) or account_deletion._empty_purge_result(),
+    )
     monkeypatch.setattr(account_deletion.auth, 'delete_account', lambda uid: calls.append(('auth', uid)))
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', lambda uid: calls.append(('twilio', uid)))
     monkeypatch.setattr(
@@ -397,6 +404,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
 
     assert calls == [
         ('running', 'uid1'),
+        ('credentials', 'uid1'),
         ('auth', 'uid1'),
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
@@ -553,6 +561,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
     monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion, 'count_x_posts', MagicMock(return_value=0))
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
     monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
@@ -579,6 +588,76 @@ def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monke
     account_deletion.delete_memory_vectors_batch.assert_not_called()
     account_deletion.delete_action_item_vectors_batch.assert_not_called()
     account_deletion.delete_screen_activity_vectors.assert_not_called()
+
+
+def test_unconfigured_pinecone_does_not_fail_x_post_vectors_for_a_user_without_x(monkeypatch):
+    """require_vector_index('x_post_vectors') used to run unconditionally, so an
+    unconfigured Pinecone made every deletion fail on a step that applies to the
+    small minority of users who connected X."""
+    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion, 'count_x_posts', MagicMock(return_value=0))
+    for name in (
+        'get_conversation_ids',
+        'get_memory_ids',
+        'get_action_item_ids',
+        'get_screen_activity_ids',
+    ):
+        monkeypatch.setattr(account_deletion, name, MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'delete_x_post_vectors', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock(return_value=0))
+    monkeypatch.setattr(account_deletion, 'delete_blobs_with_prefix', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock(return_value={}))
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert result['required_failures'] == []
+    account_deletion.delete_x_post_vectors.assert_not_called()
+
+
+def test_x_post_vectors_still_required_when_the_user_has_x_posts(monkeypatch):
+    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion, 'count_x_posts', MagicMock(return_value=4))
+    for name in (
+        'get_conversation_ids',
+        'get_memory_ids',
+        'get_action_item_ids',
+        'get_screen_activity_ids',
+    ):
+        monkeypatch.setattr(account_deletion, name, MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'delete_x_post_vectors', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock(return_value=0))
+    monkeypatch.setattr(account_deletion, 'delete_blobs_with_prefix', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock(return_value={}))
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert [failure['operation'] for failure in result['required_failures']] == ['x_post_vectors']
+    account_deletion.delete_x_post_vectors.assert_not_called()
+
+
+def test_credential_purge_failure_stops_before_the_auth_user_is_deleted(monkeypatch):
+    """While a required credential failure persists the account must stay able to
+    sign in — otherwise its MCP key keeps authenticating and nobody can revoke it."""
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_user_credentials',
+        MagicMock(return_value={'required_failures': [{'operation': 'mcp_api_keys', 'error': 'redis down'}]}),
+    )
+    monkeypatch.setattr(account_deletion.auth, 'revoke_user_refresh_tokens', MagicMock())
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.purge_derived_user_data.assert_not_called()
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
 def test_background_wipe_user_data_does_not_complete_when_required_derived_purge_fails(monkeypatch):

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
+from utils.pusher_protocol import MAX_SAMPLE_RATE, MIN_SAMPLE_RATE
+
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
 MIN_CONVERSATION_TIMEOUT_SECONDS = 120
 TARGET_SAMPLE_RATE = 16000
@@ -99,6 +101,8 @@ def validate_audio_format(codec: str, sample_rate: int) -> Optional[str]:
     Checked before any decoder is constructed so an unsupported request closes the socket cleanly
     instead of raising OpusError/TypeError out of the ASGI handler as an unclean 1006 drop.
     """
+    if not MIN_SAMPLE_RATE <= sample_rate <= MAX_SAMPLE_RATE:
+        return f'sample rate must be between {MIN_SAMPLE_RATE} and {MAX_SAMPLE_RATE}, got {sample_rate}'
     if codec in ('opus', 'opus_fs320') and sample_rate not in OPUS_SUPPORTED_SAMPLE_RATES:
         return f'opus requires a sample rate in {sorted(OPUS_SUPPORTED_SAMPLE_RATES)}, got {sample_rate}'
     if codec == 'lc3':

@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+MAX_RING_BUFFER_BYTES = 48000 * 2 * 600
+
 
 class AudioRingBuffer:
     """Circular buffer storing last N seconds of PCM16 mono audio with timestamp tracking."""
@@ -12,7 +14,7 @@ class AudioRingBuffer:
         # checked for opus codecs, so a pcm client can send 0 or a negative value. Clamp so
         # bytearray() cannot raise "negative count" at construction. Mirrors resample_pcm, which
         # guards the same non-positive rate.
-        self.capacity = max(0, int(duration_seconds * self.bytes_per_second))
+        self.capacity = min(max(0, int(duration_seconds * self.bytes_per_second)), MAX_RING_BUFFER_BYTES)
         self.buffer = bytearray(self.capacity)
         self.write_pos = 0
         self.total_bytes_written = 0

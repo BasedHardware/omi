@@ -207,7 +207,7 @@ def test_handle_llm_error_removes_permanent_bad_tokens(
 
     handle_llm_error(_HTTPError("bad key", 401), 'openai', feature='memories', model='gpt-test')
 
-    mock_remove_tokens.assert_called_once_with(['bad-token'])
+    mock_remove_tokens.assert_called_once_with('user-1', ['bad-token'])
     # No device received the notification, so the dedupe lock must be released for retry.
     mock_release.assert_called_once_with('user-1', 'openai', 'invalid')
 

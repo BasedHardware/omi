@@ -33,8 +33,10 @@ runs:
     - name: Set deploy status
       if: steps.configuration.outputs.enabled == 'true'
       shell: bash
+      env:
+        INPUT_STATUS: ${{ inputs.status }}
       run: |
-        if [ "${{ inputs.status }}" == "success" ]; then
+        if [ "$INPUT_STATUS" == "success" ]; then
           echo "ICON=✅" >> $GITHUB_ENV
           echo "STATUS=Success" >> $GITHUB_ENV
         else
@@ -48,16 +50,23 @@ runs:
       env:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_bot_token }}
         TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_RELEASE_VERSION: ${{ inputs.release_version }}
+        RUN_NUMBER: ${{ github.run_number }}
+        RUN_ID: ${{ github.run_id }}
+        WORKFLOW: ${{ github.workflow }}
+        REF_NAME: ${{ github.ref_name }}
+        TRIGGER_ACTOR: ${{ github.actor }}
       run: |
-        WORKFLOW_NAME="${{ github.workflow }}"
-        ENVIRONMENT="${{ inputs.environment }}"
-        DEPLOY_BRANCH="${{ github.ref_name }}"
+        WORKFLOW_NAME="$WORKFLOW"
+        ENVIRONMENT="$INPUT_ENVIRONMENT"
+        DEPLOY_BRANCH="$REF_NAME"
         DEPLOY_TAG="${GITHUB_SHA::7}"
-        [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-${{ github.run_number }}"
-        ACTOR="${{ github.actor }}"
+        [[ -n "$INPUT_RELEASE_VERSION" ]] && RELEASE_VERSION="$INPUT_RELEASE_VERSION" || RELEASE_VERSION="release-$(date +'%Y%m%d')-${RUN_NUMBER}"
+        ACTOR="$TRIGGER_ACTOR"
         FINISH_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
         GITHUB_URL="https://github.com/BasedHardware/omi"
-        DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}"
+        DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${RUN_ID}"
         MESSAGE="🚀 <b>$WORKFLOW_NAME</b>: $ICON $STATUS
 
         ⚡️ <b>Environment:</b> $ENVIRONMENT

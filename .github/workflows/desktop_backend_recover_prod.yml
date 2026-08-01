@@ -183,10 +183,14 @@ jobs:
 
       - name: Record recovery
         if: success()
+        env:
+          REVISION: ${{ github.event.inputs.revision }}
+          PREVIOUS_REVISION: ${{ steps.recovery.outputs.previous_revision }}
+          REASON_DIGEST: ${{ steps.recovery.outputs.reason_digest }}
         run: |
           {
             echo "### Desktop backend production recovery"
-            echo "- Restored revision: \`${{ github.event.inputs.revision }}\`"
-            echo "- Previous revision: \`${{ steps.recovery.outputs.previous_revision }}\`"
-            echo "- Reason SHA-256: \`${{ steps.recovery.outputs.reason_digest }}\`"
+            echo "- Restored revision: \`${REVISION}\`"
+            echo "- Previous revision: \`${PREVIOUS_REVISION}\`"
+            echo "- Reason SHA-256: \`${REASON_DIGEST}\`"
           } >> "$GITHUB_STEP_SUMMARY"

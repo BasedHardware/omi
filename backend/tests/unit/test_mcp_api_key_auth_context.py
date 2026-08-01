@@ -73,15 +73,39 @@ class _FakeQuery:
 
 
 class _FakeDB:
-    def __init__(self, docs):
+    def __init__(self, docs, account_deletion=None):
         self._docs = docs
         self.grant_sets = []
+        # None means no account_deletions/{uid} marker at all — the state every
+        # live account is in.
+        self.account_deletion = account_deletion
+        self.deletion_reads = []
 
     def collection(self, name):
         if name == 'users':
             return _FakeUsersCollection(self)
+        if name == 'account_deletions':
+            return _FakeAccountDeletionCollection(self)
         assert name == 'mcp_api_keys'
         return _FakeQuery(self._docs)
+
+
+class _FakeAccountDeletionCollection:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def document(self, uid):
+        self.parent.deletion_reads.append(f'account_deletions/{uid}')
+        return _FakeAccountDeletionDoc(self.parent.account_deletion)
+
+
+class _FakeAccountDeletionDoc:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def get(self):
+        payload = self._payload
+        return SimpleNamespace(exists=payload is not None, to_dict=lambda: dict(payload or {}))
 
 
 class _FakeUsersCollection:
@@ -392,3 +416,87 @@ def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
     assert 'memories.read' in api_key_data.scopes
     assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes
     assert fake_db.grant_sets
+
+
+# ---------------------------------------------------------------------------
+# Account-deletion gate
+#
+# The gate keys on the top-level account_deletions marker, NOT on the presence
+# of the users/{uid} root document. Nothing creates that root document at
+# signup — record_user_platform is a throttled telemetry side-effect that
+# returns early without an X-App-Platform header — and Firestore reports a
+# parent holding only subcollections as non-existent. Keying on it 401'd every
+# key belonging to a curl/third-party/Linux principal, permanently.
+# ---------------------------------------------------------------------------
+
+
+def _key_doc():
+    return _FakeDoc(
+        {
+            'id': 'key-1',
+            'user_id': 'u1',
+            'hashed_key': 'hashed',
+            'app_id': 'mcp-api',
+            'scopes': ['memories.read'],
+        },
+        doc_id='key-1',
+    )
+
+
+def test_legacy_principal_without_a_user_root_document_still_authenticates(monkeypatch):
+    """Legacy-principal guard for the fail-closed deletion gate.
+
+    An existing key whose owner never wrote a users/{uid} root field must keep
+    working: no root doc is the normal state for anyone whose traffic never
+    carried X-App-Platform.
+    """
+    fake_db = _FakeDB([_key_doc()], account_deletion=None)
+    fake_db.user_exists = False  # users/{uid} root document absent
+    monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+    monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
+
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
+
+    assert auth is not None
+    assert auth['user_id'] == 'u1'
+    assert fake_db.deletion_reads == ['account_deletions/u1']
+
+
+def test_key_is_rejected_once_a_deletion_marker_owns_the_account(monkeypatch):
+    fake_db = _FakeDB([_key_doc()], account_deletion={'wipe_status': 'running'})
+    monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+    monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
+
+    assert mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret') is None
+
+
+def test_a_cancelled_deletion_does_not_revoke_the_key(monkeypatch):
+    """cancelled/billing_failed mean the account still exists and can sign in."""
+    fake_db = _FakeDB([_key_doc()], account_deletion={'wipe_status': 'cancelled'})
+    monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+    monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
+
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
+
+    assert auth is not None and auth['user_id'] == 'u1'
+
+
+def test_deletion_gate_runs_before_the_cached_auth_context_is_returned(monkeypatch):
+    """A key cached just before the purge must not survive for the cache TTL."""
+    cached = {
+        'user_id': 'u1',
+        'scopes': sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        'key_id': 'key-1',
+        'app_id': 'mcp-api',
+        'auth_context_version': mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
+    }
+    fake_db = _FakeDB([], account_deletion={'wipe_status': 'completed'})
+    monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+    monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis(cached=cached))
+
+    assert mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret') is None
+    assert fake_db.deletion_reads == ['account_deletions/u1']

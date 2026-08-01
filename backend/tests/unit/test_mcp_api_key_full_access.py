@@ -20,8 +20,13 @@ class _DocSnapshot:
 
 
 def _seed_user(db, uid="user-1"):
-    """The auth path rejects a key whose owning user document is gone."""
+    """Give the uid a users/{uid} root document (not required to authenticate)."""
     db.collection("users").document(uid).set({"uid": uid})
+
+
+def _mark_account_deleted(db, uid, wipe_status="running"):
+    """Write the durable top-level deletion authority the auth gate keys on."""
+    db.collection("account_deletions").document(uid).set({"uid": uid, "wipe_status": wipe_status})
 
 
 def _deep_merge(target, patch):
@@ -351,21 +356,26 @@ def test_backfill_grant_check_requires_all_memory_grant_scopes():
     )
 
 
+def _seed_orphan_key(db, uid="deleted-user"):
+    db.collection("mcp_api_keys").document("orphan-key").set(
+        {
+            "id": "orphan-key",
+            "user_id": uid,
+            "hashed_key": "hashed",
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": list(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        }
+    )
+
+
 def test_mcp_key_whose_owner_was_deleted_does_not_authenticate(monkeypatch):
     """Account deletion regression: MCP keys live in a top-level collection, so
     the users/{uid} subcollection wipe never reached them. A key that outlives
     its owner must not authenticate, and must not recreate the deleted user's
     documents via its last_used_at / memory-grant writes."""
     db = _DB()
-    db.collection("mcp_api_keys").document("orphan-key").set(
-        {
-            "id": "orphan-key",
-            "user_id": "deleted-user",
-            "hashed_key": "hashed",
-            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-            "scopes": list(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
-        }
-    )
+    _seed_orphan_key(db)
+    _mark_account_deleted(db, "deleted-user")
     redis = _Redis()
     monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
@@ -374,6 +384,29 @@ def test_mcp_key_whose_owner_was_deleted_does_not_authenticate(monkeypatch):
     assert mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret") is None
     assert db.collection("mcp_api_keys").update_count == 0
     assert redis.cached == []
+
+
+def test_mcp_key_authenticates_when_its_owner_has_no_user_root_document(monkeypatch):
+    """Legacy-principal guard for the fail-closed deletion gate.
+
+    Nothing creates users/{uid} at signup — record_user_platform is a throttled
+    telemetry side-effect that returns early without an X-App-Platform header —
+    and Firestore reports a parent holding only subcollections as non-existent.
+    Keying the gate on that document 401'd every key held by a curl, third-party
+    or Linux principal, permanently.
+    """
+    db = _DB()
+    _seed_orphan_key(db, uid="legacy-user")
+    assert db.collection("users").document("legacy-user").get().exists is False
+    redis = _Redis()
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
+    monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
+
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+
+    assert auth is not None
+    assert auth["user_id"] == "legacy-user"
 
 
 def test_delete_all_mcp_keys_for_user_removes_every_key_and_cache_entry(monkeypatch):

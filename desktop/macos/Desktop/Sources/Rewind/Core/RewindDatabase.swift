@@ -448,8 +448,6 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
-    guard dbQueue == nil else { return }
-
     // Resolve the directory once. `retargetEffectiveOwner` may run while
     // this method is suspended in GRDB/file I/O; a stale initializer must
     // never drift to the next owner's path or publish its old pool later.
@@ -463,7 +461,16 @@ actor RewindDatabase {
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700]
     )
-    try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: omiDir.path)
+    // Unconditional: the intermediate `Omi` and `Omi/users` levels are created
+    // with the process umask, and an already-open pool must not skip the repair
+    // of a tree an older build left at 0755/0644.
+    RewindStorePermissions.secureDirectory(at: omiDir)
+    // The sweep over an existing capture store is proportional to its file
+    // count, so it runs off the database actor rather than delaying first
+    // capture behind it.
+    Task.detached(priority: .utility) { RewindStorePermissions.repairStoreTreeIfNeeded(at: omiDir) }
+
+    guard dbQueue == nil else { return }
 
     // Migrate data from legacy path if this is first launch with per-user paths
     migrateFromLegacyPathIfNeeded(to: omiDir)
@@ -873,6 +880,7 @@ actor RewindDatabase {
     // Create backup directory
     let backupDir = omiDir.appendingPathComponent("backups", isDirectory: true)
     try fileManager.createDirectory(at: backupDir, withIntermediateDirectories: true)
+    RewindStorePermissions.secureDirectory(at: backupDir)
 
     // Generate backup filename with timestamp
     let formatter = DateFormatter()

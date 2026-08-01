@@ -56,7 +56,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          # Production starts from fresh main only; development retains its
+          # caller-selected branch.
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Admit production source
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          head_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+          if ! git merge-base --is-ancestor "$head_sha" "$main_sha"; then
+            echo "ERROR: deploy source $head_sha is not an ancestor of fresh origin/main; only merged code may deploy." >&2
+            exit 1
+          fi
 
       - name: Google Auth
         id: auth

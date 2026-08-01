@@ -130,11 +130,11 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
             loop = asyncio.get_running_loop()
             calls: list[list[str]] = []
 
-            def blocking_read(timezones: list[str]) -> list[str]:
+            def blocking_read(timezones: list[str]) -> list[tuple[str, str]]:
                 calls.append(timezones)
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
-                return ['token-a', 'token-b']
+                return [('user-a', 'token-a'), ('user-b', 'token-b')]
 
             notifications._get_timezones_at_time = lambda _target: ['Asia/Kolkata']
             notification_db.get_users_token_in_timezones = blocking_read
@@ -144,7 +144,7 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
                 entered,
                 release,
             )
-            assert result == ['token-a', 'token-b']
+            assert result == [('user-a', 'token-a'), ('user-b', 'token-b')]
             assert calls == [['Asia/Kolkata']]
 
         asyncio.run(exercise())

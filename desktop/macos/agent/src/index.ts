@@ -32,15 +32,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
-import {
-  unlinkSync,
-  appendFileSync,
-  chmodSync,
-  closeSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-} from "fs";
+import { unlinkSync } from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
@@ -119,6 +111,7 @@ import {
   sanitizeProcessDiagnostic,
   unexpectedQueryErrorDiagnostic,
 } from "./runtime/failures.js";
+import { logCrash } from "./runtime/crash-log.js";
 import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
 import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
@@ -1164,52 +1157,6 @@ function requireControlSessionPolicy(sessionId: string | undefined, ownerId: str
 }
 
 // --- Error handling ---
-
-/**
- * Write to /tmp/agent-crash.log as fallback when stderr might be lost.
- * Hard-capped at CRASH_LOG_MAX_LINES per process to prevent runaway disk
- * fill (we shipped a build that wrote 100s of GBs into this file in a tight
- * EPIPE re-entry loop).
- */
-const CRASH_LOG_MAX_LINES = 100;
-const CRASH_LOG_PATH = join(homedir(), "Library", "Logs", "Omi", "agent-crash.log");
-let crashLogLineCount = 0;
-
-function ensureCrashLogOwnerOnly(path: string): boolean {
-  try {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    let existing: ReturnType<typeof lstatSync> | null = null;
-    try {
-      existing = lstatSync(path);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") return false;
-    }
-    if (existing) {
-      const ownerUid = process.getuid?.();
-      if (existing.isFile() && ownerUid !== undefined && existing.uid === ownerUid) {
-        chmodSync(path, 0o600);
-        return true;
-      }
-      unlinkSync(path);
-    }
-    closeSync(openSync(path, "a", 0o600));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function logCrash(msg: string): void {
-  if (crashLogLineCount >= CRASH_LOG_MAX_LINES) return;
-  crashLogLineCount += 1;
-  try {
-    if (!ensureCrashLogOwnerOnly(CRASH_LOG_PATH)) return;
-    const ts = new Date().toISOString();
-    appendFileSync(CRASH_LOG_PATH, `[${ts}] ${sanitizeProcessDiagnostic(msg)}\n`, { mode: 0o600 });
-  } catch {
-    // ignore
-  }
-}
 
 // Once we've decided to bail because the parent pipe is gone, suppress all
 // further error handling so logErr/logCrash don't keep re-entering on

@@ -32,10 +32,10 @@ jobs:
     environment: prod
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout promotion controls
+      - name: Checkout trusted promotion controls
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_tag }}
+          ref: main
           fetch-depth: 0
 
       - name: Verify live desktop-backend chat compatibility
@@ -80,7 +80,8 @@ jobs:
             printf '%s' "$encoded" | base64 --decode > /tmp/desktop-qualification-run.json
             if python3 .github/scripts/desktop_qualification_admission.py \
               --run-json /tmp/desktop-qualification-run.json \
-              --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"; then
+              --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA" \
+              --require-tag-binding; then
               selected="$(jq -r .id /tmp/desktop-qualification-run.json)"
               break
             fi

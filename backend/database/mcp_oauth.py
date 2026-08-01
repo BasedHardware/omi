@@ -13,6 +13,10 @@ from urllib.parse import unquote, urlsplit
 from google.cloud import firestore
 
 from database._client import db
+from database.account_deletion_projection_fence import (
+    ACCOUNT_DELETION_COLLECTION,
+    ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES,
+)
 
 MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "https://api.omi.me/v1/mcp/sse")
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
@@ -90,9 +94,19 @@ def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
     return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
 
 
-def _owner_exists(uid: str) -> bool:
-    """Whether the grant's owning user document still exists."""
-    return db.collection("users").document(uid).get().exists
+def _owner_account_deleted(uid: str) -> bool:
+    """Whether a durable account-deletion authority owns ``uid``.
+
+    Keyed on the top-level ``account_deletions`` marker, not on the presence of
+    the ``users/{uid}`` root document. Nothing creates that root document at
+    signup, and Firestore reports a parent that holds only subcollections as
+    non-existent, so a root-document probe rejects legitimate principals that
+    simply never wrote a root field.
+    """
+    snapshot = db.collection(ACCOUNT_DELETION_COLLECTION).document(uid).get()
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+    status = payload.get("wipe_status") if isinstance(payload, dict) else None
+    return isinstance(status, str) and status.strip() in ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -654,7 +668,7 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     # collection, so a token that outlives its owner must not authenticate, and
     # the last_used_at write below must not recreate a deleted user's state.
     uid = data.get("uid")
-    if not isinstance(uid, str) or not uid or not _owner_exists(uid):
+    if not isinstance(uid, str) or not uid or _owner_account_deleted(uid):
         return None
     db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
     return {
@@ -756,6 +770,33 @@ def list_user_grants(uid: str) -> List[Dict[str, Any]]:
         reverse=True,
     )
     return grants
+
+
+def delete_user_grants(uid: str) -> int:
+    """Revoke then delete every MCP OAuth artefact owned by ``uid``.
+
+    ``revoke_grant`` only merges a ``revoked_at``/``status`` field, so on its own
+    it leaves the grant, access-token, refresh-token and authorization-code
+    documents — each carrying the uid — in top-level collections with no TTL and
+    no reaper. Account deletion is an erasure request, so mirror
+    ``delete_all_mcp_keys_for_user``: revoke first, so anything reading a
+    document mid-delete already sees it as dead, then delete it.
+    """
+    grant_docs = list(db.collection("mcp_oauth_grants").where("uid", "==", uid).stream())
+    for doc in grant_docs:
+        revoke_grant(doc.id)
+    for collection_name in (
+        "mcp_oauth_access_tokens",
+        "mcp_oauth_refresh_tokens",
+        "mcp_oauth_authorization_codes",
+    ):
+        # Materialize before deleting: the query cursor must not be advanced
+        # while its own results are being removed.
+        for doc in list(db.collection(collection_name).where("uid", "==", uid).stream()):
+            doc.reference.delete()
+    for doc in grant_docs:
+        doc.reference.delete()
+    return len(grant_docs)
 
 
 def revoke_user_grant(uid: str, grant_id: str) -> bool:

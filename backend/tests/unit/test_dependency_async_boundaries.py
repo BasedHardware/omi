@@ -47,7 +47,7 @@ def _build_mcp_context(auth: _McpVerifiedAuth, *, surface: str) -> _ProductAutho
 
 @contextmanager
 def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType, ModuleType]]:
-    firebase_auth = _module('firebase_admin.auth', verify_id_token=lambda _token: {'uid': 'user-1'})
+    firebase_auth = _module('firebase_admin.auth', verify_id_token=lambda _token, **_kwargs: {'uid': 'user-1'})
     mcp_api_key_db = _module(
         'database.mcp_api_key',
         get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
@@ -58,6 +58,7 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
     )
     endpoints = _module(
         'utils.other.endpoints',
+        TOKEN_CLOCK_SKEW_SECONDS=30,
         check_api_key_rate_limit=lambda **_kwargs: None,
         enforce_token_not_revoked=lambda _decoded: None,
     )
@@ -109,7 +110,7 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
 
-        def verify_id_token(token: str) -> dict[str, str]:
+        def verify_id_token(token: str, **_kwargs: Any) -> dict[str, str]:
             assert token == 'firebase-token'
             return {'uid': 'user-1'}
 
@@ -131,6 +132,10 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         ]
         assert calls[0][1] is verify_id_token
         assert calls[1][1] is dependencies.enforce_token_not_revoked
+        # The same clock-skew allowance verify_token() uses. Wired into only one
+        # of the two call sites, a client whose clock runs slightly ahead of
+        # Google's is rejected here and accepted there.
+        assert calls[0][3] == {'clock_skew_seconds': dependencies.TOKEN_CLOCK_SKEW_SECONDS}
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
@@ -300,7 +305,7 @@ def test_firebase_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str) -> dict[str, str]:
+            def blocking_verify(_token: str, **_kwargs: Any) -> dict[str, str]:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}
@@ -402,7 +407,7 @@ def test_api_key_rate_limit_keeps_the_event_loop_responsive_and_propagates_http_
 
 def test_authentication_and_scope_failures_preserve_public_http_semantics() -> None:
     with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
-        firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(ValueError('invalid token'))
+        firebase_auth.verify_id_token = lambda _token, **_kwargs: (_ for _ in ()).throw(ValueError('invalid token'))
         with pytest.raises(HTTPException) as firebase_exc:
             asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='bad-token')))
         assert firebase_exc.value.status_code == 401

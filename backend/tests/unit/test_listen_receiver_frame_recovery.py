@@ -47,7 +47,7 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
                     {
                         'type': 'suggested_transcript',
                         'stt_provider': 'test-provider',
-                        'segments': [{'id': 'recovered', 'text': 'Recovered transcript'}],
+                        'segments': [{'text': 'Recovered transcript', 'start': 0.0, 'end': 1.0}],
                     }
                 )
             },
@@ -77,7 +77,12 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
 
     await receiver.receive_data()
 
-    assert received_segments == [{'id': 'recovered', 'text': 'Recovered transcript', 'stt_provider': 'test-provider'}]
+    assert len(received_segments) == 1
+    recovered = received_segments[0]
+    assert recovered['text'] == 'Recovered transcript'
+    assert recovered['stt_provider'] == 'test-provider'
+    assert 'id' not in recovered
+    assert 'speech_profile_processed' not in recovered
     assert live_transcription_starts == [True]
     assert host.state.close_code == 1000
 
@@ -95,3 +100,60 @@ async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_
     await receiver._handle_multi_channel_audio(b'\x01malformed-frame')
 
     assert receiver.channel_mix_buffers == [bytearray()]
+
+
+def _speaker_assigned_host(person_lookup):
+    return SimpleNamespace(
+        request=SimpleNamespace(uid='u1'),
+        state=SimpleNamespace(current_conversation_id=None, first_audio_byte_timestamp=None),
+        speakers=SimpleNamespace(speaker_to_person={}, segment_assignments={}),
+        transcripts=SimpleNamespace(current_session_segments={}),
+        private_cloud_sync_enabled=False,
+        send_speaker_sample_request=None,
+        persistence=SimpleNamespace(call=person_lookup),
+    )
+
+
+@pytest.mark.anyio
+async def test_speaker_assigned_rejects_a_person_id_not_owned_by_the_uid():
+    async def lookup(_function, _uid, _person_id):
+        return None
+
+    host = _speaker_assigned_host(lookup)
+    receiver = ListenReceiver(host, [], {})
+
+    await receiver._handle_speaker_assigned(
+        {'type': 'speaker_assigned', 'speaker_id': 1, 'person_id': 'other-tenant', 'person_name': 'Mallory'}
+    )
+
+    assert host.speakers.speaker_to_person == {}
+    assert host.speakers.segment_assignments == {}
+
+
+@pytest.mark.anyio
+async def test_speaker_assigned_accepts_an_owned_person_id():
+    async def lookup(_function, _uid, person_id):
+        return {'id': person_id}
+
+    host = _speaker_assigned_host(lookup)
+    receiver = ListenReceiver(host, [], {})
+
+    await receiver._handle_speaker_assigned(
+        {'speaker_id': 1, 'person_id': 'p1', 'person_name': 'Alice', 'segment_ids': ['s1']}
+    )
+
+    assert host.speakers.speaker_to_person == {1: ('p1', 'Alice')}
+    assert host.speakers.segment_assignments == {'s1': 'p1'}
+
+
+@pytest.mark.anyio
+async def test_speaker_assigned_drops_a_malformed_payload_without_raising():
+    async def lookup(*_args):
+        raise AssertionError('lookup must not run for a malformed payload')
+
+    host = _speaker_assigned_host(lookup)
+    receiver = ListenReceiver(host, [], {})
+
+    await receiver._handle_speaker_assigned({'speaker_id': 'not-an-int', 'person_id': 'p1'})
+
+    assert host.speakers.speaker_to_person == {}

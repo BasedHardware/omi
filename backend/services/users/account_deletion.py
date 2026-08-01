@@ -14,6 +14,7 @@ from database.mcp_api_key import delete_all_mcp_keys_for_user
 from database.conversations import get_conversation_ids
 from database.memories import get_memory_ids
 from database.screen_activity import get_screen_activity_ids
+from database.x_posts import count_x_posts
 from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_conversation_vectors_batch,
@@ -53,32 +54,66 @@ ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
-def purge_derived_user_data(uid: str) -> PurgeResult:
-    """Purge a user's derived data and credentials outside ``users/{uid}``.
-
-    Required failures must block the Firestore wipe because those IDs are
-    stored in Firestore and may become unrecoverable after ``delete_user_data``.
-    Best-effort failures are safe to retry independently or leave behind.
-    """
-    result: PurgeResult = {
+def _empty_purge_result() -> PurgeResult:
+    return {
         'required_failures': [],
         'best_effort_failures': [],
         'vectors_deleted': 0,
         'recordings_deleted': 0,
     }
 
+
+def _coerce_purge_result(value: object) -> PurgeResult:
+    """Normalize a purge return value so the two stages can be merged safely."""
+    result = _empty_purge_result()
+    if not isinstance(value, dict):
+        return result
+    payload = cast(dict[str, object], value)
+    for failure_key in ('required_failures', 'best_effort_failures'):
+        raw = payload.get(failure_key)
+        if not isinstance(raw, list):
+            continue
+        bucket = result[cast(Literal['required_failures', 'best_effort_failures'], failure_key)]
+        for item in cast(list[object], raw):
+            if isinstance(item, dict):
+                item_dict = cast(dict[str, object], item)
+                bucket.append(
+                    {
+                        'operation': str(item_dict.get('operation', 'unknown')),
+                        'error': str(item_dict.get('error', '')),
+                    }
+                )
+    for count_key in ('vectors_deleted', 'recordings_deleted'):
+        raw = payload.get(count_key)
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            result[cast(Literal['vectors_deleted', 'recordings_deleted'], count_key)] = raw
+    return result
+
+
+def _merge_purge_results(first: PurgeResult, second: PurgeResult) -> PurgeResult:
+    return {
+        'required_failures': first['required_failures'] + second['required_failures'],
+        'best_effort_failures': first['best_effort_failures'] + second['best_effort_failures'],
+        'vectors_deleted': first['vectors_deleted'] + second['vectors_deleted'],
+        'recordings_deleted': first['recordings_deleted'] + second['recordings_deleted'],
+    }
+
+
+def purge_user_credentials(uid: str) -> PurgeResult:
+    """Revoke and delete every credential that can authenticate as ``uid``.
+
+    Runs BEFORE the Firebase Auth user is deleted. Revocation must precede
+    identity destruction: once the Auth user is gone the account cannot sign in,
+    so it can no longer reach ``DELETE /v1/mcp/keys/{id}``. A key surviving a
+    required failure here (Redis down) would keep authenticating at full scope
+    with nobody able to revoke it.
+    """
+    result = _empty_purge_result()
+
     def record_failure(
         kind: Literal['required_failures', 'best_effort_failures'], operation: str, error: Exception
     ) -> None:
         result[kind].append({'operation': operation, 'error': sanitize(str(error))})
-
-    def require_deleted_count(operation: str, expected: int, deleted: int | None):
-        if expected and isinstance(deleted, int) and deleted < expected:
-            raise RuntimeError(f'{operation} only deleted {deleted}/{expected} records')
-
-    def require_vector_index(operation: str):
-        if vector_db.index is None:
-            raise RuntimeError(f'Pinecone index not initialized for {operation}')
 
     # Tell every OAuth provider to invalidate the grant while the tokens still
     # exist — after the Firestore wipe there is no credential left to revoke
@@ -107,14 +142,42 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         record_failure('required_failures', 'dev_api_keys', e)
         logger.error(f'delete_account purge developer API keys failed for {uid}: {sanitize(str(e))}')
 
+    # Revoke *and* delete. A revoked-only grant leaves the uid in the top-level
+    # mcp_oauth_* collections forever (no TTL, no reaper), which does not satisfy
+    # an erasure request.
     try:
-        for grant in mcp_oauth.list_user_grants(uid):
-            grant_id = grant.get('id')
-            if isinstance(grant_id, str) and grant_id:
-                mcp_oauth.revoke_user_grant(uid, grant_id)
+        mcp_oauth.delete_user_grants(uid)
     except Exception as e:
         record_failure('required_failures', 'mcp_oauth_grants', e)
         logger.error(f'delete_account purge MCP OAuth grants failed for {uid}: {sanitize(str(e))}')
+
+    return result
+
+
+def purge_derived_user_data(uid: str) -> PurgeResult:
+    """Purge a user's derived data outside ``users/{uid}``.
+
+    Required failures must block the Firestore wipe because those IDs are
+    stored in Firestore and may become unrecoverable after ``delete_user_data``.
+    Best-effort failures are safe to retry independently or leave behind.
+
+    Credentials are purged earlier and separately — see
+    :func:`purge_user_credentials`.
+    """
+    result = _empty_purge_result()
+
+    def record_failure(
+        kind: Literal['required_failures', 'best_effort_failures'], operation: str, error: Exception
+    ) -> None:
+        result[kind].append({'operation': operation, 'error': sanitize(str(error))})
+
+    def require_deleted_count(operation: str, expected: int, deleted: int | None):
+        if expected and isinstance(deleted, int) and deleted < expected:
+            raise RuntimeError(f'{operation} only deleted {deleted}/{expected} records')
+
+    def require_vector_index(operation: str):
+        if vector_db.index is None:
+            raise RuntimeError(f'Pinecone index not initialized for {operation}')
 
     try:
         conversation_ids = get_conversation_ids(uid)
@@ -194,8 +257,13 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge chat files failed for {uid}: {sanitize(str(e))}')
 
     try:
-        require_vector_index('x_post_vectors')
-        delete_x_post_vectors(uid)
+        # Guarded like every sibling vector step: only a user who actually has X
+        # posts needs the index. Unguarded, an unconfigured Pinecone made this a
+        # required failure for *every* deletion, including the vast majority who
+        # never connected X.
+        if count_x_posts(uid):
+            require_vector_index('x_post_vectors')
+            delete_x_post_vectors(uid)
     except Exception as e:
         record_failure('required_failures', 'x_post_vectors', e)
         logger.error(f'delete_account purge x post vectors failed for {uid}: {sanitize(str(e))}')
@@ -293,6 +361,16 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
         _cancel_subscription_for_account_deletion(uid)
+        # Revocation precedes identity destruction. Once the Auth user is gone
+        # the account can no longer sign in to revoke anything itself, so a
+        # credential that survives a required failure here would keep
+        # authenticating at full scope with no owner able to kill it.
+        current_operation = 'user_credentials'
+        purge_result = purge_user_credentials(uid)
+        credential_failures = _required_failures_from_purge_result(purge_result)
+        if credential_failures:
+            failed_operations = ', '.join(failure['operation'] for failure in credential_failures)
+            raise RuntimeError(f'required credential purge failed: {failed_operations}')
         current_operation = 'firebase_auth'
         try:
             # Revoke first: deleting the Auth user does not invalidate ID
@@ -310,7 +388,10 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         current_operation = 'twilio_caller_ids'
         delete_user_caller_ids(uid)
         current_operation = 'derived_data'
-        purge_result = purge_derived_user_data(uid)
+        purge_result = _merge_purge_results(
+            _coerce_purge_result(purge_result),
+            _coerce_purge_result(purge_derived_user_data(uid)),
+        )
         required_failures = _required_failures_from_purge_result(purge_result)
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)

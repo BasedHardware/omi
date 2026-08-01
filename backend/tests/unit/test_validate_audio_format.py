@@ -8,6 +8,8 @@ as an unclean 1006 close. validate_audio_format is checked at connect so those r
 cleanly (1003) instead.
 """
 
+import pytest
+
 from utils.transcribe_decisions import OPUS_SUPPORTED_SAMPLE_RATES, validate_audio_format
 
 
@@ -36,3 +38,16 @@ def test_bare_lc3_is_rejected_but_the_known_variant_is_not():
     assert validate_audio_format('lc3', 16000) is not None
     # the recognized variant carries a frame duration and must still pass.
     assert validate_audio_format('lc3_fs1030', 16000) is None
+
+
+@pytest.mark.parametrize('codec', ['pcm8', 'pcm16', 'aac', 'opus', 'opus_fs320', 'lc3_fs1030'])
+@pytest.mark.parametrize('sample_rate', [0, -1, 1, 7999, 48001, 1_000_000_000])
+def test_sample_rate_outside_the_universal_bound_is_rejected_for_every_codec(codec, sample_rate):
+    reason = validate_audio_format(codec, sample_rate)
+    assert reason is not None
+
+
+@pytest.mark.parametrize('codec', ['pcm8', 'pcm16', 'aac'])
+@pytest.mark.parametrize('sample_rate', [8000, 16000, 48000])
+def test_legitimate_device_rates_still_pass(codec, sample_rate):
+    assert validate_audio_format(codec, sample_rate) is None

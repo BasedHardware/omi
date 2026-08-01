@@ -270,9 +270,9 @@ def test_redis_store_uses_compatible_keys_payloads_and_ttls():
 
     assert store.get('fingerprint', 'es') == value
     assert store.is_negative('fingerprint', 'es')
-    assert client.sets[0][0] == 'translate:v1:fingerprint:es'
+    assert client.sets[0][0] == 'translate:v2:fingerprint:es'
     assert client.sets[0][2] == 600
-    assert client.sets[1] == ('translate:v2:neg:fingerprint:es', '1', 300)
+    assert client.sets[1] == ('translate:v3:neg:fingerprint:es', '1', 300)
 
 
 @pytest.mark.parametrize(
@@ -281,7 +281,7 @@ def test_redis_store_uses_compatible_keys_payloads_and_ttls():
 )
 def test_malformed_redis_payload_is_a_cache_miss(raw):
     client = RecordingRedis()
-    client.values['translate:v1:fingerprint:es'] = raw
+    client.values['translate:v2:fingerprint:es'] = raw
     store = RedisTranslationStore(client_factory=lambda: client)
 
     assert store.get('fingerprint', 'es') is None

@@ -1500,13 +1500,14 @@ def delete_speech_profile_blob(path: str) -> bool:
 
 
 def _get_signed_url(blob: Any, minutes: int) -> str:
-    if cached := get_cached_signed_url(blob.name):
+    bucket_name: str = getattr(blob.bucket, 'name', '') or ''
+    if cached := get_cached_signed_url(bucket_name, blob.name):
         return cached
 
     signed_url: str = blob.generate_signed_url(
         version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET"
     )
-    cache_signed_url(blob.name, signed_url, minutes * 60)
+    cache_signed_url(bucket_name, blob.name, signed_url, minutes * 60)
     return signed_url
 
 

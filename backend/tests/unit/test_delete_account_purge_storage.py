@@ -40,6 +40,7 @@ def users_service():
         "database.conversations": AutoMockModule("database.conversations"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
+        "database.x_posts": AutoMockModule("database.x_posts"),
         "database.vector_db": AutoMockModule("database.vector_db"),
         "utils": _pkg("utils"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
@@ -89,16 +90,11 @@ def _purge_patches(users_service, **overrides):
         "delete_screen_activity_vectors",
         "delete_all_conversation_recordings",
         "delete_user_caller_ids",
+        "count_x_posts",
     ):
         patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
-    patchers["list_user_grants"] = patch.object(
-        users_service.mcp_oauth,
-        "list_user_grants",
-        create=True,
-        **(overrides.get("list_user_grants") or {"return_value": []})
-    )
-    patchers["revoke_user_grant"] = patch.object(
-        users_service.mcp_oauth, "revoke_user_grant", create=True, **(overrides.get("revoke_user_grant") or {})
+    patchers["delete_user_grants"] = patch.object(
+        users_service.mcp_oauth, "delete_user_grants", create=True, **(overrides.get("delete_user_grants") or {})
     )
     patchers["delete_user_data"] = patch.object(
         users_service.users_db, "delete_user_data", create=True, **(overrides.get("delete_user_data") or {})
@@ -192,26 +188,48 @@ def test_enumeration_failure_is_isolated(users_service):
 # ---------------------------------------------------------------------------
 
 
-def test_credentials_are_purged_before_the_firestore_wipe(users_service):
+def test_credentials_are_purged_before_the_auth_user_is_deleted(users_service):
+    """Revocation must precede identity destruction.
+
+    Once the Firebase Auth user is gone the account cannot sign in, so it can no
+    longer reach DELETE /v1/mcp/keys/{id}. A key that survives a required purge
+    failure after that point authenticates at full scope with nobody able to
+    revoke it.
+    """
     order = []
     patchers, m = _purge_patches(
         users_service,
         delete_all_mcp_keys_for_user={"side_effect": lambda uid: order.append("mcp_keys")},
         delete_all_dev_keys_for_user={"side_effect": lambda uid: order.append("dev_keys")},
-        list_user_grants={"side_effect": lambda uid: order.append("grants") or [{"id": "g1"}]},
+        delete_user_grants={"side_effect": lambda uid: order.append("grants")},
         delete_user_data={"side_effect": lambda uid: order.append("wipe")},
     )
+    users_service.auth.delete_account.side_effect = lambda uid: order.append("auth_delete")
+    try:
+        users_service.background_wipe_user_data("uid1")
+    finally:
+        _stop(patchers)
+        users_service.auth.delete_account.side_effect = None
+
+    m["delete_all_mcp_keys_for_user"].assert_called_once_with("uid1")
+    m["delete_all_dev_keys_for_user"].assert_called_once_with("uid1")
+    m["delete_user_grants"].assert_called_once_with("uid1")
+    for credential_step in ("mcp_keys", "dev_keys", "grants"):
+        assert order.index("auth_delete") > order.index(credential_step), order
+        assert order.index("wipe") > order.index(credential_step), order
+
+
+def test_api_key_purge_failure_leaves_the_auth_user_signed_in(users_service):
+    """A required credential failure must stop short of deleting the identity."""
+    patchers, m = _purge_patches(users_service, delete_all_mcp_keys_for_user={"side_effect": Exception("redis down")})
+    users_service.auth.delete_account.reset_mock()
     try:
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
 
-    m["delete_all_mcp_keys_for_user"].assert_called_once_with("uid1")
-    m["delete_all_dev_keys_for_user"].assert_called_once_with("uid1")
-    m["revoke_user_grant"].assert_called_once_with("uid1", "g1")
-    assert order.index("wipe") > order.index("mcp_keys")
-    assert order.index("wipe") > order.index("dev_keys")
-    assert order.index("wipe") > order.index("grants")
+    users_service.auth.delete_account.assert_not_called()
+    m["delete_user_data"].assert_not_called()
 
 
 def test_api_key_purge_failure_blocks_the_firestore_wipe(users_service):

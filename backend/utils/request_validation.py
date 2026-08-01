@@ -17,7 +17,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 PositiveLimit = Annotated[int, Query(ge=1, le=1000)]
 CalendarMeetingsLimit = Annotated[int, Query(ge=1, le=100)]
@@ -149,3 +149,60 @@ class ImageChunkEnvelope(BaseModel):
     def validate_against_cached_total(self, cached_total: int | None) -> None:
         if cached_total is not None and cached_total != self.total:
             raise ValueError('total must be consistent for all chunks in an image upload')
+
+
+MAX_SUGGESTED_TRANSCRIPT_SEGMENTS = 100
+MAX_TRANSCRIPT_SEGMENT_TEXT_CHARS = 10_000
+MAX_SPEAKER_ASSIGNED_SEGMENT_IDS = 500
+MAX_IDENTIFIER_CHARS = 128
+
+
+class SuggestedTranscriptSegment(BaseModel):
+    """One client-supplied transcript segment accepted over the listen socket.
+
+    ``extra='forbid'`` is load-bearing: the consumer splats this into
+    ``TranscriptSegment(**raw, speech_profile_processed=True)``, so a client-supplied
+    ``speech_profile_processed`` would raise TypeError inside the session-lifetime task.
+    ``id`` is deliberately absent so the server always assigns it.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    text: str = Field(max_length=MAX_TRANSCRIPT_SEGMENT_TEXT_CHARS)
+    speaker: str | None = Field(default='SPEAKER_00', max_length=MAX_IDENTIFIER_CHARS)
+    speaker_id: int | None = Field(default=None, ge=0, le=1000)
+    is_user: bool = False
+    person_id: str | None = Field(default=None, max_length=MAX_IDENTIFIER_CHARS)
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+    stt_provider: str | None = Field(default=None, max_length=MAX_IDENTIFIER_CHARS)
+
+    @model_validator(mode='after')
+    def validate_time_range(self):
+        if self.end < self.start:
+            raise ValueError('end must be greater than or equal to start')
+        return self
+
+    def clamp_to_elapsed(self, session_elapsed_seconds: float) -> None:
+        upper = max(0.0, session_elapsed_seconds)
+        self.start = min(self.start, upper)
+        self.end = min(max(self.end, self.start), upper)
+
+
+class SuggestedTranscriptEnvelope(BaseModel):
+    segments: list[SuggestedTranscriptSegment] = Field(max_length=MAX_SUGGESTED_TRANSCRIPT_SEGMENTS)
+    stt_provider: str | None = Field(default=None, max_length=MAX_IDENTIFIER_CHARS)
+
+
+class SpeakerAssignedEnvelope(BaseModel):
+    speaker_id: int = Field(ge=0, le=1000)
+    person_id: str = Field(min_length=1, max_length=MAX_IDENTIFIER_CHARS)
+    person_name: str = Field(min_length=1, max_length=MAX_IDENTIFIER_CHARS)
+    segment_ids: list[str] = Field(default_factory=list, max_length=MAX_SPEAKER_ASSIGNED_SEGMENT_IDS)
+
+    @model_validator(mode='after')
+    def validate_segment_ids(self):
+        for segment_id in self.segment_ids:
+            if not segment_id or len(segment_id) > MAX_IDENTIFIER_CHARS:
+                raise ValueError('segment_ids entries must be non-empty identifiers')
+        return self

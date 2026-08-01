@@ -695,4 +695,87 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       }
     }
   }
+
+  /// Regression coverage for silent desktop→VM data loss: the cursor used to
+  /// advance on HTTP 200 alone, so anything answering the VM's address without
+  /// forwarding the batch permanently skipped that row range. Only a receipt
+  /// matching both `applied` and `table` may advance the cursor; every other
+  /// 200 is retryable.
+  final class AgentSyncReceiptTests: XCTestCase {
+    private var storageFixture: RewindStorageTestIsolation.Fixture?
+    private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+
+    override func setUp() async throws {
+      try await super.setUp()
+      let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-receipt")
+      storageFixture = fixture
+      authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
+      await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
+      try await insertMemory()
+    }
+
+    override func tearDown() async throws {
+      if let authSnapshot {
+        await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+      }
+      await RewindStorageTestIsolation.tearDown(userDir: storageFixture?.userDir)
+      try await super.tearDown()
+    }
+
+    func testHonestReceiptAdvancesTheCursor() async {
+      let batches = await batchedMemoryIds(receipt: .honest)
+      XCTAssertEqual(batches.count, 1, "An acknowledged batch must not be re-sent")
+      XCTAssertFalse(batches[0].isEmpty)
+    }
+
+    func testAppliedMismatchDoesNotAdvanceTheCursor() async {
+      let batches = await batchedMemoryIds(receipt: .appliedZero)
+      XCTAssertEqual(batches.count, 2, "A 200 that applied nothing must be retried, not acknowledged")
+      XCTAssertEqual(batches.first, batches.last, "The unacknowledged row range must be re-selected verbatim")
+    }
+
+    func testWrongTableReceiptDoesNotAdvanceTheCursor() async {
+      let batches = await batchedMemoryIds(receipt: .wrongTable)
+      XCTAssertEqual(batches.count, 2)
+      XCTAssertEqual(batches.first, batches.last)
+    }
+
+    func testMalformedBodyDoesNotAdvanceTheCursor() async {
+      let batches = await batchedMemoryIds(receipt: .empty)
+      XCTAssertEqual(batches.count, 2, "An unparseable receipt is a mismatch, not a success")
+      XCTAssertEqual(batches.first, batches.last)
+    }
+
+    private func batchedMemoryIds(receipt: AgentSyncReceiptProbe.Receipt) async -> [[Int64]] {
+      let probe = AgentSyncReceiptProbe(receipt: receipt)
+      let service = AgentSyncService(
+        networkHooks: AgentSyncService.NetworkHooks(
+          fetchIDToken: { "test-firebase-token" },
+          dataForRequest: { request in try await probe.respond(to: request) },
+          reuploadDatabase: { _, _ in true },
+          now: Date.init,
+          tableSyncEnabled: true))
+
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+
+      return await probe.batchedIds(for: "memories")
+    }
+
+    private func insertMemory() async throws {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return XCTFail("Rewind database should be initialized")
+      }
+      let now = Date(timeIntervalSince1970: 1_700_000_000)
+      try await dbQueue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO memories (content, category, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?)
+            """,
+          arguments: ["receipt verification row", "system", now, now])
+      }
+    }
+  }
 #endif

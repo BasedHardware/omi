@@ -10,6 +10,8 @@ import struct
 from dataclasses import dataclass
 from typing import List
 
+MAX_RESAMPLE_OUTPUT_SAMPLES = 48000 * 60
+
 
 @dataclass(frozen=True)
 class ChannelConfig:
@@ -57,6 +59,6 @@ def resample_pcm(pcm_data: bytes, source_rate: int, target_rate: int) -> bytes:
         return pcm_data
     samples = struct.unpack(f'<{sample_count}h', pcm_data[: sample_count * 2])
     ratio = target_rate / source_rate
-    output_count = int(sample_count * ratio)
+    output_count = min(int(sample_count * ratio), MAX_RESAMPLE_OUTPUT_SAMPLES)
     output = [samples[min(int(index / ratio), sample_count - 1)] for index in range(output_count)]
     return struct.pack(f'<{len(output)}h', *output)

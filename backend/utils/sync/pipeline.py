@@ -20,6 +20,7 @@ import wave
 from collections import deque
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from uuid import uuid4
 
 import httpx
 import numpy as np
@@ -1445,7 +1446,7 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
         if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
 
-        path = f"{directory}{filename}"
+        path = f"{directory}{uuid4()}_{timestamp}.bin"
         try:
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)

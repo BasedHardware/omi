@@ -12,7 +12,7 @@ final class TranscriptionConnectionStateTests: XCTestCase {
     delegate.onOpen = {
       didOpen = true
     }
-    delegate.onClose = { code in
+    delegate.onClose = { code, _ in
       closeCode = code
     }
 

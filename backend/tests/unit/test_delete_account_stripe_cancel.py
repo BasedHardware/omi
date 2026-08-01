@@ -42,6 +42,7 @@ def users_service():
         "database.conversations": AutoMockModule("database.conversations"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
+        "database.x_posts": AutoMockModule("database.x_posts"),
         "database.vector_db": AutoMockModule("database.vector_db"),
         "utils": _pkg("utils"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),

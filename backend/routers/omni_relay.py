@@ -57,18 +57,30 @@ def _slot_key(uid: str) -> str:
     return f'omni_relay:conns:{uid}'
 
 
+# INCR and the TTL arming must be one atomic server-side operation. As two
+# round-trips, a crash or dropped connection between them strands the counter
+# with no expiry — exactly the case the TTL exists to bound — and three such
+# events lock the uid out permanently.
+#
+# Arming only when no expiry is set keeps the original property: a reconnect
+# loop cannot keep a stuck counter alive by re-arming it on every attempt, while
+# a counter that already lost its TTL still self-heals.
+_ACQUIRE_SLOT_LUA = """
+local count = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+
+
 def _acquire_relay_slot(uid: str) -> bool:
     """Reserve one concurrent-relay slot for uid. Fail-closed on Redis errors."""
     key = _slot_key(uid)
-    count = int(redis_db.r.incr(key))
+    count = int(redis_db.r.eval(_ACQUIRE_SLOT_LUA, 1, key, _SLOT_TTL_SECONDS))
     if count > _MAX_CONCURRENT_RELAYS:
         redis_db.r.decr(key)
         return False
-    # Only arm the TTL on the counter's first holder. Re-arming on every acquire
-    # (including rejected ones) lets a reconnect loop keep a stuck counter alive
-    # indefinitely, which locks the uid out until the key is deleted by hand.
-    if count == 1:
-        redis_db.r.expire(key, _SLOT_TTL_SECONDS)
     return True
 
 

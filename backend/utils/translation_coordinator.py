@@ -253,7 +253,7 @@ class TranslationCoordinator:
 
         # Invalidate before cache I/O so an in-flight result cannot win a stale write.
         self._invalidate_segment_work(segment_id, state)
-        text_hash = hashlib.md5(text.encode()).hexdigest()
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
         cached = await run_blocking(
             db_executor,
             self.translation_service.get_cached_translation,
@@ -306,7 +306,7 @@ class TranslationCoordinator:
         """Commit a local skip and persist its shared negative-cache decision."""
         self.metrics[skip_metric] += 1
         state.committed_text = text
-        text_hash = hashlib.md5(text.encode()).hexdigest()
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
         await run_blocking(
             db_executor,
             self.translation_service.set_negative_cache,
@@ -412,7 +412,7 @@ class TranslationCoordinator:
                             self.language_state.observe_detection(outcome.detected_language, 1.0)
                         if detected_base == target_base:
                             # Only target-language no-ops belong in the negative cache.
-                            text_hash = hashlib.md5(original_text.encode()).hexdigest()
+                            text_hash = hashlib.sha256(original_text.encode()).hexdigest()
                             await run_blocking(
                                 db_executor,
                                 self.translation_service.set_negative_cache,

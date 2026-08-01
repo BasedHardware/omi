@@ -74,18 +74,20 @@ class TestBulkNotifications:
     """Test bulk notification sending"""
 
     @pytest.mark.asyncio
-    async def test_bulk_send_small(self, test_tokens):
+    async def test_bulk_send_small(self, test_user_id, test_tokens):
         """Test bulk send to a few tokens"""
         print(f"\n📢 Sending bulk notification to {len(test_tokens)} tokens")
 
         await send_bulk_notification(
-            user_tokens=test_tokens, title="Bulk Test", body="This is a bulk notification test"
+            user_tokens=[(test_user_id, token) for token in test_tokens],
+            title="Bulk Test",
+            body="This is a bulk notification test",
         )
 
         print("✅ Bulk notifications sent")
 
     @pytest.mark.asyncio
-    async def test_bulk_send_large(self, test_tokens):
+    async def test_bulk_send_large(self, test_user_id, test_tokens):
         """Test bulk send with many tokens (simulated)"""
         # Duplicate tokens to test batching (500+ tokens)
         large_token_list = test_tokens * 200  # Creates 200x the test tokens
@@ -93,7 +95,9 @@ class TestBulkNotifications:
         print(f"\n📢 Sending bulk notification to {len(large_token_list)} tokens")
 
         await send_bulk_notification(
-            user_tokens=large_token_list, title="Large Bulk Test", body="Testing batch processing"
+            user_tokens=[(test_user_id, token) for token in large_token_list],
+            title="Large Bulk Test",
+            body="Testing batch processing",
         )
 
         print("✅ Large bulk notifications sent")
@@ -180,7 +184,7 @@ class TestTokenManagement:
         print("✅ Tokens saved successfully")
 
         # Remove tokens in bulk
-        notification_db.remove_bulk_tokens(test_tokens)
+        notification_db.remove_bulk_tokens(test_user_id, test_tokens)
         print("Removed tokens in bulk")
 
         # Verify tokens were removed
@@ -207,7 +211,7 @@ class TestTokenManagement:
         print(f"Created {len(test_tokens)} test tokens")
 
         # Remove tokens in bulk (tests chunking logic)
-        notification_db.remove_bulk_tokens(test_tokens)
+        notification_db.remove_bulk_tokens(test_user_id, test_tokens)
         print("Removed tokens in bulk with chunking")
 
         # Verify all tokens were removed
@@ -222,7 +226,7 @@ class TestTokenManagement:
         print(f"\n🗑️ Testing bulk token removal with empty list")
 
         # Should not crash
-        notification_db.remove_bulk_tokens([])
+        notification_db.remove_bulk_tokens('nonexistent-user-12345', [])
 
         print("✅ Handled empty list gracefully")
 

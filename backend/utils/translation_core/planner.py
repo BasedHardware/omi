@@ -63,8 +63,8 @@ def build_translation_plan(units: list[TranslationUnit], mode: TranslationMode) 
 
 
 def fingerprint_text(text: str) -> str:
-    """Keep the existing MD5 cache identity; this is not a security digest."""
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
+    """Collision-resistant cache identity; SHA-256 keeps shared entries unforgeable."""
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
 def _parts(text: str, mode: TranslationMode) -> list[str]:

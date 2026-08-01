@@ -34,6 +34,9 @@ class _DocReference:
     def get(self, transaction=None):
         return _DocSnapshot(self, self._collection._docs.get(self.id))
 
+    def delete(self):
+        self._collection._docs.pop(self.id, None)
+
     def set(self, data, merge=False):
         if merge and self.id in self._collection._docs:
             self._collection._docs[self.id].update(data)
@@ -126,8 +129,13 @@ def _mcp_oauth_module():
 
 
 def _seed_user(uid):
-    """validate_access_token rejects a token whose owning user document is gone."""
+    """Give the uid a users/{uid} root document (not required to authenticate)."""
     mcp_oauth.db.collection('users').document(uid).set({'uid': uid})
+
+
+def _mark_account_deleted(uid, wipe_status='running'):
+    """Write the durable top-level deletion authority the auth gate keys on."""
+    mcp_oauth.db.collection('account_deletions').document(uid).set({'uid': uid, 'wipe_status': wipe_status})
 
 
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
@@ -526,6 +534,51 @@ def test_access_token_stops_validating_once_its_owner_is_deleted():
     tokens = mcp_oauth.issue_token_pair(grant, scopes)
     assert mcp_oauth.validate_access_token(tokens['access_token'])['uid'] == 'doomed-user'
 
-    del mcp_oauth.db.collection('users')._docs['doomed-user']
+    _mark_account_deleted('doomed-user')
 
     assert mcp_oauth.validate_access_token(tokens['access_token']) is None
+
+
+def test_access_token_still_validates_without_a_user_root_document():
+    """Legacy-principal guard for the fail-closed deletion gate.
+
+    Nothing creates users/{uid} at signup, and Firestore reports a parent that
+    holds only subcollections as non-existent, so keying the gate on that
+    document 401'd principals whose accounts are perfectly alive.
+    """
+    scopes = mcp_oauth.normalize_scopes('memories.read')
+    grant = mcp_oauth.create_or_update_grant('rootless-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    tokens = mcp_oauth.issue_token_pair(grant, scopes)
+
+    assert mcp_oauth.db.collection('users').document('rootless-user').get().exists is False
+    assert mcp_oauth.validate_access_token(tokens['access_token'])['uid'] == 'rootless-user'
+
+
+def test_delete_user_grants_removes_every_oauth_artefact_for_the_uid():
+    """Revoking alone leaves the uid in top-level collections with no TTL and no
+    reaper, which does not satisfy an erasure request."""
+    scopes = mcp_oauth.normalize_scopes('memories.read')
+    grant = mcp_oauth.create_or_update_grant('erased-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    tokens = mcp_oauth.issue_token_pair(grant, scopes)
+    mcp_oauth.issue_authorization_code(
+        'erased-user',
+        grant['id'],
+        'omi-chatgpt-prod',
+        'https://example.test/cb',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        'c' * 43,
+    )
+    keeper = mcp_oauth.create_or_update_grant('kept-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    keeper_tokens = mcp_oauth.issue_token_pair(keeper, scopes)
+
+    assert mcp_oauth.delete_user_grants('erased-user') == 1
+
+    assert mcp_oauth.list_user_grants('erased-user') == []
+    for collection_name in ('mcp_oauth_access_tokens', 'mcp_oauth_refresh_tokens', 'mcp_oauth_authorization_codes'):
+        remaining = mcp_oauth.db.collection(collection_name)._docs.values()
+        assert all(doc.get('uid') != 'erased-user' for doc in remaining), collection_name
+    assert mcp_oauth.validate_access_token(tokens['access_token']) is None
+    # A different user's grant and tokens are untouched.
+    assert len(mcp_oauth.list_user_grants('kept-user')) == 1
+    assert mcp_oauth.validate_access_token(keeper_tokens['access_token'])['uid'] == 'kept-user'

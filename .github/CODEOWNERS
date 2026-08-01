@@ -1,3 +1,16 @@
 # Broad production authority remains protected after the retired release-ring deletion.
 /.github/workflows/** @Git-on-my-level
 /backend/charts/backend-secrets/** @Git-on-my-level
+
+# The workflows are only as trustworthy as the code they execute: gate scripts,
+# composite actions, the check manifest, their fixtures, and the ratchet
+# baselines those gates compare against.
+/.github/actions/** @Git-on-my-level
+/.github/scripts/** @Git-on-my-level
+/.github/checks-manifest.yaml @Git-on-my-level
+/.github/actionlint.yaml @Git-on-my-level
+/.github/release-blessing-surfaces.json @Git-on-my-level
+/.github/lifecycle-header-baseline.txt @Git-on-my-level
+/.github/failure-classes/** @Git-on-my-level
+/.github/schemas/** @Git-on-my-level
+/.github/CODEOWNERS @Git-on-my-level

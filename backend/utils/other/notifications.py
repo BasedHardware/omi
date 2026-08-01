@@ -69,9 +69,16 @@ async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -
         *[
             run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
             for chunk in timezone_chunks
-        ]
+        ],
+        return_exceptions=True,
     )
-    return [user for chunk in chunk_results for user in chunk]
+    users: List[Tuple[str, List[str], Any]] = []
+    for i, chunk in enumerate(chunk_results):
+        if isinstance(chunk, BaseException):
+            logger.error(f"Daily summary user lookup failed for chunk[{i}]: {type(chunk).__name__}")
+            continue
+        users.extend(chunk)
+    return users
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -245,9 +252,16 @@ async def _get_users_in_timezone(target_time: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
     chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks],
+        return_exceptions=True,
     )
-    return [token for chunk in chunk_results for token in chunk]
+    user_tokens: List[Tuple[str, str]] = []
+    for i, chunk in enumerate(chunk_results):
+        if isinstance(chunk, BaseException):
+            logger.error(f"Timezone token lookup failed for chunk[{i}]: {type(chunk).__name__}")
+            continue
+        user_tokens.extend(chunk)
+    return user_tokens
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

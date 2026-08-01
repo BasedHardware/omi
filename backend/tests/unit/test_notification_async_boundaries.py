@@ -60,7 +60,7 @@ def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType
     notification_db = _module(
         'database.notifications',
         get_all_tokens=lambda _uid: ['device-token'],
-        remove_bulk_tokens=lambda _tokens: None,
+        remove_bulk_tokens=lambda _uid, _tokens: None,
     )
     cache_writes: dict[str, list[str]] = {'credit': [], 'silent': []}
     redis_db = _module(
@@ -182,14 +182,14 @@ def test_silent_notification_offloads_invalid_token_removal_and_preserves_fail_s
             entered = asyncio.Event()
             release = threading.Event()
             loop = asyncio.get_running_loop()
-            removed: list[list[str]] = []
+            removed: list[tuple[str, list[str]]] = []
 
             messaging.send_each = lambda _messages: SimpleNamespace(
                 responses=[SimpleNamespace(success=False, exception=_MessagingError('UNREGISTERED'))]
             )
 
-            def blocking_remove(tokens: list[str]) -> None:
-                removed.append(tokens)
+            def blocking_remove(uid: str, tokens: list[str]) -> None:
+                removed.append((uid, tokens))
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
 
@@ -200,7 +200,7 @@ def test_silent_notification_offloads_invalid_token_removal_and_preserves_fail_s
                 entered,
                 release,
             )
-            assert removed == [['device-token']]
+            assert removed == [('user-3', ['device-token'])]
 
         asyncio.run(exercise())
         assert cache_writes['silent'] == ['user-3']

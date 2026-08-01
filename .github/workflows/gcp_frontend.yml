@@ -38,6 +38,16 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
+      - name: Restrict production deploys to main
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "ERROR: production deploys must run from main; got $GITHUB_REF." >&2
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
 

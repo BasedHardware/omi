@@ -200,7 +200,7 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
 
     if invalid_tokens:
         try:
-            notification_db.remove_bulk_tokens(invalid_tokens)
+            notification_db.remove_bulk_tokens(uid, invalid_tokens)
         except Exception as e:
             logger.error('BYOK LLM notification invalid token cleanup failed uid=%s: %s', uid, e)
 

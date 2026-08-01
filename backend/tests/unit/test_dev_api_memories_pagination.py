@@ -143,6 +143,10 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
     return dependency
 
 
+if not hasattr(_endpoints, 'enforce_token_not_revoked'):
+    _endpoints.enforce_token_not_revoked = lambda _decoded: None
+if not hasattr(_endpoints, 'TOKEN_CLOCK_SKEW_SECONDS'):
+    _endpoints.TOKEN_CLOCK_SKEW_SECONDS = 30
 if not hasattr(_endpoints, 'get_current_user_uid'):
     _endpoints.get_current_user_uid = _fake_get_current_user_uid
 if not hasattr(_endpoints, 'with_rate_limit'):

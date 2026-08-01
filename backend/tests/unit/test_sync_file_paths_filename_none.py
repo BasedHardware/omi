@@ -97,6 +97,9 @@ finally:
     sys.modules.update(_saved)
 
 from fastapi import HTTPException  # noqa: E402  (import after the finder block)
+from utils.request_validation import (  # noqa: E402
+    parse_sync_filename_timestamp as _real_parse_sync_filename_timestamp,
+)
 
 
 class _StubUploadFile:
@@ -153,3 +156,21 @@ def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_resp
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == 'Unable to stage sync file'
     assert upload.filename not in exc_info.value.detail
+
+
+def test_retrieve_file_paths_v2_ignores_client_filename_and_stays_in_the_job_directory(tmp_path, monkeypatch):
+    """A traversal filename must not escape syncing/<uid>/<job_id>/ (the v1 guard v2 had dropped)."""
+    monkeypatch.chdir(tmp_path)
+    upload = _StubUploadFile(filename='../../victim-uid/x_1720000000.bin')
+    monkeypatch.setattr(mod, 'get_timestamp_from_path', lambda _filename: 1_720_000_000)
+    monkeypatch.setattr(mod.shutil, 'copyfileobj', lambda *_a, **_k: None)
+
+    paths = mod._retrieve_file_paths_v2([upload], 'u1', 'job-1')
+
+    assert len(paths) == 1
+    assert paths[0].startswith('syncing/u1/job-1/')
+    assert '..' not in paths[0]
+    assert 'victim-uid' not in paths[0]
+    assert os.path.normpath(paths[0]).startswith(os.path.normpath('syncing/u1/job-1'))
+    assert paths[0].endswith('_1720000000.bin')
+    assert _real_parse_sync_filename_timestamp(paths[0]) == 1_720_000_000

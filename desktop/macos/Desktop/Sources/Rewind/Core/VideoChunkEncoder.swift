@@ -524,6 +524,7 @@ actor VideoChunkEncoder {
     if components.count > 1 {
       let dayDir = videosDir.appendingPathComponent(components[0], isDirectory: true)
       try FileManager.default.createDirectory(at: dayDir, withIntermediateDirectories: true)
+      RewindStorePermissions.secureDirectory(at: dayDir)
     }
 
     let fullPath = videosDir.appendingPathComponent(relativePath)
@@ -575,6 +576,7 @@ actor VideoChunkEncoder {
       throw RewindError.storageError("Failed to start HEVC writer: unknown error")
     }
     writer.startSession(atSourceTime: .zero)
+    RewindStorePermissions.secureFile(at: fullPath)
 
     assetWriter = writer
     writerInput = input

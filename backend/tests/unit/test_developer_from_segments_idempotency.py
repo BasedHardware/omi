@@ -116,6 +116,8 @@ _endpoints = sys.modules.get('utils.other.endpoints')
 if _endpoints is None:
     _endpoints = ModuleType('utils.other.endpoints')
     sys.modules['utils.other.endpoints'] = _endpoints
+_endpoints.enforce_token_not_revoked = lambda _decoded: None
+_endpoints.TOKEN_CLOCK_SKEW_SECONDS = 30
 _endpoints.get_current_user_uid = lambda: 'uid1'
 _endpoints.with_rate_limit = lambda dependency, _policy: dependency
 _endpoints.with_rate_limit_context = lambda dependency, _policy: dependency

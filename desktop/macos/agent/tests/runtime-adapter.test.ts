@@ -124,6 +124,7 @@ describe("external ACP terminal failures", () => {
           throw new Error(`Unexpected ACP method: ${method}`);
         }
         (adapter as any).notificationHandler("session/update", {
+          sessionId: `native-${provider}`,
           update: {
             sessionUpdate: "agent_message_chunk",
             content: {

@@ -25,6 +25,32 @@ class _FakeRedis:
     def mget(self, keys: List[str]) -> List[Optional[Any]]:
         return [self._store.get(key) for key in keys]
 
+    def hset(self, key: str, field: str, value: Any) -> None:
+        self._store.setdefault(key, {})[field] = value
+
+    def hget(self, key: str, field: str) -> Optional[Any]:
+        return self._store.get(key, {}).get(field)
+
+    def hgetall(self, key: str) -> Dict[Any, Any]:
+        return dict(self._store.get(key, {}))
+
+    def pipeline(self) -> "_FakePipeline":
+        return _FakePipeline(self)
+
+
+class _FakePipeline:
+    def __init__(self, client: "_FakeRedis") -> None:
+        self._client = client
+        self._queued: List[str] = []
+
+    def hgetall(self, key: str) -> None:
+        self._queued.append(key)
+
+    def execute(self) -> List[Dict[Any, Any]]:
+        results = [self._client.hgetall(key) for key in self._queued]
+        self._queued = []
+        return results
+
 
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
@@ -54,9 +80,16 @@ def test_reviews_json_round_trip(fake_redis: _FakeRedis) -> None:
     assert redis_db.get_app_reviews("app-1") == {"uid-a": {"rating": 5, "text": "great"}}
 
 
-def test_reviews_legacy_literal_round_trip(fake_redis: _FakeRedis) -> None:
+def test_reviews_concurrent_writers_do_not_overwrite_each_other(fake_redis: _FakeRedis) -> None:
+    redis_db.set_app_review_cache("app-1", "uid-a", {"rating": 5})
+    redis_db.set_app_review_cache("app-1", "uid-b", {"rating": 2})
+    assert redis_db.get_app_reviews("app-1") == {"uid-a": {"rating": 5}, "uid-b": {"rating": 2}}
+
+
+def test_reviews_hash_ignores_legacy_string_key(fake_redis: _FakeRedis) -> None:
     fake_redis._store["plugins:app-legacy:reviews"] = b"{'uid-a': {'rating': 4}}"
-    assert redis_db.get_specific_user_review("app-legacy", "uid-a") == {"rating": 4}
+    assert redis_db.get_specific_user_review("app-legacy", "uid-a") == {}
+    assert redis_db.get_app_reviews("app-legacy") == {}
 
 
 def test_geolocation_json_round_trip(fake_redis: _FakeRedis) -> None:

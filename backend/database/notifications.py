@@ -228,20 +228,12 @@ def get_all_tokens(uid: str) -> list[str]:
     return tokens
 
 
-def remove_invalid_token(token: str) -> None:
-    """Remove invalid token using collection group query (rare operation)"""
-    # Query across ALL users' fcm_tokens subcollections
-    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token)).limit(1)
-
-    for doc in query.stream():
-        doc.reference.delete()
-        return
-
-
-def remove_bulk_tokens(tokens: list[str]) -> None:
+def remove_bulk_tokens(uid: str, tokens: list[str]) -> None:
     """Remove multiple invalid tokens efficiently using IN queries and batch deletes"""
     if not tokens:
         return
+
+    tokens_ref = db.collection('users').document(uid).collection('fcm_tokens')
 
     # Firestore IN queries support up to 30 items
     chunk_size = 30
@@ -249,7 +241,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
 
     for chunk in token_chunks:
         # Query for all tokens in this chunk at once
-        query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
+        query = tokens_ref.where(filter=FieldFilter('token', 'in', chunk))
 
         # Batch delete for efficiency
         batch = db.batch()
@@ -270,7 +262,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             batch.commit()
 
 
-def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
+def get_users_token_in_timezones(timezones: list[str]) -> List[Tuple[str, str]]:
     return _get_users_in_timezones(timezones, 'fcm_token')
 
 
@@ -387,7 +379,7 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
                 if filter == 'fcm_token':
                     # Return flat list of tokens
-                    chunk_users.extend(tokens)
+                    chunk_users.extend((uid, token) for token in tokens)
                 else:
                     # Return list of (uid, [tokens], time_zone) tuples
                     time_zone = user_data.get('time_zone')

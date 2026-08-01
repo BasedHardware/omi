@@ -31,6 +31,14 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+          # it via the `secret-key` header. This disables the separate
+          # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+          # static string authenticates as any account. Dev has no caller for it, and
+          # leaving it on arms the startup ADMIN_KEY-strength check for the whole stage.
+          ADMIN_KEY_AUTH_ENABLED:
+            value: 'false'
+            category: runtime_identity
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -309,6 +317,14 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+            # it via the `secret-key` header. This disables the separate
+            # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+            # static string authenticates as any account. Dev has no caller for it, and
+            # leaving it on arms the startup ADMIN_KEY-strength check for the whole stage.
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
+              category: runtime_identity
             # Dev-only, exact-principal replay capture. Cloud Run's writable
             # scratch is ephemeral; persist synchronously to the private dev
             # bucket and never copy these values into the prod manifest.
@@ -461,6 +477,14 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+            # it via the `secret-key` header. This disables the separate
+            # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+            # static string authenticates as any account. Dev has no caller for it, and
+            # leaving it on arms the startup ADMIN_KEY-strength check for the whole stage.
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
+              category: runtime_identity
             OMI_PARITY_PACK_CAPTURE:
               value: '1'
               category: replay_capture
@@ -576,6 +600,14 @@ environments:
               value: 'true'
             OMI_ENV_STAGE:
               value: dev
+              category: runtime_identity
+            # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+            # it via the `secret-key` header. This disables the separate
+            # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+            # static string authenticates as any account. Dev has no caller for it, and
+            # leaving it on arms the startup ADMIN_KEY-strength check for the whole stage.
+            ADMIN_KEY_AUTH_ENABLED:
+              value: 'false'
               category: runtime_identity
             OMI_PARITY_PACK_CAPTURE:
               value: '1'

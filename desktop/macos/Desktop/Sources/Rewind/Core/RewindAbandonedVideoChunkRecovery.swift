@@ -21,10 +21,12 @@ enum RewindAbandonedVideoChunkJournal {
   static func record(reservation: RewindVideoChunkReservation, in videosDirectory: URL) throws -> MarkerFile {
     let markerDirectory = videosDirectory.appendingPathComponent(directoryName, isDirectory: true)
     try FileManager.default.createDirectory(at: markerDirectory, withIntermediateDirectories: true)
+    RewindStorePermissions.secureDirectory(at: markerDirectory)
 
     let markerURL = markerDirectory.appendingPathComponent("\(reservation.generation)-\(UUID().uuidString).json")
     let data = try JSONEncoder().encode(Marker(relativePath: reservation.relativePath))
     try data.write(to: markerURL, options: .atomic)
+    RewindStorePermissions.secureFile(at: markerURL)
     return MarkerFile(relativePath: reservation.relativePath, url: markerURL)
   }
 

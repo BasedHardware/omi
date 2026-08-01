@@ -160,6 +160,13 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
+  # ADMIN_KEY is still injected because the admin HTTP routes authenticate with
+  # it via the `secret-key` header. This disables the separate
+  # "Authorization: Bearer <ADMIN_KEY><uid>" impersonation path, where one
+  # static string authenticates as any account. Dev has no caller for it, and
+  # leaving it on arms the startup ADMIN_KEY-strength check for the whole stage.
+  - name: ADMIN_KEY_AUTH_ENABLED
+    value: "false"
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:

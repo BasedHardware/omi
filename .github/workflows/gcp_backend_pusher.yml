@@ -82,12 +82,15 @@ jobs:
 
       - name: Validate live-capacity-gate break-glass inputs
         if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
+        env:
+          BREAK_GLASS_CONFIRM: ${{ github.event.inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
-          if [[ "${{ github.event.inputs.break_glass_confirm }}" != "skip-live-capacity-gate" ]]; then
+          if [[ "$BREAK_GLASS_CONFIRM" != "skip-live-capacity-gate" ]]; then
             echo "ERROR: skip_live_capacity_gate requires break_glass_confirm=skip-live-capacity-gate." >&2
             exit 1
           fi
-          if [[ -z "${{ github.event.inputs.break_glass_reason }}" ]]; then
+          if [[ -z "$BREAK_GLASS_REASON" ]]; then
             echo "ERROR: skip_live_capacity_gate requires a non-empty break_glass_reason." >&2
             exit 1
           fi
@@ -184,10 +187,12 @@ jobs:
 
       - name: Bootstrap LLM Gateway dev service token
         if: env.SERVICE == 'llm-gateway' && github.event.inputs.environment == 'development'
+        env:
+          INPUT_RELEASE_VERSION: ${{ github.event.inputs.release_version }}
         run: |
           SECRET_NAME="OMI_LLM_GATEWAY_SERVICE_TOKEN"
           if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            if [[ "${{ github.event.inputs.release_version }}" == "rotate-dev-token" ]]; then
+            if [[ "$INPUT_RELEASE_VERSION" == "rotate-dev-token" ]]; then
               echo "Rotating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
               openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$SECRET_NAME" \
                 --project="${{ vars.GCP_PROJECT_ID }}" \
@@ -499,19 +504,21 @@ jobs:
         if: always() && env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
           # Match the repo's break-glass audit convention from gcp_backend.yml.
           # The gate being unusable is the defect; this issue tracks fixing it.
           gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Pusher live capacity gate bypassed for ${CHECKED_OUT_SHA:0:10} (${{ github.event.inputs.environment }})" \
+            --title "Pusher live capacity gate bypassed for ${CHECKED_OUT_SHA:0:10} (${INPUT_ENVIRONMENT})" \
             --body "$(printf '%s\n' \
               "Pusher deploy ran without the live surge-capacity gate." \
               "" \
               "- SHA: \`${CHECKED_OUT_SHA}\` (verified ancestor of main)" \
-              "- Environment: ${{ github.event.inputs.environment }}" \
+              "- Environment: ${INPUT_ENVIRONMENT}" \
               "- Operator: @${GITHUB_ACTOR}" \
-              "- Reason: ${{ github.event.inputs.break_glass_reason }}" \
+              "- Reason: ${BREAK_GLASS_REASON}" \
               "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               "" \
               "The gate being unusable is the defect. Fix the gate, then close this.")" || true

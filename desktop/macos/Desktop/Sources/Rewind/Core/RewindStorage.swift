@@ -109,6 +109,8 @@ actor RewindStorage {
 
     try fileManager.createDirectory(at: screenshotsDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+    RewindStorePermissions.secureDirectory(at: screenshotsDirectory)
+    RewindStorePermissions.secureDirectory(at: videosDirectory)
 
     // Finish any previous crashed/cancelled writer before this owner can start
     // another one. A marker remains until both database and file cleanup work.
@@ -147,6 +149,7 @@ actor RewindStorage {
 
     let dayDirectory = screenshotsDirectory.appendingPathComponent(dayString, isDirectory: true)
     try fileManager.createDirectory(at: dayDirectory, withIntermediateDirectories: true)
+    RewindStorePermissions.secureDirectory(at: dayDirectory)
 
     // Create filename with timestamp
     let timestampFormatter = DateFormatter()
@@ -159,6 +162,7 @@ actor RewindStorage {
 
     // Write the file
     try jpegData.write(to: fullPath)
+    RewindStorePermissions.secureFile(at: fullPath)
 
     return relativePath
   }

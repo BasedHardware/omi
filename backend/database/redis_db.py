@@ -224,22 +224,33 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+def _app_reviews_key(app_id: str) -> str:
+    return f'plugins:v2:{app_id}:reviews'
+
+
+def _decode_reviews_hash(raw: Optional[Dict[Any, Any]]) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    reviews: Dict[str, Any] = {}
+    for field, value in raw.items():
+        loaded = _deserialize_cache_value(value)
+        if isinstance(loaded, dict):
+            reviews[_decode_redis_value(field)] = loaded
+    return reviews
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    r.hset(_app_reviews_key(app_id), uid, _serialize_cache_value(data))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
-    raw = r.get(f'plugins:{app_id}:reviews')
+    raw = r.hget(_app_reviews_key(app_id), uid)
     if not raw:
         return {}
     loaded = _deserialize_cache_value(raw)
     if not isinstance(loaded, dict):
         return {}
-    return cast(Dict[str, Any], loaded.get(uid, {}))
+    return cast(Dict[str, Any], loaded)
 
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int) -> None:
@@ -319,29 +330,20 @@ def get_enabled_apps(uid: str) -> List[str]:
 
 
 def get_app_reviews(app_id: str) -> Dict[str, Any]:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    if not raw:
-        return {}
-    loaded = _deserialize_cache_value(raw)
-    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
+    return _decode_reviews_hash(r.hgetall(_app_reviews_key(app_id)))
 
 
 def get_apps_reviews(app_ids: List[str]) -> Dict[str, Any]:
     if not app_ids:
         return {}
 
-    keys = [f'plugins:{app_id}:reviews' for app_id in app_ids]
-    reviews = r.mget(keys)
+    pipe = r.pipeline()
+    for app_id in app_ids:
+        pipe.hgetall(_app_reviews_key(app_id))
+    reviews = pipe.execute()
     if reviews is None:
         return {}
-    result: Dict[str, Any] = {}
-    for app_id, review in zip(app_ids, reviews):
-        if not review:
-            result[app_id] = {}
-            continue
-        loaded = _deserialize_cache_value(review)
-        result[app_id] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    return result
+    return {app_id: _decode_reviews_hash(review) for app_id, review in zip(app_ids, reviews)}
 
 
 def set_app_installs_count(app_id: str, count: int) -> None:
@@ -375,13 +377,18 @@ def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
     r.expire(f'users:{uid}:name', ttl)
 
 
-def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+def _signed_url_key(bucket_name: str, blob_path: str) -> str:
+    return f'urls:v2:{bucket_name}:{blob_path}'
 
 
-def get_cached_signed_url(blob_path: str) -> str:
-    signed_url = r.get(f'urls:{blob_path}')
+def cache_signed_url(bucket_name: str, blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
+    key = _signed_url_key(bucket_name, blob_path)
+    r.set(key, signed_url)
+    r.expire(key, ttl - 1)
+
+
+def get_cached_signed_url(bucket_name: str, blob_path: str) -> str:
+    signed_url = r.get(_signed_url_key(bucket_name, blob_path))
     if not signed_url:
         return ''
     return signed_url.decode()

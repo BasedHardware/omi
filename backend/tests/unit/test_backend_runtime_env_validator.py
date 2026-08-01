@@ -38,6 +38,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
+        {"name": "ADMIN_KEY_AUTH_ENABLED", "value": "false"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},

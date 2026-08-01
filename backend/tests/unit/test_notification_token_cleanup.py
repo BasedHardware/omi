@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -109,7 +110,7 @@ def test_send_notification_removes_not_found_tokens() -> None:
 
         notifications.send_notification('user-1', 'omi', 'hello')
 
-        notification_db.remove_bulk_tokens.assert_called_once_with(['dead-token'])
+        notification_db.remove_bulk_tokens.assert_called_once_with('user-1', ['dead-token'])
 
 
 def test_send_notification_keeps_transient_failures() -> None:
@@ -140,3 +141,48 @@ def test_send_notification_body_is_plain_text() -> None:
         body = sent_messages[0].notification.body
         assert '**' not in body
         assert body == "• 🇺🇸 US President: Donald Trump\n• 🇮🇳 India's President: Droupadi Murmu"
+
+
+def test_bulk_notification_scopes_token_removal_to_owning_uid() -> None:
+    """A token value can exist under two users, so cleanup must be scoped to the owner that sent it."""
+    with _loaded_notifications() as (notifications, notification_db, messaging):
+        messaging.send_each.return_value = _FakeBatchResponse(
+            [
+                _FakeResponse(success=False, exception=_FakeMessagingException('UNREGISTERED')),
+                _FakeResponse(success=True),
+                _FakeResponse(success=False, exception=_FakeMessagingException('UNREGISTERED')),
+            ]
+        )
+
+        asyncio.run(
+            notifications.send_bulk_notification(
+                [('user-a', 'shared-token'), ('user-b', 'live-token'), ('user-b', 'dead-token')],
+                'omi',
+                'hello',
+            )
+        )
+
+        calls = sorted(call.args for call in notification_db.remove_bulk_tokens.call_args_list)
+        assert calls == [('user-a', ['shared-token']), ('user-b', ['dead-token'])]
+
+
+def test_bulk_notification_survives_a_failing_batch() -> None:
+    """One transport failure must not abandon the remaining batches of the daily notification."""
+    with _loaded_notifications() as (notifications, notification_db, messaging):
+
+        def flaky_send(messages):
+            if len(messages) == 500:
+                raise RuntimeError('fcm unavailable')
+            return _FakeBatchResponse([_FakeResponse(success=False, exception=_FakeMessagingException('UNREGISTERED'))])
+
+        messaging.send_each = flaky_send
+
+        asyncio.run(
+            notifications.send_bulk_notification(
+                [(f'user-{i}', f'token-{i}') for i in range(501)],
+                'omi',
+                'hello',
+            )
+        )
+
+        notification_db.remove_bulk_tokens.assert_called_once_with('user-500', ['token-500'])
