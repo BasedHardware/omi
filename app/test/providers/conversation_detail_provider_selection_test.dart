@@ -66,8 +66,8 @@ void main() {
     // wrong one. When the selected conversation leaves the group (deleted on
     // another device, merged away, or filtered out by the discarded/short
     // toggles) the getter must report a miss rather than substitute a sibling.
-    final selected = _conversationAt('selected', DateTime.utc(2026, 7, 18, 9));
-    final sibling = _conversationAt('sibling', DateTime.utc(2026, 7, 18, 11));
+    final selected = _conversationAt('selected', _localHourOnFixedDay(9));
+    final sibling = _conversationAt('sibling', _localHourOnFixedDay(11));
 
     final conversationProvider = ConversationProvider(
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -98,7 +98,7 @@ void main() {
   test('selected conversation survives a transient empty day group', () {
     // A refresh can momentarily empty the group; the page must keep showing the
     // conversation it was opened with instead of blanking or retargeting.
-    final selected = _conversationAt('selected', DateTime.utc(2026, 7, 18, 9));
+    final selected = _conversationAt('selected', _localHourOnFixedDay(9));
 
     final conversationProvider = ConversationProvider(
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -121,6 +121,12 @@ void main() {
     expect(detailProvider.conversationOrNull?.id, 'selected');
   });
 }
+
+/// A UTC instant that falls at [hour] o'clock local time on a fixed day, so
+/// fixtures meant to share one day-group stay in the same group at any UTC
+/// offset. Pinning the UTC hour instead split them across two local days at
+/// extreme offsets (UTC+14, UTC-11) and blew up on `keys.single`.
+DateTime _localHourOnFixedDay(int hour) => DateTime(2026, 7, 18, hour).toUtc();
 
 ServerConversation _conversationAt(String id, DateTime startedAt) {
   return ServerConversation(
