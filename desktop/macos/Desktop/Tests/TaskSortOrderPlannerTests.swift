@@ -124,6 +124,74 @@ final class TaskSortOrderPlannerTests: XCTestCase {
     XCTAssertEqual(result, .incremental(["moved": 250]))
   }
 
+  func testHiddenRowRebaseUsesPreMutationRankForMovedRow() {
+    let canonical = TasksViewModel.canonicalPreMutationTaskIDs(
+      currentTasks: [
+        (id: "hidden-before", sortOrder: 100),
+        (id: "hidden-middle", sortOrder: 300),
+        (id: "moved", sortOrder: 450),
+        (id: "bottom", sortOrder: 800),
+      ],
+      originalSortOrders: ["moved": 200]
+    )
+
+    XCTAssertEqual(canonical, ["hidden-before", "moved", "hidden-middle", "bottom"])
+    XCTAssertEqual(
+      TasksViewModel.rebaseVisibleTaskIDs(
+        fullOrder: canonical,
+        reorderedVisibleIDs: ["bottom", "moved"]
+      ),
+      ["hidden-before", "bottom", "hidden-middle", "moved"]
+    )
+  }
+
+  func testDeletedPendingIDCannotConsumeRebaseReplacementSlot() {
+    XCTAssertEqual(
+      TasksViewModel.rebaseVisibleTaskIDs(
+        fullOrder: ["first", "second", "third"],
+        reorderedVisibleIDs: ["second", "deleted-during-debounce", "first"]
+      ),
+      ["second", "first", "third"]
+    )
+  }
+
+  func testPendingReorderRemapsLocalIDAfterBackendPromotion() {
+    let promoted = TasksViewModel.remappedTaskIDs(
+      ["anchor", "local_42", "tail"],
+      using: ["local_42": "backend-42"]
+    )
+
+    XCTAssertEqual(promoted, ["anchor", "backend-42", "tail"])
+    XCTAssertEqual(
+      TasksViewModel.persistedTaskIDs(
+        reorderedIDs: promoted,
+        currentIDs: ["anchor", "backend-42", "tail"]
+      ),
+      promoted,
+      "the promoted row must remain in the pending order used for persistence"
+    )
+  }
+
+  func testPendingReorderReloadsCompleteSnapshotAfterLateBackendPromotion() {
+    // The SQLite snapshot may have been read while the row still surfaced as
+    // local_42, then promotion can be observed before planning finishes. The
+    // refreshed snapshot must use the same backend identity as the remapped
+    // pending order instead of silently dropping the moved row.
+    let refreshedSnapshot = TasksViewModel.remappedTaskIDs(
+      ["anchor", "local_42", "tail"],
+      using: ["local_42": "backend-42"]
+    )
+
+    XCTAssertEqual(refreshedSnapshot, ["anchor", "backend-42", "tail"])
+    XCTAssertEqual(
+      TasksViewModel.persistedTaskIDs(
+        reorderedIDs: ["tail", "backend-42", "anchor"],
+        currentIDs: refreshedSnapshot
+      ),
+      ["tail", "backend-42", "anchor"]
+    )
+  }
+
   private func plan(
     orderedIDs: [String],
     existingRanks: [String: Int],

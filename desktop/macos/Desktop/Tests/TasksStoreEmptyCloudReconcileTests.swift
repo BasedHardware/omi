@@ -232,9 +232,20 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
   }
 
   @MainActor
-  func testInitialLoadDoesNotReconcileWhileLegacyRecoveryIsUnresolved() async {
+  func testDefaultInitialLoadDoesNotReconcileWhileLegacyRecoveryIsUnresolved() async {
     let store = TasksStore.shared
     await prepareStore(store)
+    let defaults = UserDefaults.standard
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let previousRecoveryValue = defaults.object(forKey: recoveryKey)
+    defaults.removeObject(forKey: recoveryKey)
+    defer {
+      if let previousRecoveryValue {
+        defaults.set(previousRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
+    }
 
     // A pre-deploy backend returns 404 for the new recovery route. The initial
     // empty page must remain fail-closed until a later launch can recover the
@@ -255,7 +266,9 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       loadIncomplete: { _ in [migratedTask] },
       refreshDashboard: { _ in })
 
-    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    // The default call must remain fenced; callers cannot accidentally opt
+    // into destructive reconciliation before legacy recovery completes.
+    await store.loadIncompleteTasks(operations: operations)
 
     XCTAssertEqual(probe.censusFetches, 0, "unresolved recovery must block the initial empty-cloud census")
     XCTAssertEqual(probe.hardDeleteCalls, [], "unresolved recovery must never hard-delete cached tasks")
@@ -368,6 +381,14 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
         default:
           return .init(restored: 0, skippedExisting: 0, hasMore: false, nextCursor: nil)
         }
+      },
+      legacyRecoveryMarkersInvalidated: { ownerID in
+        XCTAssertEqual(ownerID, "owner-a")
+        XCTAssertFalse(defaults.bool(forKey: recoveryKey))
+        XCTAssertFalse(
+          defaults.bool(forKey: fullSyncKey),
+          "full sync must be invalidated before recovery is acknowledged"
+        )
       })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
@@ -680,11 +701,19 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     let defaults = UserDefaults.standard
     let previousAuthOwner = defaults.string(forKey: .authUserId)
     let previousOverride = defaults.string(forKey: .automationOwnerOverride)
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let previousRecoveryValue = defaults.object(forKey: recoveryKey)
+    defaults.set(true, forKey: recoveryKey)
     addTeardownBlock { @MainActor [weak self] in
       guard let self else { return }
       await self.establishEffectiveOwner(
         authOwnerID: previousAuthOwner,
         automationOverrideID: previousOverride)
+      if let previousRecoveryValue {
+        defaults.set(previousRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
       store.resetSessionState()
     }
     await establishEffectiveOwner(authOwnerID: "owner-a", automationOverrideID: nil)

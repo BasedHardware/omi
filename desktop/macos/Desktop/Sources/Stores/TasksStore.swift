@@ -62,6 +62,7 @@ class TasksStore: ObservableObject {
     var refreshDashboard: ((_ ownerID: String) async -> Void)?
     var restoreLegacyConversationItems:
       ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)?
+    var legacyRecoveryMarkersInvalidated: ((_ ownerID: String) -> Void)?
     var backfillRelevance: ((_ ownerID: String) async throws -> Int)?
 
     init(
@@ -84,6 +85,7 @@ class TasksStore: ObservableObject {
       refreshDashboard: ((_ ownerID: String) async -> Void)? = nil,
       restoreLegacyConversationItems:
         ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)? = nil,
+      legacyRecoveryMarkersInvalidated: ((_ ownerID: String) -> Void)? = nil,
       backfillRelevance: ((_ ownerID: String) async throws -> Int)? = nil
     ) {
       self.fetchPage = fetchPage
@@ -100,6 +102,7 @@ class TasksStore: ObservableObject {
       self.loadDeleted = loadDeleted
       self.refreshDashboard = refreshDashboard
       self.restoreLegacyConversationItems = restoreLegacyConversationItems
+      self.legacyRecoveryMarkersInvalidated = legacyRecoveryMarkersInvalidated
       self.backfillRelevance = backfillRelevance
     }
   }
@@ -1420,7 +1423,10 @@ class TasksStore: ObservableObject {
     // Force reconciliation on initial load to clean up tasks deleted on other devices.
     // This bypasses the 5-minute throttle since the first load should always reconcile.
     // Awaited inline (not in a detached Task) so loadDashboardTasks() sees clean data.
-    if allowInitialReconciliation, lastReconciliationDate == nil {
+    if allowInitialReconciliation,
+      legacyConversationRecoveryCompleted(for: lease),
+      lastReconciliationDate == nil
+    {
       await forceReconcileOnLoad(lease: lease, operations: operations)
     }
   }
@@ -1906,12 +1912,12 @@ class TasksStore: ObservableObject {
         cursor = nextCursor
       }
 
-      UserDefaults.standard.set(true, forKey: recoveryKey)
-
       // Every completed recovery sweep invalidates the startup sync, including
       // identity collisions. A skipped row has a current server action item
       // that the cache still needs to fetch, just like a newly restored row.
       UserDefaults.standard.set(false, forKey: .tasksFullSyncCompleted(ownerID: userId))
+      operations.legacyRecoveryMarkersInvalidated?(userId)
+      UserDefaults.standard.set(true, forKey: recoveryKey)
       if restored > 0 || skippedExisting > 0 {
         log(
           "TasksStore: Legacy conversation-task recovery completed: restored=\(restored), "

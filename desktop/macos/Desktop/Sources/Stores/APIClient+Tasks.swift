@@ -82,7 +82,12 @@ extension APIClient {
     precondition((1...100).contains(limit), "Legacy recovery page limit must be between 1 and 100")
     var path = "v1/action-items/restore-legacy-conversation-items?limit=\(limit)"
     if let cursor {
-      let escapedCursor = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+      let unreservedCharacters = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+      )
+      guard let escapedCursor = cursor.addingPercentEncoding(withAllowedCharacters: unreservedCharacters) else {
+        throw URLError(.badURL)
+      }
       path += "&cursor=\(escapedCursor)"
     }
     return try await post(
@@ -126,18 +131,45 @@ extension APIClient {
     struct StatusResponse: Decodable { let status: String }
     // The backend validates this endpoint's request body at 500 items. A
     // user's local task database can contain more rows than one request can
-    // carry, so preserve order while sending bounded sequential requests.
-    for updateBatch in updates.chunked(maxSize: 500) {
-      let request = BatchRequest(
-        items: updateBatch.map {
-          SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-        })
-      let _: StatusResponse = try await patch(
-        "v1/action-items/batch",
-        body: request,
-        expectedOwnerId: expectedOwnerId,
-        authorizationSnapshot: authorizationSnapshot)
+    // carry, so preserve order while sending bounded sequential requests. The
+    // endpoint applies each document independently, so replay the complete
+    // absolute update set once after a later chunk fails. Replaying an earlier
+    // chunk is safe and can heal a transient failure without leaving the
+    // caller with only the prefix applied; a second failure still propagates.
+    let updateBatches = updates.chunked(maxSize: 500)
+    var didRetry = false
+    while true {
+      do {
+        for updateBatch in updateBatches {
+          let request = BatchRequest(
+            items: updateBatch.map {
+              SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
+            })
+          let _: StatusResponse = try await patch(
+            "v1/action-items/batch",
+            body: request,
+            expectedOwnerId: expectedOwnerId,
+            authorizationSnapshot: authorizationSnapshot)
+        }
+        return
+      } catch {
+        guard !didRetry, Self.isRetryableSortOrderBatchError(error) else { throw error }
+        didRetry = true
+      }
     }
+  }
+
+  private static func isRetryableSortOrderBatchError(_ error: Error) -> Bool {
+    if let apiError = error as? APIError {
+      if case .httpError(let statusCode, _) = apiError {
+        return statusCode >= 500
+      }
+      return false
+    }
+    if let urlError = error as? URLError {
+      return urlError.code != .cancelled
+    }
+    return false
   }
 
   // MARK: - Workstream-backed task threads

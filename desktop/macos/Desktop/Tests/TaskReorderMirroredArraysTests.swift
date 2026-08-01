@@ -5,7 +5,7 @@ import XCTest
 /// TASK-07: a reorder must keep the source arrays the displayed task list can
 /// be backed by — `store.incompleteTasks`, `store.completedTasks`,
 /// `filteredFromDatabase`, `searchResults` —
-/// in agreement. `TasksViewModel.moveTask` writes the new sortOrders to all three via
+/// in agreement. `TasksViewModel.moveTask` writes the new sortOrders to all four via
 /// the single `applyReorder` helper; writing to only one diverges when filters/search
 /// are active (BL-030, fixed in #9121). These pin that helper's guarantees: the same
 /// order yields identical sortOrders for shared ids, monotonic with position, disjoint
@@ -23,7 +23,7 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
   }
 
   func testSharedIdsGetIdenticalSortOrderAcrossArrays() {
-    // The three arrays hold overlapping-but-different subsets in shuffled positions,
+    // The four arrays hold overlapping-but-different subsets in shuffled positions,
     // exactly the filters/search-active case BL-030 was about.
     let order = ["a", "b", "c", "d"]
     let categoryIndex = 1
@@ -216,16 +216,16 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertNil(remaining[.tomorrow], "the successfully committed snapshot must be cleared")
   }
 
-  /// BL-030 regression guard: `moveTask` must fan the reorder out to every mirrored
+  /// BL-030 regression guard: `moveTask` must fan the reorder out to all four mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the
   /// exact call sites (the helper's own correctness is covered behaviourally above).
-  func testMoveTaskFansReorderOutToAllThreeMirroredArrays() throws {
+  func testMoveTaskFansReorderOutToAllFourMirroredArrays() throws {
     let source = try tasksPageSource()
     for target in ["&incomplete", "&completed", "&filteredFromDatabase", "&searchResults"] {
       XCTAssertTrue(
         source.contains("Self.applyReorder(order, categoryIndex: categoryIndex, to: \(target))"),
-        "moveTask must apply the reorder to \(target) so all three mirrored arrays agree (BL-030)")
+        "moveTask must apply the reorder to \(target) so all four mirrored arrays agree (BL-030)")
     }
   }
 

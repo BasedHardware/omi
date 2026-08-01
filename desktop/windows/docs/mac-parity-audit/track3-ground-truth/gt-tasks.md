@@ -29,7 +29,7 @@ Audit doc checked against: `desktop/windows/docs/mac-parity-audit/02-proactive-t
 - `POST /v1/staged-tasks/promote` — promote the single top-ranked (lowest `relevance_score`, ascending sort = most important first) active staged task to an `action_item`.
 - `POST /v1/staged-tasks/{task_id}/promote` — promote a specific staged task by id.
 - `POST /v1/staged-tasks/migrate` — historical migration endpoint; retired because moving UI-visible `action_items` into an unrendered staging collection could make the Tasks list appear empty. It is now a no-op for compatibility.
-- `POST /v1/staged-tasks/migrate-conversation-items` — historical migration endpoint; it now restores only rows it previously marked `source='conversation_migration'` (except canonical-write users, where an existing Candidate remains authoritative to avoid duplicates).
+- `POST /v1/staged-tasks/migrate-conversation-items` — historical migration endpoint; it now restores only rows it previously marked `source='conversation_migration'` (except canonical-write users, where an existing canonical task Candidate record remains authoritative to avoid duplicates).
 
 `StagedTask` model fields (`models/staged_task.py`): `id, description, completed, created_at, updated_at, due_at?, source?, priority?, metadata?, category?, relevance_score? (0-1000)`. **`relevance_score` is present** (confirms audit's claim it exists).
 

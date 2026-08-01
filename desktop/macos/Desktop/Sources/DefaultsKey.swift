@@ -55,6 +55,8 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  // Task-order migration keys are typed so TasksPage and its tests share the
+  // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
 }
@@ -80,6 +82,7 @@ struct ScopedDefaultsKey {
     Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
   }
 
+  /// Owner-scoped key for the legacy task-order migration completion marker.
   static func tasksSortOrderMigrated(ownerID: String) -> Self {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }

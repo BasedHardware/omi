@@ -210,6 +210,7 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+import routers.staged_tasks as staged_router  # noqa: E402
 
 _ensure_package_path("models", BACKEND_DIR / "models")
 _ensure_package_path("utils", BACKEND_DIR / "utils")
@@ -1966,8 +1967,8 @@ class TestPromoteResponseWireCompat:
         from routers.staged_tasks import migrate_conversation_items
 
         with patch.object(
-            staged_tasks_db,
-            'restore_all_legacy_conversation_items',
+            staged_router,
+            '_restore_all_legacy_conversation_items',
             return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
         ):
             result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
@@ -2289,17 +2290,17 @@ class TestLegacyConversationRecovery:
             'next_cursor': None,
         }
 
-    def test_restore_all_legacy_conversation_items_completes_every_page_before_success(self):
+    def test_released_recovery_route_completes_every_page_before_success(self):
         """Released single-call clients must never receive an acknowledged partial recovery."""
         first_page = {'restored': 50, 'skipped_existing': 1, 'has_more': True, 'next_cursor': 'legacy-49'}
         second_page = {'restored': 2, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
 
         with patch.object(
-            staged_tasks_db,
+            staged_router.staged_tasks_db,
             'restore_legacy_conversation_items',
             side_effect=[first_page, second_page],
         ) as restore_page:
-            result = staged_tasks_db.restore_all_legacy_conversation_items('test-uid', firestore_client=MagicMock())
+            result = staged_router._restore_all_legacy_conversation_items('test-uid')
 
         assert result == {
             'restored': 52,
@@ -2310,12 +2311,8 @@ class TestLegacyConversationRecovery:
         assert [call.args for call in restore_page.call_args_list] == [('test-uid',), ('test-uid',)]
         assert [call.kwargs['cursor'] for call in restore_page.call_args_list] == [None, 'legacy-49']
         assert all(
-            call.kwargs['limit'] == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
+            call.kwargs['limit'] == staged_router.staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
             for call in restore_page.call_args_list
-        )
-        assert (
-            restore_page.call_args_list[0].kwargs['firestore_client']
-            is restore_page.call_args_list[1].kwargs['firestore_client']
         )
 
 

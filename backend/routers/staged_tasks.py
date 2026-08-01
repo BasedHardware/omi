@@ -24,7 +24,7 @@ from models.shared import StatusResponse
 from utils.other import endpoints as auth
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
-from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
+from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -84,6 +84,90 @@ def _staged_row(uid: str, staged_id: str) -> dict | None:
         (row for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid) if row.get('id') == staged_id),
         None,
     )
+
+
+def _restore_all_legacy_conversation_items(uid: str) -> dict:
+    """Complete the released single-call recovery contract around page storage primitives."""
+
+    cursor = None
+    seen_cursors: set[str] = set()
+    restored = 0
+    skipped_existing = 0
+
+    while True:
+        page = staged_tasks_db.restore_legacy_conversation_items(
+            uid,
+            limit=staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+            cursor=cursor,
+        )
+        restored += page['restored']
+        skipped_existing += page['skipped_existing']
+
+        if not page['has_more']:
+            if page['next_cursor'] is not None:
+                raise ValueError('complete legacy recovery returned a continuation cursor')
+            return {
+                'restored': restored,
+                'skipped_existing': skipped_existing,
+                'has_more': False,
+                'next_cursor': None,
+            }
+
+        next_cursor = page['next_cursor']
+        if not next_cursor or next_cursor == cursor or next_cursor in seen_cursors:
+            raise ValueError('legacy recovery returned an invalid continuation cursor')
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+
+
+def _legacy_rows_missing_canonical_representation(uid: str, *, account_generation: int) -> list[dict]:
+    """Find active retired rows without their deterministic canonical representation."""
+
+    missing: list[dict] = []
+    for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid):
+        if row.get('source') != 'conversation_migration' or row.get('completed'):
+            continue
+        candidate_id = candidates_db.candidate_id_for_idempotency(
+            uid,
+            account_generation,
+            f"legacy-staged:{row.get('id', '')}",
+        )
+        candidate = candidates_db.get_candidate(uid, candidate_id)
+        if candidate is None:
+            missing.append(row)
+            continue
+        if candidate.status == CandidateStatus.accepted and (
+            not candidate.result_task_id or action_items_db.get_action_item(uid, candidate.result_task_id) is None
+        ):
+            missing.append(row)
+    return missing
+
+
+def _ensure_canonical_legacy_recovery(uid: str, control) -> None:
+    """Repair missing legacy Candidates before acknowledging compatibility recovery."""
+
+    if not _legacy_rows_missing_canonical_representation(uid, account_generation=control.account_generation):
+        return
+
+    # Candidate migration is idempotent and bounded to 500-row pages. Walk the
+    # complete staged-task set: a missing legacy row may sort after unrelated
+    # rows, so a single page could acknowledge neither the repair nor progress.
+    after_id = None
+    seen_checkpoints: set[str] = set()
+    while True:
+        report = migrate_staged_tasks(uid, control, after_id=after_id, limit=500)
+        if report.failed:
+            raise HTTPException(status_code=503, detail='Legacy task recovery is not canonically reconciled')
+        checkpoint = report.checkpoint
+        if report.scanned < 500:
+            break
+        if not checkpoint or checkpoint == after_id or checkpoint in seen_checkpoints:
+            raise HTTPException(status_code=503, detail='Legacy task recovery made no pagination progress')
+        seen_checkpoints.add(checkpoint)
+        after_id = checkpoint
+
+    if _legacy_rows_missing_canonical_representation(uid, account_generation=control.account_generation):
+        raise HTTPException(status_code=503, detail='Legacy task recovery is not canonically reconciled')
 
 
 def _reconcile_write_sidecar(
@@ -591,6 +675,7 @@ def migrate_conversation_items(
     # Candidate is pending or accepted would create a duplicate. That mode
     # retains the Candidate as the canonical representation instead.
     if control.workflow_mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
+        _ensure_canonical_legacy_recovery(uid, control)
         return {
             'status': 'ok',
             'migrated': 0,
@@ -605,7 +690,7 @@ def migrate_conversation_items(
     # migration complete after one successful response and never consume a
     # cursor. Keep it all-or-complete; the dedicated action-items endpoint is
     # the bounded, cursor-paginated API used by current clients.
-    result = staged_tasks_db.restore_all_legacy_conversation_items(uid)
+    result = _restore_all_legacy_conversation_items(uid)
     return {'status': 'ok', 'migrated': 0, 'deleted': 0, **result}
 
 
