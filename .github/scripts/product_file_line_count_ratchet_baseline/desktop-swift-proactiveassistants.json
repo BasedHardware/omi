@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1742,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1739
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1742
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Rewind capture policy adds per-app heartbeat and preview skip logic inline; also registers SuggestionAssistant (event-driven) with logic in Assistants/Suggestions/."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Production builds registered DistributedNotificationCenter test observers, letting any local process forge Omi notifications; the build gate belongs where the observers are registered."
   },
   "threshold": 1500
 }
