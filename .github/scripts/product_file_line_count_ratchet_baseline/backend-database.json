@@ -1,13 +1,13 @@
 {
   "files": {
-    "backend/database/conversations.py": 1708,
+    "backend/database/conversations.py": 1707,
     "backend/database/memory_apply_store.py": 1912,
-    "backend/database/users.py": 2046
+    "backend/database/users.py": 2050
   },
   "raise_justifications": {
     "backend/database/conversations.py": "Null-aware user-field preservation and folder_user_set marker so AI folder assignment does not clobber stub nulls or explicit user unfile. +41 for the #9809 orphaned in_progress selection: a pure decision function plus a bounded fetch built from the registered conversations_in_progress_by_finished_at query spec, beside the conversation queries they filter.",
     "backend/database/memory_apply_store.py": "Canonical apply, source replacement, lineage, and projection-outbox writes must remain one atomic Firestore transaction boundary; splitting this owner would reintroduce split mutation authority (FC-split-mutation-authority). +11 routes stored lineage reactivation validation through the shared malformed-document read boundary while retaining atomic conflict semantics (#9494/#9696).",
-    "backend/database/users.py": "Account-deletion marker fencing and recursive missing-root cleanup must remain beside the existing deletion transaction and collection traversal; extracting them would duplicate the durable lifecycle authority. +33 for the queue-before-auth recovery guard and +16 for the job-id-fenced repeat-dispatch transaction. +74 for the server-owned, expiring city-context consent record and revocation cache cleanup: both belong next to the existing user-document access boundary so Redis is never authorization authority (SCA-174)."
+    "backend/database/users.py": "Removes the e2ee protection level that was accepted and stored while no write path encrypts for it."
   },
   "threshold": 1500
 }
