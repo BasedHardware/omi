@@ -205,6 +205,11 @@ final class CaptureArchiveRepository: ObservableObject {
       let (unvalidatedRows, remoteTotal) = try await (remoteRows, remoteCount)
       let rows = try validatedArchiveRows(unvalidatedRows)
       captures = rows
+      if let selectedCapture {
+        // Keep the selected value coherent with the server-authoritative page.
+        // A removed capture must not remain open as stale local state.
+        self.selectedCapture = rows.first(where: { $0.id == selectedCapture.id })
+      }
       count = remoteTotal
       errorMessage = nil
       for capture in rows {

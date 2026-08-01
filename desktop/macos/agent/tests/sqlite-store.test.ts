@@ -21,9 +21,9 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(31);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(32);
     expect(store.allRows("SELECT version FROM schema_migrations ORDER BY version")).toEqual(
-      Array.from({ length: 31 }, (_, index) => ({ version: index + 1 })),
+      Array.from({ length: 32 }, (_, index) => ({ version: index + 1 })),
     );
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
@@ -66,6 +66,19 @@ describe("SqliteAgentStore", () => {
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 
+    store.close();
+  });
+
+  it("scopes cold-start terminal receipts by owner", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const insert = `INSERT INTO chat_first_cold_start_sequence_receipts(
+      sequence_id, owner_id, conversation_id, control_generation,
+      receipt_id, terminal_state, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    store.execute(insert, ["cold-start:1", "owner-a", "conversation-a", 1, "receipt-a", "completed", 1]);
+    store.execute(insert, ["cold-start:1", "owner-b", "conversation-b", 1, "receipt-b", "completed", 2]);
+
+    expect(store.getRow("SELECT COUNT(*) AS count FROM chat_first_cold_start_sequence_receipts").count).toBe(2);
     store.close();
   });
 
@@ -125,11 +138,12 @@ describe("SqliteAgentStore", () => {
       "chat_first_materialization_receipts",
       "chat_first_cold_start_sequence_receipts",
     ]));
-    expect(store.allRows("SELECT version FROM schema_migrations WHERE version BETWEEN 28 AND 31 ORDER BY version")).toEqual([
+    expect(store.allRows("SELECT version FROM schema_migrations WHERE version BETWEEN 28 AND 32 ORDER BY version")).toEqual([
       { version: 28 },
       { version: 29 },
       { version: 30 },
       { version: 31 },
+      { version: 32 },
     ]);
     expect(store.getRow(
       "SELECT COUNT(*) AS count FROM backend_turn_outbox WHERE conversation_id = 'conv-legacy-local-only'",

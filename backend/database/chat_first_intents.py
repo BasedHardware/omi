@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.canonical_memory_cohort import is_canonical_memory_user
 from database._client import get_firestore_client
+from database.firestore_index_registry import CHAT_FIRST_DEFERRALS_DUE_QUERY, CHAT_FIRST_DEFERRALS_SUBJECT_QUERY
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.chat_first import (
     ChatFirstBlockSpec,
@@ -671,25 +672,50 @@ def release_due_deferrals(
     subject: ChatFirstSubject | None = None,
     firestore_client: Any = None,
 ) -> list[ProactiveIntent]:
-    """Release due or meaningful-subject-change deferrals exactly once, verbatim."""
+    """Release due or meaningful-subject-change deferrals exactly once.
+
+    Keep the pending/state and releaseability predicates in Firestore. A user's
+    deferral collection is unbounded, and streaming released or future rows on
+    every foreground wake turns old history into the hot path.
+    """
 
     client = _db(firestore_client)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(DEFERRALS_COLLECTION)
+    if subject is None:
+        query = CHAT_FIRST_DEFERRALS_DUE_QUERY.build(
+            collection,
+            {'account_generation': account_generation, 'state': 'pending', 'due_at': now},
+            field_filter_factory=FieldFilter,
+        )
+    else:
+        query = CHAT_FIRST_DEFERRALS_SUBJECT_QUERY.build(
+            collection,
+            {
+                'account_generation': account_generation,
+                'state': 'pending',
+                'subject_kind': subject.kind,
+                'subject_id': subject.id,
+            },
+            field_filter_factory=FieldFilter,
+        )
+    query = query.limit(32)
     candidates: list[ProactiveDeferral] = []
-    for snapshot in collection.stream():
+    for snapshot in query.stream():
         deferred = _deferral_from_snapshot(snapshot)
+        # Keep strict model validation and an exact subject check as the final
+        # fence for old/malformed rows and for fake clients that do not fully
+        # emulate Firestore's nested-field filtering.
         if deferred.account_generation != account_generation or deferred.state != 'pending':
             continue
-        if subject is not None:
-            if deferred.subject != subject:
-                continue
-        elif deferred.due_at > now:
+        if subject is not None and deferred.subject != subject:
+            continue
+        if subject is None and deferred.due_at > now:
             continue
         candidates.append(deferred)
 
     released: list[ProactiveIntent] = []
-    for deferred in candidates[:32]:
+    for deferred in candidates:
         intent = _release_deferral_transaction(
             uid,
             deferred,
@@ -716,13 +742,16 @@ def _release_deferral_transaction(
         source_key='deferral_reraise',
         continuity_key=deferred.continuity_key,
     )
+    released_question = deferred.question.model_copy(
+        update={'question_id': _stable_id('qri', deferred.question.question_id, deferred.deferral_id)}
+    )
     intent = ProactiveIntent(
         intent_id=intent_id,
         continuity_key=deferred.continuity_key,
         account_generation=account_generation,
         source='deferral_reraise',
         subject=deferred.subject,
-        blocks=[deferred.question],
+        blocks=[released_question],
         created_at=now,
     )
     deferral_ref = _deferral_ref(uid, deferred.deferral_id, firestore_client=firestore_client)

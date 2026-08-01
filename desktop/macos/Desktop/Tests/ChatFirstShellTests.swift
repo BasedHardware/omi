@@ -171,6 +171,70 @@ final class ChatFirstShellTests: XCTestCase {
     )
   }
 
+  func testExternalMainChatRequestUsesTheChatDeeplinkOrigin() throws {
+    let suiteName = "ChatFirstShellTests.external-main-chat.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    var events: [ChatFirstAnalyticsEvent] = []
+    let navigation = ChatFirstShellNavigation(defaults: defaults) { event in
+      events.append(event)
+    }
+
+    navigation.selectPrimary(.tasks)
+    events.removeAll()
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertEqual(events, [.routeEntered(route: .chat, origin: .chatDeeplink)])
+  }
+
+  func testLaunchAnalyticsRouteReflectsTheRestoredNavigationRoute() throws {
+    let suiteName = "ChatFirstShellTests.launch-route.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    navigation.selectPrimary(.tasks)
+    let restored = ChatFirstShellNavigation(defaults: defaults)
+
+    XCTAssertEqual(restored.route, .tasks)
+    XCTAssertEqual(restored.route.analyticsRoute, .tasks)
+  }
+
+  func testNewerGoalLinkResolutionPreventsAStaleCompletionFromNavigating() throws {
+    let suiteName = "ChatFirstShellTests.goal-link-resolution.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    var events: [ChatFirstAnalyticsEvent] = []
+    let navigation = ChatFirstShellNavigation(defaults: defaults) { event in
+      events.append(event)
+    }
+
+    let staleResolution = navigation.beginGoalLinkResolution()
+    let currentResolution = navigation.beginGoalLinkResolution()
+
+    XCTAssertFalse(navigation.completeGoalLinkResolution(goalID: "goal-old", generation: staleResolution))
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertTrue(navigation.completeGoalLinkResolution(goalID: "goal-new", generation: currentResolution))
+    XCTAssertEqual(navigation.route, .goals)
+    XCTAssertEqual(navigation.pendingFocus, .goal(id: "goal-new"))
+    XCTAssertEqual(events, [.routeEntered(route: .goals, origin: .chatDeeplink)])
+  }
+
+  func testDirectNavigationInvalidatesAnInFlightGoalLinkResolution() throws {
+    let suiteName = "ChatFirstShellTests.goal-link-direct-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let resolution = navigation.beginGoalLinkResolution()
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertFalse(navigation.completeGoalLinkResolution(goalID: "goal-old", generation: resolution))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.pendingFocus)
+  }
+
   func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() throws {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

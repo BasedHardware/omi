@@ -61,7 +61,9 @@ struct ChatFirstShell: View {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
       viewModelContainer.canonicalGoalsStore.activate(capability: capability)
       automationRuntime.install()
-      AnalyticsManager.shared.chatFirst(.routeEntered(route: .chat, origin: .shellLaunch))
+      AnalyticsManager.shared.chatFirst(
+        .routeEntered(route: navigation.route.analyticsRoute, origin: .shellLaunch)
+      )
     }
     .onDisappear { automationRuntime.uninstall() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

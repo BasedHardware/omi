@@ -2,8 +2,8 @@
 
 from fastapi import Depends, HTTPException, status
 
-from config.canonical_memory_cohort import is_canonical_memory_user
 from utils.other import endpoints as auth
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
 def require_canonical_task_user(uid: str = Depends(auth.get_current_user_uid)) -> str:
@@ -14,7 +14,7 @@ def require_canonical_task_user(uid: str = Depends(auth.get_current_user_uid)) -
     also prevents non-enrolled users from reaching canonical stores.
     """
 
-    if not is_canonical_memory_user(uid):
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     return uid
 

@@ -79,6 +79,7 @@ const CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION = 28;
 const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
 const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION = 30;
 const LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION = 31;
+const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION = 32;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -544,6 +545,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION)) {
       runLocalOnlyJournalDeliveryMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION)) {
+      runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(this.db, this.nowMs());
     }
   }
 
@@ -3345,6 +3349,44 @@ function runChatFirstColdStartSequenceReceiptsMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE chat_first_cold_start_sequence_receipts
+        RENAME TO chat_first_cold_start_sequence_receipts_legacy;
+      CREATE TABLE chat_first_cold_start_sequence_receipts(
+        sequence_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        terminal_state TEXT NOT NULL CHECK (terminal_state IN ('completed', 'abandoned')),
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(sequence_id, owner_id)
+      ) STRICT;
+      INSERT INTO chat_first_cold_start_sequence_receipts(
+        sequence_id, owner_id, conversation_id, control_generation,
+        receipt_id, terminal_state, created_at_ms
+      )
+      SELECT sequence_id, owner_id, conversation_id, control_generation,
+             receipt_id, terminal_state, created_at_ms
+      FROM chat_first_cold_start_sequence_receipts_legacy;
+      DROP TABLE chat_first_cold_start_sequence_receipts_legacy;
+      CREATE INDEX chat_first_cold_start_sequence_receipts_owner_idx
+        ON chat_first_cold_start_sequence_receipts(
+          owner_id, conversation_id, control_generation, created_at_ms ASC
+        );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

@@ -246,6 +246,32 @@ def run_post_commit_wake(
         return ProactiveWakeResult(outcome='declined')
 
 
+def run_task_changed_wake(uid: str, *, task_id: str, mutation_key: object) -> ProactiveWakeResult:
+    """Wake the proactive engine after an authoritative task commit."""
+
+    return run_post_commit_wake(
+        uid,
+        ProactiveWakeTrigger(
+            kind='task_changed',
+            subject=ChatFirstSubject(kind='task', id=task_id),
+            continuity_key=f'task:{task_id}:{mutation_key}',
+        ),
+    )
+
+
+def run_goal_changed_wake(uid: str, *, goal_id: str, mutation_key: object) -> ProactiveWakeResult:
+    """Wake the proactive engine after an authoritative goal commit."""
+
+    return run_post_commit_wake(
+        uid,
+        ProactiveWakeTrigger(
+            kind='goal_changed',
+            subject=ChatFirstSubject(kind='goal', id=goal_id),
+            continuity_key=f'goal:{goal_id}:{mutation_key}',
+        ),
+    )
+
+
 def persist_capture_arrival_intent(
     uid: str,
     *,
@@ -405,6 +431,8 @@ __all__ = [
     'cold_start_sparse_question',
     'persist_cold_start_intent',
     'persist_daily_opener_intent',
+    'run_goal_changed_wake',
     'run_post_commit_wake',
+    'run_task_changed_wake',
     'wake_after_commit',
 ]

@@ -104,21 +104,12 @@ struct DesktopHomeView: View {
     Group {
       if authState.isRestoringAuth {
         // State 0: Restoring auth session - show loading
-        VStack(spacing: OmiSpacing.lg) {
-          if let nsImage = Self.heroLogoImage {
-            Image(nsImage: nsImage)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 64, height: 64)
+        Color.clear
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(OmiColors.backgroundPrimary)
+          .onAppear {
+            log("DesktopHomeView: Showing auth loading splash")
           }
-          ProgressView()
-            .scaleEffect(0.8)
-            .tint(.white.opacity(0.6))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-          log("DesktopHomeView: Showing auth loading splash")
-        }
       } else if authState.sessionPhase == .recoveryRequired {
         SessionRecoveryView()
           .onAppear {
@@ -479,6 +470,9 @@ struct DesktopHomeView: View {
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
     .onChange(of: authState.isRestoringAuth) { _, _ in reportAutomationState() }
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
+    .onChange(of: chatFirstCapabilitySample.variant) { _, _ in
+      consumePendingMainChatRequestForChatFirstShell()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       chatFirstCapabilitySample.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
       // The provider's owner-bound gate rejects the previous sample for this
@@ -513,11 +507,25 @@ struct DesktopHomeView: View {
         }
       }
     }
-    // "Continue in Omi" from the floating bar: switch to the Home tab; the
-    // dashboard consumes the pending request and opens the chat panel.
+    // "Continue in Omi" from the floating bar. The legacy Dashboard owns its
+    // existing pending-request consumption, while the Chat-first shell has no
+    // Dashboard chat panel to consume it on its behalf.
     .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
-      selectedIndex = SidebarNavItem.dashboard.rawValue
+      handleMainChatRequest()
     }
+  }
+
+  private func handleMainChatRequest() {
+    guard usesChatFirstShell else {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+      return
+    }
+    consumePendingMainChatRequestForChatFirstShell()
+  }
+
+  private func consumePendingMainChatRequestForChatFirstShell() {
+    guard usesChatFirstShell, MainChatNavigationRequestStore.shared.consume() else { return }
+    chatFirstNavigation.selectPrimary(.chat, origin: .chatDeeplink)
   }
 
   private func enforceMainWindowMinimumSize() {

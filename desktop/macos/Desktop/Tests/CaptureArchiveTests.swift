@@ -77,6 +77,36 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertTrue(remote.listQueries.allSatisfy { $0.source == .omi && !$0.includeDiscarded })
   }
 
+  func testRefreshReplacesSelectedCaptureWithTheRefreshedFirstPageRow() async {
+    let original = archiveCapture(id: "omi-1", title: "Original title")
+    let refreshed = archiveCapture(id: "omi-1", title: "Refreshed title")
+    let remote = CaptureArchiveRemoteFake(rows: [original], count: 1)
+    let repository = CaptureArchiveRepository(remote: remote, local: CaptureArchiveLocalFake())
+
+    await repository.loadInitial()
+    repository.select(original)
+    remote.rows = [refreshed]
+    await repository.refresh()
+
+    XCTAssertEqual(repository.captures.single?.structured.title, "Refreshed title")
+    XCTAssertEqual(repository.selectedCapture?.structured.title, "Refreshed title")
+  }
+
+  func testRefreshClearsSelectedCaptureWhenItIsRemovedFromTheFirstPage() async {
+    let selected = archiveCapture(id: "omi-1")
+    let remote = CaptureArchiveRemoteFake(rows: [selected], count: 1)
+    let repository = CaptureArchiveRepository(remote: remote, local: CaptureArchiveLocalFake())
+
+    await repository.loadInitial()
+    repository.select(selected)
+    remote.rows = []
+    remote.count = 0
+    await repository.refresh()
+
+    XCTAssertTrue(repository.captures.isEmpty)
+    XCTAssertNil(repository.selectedCapture)
+  }
+
   func testConversationEndpointIncludesSourceInSharedListAndCountFilters() {
     let listFilters = APIClient.conversationFilterQueryItems(
       statuses: [.completed, .processing],
@@ -284,7 +314,8 @@ private func archiveCapture(
   id: String,
   source: ConversationSource = .omi,
   status: ConversationStatus = .completed,
-  createdAt: Date = Date(timeIntervalSince1970: 100)
+  createdAt: Date = Date(timeIntervalSince1970: 100),
+  title: String? = nil
 ) -> ServerConversation {
   ServerConversation(
     id: id,
@@ -293,7 +324,7 @@ private func archiveCapture(
     startedAt: createdAt,
     finishedAt: createdAt.addingTimeInterval(60),
     structured: Structured(
-      title: "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
+      title: title ?? "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
     transcriptSegments: [],
     transcriptSegmentsIncluded: false,
     geolocation: nil,

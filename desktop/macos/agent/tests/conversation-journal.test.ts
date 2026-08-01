@@ -532,7 +532,12 @@ describe("kernel conversation journal", () => {
     recordTerminalQuestion(fixture, "turn-question", [
       { optionId: "focus", label: "Focus", preparedAnswer: "Focus this goal." },
     ]);
-    const continuityKey = questionContinuityKey("question-1", "focus");
+    const continuityKey = questionContinuityKey(
+      fixture.ownerId,
+      fixture.conversationId,
+      "question-1",
+      "focus",
+    );
     const collidingUserTurnID = questionInteractionTurnID(continuityKey, "user");
     const other = insertSurface(fixture.store, "main_chat", "chat", "question-collision");
     // `turn_id` lookup is deliberately global for canonical identity. A prior
@@ -3876,8 +3881,16 @@ function newDatabasePath(): string {
   return join(newStateDir(), "agent.sqlite3");
 }
 
-function questionContinuityKey(questionID: string, optionID: string): string {
-  return `qri_${createHash("sha256").update(`${questionID}\u0000${optionID}`).digest("hex").slice(0, 32)}`;
+function questionContinuityKey(
+  ownerID: string,
+  conversationID: string,
+  questionID: string,
+  optionID: string,
+): string {
+  return `qri_${createHash("sha256")
+    .update(`${ownerID}\u0000${conversationID}\u0000${questionID}\u0000${optionID}`)
+    .digest("hex")
+    .slice(0, 32)}`;
 }
 
 function questionInteractionTurnID(continuityKey: string, role: "user" | "assistant"): string {

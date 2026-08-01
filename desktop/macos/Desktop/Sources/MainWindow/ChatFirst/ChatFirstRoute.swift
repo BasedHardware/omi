@@ -23,6 +23,17 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     }
   }
 
+  var analyticsRoute: ChatFirstAnalyticsEvent.Route {
+    switch self {
+    case .chat: return .chat
+    case .conversations: return .conversations
+    case .tasks: return .tasks
+    case .goals: return .goals
+    case .memories: return .memories
+    case .more: return .more
+    }
+  }
+
   var title: String {
     switch self {
     case .chat: return "Chat"
@@ -214,6 +225,7 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   private let defaults: UserDefaults
   private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
+  private var goalLinkResolutionGeneration: UInt = 0
 
   init(
     defaults: UserDefaults = .standard,
@@ -246,14 +258,16 @@ final class ChatFirstShellNavigation: ObservableObject {
     origin: ChatFirstAnalyticsEvent.RouteOrigin = .sidebar
   ) {
     guard destination.isPrimaryDestination else { return }
+    invalidateGoalLinkResolutions()
     route = destination
     visibleRoute = nil
     clearFocus()
     persistNavigation()
-    analytics(.routeEntered(route: analyticsRoute(destination), origin: origin))
+    analytics(.routeEntered(route: destination.analyticsRoute, origin: origin))
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
+    invalidateGoalLinkResolutions()
     route = .more(page)
     visibleRoute = nil
     clearFocus()
@@ -272,6 +286,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
+    invalidateGoalLinkResolutions()
     route = destination
     visibleRoute = nil
     pendingFocus = focus
@@ -279,7 +294,26 @@ final class ChatFirstShellNavigation: ObservableObject {
     focusedEntityID = focus.entityID
     isFocusedEntityAcknowledged = false
     persistNavigation()
-    analytics(.routeEntered(route: analyticsRoute(destination), origin: .chatDeeplink))
+    analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
+  }
+
+  /// A Goal link validates asynchronously before it opens a typed focus. The
+  /// root navigation owner fences overlapping link validations so a late result
+  /// cannot replace the route selected by a newer link request.
+  func beginGoalLinkResolution() -> UInt {
+    invalidateGoalLinkResolutions()
+    return goalLinkResolutionGeneration
+  }
+
+  func isCurrentGoalLinkResolution(_ generation: UInt) -> Bool {
+    goalLinkResolutionGeneration == generation
+  }
+
+  @discardableResult
+  func completeGoalLinkResolution(goalID: String, generation: UInt) -> Bool {
+    guard isCurrentGoalLinkResolution(generation) else { return false }
+    open(focus: .goal(id: goalID))
+    return true
   }
 
   /// Routes first, then records exactly one ordinary main-Chat user turn.
@@ -353,16 +387,10 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
   }
 
-  private func analyticsRoute(_ route: ChatFirstRoute) -> ChatFirstAnalyticsEvent.Route {
-    switch route {
-    case .chat: return .chat
-    case .conversations: return .conversations
-    case .tasks: return .tasks
-    case .goals: return .goals
-    case .memories: return .memories
-    case .more: return .more
-    }
+  private func invalidateGoalLinkResolutions() {
+    goalLinkResolutionGeneration &+= 1
   }
+
 }
 
 /// An immutable per-root sampling result. A failed, missing, stale, or

@@ -149,7 +149,7 @@ make_signed_smoke_fixture() {
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-x64/lib" \
     "$app/Contents/Resources/pi-mono-extension" \
-    "$app/Contents/Resources/Omi Computer_Omi Computer.bundle"
+    "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources"
   cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -170,8 +170,8 @@ OMI_PYTHON_API_URL=https://api.omi.me
 OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/
 ENV
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
-  chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   touch \
     "$app/Contents/Resources/agent/src/runtime/omi-tool-manifest.ts" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node" \

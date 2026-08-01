@@ -7,7 +7,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3530,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4427,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1646,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5716,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6447,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1627
   },
   "raise_justifications": {
@@ -18,8 +18,8 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state. Memory search waits for its active projection, while canonical lifecycle capability, the Brain Map evidence inspector, and the split list/detail presentation remain owned by the Memories page; local-only identity resolution and its guarded delete/undo lifecycle remain with its optimistic mutation owner rather than exposing coordination state across view-model boundaries.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "The Canonical Memory Atlas owns progressive disclosure, island territories and captions, selection-trail Escape behavior, in-place evidence inspection, and related render policies. Geometry and territory labels are extracted where possible; a further surface split remains tracked separately.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": "Relatedness layout, Louvain neighbourhood detection, and the group-separation and anchor-repulsion forces the island map is built on; no baseline entry existed because the file crossed the threshold in this change. It is already separate from the atlas view — a further split of detection from simulation is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "The Load-more-tasks action reads displayTasks.last at execution time via loadMoreTapped() instead of force-unwrapping (an emptied list no longer crashes); merged with main binding first-load/loading/error/retry state to the selected To Do or Done view. Suggested-task loading feedback is now overlaid outside the list flow so an initial fetch cannot shift the task rows; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior. SB redesign: adds the hover-expand AppNavRail (icons→labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Load-more, empty-list safety, merged loading/error/retry state, suggested-task loading placement, filter-aware rendered-order drag/drop, sparse rank allocation, hidden-row rebasing, stale-ID filtering, local-to-backend promotion remapping, generation-fenced serialized local/cloud commits, retry cleanup, and description-addressable reorder automation remain with the Tasks page state owner; recovery coordination stays separately in TasksStore; a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior. SB redesign adds the hover-expand AppNavRail (icons→labels) and merged navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },
   "threshold": 1500
 }

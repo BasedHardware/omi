@@ -841,8 +841,6 @@ def complete_candidate_integration_dispatch(
                 },
             )
             return False
-        if not is_canonical_memory_user(uid):
-            return False
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
         write_transaction.update(

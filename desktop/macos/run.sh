@@ -476,7 +476,7 @@ sign_app_bundle() {
             substep "Signing libwebp"
             codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
-        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
             codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
@@ -963,7 +963,8 @@ substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 
 # Copy Sparkle framework
-SPARKLE_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sparkle.framework"
+SWIFTPM_DEBUG_PRODUCTS_DIR="Desktop/.build/debug"
+SPARKLE_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sparkle.framework"
 if [ -d "$SPARKLE_FRAMEWORK" ]; then
     substep "Copying Sparkle framework ($(du -sh "$SPARKLE_FRAMEWORK" 2>/dev/null | cut -f1))"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
@@ -971,7 +972,7 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
 fi
 
 # Copy Sentry framework
-SENTRY_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sentry.framework"
+SENTRY_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sentry.framework"
 if [ -d "$SENTRY_FRAMEWORK" ]; then
     substep "Copying Sentry framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
@@ -979,7 +980,7 @@ if [ -d "$SENTRY_FRAMEWORK" ]; then
 fi
 
 # Copy onnxruntime framework
-ONNX_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/onnxruntime.framework"
+ONNX_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/onnxruntime.framework"
 if [ -d "$ONNX_FRAMEWORK" ]; then
     substep "Copying onnxruntime framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
@@ -1024,7 +1025,7 @@ fi
 /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID $BUNDLE_ID" "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist" 2>/dev/null || true
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
-RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
+RESOURCE_BUNDLE="$SWIFTPM_DEBUG_PRODUCTS_DIR/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
     macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"

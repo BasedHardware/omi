@@ -931,7 +931,12 @@ export function recordQuestionInteractionReply(
     // assistant placeholder has become the tail.
     const selected = findSelectedQuestionBlock(store, conversationId, questionId);
     if (selected) {
-      const continuityKey = questionInteractionContinuityKey(questionId, selected.optionId);
+      const continuityKey = questionInteractionContinuityKey(
+        input.ownerId,
+        conversationId,
+        questionId,
+        selected.optionId,
+      );
       const childTurns = questionInteractionTurns(store, conversationId, continuityKey);
       if (selected.optionId === optionId && childTurns.user && childTurns.assistant) {
         return {
@@ -967,7 +972,7 @@ export function recordQuestionInteractionReply(
     const option = question.options.find((candidate) => candidate.optionId === optionId);
     if (!option) return emptyQuestionInteractionReceipt();
 
-    const continuityKey = questionInteractionContinuityKey(questionId, optionId);
+    const continuityKey = questionInteractionContinuityKey(input.ownerId, conversationId, questionId, optionId);
     const selectedQuestion: Extract<ConversationContentBlock, { type: "questionCard" }> = {
       ...structuredClone(question),
       selectedOptionId: optionId,
@@ -1662,7 +1667,7 @@ function appendNextColdStartSequenceQuestion(
     [terminalized.conversationId],
   );
   if (!tail || String(tail.turn_id) !== terminalized.turnId) return;
-  if (!selectedColdStartParentMatchesContinuation(store, terminalized, descriptor, continuityKey)) return;
+  if (!selectedColdStartParentMatchesContinuation(store, ownerId, terminalized, descriptor, continuityKey)) return;
 
   if (descriptor.step === 3) {
     recordColdStartSequenceTerminalReceipt(store, {
@@ -1708,6 +1713,7 @@ function localColdStartSequenceDescriptor(
 
 function selectedColdStartParentMatchesContinuation(
   store: AgentStore,
+  ownerId: string,
   terminalized: ConversationTurn,
   descriptor: { sequenceId: string; step: 1 | 2 | 3 },
   continuityKey: string,
@@ -1728,7 +1734,14 @@ function selectedColdStartParentMatchesContinuation(
         || block.coldStartSequence?.sequenceId !== descriptor.sequenceId
         || block.coldStartSequence?.step !== descriptor.step
       ) continue;
-      if (questionInteractionContinuityKey(block.questionId, block.selectedOptionId) === continuityKey) return true;
+      if (
+        questionInteractionContinuityKey(
+          ownerId,
+          terminalized.conversationId,
+          block.questionId,
+          block.selectedOptionId,
+        ) === continuityKey
+      ) return true;
     }
   }
   return false;
@@ -1804,8 +1817,9 @@ function recordColdStartSequenceTerminalReceipt(
     .slice(0, 24)}`;
   const existing = store.getOptionalRow(
     `SELECT owner_id, conversation_id, control_generation, receipt_id, terminal_state
-     FROM chat_first_cold_start_sequence_receipts WHERE sequence_id = ?`,
-    [input.sequenceId],
+     FROM chat_first_cold_start_sequence_receipts
+     WHERE sequence_id = ? AND owner_id = ?`,
+    [input.sequenceId, input.ownerId],
   );
   if (existing) {
     if (
@@ -2137,8 +2151,13 @@ export function searchJournalConversation(
   const state = requireJournalState(store, input.conversationId);
   const rows = store.allRows(
     `SELECT turn_json
-     FROM conversation_turn_revisions
-     WHERE conversation_id = ? AND generation = ?
+     FROM (
+       SELECT turn_json, turn_id, turn_seq,
+              ROW_NUMBER() OVER (PARTITION BY turn_id ORDER BY turn_seq DESC) AS revision_rank
+       FROM conversation_turn_revisions
+       WHERE conversation_id = ? AND generation = ?
+     )
+     WHERE revision_rank = 1
      ORDER BY turn_seq DESC
      LIMIT ?`,
     [input.conversationId, state.generation, MAX_CHAT_HISTORY_SEARCH_SCAN],
@@ -3559,8 +3578,16 @@ function emptyQuestionInteractionReceipt(): QuestionInteractionReplyReceipt {
   };
 }
 
-function questionInteractionContinuityKey(questionId: string, optionId: string): string {
-  return `qri_${createHash("sha256").update(`${questionId}\u0000${optionId}`).digest("hex").slice(0, 32)}`;
+function questionInteractionContinuityKey(
+  ownerId: string,
+  conversationId: string,
+  questionId: string,
+  optionId: string,
+): string {
+  return `qri_${createHash("sha256")
+    .update(`${ownerId}\u0000${conversationId}\u0000${questionId}\u0000${optionId}`)
+    .digest("hex")
+    .slice(0, 32)}`;
 }
 
 function stableQuestionInteractionTurnID(continuityKey: string, role: "user" | "assistant"): string {

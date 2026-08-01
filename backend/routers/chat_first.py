@@ -168,7 +168,12 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         return goals_db.get_goal_by_id(uid, block.goal_id) is not None
     if isinstance(block, CaptureLinkSpec):
         capture = conversations_db.get_conversation(uid, block.conversation_id)
-        return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
+        return bool(
+            capture
+            and capture.get('source') == 'omi'
+            and not capture.get('discarded', False)
+            and not capture.get('is_locked', False)
+        )
     if isinstance(block, MemoryLinkSpec):
         try:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
@@ -185,7 +190,12 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if subject.kind == 'goal':
         return goals_db.get_goal_by_id(uid, subject.id) is not None
     capture = conversations_db.get_conversation(uid, subject.id)
-    return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
+    return bool(
+        capture
+        and capture.get('source') == 'omi'
+        and not capture.get('discarded', False)
+        and not capture.get('is_locked', False)
+    )
 
 
 @router.post(

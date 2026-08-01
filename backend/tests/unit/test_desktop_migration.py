@@ -213,6 +213,7 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+import routers.staged_tasks as staged_router  # noqa: E402
 
 _ensure_package_path("models", BACKEND_DIR / "models")
 _ensure_package_path("utils", BACKEND_DIR / "utils")
@@ -1958,22 +1959,27 @@ class TestPromoteResponseWireCompat:
         """migrate endpoint returns {status: str} matching Swift StatusResponse."""
         from routers.staged_tasks import migrate_ai_tasks
 
-        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
-            result = migrate_ai_tasks(uid='test-uid')
+        result = migrate_ai_tasks(uid='test-uid')
 
         assert 'status' in result
         assert isinstance(result['status'], str)
+        assert result['status'].startswith('legacy task migration retired')
 
     def test_migrate_conversation_items_returns_status_migrated_deleted(self):
         """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
         from routers.staged_tasks import migrate_conversation_items
 
-        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
-            result = migrate_conversation_items(uid='test-uid')
+        with patch.object(
+            staged_router,
+            '_restore_all_legacy_conversation_items',
+            return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
+        ):
+            result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
-        assert result['migrated'] == 10
+        assert result['migrated'] == 0
         assert 'deleted' in result
+        assert result['restored'] == 3
 
 
 # ===========================================================================
@@ -2114,49 +2120,203 @@ class TestRatingZeroBoundary:
 # ===========================================================================
 
 
-class TestMigrationBatchIntegration:
-    """Exercise migration functions with enough items to cross batch boundary."""
+class TestLegacyConversationRecovery:
+    """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self):
+        """Recovery removes only its marker and atomically recreates the original action item."""
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'conversation_id': 'conversation-1',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        ordinary_staged_snapshot = MagicMock()
+        ordinary_staged_snapshot.id = 'ordinary-staged-task'
+        ordinary_staged_snapshot.to_dict.return_value = {
+            'id': 'ordinary-staged-task',
+            'description': 'Keep this staged task',
+            'completed': False,
+            'source': 'screenshot',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        action_item_ref = MagicMock()
+        action_items_col.document.return_value = action_item_ref
+        staged_ref = MagicMock()
+        staged_col.document.return_value = staged_ref
+        batch = MagicMock()
 
-        def _make_doc(i, source='screenshot'):
-            doc = MagicMock()
-            doc.id = f'task-{i}'
-            doc.to_dict.return_value = {
-                'id': f'task-{i}',
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        get_firestore_client.assert_not_called()
+
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.create.assert_called_once_with(
+            action_item_ref,
+            {
+                'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
                 'completed': False,
-                'source': source,
-                'relevance_score': i,
+            },
+        )
+        batch.delete.assert_called_once_with(staged_ref)
+        batch.commit.assert_called_once()
+
+    @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, conflict_error):
+        """An identity collision preserves both copies instead of overwriting current task data."""
+        from google.api_core.exceptions import AlreadyExists, Conflict
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = {
+            'already_exists': AlreadyExists('task already exists'),
+            'conflict': Conflict('task already exists'),
+        }[conflict_error]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.delete.assert_called_once()
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        snapshots = []
+        for index in range(3):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-{index}'
+            snapshot.to_dict.return_value = {
+                'id': f'legacy-{index}',
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
             }
-            return doc
+            snapshots.append(snapshot)
 
-        ai_docs = [_make_doc(i) for i in range(260)]
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
 
-        mock_action_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.stream.return_value = ai_docs
-        mock_action_col.where.return_value = mock_query
-        mock_action_col.document.return_value = MagicMock()
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', limit=2, firestore_client=firestore_client
+        )
 
-        mock_staged_col = MagicMock()
-        mock_staged_col.document.return_value = MagicMock()
+        recovery_query.order_by.assert_called_once_with('__name__')
+        recovery_query.limit.assert_called_once_with(3)
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': True,
+            'next_cursor': 'legacy-1',
+        }
 
-        batch1 = MagicMock()
-        batch2 = MagicMock()
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self):
+        """A continuation skips already-scanned collisions instead of retrying them forever."""
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.start_after.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = []
+        staged_col.where.return_value = recovery_query
+        cursor_ref = MagicMock()
+        staged_col.document.return_value = cursor_ref
 
-        def col_side_effect(col_name):
-            if col_name == 'action_items':
-                return mock_action_col
-            return mock_staged_col
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', cursor='legacy-1', firestore_client=firestore_client
+        )
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.side_effect = [batch1, batch2]
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+        recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
-        assert result['moved'] == 257  # 260 - 3 kept
-        batch1.commit.assert_called()  # intermediate commit at 500 ops
+    def test_released_recovery_route_completes_every_page_before_success(self):
+        """Released single-call clients must never receive an acknowledged partial recovery."""
+        first_page = {'restored': 50, 'skipped_existing': 1, 'has_more': True, 'next_cursor': 'legacy-49'}
+        second_page = {'restored': 2, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=[first_page, second_page],
+        ) as restore_page:
+            result = staged_router._restore_all_legacy_conversation_items('test-uid')
+
+        assert result == {
+            'restored': 52,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert [call.args for call in restore_page.call_args_list] == [('test-uid',), ('test-uid',)]
+        assert [call.kwargs['cursor'] for call in restore_page.call_args_list] == [None, 'legacy-49']
+        assert all(
+            call.kwargs['limit'] == staged_router.staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
+            for call in restore_page.call_args_list
+        )
 
 
 # ============================================================================

@@ -93,4 +93,185 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertFalse(model.screenDemoPTTReady)
     XCTAssertTrue(model.screenDemoPTTUnavailable)
   }
+
+  func testCustomOpenShortcutRecordsAnArbitraryChord() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.askOmiShortcut
+    let previousEnabled = settings.askOmiEnabled
+    defer {
+      settings.askOmiShortcut = previousShortcut
+      settings.askOmiEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutOpen
+    model.beginShortcutRecording(isTalk: false)
+    let event = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [.control, .option],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "p",
+        charactersIgnoringModifiers: "p",
+        isARepeat: false,
+        keyCode: 35
+      ))
+
+    XCTAssertTrue(model.recordShortcut(from: event))
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertEqual(model.chosenShortcut?.keyCode, 35)
+    XCTAssertEqual(model.chosenShortcut?.modifiers, [.control, .option])
+    XCTAssertEqual(settings.askOmiShortcut.keyCode, 35)
+  }
+
+  func testCustomPushToTalkShortcutRecordsAnArbitraryChord() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.pttShortcut
+    let previousEnabled = settings.pttEnabled
+    defer {
+      settings.pttShortcut = previousShortcut
+      settings.pttEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutTalk
+    model.beginShortcutRecording(isTalk: true)
+    let modifierDown = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .flagsChanged,
+        location: .zero,
+        modifierFlags: .command,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "",
+        charactersIgnoringModifiers: "",
+        isARepeat: false,
+        keyCode: 55
+      ))
+
+    XCTAssertTrue(model.recordShortcut(from: modifierDown))
+    XCTAssertTrue(model.shortcutRecording)
+    XCTAssertNil(model.chosenShortcut)
+
+    let event = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [.command, .shift],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "k",
+        charactersIgnoringModifiers: "k",
+        isARepeat: false,
+        keyCode: 40
+      ))
+
+    XCTAssertTrue(model.recordShortcut(from: event))
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertEqual(model.chosenShortcut?.keyCode, 40)
+    XCTAssertEqual(model.chosenShortcut?.modifiers, [.command, .shift])
+    XCTAssertEqual(settings.pttShortcut.keyCode, 40)
+  }
+
+  func testCustomPushToTalkModifierOnlyShortcutCompletesOnRelease() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.pttShortcut
+    let previousEnabled = settings.pttEnabled
+    defer {
+      settings.pttShortcut = previousShortcut
+      settings.pttEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutTalk
+    model.beginShortcutRecording(isTalk: true)
+    let modifierDown = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .flagsChanged,
+        location: .zero,
+        modifierFlags: .option,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "",
+        charactersIgnoringModifiers: "",
+        isARepeat: false,
+        keyCode: 58
+      ))
+    let modifierUp = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .flagsChanged,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "",
+        charactersIgnoringModifiers: "",
+        isARepeat: false,
+        keyCode: 58
+      ))
+
+    XCTAssertTrue(model.recordShortcut(from: modifierDown))
+    XCTAssertTrue(model.shortcutRecording)
+    XCTAssertTrue(model.recordShortcut(from: modifierUp))
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertEqual(model.chosenShortcut, ShortcutSettings.KeyboardShortcut(modifierOnly: .option))
+    XCTAssertEqual(settings.pttShortcut, ShortcutSettings.KeyboardShortcut(modifierOnly: .option))
+  }
+
+  func testPresetOpenShortcutRowSelectsItsDisplayedShortcut() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.askOmiShortcut
+    let previousEnabled = settings.askOmiEnabled
+    defer {
+      settings.askOmiShortcut = previousShortcut
+      settings.askOmiEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutOpen
+    let option = try XCTUnwrap(model.openShortcutOptions.last)
+
+    model.pickShortcut(option.shortcut, isTalk: false)
+
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertTrue(model.shortcutPicked)
+    XCTAssertEqual(model.chosenShortcut, option.shortcut)
+    XCTAssertEqual(settings.askOmiShortcut, option.shortcut)
+    XCTAssertTrue(settings.askOmiEnabled)
+  }
+
+  func testPresetPushToTalkShortcutRowSelectsItsDisplayedShortcut() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.pttShortcut
+    let previousEnabled = settings.pttEnabled
+    defer {
+      settings.pttShortcut = previousShortcut
+      settings.pttEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutTalk
+    let option = try XCTUnwrap(model.talkShortcutOptions.last)
+
+    model.pickShortcut(option.shortcut, isTalk: true)
+
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertTrue(model.shortcutPicked)
+    XCTAssertTrue(model.chosenShortcutIsPTT)
+    XCTAssertEqual(model.chosenShortcut, option.shortcut)
+    XCTAssertEqual(settings.pttShortcut, option.shortcut)
+    XCTAssertTrue(settings.pttEnabled)
+  }
 }

@@ -276,3 +276,21 @@ def test_post_commit_wake_isolates_provider_or_store_failure(monkeypatch):
     result = engine.run_post_commit_wake('user-1', _trigger())
 
     assert result.outcome == 'declined'
+
+
+def test_task_and_goal_wake_helpers_bind_the_committed_entity_identity(monkeypatch):
+    calls = []
+
+    def record(uid, trigger, **kwargs):
+        calls.append((uid, trigger, kwargs))
+        return engine.ProactiveWakeResult(outcome='no_candidate')
+
+    monkeypatch.setattr(engine, 'run_post_commit_wake', record)
+
+    assert engine.run_task_changed_wake('user-1', task_id='task-7', mutation_key='revision-3').outcome == 'no_candidate'
+    assert engine.run_goal_changed_wake('user-1', goal_id='goal-9', mutation_key='revision-4').outcome == 'no_candidate'
+
+    assert [(uid, trigger.kind, trigger.subject, trigger.continuity_key) for uid, trigger, _ in calls] == [
+        ('user-1', 'task_changed', ChatFirstSubject(kind='task', id='task-7'), 'task:task-7:revision-3'),
+        ('user-1', 'goal_changed', ChatFirstSubject(kind='goal', id='goal-9'), 'goal:goal-9:revision-4'),
+    ]

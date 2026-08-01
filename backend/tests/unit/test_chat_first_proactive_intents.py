@@ -72,7 +72,7 @@ class _Collection:
         ]
 
     def where(self, *, filter):
-        """Minimal FieldFilter mock: filter by a single ``in`` or ``==`` field."""
+        """Minimal FieldFilter mock supporting chained equality/range filters."""
         child_length = len(self._path) + 1
         snapshots = [
             _Snapshot(self._database, path)
@@ -85,11 +85,20 @@ class _Collection:
         matched = []
         for snap in snapshots:
             snap_data = snap.to_dict() or {}
+            actual = snap_data
+            for component in field.split('.'):
+                if not isinstance(actual, dict):
+                    actual = None
+                    break
+                actual = actual.get(component)
             if op == 'in':
-                if snap_data.get(field) in value:
+                if actual in value:
                     matched.append(snap)
             elif op == '==':
-                if snap_data.get(field) == value:
+                if actual == value:
+                    matched.append(snap)
+            elif op == '<=':
+                if actual is not None and actual <= value:
                     matched.append(snap)
             else:  # pragma: no cover - only ``in``/``==`` used by this suite
                 matched.append(snap)
@@ -104,6 +113,27 @@ class _FilteredCollection:
 
     def stream(self):
         return self._snapshots
+
+    def where(self, *, filter):
+        field = filter.field_path
+        op = filter.op_string
+        value = filter.value
+        matched = []
+        for snap in self._snapshots:
+            actual = snap.to_dict() or {}
+            for component in field.split('.'):
+                if not isinstance(actual, dict):
+                    actual = None
+                    break
+                actual = actual.get(component)
+            if op == '==' and actual == value:
+                matched.append(snap)
+            elif op == '<=' and actual is not None and actual <= value:
+                matched.append(snap)
+        return _FilteredCollection(matched)
+
+    def limit(self, count):
+        return _FilteredCollection(self._snapshots[:count])
 
 
 class _Transaction:
@@ -508,7 +538,9 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(firestore):
 
     assert len(due) == 1
     assert due[0].source == 'deferral_reraise'
-    assert due[0].blocks == [question]
+    released_question = due[0].blocks[0]
+    assert released_question.question_id != question.question_id
+    assert released_question.model_copy(update={'question_id': question.question_id}) == question
     assert replay == []
 
     task_subject = ChatFirstSubject(kind='task', id='task-1')
@@ -531,7 +563,8 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(firestore):
     )
 
     assert len(subject_change) == 1
-    assert subject_change[0].blocks == [task_question]
+    assert subject_change[0].blocks[0].model_copy(update={'question_id': task_question.question_id}) == task_question
+    assert subject_change[0].blocks[0].question_id != task_question.question_id
 
 
 def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects(firestore):

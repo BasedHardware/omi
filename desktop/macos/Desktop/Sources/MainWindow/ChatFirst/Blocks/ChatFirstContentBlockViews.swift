@@ -310,11 +310,14 @@ struct GoalLinkView: View {
   private func openGoal() {
     guard !isOpening else { return }
     isOpening = true
+    let resolutionGeneration = navigation.beginGoalLinkResolution()
     Task { @MainActor in
       defer { isOpening = false }
       // Validate through the root-owned canonical projection. The actual
       // destination remains a typed shell focus, never a display-string URL.
-      guard await goalsStore.loadDetail(goalID: goalID) != nil else {
+      let detail = await goalsStore.loadDetail(goalID: goalID)
+      guard navigation.isCurrentGoalLinkResolution(resolutionGeneration) else { return }
+      guard detail != nil else {
         isUnavailable = true
         AnalyticsManager.shared.chatFirst(
           .richBlock(kind: .goalLink, outcome: .stalePlaceholder, action: .open)
@@ -324,7 +327,7 @@ struct GoalLinkView: View {
       AnalyticsManager.shared.chatFirst(
         .richBlock(kind: .goalLink, outcome: .acted, action: .open)
       )
-      navigation.open(focus: .goal(id: goalID))
+      _ = navigation.completeGoalLinkResolution(goalID: goalID, generation: resolutionGeneration)
     }
   }
 }
