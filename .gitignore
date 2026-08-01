@@ -272,3 +272,17 @@ htmlcov/
 
 # pnpm store
 .pnpm-store/
+
+# Secrets / key material
+*.pem
+*.p8
+*.p12
+*.pfx
+*.keystore
+**/credentials.json
+**/*service-account*.json
+!omi/firmware/bootloader/mcuboot/enc-rsa2048-priv.pem
+!omi/firmware/bootloader/mcuboot/enc-rsa2048-pub.pem
+!omi/firmware/bootloader/mcuboot/root-rsa-2048.pem
+!app/setup/prebuilt/debug.keystore
+!sdks/react-native/example/android/app/debug.keystore

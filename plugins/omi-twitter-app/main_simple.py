@@ -223,8 +223,11 @@ async def auth_callback(
         expires_in = token_data.get('expires_in', 7200)
         
         print(f"🔑 Token data received:", flush=True)
-        print(f"   Access token: {access_token[:20]}..." if access_token else "   Access token: None", flush=True)
-        print(f"   Refresh token: {refresh_token[:20]}..." if refresh_token else "   Refresh token: None", flush=True)
+        print(f"   Access token: present (len={len(access_token)})" if access_token else "   Access token: None", flush=True)
+        print(
+            f"   Refresh token: present (len={len(refresh_token)})" if refresh_token else "   Refresh token: None",
+            flush=True,
+        )
         print(f"   Expires in: {expires_in}s ({expires_in/3600:.1f}h)", flush=True)
         
         SimpleUserStorage.save_user(

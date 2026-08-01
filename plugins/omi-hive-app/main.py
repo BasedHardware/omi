@@ -304,7 +304,6 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
             if user_id:
                 headers["user_id"] = user_id
                 
-            print(f"   REST Headers: {headers}")
             response = requests.get(
                 f"{HIVE_REST_API_BASE}/workspaces",
                 headers=headers,

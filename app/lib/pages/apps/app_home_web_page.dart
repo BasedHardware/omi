@@ -22,6 +22,15 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
   late final AnimationController _animationController;
   late final Animation<Offset> _slideAnimation;
   bool _isLoading = true;
+  Uri? _allowedOrigin;
+
+  bool _isAllowedNavigation(String url) {
+    final origin = _allowedOrigin;
+    if (origin == null) return false;
+    final target = Uri.tryParse(url);
+    if (target == null) return false;
+    return target.scheme == origin.scheme && target.host == origin.host && target.port == origin.port;
+  }
 
   @override
   void initState() {
@@ -32,11 +41,16 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
     _animationController.forward();
+    final initialUrl = '${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}';
+    _allowedOrigin = Uri.tryParse(initialUrl);
     _controller = WebViewController()
       ..setUserAgent(topUserAgents[Random().nextInt(topUserAgents.length)])
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (NavigationRequest request) {
+            return _isAllowedNavigation(request.url) ? NavigationDecision.navigate : NavigationDecision.prevent;
+          },
           onPageFinished: (String url) {
             if (mounted) {
               setState(() {
@@ -60,9 +74,7 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
           },
         ),
       )
-      ..loadRequest(
-        Uri.parse('${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}'),
-      );
+      ..loadRequest(Uri.parse(initialUrl));
   }
 
   @override

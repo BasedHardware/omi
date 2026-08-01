@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 
 class MarkdownViewer extends StatefulWidget {
   final String markdown;
@@ -15,6 +16,12 @@ class MarkdownViewer extends StatefulWidget {
 }
 
 class _MarkdownViewerState extends State<MarkdownViewer> {
+  bool _isTrustedHost(String host) {
+    if (host == 'api.omi.me') return true;
+    final baseHost = Uri.tryParse(Env.apiBaseUrl ?? '')?.host;
+    return baseHost != null && baseHost.isNotEmpty && host == baseHost;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -58,14 +65,13 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
                 // return Container();
               },
               onTapLink: (text, href, title) {
-                if (href != null) {
-                  if (href.contains('?')) {
-                    href += '&uid=${SharedPreferencesUtil().uid}';
-                  } else {
-                    href += '?uid=${SharedPreferencesUtil().uid}';
-                  }
-                  launchUrl(Uri.parse(href));
-                }
+                if (href == null) return;
+                final uri = Uri.tryParse(href);
+                if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return;
+                final target = _isTrustedHost(uri.host)
+                    ? uri.replace(queryParameters: {...uri.queryParameters, 'uid': SharedPreferencesUtil().uid})
+                    : uri;
+                launchUrl(target);
               },
             ),
           ),

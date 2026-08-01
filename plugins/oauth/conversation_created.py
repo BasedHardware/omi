@@ -89,7 +89,6 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return
 
     # Save
-    print({'uid': uid, 'api_key': access_token, 'database_id': database_id})
     store_notion_crm_api_key(uid, access_token)
     store_notion_database_id(uid, database_id)
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})

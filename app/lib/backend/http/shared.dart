@@ -131,11 +131,11 @@ Future<Map<String, String>> buildHeaders({
 
 bool _isRequiredAuthCheck(String url) {
   // Agent VM endpoints always hit prod even when app uses dev
-  if (url.contains('api.omi.me')) return true;
-  if (url.contains(Env.apiBaseUrl!)) {
-    return true;
-  }
-  return false;
+  final host = Uri.tryParse(url)?.host;
+  if (host == null || host.isEmpty) return false;
+  if (host == 'api.omi.me') return true;
+  final baseHost = Uri.tryParse(Env.apiBaseUrl ?? '')?.host;
+  return baseHost != null && baseHost.isNotEmpty && host == baseHost;
 }
 
 Future<http.StreamedResponse> makeRawApiCall({

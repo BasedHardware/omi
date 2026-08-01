@@ -90,7 +90,7 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'tasks' && uri.pathSegments.length > 1) {
       if (mounted) {
         final token = uri.pathSegments[1];
-        PlatformManager.instance.analytics.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
+        PlatformManager.instance.analytics.track('Shared Tasks Opened From DeepLink');
         _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
