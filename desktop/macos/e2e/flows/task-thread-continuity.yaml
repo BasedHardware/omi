@@ -4,7 +4,6 @@ tier: 2
 description: Hermetic task-backed thread continuity through the app kernel
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
 preconditions:
   - automation_bridge_ready
