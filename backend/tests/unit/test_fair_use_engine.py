@@ -6,7 +6,7 @@ an autouse ``monkeypatch`` fixture instead of mutating ``sys.modules`` at module
 scope. See ``backend/docs/test_isolation.md`` (Tier-2 sanctioned seams).
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -750,3 +750,64 @@ class TestDgBudget:
         assert result['used_ms'] == 0
         assert result['remaining_ms'] == 1800000
         _mock_redis.get.side_effect = None
+
+
+class TestNormalizeExpiredRestrictionState:
+    """restrict_until expiry must always clear, even on malformed stored data."""
+
+    NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    def setup_method(self):
+        _fair_use_db.update_fair_use_state.reset_mock()
+        _fair_use_db.invalidate_enforcement_cache.reset_mock()
+
+    def _state(self, stage='restrict', restrict_until=None):
+        return {'stage': stage, 'restrict_until': restrict_until}
+
+    def test_active_restriction_is_kept(self):
+        future = self.NOW + timedelta(days=1)
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=future), now=self.NOW
+        )
+        assert result['stage'] == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
+    def test_expired_datetime_restriction_clears(self):
+        past = self.NOW - timedelta(minutes=1)
+        result = fair_use_mod.normalize_expired_restriction_state('uid', self._state(restrict_until=past), now=self.NOW)
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+        _fair_use_db.update_fair_use_state.assert_called_once_with('uid', {'stage': 'throttle', 'restrict_until': None})
+
+    def test_expired_iso_string_restriction_clears(self):
+        """A string timestamp (older write / admin import) must still expire —
+        previously it was skipped by an isinstance check and the user stayed
+        hard-restricted forever."""
+        past_str = (self.NOW - timedelta(minutes=1)).isoformat()
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=past_str), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+        _fair_use_db.update_fair_use_state.assert_called_once_with('uid', {'stage': 'throttle', 'restrict_until': None})
+
+    def test_unparseable_restriction_clears_fail_safe(self):
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until='not-a-timestamp'), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+
+    def test_utc_z_suffix_string_restriction_is_kept_while_active(self):
+        future = (self.NOW + timedelta(hours=2)).isoformat().replace('+00:00', 'Z')
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=future), now=self.NOW
+        )
+        assert result['stage'] == 'restrict'
+
+    def test_non_restrict_stage_untouched(self):
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(stage='throttle', restrict_until=self.NOW + timedelta(days=1)), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        _fair_use_db.update_fair_use_state.assert_not_called()
