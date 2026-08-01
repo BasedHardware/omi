@@ -437,7 +437,7 @@ class TestModeAwareSidecarReconciliation:
         restore_calls = []
         monkeypatch.setattr(
             r.staged_tasks_db,
-            'restore_legacy_conversation_items',
+            'restore_all_legacy_conversation_items',
             lambda uid, **kwargs: restore_calls.append(uid)
             or {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
         )
@@ -482,6 +482,16 @@ class TestModeAwareSidecarReconciliation:
         )
         monkeypatch.setattr(
             r.staged_tasks_db,
+            'restore_all_legacy_conversation_items',
+            lambda uid, **kwargs: {
+                'restored': 2,
+                'skipped_existing': 1,
+                'has_more': False,
+                'next_cursor': None,
+            },
+        )
+        monkeypatch.setattr(
+            r.staged_tasks_db,
             'restore_legacy_conversation_items',
             lambda uid, **kwargs: {
                 'restored': 2,
@@ -497,8 +507,8 @@ class TestModeAwareSidecarReconciliation:
             'deleted': 0,
             'restored': 2,
             'skipped_existing': 1,
-            'has_more': True,
-            'next_cursor': 'legacy-2',
+            'has_more': False,
+            'next_cursor': None,
         }
 
         assert r.restore_legacy_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {

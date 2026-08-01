@@ -527,6 +527,11 @@ class TasksViewModel: ObservableObject {
   private var sortOrderSyncTask: Task<Void, Never>?
   @Published private(set) var sortOrderSyncFailure: TaskSortOrderSyncFailure?
   private var pendingSortOrderUpdates: [SortOrderUpdate] = []
+  /// The exact canonical sequence produced by the most recent drag in each
+  /// category. It survives the debounce window so persistence uses the same
+  /// displayed scope as the drop, including Done/search rows that are not in
+  /// the first incomplete-task cache page.
+  private var pendingReorderOrders: [TaskCategory: [String]] = [:]
   var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
   private var cancellables = Set<AnyCancellable>()
@@ -687,6 +692,7 @@ class TasksViewModel: ObservableObject {
     indentLevels = [:]
     suppressOrderingPersistence = false
     pendingSortOrderUpdates = []
+    pendingReorderOrders = [:]
     sortOrderSyncFailure = nil
     suppressDatabaseRequery = false
     suppressRequeryGeneration &+= 1
@@ -789,14 +795,22 @@ class TasksViewModel: ObservableObject {
     orderedTasks(categorizedTasks[category] ?? [], inCategory: category)
   }
 
-  /// The category's canonical active-task order, including rows that a search or
-  /// non-status filter has hidden. Reordering a rendered subset must rebase this
-  /// full sequence: assigning new sort orders to only the visible ids leaves
-  /// hidden rows with stale values that can interleave or collide after the
-  /// filter is cleared.
+  /// The category's canonical order in the active UI scope. Start with the
+  /// full SQLite search/filter result when present, then include the active
+  /// store cache so hidden rows retain their slots. This makes a Done row or a
+  /// search row outside the first incomplete cache page persist through the
+  /// debounce instead of falling out of the subsequent full-order write.
   private func getFullOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
-    orderedTasks(
-      store.incompleteTasks.filter { currentCategoryFor($0) == category },
+    var scope: [TaskActionItem] = []
+    if !searchText.isEmpty {
+      scope.append(contentsOf: searchResults)
+    } else if !filteredFromDatabase.isEmpty {
+      scope.append(contentsOf: filteredFromDatabase)
+    }
+    scope.append(contentsOf: getSourceTasks())
+    scope.append(contentsOf: displayTasks)
+    return orderedTasks(
+      deduplicateById(scope).filter { currentCategoryFor($0) == category },
       inCategory: category
     )
   }
@@ -893,10 +907,10 @@ class TasksViewModel: ObservableObject {
   /// Rewrites `array`'s `sortOrder` for every task id named in `order`, using the
   /// single `sortOrder` banding helper. `moveTask` applies this to each source array
   /// the displayed list can be backed by (`store.incompleteTasks`,
-  /// `filteredFromDatabase`, `searchResults`) so they agree on the new order — a write
-  /// to only one diverges when filters/search are active. Ids not in `order` keep
-  /// their existing sortOrder. Extracted so the mirrored-array invariant is
-  /// unit-testable (TASK-07 / BL-030).
+  /// `store.completedTasks`, `filteredFromDatabase`, `searchResults`) so they agree
+  /// on the new order — a write to only one diverges when filters/search are active.
+  /// Ids not in `order` keep their existing sortOrder. Extracted so the
+  /// mirrored-array invariant is unit-testable (TASK-07 / BL-030).
   nonisolated static func applyReorder(
     _ order: [String], categoryIndex: Int, to array: inout [TaskActionItem]
   ) {
@@ -927,6 +941,7 @@ class TasksViewModel: ObservableObject {
     )
 
     categoryOrder[category] = order
+    pendingReorderOrders[category] = order
 
     // Apply the new sortOrder to every source array the displayed list could be
     // backed by. recomputeDisplayCaches picks displayTasks from searchResults,
@@ -939,6 +954,10 @@ class TasksViewModel: ObservableObject {
     var incomplete = store.incompleteTasks
     Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
     store.incompleteTasks = incomplete
+
+    var completed = store.completedTasks
+    Self.applyReorder(order, categoryIndex: categoryIndex, to: &completed)
+    store.completedTasks = completed
 
     Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
     Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
@@ -1024,6 +1043,19 @@ class TasksViewModel: ObservableObject {
       mergedOrder[index] = reorderedID
     }
     return mergedOrder
+  }
+
+  /// Keep a debounce-time reorder authoritative for rows that the active store
+  /// cache does not contain (for example, a Done task or a search result from a
+  /// later page). Newly loaded rows are appended in their current order, so a
+  /// stale pending sequence can never hide them from later persistence.
+  nonisolated static func persistedTaskIDs(reorderedIDs: [String]?, currentIDs: [String]) -> [String] {
+    var seenIDs = Set<String>()
+    var result: [String] = []
+    for id in (reorderedIDs ?? []) + currentIDs where seenIDs.insert(id).inserted {
+      result.append(id)
+    }
+    return result
   }
 
   /// Move a task to first position in category
@@ -1290,7 +1322,13 @@ class TasksViewModel: ObservableObject {
     var updates: [SortOrderUpdate] = []
 
     for category in TaskCategory.allCases {
-      let orderedTasks = getFullOrderedTasks(for: category)
+      let currentTasks = getFullOrderedTasks(for: category)
+      let currentTasksByID = Dictionary(lastWriteWins: currentTasks.map { ($0.id, $0) })
+      let orderedTaskIDs = Self.persistedTaskIDs(
+        reorderedIDs: pendingReorderOrders[category],
+        currentIDs: currentTasks.map(\.id)
+      )
+      let orderedTasks = orderedTaskIDs.compactMap { currentTasksByID[$0] }
       // Category bands: today=[0,100k), tomorrow=[100k,200k), later=[200k,300k),
       // noDeadline=[300k,400k). Spacing is derived from the per-category count so a
       // large category never overflows its band (BL-016); see TasksViewModel.sortOrder.
