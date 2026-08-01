@@ -169,6 +169,30 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertEqual(Set(persisted).count, persisted.count, "persistence must not create duplicate sort-order updates")
   }
 
+  func testSuccessfulCommitClearsOnlyTheSnapshotItPersisted() {
+    // A reorder snapshot is needed through its SQLite/backend write, but must
+    // not survive a successful commit: a later indent/reorder would otherwise
+    // prepend it and overwrite an order just received from another device.
+    // If another drag replaces the snapshot while the first write awaits I/O,
+    // retain that newer order for its own sync.
+    let pending: [TaskCategory: [String]] = [
+      .today: ["new-a", "new-b"],
+      .tomorrow: ["tomorrow-a"],
+    ]
+    let committed: [TaskCategory: [String]] = [
+      .today: ["old-a", "old-b"],
+      .tomorrow: ["tomorrow-a"],
+    ]
+
+    let remaining = TasksViewModel.removingCommittedReorderOrders(
+      pending,
+      committedOrders: committed
+    )
+
+    XCTAssertEqual(remaining[.today], ["new-a", "new-b"], "a newer drag must keep its snapshot")
+    XCTAssertNil(remaining[.tomorrow], "the successfully committed snapshot must be cleared")
+  }
+
   /// BL-030 regression guard: `moveTask` must fan the reorder out to every mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the

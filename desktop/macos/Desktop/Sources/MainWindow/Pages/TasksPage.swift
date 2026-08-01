@@ -530,8 +530,15 @@ class TasksViewModel: ObservableObject {
   /// The exact canonical sequence produced by the most recent drag in each
   /// category. It survives the debounce window so persistence uses the same
   /// displayed scope as the drop, including Done/search rows that are not in
-  /// the first incomplete-task cache page.
+  /// the first incomplete-task cache page. A committed snapshot is removed as
+  /// soon as its SQLite and backend writes both succeed, so a later action
+  /// cannot replay it over a newer cross-device refresh.
   private var pendingReorderOrders: [TaskCategory: [String]] = [:]
+  /// The exact reorder snapshots that produced `pendingSortOrderUpdates` after
+  /// a failed write. Retaining this separately lets a retry clear only the
+  /// snapshot it actually committed, never a newer drag that occurred while it
+  /// was awaiting I/O.
+  private var pendingReorderOrdersForRetry: [TaskCategory: [String]] = [:]
   var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
   private var cancellables = Set<AnyCancellable>()
@@ -693,6 +700,7 @@ class TasksViewModel: ObservableObject {
     suppressOrderingPersistence = false
     pendingSortOrderUpdates = []
     pendingReorderOrders = [:]
+    pendingReorderOrdersForRetry = [:]
     sortOrderSyncFailure = nil
     suppressDatabaseRequery = false
     suppressRequeryGeneration &+= 1
@@ -1058,6 +1066,21 @@ class TasksViewModel: ObservableObject {
     return result
   }
 
+  /// Remove only reorder snapshots that were included in a successful write.
+  /// A new drag can start while SQLite or the backend is awaited, so comparing
+  /// values rather than clearing the dictionary wholesale preserves that newer
+  /// drag for its own sync.
+  nonisolated static func removingCommittedReorderOrders(
+    _ pendingOrders: [TaskCategory: [String]],
+    committedOrders: [TaskCategory: [String]]
+  ) -> [TaskCategory: [String]] {
+    var remainingOrders = pendingOrders
+    for (category, committedOrder) in committedOrders where remainingOrders[category] == committedOrder {
+      remainingOrders.removeValue(forKey: category)
+    }
+    return remainingOrders
+  }
+
   /// Move a task to first position in category
   func moveTaskToFirst(_ task: TaskActionItem, inCategory category: TaskCategory) {
     moveTask(task, toIndex: 0, inCategory: category)
@@ -1314,8 +1337,13 @@ class TasksViewModel: ObservableObject {
         recomputeAllCaches()
       }
     }
+    let committedReorderOrders = pendingReorderOrders
     let updates = collectSortOrderUpdates()
-    await syncSortOrderUpdates(updates, lease: lease)
+    await syncSortOrderUpdates(
+      updates,
+      lease: lease,
+      committedReorderOrders: committedReorderOrders
+    )
   }
 
   private func collectSortOrderUpdates() -> [SortOrderUpdate] {
@@ -1345,7 +1373,11 @@ class TasksViewModel: ObservableObject {
     return updates
   }
 
-  private func syncSortOrderUpdates(_ updates: [SortOrderUpdate], lease: OwnerLease) async {
+  private func syncSortOrderUpdates(
+    _ updates: [SortOrderUpdate],
+    lease: OwnerLease,
+    committedReorderOrders: [TaskCategory: [String]] = [:]
+  ) async {
     guard !updates.isEmpty, isCurrent(lease) else { return }
 
     var storageErrorDescription: String?
@@ -1383,11 +1415,16 @@ class TasksViewModel: ObservableObject {
     guard isCurrent(lease) else { return }
     if storageErrorDescription == nil, backendErrorDescription == nil {
       clearSortOrderSyncFailure()
+      pendingReorderOrders = Self.removingCommittedReorderOrders(
+        pendingReorderOrders,
+        committedOrders: committedReorderOrders
+      )
     } else {
       recordSortOrderSyncFailure(
         storageErrorDescription: storageErrorDescription,
         backendErrorDescription: backendErrorDescription,
-        updates: updates
+        updates: updates,
+        committedReorderOrders: committedReorderOrders
       )
     }
   }
@@ -1395,9 +1432,11 @@ class TasksViewModel: ObservableObject {
   func recordSortOrderSyncFailure(
     storageErrorDescription: String?,
     backendErrorDescription: String?,
-    updates: [SortOrderUpdate]
+    updates: [SortOrderUpdate],
+    committedReorderOrders: [TaskCategory: [String]] = [:]
   ) {
     pendingSortOrderUpdates = updates
+    pendingReorderOrdersForRetry = committedReorderOrders
     sortOrderSyncFailure = TaskSortOrderSyncFailure(
       storageErrorDescription: storageErrorDescription,
       backendErrorDescription: backendErrorDescription
@@ -1406,6 +1445,7 @@ class TasksViewModel: ObservableObject {
 
   private func clearSortOrderSyncFailure() {
     pendingSortOrderUpdates = []
+    pendingReorderOrdersForRetry = [:]
     sortOrderSyncFailure = nil
   }
 
@@ -1414,6 +1454,7 @@ class TasksViewModel: ObservableObject {
     guard let lease = captureOwnerLease() else { return nil }
     sortOrderSyncTask?.cancel()
     let updates = pendingSortOrderUpdates
+    let committedReorderOrders = pendingReorderOrdersForRetry
     let task = Task { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
       if updates.isEmpty {
@@ -1432,7 +1473,11 @@ class TasksViewModel: ObservableObject {
           self.recomputeAllCaches()
         }
       }
-      await self.syncSortOrderUpdates(updates, lease: lease)
+      await self.syncSortOrderUpdates(
+        updates,
+        lease: lease,
+        committedReorderOrders: committedReorderOrders
+      )
     }
     sortOrderSyncTask = task
     return task
