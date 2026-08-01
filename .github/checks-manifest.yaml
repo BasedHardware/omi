@@ -275,6 +275,11 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: windows-sync-pr-retirement-contract
+    command: ["python3", ".github/scripts/test_retire_superseded_sync_prs.py"]
+    triggers: [".github/workflows/desktop_windows_release.yml", ".github/scripts/retire_superseded_sync_prs.py", ".github/scripts/test_retire_superseded_sync_prs.py"]
+    lanes: ["local", "ci"]
+    reason: "#10727: the Windows release sync-PR cleanup must retain the current PR, only close same-repo release/windows-v* heads, and never block the release"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
