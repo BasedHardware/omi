@@ -132,7 +132,7 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
         #if canImport(MWDATDisplay)
             private var display: MWDATDisplay.Display?
-            private var displayStateTask: Task<Void, Never>?
+            private var displayStateToken: AnyListenerToken?
         #endif
 
         func initialize() throws {
@@ -458,12 +458,8 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                 let capability = try session.addDisplay()
                 display = capability
 
-                displayStateTask?.cancel()
-                displayStateTask = Task { [weak self] in
-                    for await state in capability.stateStream() {
-                        guard let self = self else { return }
-                        self.emitDisplayState(Self.normalizeDisplayState(state))
-                    }
+                displayStateToken = capability.statePublisher.listen { [weak self] state in
+                    self?.emitDisplayState(Self.normalizeDisplayState(state))
                 }
 
                 capability.start()
@@ -474,12 +470,8 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
         func detachDisplay() throws {
             #if canImport(MWDATDisplay)
-                displayStateTask?.cancel()
-                displayStateTask = nil
                 display?.stop()
-                if let capability = display {
-                    try? session?.removeDisplay(capability)
-                }
+                displayStateToken = nil
                 display = nil
                 emitDisplayState("detached")
             #endif
@@ -530,10 +522,9 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
             private static func normalizeDisplayState(_ state: DisplayState) -> String {
                 switch state {
-                case .started: return "ready"
                 case .starting: return "attaching"
-                case .stopped: return "detached"
-                default: return "error"
+                case .started: return "ready"
+                case .stopping, .stopped: return "detached"
                 }
             }
         #endif
