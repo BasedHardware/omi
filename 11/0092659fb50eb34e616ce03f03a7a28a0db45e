@@ -1,0 +1,47 @@
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeRouterTests.swift
+  s_d60bd669afaade::t_09450e7b9b1946 65
+  s_d60bd669afaade::t_daf6e9146c88c7 14-38,45-50,54-57
+  s_d60bd669afaade::t_e08cec5927615e 103-115,121,127,136,145-149,154
+  s_d60bd669afaade::t_cfbfd809b4232c 232-240
+  s_d60bd669afaade::t_8a845026f88aa1 229
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeHandoffTests.swift
+  s_d60bd669afaade::t_a1f5bd88dbabb0 189-198,200-203,207-221
+  s_d60bd669afaade::t_eab991ebe2af47 39-40
+  s_d60bd669afaade::t_268897fe2bfb7e 187-188,199,204-206
+  s_d60bd669afaade::t_252fec95d46fe9 222
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_d60bd669afaade::t_089cca0e6e2ef7 196
+  s_d60bd669afaade::t_86cfac8774f26f 77-83,85
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_d60bd669afaade::t_ec86e025ac6297 405
+  s_d60bd669afaade::t_5b5e8fe6a844a2 347-352
+  s_d60bd669afaade::t_0da67bd48b9a29 309-322
+  s_d60bd669afaade::t_13142012f7aab7 353
+desktop/context-for-claude/Sources/ContextApp/Search/ClaudeRouter.swift
+  s_d60bd669afaade::t_7c414b30446a52 367-369
+  s_d60bd669afaade::t_38ae5b63996c02 106-107
+  s_d60bd669afaade::t_cf2b9789755edb 56-89,92-97
+  s_d60bd669afaade::t_a15011a75ba591 140-141,143-146,152-153,156
+  s_d60bd669afaade::t_ead78a26631b30 227-229,231-233,241,249,253,255,258
+  s_d60bd669afaade::t_446f3d8e8200c8 173
+  s_d60bd669afaade::t_f19a7986f15b8d 14-17
+  s_d60bd669afaade::t_d0bc5c0e96f2b6 206-208,215
+desktop/context-for-claude/docs/first-run-experience.md
+  s_d60bd669afaade::t_b745476672ff17 212-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "110092659fb50eb34e616ce03f03a7a28a0db45e",
+  "prompts": {},
+  "sessions": {
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
