@@ -2317,7 +2317,7 @@ final class DesktopAutomationActionRegistry {
       summary: "List current floating agent pills with status, provider, and activity"
     ) { _ in
       let listing = await MainActor.run {
-        AgentPillsManager.shared.manage(action: "list", agentId: nil)
+        AgentPillsManager.shared.statusSummary()
       }
       return ["pills": listing]
     }

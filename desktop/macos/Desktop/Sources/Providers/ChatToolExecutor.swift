@@ -1112,7 +1112,24 @@ class ChatToolExecutor {
     let action = ((args["action"] as? String) ?? "list")
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
+    let manager = AgentPillsManager.shared
+    switch action.lowercased() {
+    case "list", "status", "":
+      return manager.statusSummary()
+    case "dismiss":
+      guard let agentId, !agentId.isEmpty else {
+        return "Missing agent_id. Call get_task_agent_status first and pass the floating_agent_pills id."
+      }
+      return manager.dismiss(pillIdString: agentId)
+        ? "Dismissed floating agent pill \(agentId)."
+        : "No floating agent pill matched \(agentId)."
+    case "clear_completed":
+      let count = manager.completedPillCount()
+      manager.clearCompleted()
+      return "Cleared \(count) completed floating agent pill(s)."
+    default:
+      return "Unknown action. Use list, dismiss, or clear_completed."
+    }
   }
 
   private static func executeSetupAgentProvider(
