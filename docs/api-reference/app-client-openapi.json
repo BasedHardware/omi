@@ -4647,6 +4647,7 @@
             "items": {
               "type": "string"
             },
+            "maxItems": 100,
             "title": "Conversation Ids",
             "type": "array"
           }
@@ -14005,6 +14006,7 @@
             "items": {
               "type": "string"
             },
+            "maxItems": 50,
             "minItems": 2,
             "title": "Conversation Ids",
             "type": "array"
@@ -16972,6 +16974,7 @@
             "items": {
               "type": "string"
             },
+            "maxItems": 100,
             "title": "Message Ids",
             "type": "array"
           }
