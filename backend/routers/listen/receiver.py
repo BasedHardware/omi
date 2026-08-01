@@ -37,6 +37,8 @@ from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
+from utils.byok import get_byok_key
+from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from utils.stt.live_failure import (
     flush_live_stt_buffer,
     live_stt_initialization_failure,
@@ -327,12 +329,21 @@ class ListenReceiver:
     async def _process_photo(self, image_b64: str, temporary_id: str) -> None:
         photo_id = str(uuid.uuid4())
         await self.host.asend_event(PhotoProcessingEvent(temp_id=temporary_id, photo_id=photo_id))
-        try:
-            description = await describe_image(self.host.request.uid, image_b64)
-            discarded = not description or not description.strip()
-        except Exception as error:
-            logger.error('Image description failed type=%s', type(error).__name__)
-            description, discarded = 'Could not generate description.', True
+        # Custom-STT sessions without an LLM BYOK key must not incur Omi-paid LLM
+        # spend (same gate as post-processing, #7690): store the photo without a
+        # generated description instead of calling describe_image.
+        if should_skip_custom_stt_postprocessing(
+            uses_custom_stt=self.host.use_custom_stt,
+            has_llm_byok_key=bool(get_byok_key('openai') or get_byok_key('anthropic')),
+        ):
+            description, discarded = 'Custom STT: photo description skipped (no LLM BYOK key).', False
+        else:
+            try:
+                description = await describe_image(self.host.request.uid, image_b64)
+                discarded = not description or not description.strip()
+            except Exception as error:
+                logger.error('Image description failed type=%s', type(error).__name__)
+                description, discarded = 'Could not generate description.', True
         self.host.transcripts.photo_buffer.append(
             ConversationPhoto(id=photo_id, base64=image_b64, description=description, discarded=discarded)
         )
