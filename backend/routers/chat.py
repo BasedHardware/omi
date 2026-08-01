@@ -46,7 +46,7 @@ from models.chat import (
     DeviceToolResultResponse,
 )
 from utils.apps import get_available_app_by_id
-from utils.device_tools import store_device_tool_result
+from utils.device_tools import UnknownDeviceToolCall, store_device_tool_result
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
@@ -497,11 +497,24 @@ def submit_device_tool_result(
     The awaiting tool coroutine may be on a different worker than this request,
     so the result is handed over through Redis rather than an in-process future.
     The key is scoped by uid, so one user cannot answer another user's call.
+
+    A result is only accepted for a call that is actually in flight for this uid.
+    Without that check the endpoint is a write primitive: an authenticated caller
+    could invent call ids and park an oversized value in shared Redis for each
+    one, at the full rate limit, for the length of the TTL.
     """
     if not call_id or len(call_id) > 100:
         raise HTTPException(status_code=400, detail='Invalid call_id')
 
-    store_device_tool_result(uid, call_id, data.result)
+    try:
+        store_device_tool_result(uid, call_id, data.result)
+    except ValueError:
+        raise HTTPException(status_code=413, detail='Device tool result too large')
+    except UnknownDeviceToolCall:
+        # 404 rather than 409: to a caller that never made this call, it does not
+        # exist. The same answer covers an expired call and an invented one, so
+        # this cannot be used to probe which calls are in flight.
+        raise HTTPException(status_code=404, detail='No such in-flight device tool call')
     # Whether a coroutine was still waiting is deliberately not reported: it
     # would let a caller probe which calls are in flight, and a late result is
     # harmless because the tool has already returned its timeout.

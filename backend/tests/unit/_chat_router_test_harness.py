@@ -148,6 +148,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     )
     transcription_observability.TranscriptionAttempt = MagicMock
 
+    fallback_observability = install('utils.observability.fallback', ModuleType('utils.observability.fallback'))
+    fallback_observability.record_fallback = MagicMock()
+
     rate_limit = install('utils.rate_limit_config', ModuleType('utils.rate_limit_config'))
     rate_limit.get_effective_limit = MagicMock(return_value=(100, 60))
     rate_limit.RATE_LIMIT_SHADOW = False
