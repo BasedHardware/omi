@@ -539,7 +539,7 @@ routes:
   - route_type: http
     method: GET
     path: /v1/conversations/{conversation_id}/finalization
-    policy:
+    policy: &speaker_suggestion_policy
       review_status: reviewed
       auth:
         mechanisms:
@@ -559,6 +559,14 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}/accept
+    policy: *speaker_suggestion_policy
+  - route_type: http
+    method: DELETE
+    path: /v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}
+    policy: *speaker_suggestion_policy
   - route_type: http
     method: DELETE
     path: /v1/goals/{goal_id}/focus

@@ -906,6 +906,129 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+PERSON_NAME_ID_PROBES = 4
+"""How many deterministic id slots a name may occupy before falling back to uuid4.
+
+A slot is only skipped when it already holds a *different* name, which happens
+after a rename frees the seed of the old name for reuse. Four slots means four
+independent renames of the same name would have to pile up before the
+non-deterministic fallback is reached.
+"""
+
+
+def person_name_identity_key(name: str) -> str:
+    """The one notion of person-name identity: `name.strip().casefold()`.
+
+    Callers building name maps out of `get_people` already used this rule, and
+    `get_person_by_name` matches a stored name exactly, which this key subsumes.
+    Route every name comparison through here so a third rule cannot appear.
+    """
+    return name.strip().casefold()
+
+
+def person_name_document_id(uid: str, name_key: str, probe: int = 0) -> str:
+    """Deterministic people-document id for a normalized name identity key.
+
+    The id is a SHA-256 digest reshaped as a UUID, so it is opaque: it neither
+    reads back as the name nor distinguishes itself from the uuid4 ids existing
+    Person documents already use. `probe` selects an alternate slot for the rare
+    case where the natural slot is held by a different name.
+    """
+    suffix = '' if probe == 0 else f':{probe}'
+    return document_id_from_seed(f"user:{uid}:person_name:{name_key}{suffix}")
+
+
+@transactional
+def _resolve_person_by_name_transaction(transaction, person_ref, name: str, name_key: str):
+    """Claim one deterministic name slot, atomically.
+
+    Returns `(person, created)` when this slot belongs to `name_key`, and
+    `(None, False)` when it is held by some other name so the caller can probe
+    the next slot. The read and the create share one transaction, so two
+    concurrent resolvers of the same unseen name contend rather than both
+    writing: the loser retries, re-reads the winner's document, and returns it.
+    """
+    snapshot = person_ref.get(transaction=transaction)
+    if snapshot.exists:
+        existing = snapshot.to_dict() or {}
+        existing.setdefault('id', snapshot.id)
+        if person_name_identity_key(str(existing.get('name') or '')) != name_key:
+            return None, False
+        return existing, False
+
+    now = datetime.now(timezone.utc)
+    person_data = {
+        'id': person_ref.id,
+        'name': name,
+        'created_at': now,
+        'updated_at': now,
+    }
+    transaction.create(person_ref, person_data)
+    return person_data, True
+
+
+def get_or_create_person_by_name(uid: str, name: str) -> tuple[dict, bool]:
+    """Resolve a person by name, creating one only if no existing person matches.
+
+    Returns `(person, created)`. This is the primitive to use instead of
+    `get_people` -> casefold map -> `uuid.uuid4()` -> `create_person`, which is a
+    read-then-create race: two conversations finishing at once for the same
+    previously unknown name each miss, each coin their own uuid4, and each write,
+    leaving two Person documents for one human and two voiceprint targets.
+
+    The mechanism is a deterministic document id derived from the normalized name
+    (see `person_name_document_id`) plus a transaction over that id. A name maps
+    to one document path, so concurrent resolvers collide on a single Firestore
+    document instead of inventing two, and the transaction turns that collision
+    into a retry that returns the winner's record. A transaction alone would not
+    do: without a shared id there is no document for the two passes to contend
+    over, and Firestore has no unique index to serialize a name query against.
+
+    Existing uuid4-keyed people stay authoritative. Resolution scans `get_people`
+    by `person_name_identity_key` first, so a legacy record, or one whose name was
+    edited, is found and reused; the deterministic id is only ever consulted when
+    that scan finds nothing, and never rewrites an existing document.
+
+    On rename, the person keeps its document id — `update_person` writes only the
+    `name` field — so the id no longer matches the seed of the name it holds, and
+    the old name's slot is now stale. Both cases are handled by matching the
+    stored name inside the transaction: the renamed person is still found by the
+    name scan under its new name, and a later person genuinely named the old name
+    sees the slot held by a different name and takes the next probe slot rather
+    than adopting the stranger's record. Slot exhaustion falls back to uuid4,
+    which is the pre-existing behaviour and no worse than it.
+    """
+    normalized = name.strip()
+    name_key = person_name_identity_key(normalized)
+    if not name_key:
+        raise ValueError('person name must not be blank')
+
+    for person in get_people(uid):
+        if person_name_identity_key(str(person.get('name') or '')) == name_key:
+            return person, False
+
+    people_ref = db.collection('users').document(uid).collection('people')
+    for probe in range(PERSON_NAME_ID_PROBES):
+        person_ref = people_ref.document(person_name_document_id(uid, name_key, probe))
+        person, created = _resolve_person_by_name_transaction(db.transaction(), person_ref, normalized, name_key)
+        if person is not None:
+            return person, created
+
+    now = datetime.now(timezone.utc)
+    return (
+        create_person(
+            uid,
+            {
+                'id': str(uuid.uuid4()),
+                'name': normalized,
+                'created_at': now,
+                'updated_at': now,
+            },
+        ),
+        True,
+    )
+
+
 SPEECH_SAMPLE_ATTRIBUTION_USER_TAGGED = 'user_tagged'
 
 SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'

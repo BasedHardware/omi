@@ -16,9 +16,7 @@ stays distinguishable from one the user confirmed by hand.
 
 import logging
 import os
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from utils.executors import db_executor, llm_executor, run_blocking
@@ -108,27 +106,26 @@ async def _resolve_person_id(uid: str, name: str, known: Dict[str, Optional[str]
     A name already in ``known`` is never coined a second time, even when it
     maps to ``None`` for a collision: an ambiguous contact resolves to nothing
     rather than to a new duplicate of itself.
+
+    Creation goes through ``get_or_create_person_by_name`` rather than reading
+    the roster and coining a uuid, because two conversations for one user can
+    finish at once: both would miss the same unseen name, both would coin, and
+    the user would end up with two records for one human and a voiceprint on
+    each. That helper makes the name select the document, so the second caller
+    contends for it instead of duplicating it.
     """
     from database import users as users_db
 
     key = name.casefold()
     if key in known:
         return known[key]
-    person_id = str(uuid.uuid4())
     try:
-        await run_blocking(
-            db_executor,
-            users_db.create_person,
-            uid,
-            {
-                'id': person_id,
-                'name': name,
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc),
-            },
-        )
+        person, _ = await run_blocking(db_executor, users_db.get_or_create_person_by_name, uid, name)
     except Exception as e:
         logger.error('Speaker resolution could not create person %s: %s %s', sanitize_pii(name), e, uid)
+        return None
+    person_id = person.get('id')
+    if not isinstance(person_id, str) or not person_id:
         return None
     known[key] = person_id
     return person_id

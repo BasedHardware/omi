@@ -7,6 +7,11 @@ speaker -- and produces suggestions only. A second, independent model call then
 tries to refute each suggestion, and only the survivors are assigned and
 enrolled, so these also pin down that a refusal, or a verifier that breaks,
 leaves the pass at suggestion-only.
+
+``utils.llm.usage_tracker`` is imported here rather than inside the one test
+that needs it: the pass imports it lazily, so whichever test called the pass
+first paid a third of a second of import in its call phase and tripped the
+fast-unit CPU guard. Importing at collection puts that cost where it belongs.
 """
 
 import sys
@@ -15,6 +20,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from utils.conversations.speaker_resolution import MAX_VERIFICATIONS_PER_CONVERSATION, verify_suggestions
+from utils.llm.usage_tracker import Features, get_current_context
 from utils.speaker_resolution import (
     RejectionReason,
     ResolvedSpeaker,
@@ -429,6 +435,11 @@ def resolution_pass(monkeypatch):
     Stubs the two database modules it reaches for and captures the arguments
     ``apply_plan`` is handed, which is where the verified/unverified split
     becomes the difference between an enrolment and a suggestion.
+
+    ``run_blocking`` runs inline rather than dispatching to the real db and llm
+    pools: the stubs it would carry there do no blocking work, so the only
+    thing the hand-off buys is thread startup, which put this file over the
+    fast-unit CPU guard.
     """
     module = sys.modules['utils.conversations.speaker_resolution']
 
@@ -450,6 +461,10 @@ def resolution_pass(monkeypatch):
             enrolled=['person-1'] if assignments else [],
         )
 
+    async def inline_run_blocking(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(module, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(module, 'apply_plan', fake_apply_plan)
     monkeypatch.setattr(
         module,
@@ -568,13 +583,17 @@ def write_path(monkeypatch):
     users = ModuleType('database.users')
     setattr(users, 'get_people', lambda uid: list(state['people']))
 
-    def create_person(uid, data):
+    def get_or_create_person_by_name(uid, name):
         if state['create_error']:
             raise state['create_error']
+        for person in state['people']:
+            if person['name'].strip().casefold() == name.strip().casefold():
+                return person, False
+        data = {'id': f'person-{len(state["created"]) + 1}', 'name': name}
         state['created'].append(data)
-        return data
+        return data, True
 
-    setattr(users, 'create_person', create_person)
+    setattr(users, 'get_or_create_person_by_name', get_or_create_person_by_name)
     setattr(users, 'delete_person', lambda uid, person_id: state['deleted'].append(person_id))
 
     identification = ModuleType('utils.speaker_identification')
@@ -878,8 +897,6 @@ class TestUsageIsAttributed:
     """Both model calls bill a feature and a user, not ``unknown``/``other``."""
 
     def test_the_proposal_and_refutation_calls_carry_a_usage_context(self, stub_verifier, resolution_pass, monkeypatch):
-        from utils.llm.usage_tracker import Features, get_current_context
-
         stub_verifier.behaviour['fn'] = lambda **kwargs: SimpleNamespace(refuted=False, reason='states own name')
         seen = []
 
