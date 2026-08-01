@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2536,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2520,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2663,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4918,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2807,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift": 1500,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1658
   },
   "raise_justifications": {
@@ -13,8 +13,8 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The live-suggestion notch card, hover shortcut legend, Second Brain onboarding, reach-error, and notch-moment UI are distinct overlay branches; the visible, centered 21pt notch voice morph must remain frontmost through the flatline-to-waveform transition so capture dots cannot be clipped by notch chrome. The reducer-owned speaking projection (showingNotchSpeaking) threads through the always-mounted mark so response playback can pulse the ring without a second voice state.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership. Reusing the existing owner-scoped, TTL-bounded notification store to hand the last notch card to a voice follow-up needs a read-only accessor and a shared builder here; the builder also carries untrusted-context framing because card bodies and provenance are assembled from screen OCR and memories. Live Suggestions records opaque evaluation/suggestion IDs only at the actual card presentation boundary, so the delivery funnel cannot count an unshown notification.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499). Setup and both PTT entry points then warm the CoreAudio input-routing snapshot off the main thread so turn start never reads the HAL inline (BasedHardware/omi#10442). Warm mic keep-alive parks a finished turn's capture behind a lock-guarded lease so the next turn reuses the CoreAudio IOProc instead of rebuilding it; the lease and park/adopt state must live beside the capture generation counter they guard (port of BasedHardware/omi#9181).",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift": "Extracted realtime session lifecycle boundaries retain the canonical convergence and provider-schema handoff ownership.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext confirms the provider send before returning true (exactly-once: no ack before delivery), the session emits hubDidOpenInputWindow so a warm-idle completion is retried, and URLSession is invalidated on transport teardown via an explicit backing optional to break the delegate retain cycle \u2014 all beside the file-private send/turn machinery."
   },
   "threshold": 1500
