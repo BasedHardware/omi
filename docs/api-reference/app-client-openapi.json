@@ -9679,6 +9679,19 @@
         "title": "DeviceToolResultRequest",
         "type": "object"
       },
+      "DeviceToolResultResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DeviceToolResultResponse",
+        "type": "object"
+      },
       "DismissAnnouncementRequest": {
         "description": "Request body for dismissing an announcement.",
         "properties": {
@@ -54196,7 +54209,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceToolResultResponse"
+                }
               }
             },
             "description": "Successful Response"
