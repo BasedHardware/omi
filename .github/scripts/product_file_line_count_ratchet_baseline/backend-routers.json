@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/routers/apps.py": 2464,
+    "backend/routers/apps.py": 2482,
     "backend/routers/chat.py": 1645,
     "backend/routers/developer.py": 2282,
     "backend/routers/mcp_sse.py": 1894,
@@ -9,7 +9,7 @@
     "backend/routers/payment.py": 1608
   },
   "raise_justifications": {
-    "backend/routers/apps.py": "Admin gate hardening, unauthenticated MCP-callback state consumption, install-count and review install checks, and SSRF-wrapping the setup-completed fetch all belong to the routes that own those contracts.",
+    "backend/routers/apps.py": "App-authored manifest text is pinned by hash at approval and escaped before it reaches a prompt or a tool schema, so a post-approval manifest swap is detected.",
     "backend/routers/chat.py": "Transcription budget no longer silently skipped when a file's duration cannot be parsed; the charge decision belongs to the route that admits the upload.",
     "backend/routers/developer.py": "Developer memory create and batch routes must record their accepted write result at the authoritative API boundary; the shared dev-only allowlisted serializer/exporter lives in testing.parity_pack_v0.live_capture.",
     "backend/routers/mcp_sse.py": "Token revocation now enforced on the MCP sign-in path, which previously let a revoked token mint a 365-day OAuth grant.",

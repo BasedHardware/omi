@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -40,7 +41,15 @@ class ChecksManifestShrinkRatchetTests(unittest.TestCase):
         self.temp.cleanup()
 
     def git(self, *args: str) -> None:
-        subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True, encoding="utf-8")
+        # Git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into hook processes, and this
+        # suite runs under the pre-push hook. Inheriting them makes the fixture's `git
+        # init` resolve against the real repository instead of the temp dir, so `commit`
+        # invokes the repo's own pre-commit hook against a tree that has no scripts/ and
+        # fails. Scrub them so the fixture is genuinely self-contained.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        subprocess.run(
+            ["git", *args], cwd=self.root, check=True, capture_output=True, encoding="utf-8", env=env
+        )
 
     def write_manifest(self, ids: list[str]) -> None:
         (self.root / RATCHET.MANIFEST_RELATIVE).write_text(manifest_text(ids), encoding="utf-8")

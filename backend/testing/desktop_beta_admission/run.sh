@@ -31,6 +31,14 @@ else
   exit 1
 fi
 node_major="$($node_bin -p 'process.versions.node.split(".")[0]')"
+
+# The emulator runs from a temp working directory, so the repo's node_modules/.bin
+# is no longer resolvable from cwd and `npx` falls through to PATH, where firebase
+# does not exist -> "sh: firebase: command not found". Put the repo-local bin on
+# PATH explicitly so the pinned firebase-tools is found regardless of cwd.
+if [[ -d "$repo_root/node_modules/.bin" ]]; then
+  export PATH="$repo_root/node_modules/.bin:$PATH"
+fi
 if [[ "$node_major" -lt 22 ]]; then
   echo "Firestore emulator prerequisite missing: Node 22+ is required (found $($node_bin --version))." >&2
   exit 1

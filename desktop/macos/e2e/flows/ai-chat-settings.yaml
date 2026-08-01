@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowEdgeWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentManager.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentToolConsent.swift
 preconditions:
   - automation_bridge_ready
 
