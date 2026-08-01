@@ -156,6 +156,66 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   }
 
   @MainActor
+  func testFirstExportAppliesCompletedState() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [.fixture(id: "item-1", description: "Buy milk", completed: true)],
+        syncedItems: []
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: try makeExportJournal()
+    ).syncReminders()
+
+    let reminder = try XCTUnwrap(store.remindersByID["stub-reminder-1"])
+    XCTAssertEqual(result.exported, 1)
+    XCTAssertTrue(reminder.isCompleted)
+    XCTAssertNotNil(reminder.completionDate)
+  }
+
+  @MainActor
+  func testMissingDefaultCalendarStillReconcilesSyncedItems() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    _ = store.makeReminder(id: "reminder-linked", title: "Linked task", completed: false)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [.fixture(id: "item-new", description: "Needs a list")],
+        syncedItems: [
+          .fixture(
+            id: "item-linked",
+            description: "Linked task",
+            completed: true,
+            appleReminderId: "reminder-linked",
+            updatedAt: "2026-08-01T12:00:00Z"
+          ),
+          .fixture(id: "item-gone", description: "Deleted elsewhere", appleReminderId: "missing-reminder"),
+        ]
+      )
+    )
+    store.lastModifiedByID["reminder-linked"] = Date(timeIntervalSince1970: 1)
+
+    do {
+      _ = try await AppleEventKitReaderService(
+        eventStore: store, remindersSync: sync, exportJournal: try makeExportJournal()
+      ).syncReminders()
+      XCTFail("Expected missing default calendar to fail after reconciliation")
+    } catch {
+      XCTAssertEqual(
+        error as? AppleEventKitReaderError,
+        .readFailed(.reminders, "No writable reminders list is available.")
+      )
+    }
+
+    let reminder = try XCTUnwrap(store.remindersByID["reminder-linked"])
+    XCTAssertTrue(reminder.isCompleted)
+    XCTAssertEqual(sync.deletedIDs, ["item-gone"])
+    XCTAssertFalse(sync.syncBatches.flatMap { $0 }.contains { $0.id == "item-new" })
+  }
+
+  @MainActor
   func testJournaledExportAppliesLatestPendingFieldsBeforeAck() async throws {
     let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
     store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())

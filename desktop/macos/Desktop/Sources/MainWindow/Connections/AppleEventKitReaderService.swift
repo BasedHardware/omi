@@ -333,10 +333,9 @@ final class AppleEventKitReaderService {
 
     exportJournal.retain(itemIDs: Set(pending.pendingExport.map(\.id)))
 
+    var missingDefaultCalendarForExport = false
     if !pending.pendingExport.isEmpty {
-      guard let calendar = eventStore.defaultCalendarForNewReminders() else {
-        throw AppleEventKitReaderError.readFailed(.reminders, "No writable reminders list is available.")
-      }
+      let calendar = eventStore.defaultCalendarForNewReminders()
       // Journal the EventKit identifier before the ack and acknowledge each
       // export immediately after its commit, so neither a mid-batch network
       // failure nor a failed ack can re-create an already-persisted reminder.
@@ -371,10 +370,16 @@ final class AppleEventKitReaderService {
             }
           }
         } else {
+          guard let calendar else {
+            missingDefaultCalendarForExport = true
+            continue
+          }
           let reminder = eventStore.newReminder()
           reminder.title = item.description_
           reminder.notes = "From Omi"
           reminder.calendar = calendar
+          reminder.isCompleted = item.completed
+          reminder.completionDate = item.completed ? Date() : nil
           if let dueAt = item.dueAt.flatMap(Self.parseDate) {
             reminder.dueDateComponents = Calendar.current.dateComponents(
               [.year, .month, .day, .hour, .minute], from: dueAt)
@@ -467,6 +472,9 @@ final class AppleEventKitReaderService {
 
     try await remindersSync.syncAppleReminders(updates)
     for id in deletedIDs { try await remindersSync.deleteSyncedActionItem(id: id) }
+    if missingDefaultCalendarForExport {
+      throw AppleEventKitReaderError.readFailed(.reminders, "No writable reminders list is available.")
+    }
     return AppleRemindersSyncResult(
       total: max(0, exported + pending.syncedItems.count - deletedIDs.count),
       exported: exported,
