@@ -227,19 +227,15 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (response != null) {
-        // Snapshot server IDs before we assign/mutate the list — otherwise
-        // _actionItems.removeWhere() would alias response.actionItems and
-        // retire tombstones prematurely.
+        // Snapshot server IDs before filtering so tombstone retirement is
+        // based on the full server response, not the filtered subset.
         final serverIds = response.actionItems.map((e) => e.id).toSet();
-        _actionItems = response.actionItems;
-        // Suppress re-insertion of items with a pending/in-flight deletion.
-        // Without this, any background refresh (foreground resume, shared-task
-        // accept, toggle completed, date-range change) that fires while the
-        // server delete is in flight would re-fetch the still-present document
-        // and overwrite the optimistic removal.
-        if (_pendingDeletionIds.isNotEmpty) {
-          _actionItems.removeWhere((item) => _pendingDeletionIds.contains(item.id));
-        }
+        // Filter into a new list rather than mutating response.actionItems
+        // in-place: the response list may be unmodifiable, and aliasing it
+        // would also retire tombstones prematurely.
+        _actionItems = _pendingDeletionIds.isEmpty
+            ? response.actionItems
+            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         // Lazily retire tombstones once the server confirms the item is gone:
         // any ID still tracked as pending-deletion that did not appear in the
         // fresh server response can be cleared, because subsequent refreshes
