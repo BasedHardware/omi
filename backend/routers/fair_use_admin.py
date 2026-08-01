@@ -120,6 +120,8 @@ def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> st
     return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
 
 
+# Public alias: other routers depend on this admin gate, so it needs a non-private name.
+verify_admin_key = _verify_admin_key
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------

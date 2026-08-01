@@ -160,7 +160,7 @@ def _ip(instance: dict[str, Any]) -> str:
 async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str, auth_token: str) -> str:
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{_ZONE}/instances"
     startup = f"#!/bin/bash\ncurl -sf https://storage.googleapis.com/{bucket}/startup.sh -o /tmp/omi-startup.sh && bash /tmp/omi-startup.sh\n"
-    body = {
+    body: dict[str, Any] = {
         "name": vm_name,
         "machineType": f"zones/{_ZONE}/machineTypes/e2-small",
         "disks": [

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 import database.action_items as action_items_db
 from database import redis_db
-from routers.fair_use_admin import _verify_admin_key
+from routers.fair_use_admin import verify_admin_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.other.endpoints import get_current_user_uid
@@ -246,7 +246,7 @@ def _sentry_poll_skip(reason: str, sentry_status: int | None = None) -> dict[str
 
 
 @router.post("/v1/webhooks/sentry/poll")
-async def sentry_poll(admin_id: str = Depends(_verify_admin_key)) -> dict[str, object]:
+async def sentry_poll(admin_id: str = Depends(verify_admin_key)) -> dict[str, object]:
     uid = os.getenv("SENTRY_ADMIN_UID")
     token = os.getenv("SENTRY_AUTH_TOKEN")
     if not uid or not token:
