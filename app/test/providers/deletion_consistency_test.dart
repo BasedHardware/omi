@@ -287,7 +287,6 @@ void main() {
     test('tombstone is lazily cleared once the server confirms deletion', () async {
       final deleted = _item('task-3');
 
-      var fetchCall = 0;
       var staleMode = false;
       final provider = newProvider(
         fetcher: (
@@ -297,7 +296,6 @@ void main() {
             String? conversationId,
             DateTime? startDate,
             DateTime? endDate}) async {
-          fetchCall++;
           // In stale mode the server still returns the deleted item; once
           // cleared, the server response omits it.
           if (staleMode) {
