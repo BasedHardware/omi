@@ -22,6 +22,7 @@ from utils.subscription import has_transcription_credits, is_paid_plan
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.fair_use_classifier import classify_user_purpose
 from utils.notifications import send_notification
+from utils.observability.fallback import record_fallback
 
 # Patchable lazy-held callables keep tests at a production seam without using
 # in-function imports. Both imported modules are import-pure and construct their
@@ -610,6 +611,18 @@ def normalize_expired_restriction_state(
     # safe toward expiry: clear the restriction instead of keeping it forever.
     if restrict_until is not None and effective_now <= restrict_until:
         return normalized_state
+    if restrict_until is None:
+        # Malformed stored timestamp: the restriction is being cleared even though
+        # we cannot prove it expired. Surface the silent healing so recurrence of
+        # corrupted fair-use state is observable in ops telemetry (#10948).
+        record_fallback(
+            component='other',
+            from_mode='restrict',
+            to_mode='throttle',
+            reason='malformed_doc',
+            outcome='recovered',
+            log=logger,
+        )
 
     fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
     invalidate_enforcement_cache(uid)

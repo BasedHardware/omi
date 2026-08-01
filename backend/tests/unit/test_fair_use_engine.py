@@ -33,6 +33,11 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    # The record_fallback patch is applied per-test (see
+    # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
+    # it cannot leak into other test classes.
+    yield
+    monkeypatch.undo()
 
 
 class TestRecordSpeechMs:
@@ -760,6 +765,8 @@ class TestNormalizeExpiredRestrictionState:
     def setup_method(self):
         _fair_use_db.update_fair_use_state.reset_mock()
         _fair_use_db.invalidate_enforcement_cache.reset_mock()
+        self._record_fallback = MagicMock()
+        fair_use_mod.record_fallback = self._record_fallback
 
     def _state(self, stage='restrict', restrict_until=None):
         return {'stage': stage, 'restrict_until': restrict_until}
@@ -778,6 +785,8 @@ class TestNormalizeExpiredRestrictionState:
         assert result['stage'] == 'throttle'
         assert result['restrict_until'] is None
         _fair_use_db.update_fair_use_state.assert_called_once_with('uid', {'stage': 'throttle', 'restrict_until': None})
+        # A legitimate expiry is normal operation, not a silent heal.
+        self._record_fallback.assert_not_called()
 
     def test_expired_iso_string_restriction_clears(self):
         """A string timestamp (older write / admin import) must still expire —
@@ -797,6 +806,15 @@ class TestNormalizeExpiredRestrictionState:
         )
         assert result['stage'] == 'throttle'
         assert result['restrict_until'] is None
+        # The malformed-timestamp heal must be observable, not silent.
+        self._record_fallback.assert_called_once_with(
+            component='other',
+            from_mode='restrict',
+            to_mode='throttle',
+            reason='malformed_doc',
+            outcome='recovered',
+            log=fair_use_mod.logger,
+        )
 
     def test_utc_z_suffix_string_restriction_is_kept_while_active(self):
         future = (self.NOW + timedelta(hours=2)).isoformat().replace('+00:00', 'Z')
