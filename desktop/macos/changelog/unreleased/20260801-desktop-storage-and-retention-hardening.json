@@ -1,0 +1,3 @@
+{
+  "change": "Omi now actually deletes what its retention setting promises, frees disk space when you lower it, stops recording instead of filling your drive, and keeps its log out of a shared folder"
+}

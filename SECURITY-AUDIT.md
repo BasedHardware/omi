@@ -4,6 +4,12 @@ Multi-agent audit of the whole repo at `upstream/main` (`6c4d752b2f`), plus the 
 applied on this branch. Nothing here originates from a feature PR; all of it is on `main`
 today.
 
+Two rounds so far. **Round 1** (sections 1–3) covered authz, transport, secrets, storage
+ACLs, local RCE, and mobile. **Round 2** (section 5) applied lenses round 1 never used —
+dependencies, concurrency, billing abuse, resource exhaustion, crypto, the web tier, the
+Windows app, and fail-open patterns — and found more than round 1 did, including the single
+most expensive bug in the repo. Rounds continue until one produces no new HIGH or CRITICAL.
+
 **Read the "Not fixed" section before deploying anything.** Several of the worst findings
 need an infra or product decision, not a code change, and two of the applied fixes require
 env vars to be set *before* they roll out or they will take features down.
@@ -349,3 +355,136 @@ Numbers are list-price `us-central1` and assume 30% DAU at ~3h/day; the per-user
 (1 GB average) is the weakest input and is worth measuring on a real install before anyone
 commits to a plan. No pruning exists for `transcription_segments` or `observations`, and
 there is no `VACUUM` anywhere, so the DB file only ever ratchets up to its high-water mark.
+
+---
+
+## 5. Round 2 — fixed on this branch
+
+Different lenses from round 1. Everything below is now fixed unless marked otherwise.
+
+### 5.1 Money
+
+| | Finding |
+|---|---|
+| CRITICAL | **`backend/routers/desktop_proxy.py` — a one-line binding error made the daily cap unreachable.** `check_rate_limit` returns `(allowed, remaining, retry_after)`; the code bound `_, current, _` and then tested `current > _DAILY_HARD_LIMIT`. `current` was actually `remaining`, which starts at 1499 and counts *down*, so `> 1500` was never true. The 1,500/day Gemini cap was dead code and the real ceiling was the 30/60s burst limit — **43,200 requests/day per free account on Omi's key**. The same inversion ran the pro→flash cost downgrade backwards. |
+| CRITICAL | `/v1/omni/relay` — a realtime LLM websocket relay on the platform OpenAI key with no quota, no rate policy, no connection cap, no session timer, and no usage recording. ~$4–6/hour per socket, unbounded sockets. Capped; **per-token metering is still missing** (it needs protocol-aware parsing of the upstream stream). |
+| CRITICAL | `/v2/realtime/session` minted OpenAI realtime client secrets with no expiry — usable directly against OpenAI, bypassing Omi entirely, so the spend is invisible until the invoice. Now bounded and quota-gated. `/v2/realtime/usage` accounting remains **client-self-reported** and trivially skipped; that needs provider-side reconciliation. |
+| HIGH | Client picked its own Stripe `price_id` with no membership check, and `LEGACY_PRICE_MAP` accepted retired prices — subscribe at the old $19.99 tier, receive current entitlements. |
+| HIGH | Paid-app entitlement was a 30-day Redis key with no revocation on refund, chargeback, or cancellation. Subscribe → enable → dispute → keep access. It also failed the other way: annual subscribers lost access on day 31. |
+| HIGH | `/v2/sync-local-files` took an unbounded `files[]` behind a single boolean pre-flight check — ~900 hours of audio and ~$230 of STT from one request. |
+| MEDIUM | Install counts and ratings were both inflatable (enable is not idempotent, reviews require no install), and both drive marketplace ranking. |
+
+### 5.2 Availability
+
+| | Finding |
+|---|---|
+| CRITICAL | **Quadratic regexes in `web_tools.py` blocked the event loop.** Three unanchored lazy `DOTALL` patterns run sequentially and synchronously inside `async def`, against a 512 KB fetch cap. Measured 7.4s at 140 KB, ~100s+ at the cap. Trigger: one chat message containing an attacker's URL — the agent prompt *instructs* the model to fetch any URL the user shares. A handful of messages is a full backend outage. Now 0.18s. |
+| CRITICAL | Limitless ZIP import read members with no decompressed-size cap — 100 MB → ~103 GB, in-process in the API container. The correct bounded-ZIP pattern already existed in this repo and had not been applied. |
+| CRITICAL | Agent-VM upload's decompressed cap equalled its compressed cap, so a ~10 MB request drove 10 GB (~1000:1). |
+| CRITICAL | MCP batch endpoint charged one rate-limit token for an unbounded array — a ~100,000× bypass. |
+| HIGH | `/v1/tools/conversations` allowed `limit=5000` into a photo N+1 → 5,001 Firestore round trips, unrate-limited. The photo-free query already existed. |
+| HIGH | `multipart.py` raised the per-part cap for file parts but left non-file fields on the raised cap with `max_fields` defaulted to 1000 — a 200 GB ceiling. The helper that exists to *protect* uploads was what unlocked the amplification. |
+| HIGH | Unbounded user-supplied ID lists drove one Firestore query per element; the shared-chat read leg is **unauthenticated**, making it a durable anonymous amplifier. |
+| MEDIUM | Quadratic inline-code regex on every push-notification body: 21s at 100 KB, in a sync handler holding a threadpool slot. Now 0.000s. |
+
+### 5.3 Fail-open
+
+| | Finding |
+|---|---|
+| CRITICAL | **agent-proxy stored "enhanced protection" chat in plaintext.** It read `ENCRYPTION_SECRET` with a default of `''` and, when unset, wrote plaintext *and relabelled the record `'standard'`* so nothing downstream could tell. The prod Helm chart never injected that secret — this was the shipped production configuration, not a hypothetical. It is a fork of `utils/encryption.py` with that file's fail-closed guard converted to a fail-open one. |
+| HIGH | `decrypt()` returned its own input on any exception, **including a GCM authentication-tag failure** — so tampering was indistinguishable from success, and a wrong key silently turned every read into a base64 blob that could then be re-persisted as content. |
+| HIGH | `data_protection_level` accepted and persisted `'e2ee'`, but no write path encrypts for it — the strongest-sounding setting stored fully plaintext. |
+| HIGH | ~20 admin endpoints used `secret_key != os.getenv('ADMIN_KEY')`. Unset is safe; **set-to-empty authenticated any empty header**, and the prod ExternalSecret materialises empty when the remote secret is absent. `POST /v2/desktop/releases` writes the auto-update manifest. |
+| MEDIUM | `_enforce_rate_limit(..., fail_closed=False)` — the insecure value was the default, and the third-party surfaces (MCP, marketplace integrations) took the default. A Redis blip made them unmetered. |
+| MEDIUM | The voice-duration Lua script registered once at import; Redis down at import meant that pod served **unmetered transcription for its entire lifetime**, long after Redis recovered. |
+| MEDIUM | The transcription budget was skipped entirely when a file's duration could not be parsed — strip the duration metadata and every upload was free. |
+
+### 5.4 Web
+
+| | Finding |
+|---|---|
+| CRITICAL | **`personas /api/store-facts` was unauthenticated** and took `uid` from the request body, then wrote memories into that account using the server's privileged integration key. Anyone could inject memories into any Omi user's memory bank — which then feed that user's assistant. Persistent prompt injection, at scale, with no credential. `/api/enable-plugins` had the same shape plus Redis key injection. |
+| HIGH | `uploadThumbnails` is a public Next server action that fetched a client-supplied URL with no validation and never checked the token first — SSRF to `169.254.169.254` from the frontend service. |
+| HIGH | JSON-LD used `JSON.stringify` inside `dangerouslySetInnerHTML`, which does not escape `<`/`>`; developer-submitted app metadata could break out of the script tag on the public marketplace pages. With the Firebase token in localStorage and no `script-src` CSP anywhere, that is account takeover. |
+| HIGH | `markdown-to-jsx` passes raw `<script>` through; it rendered LLM and third-party-app content on the public shared-conversation page. |
+| MEDIUM | The admin Firebase ID token was persisted to localStorage inside SWR cache keys and never cleared on sign-out; admin payout responses were marked publicly cacheable. |
+
+### 5.5 Client
+
+| | Finding |
+|---|---|
+| CRITICAL | **`Logger.swift` — a local write primitive.** The production log was `/tmp/omi.log`. The permission-normalisation helper correctly returned `false` when it could not remove an attacker-owned file in sticky `/tmp`, **but the caller never checked the result**, then used `fileExists` + `FileHandle` — both of which follow symlinks. Another local account could read the entire app log, or make Omi append to and create any path the victim can write (`~/.zshenv`, a LaunchAgent plist) as the victim. Moved to `~/Library/Logs/Omi` (0700/0600, `O_NOFOLLOW`, fstat owner check), failing closed, with rotation. |
+| HIGH | **Windows: persistent renderer→RCE.** `agentCommands` came from the renderer over IPC *and was read from localStorage*, then reached `spawn(command, { shell: true })`. One write to that origin's storage was persistent code execution, re-run on every agent turn. Moved to main-process settings. |
+| HIGH | **`TaskAgentSettings` read its skip-permissions flag as `?? true`** — deliberately permissive when unset, unlike every other flag in the same initializer. A fresh install ran Claude with `--dangerously-skip-permissions` in a process holding Full Disk Access, driven by prompts built from screen OCR. This is the same defect round 1 fixed inside the agent VM, still live on the desktop. |
+| HIGH | **A 429 made `AgentSyncService` retry *faster* than a 500 would.** Only 5xx triggered backoff; 4xx left the interval pinned at the 3-second base, re-POSTing the same rejected batch forever — 3 req/s per client, 259k/day. A server-side rate limiter physically could not shed the load. |
+| HIGH | `TranscriptionService` did not re-check `shouldReconnect` after awaiting the auth token, so an authenticated socket carrying the user's BYOK Deepgram key could open **after** the user hit stop, with no handle to close it. No jitter and no close-code inspection either — the Windows client of the same product already had both, with a comment naming macOS as the un-jittered reference. |
+| HIGH | `stopCapture()` snapshotted a stale IOProc, so a device change racing stop could leave the microphone live with the OS indicator lit and `isCapturing == false` — meaning every later stop was gated off. |
+| HIGH | **Retention was largely fictional.** Three retention functions existed with zero call sites; `observations` used `onDelete: .setNull` so they survived the screenshot sweep forever; synced transcription sessions were never aged out; WAL audio was only swept for `.synced` entries and only from inside `syncToCloud`, so a signed-out or offline user accumulated ~30 MB/h indefinitely; retention only ran from the frame-ingest path, so it stopped exactly when capture stopped — including when the disk filled; and with no `VACUUM` or `auto_vacuum`, lowering the retention setting reclaimed zero bytes. Nothing checked free space before any write, and corrupt-DB recovery needed 3× the DB size with a fatal copy, so a full disk could crash-loop the app on a database it could neither open nor recycle. |
+| — | **Data loss, not security:** the Trash cleanup deleted every entry whose lowercased name merely *contained* `"omi"` — `domino.pdf`, `comic.png`, `economics.xlsx` — unrecoverably. |
+
+### 5.6 Dependencies
+
+Patched: `cryptography` 46.0.7 → 48.0.1 in agent-proxy (GHSA-537c-gmf6-5ccf, vulnerable
+OpenSSL statically linked into the wheel — and this is the TLS-terminating proxy);
+`tornado` → 6.5.7, `soupsieve` → 2.8.4, `python-multipart` → 0.0.31, `ujson` → 5.13.0 in
+`plugins/` and `mcp/examples/`. Four mutable git refs in `app/pubspec.yaml` pinned to SHAs —
+three shipped mobile codec components tracked branches on a **personal, non-org** GitHub
+account and one had no `ref` at all, so it followed that fork's default HEAD into our builds.
+
+**The real finding is drift.** In four separate cases the same package was already patched in
+one of the repo's ~60 hand-copied `requirements.txt` files and stale in another. Fixing the
+mechanism (a `uv` workspace — the tooling is already vendored) is worth more than fixing the
+four instances.
+
+**Still outstanding, each needs its own PR:**
+
+- **`websockets` 12.0 → 15.x.** This *blocks* the `langsmith` 0.8.5 → 0.8.18 fix
+  (GHSA-f4xh-w4cj-qxq8, arbitrary server-side file read): from 0.8.6 onward langsmith
+  requires `websockets>=15.0`, and the backend pins 12.0. Note `backend/openapi-requirements.txt`
+  already pins *both* `langsmith==0.8.18` and `websockets==12.0` — an unsatisfiable
+  combination that only survives because that file has no solver-verified lock.
+- **Electron 39.8.10** — EOL since 2026-05-05, four majors behind, so every Chromium CVE
+  disclosed since then is permanently unpatched in a shipped desktop app. Top outstanding
+  dependency risk. Native-ABI migration (`better-sqlite3`, `koffi`).
+- **Starlette 0.49.3 → 1.3.1** — five advisories, two HIGH. CVE-2026-54283 (form limits
+  silently ignored for urlencoded bodies) is genuinely reachable: `POST /token` in
+  `backend/routers/auth.py:545` is the unauthenticated OAuth token endpoint and is exactly
+  the vulnerable shape. Needs a coordinated FastAPI major bump.
+
+### 5.7 Round 2 — found but NOT fixed
+
+- **`resolveAcpPermission` auto-approves with `allow_always`** (`desktop-tool-policy.ts:304`)
+  — still the widest single exposure, and documented as intentional, so it is a product call.
+- **`RewindSettings` is still unsynchronized.** The password-manager screenshot-exclusion gate
+  is a `@Published Set<String>` on a `nonisolated(unsafe)` singleton read from actors. The two
+  `TaskAssistant` call sites now hop to the MainActor, but making the type `@MainActor` cascades
+  into ~15 files across four other subsystems (`VideoChunkEncoder` and `RewindIndexer` read it
+  from *synchronous* members inside actors, so it is a signature change, not an `await`).
+- **Screen OCR is still unencrypted in Firestore** while transcripts, memories, and chat are
+  encrypted — needs a backfill migration.
+- **Mobile still has no secure storage and no certificate pinning**; `flutter_secure_storage`
+  is not a dependency at all.
+- **`OPENAI_API_KEY` and `GOOGLE_CLIENT_SECRET` are still compiled into the mobile binary**
+  by CI, contradicting the repo's own `client_env_policy.yaml`. Rotate if any published build
+  carried them.
+- **Firestore/Redis counters fail open individually**, which is defensible per-counter but
+  means one Redis degradation removes nearly all cost controls at once.
+- **No zero-retention configuration on any model or transcription provider.**
+- **Idempotency gaps** remain on the integration-webhook conversation-create path and the
+  Limitless import (a redelivery duplicates conversations, action items, and real
+  third-party tasks).
+
+### 5.8 Additional deploy-ordering notes from round 2
+
+- **`ENCRYPTION_SECRET` must exist in `prod-omi-backend-secrets` before the agent-proxy chart
+  is applied.** agent-proxy now raises at import, so a missing or short value is a
+  CrashLoopBackOff instead of a silent plaintext write. The pusher chart already reads the
+  same key from the same secret.
+- **`ADMIN_KEY` must be non-empty in every environment**, or all admin routes — including
+  desktop release publishing — now 403 instead of accepting an empty header.
+- **Phone-call quota and the MCP/integration/relay rate limits now fail closed**, so a Redis
+  outage blocks those paths rather than going unmetered. Worth an alert.
+- **Desktop retention now actually deletes**, so users will see historical derived data
+  disappear on first run after upgrade, and existing databases get a one-time full `VACUUM`
+  the first time a sweep leaves >20% of the file free.
+- **Capture stops below 2 GB free** instead of filling the disk.
