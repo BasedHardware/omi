@@ -49,6 +49,7 @@
 		433B391DCC48F1EA64996624 /* PhoneMicConverterPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */; };
 		44E6D3550DDAC81C6ADF09ED /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		4C63D0133E38DE51BA55148C /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = E640392A2909606360520801 /* MWDATCamera */; };
+		A1D5093E7C40B1EE2F730AB4 /* MWDATDisplay in Frameworks */ = {isa = PBXBuildFile; productRef = B7C21A6F45E093DD18274C33 /* MWDATDisplay */; };
 		4D351AE1E3C89CD45ADBC99C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		515BEA34860AB5238B369C52 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
@@ -326,6 +327,7 @@
 				715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */,
 				3E200B606D3D02BFEF213BF1 /* MWDATCore in Frameworks */,
 				4C63D0133E38DE51BA55148C /* MWDATCamera in Frameworks */,
+				A1D5093E7C40B1EE2F730AB4 /* MWDATDisplay in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,6 +567,7 @@
 			packageProductDependencies = (
 				F954EF7C37697F83E05F20D8 /* MWDATCore */,
 				E640392A2909606360520801 /* MWDATCamera */,
+				B7C21A6F45E093DD18274C33 /* MWDATDisplay */,
 			);
 			productName = Runner;
 			productReference = 8AF672E55033617EF994D1BD /* Runner.app */;
@@ -3087,6 +3090,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATCamera;
+		};
+		B7C21A6F45E093DD18274C33 /* MWDATDisplay */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATDisplay;
 		};
 		F954EF7C37697F83E05F20D8 /* MWDATCore */ = {
 			isa = XCSwiftPackageProductDependency;
