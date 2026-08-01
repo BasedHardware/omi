@@ -43,6 +43,7 @@ import { agentControlCapabilityManifest } from "../agent/src/runtime/control-too
 import { discoverSkillCatalog, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
+  modelVisibleDescription,
   toolNamesForAdapter,
   toolsForAdapter,
 } from "../agent/src/runtime/omi-tool-manifest.ts";
@@ -1067,7 +1068,7 @@ test("OMI_TOOLS: all tools preserve canonical pi-mono projection metadata and sc
     const tool = OMI_TOOLS.find((candidate) => candidate.name === canonicalTool.name);
     assert.ok(tool, `${canonicalTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, canonicalTool.label, `${canonicalTool.name} label drifted`);
-    assert.equal(tool!.description, canonicalTool.description, `${canonicalTool.name} description drifted`);
+    assert.equal(tool!.description, modelVisibleDescription(canonicalTool), `${canonicalTool.name} description drifted`);
     assert.equal(tool!.promptSnippet, canonicalTool.promptSnippet, `${canonicalTool.name} promptSnippet drifted`);
     assert.deepEqual(tool!.promptGuidelines ?? [], canonicalTool.promptGuidelines ?? [], `${canonicalTool.name} promptGuidelines drifted`);
     assert.deepEqual(
@@ -1247,7 +1248,7 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
     const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
     assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
-    assert.equal(tool!.description, manifestTool.description, `${manifestTool.name} description drifted`);
+    assert.equal(tool!.description, modelVisibleDescription(manifestTool), `${manifestTool.name} description drifted`);
     assert.equal(tool!.promptSnippet, manifestTool.promptSnippet, `${manifestTool.name} promptSnippet drifted`);
     assert.deepEqual(tool!.promptGuidelines ?? [], manifestTool.promptGuidelines, `${manifestTool.name} promptGuidelines drifted`);
     assert.deepEqual(

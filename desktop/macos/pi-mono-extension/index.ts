@@ -35,6 +35,8 @@ import { dirname, join, resolve } from "node:path";
 import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
+  modelVisibleDescription,
+  toolManifestEntry,
   toolNamesForAdapter,
   toolsForAdapter,
   type OmiToolInputSchema,
@@ -679,7 +681,7 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
   return omiTool({
     name: tool.name,
     label: tool.label,
-    description: tool.description,
+    description: modelVisibleDescription(tool),
     promptSnippet: tool.promptSnippet,
     promptGuidelines: tool.promptGuidelines,
     properties: typeBoxPropertiesForInputSchema(tool.inputSchema),
@@ -689,10 +691,11 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
 }
 
 function loadSkillTool() {
+  const loadSkill = toolManifestEntry("load_skill");
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: modelVisibleDescription(loadSkill!),
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
       name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
@@ -720,10 +723,11 @@ function loadSkillTool() {
 }
 
 function searchSkillsTool() {
+  const searchSkillsEntry = toolManifestEntry("search_skills");
   return defineTool({
     name: "search_skills",
     label: "Search Skills",
-    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    description: modelVisibleDescription(searchSkillsEntry!),
     promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
     promptGuidelines: [
       "Use only when the current user request plausibly needs a specialized workflow.",

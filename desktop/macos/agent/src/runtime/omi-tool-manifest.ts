@@ -1620,13 +1620,28 @@ export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[]
   return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
 }
 
+/**
+ * Model-visible tool description. The manifest keeps the short authored
+ * `description` and the fuller capabilityDoc bullets separate; tool
+ * definitions must carry both so per-tool guidance is sent exactly once,
+ * through the tool definition, and is never dropped when a system prompt
+ * stops restating capability docs. Bullets already covered by the authored
+ * description or promptGuidelines are not repeated.
+ */
+export function modelVisibleDescription(tool: OmiToolManifestEntry): string {
+  const covered = [tool.description, ...(tool.promptGuidelines ?? [])].join("\n");
+  const uniqueBullets = tool.capabilityDoc.bullets.filter((bullet) => !covered.includes(bullet));
+  if (uniqueBullets.length === 0) return tool.description;
+  return [tool.description, ...uniqueBullets].join("\n");
+}
+
 export function mcpToolDefinitionsForAdapter(
   adapterId: "omi-tools-stdio",
   context: OmiToolProjectionContext = {},
 ): Array<{ name: string; description: string; inputSchema: OmiMcpToolInputSchema }> {
   return toolsForAdapter(adapterId, context).map((tool) => ({
     name: tool.adapters[adapterId]?.adapterName ?? tool.name,
-    description: tool.description,
+    description: modelVisibleDescription(tool),
     inputSchema: tool.mcpInputSchema ?? tool.inputSchema,
   }));
 }
