@@ -7,6 +7,43 @@ import WebKit
 extension SettingsContentView {
   var gmailReaderSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Email account selection
+      settingsCard(settingId: "advanced.gmail.account") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.crop.circle.badge.checkmark")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Email account")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text(gmailAccountSummary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Button(action: {
+            Task { await probeGmailAccounts() }
+          }) {
+            if isProbingGmailAccounts {
+              ProgressView()
+                .scaleEffect(0.7)
+                .frame(width: 70, height: 22)
+            } else {
+              Text("Choose…")
+                .scaledFont(size: OmiType.body, weight: .medium)
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(isProbingGmailAccounts)
+        }
+      }
+
       // Read Gmail button
       settingsCard(settingId: "advanced.gmail.read") {
         HStack(spacing: OmiSpacing.lg) {
@@ -107,6 +144,54 @@ extension SettingsContentView {
         }
       }
     }
+    .sheet(isPresented: $showingGmailAccountPicker) {
+      GmailAccountPickerView(
+        accounts: gmailAccounts,
+        selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+        hasMadeChoice: GmailSelectionStore.hasMadeChoice,
+        onSelect: { cookiePath, label in
+          selectGmailAccount(cookiePath, label: label)
+        },
+        onCancel: { showingGmailAccountPicker = false }
+      )
+    }
+  }
+
+  var gmailAccountSummary: String {
+    let label = GmailSelectionStore.selectedAccountLabel
+    return label.isEmpty ? "Automatic — first readable browser account" : label
+  }
+
+  func probeGmailAccounts() async {
+    guard !isProbingGmailAccounts else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    do {
+      let accounts = try await GmailAccountProbe.availableAccounts()
+      guard !accounts.isEmpty else {
+        gmailReadError = "No readable Gmail accounts found."
+        return
+      }
+      gmailAccounts = accounts
+      showingGmailAccountPicker = true
+    } catch {
+      // Surface the failure instead of silently treating every probe error as
+      // an empty success: this is the sole Settings entry point for changing
+      // the account.
+      gmailReadError = UserFacingErrorPresentation.message(
+        for: error, while: .integration("Gmail"))
+    }
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    // The previous account's read results no longer describe the newly
+    // selected profile; reset them so the page cannot label one account while
+    // showing another's emails.
+    gmailEmails = []
+    gmailLastFetched = nil
+    gmailMemoriesSaved = 0
   }
 
   func readGmail() async {

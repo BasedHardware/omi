@@ -120,6 +120,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published private(set) var gmailInsightsFailed = false
   @Published private(set) var calendarInsightsFailed = false
   @Published private(set) var appleNotesInsightsFailed = false
+  @Published var gmailAccounts: [GmailAccountOption] = []
+  @Published var isProbingGmailAccounts = false
+  @Published var showingGmailAccountPicker = false
+  @Published var gmailAwaitingSelection = false
+  private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -842,6 +847,70 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
+  func loadGmailAccounts() async {
+    guard gmailAccounts.isEmpty else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    guard let accounts = try? await GmailAccountProbe.availableAccounts() else { return }
+    gmailAccounts = accounts
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
+  }
+
+  private func awaitGmailAccountSelectionIfNeeded() async {
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    let accounts: [GmailAccountOption]
+    do {
+      accounts = try await GmailAccountProbe.availableAccounts()
+    } catch {
+      // Probe failure is not "zero or one account": a transient failure would
+      // otherwise silently fall back to the first readable profile — the
+      // exact junk-account behavior this feature exists to prevent. Fall back
+      // to the automatic default but record the fail-open.
+      log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      return
+    }
+    // Re-check after the probe: the user may have picked an account from the
+    // manual picker while the probe was still running, before this waiter
+    // exists. Installing a continuation after a choice is already persisted
+    // would suspend the gmail task forever.
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    guard accounts.count > 1 else { return }
+    gmailAccounts = accounts
+    gmailAwaitingSelection = true
+    // Surface the picker automatically; nothing else ever reacts to
+    // gmailAwaitingSelection, so without this the gmail background task would
+    // suspend forever and onboarding research would never finish.
+    showingGmailAccountPicker = true
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        gmailSelectionWaiter = continuation
+      }
+    } onCancel: {
+      Task { @MainActor in
+        self.resumeGmailSelection()
+      }
+    }
+  }
+
+  private func resumeGmailSelection() {
+    guard let waiter = gmailSelectionWaiter else { return }
+    gmailSelectionWaiter = nil
+    gmailAwaitingSelection = false
+    waiter.resume()
+  }
+
+  /// Dismissing the picker without a choice must not strand the gmail
+  /// background task: fall back to the automatic (first readable) account.
+  func cancelGmailAccountSelection() {
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
+  }
+
   func startBackgroundInsightsIfNeeded() async {
     guard !insightsStarted else { return }
     insightsStarted = true
@@ -864,6 +933,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     gmailTask = Task {
       await googleInsightGate.waitForCalendar()
+      guard !Task.isCancelled else { return }
+      await self.awaitGmailAccountSelectionIfNeeded()
       guard !Task.isCancelled else { return }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
