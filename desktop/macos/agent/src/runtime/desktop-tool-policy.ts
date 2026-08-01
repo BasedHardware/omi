@@ -14,6 +14,7 @@ export type DesktopCoordinatorBundle =
   | "desktop.automation.act"
   | "desktop.contacts.read"
   | "desktop.messaging.read"
+  | "desktop.mail.read"
   | "desktop.messaging.send"
   | "desktop.permissions.request"
   | "external.write_prepare"
@@ -85,6 +86,10 @@ const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);
 const AUTOMATION_READ_TOOLS = new Set(["check_permission_status"]);
 const CONTACTS_READ_TOOLS = new Set(["search_contacts"]);
 const MESSAGING_READ_TOOLS = new Set(["list_message_chats", "read_message_history"]);
+// Mail headers name who is writing to the user and about what. That is the
+// same class of disclosure as a message thread, so it takes the same durable
+// approval rather than riding along as an ordinary local read.
+const MAIL_READ_TOOLS = new Set(["list_mail_messages"]);
 const MESSAGING_SEND_TOOLS = new Set(["send_message"]);
 // Production actuation, unlike `act_dev_only`: allowed in release bundles but
 // never without a dispatch or an unexpired scoped grant.
@@ -140,6 +145,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
   if (CONTACTS_READ_TOOLS.has(tool.name)) bundles.add("desktop.contacts.read");
   if (MESSAGING_READ_TOOLS.has(tool.name)) bundles.add("desktop.messaging.read");
+  if (MAIL_READ_TOOLS.has(tool.name)) bundles.add("desktop.mail.read");
   if (MESSAGING_SEND_TOOLS.has(tool.name)) bundles.add("desktop.messaging.send");
   if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act");
   if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
@@ -160,6 +166,7 @@ const SENSITIVE_BUNDLES: readonly DesktopCoordinatorBundle[] = [
   "desktop.automation.act_dev_only",
   "desktop.automation.act",
   "desktop.messaging.read",
+  "desktop.mail.read",
   "desktop.messaging.send",
   "desktop.permissions.request",
 ];

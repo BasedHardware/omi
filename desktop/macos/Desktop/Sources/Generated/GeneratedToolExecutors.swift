@@ -35,6 +35,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case searchContacts = "search_contacts"
   case listMessageChats = "list_message_chats"
   case readMessageHistory = "read_message_history"
+  case listMailMessages = "list_mail_messages"
   case sendMessage = "send_message"
   case runApplescript = "run_applescript"
 }
@@ -46,7 +47,7 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:282394e816e4365ee209b4a28c6f83f574fc82c1cc0e9a1e8b3de9c45a47f950"
+  static let manifestDigest = "sha256:1e16df48c4ddccb0c1ad8be408de2f0d813dea4861377bc4b52fb7a6bf65ae71"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -88,6 +89,7 @@ enum GeneratedToolExecutors {
     .searchContacts: .chatToolExecutor,
     .listMessageChats: .chatToolExecutor,
     .readMessageHistory: .chatToolExecutor,
+    .listMailMessages: .chatToolExecutor,
     .sendMessage: .chatToolExecutor,
     .runApplescript: .chatToolExecutor
   ]
@@ -149,6 +151,7 @@ enum GeneratedToolExecutors {
     case searchContacts
     case listMessageChats
     case readMessageHistory
+    case listMailMessages
     case sendMessage
     case runApplescript
     case unhandled
@@ -187,6 +190,7 @@ enum GeneratedToolExecutors {
     case .searchContacts: return .searchContacts
     case .listMessageChats: return .listMessageChats
     case .readMessageHistory: return .readMessageHistory
+    case .listMailMessages: return .listMailMessages
     case .sendMessage: return .sendMessage
     case .runApplescript: return .runApplescript
     default: return .unhandled

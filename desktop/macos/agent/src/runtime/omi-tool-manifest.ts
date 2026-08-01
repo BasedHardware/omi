@@ -676,6 +676,18 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ],
     ),
   },
+  list_mail_messages: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "List Mail Messages",
+      "List recent Apple Mail headers from the local envelope index.",
+      [
+        "Returns subject, sender, date, and read state — never message bodies.",
+        "Say the body is unavailable rather than inferring what a message said.",
+        "Requires Full Disk Access; returns a permission hint without it.",
+      ],
+    ),
+  },
   send_message: {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
@@ -1523,6 +1535,28 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Full Disk Access to read the Messages database."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "list_mail_messages",
+    label: "List Mail Messages",
+    description:
+      "List recent Apple Mail messages from the local envelope index, newest first. Returns subject, sender, date, and read/flagged/replied state only — never message bodies. Read-only.",
+    promptSnippet: "list_mail_messages - List recent Apple Mail headers",
+    promptGuidelines: [
+      "Use this to answer what is waiting in the user's inbox, who wrote, and what about.",
+      "Bodies are not available through this tool. Say so rather than guessing what a message said.",
+      "Summarize senders and subjects; quote a subject only when the user asked for it.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      limit: { type: "number", description: "Maximum messages to return (default 30, max 200)." },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires macOS Full Disk Access to read the Apple Mail index."],
     adapters: piAndStdio(),
   },
   {

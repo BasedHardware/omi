@@ -197,6 +197,40 @@ extension ChatToolExecutor {
     }
   }
 
+  // MARK: - Mail reads
+
+  static func executeListMailMessages(_ args: [String: Any]) async -> String {
+    let limit = boundedInt(args, "limit", default: 30)
+    do {
+      let messages = try await AppleMailReaderService.shared.readRecentMessages(limit: limit)
+      return deviceToolJSON([
+        "ok": true,
+        "count": messages.count,
+        // Headers only. Bodies live in .emlx files this reader never opens, and
+        // the tool description tells the model to say so rather than invent one.
+        "messages": messages.map { message in
+          [
+            "message_id": message.id,
+            "subject": message.subject,
+            "sender_address": message.senderAddress,
+            "sender_name": message.senderName,
+            "received_at": iso8601(message.receivedAt) ?? "",
+            "is_read": message.isRead,
+            "is_flagged": message.isFlagged,
+            "was_answered": message.wasAnswered,
+          ] as [String: Any]
+        },
+      ])
+    } catch let error as AppleMailReaderError {
+      return deviceToolFailure(
+        reason: error.reasonCode,
+        message: error.errorDescription ?? "Could not read the Apple Mail index.",
+        requiredPermission: error.requiredPermission)
+    } catch {
+      return deviceToolFailure(reason: "store_read_failed", message: error.localizedDescription)
+    }
+  }
+
   // MARK: - Messages send
 
   static func executeSendMessage(_ args: [String: Any]) async -> String {

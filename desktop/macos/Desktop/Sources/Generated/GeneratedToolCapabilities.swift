@@ -695,6 +695,21 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "list_mail_messages",
+      title: "List Mail Messages",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "List recent Apple Mail headers from the local envelope index.",
+      bullets: [
+      "Returns subject, sender, date, and read state — never message bodies.",
+      "Say the body is unavailable rather than inferring what a message said.",
+      "Requires Full Disk Access; returns a permission hint without it.",
+      "Use this to answer what is waiting in the user's inbox, who wrote, and what about.",
+      "Bodies are not available through this tool. Say so rather than guessing what a message said.",
+      "Summarize senders and subjects; quote a subject only when the user asked for it."
+    ]
+    ),
+    Capability(
       toolName: "send_message",
       title: "Send Message",
       latency: .fastLocal,

@@ -35,6 +35,22 @@ enum DeviceToolsProbe {
       detail["messagesClassification"] = "unexpected_error"
     }
 
+    // Same deliberately-absent-store treatment as the Messages read above, so
+    // the Mail classification is exercised without a real mailbox or FDA.
+    do {
+      let mail = try await AppleMailReaderService.shared.readRecentMessages(
+        limit: 5, storeOverride: URL(fileURLWithPath: absentStorePath))
+      detail["mailRead"] = "true"
+      detail["mailMessageCount"] = "\(mail.count)"
+    } catch let error as AppleMailReaderError {
+      detail["mailRead"] = "false"
+      detail["mailClassification"] = error.reasonCode
+      detail["mailRequiredPermission"] = error.requiredPermission ?? ""
+    } catch {
+      detail["mailRead"] = "false"
+      detail["mailClassification"] = "unexpected_error"
+    }
+
     do {
       _ = try MessagesSenderService.send(
         to: "+10000000000", text: "   ", service: .imessage, filePath: nil)

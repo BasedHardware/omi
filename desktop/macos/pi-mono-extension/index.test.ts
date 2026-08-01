@@ -1180,6 +1180,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     search_contacts: ["query"],
     list_message_chats: [],
     read_message_history: [],
+    list_mail_messages: [],
     send_message: ["to", "text"],
     run_applescript: ["script"],
   };
