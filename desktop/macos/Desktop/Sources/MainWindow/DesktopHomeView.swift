@@ -100,53 +100,63 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
-  var body: some View {
-    // Erase root shell branches so release type-checking stays bounded.
-    Group {
-      if authState.isRestoringAuth {
-        AnyView(
-          Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundPrimary)
-            .onAppear {
-              log("DesktopHomeView: Showing auth loading splash")
-            }
-        )
-      } else if authState.sessionPhase == .recoveryRequired {
-        AnyView(
-          SessionRecoveryView()
-            .onAppear {
-              log("DesktopHomeView: Showing recoverable auth state")
-            }
-        )
-      } else if !authState.isSignedIn {
-        AnyView(
-          SignInView(authState: authState)
-            .onAppear {
-              log("DesktopHomeView: Showing SignInView (not signed in)")
-            }
-        )
-      } else if !hasCompletedOnboardingAtAuthorityRead {
-        AnyView(
-          Group {
-            if shouldSkipOnboarding() {
-              Color.clear.onAppear {
-                log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
-                appState.hasCompletedOnboarding = true
-              }
-            } else {
-              SBOnboardingView(
-                appState: appState,
-                chatProvider: viewModelContainer.chatProvider,
-                importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
-                onComplete: nil
-              )
-              .onAppear {
-                log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
-              }
-            }
+  private var shouldShowAuthEntryShell: Bool {
+    authState.isRestoringAuth || authState.sessionPhase == .recoveryRequired || !authState.isSignedIn
+      || !hasCompletedOnboardingAtAuthorityRead
+  }
+
+  private var authEntryShell: AnyView {
+    if authState.isRestoringAuth {
+      return AnyView(
+        Color.clear
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(OmiColors.backgroundPrimary)
+          .onAppear {
+            log("DesktopHomeView: Showing auth loading splash")
           }
-        )
+      )
+    }
+    if authState.sessionPhase == .recoveryRequired {
+      return AnyView(
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
+      )
+    }
+    if !authState.isSignedIn {
+      return AnyView(
+        SignInView(authState: authState)
+          .onAppear {
+            log("DesktopHomeView: Showing SignInView (not signed in)")
+          }
+      )
+    }
+    if shouldSkipOnboarding() {
+      return AnyView(
+        Color.clear.onAppear {
+          log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
+          appState.hasCompletedOnboarding = true
+        }
+      )
+    }
+    return AnyView(
+      SBOnboardingView(
+        appState: appState,
+        chatProvider: viewModelContainer.chatProvider,
+        importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+        onComplete: nil
+      )
+      .onAppear {
+        log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
+      }
+    )
+  }
+
+  var body: some View {
+    Group {
+      if shouldShowAuthEntryShell {
+        authEntryShell
       } else if case .unresolved = chatFirstCapabilitySample.variant {
         // Hold the legacy shell until the server-authoritative cohort settles.
         AnyView(
