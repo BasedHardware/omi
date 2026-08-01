@@ -12,7 +12,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
@@ -767,11 +767,18 @@ def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
 
 
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
-    """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
+    """Parse a yyyy-mm-dd MCP argument into a UTC-anchored datetime, or None when absent.
+
+    Data stores (Firestore conversation ``created_at``/action-item ``due_at``, the vector
+    index, screen-activity timestamps) all operate in UTC. A naive parse would be
+    interpreted in the server's local timezone and shift the filter window by the UTC
+    offset, so anchor to UTC midnight (matching the integration-router convention).
+    """
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d")
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+        return parsed.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
@@ -1008,20 +1015,11 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
-        start_dt = None
-        end_dt = None
-        if start_date:
-            try:
-                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        if end_dt is not None:
+            # Include the entire end day, matching the integration-router convention.
+            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # Validate categories
         valid_categories: List[str] = []
@@ -1145,21 +1143,14 @@ def execute_tool(
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
-        # Parse dates to epoch for vector search
-        starts_at = None
-        ends_at = None
-        if start_date:
-            try:
-                starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        # Parse dates to epoch for vector search (UTC-anchored so the filter matches the
+        # vector index's UTC epoch created_at; end bound includes the full end day).
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        starts_at = int(start_dt.timestamp()) if start_dt is not None else None
+        if end_dt is not None:
+            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+        ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
         conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
         if not conversation_ids:
@@ -1238,6 +1229,9 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         due_start = _parse_mcp_date(arguments.get("due_start_date"), "due_start_date")
         due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
+        if due_end is not None:
+            # Include the entire end day, matching the integration-router convention.
+            due_end = due_end.replace(hour=23, minute=59, second=59, microsecond=999999)
         items = action_items_db.get_action_items(
             user_id,
             completed=completed,
