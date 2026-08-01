@@ -30,6 +30,10 @@ steps:
       result.detail.messagesClassification: "store_not_found"
       # store_not_found is not a permission problem, so no permission is named.
       result.detail.messagesRequiredPermission: ""
+      # The Mail index classifies the same way against the same absent path.
+      result.detail.mailRead: "false"
+      result.detail.mailClassification: "store_not_found"
+      result.detail.mailRequiredPermission: ""
       # An empty body must be rejected by validation, never forwarded to
       # Messages.app — this is what keeps the probe non-sending.
       result.detail.sendValidation: "empty_body"

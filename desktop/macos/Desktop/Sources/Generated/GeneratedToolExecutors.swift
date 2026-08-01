@@ -45,6 +45,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case searchContacts = "search_contacts"
   case listMessageChats = "list_message_chats"
   case readMessageHistory = "read_message_history"
+  case listMailMessages = "list_mail_messages"
   case sendMessage = "send_message"
   case runApplescript = "run_applescript"
   case createCanonicalGoal = "create_canonical_goal"
@@ -60,8 +61,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:3137159226ac41ec4f38b2b278886466762501b7b3b470c625f080079e451b6a"
-  static let chatFirstManifestDigest = "sha256:7c56c9305954b5fdcc28709d85d372a3c2c3b2c98807263a7761e0d75247fc72"
+  static let manifestDigest = "sha256:aa89611222e82a637ee4e326caf51a48bf0fd4c7cb185df14c8066b021f6e68e"
+  static let chatFirstManifestDigest = "sha256:17d52892dc4c04b32b3f97b8f9e8542fd6a9de4bc1e83f290fa613d04628aed5"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -113,6 +114,7 @@ enum GeneratedToolExecutors {
     .searchContacts: .chatToolExecutor,
     .listMessageChats: .chatToolExecutor,
     .readMessageHistory: .chatToolExecutor,
+    .listMailMessages: .chatToolExecutor,
     .sendMessage: .chatToolExecutor,
     .runApplescript: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
@@ -187,6 +189,7 @@ enum GeneratedToolExecutors {
     case searchContacts
     case listMessageChats
     case readMessageHistory
+    case listMailMessages
     case sendMessage
     case runApplescript
     case createCanonicalGoal
@@ -238,6 +241,7 @@ enum GeneratedToolExecutors {
     case .searchContacts: return .searchContacts
     case .listMessageChats: return .listMessageChats
     case .readMessageHistory: return .readMessageHistory
+    case .listMailMessages: return .listMailMessages
     case .sendMessage: return .sendMessage
     case .runApplescript: return .runApplescript
     case .createCanonicalGoal: return .createCanonicalGoal

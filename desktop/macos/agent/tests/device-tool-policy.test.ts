@@ -26,6 +26,41 @@ describe("on-device tool surface policy", () => {
     expect(result.descriptor.privacyTier).toBe("sensitive");
   });
 
+  it("requires dispatch to list mail even though it is read-only", () => {
+    // Who is writing to the user and about what is the same class of disclosure
+    // as a message thread, so mail headers take the same durable approval
+    // rather than riding along as an ordinary local read.
+    const result = evaluateDesktopToolPolicy({
+      toolName: "list_mail_messages",
+      selectedBundles: ["desktop.mail.read"],
+    });
+
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.descriptor.privacyTier).toBe("sensitive");
+    expect(result.descriptor.readOnly).toBe(true);
+  });
+
+  it("denies a mail read when the mail bundle was never selected", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "list_mail_messages",
+      selectedBundles: ["desktop.context.local_read"],
+    });
+
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("desktop.mail.read");
+  });
+
+  it("does not let a messaging grant authorize a mail read", () => {
+    // Separate bundles, separate approvals: agreeing to let the agent read a
+    // text thread is not agreeing to let it read the inbox.
+    const result = evaluateDesktopToolPolicy({
+      toolName: "list_mail_messages",
+      selectedBundles: ["desktop.messaging.read"],
+    });
+
+    expect(result.decision).toBe("deny");
+  });
+
   it("requires dispatch before sending a message", () => {
     const result = evaluateDesktopToolPolicy({
       toolName: "send_message",

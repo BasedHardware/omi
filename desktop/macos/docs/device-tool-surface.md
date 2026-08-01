@@ -17,6 +17,7 @@ capability bundle, no approval card, no ledger record — and in release bundles
 | `search_contacts` | `desktop.contacts.read` | allow | Contacts |
 | `list_message_chats` | `desktop.messaging.read` | dispatch | Full Disk Access |
 | `read_message_history` | `desktop.messaging.read` | dispatch | Full Disk Access |
+| `list_mail_messages` | `desktop.mail.read` | dispatch | Full Disk Access |
 | `send_message` | `desktop.messaging.send` | dispatch | Automation (Messages) |
 | `run_applescript` | `desktop.automation.act` | dispatch | Automation (per target app) |
 
@@ -31,6 +32,29 @@ hand-edit them.
 `desktop.messaging.send`. Reading a thread exposes the other party's messages,
 not just the user's, so it takes the same durable approval record a send does. A
 scoped grant covers repeat reads within its TTL.
+
+`desktop.mail.read` is sensitive for the same reason and is a *separate* bundle:
+agreeing to let the agent read a text thread is not agreeing to let it read the
+inbox, so a messaging grant never authorizes a mail read.
+
+### Mail is headers only
+
+`list_mail_messages` reads `~/Library/Mail/V*/MailData/Envelope Index` — subject,
+sender, date, and read/flagged/replied state. Message bodies sit beside that
+index as `.emlx` files, and this reader never opens them. Answering "what's
+waiting for me" does not require the full text of the user's mail, and the tool
+description tells the model to say a body is unavailable rather than infer one.
+
+The reader probes the schema with `PRAGMA table_info` before querying, because
+Mail's schema is Apple's private business and has changed across releases; an OS
+update degrades to a legible `schema_unavailable` instead of a raw SQLite error
+mid-query. It picks the highest-numbered `V{n}` directory, since Mail leaves old
+format versions in place and a hardcoded version would silently read stale mail
+after an upgrade. `OMI_MAIL_ENVELOPE_DB` points it at a fixture for tests.
+
+Note the epoch: Mail's `date_received` is plain Unix seconds, unlike the Core
+Data reference dates in Notes and the Apple absolute times in Messages. Reusing a
+sibling reader's conversion shifts every message by 31 years.
 
 ### `desktop.automation.act` vs `act_dev_only`
 
