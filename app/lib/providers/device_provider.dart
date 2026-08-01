@@ -25,6 +25,7 @@ import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
+import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -65,7 +66,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   // Track firmware update state to prevent showing dialog during updates
   bool _isCheckingFirmware = false;
-  bool _isFirmwareDialogShowing = false;
+  final FirmwareUpdatePromptCoordinator _firmwareUpdatePromptCoordinator = FirmwareUpdatePromptCoordinator();
   bool _pairingLostDialogShowing = false;
   bool _isFirmwareUpdateInProgress = false;
   bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
@@ -454,6 +455,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    _firmwareUpdatePromptCoordinator.invalidatePresentation();
     if (BleBridge.instance.pairingLostCallback == _showPairingLostDialog) {
       BleBridge.instance.pairingLostCallback = null;
     }
@@ -469,7 +471,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
-    _isFirmwareDialogShowing = false;
+    _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
     isCharging = false;
     setConnectedDevice(null);
@@ -710,6 +712,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void _checkFirmwareUpdates() async {
     if (!_allowsFirmwareUpdateForPairedDevice) {
       _havingNewFirmware = false;
+      _firmwareUpdatePromptCoordinator.setAvailableVersion(null);
       return;
     }
     if (_isFirmwareUpdateInProgress || _isCheckingFirmware) {
@@ -754,6 +757,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         var (message, hasUpdate, version, firmwareDetails) = await shouldUpdateFirmware();
         _havingNewFirmware = hasUpdate;
         _latestFirmwareVersion = version.isNotEmpty ? version : message;
+        _firmwareUpdatePromptCoordinator.setAvailableVersion(hasUpdate ? _latestFirmwareVersion : null);
 
         // For OmiGlass devices, populate the firmware details for the OTA UI
         if (_isOmiGlassDevice && firmwareDetails.isNotEmpty) {
@@ -789,6 +793,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (retryCount == maxRetries) {
           Logger.debug('Max retries reached, giving up');
           _havingNewFirmware = false;
+          _firmwareUpdatePromptCoordinator.setAvailableVersion(null);
           notifyListeners();
           break;
         }
@@ -803,6 +808,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _isOnFirmwareUpdatePage = false;
   void setOnFirmwareUpdatePage(bool value) {
     _isOnFirmwareUpdatePage = value;
+    if (value) {
+      _firmwareUpdatePromptCoordinator.invalidatePresentation();
+    }
   }
 
   void showFirmwareUpdateDialog(BuildContext context) {
@@ -810,39 +818,59 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         !_havingNewFirmware ||
         !SharedPreferencesUtil().showFirmwareUpdateDialog ||
         _isFirmwareUpdateInProgress ||
-        _isFirmwareDialogShowing ||
         _isOnFirmwareUpdatePage) {
       return;
     }
 
-    _isFirmwareDialogShowing = true;
-    showDialog(
+    final prompt = _firmwareUpdatePromptCoordinator.beginPresentation();
+    if (prompt == null) return;
+
+    showDialog<void>(
       context: context,
-      builder: (context) => ConfirmationDialog(
-        title: context.l10n.firmwareUpdateAvailable,
-        description: context.l10n.firmwareUpdateAvailableDescription(_latestFirmwareVersion),
-        confirmText: context.l10n.update,
-        cancelText: context.l10n.later,
-        onConfirm: () {
-          Navigator.of(context).pop();
-          setFirmwareUpdateInProgress(true);
-          if (_isOmiGlassDevice) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) =>
-                    OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
-              ),
-            );
-          } else {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
-          }
-        },
-        onCancel: () {
-          Navigator.of(context).pop();
-        },
-      ),
-    ).then((_) {
-      _isFirmwareDialogShowing = false;
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final route = ModalRoute.of(dialogContext);
+        final navigator = Navigator.of(dialogContext);
+        _firmwareUpdatePromptCoordinator.attachDismissal(prompt, () {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!dialogContext.mounted || route == null || !route.isActive) return;
+            if (route.isCurrent) {
+              navigator.pop();
+            } else {
+              navigator.removeRoute(route);
+            }
+          });
+        });
+
+        return ConfirmationDialog(
+          title: dialogContext.l10n.firmwareUpdateAvailable,
+          description: dialogContext.l10n.firmwareUpdateAvailableDescription(_latestFirmwareVersion),
+          confirmText: dialogContext.l10n.update,
+          cancelText: dialogContext.l10n.later,
+          onConfirm: () {
+            if (!_firmwareUpdatePromptCoordinator.accept(prompt)) return;
+            Logger.info('Firmware update prompt accepted');
+            setFirmwareUpdateInProgress(true);
+            if (_isOmiGlassDevice) {
+              navigator.push(
+                MaterialPageRoute(
+                  builder: (context) =>
+                      OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
+                ),
+              );
+            } else {
+              navigator.push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
+            }
+          },
+          onCancel: () {
+            if (_firmwareUpdatePromptCoordinator.defer(prompt)) {
+              Logger.info('Firmware update prompt deferred by user');
+            }
+          },
+        );
+      },
+    ).whenComplete(() {
+      _firmwareUpdatePromptCoordinator.complete(prompt);
     });
   }
 
@@ -900,6 +928,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    if (inProgress) {
+      _firmwareUpdatePromptCoordinator.invalidatePresentation();
+    }
     notifyListeners();
   }
 }
