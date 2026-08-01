@@ -122,6 +122,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published private(set) var gmailInsightsFailed = false
   @Published private(set) var calendarInsightsFailed = false
   @Published private(set) var appleNotesInsightsFailed = false
+  @Published var gmailAccounts: [GmailAccountOption] = []
+  @Published var isProbingGmailAccounts = false
+  @Published var showingGmailAccountPicker = false
+  @Published var gmailAwaitingSelection = false
+  private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -847,6 +852,44 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
+func loadGmailAccounts() async {
+    guard gmailAccounts.isEmpty else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    guard let accounts = try? await GmailAccountProbe.availableAccounts() else { return }
+    gmailAccounts = accounts
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
+  }
+
+  private func awaitGmailAccountSelectionIfNeeded() async {
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    let accounts = (try? await GmailAccountProbe.availableAccounts()) ?? []
+    guard accounts.count > 1 else { return }
+    gmailAccounts = accounts
+    gmailAwaitingSelection = true
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        gmailSelectionWaiter = continuation
+      }
+    } onCancel: {
+      Task { @MainActor in
+        self.resumeGmailSelection()
+      }
+    }
+  }
+
+  private func resumeGmailSelection() {
+    guard let waiter = gmailSelectionWaiter else { return }
+    gmailSelectionWaiter = nil
+    gmailAwaitingSelection = false
+    waiter.resume()
+  }
+
   func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {
     guard !insightsStarted else { return }
     insightsStarted = true
@@ -890,6 +933,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     gmailTask = Task {
       await googleInsightGate.waitForCalendar()
+      guard !Task.isCancelled else { return }
+      await self.awaitGmailAccountSelectionIfNeeded()
       guard !Task.isCancelled else { return }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
