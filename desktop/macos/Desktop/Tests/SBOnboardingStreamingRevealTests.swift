@@ -21,6 +21,7 @@ final class SBOnboardingStreamingRevealTests: XCTestCase {
       if let streaming = model.streamingText {
         observedPrefixes.append(streaming)
       }
+      // omi-test-quality: wall-clock-wait -- poll the reveal loop, which itself ticks on a 40ms timer
       try? await Task.sleep(nanoseconds: 20_000_000)
     }
 
