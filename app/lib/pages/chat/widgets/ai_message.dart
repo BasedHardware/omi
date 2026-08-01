@@ -806,11 +806,10 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
                   var memProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  var idx = -1;
-                  var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  final located = memProvider.findGroupedConversationById(data.$2.id);
 
-                  if (idx != -1) {
+                  if (located != null) {
+                    final (date, idx) = located;
                     context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
                     var m = memProvider.groupedConversations[date]![idx];
                     PlatformManager.instance.analytics.chatMessageConversationClicked(m);
@@ -822,7 +821,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     setState(() => conversationDetailLoading[data.$1] = true);
                     ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
-                    (idx, date) = memProvider.addConversationWithDateGrouped(m);
+                    final date = memProvider.addConversationWithDateGrouped(m).$2;
                     PlatformManager.instance.analytics.chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
                     if (context.mounted) {
