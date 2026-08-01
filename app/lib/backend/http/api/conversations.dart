@@ -476,7 +476,9 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
+    jsonDecode(response!.body) as Map<String, dynamic>,
+  );
   return body.manifest;
 }
 
@@ -591,7 +593,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     final completed = SyncLocalFilesResponse.fromGenerated(
       wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
-    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
+    return UploadFilesResult.done(
+      requireCompleteSyncUpload(completed),
+    );
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(
