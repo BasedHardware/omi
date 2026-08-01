@@ -5,6 +5,23 @@ struct ActionItemIdsResponse: Decodable {
   let ids: [String]
 }
 
+/// One bounded page from the marker-scoped legacy task recovery endpoint.
+/// `nextCursor` is present only when `hasMore` is true, so callers can make
+/// finite forward progress without marking recovery complete mid-sweep.
+struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
+  let restored: Int
+  let skippedExisting: Int
+  let hasMore: Bool
+  let nextCursor: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case restored
+    case skippedExisting = "skipped_existing"
+    case hasMore = "has_more"
+    case nextCursor = "next_cursor"
+  }
+}
+
 extension APIClient {
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
@@ -53,29 +70,28 @@ extension APIClient {
     return response.ids
   }
 
-  func migrateStagedTasks(
+  /// Restore rows the retired migration moved out of action_items. A pre-fix
+  /// backend returns a safe 404 for this new route, so a client update can never
+  /// trigger the old destructive migration during a staggered rollout.
+  func restoreLegacyConversationItems(
+    limit: Int = 100,
+    cursor: String? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws {
-    struct StatusResponse: Decodable { let status: String }
-    let _: StatusResponse = try await post(
-      "v1/staged-tasks/migrate",
-      expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot
-    )
-  }
-
-  func migrateConversationItemsToStaged(
-    expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws {
-    struct MigrateResponse: Decodable {
-      let status: String
-      let migrated: Int
-      let deleted: Int
+  ) async throws -> LegacyConversationRecoveryPage {
+    precondition((1...100).contains(limit), "Legacy recovery page limit must be between 1 and 100")
+    var path = "v1/action-items/restore-legacy-conversation-items?limit=\(limit)"
+    if let cursor {
+      let unreservedCharacters = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+      )
+      guard let escapedCursor = cursor.addingPercentEncoding(withAllowedCharacters: unreservedCharacters) else {
+        throw URLError(.badURL)
+      }
+      path += "&cursor=\(escapedCursor)"
     }
-    let _: MigrateResponse = try await post(
-      "v1/staged-tasks/migrate-conversation-items",
+    return try await post(
+      path,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
@@ -113,15 +129,47 @@ extension APIClient {
     }
     struct BatchRequest: Encodable { let items: [SortUpdate] }
     struct StatusResponse: Decodable { let status: String }
-    let request = BatchRequest(
-      items: updates.map {
-        SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-      })
-    let _: StatusResponse = try await patch(
-      "v1/action-items/batch",
-      body: request,
-      expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot)
+    // The backend validates this endpoint's request body at 500 items. A
+    // user's local task database can contain more rows than one request can
+    // carry, so preserve order while sending bounded sequential requests. The
+    // endpoint applies each document independently, so replay the complete
+    // absolute update set once after a later chunk fails. Replaying an earlier
+    // chunk is safe and can heal a transient failure without leaving the
+    // caller with only the prefix applied; a second failure still propagates.
+    let updateBatches = updates.chunked(maxSize: 500)
+    var didRetry = false
+    while true {
+      do {
+        for updateBatch in updateBatches {
+          let request = BatchRequest(
+            items: updateBatch.map {
+              SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
+            })
+          let _: StatusResponse = try await patch(
+            "v1/action-items/batch",
+            body: request,
+            expectedOwnerId: expectedOwnerId,
+            authorizationSnapshot: authorizationSnapshot)
+        }
+        return
+      } catch {
+        guard !didRetry, Self.isRetryableSortOrderBatchError(error) else { throw error }
+        didRetry = true
+      }
+    }
+  }
+
+  private static func isRetryableSortOrderBatchError(_ error: Error) -> Bool {
+    if let apiError = error as? APIError {
+      if case .httpError(let statusCode, _) = apiError {
+        return statusCode >= 500
+      }
+      return false
+    }
+    if let urlError = error as? URLError {
+      return urlError.code != .cancelled
+    }
+    return false
   }
 
   // MARK: - Workstream-backed task threads

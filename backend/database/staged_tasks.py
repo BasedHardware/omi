@@ -8,12 +8,17 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from database.store import get_document_store
+from database.store import errors, get_document_store
 import database.action_items as action_items_db
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # bulk-write chunk size (adapters honor their own batch limits)
+
+# Recovery restores one row per create-if-absent + delete. Keep the page small so
+# a user with a large historical migration never holds an HTTP request open for an
+# unbounded number of writes.
+LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE = 50
 
 
 def _store():
@@ -353,71 +358,72 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
-def migrate_ai_tasks(uid: str) -> dict:
-    """One-time migration: move excess AI tasks from action_items to staged_tasks.
+def restore_legacy_conversation_items(
+    uid: str,
+    *,
+    limit: int = LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+    cursor: Optional[str] = None,
+) -> dict:
+    """Restore rows moved by the retired desktop conversation migration.
 
-    Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
-    Uses a 'source' field marker to identify AI-created tasks.
+    Only active ``conversation_migration`` staged rows qualify. Each row is
+    restored with create-if-absent + delete, so an existing action item is never
+    overwritten: a concurrent create wins and the staged row is preserved for
+    manual inspection. Results are ordered by document id and cursor-paginated so
+    the client can finish a large recovery across requests.
     """
-    col = _col(uid, 'action_items')
-
-    all_items = []
-    for doc in _store().query(col, filters=[('completed', '==', False)]):
-        data = doc.to_dict()
-        data['id'] = doc.id
-        if data.get('deleted'):
-            continue
-        all_items.append(data)
-
-    # Separate AI-generated tasks from manual ones
-    ai_tasks = [item for item in all_items if 'screenshot' in (item.get('source') or '')]
-    if len(ai_tasks) <= 3:
-        return {'moved': 0, 'kept': len(ai_tasks)}
-
-    # Sort by relevance_score ascending (best first). relevance_score is an int in
-    # 0-1000 where 0 is the most relevant, so only a genuinely missing (None) score
-    # should sort last: `or 999` would also demote a valid best score of 0.
-    ai_tasks.sort(key=lambda x: 999 if x.get('relevance_score') is None else x.get('relevance_score'))
-    keep = ai_tasks[:3]
-    to_move = ai_tasks[3:]
-
-    staged_col = _col(uid, 'staged_tasks')
-    store = _store()
-    batch = store.batch()
-    batch_count = 0
-    for task in to_move:
-        batch.set(f'{staged_col}/{task["id"]}', task)
-        batch.delete(f'{col}/{task["id"]}')
-        batch_count += 2  # set + delete = 2 operations
-        batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
-
-    return {'moved': len(to_move), 'kept': len(keep)}
-
-
-def migrate_conversation_items_to_staged(uid: str) -> dict:
-    """Move conversation-sourced action items (without 'source') to staged_tasks."""
-    col = _col(uid, 'action_items')
-    staged_col = _col(uid, 'staged_tasks')
+    if limit < 1:
+        raise ValueError('limit must be positive')
 
     store = _store()
-    batch = store.batch()
-    moved = 0
-    batch_count = 0
-    for doc in store.query(col):
-        data = doc.to_dict()
-        if data.get('deleted') or data.get('completed'):
-            continue
-        if data.get('conversation_id') and not data.get('source'):
-            data['id'] = doc.id
-            data['source'] = 'conversation_migration'
-            batch.set(f'{staged_col}/{doc.id}', data)
-            batch.delete(f'{col}/{doc.id}')
-            moved += 1
-            batch_count += 2  # set + delete = 2 operations
-            batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
+    staged_col = _col(uid, 'staged_tasks')
+    action_items_col = _col(uid, 'action_items')
 
-    return {'moved': moved}
+    # Deterministic document-id order so the cursor is a stable keyset; ``id``
+    # ordering mirrors the retired ``__name__`` query without a Firestore-shaped
+    # cursor. The migration marker set is bounded (retired one-off), so reading
+    # the matching rows per page is acceptable.
+    rows = sorted(
+        store.query(staged_col, filters=[('source', '==', 'conversation_migration')]),
+        key=lambda d: d.id,
+    )
+    if cursor:
+        rows = [d for d in rows if d.id > cursor]
+    # One look-ahead row so the caller can tell a finished recovery from a page
+    # that must be continued with ``next_cursor``.
+    window = rows[: limit + 1]
+    page = window[:limit]
+    has_more = len(window) > limit
+    next_cursor = page[-1].id if has_more and page else None
+
+    restored = 0
+    skipped_existing = 0
+    for doc in page:
+        staged_row = doc.to_dict() or {}
+        # Belt-and-suspenders vs the filtered query: never restore an ordinary
+        # staged row even if a permissive fake or future refactor widens it.
+        if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
+            continue
+
+        action_item = dict(staged_row)
+        # ``id`` is document identity and ``source`` is the recovery marker, not
+        # original action-item data.
+        action_item.pop('id', None)
+        action_item.pop('source', None)
+
+        try:
+            # create-if-absent: a current action item with this identity wins the
+            # race; the staged row is preserved rather than deleted.
+            store.create(f'{action_items_col}/{doc.id}', action_item)
+        except errors.AlreadyExists:
+            skipped_existing += 1
+            continue
+        store.delete(f'{staged_col}/{doc.id}')
+        restored += 1
+
+    return {
+        'restored': restored,
+        'skipped_existing': skipped_existing,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+    }

@@ -100,21 +100,12 @@ struct DesktopHomeView: View {
     Group {
       if authState.isRestoringAuth {
         // State 0: Restoring auth session - show loading
-        VStack(spacing: OmiSpacing.lg) {
-          if let nsImage = Self.heroLogoImage {
-            Image(nsImage: nsImage)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 64, height: 64)
+        Color.clear
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(OmiColors.backgroundPrimary)
+          .onAppear {
+            log("DesktopHomeView: Showing auth loading splash")
           }
-          ProgressView()
-            .scaleEffect(0.8)
-            .tint(.white.opacity(0.6))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-          log("DesktopHomeView: Showing auth loading splash")
-        }
       } else if authState.sessionPhase == .recoveryRequired {
         SessionRecoveryView()
           .onAppear {

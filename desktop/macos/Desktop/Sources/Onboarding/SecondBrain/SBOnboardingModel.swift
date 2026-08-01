@@ -112,9 +112,11 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
+  @Published var shortcutRecording = false
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
+  var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   /// Each shortcut stage keeps its own choice so stepping back does not make a
   /// user re-select a key they already confirmed.
   var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
@@ -284,9 +286,9 @@ final class SBOnboardingModel: ObservableObject {
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
-      return "How do you want to open me? Just press one of these to set it."
+      return "How do you want to open me? Press any key or choose one of these."
     case .shortcutTalk:
-      return "And to talk to me, hands-free? Just hold one of these and say something."
+      return "And to talk to me hands-free? Press any key or choose one of these."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -306,6 +308,18 @@ final class SBOnboardingModel: ObservableObject {
     if !stored.isEmpty { return stored }
     return "friend"
   }
+
+  var selectedResponseLanguageName: String {
+    let code = AssistantSettings.shared.voiceLanguages.first ?? "en"
+    let baseCode = AssistantSettings.baseLanguageCode(code)
+    return AssistantSettings.supportedLanguages.first {
+      AssistantSettings.baseLanguageCode($0.code) == baseCode
+    }?.name ?? code
+  }
+
+  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
+  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
+  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 

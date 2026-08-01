@@ -211,6 +211,7 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+import routers.staged_tasks as staged_router  # noqa: E402
 
 _ensure_package_path("models", BACKEND_DIR / "models")
 _ensure_package_path("utils", BACKEND_DIR / "utils")
@@ -1172,22 +1173,27 @@ class TestPromoteResponseWireCompat:
         """migrate endpoint returns {status: str} matching Swift StatusResponse."""
         from routers.staged_tasks import migrate_ai_tasks
 
-        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
-            result = migrate_ai_tasks(uid='test-uid')
+        result = migrate_ai_tasks(uid='test-uid')
 
         assert 'status' in result
         assert isinstance(result['status'], str)
+        assert result['status'].startswith('legacy task migration retired')
 
     def test_migrate_conversation_items_returns_status_migrated_deleted(self):
         """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
         from routers.staged_tasks import migrate_conversation_items
 
-        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
-            result = migrate_conversation_items(uid='test-uid')
+        with patch.object(
+            staged_router,
+            '_restore_all_legacy_conversation_items',
+            return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
+        ):
+            result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
-        assert result['migrated'] == 10
+        assert result['migrated'] == 0
         assert 'deleted' in result
+        assert result['restored'] == 3
 
 
 # ===========================================================================
@@ -1328,39 +1334,135 @@ class TestRatingZeroBoundary:
 # ===========================================================================
 
 
-class TestMigrationBatchIntegration:
-    """Exercise migration functions with enough items to cross batch boundary."""
+class TestLegacyConversationRecovery:
+    """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self, monkeypatch):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (257*2=514 ops > 500)."""
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self, monkeypatch):
+        """Recovery restores only marker rows: recreate the action item, drop the marker."""
         store = FakeDocumentStore()
-        for i in range(260):
-            store.set(
-                f'users/test-uid/action_items/task-{i}',
-                {'id': f'task-{i}', 'completed': False, 'source': 'screenshot', 'relevance_score': i},
-            )
-
-        # Count port batches created so we can prove the 500-op boundary was crossed
-        # (an intermediate commit spawns a fresh batch mid-run).
-        batch_calls = []
-        real_batch = store.batch
-
-        def counting_batch():
-            b = real_batch()
-            batch_calls.append(b)
-            return b
-
-        monkeypatch.setattr(store, 'batch', counting_batch)
+        store.set(
+            'users/test-uid/staged_tasks/legacy-task',
+            {
+                'id': 'legacy-task',
+                'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
+                'completed': False,
+                'source': 'conversation_migration',
+            },
+        )
+        store.set(
+            'users/test-uid/staged_tasks/ordinary-staged-task',
+            {
+                'id': 'ordinary-staged-task',
+                'description': 'Keep this staged task',
+                'completed': False,
+                'source': 'screenshot',
+            },
+        )
         monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
 
-        result = staged_tasks_db.migrate_ai_tasks('test-uid')
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
 
-        assert result['moved'] == 257  # 260 - 3 kept
-        # Boundary crossed → more than one batch was created (intermediate commit).
-        assert len(batch_calls) >= 2
-        # The moved rows now live in staged_tasks; only the top-3 remain in action_items.
-        assert len(store.list_ids('users/test-uid/staged_tasks')) == 257
-        assert len(store.list_ids('users/test-uid/action_items')) == 3
+        assert result == {'restored': 1, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+        # The marker row became an action item without `id`/`source`, its staged
+        # row is gone, and the ordinary staged row is untouched.
+        assert store.get('users/test-uid/action_items/legacy-task').to_dict() == {
+            'description': 'Call supplier',
+            'conversation_id': 'conversation-1',
+            'completed': False,
+        }
+        assert not store.get('users/test-uid/staged_tasks/legacy-task').exists
+        assert store.get('users/test-uid/staged_tasks/ordinary-staged-task').exists
+
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, monkeypatch):
+        """An identity collision preserves both copies instead of overwriting current data."""
+        store = FakeDocumentStore()
+        store.set('users/test-uid/action_items/legacy-task', {'description': 'Current authoritative task'})
+        store.set(
+            'users/test-uid/staged_tasks/legacy-task',
+            {
+                'id': 'legacy-task',
+                'description': 'Call supplier',
+                'completed': False,
+                'source': 'conversation_migration',
+            },
+        )
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
+
+        assert result == {'restored': 0, 'skipped_existing': 1, 'has_more': False, 'next_cursor': None}
+        # The current action item wins the identity; the staged row is preserved.
+        assert store.get('users/test-uid/action_items/legacy-task').to_dict() == {
+            'description': 'Current authoritative task'
+        }
+        assert store.get('users/test-uid/staged_tasks/legacy-task').exists
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self, monkeypatch):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        store = FakeDocumentStore()
+        for index in range(3):
+            store.set(
+                f'users/test-uid/staged_tasks/legacy-{index}',
+                {
+                    'id': f'legacy-{index}',
+                    'description': f'Call supplier {index}',
+                    'completed': False,
+                    'source': 'conversation_migration',
+                },
+            )
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', limit=2)
+
+        assert result == {'restored': 2, 'skipped_existing': 0, 'has_more': True, 'next_cursor': 'legacy-1'}
+        # First two ids (document-id order) restored; the third remains staged.
+        assert store.get('users/test-uid/action_items/legacy-0').exists
+        assert store.get('users/test-uid/action_items/legacy-1').exists
+        assert not store.get('users/test-uid/action_items/legacy-2').exists
+        assert store.get('users/test-uid/staged_tasks/legacy-2').exists
+
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self, monkeypatch):
+        """A continuation skips already-scanned rows instead of retrying them forever."""
+        store = FakeDocumentStore()
+        for index in range(2):
+            store.set(
+                f'users/test-uid/staged_tasks/legacy-{index}',
+                {
+                    'id': f'legacy-{index}',
+                    'description': f'Call supplier {index}',
+                    'completed': False,
+                    'source': 'conversation_migration',
+                },
+            )
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+
+        # The cursor is exclusive: legacy-0 and legacy-1 are both <= 'legacy-1'.
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', cursor='legacy-1')
+
+        assert result == {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+        assert store.get('users/test-uid/staged_tasks/legacy-0').exists
+        assert store.get('users/test-uid/staged_tasks/legacy-1').exists
+
+    def test_released_recovery_route_completes_every_page_before_success(self):
+        """Released single-call clients must never receive an acknowledged partial recovery."""
+        first_page = {'restored': 50, 'skipped_existing': 1, 'has_more': True, 'next_cursor': 'legacy-49'}
+        second_page = {'restored': 2, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=[first_page, second_page],
+        ) as restore_page:
+            result = staged_router._restore_all_legacy_conversation_items('test-uid')
+
+        assert result == {'restored': 52, 'skipped_existing': 1, 'has_more': False, 'next_cursor': None}
+        assert [call.args for call in restore_page.call_args_list] == [('test-uid',), ('test-uid',)]
+        assert [call.kwargs['cursor'] for call in restore_page.call_args_list] == [None, 'legacy-49']
+        assert all(
+            call.kwargs['limit'] == staged_router.staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
+            for call in restore_page.call_args_list
+        )
 
 
 # ============================================================================

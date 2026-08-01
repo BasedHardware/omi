@@ -526,21 +526,16 @@ class AnalyticsManager {
   void deviceConnected() {
     final device = _preferences.btDevice;
     final vendor = device.type.analyticsVendor;
-    track('Device Connected', properties: {
-      ...device.toJson(),
-      'type': device.type.name,
-      'device_vendor': vendor,
-    });
+    track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
     setUserProperty('device_vendor', vendor);
   }
 
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
-    track('Device Paired', properties: {
-      ...device.toJson(),
-      'type': device.type.name,
-      'device_vendor': device.type.analyticsVendor,
-    });
+    track(
+      'Device Paired',
+      properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': device.type.analyticsVendor},
+    );
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
@@ -550,12 +545,7 @@ class AnalyticsManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void deviceSessionEnded({
-    required BtDevice device,
-    required Duration duration,
-    String? reason,
-    int? hciReasonCode,
-  }) {
+  void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),

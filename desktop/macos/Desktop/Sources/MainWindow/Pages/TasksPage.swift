@@ -411,7 +411,9 @@ class TasksViewModel: ObservableObject {
           if showCompleted {
             await store.loadCompletedTasks()
           } else {
-            await store.loadIncompleteTasks()
+            // Initial loading owns the legacy-recovery boundary. A tab toggle
+            // must never bypass it and reconcile an unresolved empty response.
+            await store.loadIncompleteTasks(allowInitialReconciliation: false)
           }
         }
       }
@@ -523,8 +525,44 @@ class TasksViewModel: ObservableObject {
 
   /// Debounced task for syncing sort orders to SQLite + backend
   private var sortOrderSyncTask: Task<Void, Never>?
+  /// Serializes SQLite/backend commits so an older network response cannot land
+  /// after a newer reorder. Cancellation only stops the debounce task; it does
+  /// not cancel an already-started request.
+  private var sortOrderIOInFlight: Task<Bool, Never>?
+  private var sortOrderMutationGeneration: UInt64 = 0
   @Published private(set) var sortOrderSyncFailure: TaskSortOrderSyncFailure?
   private var pendingSortOrderUpdates: [SortOrderUpdate] = []
+  private var pendingSortOrderUpdatesGeneration: UInt64?
+  /// The exact canonical sequence produced by the most recent drag in each
+  /// category. It survives the debounce window so persistence uses the same
+  /// displayed scope as the drop, including Done/search rows that are not in
+  /// the first incomplete-task cache page. A committed snapshot is removed as
+  /// soon as its SQLite and backend writes both succeed, so a later action
+  /// cannot replay it over a newer cross-device refresh.
+  private var pendingReorderOrders: [TaskCategory: [String]] = [:]
+  /// IDs whose relative position changed in each pending category. Sparse rank
+  /// allocation uses these as the only normal write candidates.
+  private var pendingReorderTaskIDs: [TaskCategory: Set<String>] = [:]
+  /// The persisted rank observed before each pending drag. The UI arrays are
+  /// optimistically updated immediately, so the collector must compare the
+  /// planned rank against this baseline rather than the optimistic projection.
+  private var pendingOriginalSortOrders: [String: Int] = [:]
+  private var pendingOriginalSortOrderMissing: Set<String> = []
+  /// A category that needs a full rank rewrite because its persisted ranks are
+  /// legacy/invalid or the requested integer gap was exhausted.
+  private var pendingRebalanceCategories: Set<TaskCategory> = []
+  /// Versioned indent mutations prevent an older in-flight sync from clearing a
+  /// newer indent edit for the same task.
+  private var pendingIndentTaskVersions: [String: Int] = [:]
+  private var indentMutationVersion = 0
+  /// The exact reorder snapshots that produced `pendingSortOrderUpdates` after
+  /// a failed write. Retaining this separately lets a retry clear only the
+  /// snapshot it actually committed, never a newer drag that occurred while it
+  /// was awaiting I/O.
+  private var pendingReorderOrdersForRetry: [TaskCategory: [String]] = [:]
+  private var pendingReorderTaskIDsForRetry: [TaskCategory: Set<String>] = [:]
+  private var pendingRebalanceCategoriesForRetry: Set<TaskCategory> = []
+  private var pendingIndentTaskVersionsForRetry: [String: Int] = [:]
   var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
   private var cancellables = Set<AnyCancellable>()
@@ -637,12 +675,14 @@ class TasksViewModel: ObservableObject {
 
   // MARK: - Persistence (UserDefaults)
 
-  private static let categoryOrderKey = "TasksCategoryOrder"
   private static let indentLevelsKey = "TasksIndentLevels"
-  private static let sortOrderMigrationKey = "TasksSortOrderMigrated"
 
   private static func ownerScopedKey(_ key: String, ownerID: String) -> String {
     "\(key).owner.\(ownerID)"
+  }
+
+  private static func ownerScopedKey(_ key: DefaultsKey, ownerID: String) -> String {
+    ownerScopedKey(key.rawValue, ownerID: ownerID)
   }
 
   private static func normalizedOwnerID(_ ownerID: String?) -> String? {
@@ -677,6 +717,7 @@ class TasksViewModel: ObservableObject {
 
   private func resetOwnerOrderingProjection(scheduleOwnerActivation: Bool = true) {
     ownerGeneration &+= 1
+    sortOrderMutationGeneration &+= 1
     sortOrderSyncTask?.cancel()
     sortOrderSyncTask = nil
     activeOwnerID = nil
@@ -685,6 +726,18 @@ class TasksViewModel: ObservableObject {
     indentLevels = [:]
     suppressOrderingPersistence = false
     pendingSortOrderUpdates = []
+    pendingSortOrderUpdatesGeneration = nil
+    pendingReorderOrders = [:]
+    pendingReorderTaskIDs = [:]
+    pendingOriginalSortOrders = [:]
+    pendingOriginalSortOrderMissing = []
+    pendingRebalanceCategories = []
+    pendingIndentTaskVersions = [:]
+    indentMutationVersion = 0
+    pendingReorderOrdersForRetry = [:]
+    pendingReorderTaskIDsForRetry = [:]
+    pendingRebalanceCategoriesForRetry = []
+    pendingIndentTaskVersionsForRetry = [:]
     sortOrderSyncFailure = nil
     suppressDatabaseRequery = false
     suppressRequeryGeneration &+= 1
@@ -700,7 +753,7 @@ class TasksViewModel: ObservableObject {
   private func loadOwnerOrderingProjection(ownerID: String) {
     suppressOrderingPersistence = true
     defer { suppressOrderingPersistence = false }
-    let categoryKey = Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+    let categoryKey = Self.ownerScopedKey(DefaultsKey.tasksCategoryOrder, ownerID: ownerID)
     if let data = orderingDefaults.dictionary(forKey: categoryKey) as? [String: [String]] {
       categoryOrder = Dictionary(
         lastWriteWins: data.compactMap { key, ids in
@@ -714,17 +767,17 @@ class TasksViewModel: ObservableObject {
   }
 
   private func removeUnscopedLegacyOrderingDefaults() {
-    orderingDefaults.removeObject(forKey: Self.categoryOrderKey)
+    orderingDefaults.removeObject(forKey: .tasksCategoryOrder)
     orderingDefaults.removeObject(forKey: Self.indentLevelsKey)
-    orderingDefaults.removeObject(forKey: Self.sortOrderMigrationKey)
+    orderingDefaults.removeObject(forKey: .tasksSortOrderMigrated)
   }
 
   /// Adopt the pre-owner-scoping fallback exactly once for the owner active at
   /// launch. A later account must never inherit another owner's ordering.
   private func adoptUnscopedLegacyOrderingDefaults(for ownerID: String) {
-    let scopedCategoryKey = Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+    let scopedCategoryKey = Self.ownerScopedKey(DefaultsKey.tasksCategoryOrder, ownerID: ownerID)
     if orderingDefaults.object(forKey: scopedCategoryKey) == nil,
-      let legacyOrder = orderingDefaults.object(forKey: Self.categoryOrderKey)
+      let legacyOrder = orderingDefaults.object(forKey: .tasksCategoryOrder)
     {
       orderingDefaults.set(legacyOrder, forKey: scopedCategoryKey)
     }
@@ -757,7 +810,7 @@ class TasksViewModel: ObservableObject {
     }
     orderingDefaults.set(
       data,
-      forKey: Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+      forKey: Self.ownerScopedKey(DefaultsKey.tasksCategoryOrder, ownerID: ownerID)
     )
   }
 
@@ -784,9 +837,201 @@ class TasksViewModel: ObservableObject {
 
   /// Get ordered tasks for a category, using sortOrder when available, falling back to UserDefaults/default sort
   func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
-    guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
-      return []
+    orderedTasks(categorizedTasks[category] ?? [], inCategory: category)
+  }
+
+  /// The category order currently available to the interactive view. This is
+  /// intentionally limited to its rendered/search/cache sources; the debounced
+  /// persistence path separately loads every local row before rebasing it.
+  private func getActiveScopeOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
+    var scope: [TaskActionItem] = []
+    if !searchText.isEmpty {
+      scope.append(contentsOf: searchResults)
+    } else if !filteredFromDatabase.isEmpty {
+      scope.append(contentsOf: filteredFromDatabase)
     }
+    scope.append(contentsOf: getSourceTasks())
+    scope.append(contentsOf: displayTasks)
+    return orderedTasks(
+      deduplicateById(scope).filter { currentCategoryFor($0) == category },
+      inCategory: category
+    )
+  }
+
+  /// Merge the reordered IDs from an interactive subset into the full local
+  /// category sequence. The subset replaces only its own original slots, so a
+  /// search result or first-page cache cannot displace unseen tasks when the
+  /// reorder is finally persisted.
+  nonisolated static func rebaseVisibleTaskIDs(
+    fullOrder: [String], reorderedVisibleIDs: [String]
+  ) -> [String] {
+    let fullIDs = Set(fullOrder)
+    var knownIDs = Set<String>()
+    var rebasedOrder: [String] = []
+    for id in fullOrder where knownIDs.insert(id).inserted {
+      rebasedOrder.append(id)
+    }
+    for id in reorderedVisibleIDs where fullIDs.contains(id) && knownIDs.insert(id).inserted {
+      rebasedOrder.append(id)
+    }
+
+    var replacementIDs: [String] = []
+    var replacementSet = Set<String>()
+    for id in reorderedVisibleIDs where fullIDs.contains(id) && replacementSet.insert(id).inserted {
+      replacementIDs.append(id)
+    }
+    let visibleIDs = Set(replacementIDs)
+    var reorderedVisible = replacementIDs.makeIterator()
+    for index in rebasedOrder.indices where visibleIDs.contains(rebasedOrder[index]) {
+      guard let reorderedID = reorderedVisible.next() else { return fullOrder }
+      rebasedOrder[index] = reorderedID
+    }
+    return rebasedOrder
+  }
+
+  /// Restore the pre-mutation rank of optimistically moved rows before using a
+  /// complete SQLite sequence as the hidden-row rebase anchor. Rows not in the
+  /// baseline retain their current rank, which is unchanged by a sparse move.
+  nonisolated static func canonicalPreMutationTaskIDs(
+    currentTasks: [(id: String, sortOrder: Int?)],
+    originalSortOrders: [String: Int]
+  ) -> [String] {
+    currentTasks.enumerated()
+      .sorted { lhs, rhs in
+        let lhsRank = originalSortOrders[lhs.element.id] ?? lhs.element.sortOrder ?? Int.max
+        let rhsRank = originalSortOrders[rhs.element.id] ?? rhs.element.sortOrder ?? Int.max
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        return lhs.offset < rhs.offset
+      }
+      .map { $0.element.id }
+  }
+
+  /// Replace transient local row IDs in pending ordering snapshots after the
+  /// SQLite row receives its backend ID. De-duplication keeps a promoted row
+  /// from appearing twice if a backend refresh already exposed the new ID.
+  nonisolated static func remappedTaskIDs(
+    _ ids: [String], using replacements: [String: String]
+  ) -> [String] {
+    var seen = Set<String>()
+    return ids.compactMap { id in
+      let remappedID = replacements[id] ?? id
+      guard seen.insert(remappedID).inserted else { return nil }
+      return remappedID
+    }
+  }
+
+  private func pendingTaskIDsForPromotion() -> Set<String> {
+    var ids = Set<String>()
+    ids.formUnion(categoryOrder.values.flatMap { $0 })
+    ids.formUnion(pendingReorderOrders.values.flatMap { $0 })
+    ids.formUnion(pendingReorderTaskIDs.values.flatMap { $0 })
+    ids.formUnion(pendingOriginalSortOrders.keys)
+    ids.formUnion(pendingOriginalSortOrderMissing)
+    ids.formUnion(pendingIndentTaskVersions.keys)
+    ids.formUnion(pendingSortOrderUpdates.map(\.id))
+    ids.formUnion(pendingReorderOrdersForRetry.values.flatMap { $0 })
+    ids.formUnion(pendingReorderTaskIDsForRetry.values.flatMap { $0 })
+    ids.formUnion(pendingIndentTaskVersionsForRetry.keys)
+    return ids
+  }
+
+  private func resolvePromotedTaskIDs() async -> [String: String] {
+    var replacements: [String: String] = [:]
+    for taskID in pendingTaskIDsForPromotion() {
+      guard case .localRow(let rowID) = ActionItemTaskIdentity(surfacedId: taskID) else { continue }
+      if let record = try? await ActionItemStorage.shared.getActionItem(id: rowID),
+        let backendID = record.backendId,
+        !backendID.isEmpty
+      {
+        replacements[taskID] = backendID
+      }
+    }
+    return replacements
+  }
+
+  private func remapPendingTaskIDs(_ replacements: [String: String]) {
+    guard !replacements.isEmpty else { return }
+
+    for category in TaskCategory.allCases {
+      if let order = categoryOrder[category] {
+        categoryOrder[category] = Self.remappedTaskIDs(order, using: replacements)
+      }
+      if let order = pendingReorderOrders[category] {
+        pendingReorderOrders[category] = Self.remappedTaskIDs(order, using: replacements)
+      }
+      if let taskIDs = pendingReorderTaskIDs[category] {
+        pendingReorderTaskIDs[category] = Set(Self.remappedTaskIDs(Array(taskIDs), using: replacements))
+      }
+      if let order = pendingReorderOrdersForRetry[category] {
+        pendingReorderOrdersForRetry[category] = Self.remappedTaskIDs(order, using: replacements)
+      }
+      if let taskIDs = pendingReorderTaskIDsForRetry[category] {
+        pendingReorderTaskIDsForRetry[category] = Set(Self.remappedTaskIDs(Array(taskIDs), using: replacements))
+      }
+    }
+
+    var remappedOriginalSortOrders: [String: Int] = [:]
+    for (taskID, sortOrder) in pendingOriginalSortOrders {
+      remappedOriginalSortOrders[replacements[taskID] ?? taskID] = sortOrder
+    }
+    pendingOriginalSortOrders = remappedOriginalSortOrders
+    pendingOriginalSortOrderMissing = Set(
+      pendingOriginalSortOrderMissing.map { replacements[$0] ?? $0 }
+    )
+
+    pendingSortOrderUpdates = pendingSortOrderUpdates.map { update in
+      (
+        id: replacements[update.id] ?? update.id,
+        sortOrder: update.sortOrder,
+        indentLevel: update.indentLevel
+      )
+    }
+
+    var remappedIndentVersions: [String: Int] = [:]
+    for (taskID, version) in pendingIndentTaskVersions {
+      let remappedID = replacements[taskID] ?? taskID
+      remappedIndentVersions[remappedID] = max(remappedIndentVersions[remappedID] ?? 0, version)
+    }
+    pendingIndentTaskVersions = remappedIndentVersions
+
+    var remappedRetryIndentVersions: [String: Int] = [:]
+    for (taskID, version) in pendingIndentTaskVersionsForRetry {
+      let remappedID = replacements[taskID] ?? taskID
+      remappedRetryIndentVersions[remappedID] = max(remappedRetryIndentVersions[remappedID] ?? 0, version)
+    }
+    pendingIndentTaskVersionsForRetry = remappedRetryIndentVersions
+
+    var remappedIndentLevels: [String: Int] = [:]
+    for (taskID, level) in indentLevels {
+      remappedIndentLevels[replacements[taskID] ?? taskID] = level
+    }
+    indentLevels = remappedIndentLevels
+  }
+
+  /// The complete order used only for persistence. Database rows are appended
+  /// after the active scope so an optimistic in-memory task record wins while
+  /// every off-page or filtered-out local row remains available for rebasing.
+  private func getCompleteOrderedTasksForPersistence(
+    for category: TaskCategory,
+    allLocalTasks: [TaskActionItem]
+  ) -> [TaskActionItem] {
+    var scope: [TaskActionItem] = []
+    if !searchText.isEmpty {
+      scope.append(contentsOf: searchResults)
+    } else if !filteredFromDatabase.isEmpty {
+      scope.append(contentsOf: filteredFromDatabase)
+    }
+    scope.append(contentsOf: getSourceTasks())
+    scope.append(contentsOf: displayTasks)
+    scope.append(contentsOf: allLocalTasks)
+    return orderedTasks(
+      deduplicateById(scope).filter { currentCategoryFor($0) == category },
+      inCategory: category
+    )
+  }
+
+  private func orderedTasks(_ tasks: [TaskActionItem], inCategory category: TaskCategory) -> [TaskActionItem] {
+    guard !tasks.isEmpty else { return [] }
 
     // Primary: if any task in this category has a sortOrder, use sortOrder-based sorting
     let hasSortOrder = tasks.contains(where: { $0.sortOrder != nil })
@@ -875,12 +1120,11 @@ class TasksViewModel: ObservableObject {
   }
 
   /// Rewrites `array`'s `sortOrder` for every task id named in `order`, using the
-  /// single `sortOrder` banding helper. `moveTask` applies this to each source array
-  /// the displayed list can be backed by (`store.incompleteTasks`,
-  /// `filteredFromDatabase`, `searchResults`) so they agree on the new order — a write
-  /// to only one diverges when filters/search are active. Ids not in `order` keep
-  /// their existing sortOrder. Extracted so the mirrored-array invariant is
-  /// unit-testable (TASK-07 / BL-030).
+  /// single `sortOrder` banding helper. The sparse path uses this only when a
+  /// category needs a full reindex; the normal path updates just the moved row.
+  /// Applying the same result to every mirrored source keeps filters/search in
+  /// agreement. Ids not in `order` keep their existing sortOrder. Extracted so
+  /// the mirrored-array invariant is unit-testable (TASK-07 / BL-030).
   nonisolated static func applyReorder(
     _ order: [String], categoryIndex: Int, to array: inout [TaskActionItem]
   ) {
@@ -893,35 +1137,117 @@ class TasksViewModel: ObservableObject {
     }
   }
 
+  /// Applies only the rows selected by sparse rank allocation. Keeping this
+  /// separate from `applyReorder` makes the normal drag path's write set
+  /// explicit and keeps mirrored UI projections in agreement.
+  nonisolated static func applySortOrderUpdates(
+    _ updates: [String: Int], to array: inout [TaskActionItem]
+  ) {
+    for index in array.indices {
+      guard let sortOrder = updates[array[index].id] else { continue }
+      array[index].sortOrder = sortOrder
+    }
+  }
+
   /// Move a task within a category
   func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
     guard let lease = captureOwnerLease() else { return }
+    sortOrderMutationGeneration &+= 1
     log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
-    var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
-
-    // Remove task from current position
-    order.removeAll { $0 == task.id }
-
-    // Insert at new position
-    let safeIndex = min(targetIndex, order.count)
-    order.insert(task.id, at: safeIndex)
+    // The drop target is an index in the rendered sortOrder sequence. Mutating
+    // the legacy UserDefaults projection (or categorizedTasks' due-date order)
+    // applies that coordinate to a different list and can move a task far from
+    // where it was dropped after sync, pagination, or another-device changes.
+    // Always start from the exact visual sequence instead.
+    let activeScopeTasks = getActiveScopeOrderedTasks(for: category)
+    let activeOrder = activeScopeTasks.map(\.id)
+    let visibleOrder = getOrderedTasks(for: category).map(\.id)
+    let order = Self.mergedReorderedTaskIDs(
+      fullOrder: activeScopeTasks.map(\.id),
+      visibleOrder: visibleOrder,
+      moving: task.id,
+      toPostRemovalIndex: targetIndex
+    )
 
     categoryOrder[category] = order
+    pendingReorderOrders[category] = order
+    if !task.id.hasPrefix("staged_") {
+      if !pendingReorderTaskIDs.values.contains(where: { $0.contains(task.id) }) {
+        if let originalSortOrder = activeScopeTasks.first(where: { $0.id == task.id })?.sortOrder ?? task.sortOrder {
+          pendingOriginalSortOrders[task.id] = originalSortOrder
+        } else {
+          pendingOriginalSortOrderMissing.insert(task.id)
+        }
+      }
+      pendingReorderTaskIDs[category, default: []].insert(task.id)
+    }
+
+    let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
+    let existingRanks = Dictionary(
+      lastWriteWins: activeScopeTasks.compactMap { task in
+        task.sortOrder.map { (task.id, $0) }
+      }
+    )
+    let rankPlan = TaskSortOrderPlanner.plan(
+      orderedIDs: order,
+      existingRanks: existingRanks,
+      affectedIDs: Set([task.id]),
+      categoryIndex: categoryIndex,
+      bandWidth: Self.sortOrderBandWidth
+    )
+
+    let rankUpdates: [String: Int]
+    let shouldRebalance: Bool
+    switch rankPlan {
+    case .incremental(let updates):
+      rankUpdates = updates
+      shouldRebalance = false
+    case .needsRebalance:
+      pendingRebalanceCategories.insert(category)
+      rankUpdates = Dictionary(
+        lastWriteWins: order.enumerated().map { index, taskID in
+          (taskID, Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: order.count))
+        }
+      )
+      shouldRebalance = true
+    }
+
+    // Staged rows are not backed by action_items and still need an immediate
+    // visual rank. Local-only action items use the same sparse SQLite rank path
+    // as cloud rows, but are filtered out before the backend request.
+    let isEphemeralMove = task.id.hasPrefix("staged_")
+    let orderChanged = order != activeOrder
+    let applyFullReorder =
+      shouldRebalance
+      || (isEphemeralMove && rankUpdates.isEmpty)
+      || (rankUpdates.isEmpty && orderChanged)
 
     // Apply the new sortOrder to every source array the displayed list could be
-    // backed by. recomputeDisplayCaches picks displayTasks from searchResults,
-    // filteredFromDatabase, or store.incompleteTasks (in priority order), so a
-    // write to only one of them misses when filters/search are active. Each
-    // reassignment fires its own @Published; recomputeAllCaches at the end folds
-    // them all into categorizedTasks.
-    let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
-
+    // backed by. A normal move applies only the sparse rank map; a full category
+    // reindex is reserved for exhausted/invalid rank gaps.
     var incomplete = store.incompleteTasks
-    Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
+    if applyFullReorder {
+      Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
+    } else {
+      Self.applySortOrderUpdates(rankUpdates, to: &incomplete)
+    }
     store.incompleteTasks = incomplete
 
-    Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
-    Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
+    var completed = store.completedTasks
+    if applyFullReorder {
+      Self.applyReorder(order, categoryIndex: categoryIndex, to: &completed)
+    } else {
+      Self.applySortOrderUpdates(rankUpdates, to: &completed)
+    }
+    store.completedTasks = completed
+
+    if applyFullReorder {
+      Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
+      Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
+    } else {
+      Self.applySortOrderUpdates(rankUpdates, to: &filteredFromDatabase)
+      Self.applySortOrderUpdates(rankUpdates, to: &searchResults)
+    }
 
     // Recompute caches immediately so the UI updates. Suppress the async
     // SQLite requery — when filters are active, the requery would otherwise
@@ -934,6 +1260,104 @@ class TasksViewModel: ObservableObject {
 
     // Schedule debounced sync to SQLite + backend
     scheduleSortOrderSync(lease: lease)
+  }
+
+  /// Move `task` immediately before the rendered target row. Row drops supply a
+  /// target position from the list before the source row is removed, whereas
+  /// `moveTask(_:toIndex:inCategory:)` takes a post-removal insertion index.
+  func moveTask(_ task: TaskActionItem, before targetTaskID: String, inCategory category: TaskCategory) {
+    let visibleOrder = getOrderedTasks(for: category).map(\.id)
+    guard
+      task.id != targetTaskID,
+      let targetIndex = visibleOrder.firstIndex(of: targetTaskID)
+    else { return }
+
+    let insertionIndex = Self.insertionIndex(
+      beforeTargetAt: targetIndex,
+      removingSourceAt: visibleOrder.firstIndex(of: task.id)
+    )
+    moveTaskToCategory(task, toIndex: insertionIndex, inCategory: category)
+  }
+
+  /// Translate a before-target index from the pre-removal visual list into the
+  /// insertion index accepted by `moveTask`. If the source precedes the target,
+  /// removal shifts that target one slot toward the start.
+  nonisolated static func insertionIndex(beforeTargetAt targetIndex: Int, removingSourceAt sourceIndex: Int?) -> Int {
+    max(0, targetIndex - ((sourceIndex ?? .max) < targetIndex ? 1 : 0))
+  }
+
+  /// Apply one move to a current visual order. This is the single production
+  /// mutation used before sort orders are rebased and persisted.
+  nonisolated static func reorderedTaskIDs(
+    _ visibleOrder: [String], moving taskID: String, toPostRemovalIndex targetIndex: Int
+  ) -> [String] {
+    var order = visibleOrder
+    order.removeAll { $0 == taskID }
+    order.insert(taskID, at: min(max(0, targetIndex), order.count))
+    return order
+  }
+
+  /// Moves one rendered task while retaining every hidden task in its current
+  /// full-category slot. This lets filtered/search list drops keep their visual
+  /// intent without leaving hidden records on old sort orders.
+  nonisolated static func mergedReorderedTaskIDs(
+    fullOrder: [String],
+    visibleOrder: [String],
+    moving taskID: String,
+    toPostRemovalIndex targetIndex: Int
+  ) -> [String] {
+    var knownIDs = Set<String>()
+    var canonicalOrder: [String] = []
+    for id in fullOrder where knownIDs.insert(id).inserted {
+      canonicalOrder.append(id)
+    }
+    for id in visibleOrder where knownIDs.insert(id).inserted {
+      canonicalOrder.append(id)
+    }
+
+    guard visibleOrder.contains(taskID) else { return canonicalOrder }
+    let visibleIDs = Set(visibleOrder)
+    var reorderedVisible = reorderedTaskIDs(
+      visibleOrder, moving: taskID, toPostRemovalIndex: targetIndex
+    ).makeIterator()
+
+    var mergedOrder = canonicalOrder
+    for index in mergedOrder.indices where visibleIDs.contains(mergedOrder[index]) {
+      // `reorderedTaskIDs` preserves the visible count, but if a malformed
+      // caller ever violates that contract, retain the canonical sequence
+      // instead of producing a partial reorder.
+      guard let reorderedID = reorderedVisible.next() else { return canonicalOrder }
+      mergedOrder[index] = reorderedID
+    }
+    return mergedOrder
+  }
+
+  /// Keep a debounce-time reorder authoritative for rows that the active store
+  /// cache does not contain (for example, a Done task or a search result from a
+  /// later page). Newly loaded rows are appended in their current order, so a
+  /// stale pending sequence can never hide them from later persistence.
+  nonisolated static func persistedTaskIDs(reorderedIDs: [String]?, currentIDs: [String]) -> [String] {
+    var seenIDs = Set<String>()
+    var result: [String] = []
+    for id in (reorderedIDs ?? []) + currentIDs where seenIDs.insert(id).inserted {
+      result.append(id)
+    }
+    return result
+  }
+
+  /// Remove only reorder snapshots that were included in a successful write.
+  /// A new drag can start while SQLite or the backend is awaited, so comparing
+  /// values rather than clearing the dictionary wholesale preserves that newer
+  /// drag for its own sync.
+  nonisolated static func removingCommittedReorderOrders(
+    _ pendingOrders: [TaskCategory: [String]],
+    committedOrders: [TaskCategory: [String]]
+  ) -> [TaskCategory: [String]] {
+    var remainingOrders = pendingOrders
+    for (category, committedOrder) in committedOrders where remainingOrders[category] == committedOrder {
+      remainingOrders.removeValue(forKey: category)
+    }
+    return remainingOrders
   }
 
   /// Move a task to first position in category
@@ -1009,6 +1433,7 @@ class TasksViewModel: ObservableObject {
     let current = getIndentLevel(for: taskId)
     if current < 3 {
       indentLevels[taskId] = current + 1
+      markIndentMutation(taskId)
       scheduleSortOrderSync(lease: lease)
     }
   }
@@ -1018,8 +1443,15 @@ class TasksViewModel: ObservableObject {
     let current = getIndentLevel(for: taskId)
     if current > 0 {
       indentLevels[taskId] = current - 1
+      markIndentMutation(taskId)
       scheduleSortOrderSync(lease: lease)
     }
+  }
+
+  private func markIndentMutation(_ taskId: String) {
+    indentMutationVersion &+= 1
+    sortOrderMutationGeneration &+= 1
+    pendingIndentTaskVersions[taskId] = indentMutationVersion
   }
 
   // MARK: - Keyboard Navigation
@@ -1172,8 +1604,9 @@ class TasksViewModel: ObservableObject {
   }
 
   /// Collect current sort orders from all categories and write to SQLite + backend
-  private func syncSortOrders(lease expectedLease: OwnerLease? = nil) async {
-    guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
+  @discardableResult
+  private func syncSortOrders(lease expectedLease: OwnerLease? = nil) async -> Bool {
+    guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return false }
     // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
     // during the debounce window. Capture the ownership token at entry and only
     // clear if it still matches — a newer drag that bumped the generation while
@@ -1192,24 +1625,156 @@ class TasksViewModel: ObservableObject {
         recomputeAllCaches()
       }
     }
-    let updates = collectSortOrderUpdates()
-    await syncSortOrderUpdates(updates, lease: lease)
+    let committedReorderOrders = pendingReorderOrders
+    let committedReorderTaskIDs = pendingReorderTaskIDs
+    let committedRebalanceCategories = pendingRebalanceCategories
+    let committedIndentTaskVersions = pendingIndentTaskVersions
+    let committedMutationGeneration = sortOrderMutationGeneration
+    do {
+      guard committedMutationGeneration == sortOrderMutationGeneration else { return false }
+      let updates = try await collectSortOrderUpdates()
+      return await syncSortOrderUpdates(
+        updates,
+        lease: lease,
+        committedReorderOrders: committedReorderOrders,
+        committedReorderTaskIDs: committedReorderTaskIDs,
+        committedRebalanceCategories: committedRebalanceCategories,
+        committedIndentTaskVersions: committedIndentTaskVersions,
+        expectedMutationGeneration: committedMutationGeneration
+      )
+    } catch {
+      guard isCurrent(lease), committedMutationGeneration == sortOrderMutationGeneration else { return false }
+      let errorDescription = String(describing: error)
+      log("TasksVM: Failed to load complete local task order: \(error)")
+      recordSortOrderSyncFailure(
+        storageErrorDescription: errorDescription,
+        backendErrorDescription: nil,
+        updates: [],
+        committedReorderOrders: committedReorderOrders,
+        committedReorderTaskIDs: committedReorderTaskIDs,
+        committedRebalanceCategories: committedRebalanceCategories,
+        committedIndentTaskVersions: committedIndentTaskVersions,
+        committedMutationGeneration: committedMutationGeneration
+      )
+      return false
+    }
   }
 
-  private func collectSortOrderUpdates() -> [SortOrderUpdate] {
+  private func collectSortOrderUpdates() async throws -> [SortOrderUpdate] {
     var updates: [SortOrderUpdate] = []
+    // The reorder debounce can outlive a search/filter change. Resolve every
+    // pending ID from SQLite, not the mutable UI scope, so an off-page search
+    // result and all hidden category rows receive one collision-free rebase.
+    let promotedTaskIDs = await resolvePromotedTaskIDs()
+    remapPendingTaskIDs(promotedTaskIDs)
+    var allLocalTasks = try await ActionItemStorage.shared.getAllLocalActionItems()
+    // A local row can receive its backend ID between the first promotion scan
+    // and the complete-order read. Re-scan after that read and refresh the
+    // snapshot when a late promotion is observed; otherwise the pending order
+    // would point at the backend ID while the snapshot still contains only the
+    // filtered-out local ID, making the reorder look like a successful no-op.
+    let latePromotedTaskIDs = await resolvePromotedTaskIDs()
+    if !latePromotedTaskIDs.isEmpty {
+      remapPendingTaskIDs(latePromotedTaskIDs)
+      allLocalTasks = try await ActionItemStorage.shared.getAllLocalActionItems()
+    }
 
     for category in TaskCategory.allCases {
-      let orderedTasks = getOrderedTasks(for: category)
-      // Category bands: today=[0,100k), tomorrow=[100k,200k), later=[200k,300k),
-      // noDeadline=[300k,400k). Spacing is derived from the per-category count so a
-      // large category never overflows its band (BL-016); see TasksViewModel.sortOrder.
+      let currentTasks = getCompleteOrderedTasksForPersistence(
+        for: category,
+        allLocalTasks: allLocalTasks
+      )
+      let currentTasksByID = Dictionary(lastWriteWins: currentTasks.map { ($0.id, $0) })
+      let canonicalPreMutationIDs = Self.canonicalPreMutationTaskIDs(
+        currentTasks: currentTasks.map { (id: $0.id, sortOrder: $0.sortOrder) },
+        originalSortOrders: pendingOriginalSortOrders
+      )
+      let orderedTaskIDs = Self.persistedTaskIDs(
+        reorderedIDs: pendingReorderOrders[category].map {
+          Self.rebaseVisibleTaskIDs(
+            fullOrder: canonicalPreMutationIDs,
+            reorderedVisibleIDs: $0
+          )
+        },
+        currentIDs: currentTasks.map(\.id)
+      )
+      let orderedTasks = orderedTaskIDs.compactMap { currentTasksByID[$0] }
       let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
 
-      for (index, task) in orderedTasks.enumerated() {
-        guard !task.id.hasPrefix("local_"), !task.id.hasPrefix("staged_") else { continue }
-        let sortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: orderedTasks.count)
+      // Local-only action_items have a real SQLite row and must keep their rank
+      // across reloads. Staged tasks live in a separate table without the
+      // action_items sort-order column, so they remain UI-only until promotion.
+      let sortableTasks = orderedTasks.filter { !$0.id.hasPrefix("staged_") }
+      let sortableIDs = sortableTasks.map(\.id)
+      var affectedIDs = pendingReorderTaskIDs[category] ?? []
+      let indentIDs = Set(
+        pendingIndentTaskVersions.keys.filter { currentTasksByID[$0] != nil }
+      )
+      affectedIDs.formUnion(indentIDs.filter { sortableIDs.contains($0) })
+      if pendingRebalanceCategories.contains(category) {
+        affectedIDs = Set(sortableIDs)
+      }
+
+      var existingRanks = Dictionary(
+        lastWriteWins: sortableTasks.compactMap { task in
+          task.sortOrder.map { (task.id, $0) }
+        }
+      )
+      for taskID in affectedIDs {
+        if pendingOriginalSortOrderMissing.contains(taskID) {
+          existingRanks.removeValue(forKey: taskID)
+        } else if let originalSortOrder = pendingOriginalSortOrders[taskID] {
+          existingRanks[taskID] = originalSortOrder
+        }
+      }
+
+      var rankUpdates: [String: Int] = [:]
+      if !affectedIDs.isEmpty {
+        switch TaskSortOrderPlanner.plan(
+          orderedIDs: sortableIDs,
+          existingRanks: existingRanks,
+          affectedIDs: affectedIDs,
+          categoryIndex: categoryIndex,
+          bandWidth: Self.sortOrderBandWidth
+        ) {
+        case .incremental(let sparseUpdates):
+          rankUpdates = sparseUpdates
+        case .needsRebalance:
+          rankUpdates = Dictionary(
+            lastWriteWins: sortableIDs.enumerated().map { index, taskID in
+              (
+                taskID,
+                Self.sortOrder(
+                  categoryIndex: categoryIndex,
+                  itemIndex: index,
+                  itemCount: sortableIDs.count
+                )
+              )
+            }
+          )
+        }
+      }
+
+      let tasksByID = Dictionary(lastWriteWins: sortableTasks.map { ($0.id, $0) })
+      var updateIDs: [String] = []
+      var seenUpdateIDs = Set<String>()
+      for task in sortableTasks where rankUpdates[task.id] != nil || indentIDs.contains(task.id) {
+        if seenUpdateIDs.insert(task.id).inserted {
+          updateIDs.append(task.id)
+        }
+      }
+      for taskID in updateIDs {
+        guard let task = tasksByID[taskID], let sortOrder = rankUpdates[taskID] ?? task.sortOrder else {
+          continue
+        }
         let indent = indentLevels[task.id] ?? task.indentLevel ?? 0
+        let persistedSortOrder =
+          pendingOriginalSortOrderMissing.contains(task.id)
+          ? nil
+          : (pendingOriginalSortOrders[task.id] ?? task.sortOrder)
+        let rankChanged = persistedSortOrder != sortOrder
+        let indentChanged = pendingIndentTaskVersions[task.id] != nil
+        guard rankChanged || indentChanged else { continue }
         updates.append((id: task.id, sortOrder: sortOrder, indentLevel: indent))
       }
     }
@@ -1217,8 +1782,57 @@ class TasksViewModel: ObservableObject {
     return updates
   }
 
-  private func syncSortOrderUpdates(_ updates: [SortOrderUpdate], lease: OwnerLease) async {
-    guard !updates.isEmpty, isCurrent(lease) else { return }
+  private func syncSortOrderUpdates(
+    _ updates: [SortOrderUpdate],
+    lease: OwnerLease,
+    committedReorderOrders: [TaskCategory: [String]] = [:],
+    committedReorderTaskIDs: [TaskCategory: Set<String>] = [:],
+    committedRebalanceCategories: Set<TaskCategory> = [],
+    committedIndentTaskVersions: [String: Int] = [:],
+    expectedMutationGeneration: UInt64
+  ) async -> Bool {
+    let previous = sortOrderIOInFlight
+    let operation = Task { @MainActor [weak self] in
+      _ = await previous?.value
+      guard let self else { return false }
+      return await self.performSyncSortOrderUpdates(
+        updates,
+        lease: lease,
+        committedReorderOrders: committedReorderOrders,
+        committedReorderTaskIDs: committedReorderTaskIDs,
+        committedRebalanceCategories: committedRebalanceCategories,
+        committedIndentTaskVersions: committedIndentTaskVersions,
+        expectedMutationGeneration: expectedMutationGeneration
+      )
+    }
+    sortOrderIOInFlight = operation
+    return await operation.value
+  }
+
+  private func performSyncSortOrderUpdates(
+    _ updates: [SortOrderUpdate],
+    lease: OwnerLease,
+    committedReorderOrders: [TaskCategory: [String]] = [:],
+    committedReorderTaskIDs: [TaskCategory: Set<String>] = [:],
+    committedRebalanceCategories: Set<TaskCategory> = [],
+    committedIndentTaskVersions: [String: Int] = [:],
+    expectedMutationGeneration: UInt64
+  ) async -> Bool {
+    guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
+    if updates.isEmpty {
+      clearSortOrderSyncFailure()
+      clearCommittedReorderState(
+        orders: committedReorderOrders,
+        taskIDs: committedReorderTaskIDs,
+        rebalanceCategories: committedRebalanceCategories,
+        indentVersions: committedIndentTaskVersions
+      )
+      pendingReorderOrders = Self.removingCommittedReorderOrders(
+        pendingReorderOrders,
+        committedOrders: committedReorderOrders
+      )
+      return true
+    }
 
     var storageErrorDescription: String?
     var backendErrorDescription: String?
@@ -1232,44 +1846,102 @@ class TasksViewModel: ObservableObject {
         }
       )
     } catch {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
       storageErrorDescription = String(describing: error)
       log("TasksVM: Failed to write sort orders to SQLite: \(error)")
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
 
     // Sync to backend API
-    do {
-      try await sortOrderSyncOperations.updateBackend(
-        updates,
-        lease.authorizationSnapshot
-      )
-      guard isCurrent(lease) else { return }
-      log("TasksVM: Synced \(updates.count) sort orders to backend")
-    } catch {
-      guard isCurrent(lease) else { return }
-      backendErrorDescription = String(describing: error)
-      log("TasksVM: Failed to sync sort orders to backend: \(error)")
+    let backendUpdates = updates.filter {
+      !$0.id.hasPrefix("local_") && !$0.id.hasPrefix("staged_")
+    }
+    if !backendUpdates.isEmpty {
+      do {
+        try await sortOrderSyncOperations.updateBackend(
+          backendUpdates,
+          lease.authorizationSnapshot
+        )
+        guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
+        log("TasksVM: Synced \(backendUpdates.count) sort orders to backend")
+      } catch {
+        guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
+        backendErrorDescription = String(describing: error)
+        log("TasksVM: Failed to sync sort orders to backend: \(error)")
+      }
     }
 
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease), expectedMutationGeneration == sortOrderMutationGeneration else { return false }
     if storageErrorDescription == nil, backendErrorDescription == nil {
       clearSortOrderSyncFailure()
+      clearCommittedReorderState(
+        orders: committedReorderOrders,
+        taskIDs: committedReorderTaskIDs,
+        rebalanceCategories: committedRebalanceCategories,
+        indentVersions: committedIndentTaskVersions
+      )
+      pendingReorderOrders = Self.removingCommittedReorderOrders(
+        pendingReorderOrders,
+        committedOrders: committedReorderOrders
+      )
+      return true
     } else {
       recordSortOrderSyncFailure(
         storageErrorDescription: storageErrorDescription,
         backendErrorDescription: backendErrorDescription,
-        updates: updates
+        updates: updates,
+        committedReorderOrders: committedReorderOrders,
+        committedReorderTaskIDs: committedReorderTaskIDs,
+        committedRebalanceCategories: committedRebalanceCategories,
+        committedIndentTaskVersions: committedIndentTaskVersions,
+        committedMutationGeneration: expectedMutationGeneration
       )
+      return false
+    }
+  }
+
+  private func clearCommittedReorderState(
+    orders: [TaskCategory: [String]],
+    taskIDs: [TaskCategory: Set<String>],
+    rebalanceCategories: Set<TaskCategory>,
+    indentVersions: [String: Int]
+  ) {
+    for (category, committedOrder) in orders {
+      guard pendingReorderOrders[category] == committedOrder else { continue }
+      pendingReorderTaskIDs[category]?.subtract(taskIDs[category] ?? [])
+      if pendingReorderTaskIDs[category]?.isEmpty == true {
+        pendingReorderTaskIDs.removeValue(forKey: category)
+      }
+      for taskID in taskIDs[category] ?? [] {
+        pendingOriginalSortOrders.removeValue(forKey: taskID)
+        pendingOriginalSortOrderMissing.remove(taskID)
+      }
+      pendingRebalanceCategories.remove(category)
+    }
+    for category in rebalanceCategories where pendingReorderOrders[category] == nil {
+      pendingRebalanceCategories.remove(category)
+    }
+    for (taskID, version) in indentVersions where pendingIndentTaskVersions[taskID] == version {
+      pendingIndentTaskVersions.removeValue(forKey: taskID)
     }
   }
 
   func recordSortOrderSyncFailure(
     storageErrorDescription: String?,
     backendErrorDescription: String?,
-    updates: [SortOrderUpdate]
+    updates: [SortOrderUpdate],
+    committedReorderOrders: [TaskCategory: [String]] = [:],
+    committedReorderTaskIDs: [TaskCategory: Set<String>] = [:],
+    committedRebalanceCategories: Set<TaskCategory> = [],
+    committedIndentTaskVersions: [String: Int] = [:],
+    committedMutationGeneration: UInt64? = nil
   ) {
     pendingSortOrderUpdates = updates
+    pendingReorderOrdersForRetry = committedReorderOrders
+    pendingReorderTaskIDsForRetry = committedReorderTaskIDs
+    pendingRebalanceCategoriesForRetry = committedRebalanceCategories
+    pendingIndentTaskVersionsForRetry = committedIndentTaskVersions
+    pendingSortOrderUpdatesGeneration = committedMutationGeneration ?? sortOrderMutationGeneration
     sortOrderSyncFailure = TaskSortOrderSyncFailure(
       storageErrorDescription: storageErrorDescription,
       backendErrorDescription: backendErrorDescription
@@ -1278,6 +1950,11 @@ class TasksViewModel: ObservableObject {
 
   private func clearSortOrderSyncFailure() {
     pendingSortOrderUpdates = []
+    pendingSortOrderUpdatesGeneration = nil
+    pendingReorderOrdersForRetry = [:]
+    pendingReorderTaskIDsForRetry = [:]
+    pendingRebalanceCategoriesForRetry = []
+    pendingIndentTaskVersionsForRetry = [:]
     sortOrderSyncFailure = nil
   }
 
@@ -1286,8 +1963,17 @@ class TasksViewModel: ObservableObject {
     guard let lease = captureOwnerLease() else { return nil }
     sortOrderSyncTask?.cancel()
     let updates = pendingSortOrderUpdates
+    let committedReorderOrders = pendingReorderOrdersForRetry
+    let committedReorderTaskIDs = pendingReorderTaskIDsForRetry
+    let committedRebalanceCategories = pendingRebalanceCategoriesForRetry
+    let committedIndentTaskVersions = pendingIndentTaskVersionsForRetry
+    let failedMutationGeneration = pendingSortOrderUpdatesGeneration
     let task = Task { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
+      if let failedMutationGeneration, failedMutationGeneration != self.sortOrderMutationGeneration {
+        await self.syncSortOrders(lease: lease)
+        return
+      }
       if updates.isEmpty {
         await self.syncSortOrders(lease: lease)
         return
@@ -1304,7 +1990,15 @@ class TasksViewModel: ObservableObject {
           self.recomputeAllCaches()
         }
       }
-      await self.syncSortOrderUpdates(updates, lease: lease)
+      _ = await self.syncSortOrderUpdates(
+        updates,
+        lease: lease,
+        committedReorderOrders: committedReorderOrders,
+        committedReorderTaskIDs: committedReorderTaskIDs,
+        committedRebalanceCategories: committedRebalanceCategories,
+        committedIndentTaskVersions: committedIndentTaskVersions,
+        expectedMutationGeneration: failedMutationGeneration ?? self.sortOrderMutationGeneration
+      )
     }
     sortOrderSyncTask = task
     return task
@@ -1315,7 +2009,7 @@ class TasksViewModel: ObservableObject {
   /// One-time migration: read existing UserDefaults ordering and write as sortOrder to SQLite + backend
   private func migrateUserDefaultsToSortOrder(lease expectedLease: OwnerLease? = nil) {
     guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
-    let migrationKey = Self.ownerScopedKey(Self.sortOrderMigrationKey, ownerID: lease.ownerID)
+    let migrationKey = ScopedDefaultsKey.tasksSortOrderMigrated(ownerID: lease.ownerID)
     guard !orderingDefaults.bool(forKey: migrationKey) else { return }
 
     // Only migrate if there's existing UserDefaults ordering data
@@ -1327,10 +2021,21 @@ class TasksViewModel: ObservableObject {
       return
     }
 
+    // Treat the legacy projection as a one-time set of affected rows. The
+    // persistence path will reindex a category if its old ranks are missing or
+    // invalid, while valid sparse ranks still avoid unrelated writes.
+    for (category, ids) in categoryOrder {
+      pendingReorderOrders[category] = ids
+      pendingReorderTaskIDs[category, default: []].formUnion(ids)
+    }
+    for taskID in indentLevels.keys {
+      markIndentMutation(taskID)
+    }
+
     sortOrderSyncTask = Task { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
-      await self.syncSortOrders(lease: lease)
-      guard self.isCurrent(lease) else { return }
+      let syncSucceeded = await self.syncSortOrders(lease: lease)
+      guard self.isCurrent(lease), syncSucceeded else { return }
       self.orderingDefaults.set(true, forKey: migrationKey)
       log("TasksVM: Migrated UserDefaults ordering to sortOrder")
     }
@@ -2073,13 +2778,28 @@ class TasksViewModel: ObservableObject {
     registry.register(
       name: "reorder_task",
       summary:
-        "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path and return the resulting order. Flushes the sortOrder sync to SQLite + backend by default; pass flush=false to leave the production 500ms debounce running so a harness can prove coalescing (TASK-05).",
-      params: ["id", "index", "category", "flush"]
+        "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path and return the resulting order. Resolve by id or description. Flushes the sortOrder sync to SQLite + backend by default; pass flush=false to leave the production 500ms debounce running so a harness can prove coalescing (TASK-05).",
+      params: ["id", "description", "index", "category", "flush"]
     ) { [weak self] params in
       guard let self else { return ["error": "tasks view model deallocated"] }
       await self.ensureTasksLoadedForAutomation()
-      guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-      else { return ["error": "task not found: \(params["id"] ?? "")"] }
+      let task: TaskActionItem?
+      if let id = params["id"], !id.isEmpty {
+        task = self.store.tasks.first(where: { $0.id == id })
+      } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !description.isEmpty
+      {
+        let matches = self.store.tasks.filter { $0.description.contains(description) }
+        if matches.count > 1 {
+          return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+        }
+        task = matches.first
+      } else {
+        task = nil
+      }
+      guard let task else {
+        return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"]
+      }
       // moveTask only clamps the upper bound before Array.insert(at:), so a negative
       // index would crash the bridge; clamp to >= 0 for deterministic behavior.
       let index = max(0, Int(params["index"] ?? "") ?? 0)
@@ -2090,11 +2810,22 @@ class TasksViewModel: ObservableObject {
       // log line) — exactly the TASK-05 coalescing criterion. Default stays
       // flush=true so existing recipes keep their deterministic SQLite reads.
       let flush = (params["flush"] ?? "true").lowercased() != "false"
+      let flushed: Bool
       if flush {
-        await self.flushSortOrderSyncForAutomation()
+        flushed = await self.flushSortOrderSyncForAutomation()
+      } else {
+        flushed = false
       }
-      let order = self.getOrderedTasks(for: category).map(\.id).joined(separator: ",")
-      return ["id": id, "category": category.rawValue, "order": order, "flushed": flush ? "true" : "false"]
+      let order = self.getOrderedTasks(for: category).map(\.id)
+      let persistedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id)
+      return [
+        "id": task.id,
+        "category": category.rawValue,
+        "order": order.joined(separator: ","),
+        "position": String(order.firstIndex(of: task.id) ?? -1),
+        "persisted": persistedTask?.sortOrder == nil ? "false" : "true",
+        "flushed": flushed ? "true" : "false",
+      ]
     }
 
     registry.register(
@@ -2222,9 +2953,10 @@ class TasksViewModel: ObservableObject {
   /// Cancel the debounced sortOrder sync and run it now, so an automation caller can
   /// deterministically observe the SQLite + backend write instead of racing the 500ms
   /// debounce window.
-  private func flushSortOrderSyncForAutomation() async {
+  @discardableResult
+  private func flushSortOrderSyncForAutomation() async -> Bool {
     sortOrderSyncTask?.cancel()
-    await syncSortOrders()
+    return await syncSortOrders()
   }
 
   /// Resolve automation-created tasks to their stable backend ids. `store.createTask`
@@ -3302,7 +4034,11 @@ struct TasksPage: View {
                   },
                   onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                   onDecrementIndent: { viewModel.decrementIndent(for: $0) },
-                  onMoveTask: { task, index, cat in viewModel.moveTaskToCategory(task, toIndex: index, inCategory: cat)
+                  onMoveTask: { task, index, category in
+                    viewModel.moveTaskToCategory(task, toIndex: index, inCategory: category)
+                  },
+                  onMoveTaskBeforeTarget: { task, targetTaskID, cat in
+                    viewModel.moveTask(task, before: targetTaskID, inCategory: cat)
                   },
                   onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
@@ -3595,6 +4331,7 @@ struct TaskCategorySection: View {
   var onIncrementIndent: ((String) -> Void)?
   var onDecrementIndent: ((String) -> Void)?
   var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
+  var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
   var onClearTodayDeadlines: (() async -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
@@ -3762,9 +4499,8 @@ struct TaskCategorySection: View {
                   isDropTarget: dropTargetTaskId == task.id,
                   dropAbove: dropAbove,
                   findTask: { id in findTaskGlobal?(id) ?? orderedTasks.first(where: { $0.id == id }) },
-                  findTargetIndex: { orderedTasks.firstIndex(where: { $0.id == task.id }) },
-                  onMoveTask: { droppedTask, targetIndex in
-                    onMoveTask?(droppedTask, targetIndex, category)
+                  onMoveTaskBeforeTarget: { droppedTask in
+                    onMoveTaskBeforeTarget?(droppedTask, task.id, category)
                   },
                   onDragEnded: onDragEnded,
                   onHoverChanged: onDragHoverChanged
@@ -3817,8 +4553,7 @@ struct TaskDragDropModifier: ViewModifier {
   var isDropTarget: Bool = false
   var dropAbove: Bool = true
   var findTask: ((String) -> TaskActionItem?)?
-  var findTargetIndex: (() -> Int?)?
-  var onMoveTask: ((TaskActionItem, Int) -> Void)?
+  var onMoveTaskBeforeTarget: ((TaskActionItem) -> Void)?
   /// Called with the id of the dragged task when a drop lands, so the drag-end
   /// reset stays scoped to that task (BL-030).
   var onDragEnded: (@Sendable (String) -> Void)?
@@ -3870,13 +4605,9 @@ struct TaskDragDropModifier: ViewModifier {
               // fires the same scoped reset as the catch-all; both are
               // idempotent via the draggedTaskId == endedId guard (BL-030).
               onDragEnded?(droppedId)
-              guard let targetIndex = findTargetIndex?() else {
-                log("DROP: findTargetIndex returned nil")
-                return
-              }
               if let droppedTask = findTask?(droppedId) {
-                log("DROP: Moving task \(droppedId) to index \(targetIndex)")
-                onMoveTask?(droppedTask, targetIndex)
+                log("DROP: Moving task \(droppedId) before target \(taskId)")
+                onMoveTaskBeforeTarget?(droppedTask)
               } else {
                 log("DROP: Could not find task for id \(droppedId)")
               }

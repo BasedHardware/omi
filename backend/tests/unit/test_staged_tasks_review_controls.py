@@ -411,25 +411,190 @@ class TestModeAwareSidecarReconciliation:
             is False
         )
 
-    def test_read_mode_legacy_migrations_are_noops(self, monkeypatch):
+    @pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
+    def test_legacy_migrations_only_recover_legacy_read_modes(self, monkeypatch, workflow_mode):
         monkeypatch.setattr(
             r.task_control_db,
             'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
+            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
+        )
+        restore_calls = []
+        monkeypatch.setattr(
+            r,
+            '_restore_all_legacy_conversation_items',
+            lambda uid, **kwargs: restore_calls.append(uid)
+            or {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
+        )
+        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: [])
+        assert r.migrate_ai_tasks(uid='u1')['status'].startswith('legacy task migration retired')
+        assert r.migrate_conversation_items(uid='u1', limit=50, cursor=None) == {
+            'status': 'ok',
+            'migrated': 0,
+            'deleted': 0,
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert restore_calls == ([] if workflow_mode in {'write', 'read'} else ['u1'])
+
+    @pytest.mark.parametrize('workflow_mode', ['write', 'read'])
+    def test_canonical_mode_recovery_keeps_legacy_staged_candidate_authoritative(self, monkeypatch, workflow_mode):
+        monkeypatch.setattr(
+            r.task_control_db,
+            'get_task_workflow_control',
+            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
         )
         monkeypatch.setattr(
             r.staged_tasks_db,
-            'migrate_ai_tasks',
-            lambda uid: pytest.fail('read mode cannot invoke staged migration writer'),
+            'restore_legacy_conversation_items',
+            lambda *args, **kwargs: pytest.fail('canonical recovery must not duplicate a legacy_staged Candidate'),
         )
         monkeypatch.setattr(
             r.staged_tasks_db,
-            'migrate_conversation_items_to_staged',
-            lambda uid: pytest.fail('read mode cannot invoke staged migration writer'),
+            'get_all_staged_tasks_for_migration',
+            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
+        )
+        monkeypatch.setattr(
+            r.candidates_db,
+            'get_candidate',
+            lambda uid, candidate_id: MagicMock(status=CandidateStatus.pending),
         )
 
-        assert r.migrate_ai_tasks(uid='u1')['status'].startswith('canonical read mode')
-        assert r.migrate_conversation_items(uid='u1') == {'status': 'ok', 'migrated': 0, 'deleted': 0}
+        assert r.restore_legacy_conversation_items(uid='u1', limit=50, cursor=None) == {
+            'status': 'ok',
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+
+    def test_canonical_compatibility_recovery_repairs_missing_candidate_before_ack(self, monkeypatch):
+        control = TaskWorkflowControl(workflow_mode='write', account_generation=7)
+        monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: control)
+        monkeypatch.setattr(
+            r.staged_tasks_db,
+            'get_all_staged_tasks_for_migration',
+            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
+        )
+        candidates = iter([None, MagicMock(status=CandidateStatus.pending)])
+        candidate_ids = []
+        monkeypatch.setattr(
+            r.candidates_db,
+            'get_candidate',
+            lambda uid, candidate_id: candidate_ids.append(candidate_id) or next(candidates),
+        )
+        migration_calls = []
+        monkeypatch.setattr(
+            r,
+            'migrate_staged_tasks',
+            lambda uid, current_control, *, after_id=None, limit: migration_calls.append(
+                (uid, current_control, after_id, limit)
+            )
+            or MagicMock(failed=0, scanned=1, checkpoint='legacy-1'),
+        )
+
+        result = r.migrate_conversation_items(uid='u1', limit=50, cursor=None)
+
+        assert result['status'] == 'ok'
+        assert migration_calls == [('u1', control, None, 500)]
+        assert candidate_ids == [
+            candidates_db.candidate_id_for_idempotency('u1', 7, 'legacy-staged:legacy-1'),
+            candidates_db.candidate_id_for_idempotency('u1', 7, 'legacy-staged:legacy-1'),
+        ]
+
+    def test_canonical_compatibility_recovery_does_not_ack_missing_candidate(self, monkeypatch):
+        control = TaskWorkflowControl(workflow_mode='read', account_generation=7)
+        monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: control)
+        monkeypatch.setattr(
+            r.staged_tasks_db,
+            'get_all_staged_tasks_for_migration',
+            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
+        )
+        monkeypatch.setattr(r.candidates_db, 'get_candidate', lambda uid, candidate_id: None)
+        monkeypatch.setattr(r, 'migrate_staged_tasks', lambda *args, **kwargs: MagicMock(failed=1))
+
+        with pytest.raises(HTTPException) as error:
+            r.migrate_conversation_items(uid='u1', limit=50, cursor=None)
+
+        assert error.value.status_code == 503
+
+    def test_canonical_compatibility_recovery_pages_past_unrelated_rows(self, monkeypatch):
+        control = TaskWorkflowControl(workflow_mode='write', account_generation=7)
+        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: [])
+        missing = iter([True, False])
+        monkeypatch.setattr(
+            r,
+            '_legacy_rows_missing_canonical_representation',
+            lambda uid, *, account_generation: next(missing),
+        )
+        reports = iter(
+            [
+                MagicMock(failed=0, scanned=500, checkpoint='page-1'),
+                MagicMock(failed=0, scanned=1, checkpoint='page-2'),
+            ]
+        )
+        migration_calls = []
+        monkeypatch.setattr(
+            r,
+            'migrate_staged_tasks',
+            lambda uid, current_control, *, after_id=None, limit: migration_calls.append(
+                (uid, current_control, after_id, limit)
+            )
+            or next(reports),
+        )
+
+        r._ensure_canonical_legacy_recovery('u1', control)
+
+        assert migration_calls == [
+            ('u1', control, None, 500),
+            ('u1', control, 'page-1', 500),
+        ]
+
+    def test_retired_conversation_migration_uses_only_the_marked_recovery(self, monkeypatch):
+        monkeypatch.setattr(
+            r.task_control_db,
+            'get_task_workflow_control',
+            lambda uid: TaskWorkflowControl(workflow_mode='off', account_generation=7),
+        )
+        monkeypatch.setattr(
+            r,
+            '_restore_all_legacy_conversation_items',
+            lambda uid, **kwargs: {
+                'restored': 2,
+                'skipped_existing': 1,
+                'has_more': False,
+                'next_cursor': None,
+            },
+        )
+        monkeypatch.setattr(
+            r.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            lambda uid, **kwargs: {
+                'restored': 2,
+                'skipped_existing': 1,
+                'has_more': True,
+                'next_cursor': 'legacy-2',
+            },
+        )
+
+        assert r.migrate_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
+            'status': 'ok',
+            'migrated': 0,
+            'deleted': 0,
+            'restored': 2,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+
+        assert r.restore_legacy_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
+            'status': 'ok',
+            'restored': 2,
+            'skipped_existing': 1,
+            'has_more': True,
+            'next_cursor': 'legacy-2',
+        }
 
     def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):
         monkeypatch.setattr(
