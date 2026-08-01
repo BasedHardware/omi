@@ -166,6 +166,10 @@ class ChatRatingResponse(BaseModel):
     status: str
 
 
+class DeviceToolResultResponse(BaseModel):
+    status: str
+
+
 class ShareChatMessagesResponse(BaseModel):
     url: str
     token: str
@@ -766,7 +770,9 @@ def send_message(
     return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 
-@router.post('/v2/messages/device-tool/{call_id}/result', tags=['chat'])
+@router.post(
+    '/v2/messages/device-tool/{call_id}/result', tags=['chat'], response_model=DeviceToolResultResponse
+)
 def submit_device_tool_result(
     call_id: str,
     data: DeviceToolResultRequest,
