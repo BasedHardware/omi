@@ -156,6 +156,7 @@ describe("on-device tool manifest", () => {
       "search_contacts",
       "list_message_chats",
       "read_message_history",
+      "list_mail_messages",
       "send_message",
       "run_applescript",
     ]) {
