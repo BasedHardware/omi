@@ -1474,6 +1474,95 @@ def update_conversation_segments(
     return run_transactional(client, _write_segments)
 
 
+def assign_conversation_segment_people(
+    uid: str,
+    conversation_id: str,
+    assignments: List[Any],
+    *,
+    firestore_client: Any = None,
+) -> Dict[int, List[str]]:
+    """Bind whole diarized speakers to people, but only while they are still free.
+
+    ``assignments`` is a list of ``(speaker_id, person_id)`` pairs. A speaker is
+    bound only when *every* stored segment carrying that ``speaker_id`` is still
+    unresolved -- no ``person_id`` and not the account owner. A speaker with one
+    resolved segment is left entirely alone, because splitting a single voice
+    between the person the user picked and the one an inference picked leaves the
+    conversation asserting both.
+
+    The eligibility check and the write share one transaction.
+    ``update_conversation_segments`` is transactional too, but it takes a segment
+    array its caller computed from an earlier read, so an assignment landing in
+    between is overwritten by that stale array. Deciding eligibility inside the
+    transaction is what closes that window.
+
+    Returns:
+        The segment ids written, keyed by the ``speaker_id`` they were written
+        for. Speakers that were no longer free are absent, so a caller can tell
+        an inference that landed from one the user overtook. An empty result
+        means nothing was written.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    requested = [
+        (speaker_id, person_id)
+        for speaker_id, person_id in assignments
+        if isinstance(speaker_id, int) and not isinstance(speaker_id, bool) and isinstance(person_id, str) and person_id
+    ]
+    if not requested:
+        return {}
+
+    @firestore.transactional
+    def _assign(transaction) -> Dict[int, List[str]]:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return {}
+        conversation_data = _prepare_conversation_for_read(doc_snapshot.to_dict(), uid)
+        if not conversation_data:
+            return {}
+        segments = conversation_data.get('transcript_segments')
+        if not isinstance(segments, list) or not segments:
+            return {}
+
+        by_speaker: Dict[int, List[Dict[str, Any]]] = {}
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            stored_speaker_id = segment.get('speaker_id')
+            if not isinstance(stored_speaker_id, int) or isinstance(stored_speaker_id, bool):
+                continue
+            by_speaker.setdefault(stored_speaker_id, []).append(segment)
+
+        applied: Dict[int, List[str]] = {}
+        for speaker_id, person_id in requested:
+            speaker_segments = by_speaker.get(speaker_id) or []
+            if not speaker_segments:
+                continue
+            if any(segment.get('is_user') or segment.get('person_id') for segment in speaker_segments):
+                continue
+            written: List[str] = []
+            for segment in speaker_segments:
+                segment_id = segment.get('id')
+                if not isinstance(segment_id, str) or not segment_id:
+                    continue
+                segment['is_user'] = False
+                segment['person_id'] = person_id
+                written.append(segment_id)
+            if written:
+                applied[speaker_id] = written
+
+        if not applied:
+            return {}
+
+        doc_level = conversation_data.get('data_protection_level', 'standard')
+        prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return applied
+
+    return run_transactional(client, _assign)
+
+
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************

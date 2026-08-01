@@ -827,8 +827,9 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
-def create_person(uid: str, data: dict):
-    people_ref = db.collection('users').document(uid).collection('people')
+def create_person(uid: str, data: dict, *, firestore_client: Any | None = None):
+    client = firestore_client or db
+    people_ref = client.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
     return data
 
@@ -843,8 +844,9 @@ def get_person(uid: str, person_id: str):
     return person_data
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
+def get_people(uid: str, *, firestore_client: Any | None = None):
+    client = firestore_client or db
+    people_ref = client.collection('users').document(uid).collection('people')
     result = []
     for person in people_ref.stream():
         data = person.to_dict()
@@ -967,7 +969,7 @@ def _resolve_person_by_name_transaction(transaction, person_ref, name: str, name
     return person_data, True
 
 
-def get_or_create_person_by_name(uid: str, name: str) -> tuple[dict, bool]:
+def get_or_create_person_by_name(uid: str, name: str, *, firestore_client: Any | None = None) -> tuple[dict, bool]:
     """Resolve a person by name, creating one only if no existing person matches.
 
     Returns `(person, created)`. This is the primitive to use instead of
@@ -997,20 +999,26 @@ def get_or_create_person_by_name(uid: str, name: str) -> tuple[dict, bool]:
     sees the slot held by a different name and takes the next probe slot rather
     than adopting the stranger's record. Slot exhaustion falls back to uuid4,
     which is the pre-existing behaviour and no worse than it.
+
+    One client is obtained at call time and used for the name scan, the slot
+    transaction and the uuid4 fallback alike, so all three arms of a single
+    resolution see one Firestore view; `firestore_client` injects that client so
+    the boundary can be exercised against a fake instead of a global.
     """
     normalized = name.strip()
     name_key = person_name_identity_key(normalized)
     if not name_key:
         raise ValueError('person name must not be blank')
 
-    for person in get_people(uid):
+    client = firestore_client or get_firestore_client()
+    for person in get_people(uid, firestore_client=client):
         if person_name_identity_key(str(person.get('name') or '')) == name_key:
             return person, False
 
-    people_ref = db.collection('users').document(uid).collection('people')
+    people_ref = client.collection('users').document(uid).collection('people')
     for probe in range(PERSON_NAME_ID_PROBES):
         person_ref = people_ref.document(person_name_document_id(uid, name_key, probe))
-        person, created = _resolve_person_by_name_transaction(db.transaction(), person_ref, normalized, name_key)
+        person, created = _resolve_person_by_name_transaction(client.transaction(), person_ref, normalized, name_key)
         if person is not None:
             return person, created
 
@@ -1024,6 +1032,7 @@ def get_or_create_person_by_name(uid: str, name: str) -> tuple[dict, bool]:
                 'created_at': now,
                 'updated_at': now,
             },
+            firestore_client=client,
         ),
         True,
     )
@@ -1415,6 +1424,13 @@ def clear_person_llm_inferred_enrolment(uid: str, person_id: str) -> List[str]:
 
     Returns the removed sample paths so the caller can delete the objects from
     storage; an empty list means the person had nothing inferred to revoke.
+
+    The embedding is only cleared when it is still the inferred one. A person can
+    hold an old inferred sample and a later enrolment the user confirmed, which
+    overwrote the attribution to `user_tagged`; revoking the earlier inference
+    unconditionally would delete a voiceprint nobody disputed and leave that
+    person unmatchable until some later rebuild happened to succeed. The samples
+    go either way, since the inference behind them is what was contradicted.
     """
     person_data = get_person(uid, person_id)
     if not person_data:
@@ -1425,7 +1441,8 @@ def clear_person_llm_inferred_enrolment(uid: str, person_id: str) -> List[str]:
         return []
 
     removed = [path for path in inferred if remove_person_speech_sample(uid, person_id, path)]
-    clear_person_speaker_embedding(uid, person_id)
+    if person_data.get('speaker_embedding_attribution') == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+        clear_person_speaker_embedding(uid, person_id)
     return removed
 
 

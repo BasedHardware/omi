@@ -122,16 +122,24 @@ class SpeakerMatcher:
         gate says the audio is clean, not that it belongs to the person the model named.
         Rebuilding from one would resurrect an enrolment whose embedding was cleared
         precisely because that inference was wrong, silently and on the next session.
+
+        The refusal is per sample, not per person: recovery takes the first sample that
+        is not inferred, so a person who was first guessed at and later taught properly
+        is still rebuilt from the audio the user stood behind. Only a person whose every
+        sample is inferred has nothing recovery is allowed to trust.
         """
         person_id = person.get('id')
-        samples = person.get('speech_samples') or []
+        samples: list[Any] = person.get('speech_samples') or []
         if not samples:
             return None
-        if user_db.is_person_speech_sample_llm_inferred(person, samples[0]):
+        trusted: Optional[str] = next(
+            (str(path) for path in samples if not user_db.is_person_speech_sample_llm_inferred(person, path)), None
+        )
+        if trusted is None:
             logger.info('Speaker ID skipped recovery from inferred sample person=%s', person_id)
             return None
         try:
-            audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
+            audio = await run_blocking(storage_executor, download_sample_audio, trusted)
             if not audio:
                 return None
             vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')

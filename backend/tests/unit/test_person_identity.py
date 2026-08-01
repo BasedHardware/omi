@@ -107,10 +107,18 @@ def _run_transaction(store, person_ref, name, name_key, attempts=5):
     raise AssertionError('transaction never committed')
 
 
+class _ForbiddenGlobal:
+    """Fails any use of the legacy `db` proxy, which resolution must no longer touch."""
+
+    def __getattr__(self, attribute):
+        raise AssertionError(f'legacy global db used for {attribute}')
+
+
 @pytest.fixture
 def store(monkeypatch):
     people = {}
-    monkeypatch.setattr(users_db, 'db', _Client(people))
+    monkeypatch.setattr(users_db, 'db', _ForbiddenGlobal())
+    monkeypatch.setattr(users_db, 'get_firestore_client', lambda: _Client(people))
 
     def _resolve(_transaction, person_ref, name, name_key):
         return _run_transaction(people, person_ref, name, name_key)
@@ -208,3 +216,27 @@ def test_blank_name_is_rejected(store):
     with pytest.raises(ValueError):
         users_db.get_or_create_person_by_name(UID, '   ')
     assert not store
+
+
+def test_an_injected_client_serves_the_scan_the_transaction_and_the_creation(monkeypatch):
+    """One client at the call boundary, so a fake can exercise resolve-or-create end to end."""
+    people = {}
+    client = _Client(people)
+    monkeypatch.setattr(users_db, 'db', _ForbiddenGlobal())
+    monkeypatch.setattr(
+        users_db,
+        'get_firestore_client',
+        lambda: (_ for _ in ()).throw(AssertionError('injected client was ignored')),
+    )
+    monkeypatch.setattr(
+        users_db,
+        '_resolve_person_by_name_transaction',
+        lambda _transaction, person_ref, name, name_key: _run_transaction(people, person_ref, name, name_key),
+    )
+
+    created_person, created = users_db.get_or_create_person_by_name(UID, 'Alice', firestore_client=client)
+    reused, created_again = users_db.get_or_create_person_by_name(UID, 'Alice', firestore_client=client)
+
+    assert created and not created_again
+    assert reused['id'] == created_person['id'] == _slot('alice')
+    assert len(people) == 1

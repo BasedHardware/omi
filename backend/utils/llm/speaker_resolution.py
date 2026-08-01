@@ -17,12 +17,13 @@ it.
 """
 
 import logging
-from typing import Any, List, Optional, Sequence, cast
+from typing import Any, List, Mapping, Optional, Sequence, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from utils.log_sanitizer import sanitize
 from utils.speaker_resolution import SpeakerClaim
 
 from .clients import get_llm
@@ -54,13 +55,22 @@ class SpeakerResolutionResponse(BaseModel):
     )
 
 
-def build_speaker_transcript(segments: Sequence[Any]) -> str:
+def build_speaker_transcript(segments: Sequence[Any], person_names: Optional[Mapping[str, str]] = None) -> str:
     """Render segments as ``Speaker N: text``, truncated to the prompt budget.
 
     Segments already bound to a person or to the user keep their name so the
     model can use them as context, and so it does not propose a name for a
     speaker that is already decided.
+
+    That name has to come from ``person_names``, the caller's ``person_id`` to
+    display-name roster. A finalized ``TranscriptSegment`` carries only
+    ``person_id``, so reading a ``person_name`` attribute off it finds nothing
+    and every bound speaker renders as a bare index -- which loses the one fact
+    the refutation pass needs to notice that another speaker already holds the
+    name under audit. A ``person_id`` missing from the roster falls back to the
+    speaker index; the gate still refuses to re-resolve it.
     """
+    roster = person_names or {}
     lines: List[str] = []
     for segment in segments:
         text = getattr(segment, 'text', None)
@@ -69,7 +79,8 @@ def build_speaker_transcript(segments: Sequence[Any]) -> str:
         if getattr(segment, 'is_user', False):
             label = 'The user'
         else:
-            person_name = getattr(segment, 'person_name', None)
+            person_id = getattr(segment, 'person_id', None)
+            person_name = roster.get(person_id) if isinstance(person_id, str) else None
             speaker_id = getattr(segment, 'speaker_id', None)
             if isinstance(person_name, str) and person_name:
                 label = person_name
@@ -112,6 +123,7 @@ def resolve_speakers(
     segments: Sequence[Any],
     known_names: Sequence[str] = (),
     user_name: Optional[str] = None,
+    person_names: Optional[Mapping[str, str]] = None,
 ) -> List[SpeakerClaim]:
     """Ask the model who the unnamed speakers are.
 
@@ -121,12 +133,15 @@ def resolve_speakers(
             the model prefers an existing person over a new spelling of them.
         user_name: The account owner's display name, so the model can tell who
             "the user" is and does not propose the owner as a separate person.
+        person_names: ``person_id`` to display name for the people already bound
+            in this transcript, so a decided speaker reads as their name rather
+            than as one more number to guess at.
 
     Returns:
         Parsed claims, unvalidated. Callers must pass these through
         ``plan_speaker_resolution`` before acting on any of them.
     """
-    transcript = build_speaker_transcript(segments)
+    transcript = build_speaker_transcript(segments, person_names)
     if not transcript:
         return []
 
@@ -173,7 +188,7 @@ For each speaker you can identify, provide:
             ),
         )
     except Exception as e:
-        logger.error('Speaker resolution LLM call failed: %s', e)
+        logger.error('Speaker resolution LLM call failed: %s', sanitize(e))
         return []
 
     return to_speaker_claims(response)
