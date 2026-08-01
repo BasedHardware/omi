@@ -7,6 +7,7 @@ import ipaddress
 import json
 import re
 import logging
+import zlib
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Set, Tuple, cast
 from urllib.parse import urlparse, urljoin
@@ -22,6 +23,7 @@ _SKIP_TAGS = {'script', 'style', 'noscript', 'head', 'meta', 'link', 'svg', 'ifr
 _BLOCK_TAGS = {'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'br', 'tr', 'blockquote', 'section', 'article'}
 _MAX_CONTENT_CHARS = 8000
 _MAX_BODY_BYTES = 512 * 1024  # cap before HTML parsing
+_MAX_METADATA_SCAN_CHARS = 64 * 1024  # regex metadata scans never see more than this
 _MAX_REDIRECTS = 5
 
 # RFC-1918, loopback, link-local (incl. cloud metadata), carrier-grade NAT, IPv6 private
@@ -58,6 +60,7 @@ def _extract_meta_tags(html: str) -> str:
     These are set even on fully JS-rendered pages (needed for SEO/social sharing)
     and live inside <head>, which the HTML stripper skips entirely.
     """
+    html = html[:_MAX_METADATA_SCAN_CHARS]
     lines: List[str] = []
     seen: Set[str] = set()
 
@@ -67,11 +70,11 @@ def _extract_meta_tags(html: str) -> str:
             seen.add(label)
             lines.append(f'{label}: {value}')
 
-    title_m = re.search(r'<title[^>]*>(.*?)</title>', html, re.DOTALL | re.IGNORECASE)
+    title_m = re.search(r'<title[^>]{0,1024}>(.{0,4096}?)</title>', html, re.DOTALL | re.IGNORECASE)
     if title_m:
-        add('Title', re.sub(r'<[^>]+>', '', title_m.group(1)))
+        add('Title', re.sub(r'<[^>]{0,1024}>', '', title_m.group(1)))
 
-    for m in re.finditer(r'<meta\s+([^>]+?)/?>', html, re.IGNORECASE):
+    for m in re.finditer(r'<meta\s([^>]{1,2048}?)/?>', html, re.IGNORECASE):
         attrs = m.group(1)
         name_m = re.search(r'(?:name|property)=["\']([^"\']+)["\']', attrs, re.IGNORECASE)
         content_m = re.search(r'content=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
@@ -102,8 +105,10 @@ def _extract_json_ld(html: str) -> str:
     here even when the visible DOM is empty without JS execution.
     Returns a formatted multi-line string, or '' if nothing useful is found.
     """
+    html = html[:_MAX_METADATA_SCAN_CHARS]
     pattern = re.compile(
-        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE
+        r'<script[^>]{1,1024}?type=["\']application/ld\+json["\'][^>]{0,1024}>(.{0,32768}?)</script>',
+        re.DOTALL | re.IGNORECASE,
     )
     lines: List[str] = []
     for match in pattern.finditer(html):
@@ -205,6 +210,25 @@ def _html_to_text(html: str) -> str:
     return '\n\n'.join(parts)
 
 
+def _decode_body(raw: bytes, content_encoding: str) -> str:
+    """
+    Decode a raw (still-compressed) response body under a hard decompressed-size budget.
+    Returns '' for encodings we cannot bound.
+    """
+    encoding = content_encoding.lower().strip()
+    if encoding in ('', 'identity'):
+        return raw.decode('utf-8', errors='replace')
+    if encoding in ('gzip', 'x-gzip', 'deflate'):
+        wbits_candidates = [16 + zlib.MAX_WBITS] if encoding != 'deflate' else [zlib.MAX_WBITS, -zlib.MAX_WBITS]
+        for wbits in wbits_candidates:
+            try:
+                decoded = zlib.decompressobj(wbits).decompress(raw, _MAX_BODY_BYTES)
+            except zlib.error:
+                continue
+            return decoded.decode('utf-8', errors='replace')
+    return ''
+
+
 async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]:
     """
     Fetch *url* with SSRF guard, manual redirect following, and a body-size cap.
@@ -244,13 +268,15 @@ async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]
 
                 chunks: List[bytes] = []
                 total = 0
-                async for chunk in response.aiter_bytes(chunk_size=8192):
+                # aiter_raw() keeps the cap on the wire bytes: aiter_bytes() would let
+                # httpx decompress a whole chunk (a gzip bomb) before we could break.
+                async for chunk in response.aiter_raw(chunk_size=8192):
                     total += len(chunk)
                     chunks.append(chunk)
                     if total >= _MAX_BODY_BYTES:
                         break
 
-                body_text = b''.join(chunks).decode('utf-8', errors='replace')
+                body_text = _decode_body(b''.join(chunks), response.headers.get('content-encoding', ''))
 
         if redirect_url is not None:
             url = redirect_url
@@ -288,6 +314,7 @@ async def fetch_url_tool(url: str) -> str:
         'User-Agent': 'Mozilla/5.0 (compatible; Omi-AI-Bot/1.0)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
         'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'identity',
     }
 
     try:

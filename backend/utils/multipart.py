@@ -18,6 +18,12 @@ SPEECH_PROFILE_MAX_PART_SIZE = 50 * MB
 SYNC_AUDIO_MAX_PART_SIZE = 200 * MB
 VOICE_MESSAGE_MAX_PART_SIZE = 200 * MB
 
+# The raised per-part caps above exist for uploaded files only. Everything else stays small,
+# and the part counts are bounded so the caps cannot be multiplied by 1000 default slots.
+NON_FILE_MAX_PART_SIZE = 1 * MB
+MAX_MULTIPART_FILES = 16
+MAX_MULTIPART_FIELDS = 16
+
 
 def max_part_size(bytes_size: int):
     def decorator(endpoint: Callable):
@@ -49,10 +55,10 @@ class FileSizeLimitedMultiPartParser(MultiPartParser):
         self._current_file_part_size = 0
 
     def on_part_data(self, data: bytes, start: int, end: int) -> None:
-        if self._current_part.file is not None:
-            self._current_file_part_size += end - start
-            if self._current_file_part_size > self.max_part_size:
-                raise MultiPartException(f"Part exceeded maximum size of {int(self.max_part_size / 1024)}KB.")
+        limit = self.max_part_size if self._current_part.file is not None else NON_FILE_MAX_PART_SIZE
+        self._current_file_part_size += end - start
+        if self._current_file_part_size > limit:
+            raise MultiPartException(f"Part exceeded maximum size of {int(limit / 1024)}KB.")
         super().on_part_data(data, start, end)
 
 
@@ -70,7 +76,13 @@ async def parse_multipart_form(request: Request, *, max_part_size: int) -> FormD
     if not _is_multipart(request):
         return await request.form()
 
-    parser = FileSizeLimitedMultiPartParser(request.headers, request.stream(), max_part_size=max_part_size)
+    parser = FileSizeLimitedMultiPartParser(
+        request.headers,
+        request.stream(),
+        max_files=MAX_MULTIPART_FILES,
+        max_fields=MAX_MULTIPART_FIELDS,
+        max_part_size=max_part_size,
+    )
     try:
         form = await parser.parse()
     except MultiPartException as exc:

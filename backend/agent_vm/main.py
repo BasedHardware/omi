@@ -38,6 +38,12 @@ SYNC_TABLES = frozenset(
 )
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
+# Independent of the wire cap: a compressed upload must not be able to amplify into a
+# disk-filling database on the VM.
+MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+MAX_COMPRESSION_RATIO = 100
+COMPRESSION_RATIO_FLOOR_BYTES = 64 * 1024 * 1024
+DECOMPRESS_CHUNK_BYTES = 1024 * 1024
 
 
 class Runtime:
@@ -269,25 +275,45 @@ async def upload_database(request: Request) -> tuple[int, int]:
         decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
     try:
         with temporary.open("wb") as output:
+
+            def write_decompressed(data: bytes) -> None:
+                nonlocal final_size
+                if not data:
+                    return
+                if final_size + len(data) > MAX_DECOMPRESSED_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail={"error": "File too large", "maxBytes": MAX_DECOMPRESSED_BYTES},
+                    )
+                if (
+                    final_size + len(data) > COMPRESSION_RATIO_FLOOR_BYTES
+                    and (final_size + len(data)) / max(received, 1) > MAX_COMPRESSION_RATIO
+                ):
+                    raise HTTPException(
+                        status_code=413,
+                        detail={"error": "Compression ratio too high", "maxRatio": MAX_COMPRESSION_RATIO},
+                    )
+                output.write(data)
+                final_size += len(data)
+
             async for chunk in request.stream():
                 received += len(chunk)
                 if received > MAX_UPLOAD_BYTES:
                     raise HTTPException(
                         status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES}
                     )
-                data = decompressor.decompress(chunk) if decompressor else chunk
-                output.write(data)
-                final_size += len(data)
-                if final_size > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES}
-                    )
+                if decompressor is None:
+                    write_decompressed(chunk)
+                    continue
+                pending = chunk
+                while pending:
+                    data = decompressor.decompress(pending, DECOMPRESS_CHUNK_BYTES)
+                    pending = decompressor.unconsumed_tail
+                    write_decompressed(data)
+                    if not data:
+                        break
             if decompressor:
-                data = decompressor.flush()
-                output.write(data)
-                final_size += len(data)
-        if final_size > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
+                write_decompressed(decompressor.flush())
         with runtime.lock:
             runtime.close_database()
             for suffix in ("-wal", "-shm"):

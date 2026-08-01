@@ -15,11 +15,15 @@ _HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+', re.MULTILINE)
 _BLOCKQUOTE_RE = re.compile(r'^\s{0,3}>\s?', re.MULTILINE)
 _HORIZONTAL_RULE_RE = re.compile(r'^\s{0,3}([-*_])\s*(?:\1\s*){2,}$', re.MULTILINE)
 _BULLET_RE = re.compile(r'^(\s*)[-*+]\s+', re.MULTILINE)
-_INLINE_CODE_RE = re.compile(r'`+([^`]+)`+')
+_INLINE_CODE_RE = re.compile(r'`{1,3}([^`]+)`{1,3}')
 _BOLD_ITALIC_RE = re.compile(r'(\*{1,3})(\S.*?\S|\S)\1', re.DOTALL)
 _UNDERSCORE_EMPHASIS_RE = re.compile(r'(?<![\w\\])(_{1,3})(\S.*?\S|\S)\1(?![\w])', re.DOTALL)
 _STRIKETHROUGH_RE = re.compile(r'~~(\S.*?\S|\S)~~', re.DOTALL)
 _BLANK_LINES_RE = re.compile(r'\n{3,}')
+
+# The OS truncates notification bodies far below this; anything longer is only
+# ever regex work, so it is cut before the markdown passes run.
+_MAX_BODY_CHARS = 4096
 
 
 def to_plain_text(body: str) -> str:
@@ -27,7 +31,7 @@ def to_plain_text(body: str) -> str:
     if not body:
         return body
 
-    text = _FENCE_RE.sub('', body)
+    text = _FENCE_RE.sub('', body[:_MAX_BODY_CHARS])
     text = _IMAGE_RE.sub(r'\1', text)
     text = _LINK_RE.sub(r'\1', text)
     text = _HORIZONTAL_RULE_RE.sub('', text)

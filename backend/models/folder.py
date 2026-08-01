@@ -58,7 +58,12 @@ class MoveConversationRequest(BaseModel):
 class BulkMoveConversationsRequest(BaseModel):
     """Request model for moving multiple conversations to a folder."""
 
-    conversation_ids: List[str]
+    conversation_ids: List[str] = Field(..., max_length=100)
+
+    @field_validator('conversation_ids')
+    @classmethod
+    def deduplicate_conversation_ids(cls, conversation_ids: List[str]) -> List[str]:
+        return list(dict.fromkeys(conversation_ids))
 
 
 class ReorderFoldersRequest(BaseModel):

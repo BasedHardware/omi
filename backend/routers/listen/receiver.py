@@ -35,7 +35,11 @@ from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
-from utils.request_validation import ImageChunkEnvelope
+from utils.request_validation import (
+    MAX_IMAGE_TOTAL_CHARS,
+    MAX_INFLIGHT_IMAGE_CHARS,
+    ImageChunkEnvelope,
+)
 from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
     flush_live_stt_buffer,
@@ -116,6 +120,7 @@ class ListenReceiver:
         self.vad_gate: Any = None
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
+        self.image_chunk_bytes = 0
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
@@ -322,7 +327,12 @@ class ListenReceiver:
             if now - data['created_at'] > self.host.limits.image_chunk_ttl
         ]
         for temporary_id in expired:
-            del self.image_chunks[temporary_id]
+            self._discard_image_chunks(temporary_id)
+
+    def _discard_image_chunks(self, temporary_id: str) -> Dict[str, Any]:
+        entry = self.image_chunks.pop(temporary_id)
+        self.image_chunk_bytes -= entry['bytes']
+        return entry
 
     async def _process_photo(self, image_b64: str, temporary_id: str) -> None:
         photo_id = str(uuid.uuid4())
@@ -345,15 +355,32 @@ class ListenReceiver:
         self._cleanup_expired_image_chunks()
         if chunk.id not in self.image_chunks:
             if len(self.image_chunks) >= self.host.limits.max_image_chunks:
-                self.image_chunks.popitem(last=False)
-            self.image_chunks[chunk.id] = {'chunks': [None] * chunk.total, 'created_at': time.time()}
-        chunks = self.image_chunks[chunk.id]['chunks']
+                self._discard_image_chunks(next(iter(self.image_chunks)))
+            self.image_chunks[chunk.id] = {'chunks': [None] * chunk.total, 'created_at': time.time(), 'bytes': 0}
+        entry = self.image_chunks[chunk.id]
+        chunks = entry['chunks']
         chunk.validate_against_cached_total(len(chunks))
         if chunks[chunk.index] is None:
+            size = len(chunk.data)
+            # Chunk count is capped but chunk bytes are not, so one image and the whole
+            # session are both budgeted before the payload is retained.
+            if entry['bytes'] + size > MAX_IMAGE_TOTAL_CHARS:
+                self._discard_image_chunks(chunk.id)
+                raise ValueError('image upload exceeded the maximum image size')
+            while self.image_chunk_bytes + size > MAX_INFLIGHT_IMAGE_CHARS:
+                victim = next((key for key in self.image_chunks if key != chunk.id), None)
+                if victim is None:
+                    break
+                self._discard_image_chunks(victim)
+            if self.image_chunk_bytes + size > MAX_INFLIGHT_IMAGE_CHARS:
+                self._discard_image_chunks(chunk.id)
+                raise ValueError('in-flight image uploads exceeded the maximum size')
             chunks[chunk.index] = chunk.data
+            entry['bytes'] += size
+            self.image_chunk_bytes += size
         if all(value is not None for value in chunks):
             image = ''.join(chunks)
-            del self.image_chunks[chunk.id]
+            self._discard_image_chunks(chunk.id)
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
@@ -598,3 +625,4 @@ class ListenReceiver:
 
     def clear(self) -> None:
         self.image_chunks.clear()
+        self.image_chunk_bytes = 0

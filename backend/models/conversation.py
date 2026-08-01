@@ -396,8 +396,18 @@ class TestPromptRequest(BaseModel):
 class MergeConversationsRequest(BaseModel):
     """Request model for merging multiple conversations."""
 
-    conversation_ids: List[str] = Field(description="IDs of conversations to merge (minimum 2)", min_length=2)
+    conversation_ids: List[str] = Field(
+        description="IDs of conversations to merge (minimum 2)", min_length=2, max_length=50
+    )
     reprocess: bool = Field(default=True, description="Whether to regenerate summary from merged transcript")
+
+    @field_validator('conversation_ids')
+    @classmethod
+    def reject_duplicate_conversation_ids(cls, conversation_ids: List[str]) -> List[str]:
+        # Deduplicating silently could drop the list below min_length, so duplicates are rejected.
+        if len(conversation_ids) != len(set(conversation_ids)):
+            raise ValueError('conversation_ids must not contain duplicates')
+        return conversation_ids
 
 
 class MergeConversationsResponse(BaseModel):

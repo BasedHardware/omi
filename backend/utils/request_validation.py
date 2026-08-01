@@ -93,6 +93,11 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
 
 
 MAX_IMAGE_CHUNK_TOTAL = 4096
+# Chunk count alone bounds nothing without a byte bound: these cap one chunk, one
+# assembled image, and everything a single session may hold in flight at once.
+MAX_IMAGE_CHUNK_DATA_CHARS = 64 * 1024
+MAX_IMAGE_TOTAL_CHARS = 16 * 1024 * 1024
+MAX_INFLIGHT_IMAGE_CHARS = 64 * 1024 * 1024
 
 
 def parse_sync_filename_timestamp(path: str) -> int | float:
@@ -133,7 +138,7 @@ class ImageChunkEnvelope(BaseModel):
     id: str = Field(min_length=1)
     index: int = Field(ge=0)
     total: int = Field(ge=1, le=MAX_IMAGE_CHUNK_TOTAL)
-    data: str = Field(min_length=1)
+    data: str = Field(min_length=1, max_length=MAX_IMAGE_CHUNK_DATA_CHARS)
 
     @model_validator(mode='after')
     def validate_index_within_total(self):

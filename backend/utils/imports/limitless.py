@@ -27,6 +27,48 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# The upload route bounds only the *compressed* size, so the archive is budgeted on the
+# decompressed side as well before any member is read.
+MAX_IMPORT_ZIP_ENTRIES = 100_000
+MAX_IMPORT_ZIP_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+MAX_IMPORT_ZIP_MEMBER_BYTES = 50 * 1024 * 1024
+_ZIP_READ_CHUNK_BYTES = 1024 * 1024
+
+
+def _validate_zip_budget(zf: ZipFile) -> Optional[str]:
+    """Reject archives whose declared decompressed size exceeds the import budget."""
+    infos = zf.infolist()
+    if len(infos) > MAX_IMPORT_ZIP_ENTRIES:
+        return f'ZIP contains {len(infos)} entries, more than the {MAX_IMPORT_ZIP_ENTRIES} entry limit.'
+    total = 0
+    for info in infos:
+        if info.file_size > MAX_IMPORT_ZIP_MEMBER_BYTES:
+            return f'ZIP entry "{info.filename}" exceeds the {MAX_IMPORT_ZIP_MEMBER_BYTES} byte per-file limit.'
+        total += info.file_size
+        if total > MAX_IMPORT_ZIP_TOTAL_BYTES:
+            return f'ZIP decompresses to more than the {MAX_IMPORT_ZIP_TOTAL_BYTES} byte limit.'
+    return None
+
+
+def _read_zip_member(zf: ZipFile, name: str) -> bytes:
+    """Read one member in chunks, enforcing the per-member budget as it goes.
+
+    The central directory can lie about ``file_size``, so the running total is what
+    actually bounds memory here.
+    """
+    chunks: List[bytes] = []
+    total = 0
+    with zf.open(name) as handle:
+        while True:
+            chunk = handle.read(_ZIP_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_IMPORT_ZIP_MEMBER_BYTES:
+                raise ValueError(f'ZIP entry "{name}" exceeds the {MAX_IMPORT_ZIP_MEMBER_BYTES} byte per-file limit')
+            chunks.append(chunk)
+    return b''.join(chunks)
+
 
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
     """
@@ -229,6 +271,19 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
         # Open and scan the ZIP file
         with ZipFile(zip_path, 'r') as zf:
+            budget_error = _validate_zip_budget(zf)
+            if budget_error:
+                logger.warning(f"[Limitless Import] Rejected archive for job {job_id}: {budget_error}")
+                import_jobs_db.update_import_job(
+                    job_id,
+                    {
+                        'status': ImportJobStatus.failed.value,
+                        'error': budget_error,
+                        'completed_at': datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                return
+
             all_files = zf.namelist()
             logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
@@ -272,7 +327,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             for lifelog_path in lifelog_files:
                 try:
                     # Read and parse the lifelog
-                    content = zf.read(lifelog_path).decode('utf-8')
+                    content = _read_zip_member(zf, lifelog_path).decode('utf-8')
                     filename = Path(lifelog_path).name
 
                     started_at, segments, title, plain_summary, formatted_summary = parse_lifelog_md(content, filename)

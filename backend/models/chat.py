@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class MessageSender(str, Enum):
@@ -231,7 +231,14 @@ class RateMessageRequest(BaseModel):
 
 
 class ShareChatMessagesRequest(BaseModel):
-    message_ids: list[str] = []
+    # The shared-chat read leg is unauthenticated and runs one query per id, so the list is
+    # bounded and deduplicated before it reaches the database.
+    message_ids: list[str] = Field(default=[], max_length=100)
+
+    @field_validator('message_ids')
+    @classmethod
+    def deduplicate_message_ids(cls, message_ids: list[str]) -> list[str]:
+        return list(dict.fromkeys(message_ids))
 
 
 class ChatSession(BaseModel):
