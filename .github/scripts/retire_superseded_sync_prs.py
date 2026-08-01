@@ -145,8 +145,8 @@ def _self_test(gh: str) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--current-pr", type=int, required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--current-pr", type=int)
+    parser.add_argument("--version")
     parser.add_argument("--base", default="main")
     parser.add_argument("--search-head", default="release/windows-v")
     parser.add_argument("--gh", default="gh", help="gh executable (test seam)")
@@ -155,6 +155,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.self_test:
         return _self_test(args.gh)
+
+    if args.current_pr is None or args.version is None:
+        parser.error("--current-pr and --version are required unless --self-test is used")
 
     retire(
         current_number=args.current_pr,
