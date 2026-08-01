@@ -218,7 +218,7 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.
 
 ## Testing
 
-Emulator commands require root Bun 1.3.14; run `bun install --frozen-lockfile --ignore-scripts` first.
+Emulator commands require root Bun 1.3.14; run `bun install --frozen-lockfile --ignore-scripts` first. They also require Node.js 22 on `PATH`: `firebase-tools` keeps its `#!/usr/bin/env node` shebang, so Bun runs the Firebase CLI under Node. CI runners provide Node preinstalled.
 
 ```bash
 bash test-preflight.sh   # Verify env

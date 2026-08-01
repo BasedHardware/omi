@@ -82,6 +82,7 @@ Prerequisites:
 - Java runtime (`java`) for the Firebase emulator
 - Bun 1.3.14 (the root `packageManager` pin; install/activate it and verify `bun --version`)
 - Root dependencies installed with `bun install --frozen-lockfile --ignore-scripts`
+- Node.js 22 on `PATH` (`firebase-tools` keeps its `#!/usr/bin/env node` shebang, so Bun runs the Firebase CLI under Node)
 - Python backend dependencies including `google-cloud-firestore`
 
 What this gate proves locally:

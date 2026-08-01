@@ -9,7 +9,9 @@ backend/testing/listen_pusher_stack/run.sh --keep
 
 Prerequisites are the backend virtual environment (`backend/scripts/sync-python-deps.sh`),
 Bun 1.3.14 (the root `packageManager` pin; install/activate it and verify `bun --version`),
-root dependencies (`bun install --frozen-lockfile --ignore-scripts`), Redis, and Java 21+. The runner discovers
+root dependencies (`bun install --frozen-lockfile --ignore-scripts`), Node.js 22
+(`firebase-tools` keeps its `#!/usr/bin/env node` shebang, so `bunx firebase` still
+needs a Node runtime on `PATH`), Redis, and Java 21+. The runner discovers
 Homebrew's `openjdk@21` automatically when `java` is not already on `PATH` and
 chooses a per-run Firestore emulator port, so it does not conflict with shared
 developer services.

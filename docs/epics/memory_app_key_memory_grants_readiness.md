@@ -72,6 +72,8 @@ bun run test:memory-app-key-grants-rules:emulator
 
 Install/activate Bun 1.3.14 (the root `packageManager` pin), verify `bun --version`,
 then run `bun install --frozen-lockfile --ignore-scripts` from the repository root first.
+Node.js 22 must also be on `PATH`: `firebase-tools` keeps its `#!/usr/bin/env node`
+shebang, so Bun runs the Firebase CLI under Node.
 
 Result: PASS under the local Firebase Firestore emulator. This is not a deployed/cloud rules or IAM proof.
 
