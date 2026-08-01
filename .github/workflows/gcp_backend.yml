@@ -317,10 +317,18 @@ jobs:
           # A missing release-gate-failure label made gh issue create fail hard,
           # so the audit issue was never filed (see #10301 / #10389). Ensure the
           # label exists first — idempotent, so a concurrent run cannot race it.
-          gh label create release-gate-failure \
-            --repo "$REPO" \
-            --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
-            --color "b60205" 2>/dev/null || true
+          # Only the tolerated "already exists" case is suppressed; any other
+          # label-create failure (permissions, rate limit, API error) must fail
+          # loudly rather than silently drop the audit trail.
+          if ! label_output="$(gh label create release-gate-failure \
+              --repo "$REPO" \
+              --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
+              --color "b60205" 2>&1)"; then
+            if [[ "$label_output" != *"already exists"* ]]; then
+              echo "Failed to ensure release-gate-failure label: $label_output" >&2
+              exit 1
+            fi
+          fi
           gh issue create --repo "$REPO" \
             --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
             --label release-gate-failure \
