@@ -6,7 +6,8 @@ OMI Desktop App for macOS (Swift)
 ## Logs & Debugging
 
 ### Local App Logs
-- **App log file**: `/private/tmp/omi.log` (production). Each non-production
+- **App log file**: `~/Library/Logs/Omi/omi.log` (production; `omi-beta.log` for
+  Omi Beta). Each non-production
   launch writes to its own owner-only log; ask the running named bundle for its
   exact path with `./scripts/omi-ctl log-path` rather than reading a shared dev log.
 
@@ -314,7 +315,7 @@ Fast path (skips web login and sidebar click-through):
    - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
    - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
 3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
-   `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
+   `./scripts/omi-ctl log-path` (named dev bundles) or `~/Library/Logs/Omi/omi.log`
    (production); `./run.sh` prints the isolated local Python desktop-backend log path at
    launch; per-user issues in Sentry/PostHog.
 4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.

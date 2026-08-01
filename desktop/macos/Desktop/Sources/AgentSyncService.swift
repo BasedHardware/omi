@@ -109,12 +109,22 @@ actor AgentSyncService {
   private var cursorOwnerID: String?
   private var latencyBackoffMultiplier: UInt64 = 1
   private var requiredSchemaRecovery: RequiredSchemaRecoveryState?
+  /// Consecutive non-retryable 4xx rejections per table. A rejected batch never
+  /// advances its cursor, so without a breaker the same payload is re-POSTed forever.
+  private var tableHardFailures: [String: Int] = [:]
+  /// While set and in the future, the table is skipped entirely (poison-batch breaker).
+  private var tableBreakerUntil: [String: Date] = [:]
+  /// Server-directed `Retry-After` deadline; floors the whole sync loop's interval.
+  private var retryAfterDeadline: Date?
   private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
   private let networkHooks: NetworkHooks
 
   private let batchSize = 100
   private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
   private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
+  private let poisonBatchThreshold = 5
+  private let poisonBatchCooldown: TimeInterval = 15 * 60
+  private let maxRetryAfter: TimeInterval = 15 * 60
   private let tokenRefreshInterval: TimeInterval = 30 * 60  // 30 minutes
 
   private init() {
@@ -176,6 +186,9 @@ actor AgentSyncService {
     cursors.removeAll()
     cachedTableColumns.removeAll()
     consecutiveFailures = 0
+    tableHardFailures.removeAll()
+    tableBreakerUntil.removeAll()
+    retryAfterDeadline = nil
     lastTokenRefresh = .distantPast
     isPaused = false
     latencyBackoffMultiplier = 1
@@ -272,7 +285,61 @@ actor AgentSyncService {
     } else {
       base = baseSyncInterval
     }
-    return min(base * latencyBackoffMultiplier, maxSyncInterval)
+    var interval = min(base * latencyBackoffMultiplier, maxSyncInterval)
+    if let deadline = retryAfterDeadline {
+      let remaining = deadline.timeIntervalSinceNow
+      if remaining > 0 {
+        interval = max(interval, UInt64(remaining * 1_000_000_000))
+      }
+    }
+    return interval
+  }
+
+  /// Record a server-directed retry delay. `nil` falls back to the normal backoff curve.
+  private func noteRetryAfter(_ seconds: TimeInterval?) {
+    guard let seconds, seconds > 0 else { return }
+    let clamped = min(seconds, maxRetryAfter)
+    let deadline = Date().addingTimeInterval(clamped)
+    if let existing = retryAfterDeadline, existing > deadline { return }
+    retryAfterDeadline = deadline
+  }
+
+  /// Parse a `Retry-After` header value: delta-seconds or an HTTP-date.
+  static func parseRetryAfter(_ value: String?) -> TimeInterval? {
+    guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+    if let seconds = TimeInterval(value) {
+      return seconds > 0 ? seconds : nil
+    }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "GMT")
+    for format in ["EEE, dd MMM yyyy HH:mm:ss zzz", "EEEE, dd-MMM-yy HH:mm:ss zzz", "EEE MMM d HH:mm:ss yyyy"] {
+      formatter.dateFormat = format
+      if let date = formatter.date(from: value) {
+        let delta = date.timeIntervalSinceNow
+        return delta > 0 ? delta : nil
+      }
+    }
+    return nil
+  }
+
+  /// A non-retryable 4xx means this exact batch will never be accepted. Count it,
+  /// and after `poisonBatchThreshold` attempts stop re-POSTing the table for a cooldown.
+  private func recordTableHardFailure(_ table: String) {
+    let count = (tableHardFailures[table] ?? 0) + 1
+    tableHardFailures[table] = count
+    if count >= poisonBatchThreshold {
+      tableBreakerUntil[table] = Date().addingTimeInterval(poisonBatchCooldown)
+      tableHardFailures[table] = 0
+      log(
+        "AgentSync: poison-batch breaker tripped for \(table) after \(count) rejected batches; pausing \(Int(poisonBatchCooldown))s"
+      )
+    }
+  }
+
+  private func clearTableHardFailures(_ table: String) {
+    tableHardFailures[table] = nil
+    tableBreakerUntil[table] = nil
   }
 
   private func syncTick(generation: UInt64) async {
@@ -477,6 +544,13 @@ actor AgentSyncService {
     guard let dbPool = await getDBPool() else { return 0 }
     guard syncGeneration == generation else { return 0 }
 
+    // Poison-batch breaker: a table whose batches the VM keeps rejecting is
+    // parked rather than re-POSTed every tick.
+    if let until = tableBreakerUntil[spec.name] {
+      if Date() < until { return 0 }
+      tableBreakerUntil[spec.name] = nil
+    }
+
     let cursor = cursors[spec.name] ?? SyncCursor(lastId: 0, lastUpdatedAt: "1970-01-01T00:00:00")
 
     // Resolve columns once and cache — PRAGMA table_info is static at runtime
@@ -559,33 +633,45 @@ actor AgentSyncService {
       guard let vmIP else { return 0 }
       let result = await pushRows(spec.name, rows, generation: generation, ownerID: ownerID, vmIP: vmIP)
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return 0 }
-      if result == .success {
-        clearRequiredSchemaRecovery(for: spec.name, generation: generation, ownerID: ownerID, vmIP: vmIP)
-        // Update cursor
-        if spec.appendOnly {
-          if let lastId = rows.last?["id"] as? Int64 {
-            cursors[spec.name] = SyncCursor(
-              lastId: lastId,
-              lastUpdatedAt: cursor.lastUpdatedAt
-            )
-          }
-        } else {
-          if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
-            // Advance BOTH updatedAt and id so the compound cursor can
-            // resume within a run of rows sharing the same updatedAt
-            // (otherwise a >batchSize same-timestamp bulk update loses
-            // every row past the first page).
-            let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
-            cursors[spec.name] = SyncCursor(
-              lastId: lastRowId,
-              lastUpdatedAt: lastUpdatedAt
-            )
-          }
-        }
-        return rows.count
-      } else if result == .networkError {
-        return -1  // Signal network failure for backoff
+      switch result {
+      case .rateLimited(let retryAfter):
+        noteRetryAfter(retryAfter)
+        return -1
+      case .networkError:
+        return -1
+      case .httpError:
+        // Non-retryable rejection: the cursor cannot advance, so retrying the
+        // identical batch at the base interval is a self-inflicted flood.
+        recordTableHardFailure(spec.name)
+        return -1
+      case .success:
+        break
       }
+
+      clearTableHardFailures(spec.name)
+      clearRequiredSchemaRecovery(for: spec.name, generation: generation, ownerID: ownerID, vmIP: vmIP)
+      // Update cursor
+      if spec.appendOnly {
+        if let lastId = rows.last?["id"] as? Int64 {
+          cursors[spec.name] = SyncCursor(
+            lastId: lastId,
+            lastUpdatedAt: cursor.lastUpdatedAt
+          )
+        }
+      } else {
+        if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
+          // Advance BOTH updatedAt and id so the compound cursor can
+          // resume within a run of rows sharing the same updatedAt
+          // (otherwise a >batchSize same-timestamp bulk update loses
+          // every row past the first page).
+          let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
+          cursors[spec.name] = SyncCursor(
+            lastId: lastRowId,
+            lastUpdatedAt: lastUpdatedAt
+          )
+        }
+      }
+      return rows.count
     } catch {
       log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
       await Self.reportDatabaseReadFailure(error)
@@ -595,10 +681,14 @@ actor AgentSyncService {
 
   // MARK: - HTTP push
 
-  private enum PushResult {
+  private enum PushResult: Equatable {
     case success
+    /// Non-retryable rejection (4xx other than 429): retrying the same batch cannot help.
     case httpError
+    /// Transient failure (transport error or 5xx): retry with exponential backoff.
     case networkError
+    /// Server asked us to slow down (429), optionally with a `Retry-After` delay.
+    case rateLimited(retryAfter: TimeInterval?)
   }
 
   private func isCurrent(generation: UInt64, ownerID: String?, vmIP: String) -> Bool {
@@ -672,8 +762,14 @@ actor AgentSyncService {
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return .networkError }
       guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
+      let retryAfter = Self.parseRetryAfter(httpResponse.value(forHTTPHeaderField: "Retry-After"))
+
       if httpResponse.statusCode == 200 {
         return .success
+      } else if httpResponse.statusCode == 429 {
+        let body = String(data: data, encoding: .utf8) ?? ""
+        log("AgentSync: push \(table) rate limited — HTTP 429 (retryAfter=\(retryAfter.map { "\($0)s" } ?? "none")): \(body)")
+        return .rateLimited(retryAfter: retryAfter)
       } else if httpResponse.statusCode >= 500 {
         let body = String(data: data, encoding: .utf8) ?? ""
         if Self.databaseReadiness(
@@ -683,6 +779,7 @@ actor AgentSyncService {
           recordRequiredSchemaFailure(for: table, generation: generation, ownerID: ownerID, vmIP: vmIP)
         }
         log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
+        noteRetryAfter(retryAfter)
         return .networkError  // 5xx = server not ready, trigger backoff
       } else {
         let body = String(data: data, encoding: .utf8) ?? ""

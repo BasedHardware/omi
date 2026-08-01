@@ -48,6 +48,11 @@ actor RewindIndexer {
   private var lastRetentionCleanupAt: Date = .distantPast
   private let retentionCleanupInterval: TimeInterval = 6 * 60 * 60
   private var isRetentionCleanupRunning = false
+  /// Drives retention on its own schedule. Retention used to be triggered only
+  /// from the frame-ingest path, so pausing recording, revoking Screen Recording
+  /// permission, or a full disk (writes fail → frames stop) permanently stopped
+  /// deletion — exactly when reclaiming space matters most.
+  private var retentionSchedulerTask: Task<Void, Never>?
 
   // MARK: - Initialization
 
@@ -108,6 +113,8 @@ actor RewindIndexer {
     isInitialized = true
     initFailureCount = 0
     log("RewindIndexer: Initialized successfully")
+
+    startRetentionSchedulerIfNeeded()
 
     // Set up power monitor to backfill OCR when AC reconnects
     setupPowerMonitorCallback()
@@ -247,7 +254,8 @@ actor RewindIndexer {
   func processFrame(_ frame: CapturedFrame) async {
     // Ensure initialized with backoff
     guard await ensureInitialized() else { return }
-    scheduleRetentionCleanupIfDue()
+    startRetentionSchedulerIfNeeded()
+    if pauseCaptureForLowDisk() { return }
 
     do {
       // Convert JPEG to CGImage for video encoding.
@@ -353,7 +361,8 @@ actor RewindIndexer {
   /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
   func processFrame(cgImage: CGImage, appName: String, windowTitle: String?, captureTime: Date) async {
     guard await ensureInitialized() else { return }
-    scheduleRetentionCleanupIfDue()
+    startRetentionSchedulerIfNeeded()
+    if pauseCaptureForLowDisk() { return }
 
     do {
       let dedupeSignature = makeFrameDedupeSignature(cgImage: cgImage, appName: appName, windowTitle: windowTitle)
@@ -450,7 +459,8 @@ actor RewindIndexer {
   /// Process a frame with additional metadata (focus status, etc.)
   func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, insight: String?) async {
     guard await ensureInitialized() else { return }
-    scheduleRetentionCleanupIfDue()
+    startRetentionSchedulerIfNeeded()
+    if pauseCaptureForLowDisk() { return }
 
     do {
       // Convert JPEG to CGImage for video encoding.
@@ -573,9 +583,38 @@ actor RewindIndexer {
   /// never blocked by deletion. Called from the frame pipeline; the first frame
   /// after launch prunes anything past the retention setting.
   private func scheduleRetentionCleanupIfDue() {
+    guard !ownerTransitionSuspended else { return }
     guard Date().timeIntervalSince(lastRetentionCleanupAt) >= retentionCleanupInterval else { return }
     lastRetentionCleanupAt = Date()
     Task { await self.runCleanup() }
+  }
+
+  /// When the volume is critically full, drop the frame and force a retention
+  /// sweep instead of writing. Capture is the thing filling the disk, so
+  /// continuing to write is what turns "nearly full" into "app cannot function".
+  private var lastLowDiskLogAt: Date = .distantPast
+
+  private func pauseCaptureForLowDisk() -> Bool {
+    guard RewindDatabase.isDiskCritical() else { return false }
+    if Date().timeIntervalSince(lastLowDiskLogAt) >= 300 {
+      lastLowDiskLogAt = Date()
+      log("RewindIndexer: Pausing capture — free disk space below threshold; forcing retention sweep")
+    }
+    lastRetentionCleanupAt = .distantPast
+    scheduleRetentionCleanupIfDue()
+    return true
+  }
+
+  /// Start the frame-independent retention loop. Idempotent; the loop outlives
+  /// capture pauses, permission revocation, and write failures.
+  func startRetentionSchedulerIfNeeded() {
+    guard retentionSchedulerTask == nil else { return }
+    retentionSchedulerTask = Task { [retentionCleanupInterval] in
+      while !Task.isCancelled {
+        self.scheduleRetentionCleanupIfDue()
+        try? await Task.sleep(nanoseconds: UInt64(retentionCleanupInterval / 12 * 1_000_000_000))
+      }
+    }
   }
 
   /// Run cleanup to remove old screenshots
@@ -620,8 +659,35 @@ actor RewindIndexer {
         )
       }
 
+      await runDerivedDataRetention(cutoffDate: cutoffDate)
+
+      // Deleted pages are only returned to the filesystem by an explicit
+      // incremental vacuum; without it the DB file keeps its high-water mark
+      // and shortening the retention window reclaims nothing.
+      await RewindDatabase.shared.reclaimFreePages()
+
     } catch {
       logError("RewindIndexer: Cleanup failed: \(error)")
+    }
+  }
+
+  /// Apply the same retention window to the LLM-derived stores. These deletion
+  /// functions existed with no call site, so proactive extractions, focus
+  /// sessions, and dismissed memories were retained indefinitely regardless of
+  /// the user's "how long to keep" setting.
+  private func runDerivedDataRetention(cutoffDate: Date) async {
+    do {
+      let extractions = try await ProactiveStorage.shared.deleteExtractionsOlderThan(cutoffDate)
+      let focusSessions = try await ProactiveStorage.shared.deleteFocusSessionsOlderThan(cutoffDate)
+      let dismissedMemories = try await MemoryStorage.shared.cleanupOldDismissedMemories(
+        olderThan: cutoffDate)
+      if extractions + focusSessions + dismissedMemories > 0 {
+        log(
+          "RewindIndexer: Retention removed \(extractions) extractions, "
+            + "\(focusSessions) focus sessions, \(dismissedMemories) dismissed memories")
+      }
+    } catch {
+      logError("RewindIndexer: Derived-data retention failed", error: error)
     }
   }
 

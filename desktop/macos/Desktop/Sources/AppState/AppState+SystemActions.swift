@@ -193,9 +193,28 @@ extension AppState {
     let homeDir = fileManager.homeDirectoryForCurrentUser.path
 
     // Clean Omi apps from Trash (they still pollute Launch Services!)
+    // Match only Omi's own `.app` bundles. A substring match on "omi" also matched
+    // ordinary user documents (domino.pdf, comic.png, economics.xlsx) and deleted
+    // them from the Trash unrecoverably.
+    let omiAppBundleBaseNames: Set<String> = [
+      "omi",
+      "omi beta",
+      "omi computer",
+      "omi dev",
+    ]
+    func isOmiAppBundle(_ item: String) -> Bool {
+      guard item.hasSuffix(".app") else { return false }
+      var base = String(item.dropLast(4)).lowercased()
+      // The Trash disambiguates collisions as "Omi 2.app", "Omi Dev 3.app", ...
+      if let suffix = base.range(of: #" \d+$"#, options: .regularExpression) {
+        base = String(base[base.startIndex..<suffix.lowerBound])
+      }
+      return omiAppBundleBaseNames.contains(base) || base.hasPrefix("omi-")
+    }
+
     let trashPath = "\(homeDir)/.Trash"
     if let contents = try? fileManager.contentsOfDirectory(atPath: trashPath) {
-      for item in contents where item.lowercased().contains("omi") {
+      for item in contents where isOmiAppBundle(item) {
         let itemPath = "\(trashPath)/\(item)"
         do {
           try fileManager.removeItem(atPath: itemPath)

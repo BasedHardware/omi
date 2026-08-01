@@ -68,17 +68,20 @@ final class AppBuildBetaIdentityTests: XCTestCase {
   }
 
   func testProductionLogPathsAreSeparatePerIdentity() {
+    let home = URL(fileURLWithPath: "/Users/test-home", isDirectory: true)
     XCTAssertEqual(
       OmiLogPathResolver.logPath(
         isNonProduction: false,
         bundleIdentifier: AppBuild.productionBundleIdentifier,
-        processID: 1),
-      "/tmp/omi.log")
+        processID: 1,
+        homeDirectory: home),
+      "/Users/test-home/Library/Logs/Omi/omi.log")
     XCTAssertEqual(
       OmiLogPathResolver.logPath(
         isNonProduction: false,
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
-        processID: 1),
-      "/tmp/omi-beta.log")
+        processID: 1,
+        homeDirectory: home),
+      "/Users/test-home/Library/Logs/Omi/omi-beta.log")
   }
 }

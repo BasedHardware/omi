@@ -86,8 +86,9 @@ final class LoggerPermissionsTests: XCTestCase {
       OmiLogPathResolver.logPath(
         isNonProduction: false,
         bundleIdentifier: "com.omi.computer-macos",
-        processID: 303),
-      "/tmp/omi.log")
+        processID: 303,
+        homeDirectory: URL(fileURLWithPath: "/Users/test-home", isDirectory: true)),
+      "/Users/test-home/Library/Logs/Omi/omi.log")
   }
 
   func testEnsureLogDirectoryOwnerOnlyCreatesDirectoryWith0700() throws {

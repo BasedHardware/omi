@@ -5,16 +5,28 @@ import Sentry
 enum OmiLogPathResolver {
   static func launchID(processID: Int32) -> String { "pid-\(processID)" }
 
+  /// Owner-only production log directory. `/tmp` is world-writable and sticky, so
+  /// an attacker can pre-create the log path there and we may be unable to remove
+  /// it; a per-user directory under the home folder removes that race entirely.
+  static func productionLogDirectory(
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> String {
+    homeDirectory.appendingPathComponent("Library/Logs/Omi", isDirectory: true).path
+  }
+
   static func logPath(
     isNonProduction: Bool,
     bundleIdentifier: String?,
-    processID: Int32
+    processID: Int32,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> String {
     // Stable and Omi Beta can run at the same time; interleaving one shared log file
     // would corrupt both transcripts, so each production identity owns its own path.
     guard isNonProduction else {
-      return bundleIdentifier == AppBuild.betaProductionBundleIdentifier
-        ? "/tmp/omi-beta.log" : "/tmp/omi.log"
+      let directory = productionLogDirectory(homeDirectory: homeDirectory)
+      let name =
+        bundleIdentifier == AppBuild.betaProductionBundleIdentifier ? "omi-beta.log" : "omi.log"
+      return (directory as NSString).appendingPathComponent(name)
     }
     let rawBundleID = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
     let safeBundleID = rawBundleID.replacingOccurrences(
@@ -49,10 +61,34 @@ private let dateFormatter: DateFormatter = {
 /// Appends to a file using Foundation's throwing APIs. Legacy `FileHandle.write(_:)`
 /// raises an Objective-C exception for I/O failures, which aborts a Swift process.
 enum OmiLogFileAppender {
+  /// Open the log for appending without ever following a symlink, creating it
+  /// owner-only when absent. `O_NOFOLLOW` refuses a swapped-in link, and the
+  /// `fstat` check refuses a FIFO/device/foreign-owned node on the descriptor we
+  /// actually hold, so no TOCTOU window exists between the check and the write.
+  static func openOwnedRegularFile(at file: URL) throws -> FileHandle {
+    let descriptor = file.withUnsafeFileSystemRepresentation { path -> Int32 in
+      guard let path else { return -1 }
+      return open(path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600)
+    }
+    guard descriptor >= 0 else {
+      throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    var info = stat()
+    let isOwnedRegularFile =
+      fstat(descriptor, &info) == 0
+      && (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG)
+      && info.st_uid == getuid()
+    guard isOwnedRegularFile else {
+      close(descriptor)
+      throw CocoaError(.fileWriteNoPermission)
+    }
+    return FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+  }
+
   static func append(
     _ data: Data,
     to file: URL,
-    openFile: (URL) throws -> FileHandle = { try FileHandle(forWritingTo: $0) },
+    openFile: (URL) throws -> FileHandle = { try openOwnedRegularFile(at: $0) },
     seekToEnd: (FileHandle) throws -> Void = { try $0.seekToEnd() },
     write: (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) },
     close: (FileHandle) throws -> Void = { try $0.close() }
@@ -190,7 +226,52 @@ private nonisolated(unsafe) var didEnsureLogFilePermissions = false
 private func ensureLogParentDirectories() -> Bool {
   // Non-production logs live as owner-only files directly under private tmp.
   // Do not chmod `/private/tmp`: it is shared infrastructure owned by macOS.
-  true
+  guard !AppBuild.isNonProduction else { return true }
+  let directory = OmiLogPathResolver.productionLogDirectory()
+  let fileManager = FileManager.default
+  var isDirectory: ObjCBool = false
+  if !fileManager.fileExists(atPath: directory, isDirectory: &isDirectory) {
+    // `~/Library/Logs` is missing inside a fresh app container, so intermediates
+    // must be created; the mode is then applied to the leaf explicitly because
+    // `createDirectory` attributes do not repair an existing directory.
+    try? fileManager.createDirectory(
+      atPath: directory,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+  }
+  return ensureLogDirectoryOwnerOnly(atPath: directory)
+}
+
+/// Hard ceiling for the on-disk log. Exceeding it rolls the file over once to
+/// `<path>.1` (replacing any previous rollover), so the logger owns at most
+/// `2 * maxLogFileBytes` on disk instead of growing for the life of the install.
+private let maxLogFileBytes: UInt64 = 8 * 1024 * 1024
+
+/// Bytes appended since the last truncation/rollover. Mutated only on `logQueue`.
+private nonisolated(unsafe) var logFileBytesWritten: UInt64 = 0
+
+/// Start each launch from an empty log so a long-lived install cannot accumulate
+/// an unbounded transcript, and so the previous run stays available as `.1`.
+private func truncateLogFileForLaunch() {
+  let fileManager = FileManager.default
+  let rollover = logFile + ".1"
+  if fileManager.fileExists(atPath: logFile) {
+    try? fileManager.removeItem(atPath: rollover)
+    try? fileManager.moveItem(atPath: logFile, toPath: rollover)
+  }
+  logFileBytesWritten = 0
+}
+
+private func rotateLogFileIfNeeded(adding byteCount: UInt64) {
+  guard logFileBytesWritten + byteCount > maxLogFileBytes else {
+    logFileBytesWritten += byteCount
+    return
+  }
+  let fileManager = FileManager.default
+  let rollover = logFile + ".1"
+  try? fileManager.removeItem(atPath: rollover)
+  try? fileManager.moveItem(atPath: logFile, toPath: rollover)
+  logFileBytesWritten = byteCount
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
@@ -214,24 +295,25 @@ private func writeToLogFile(_ data: Data) {
     // Latch only when normalization actually succeeds, so a transient failure
     // (e.g. a racing create) is retried on the next write instead of leaving
     // the log permanently world-readable.
-    didEnsureLogFilePermissions =
+    let normalized =
       ensureLogParentDirectories()
       && ensureLogFileOwnerOnly(atPath: logFile)
-  }
-  if FileManager.default.fileExists(atPath: logFile) {
-    writeToLogFile(
-      data,
-      to: URL(fileURLWithPath: logFile),
-      appendFile: { data, file in OmiLogFileAppender.append(data, to: file) },
-      reportFailure: { logFileFailureReporter.report($0) })
-  } else {
-    // Recreate owner-only if the file was removed mid-session.
-    let created = FileManager.default.createFile(
-      atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
-    if !created {
-      logFileFailureReporter.report(CocoaError(.fileWriteUnknown))
+    if normalized {
+      truncateLogFileForLaunch()
     }
+    didEnsureLogFilePermissions = normalized
   }
+  // Fail closed. Normalization returns false when the path is a node we could
+  // neither adopt nor remove — writing anyway would stream the whole app log
+  // into a file we do not own, or append to whatever the path resolves to.
+  guard didEnsureLogFilePermissions else { return }
+
+  rotateLogFileIfNeeded(adding: UInt64(data.count))
+  writeToLogFile(
+    data,
+    to: URL(fileURLWithPath: logFile),
+    appendFile: { data, file in OmiLogFileAppender.append(data, to: file) },
+    reportFailure: { logFileFailureReporter.report($0) })
 }
 
 // MARK: - Performance Logging

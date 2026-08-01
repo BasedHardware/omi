@@ -336,7 +336,7 @@ probe_set_04() {
     return
   fi
   {
-    for f in "$active_log" /private/tmp/omi.log; do
+    for f in "$active_log" "$HOME/Library/Logs/Omi/omi.log" "$HOME/Library/Logs/Omi/omi-beta.log"; do
       if [ ! -r "$f" ]; then echo "$f: not present/readable"; continue; fi
       set +e
       hits="$(grep -cE "$CRED_PATTERNS" "$f" 2>/dev/null)"

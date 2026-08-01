@@ -92,12 +92,50 @@ class TranscriptionService: @unchecked Sendable {
   // MARK: - Properties
 
   private let apiKey: String
-  private var webSocketTask: URLSessionWebSocketTask?
-  private var urlSession: URLSession?
-  private var webSocketDelegate: WebSocketConnectionDelegate?
+
+  /// One lock owns every field the connection state machine touches. These are read and
+  /// written from the URLSession delegate queue, the send-completion queue, the receive
+  /// callback, the watchdog task, and the caller's thread — previously unsynchronized,
+  /// which let two disconnect paths both observe `isConnected == true` and each open a
+  /// socket, and let a `reconnectTask` overwrite drop a live timer without cancelling it.
+  private let stateLock = NSRecursiveLock()
+
+  private var _webSocketTask: URLSessionWebSocketTask?
+  private var _urlSession: URLSession?
+  private var _webSocketDelegate: WebSocketConnectionDelegate?
+  private var _isConnected = false
+  private var _shouldReconnect = false
+
+  /// Monotonic id of the current connection attempt. Bumped by `stop()`, `disconnect()`,
+  /// and every disconnect path, so a `connect()` that resumes after an `await` can tell
+  /// that its attempt was superseded and must not open (or publish) a socket.
+  private var _connectionGeneration: UInt64 = 0
+
+  private var webSocketTask: URLSessionWebSocketTask? {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _webSocketTask }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _webSocketTask = newValue }
+  }
+
+  private var urlSession: URLSession? {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _urlSession }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _urlSession = newValue }
+  }
+
+  private var webSocketDelegate: WebSocketConnectionDelegate? {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _webSocketDelegate }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _webSocketDelegate = newValue }
+  }
+
   // Internal for @testable import access in unit tests
-  var isConnected = false
-  var shouldReconnect = false
+  var isConnected: Bool {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _isConnected }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _isConnected = newValue }
+  }
+
+  var shouldReconnect: Bool {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _shouldReconnect }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _shouldReconnect = newValue }
+  }
 
   // Callbacks
   private var onBackendSegments: BackendSegmentsHandler?
@@ -158,9 +196,39 @@ class TranscriptionService: @unchecked Sendable {
   }
 
   // Reconnection (internal for @testable import)
-  var reconnectAttempts = 0
+  private var _reconnectAttempts = 0
+  var reconnectAttempts: Int {
+    get { stateLock.lock(); defer { stateLock.unlock() }; return _reconnectAttempts }
+    set { stateLock.lock(); defer { stateLock.unlock() }; _reconnectAttempts = newValue }
+  }
   let maxReconnectAttempts = 10
-  private var reconnectTask: Task<Void, Never>?
+  private var _reconnectTask: Task<Void, Never>?
+
+  /// Up-to jitter added to every reconnect delay. Ported from the Windows client's
+  /// `RECONNECT_JITTER_MS` — without it every client dropped by the same backend
+  /// incident wakes at the same instant and re-storms it.
+  static let reconnectJitterSeconds: TimeInterval = 1.0
+
+  /// Capped exponential backoff (2s, 4s, … 32s) plus decorrelating jitter.
+  /// Mirrors the Windows client's `reconnectDelayJitteredMs`.
+  static func reconnectDelay(
+    attempt: Int,
+    rand: () -> Double = { Double.random(in: 0..<1) }
+  ) -> TimeInterval {
+    let base = min(pow(2.0, Double(max(1, attempt))), 32.0)
+    return base + rand() * reconnectJitterSeconds
+  }
+
+  /// Whether a close is worth reconnecting for. Ported from the Windows client's
+  /// `isRetryableDropError`: quota/entitlement exhaustion (1008) and the backend's
+  /// auth-rejection codes hit the same wall on every retry, so surface them at once
+  /// instead of burning the whole backoff budget first.
+  static func isRetryableCloseCode(_ closeCode: URLSessionWebSocketTask.CloseCode) -> Bool {
+    switch closeCode.rawValue {
+    case 1008, 4001, 4004: return false
+    default: return true
+    }
+  }
 
   // Watchdog: detect stale connections where WebSocket dies silently
   private var watchdogTask: Task<Void, Never>?
@@ -264,9 +332,16 @@ class TranscriptionService: @unchecked Sendable {
 
   /// Stop the transcription service
   func stop(discardBufferedAudio: Bool = false) {
-    shouldReconnect = false
-    reconnectTask?.cancel()
-    reconnectTask = nil
+    stateLock.lock()
+    _shouldReconnect = false
+    // Invalidate every in-flight connect attempt, including one currently suspended
+    // inside `getAuthHeader` that would otherwise open a socket nobody can close.
+    _connectionGeneration &+= 1
+    let pendingReconnect = _reconnectTask
+    _reconnectTask = nil
+    stateLock.unlock()
+
+    pendingReconnect?.cancel()
     watchdogTask?.cancel()
     watchdogTask = nil
 
@@ -341,21 +416,44 @@ class TranscriptionService: @unchecked Sendable {
       onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
       return
     }
+    stateLock.lock()
+    guard _shouldReconnect else {
+      stateLock.unlock()
+      return
+    }
+    let generation = _connectionGeneration
+    stateLock.unlock()
+
     // Always use Firebase auth for Python backend
     Task { [weak self] in
       guard let self = self else { return }
       do {
         let authService = await MainActor.run { AuthService.shared }
         let authHeader = try await authService.getAuthHeader(forceRefresh: self.reconnectAttempts > 0)
-        self.connectToBackend(authHeader: authHeader)
+        // `stop()` can run while this Task is suspended above. Without this re-check the
+        // socket below is built and resumed after stop, carrying the Firebase bearer and
+        // the user's BYOK keys, with no handle left anywhere to close it.
+        guard self.isCurrentAttempt(generation) else {
+          log("TranscriptionService: Connect superseded during auth — dropping attempt")
+          return
+        }
+        self.connectToBackend(authHeader: authHeader, generation: generation)
       } catch {
+        guard self.isCurrentAttempt(generation) else { return }
         logError("TranscriptionService: Failed to get auth token", error: error)
         self.onError?(TranscriptionError.connectionFailed(error))
       }
     }
   }
 
-  private func connectToBackend(authHeader: String) {
+  /// Whether `generation` is still the live connection attempt and reconnects are wanted.
+  private func isCurrentAttempt(_ generation: UInt64) -> Bool {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return _shouldReconnect && _connectionGeneration == generation
+  }
+
+  private func connectToBackend(authHeader: String, generation: UInt64) {
     let base = Self.pythonBackendBaseURL
       .replacingOccurrences(of: "https://", with: "wss://")
       .replacingOccurrences(of: "http://", with: "ws://")
@@ -438,9 +536,21 @@ class TranscriptionService: @unchecked Sendable {
     let delegate = WebSocketConnectionDelegate()
     let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     let task = session.webSocketTask(with: request)
-    webSocketDelegate = delegate
-    urlSession = session
-    webSocketTask = task
+
+    // Publish the socket only if this attempt is still the live one. Checking and
+    // assigning under one lock is what makes "stop() happened, so never resume" hold.
+    stateLock.lock()
+    guard _shouldReconnect, _connectionGeneration == generation else {
+      stateLock.unlock()
+      task.cancel(with: .goingAway, reason: nil)
+      session.invalidateAndCancel()
+      log("TranscriptionService: Connect superseded before resume — discarding socket")
+      return
+    }
+    _webSocketDelegate = delegate
+    _urlSession = session
+    _webSocketTask = task
+    stateLock.unlock()
 
     delegate.onOpen = { [weak self, weak task] in
       guard let self,
@@ -458,6 +568,14 @@ class TranscriptionService: @unchecked Sendable {
         WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
       else { return }
       log("TranscriptionService: WebSocket closed with code \(closeCode.rawValue)")
+      guard Self.isRetryableCloseCode(closeCode) else {
+        log("TranscriptionService: Close code \(closeCode.rawValue) is terminal — not reconnecting")
+        self.shouldReconnect = false
+        self.disconnect()
+        self.onError?(
+          TranscriptionError.webSocketError("Connection rejected by server (code \(closeCode.rawValue))"))
+        return
+      }
       if self.isConnected {
         self.handleDisconnection()
       } else if self.shouldReconnect {
@@ -515,47 +633,80 @@ class TranscriptionService: @unchecked Sendable {
   }
 
   private func disconnect() {
-    isConnected = false
+    stateLock.lock()
+    _isConnected = false
+    _connectionGeneration &+= 1
+    let task = _webSocketTask
+    _webSocketTask = nil
+    let session = _urlSession
+    _urlSession = nil
+    _webSocketDelegate = nil
+    stateLock.unlock()
+
     watchdogTask?.cancel()
     watchdogTask = nil
-    webSocketTask?.cancel(with: .normalClosure, reason: nil)
-    webSocketTask = nil
-    urlSession?.invalidateAndCancel()
-    urlSession = nil
-    webSocketDelegate = nil
+    task?.cancel(with: .normalClosure, reason: nil)
+    session?.invalidateAndCancel()
     log("TranscriptionService: Disconnected")
     onDisconnected?()
   }
 
-  func handleDisconnection() {
-    guard isConnected else { return }
+  /// Cancel any pending reconnect timer before installing a new one. Overwriting
+  /// `_reconnectTask` without cancelling left the previous timer running, and it woke
+  /// up later to open a second, parallel socket.
+  private func scheduleReconnect(after delay: TimeInterval, generation: UInt64) {
+    stateLock.lock()
+    let previous = _reconnectTask
+    let task = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      guard !Task.isCancelled, let self, self.isCurrentAttempt(generation) else { return }
+      self.connect()
+    }
+    _reconnectTask = task
+    stateLock.unlock()
+    previous?.cancel()
+  }
 
-    isConnected = false
+  func handleDisconnection() {
+    // The whole transition is one critical section: two callers racing here both used
+    // to observe `isConnected == true`, both increment attempts, and both schedule a
+    // reconnect, ending with two live sockets.
+    stateLock.lock()
+    guard _isConnected else {
+      stateLock.unlock()
+      return
+    }
+    _isConnected = false
+    _connectionGeneration &+= 1
+    _webSocketTask = nil
+    let session = _urlSession
+    _urlSession = nil
+    _webSocketDelegate = nil
+    let canRetry = _shouldReconnect && _reconnectAttempts < maxReconnectAttempts
+    let exhausted = _reconnectAttempts >= maxReconnectAttempts
+    if canRetry {
+      _reconnectAttempts += 1
+    }
+    let attempt = _reconnectAttempts
+    let generation = _connectionGeneration
+    stateLock.unlock()
+
     watchdogTask?.cancel()
     watchdogTask = nil
-    webSocketTask = nil
-    urlSession?.invalidateAndCancel()
-    urlSession = nil
-    webSocketDelegate = nil
+    session?.invalidateAndCancel()
     onDisconnected?()
 
     // Attempt reconnection if enabled
-    if shouldReconnect && reconnectAttempts < maxReconnectAttempts {
-      reconnectAttempts += 1
-      let delay = min(pow(2.0, Double(reconnectAttempts)), 32.0)  // Exponential backoff, max 32s
-      log("TranscriptionService: Reconnecting in \(delay)s (attempt \(reconnectAttempts))")
-
-      reconnectTask = Task {
-        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        guard !Task.isCancelled, self.shouldReconnect else { return }
-        self.connect()
-      }
-    } else if reconnectAttempts >= maxReconnectAttempts {
+    if canRetry {
+      let delay = Self.reconnectDelay(attempt: attempt)
+      log("TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt))")
+      scheduleReconnect(after: delay, generation: generation)
+    } else if exhausted {
       log(
         "TranscriptionService: Max reconnect attempts reached "
           + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
       DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
-        reconnectAttempts: reconnectAttempts,
+        reconnectAttempts: attempt,
         streamingMode: streamingMode.telemetryLabel
       )
       onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
@@ -565,20 +716,33 @@ class TranscriptionService: @unchecked Sendable {
   /// Cleanup a failed/pending connection and schedule reconnect.
   /// Unlike handleDisconnection(), this works even when isConnected is false (pre-handshake failures).
   func cleanupAndReconnect() {
-    isConnected = false
-    webSocketTask?.cancel(with: .abnormalClosure, reason: nil)
-    webSocketTask = nil
-    urlSession?.invalidateAndCancel()
-    urlSession = nil
-    webSocketDelegate = nil
+    stateLock.lock()
+    _isConnected = false
+    _connectionGeneration &+= 1
+    let task = _webSocketTask
+    _webSocketTask = nil
+    let session = _urlSession
+    _urlSession = nil
+    _webSocketDelegate = nil
+    let canRetry = _shouldReconnect && _reconnectAttempts < maxReconnectAttempts
+    let exhausted = _reconnectAttempts >= maxReconnectAttempts
+    if canRetry {
+      _reconnectAttempts += 1
+    }
+    let attempt = _reconnectAttempts
+    let generation = _connectionGeneration
+    stateLock.unlock()
 
-    guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
-      if reconnectAttempts >= maxReconnectAttempts {
+    task?.cancel(with: .abnormalClosure, reason: nil)
+    session?.invalidateAndCancel()
+
+    guard canRetry else {
+      if exhausted {
         log(
           "TranscriptionService: Max reconnect attempts reached (pre-connect) "
             + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
         DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
-          reconnectAttempts: reconnectAttempts,
+          reconnectAttempts: attempt,
           streamingMode: streamingMode.telemetryLabel
         )
         onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
@@ -586,15 +750,11 @@ class TranscriptionService: @unchecked Sendable {
       return
     }
 
-    reconnectAttempts += 1
-    let delay = min(pow(2.0, Double(reconnectAttempts)), 32.0)
-    log("TranscriptionService: Reconnecting in \(delay)s (attempt \(reconnectAttempts), pre-connect failure)")
-
-    reconnectTask = Task {
-      try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-      guard !Task.isCancelled, self.shouldReconnect else { return }
-      self.connect()
-    }
+    let delay = Self.reconnectDelay(attempt: attempt)
+    log(
+      "TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt), pre-connect failure)"
+    )
+    scheduleReconnect(after: delay, generation: generation)
   }
 
   private func receiveMessage() {

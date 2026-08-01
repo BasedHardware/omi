@@ -27,16 +27,10 @@ enum DesktopKeychainStore {
   /// Signing Team ID of the running binary (e.g. `9536L8KLMP` for Developer ID,
   /// `JVMXE5G542` for a personal Apple Development cert). Falls back to an ad-hoc
   /// bundle-scoped token when codesign info has no Team ID.
-  static var signingTeamID: String {
-    if let cached = _cachedSigningTeamID {
-      return cached
-    }
-    let resolved = resolveSigningTeamID()
-    _cachedSigningTeamID = resolved
-    return resolved
-  }
-
-  private nonisolated(unsafe) static var _cachedSigningTeamID: String?
+  ///
+  /// `static let` is initialized exactly once under `swift_once`, so concurrent first
+  /// readers cannot observe a torn or duplicated value for this security-scoping key.
+  static let signingTeamID: String = resolveSigningTeamID()
 
   /// Team + bundle scoped service name.
   ///

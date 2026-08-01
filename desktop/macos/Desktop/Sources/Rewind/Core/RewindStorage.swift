@@ -133,6 +133,13 @@ actor RewindStorage {
       throw RewindError.storageError("Storage not initialized")
     }
 
+    // Refuse to add capture data to a volume that is nearly full. The disk-full
+    // path is self-amplifying — writes fail, frames stop, and the frame-driven
+    // retention sweep stops with them — so stop before crossing the threshold.
+    guard RewindDatabase.hasFreeSpace(atLeast: RewindDatabase.lowDiskThresholdBytes) else {
+      throw RewindError.storageError("Insufficient free disk space for screenshot capture")
+    }
+
     // Create day subdirectory
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -400,6 +407,9 @@ actor RewindStorage {
     // Create a temporary file for the output
     let tempDir = FileManager.default.temporaryDirectory
     let outputPath = tempDir.appendingPathComponent("frame_\(UUID().uuidString).jpg")
+    // Every failure path below throws; without `defer` the partial JPEG leaked
+    // into the temp directory once per failed extraction.
+    defer { try? FileManager.default.removeItem(at: outputPath) }
 
     // Build ffmpeg command to extract single frame
     let process = Process()
@@ -468,9 +478,6 @@ actor RewindStorage {
       "data_size_bytes": imageData.count,
     ]
     SentrySDK.addBreadcrumb(breadcrumb)
-
-    // Clean up temp file
-    try? FileManager.default.removeItem(at: outputPath)
 
     return image
   }
@@ -686,6 +693,9 @@ actor RewindStorage {
   /// Finalize the active encoder generation and reconcile any durable
   /// abandonment marker before returning an error to non-indexer callers.
   func flushCurrentVideoChunk() async throws -> VideoChunkEncoder.ChunkFlushResult? {
+    if RewindDatabase.isDiskCritical() {
+      log("RewindStorage: Finalizing video chunk with critically low free disk space")
+    }
     do {
       return try await VideoChunkEncoder.shared.flushCurrentChunk()
     } catch {

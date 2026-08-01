@@ -481,12 +481,23 @@ actor RewindDatabase {
     }
 
     // Clean up stale WAL files that can cause disk I/O errors (SQLite error 10)
-    if FileManager.default.fileExists(atPath: dbPath) {
+    let databaseFileExists = FileManager.default.fileExists(atPath: dbPath)
+    if databaseFileExists {
       cleanupStaleWALFiles(at: dbPath)
     }
 
     var config = Configuration()
     config.prepareDatabase { db in
+      // `auto_vacuum` is only settable before the first table is written, so it
+      // must be applied here on a brand-new file. Without it SQLite keeps freed
+      // pages on the freelist forever and the .db never shrinks — dropping
+      // retention from 30 days to 3 reclaimed zero bytes. Databases created by
+      // older builds stay auto_vacuum=NONE and are converted (once, guarded on
+      // free space) by `reclaimFreePages`.
+      if !databaseFileExists {
+        try? db.execute(sql: "PRAGMA auto_vacuum = INCREMENTAL")
+      }
+
       // Try to enable WAL mode for better crash resistance and performance
       // WAL mode keeps writes in a separate file, making corruption much less likely
       // If WAL fails (disk I/O error, permissions), continue with default journal mode
@@ -869,9 +880,23 @@ actor RewindDatabase {
     let timestamp = formatter.string(from: Date())
     let backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db")
 
-    // Backup the corrupted database (for potential manual recovery)
-    log("RewindDatabase: Backing up corrupted database to \(backupPath.path)")
-    try fileManager.copyItem(atPath: dbPath, toPath: backupPath.path)
+    // Backup the corrupted database (for potential manual recovery). This must
+    // not be fatal: on a full disk the copy fails, and throwing here aborted
+    // recovery entirely, leaving the app crash-looping on a database it could
+    // neither open nor recycle. Losing the forensic copy is strictly better.
+    let corruptedSize =
+      (try? fileManager.attributesOfItem(atPath: dbPath)[.size] as? Int64).flatMap { $0 } ?? 0
+    if Self.hasFreeSpace(atLeast: corruptedSize + Self.lowDiskThresholdBytes) {
+      log("RewindDatabase: Backing up corrupted database to \(backupPath.path)")
+      do {
+        try fileManager.copyItem(atPath: dbPath, toPath: backupPath.path)
+      } catch {
+        log("RewindDatabase: Could not back up corrupted database: \(error.localizedDescription)")
+        try? fileManager.removeItem(at: backupPath)
+      }
+    } else {
+      log("RewindDatabase: Skipping corrupted-database backup — insufficient free disk space")
+    }
 
     // Attempt to recover data from corrupted database
     let recoveredPath = omiDir.appendingPathComponent("omi_recovered.db").path
@@ -927,8 +952,9 @@ actor RewindDatabase {
         error: triggerError,
         appIsTerminating: Self.isTerminationInProgress))
 
-    // Clean up old backups (keep only last 5)
-    try await cleanupOldBackups(in: backupDir, keepCount: 5)
+    // Keep a single forensic copy. Five was up to 5 × the database size (tens of
+    // GB on a large install) of files nothing ever reads back.
+    try await cleanupOldBackups(in: backupDir, keepCount: 1)
   }
 
   /// Attempt to recover data from a corrupted database using sqlite3 .recover
@@ -1108,6 +1134,10 @@ actor RewindDatabase {
   }
 
   /// Clean up old database backups, keeping only the most recent ones
+  /// Corrupted-database backups older than this are deleted regardless of count:
+  /// a stale multi-GB copy nobody has inspected in a month is pure disk cost.
+  private static let backupMaxAge: TimeInterval = 30 * 24 * 60 * 60
+
   private func cleanupOldBackups(in backupDir: URL, keepCount: Int) async throws {
     let fileManager = FileManager.default
 
@@ -1128,6 +1158,16 @@ actor RewindDatabase {
     for file in sortedFiles.dropFirst(keepCount) {
       try fileManager.removeItem(at: file)
       log("RewindDatabase: Removed old backup \(file.lastPathComponent)")
+    }
+
+    // Age out whatever survived the count limit.
+    let ageCutoff = Date().addingTimeInterval(-Self.backupMaxAge)
+    for file in sortedFiles.prefix(keepCount) {
+      let created =
+        (try? file.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+      guard created < ageCutoff else { continue }
+      try? fileManager.removeItem(at: file)
+      log("RewindDatabase: Removed expired backup \(file.lastPathComponent)")
     }
   }
 
@@ -3445,6 +3485,25 @@ actor RewindDatabase {
           arguments: [date]
         )
 
+        // `observations` references screenshots with ON DELETE SET NULL, so the
+        // sweep above only nulls the FK and leaves every LLM-written prose
+        // summary of the user's screen on disk forever. Retention promises the
+        // screen record is gone, so age the observations out by their own
+        // timestamp (this also covers rows whose screenshotId was already null).
+        try db.execute(
+          sql: "DELETE FROM observations WHERE createdAt < ?",
+          arguments: [date]
+        )
+
+        // Transcription sessions were only removed once they had zero segments,
+        // so a successfully-synced transcript (segments cascade-deleted, backend
+        // holds the copy) was kept locally forever. Age out synced sessions;
+        // unsynced ones are still pending upload and must survive.
+        try db.execute(
+          sql: "DELETE FROM transcription_sessions WHERE backendSynced = 1 AND startedAt < ?",
+          arguments: [date]
+        )
+
         var orphaned: [String] = []
         for chunkPath in videoChunksToCheck {
           let remainingCount =
@@ -3465,6 +3524,85 @@ actor RewindDatabase {
       await recoverFromMaintenanceError(error, operation: "retention_cleanup")
       throw error
     }
+  }
+
+  /// Return freed pages to the filesystem after a retention sweep.
+  ///
+  /// New databases are created with `auto_vacuum = INCREMENTAL`, so this is a
+  /// cheap bounded `incremental_vacuum`. Databases created by older builds are
+  /// `auto_vacuum = NONE`, where the pragma alone does nothing — those need one
+  /// full `VACUUM` to convert. That rewrite needs roughly the database's size in
+  /// free space, so it only runs when the freelist is large enough to be worth
+  /// it and the volume can afford it; otherwise the file simply stays as-is.
+  func reclaimFreePages(maxPages: Int = 4096) async {
+    guard let dbQueue = dbQueue else { return }
+
+    do {
+      let plan = try await dbQueue.read { db -> (mode: Int, freePages: Int, sizeBytes: Int64) in
+        let mode = try Int.fetchOne(db, sql: "PRAGMA auto_vacuum") ?? 0
+        let freePages = try Int.fetchOne(db, sql: "PRAGMA freelist_count") ?? 0
+        let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+        let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 0
+        return (mode, freePages, Int64(pageCount) * Int64(pageSize))
+      }
+      guard plan.freePages > 0 else { return }
+
+      // 2 == SQLITE_AUTO_VACUUM_INCREMENTAL
+      if plan.mode == 2 {
+        try await dbQueue.write { db in
+          try db.execute(sql: "PRAGMA incremental_vacuum(\(min(plan.freePages, maxPages)))")
+        }
+        log("RewindDatabase: Reclaimed up to \(min(plan.freePages, maxPages)) free pages")
+        return
+      }
+
+      // Legacy auto_vacuum = NONE. Converting is a full rewrite; only do it when
+      // a meaningful fraction of the file is dead space and the volume has room.
+      let totalPages = plan.sizeBytes > 0 ? Int(plan.sizeBytes / 4096) : 0
+      guard totalPages > 0, plan.freePages * 5 > totalPages else { return }
+      guard Self.hasFreeSpace(atLeast: plan.sizeBytes + Self.lowDiskThresholdBytes) else {
+        log("RewindDatabase: Skipping VACUUM conversion — insufficient free disk space")
+        return
+      }
+
+      try await dbQueue.writeWithoutTransaction { db in
+        try db.execute(sql: "PRAGMA auto_vacuum = INCREMENTAL")
+        try db.execute(sql: "VACUUM")
+      }
+      log("RewindDatabase: Converted database to incremental auto-vacuum and reclaimed free pages")
+    } catch {
+      log("RewindDatabase: Free-page reclaim failed: \(error.localizedDescription)")
+    }
+  }
+
+  // MARK: - Free Space
+
+  /// Below this the app stops producing new capture data. Retention and the
+  /// logger both fail when the volume fills, and the failure is self-amplifying:
+  /// writes fail → frames stop → the frame-driven sweeps stop.
+  static let lowDiskThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024  // 2 GB
+
+  /// Available bytes on the volume holding the app's data, using the "important
+  /// usage" figure (what macOS will actually purge to make room for us).
+  nonisolated static func availableCapacityBytes() -> Int64? {
+    let url = DesktopLocalProfile.applicationSupportURL()
+    guard
+      let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+      let available = values.volumeAvailableCapacityForImportantUsage
+    else { return nil }
+    return available
+  }
+
+  /// `true` when the volume has at least `bytes` free, or when capacity cannot be
+  /// determined (never block writes on a failed measurement).
+  nonisolated static func hasFreeSpace(atLeast bytes: Int64) -> Bool {
+    guard let available = availableCapacityBytes() else { return true }
+    return available >= bytes
+  }
+
+  /// `true` when the volume is too full to keep capturing.
+  nonisolated static func isDiskCritical() -> Bool {
+    !hasFreeSpace(atLeast: lowDiskThresholdBytes)
   }
 
   /// Delete a specific screenshot

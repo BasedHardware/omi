@@ -402,13 +402,15 @@ class AudioCaptureService: @unchecked Sendable {
 
     removePropertyListeners()
 
-    // Capture values before clearing state so we can dispatch the heavy
-    // CoreAudio calls off the main thread.
-    let procID = self.ioProcID
-    let devID = self.deviceID
+    // Snapshot only as a dealloc fallback. The authoritative read happens on
+    // audioQueue below: a device-change reconfiguration already running there can
+    // replace ioProcID/deviceID after this point, and tearing down the snapshotted
+    // (already destroyed) proc would leave the *replacement* IOProc running with
+    // isCapturing == false — a live mic and a lit orange indicator that no later
+    // stopCapture() can reach, because they are all gated on isCapturing.
+    let fallbackProcID = self.ioProcID
+    let fallbackDevID = self.deviceID
 
-    ioProcID = nil
-    deviceID = kAudioObjectUnknown
     isCapturing = false
     isReconfiguring = false
     isTrackingOverrideDevice = false
@@ -424,6 +426,12 @@ class AudioCaptureService: @unchecked Sendable {
     // AudioDeviceStop can block waiting for the IO thread — run off main thread.
     let teardownToken = activeCaptureToken
     audioQueue.async { [weak self] in
+      // Read the live proc/device on the owning queue, so an in-flight
+      // reconfiguration's replacement is the thing that gets torn down.
+      let procID = self?.ioProcID ?? fallbackProcID
+      let devID = self.map { $0.deviceID } ?? fallbackDevID
+      self?.ioProcID = nil
+      self?.deviceID = kAudioObjectUnknown
       if let procID = procID, devID != kAudioObjectUnknown {
         AudioDeviceStop(devID, procID)
         AudioDeviceDestroyIOProcID(devID, procID)
@@ -1093,6 +1101,17 @@ class AudioCaptureService: @unchecked Sendable {
       retryOrGiveUp(retryCount: retryCount)
       return
     }
+    // stopCapture() runs on the caller thread and can have flipped the gate while the
+    // slow HAL work above was in flight. This function read `isCapturing` once, at the
+    // top; starting now would leave a running IOProc with isCapturing == false.
+    guard isCapturing else {
+      log("AudioCapture: Capture stopped during reconfiguration — discarding new IOProc")
+      AudioDeviceDestroyIOProcID(deviceID, validProcID)
+      self.ioProcID = nil
+      isReconfiguring = false
+      return
+    }
+
     self.ioProcID = validProcID
 
     // Start device

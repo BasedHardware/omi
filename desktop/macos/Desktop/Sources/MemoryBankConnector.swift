@@ -94,12 +94,23 @@ enum MemoryBankConnector {
         "Claude Code is not installed. Install it, then try again.")
     }
 
+    // `~/.claude.json` has an independent concurrent writer: the `claude` CLI itself.
+    // An unlocked read → mutate → atomic-replace silently discards whatever the CLI
+    // wrote in between (session history, other MCP registrations, OAuth account),
+    // and the backup taken at the top of this function predates the loss.
+    guard let fd = openLockedClaudeConfig(config) else {
+      throw ConnectError.invalidConfig(
+        "Omi could not lock \(displayPath(for: config)) for update. Quit Claude Code, then try again.")
+    }
+    defer { close(fd) }  // releasing the descriptor releases the flock
+
+    let existingData = readAllFromDescriptor(fd)
+    let identityAtRead = claudeConfigIdentity(fd)
+    let hadExistingConfig = !existingData.isEmpty
+
     var root: [String: Any] = [:]
-    if fm.fileExists(atPath: config.path) {
-      guard
-        let data = try? Data(contentsOf: config),
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-      else {
+    if hadExistingConfig {
+      guard let json = try? JSONSerialization.jsonObject(with: existingData) as? [String: Any] else {
         throw ConnectError.invalidConfig(
           "Claude Code settings are invalid. Fix \(displayPath(for: config)), then try again.")
       }
@@ -114,12 +125,22 @@ enum MemoryBankConnector {
       return "Claude Code is already connected."
     }
 
-    try backupClaudeCodeConfigIfNeeded(config)
+    if hadExistingConfig {
+      try backupClaudeCodeConfigIfNeeded(config)
+    }
     servers["omi-memory"] = server
     root["mcpServers"] = servers
     let data = try JSONSerialization.data(
       withJSONObject: root,
       options: [.prettyPrinted, .withoutEscapingSlashes])
+
+    // Second line of defence for a writer that does not take the lock: if the file
+    // changed identity/size/mtime since we read it, our copy is stale — abort rather
+    // than replace it and destroy the other writer's data.
+    guard let identityNow = claudeConfigIdentity(config), identityNow == identityAtRead else {
+      throw ConnectError.invalidConfig(
+        "\(displayPath(for: config)) changed while Omi was updating it. Quit Claude Code, then try again.")
+    }
     try data.write(to: config, options: [.atomic])
 
     guard MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: key) else {
@@ -127,6 +148,63 @@ enum MemoryBankConnector {
         "Claude Code settings were updated, but Omi could not verify the connection.")
     }
     return "Claude Code is now connected."
+  }
+
+  /// File identity used to detect a concurrent writer: inode, size, and mtime.
+  private struct ClaudeConfigIdentity: Equatable {
+    let inode: UInt64
+    let size: Int64
+    let mtimeSeconds: Int64
+    let mtimeNanoseconds: Int64
+
+    init(_ st: stat) {
+      self.inode = UInt64(st.st_ino)
+      self.size = Int64(st.st_size)
+      self.mtimeSeconds = Int64(st.st_mtimespec.tv_sec)
+      self.mtimeNanoseconds = Int64(st.st_mtimespec.tv_nsec)
+    }
+  }
+
+  private static func claudeConfigIdentity(_ fd: Int32) -> ClaudeConfigIdentity? {
+    var st = stat()
+    guard fstat(fd, &st) == 0 else { return nil }
+    return ClaudeConfigIdentity(st)
+  }
+
+  private static func claudeConfigIdentity(_ url: URL) -> ClaudeConfigIdentity? {
+    var st = stat()
+    guard stat(url.path, &st) == 0 else { return nil }
+    return ClaudeConfigIdentity(st)
+  }
+
+  /// Opens `~/.claude.json` for update and takes an exclusive advisory lock on it,
+  /// so two lock-aware writers cannot interleave a read-modify-write.
+  private static func openLockedClaudeConfig(_ url: URL) -> Int32? {
+    let fd = open(url.path, O_RDWR | O_CREAT, 0o600)
+    guard fd >= 0 else { return nil }
+    while flock(fd, LOCK_EX) != 0 {
+      if errno == EINTR { continue }
+      close(fd)
+      return nil
+    }
+    return fd
+  }
+
+  private static func readAllFromDescriptor(_ fd: Int32) -> Data {
+    guard lseek(fd, 0, SEEK_SET) >= 0 else { return Data() }
+    var out = Data()
+    var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+    while true {
+      let bytesRead = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+      if bytesRead > 0 {
+        out.append(contentsOf: buffer[0..<bytesRead])
+      } else if bytesRead < 0 && errno == EINTR {
+        continue
+      } else {
+        break
+      }
+    }
+    return out
   }
 
   private static func claudeCodeMCPServer(key: String) -> [String: Any] {

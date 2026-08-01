@@ -221,6 +221,9 @@ final class WALService: ObservableObject {
   private let maxDirectoryRecreateAttempts = 3
   private var flushTimer: Timer?
   private var chunkTimer: Timer?
+  /// Retention sweep. Lives outside `startTimers`/`stopTimers` so it keeps
+  /// running while recording is stopped — deletion must not require capture.
+  private var cleanupTimer: Timer?
 
   // Active capture and frozen persistence batches have separate immutable
   // identities so a failed device-A write can never absorb device-B frames.
@@ -257,6 +260,7 @@ final class WALService: ObservableObject {
       setupWalDirectory()
     }
     loadWals()
+    startCleanupTimer()
   }
 
   // MARK: - Directory Setup
@@ -662,6 +666,18 @@ final class WALService: ObservableObject {
         recoveryAction: "retain_frames",
         recoveryResult: "degraded"
       )
+      return false
+    }
+    // A WAL write onto a nearly-full volume fails anyway; sweeping first is the
+    // only action that can make room, and it must happen before we try again.
+    guard RewindDatabase.hasFreeSpace(atLeast: RewindDatabase.lowDiskThresholdBytes) else {
+      let reason = "wal_low_disk_space"
+      persistenceState = .degraded(reason: reason)
+      errorMessage = "Disk almost full. Audio backup is paused until space is freed."
+      cleanupOldWals()
+      log(
+        "WALService: skipping WAL chunk — low free disk space "
+          + "(failure_class=wal_persistence_degraded recovery_action=retention_sweep recovery_result=degraded)")
       return false
     }
 
@@ -1176,13 +1192,45 @@ final class WALService: ObservableObject {
 
   // MARK: - Cleanup
 
-  /// Remove synced WALs older than `olderThanDays` and delete their on-disk audio.
-  /// Runs at the end of each `syncToCloud` pass; uses the injected clock so the
-  /// retention window is deterministic in tests.
-  func cleanupOldWals(olderThanDays: Int = 7) {
-    let cutoffTimestamp = timestampProvider() - olderThanDays * 24 * 60 * 60
+  /// Hard age cutoff for WALs the cloud never acknowledged. Past this the local
+  /// audio is deleted regardless of status: an unsynced backlog older than this
+  /// is not going to upload, and keeping it grows without bound.
+  static let unsyncedRetentionDays = 30
 
-    let toRemove = WALCloudSyncLogic.cleanupCandidates(wals: wals, cutoffTimestamp: cutoffTimestamp)
+  /// Byte ceiling for the `wals/` directory. Age cutoffs cannot bound a
+  /// continuously-recording offline user, so this caps disk directly.
+  static let walDirectoryByteCeiling: Int64 = 2 * 1024 * 1024 * 1024  // 2 GB
+
+  /// How often the sync-independent sweep runs.
+  static let cleanupIntervalSeconds: TimeInterval = 30 * 60
+
+  /// Remove synced WALs older than `olderThanDays` and delete their on-disk audio.
+  /// Also ages out never-synced WALs past `unsyncedRetentionDays` and evicts the
+  /// oldest entries when the directory exceeds `walDirectoryByteCeiling`, so a
+  /// signed-out/offline/upload-failing user's audio is still reclaimed.
+  /// Driven by `cleanupTimer` (not only by a successful sync); uses the injected
+  /// clock so the retention window is deterministic in tests.
+  func cleanupOldWals(olderThanDays: Int = 7) {
+    let now = timestampProvider()
+    let cutoffTimestamp = now - olderThanDays * 24 * 60 * 60
+    let hardCutoffTimestamp = now - Self.unsyncedRetentionDays * 24 * 60 * 60
+
+    var toRemove = WALCloudSyncLogic.cleanupCandidates(
+      wals: wals,
+      cutoffTimestamp: cutoffTimestamp,
+      hardCutoffTimestamp: hardCutoffTimestamp)
+
+    let removedIds = Set(toRemove.map(\.id))
+    let survivors = wals.filter { !removedIds.contains($0.id) }
+    var sizesById: [String: Int64] = [:]
+    for wal in survivors {
+      sizesById[wal.id] = walFileSize(wal)
+    }
+    toRemove += WALCloudSyncLogic.overflowCandidates(
+      wals: survivors,
+      byteCeiling: Self.walDirectoryByteCeiling,
+      fileSize: { sizesById[$0.id] ?? 0 })
+
     guard !toRemove.isEmpty else { return }
 
     for wal in toRemove {
@@ -1193,14 +1241,35 @@ final class WALService: ObservableObject {
       }
     }
 
-    wals.removeAll { wal in
-      toRemove.contains { $0.id == wal.id }
-    }
+    let idsToRemove = Set(toRemove.map(\.id))
+    wals.removeAll { idsToRemove.contains($0.id) }
 
     updatePendingWals()
     saveWals()
 
     logger.info("Cleaned up \(toRemove.count) old WALs")
+  }
+
+  private func walFileSize(_ wal: WALEntry) -> Int64 {
+    guard let filePath = wal.filePath, let walDir = walDirectory else { return 0 }
+    let fileUrl = walDir.appendingPathComponent(filePath)
+    let size = try? fileManager.attributesOfItem(atPath: fileUrl.path)[.size] as? Int64
+    return size ?? 0
+  }
+
+  /// Retention must not depend on sync succeeding. `cleanupOldWals` used to run
+  /// only at the end of `syncToCloud`, so a signed-out, offline, or persistently
+  /// failing user never swept at all and the `wals/` directory grew forever.
+  private func startCleanupTimer() {
+    cleanupTimer?.invalidate()
+    cleanupOldWals()
+    cleanupTimer = Timer.scheduledTimer(
+      withTimeInterval: Self.cleanupIntervalSeconds, repeats: true
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.cleanupOldWals()
+      }
+    }
   }
 
   /// Get WAL by ID

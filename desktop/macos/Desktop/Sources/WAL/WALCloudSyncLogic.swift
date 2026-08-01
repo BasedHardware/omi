@@ -134,7 +134,44 @@ enum WALCloudSyncLogic {
   /// `.uploaded`/`.corrupted`, which still need upload) AND older than the
   /// cutoff, so local audio is only reclaimed after the cloud has it and a
   /// retention buffer has elapsed. Pure so the delete/keep boundary is testable.
-  static func cleanupCandidates(wals: [WALEntry], cutoffTimestamp: Int) -> [WALEntry] {
-    wals.filter { $0.status == .synced && $0.timerStart < cutoffTimestamp }
+  ///
+  /// `hardCutoffTimestamp` additionally ages out WALs that never reached
+  /// `.synced`. A signed-out, offline, or persistently upload-failing user
+  /// accumulates `.miss`/`.uploaded`/`.corrupted` entries that the synced-only
+  /// filter kept forever (~30 MB/h of audio); past the hard cutoff the local
+  /// copy is reclaimed even though the cloud never acknowledged it.
+  static func cleanupCandidates(
+    wals: [WALEntry],
+    cutoffTimestamp: Int,
+    hardCutoffTimestamp: Int? = nil
+  ) -> [WALEntry] {
+    wals.filter { wal in
+      if wal.status == .synced { return wal.timerStart < cutoffTimestamp }
+      guard let hardCutoffTimestamp else { return false }
+      return wal.timerStart < hardCutoffTimestamp
+    }
+  }
+
+  /// Oldest-first WALs to evict so the on-disk audio total falls back under
+  /// `byteCeiling`. Age cutoffs alone cannot bound the directory: a user who
+  /// records continuously while offline exceeds any window's byte total long
+  /// before the window elapses, so this is the backstop that actually caps disk.
+  /// `.inProgress` entries are never evicted — they are the live recording.
+  static func overflowCandidates(
+    wals: [WALEntry],
+    byteCeiling: Int64,
+    fileSize: (WALEntry) -> Int64
+  ) -> [WALEntry] {
+    let evictable = wals.filter { $0.status != .inProgress }
+    var total = evictable.reduce(Int64(0)) { $0 + fileSize($1) }
+    guard total > byteCeiling else { return [] }
+
+    var evicted: [WALEntry] = []
+    for wal in evictable.sorted(by: { $0.timerStart < $1.timerStart }) {
+      guard total > byteCeiling else { break }
+      total -= fileSize(wal)
+      evicted.append(wal)
+    }
+    return evicted
   }
 }

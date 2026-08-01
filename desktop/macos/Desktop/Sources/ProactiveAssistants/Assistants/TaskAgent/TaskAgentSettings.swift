@@ -58,7 +58,7 @@ class TaskAgentSettings: ObservableObject, @unchecked Sendable {
     self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? ""
     self.customPromptPrefix = UserDefaults.standard.string(forKey: "taskAgentPromptPrefix") ?? ""
     self.defaultPrompt = UserDefaults.standard.string(forKey: "taskAgentDefaultPrompt") ?? Self.defaultPromptTemplate
-    self.skipPermissions = UserDefaults.standard.object(forKey: "taskAgentSkipPermissions") as? Bool ?? true
+    self.skipPermissions = UserDefaults.standard.object(forKey: "taskAgentSkipPermissions") as? Bool ?? false
   }
 
   /// Reset to default settings
@@ -69,7 +69,7 @@ class TaskAgentSettings: ObservableObject, @unchecked Sendable {
     workingDirectory = ""
     customPromptPrefix = ""
     defaultPrompt = Self.defaultPromptTemplate
-    skipPermissions = true
+    skipPermissions = false
   }
 
   /// Build the bounded canonical prompt for the workstream-backed thread.

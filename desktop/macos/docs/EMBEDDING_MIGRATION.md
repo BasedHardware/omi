@@ -111,7 +111,7 @@ This ensures newly captured screenshots always have embeddings, independent of b
 
 5. **Watch backfill logs**:
    ```bash
-   tail -f /private/tmp/omi.log | grep OCREmbedding
+   tail -f ~/Library/Logs/Omi/omi.log | grep OCREmbedding
    ```
 
 ### Test Semantic Search
