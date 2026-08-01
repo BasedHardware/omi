@@ -51,7 +51,7 @@ from utils.retrieval.tools import (
     traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
-from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools
+from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -896,7 +896,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # list so the cached tools prefix stays byte-stable for clients that declare
     # none, and stable per-client for those that do. Unlike app tools these are
     # immediately visible — the model cannot discover them via tool search.
-    device_tools = build_device_tools(uid, set(device_tool_names or ()), callback)
+    device_tools = build_device_tools(
+        uid,
+        set(device_tool_names or ()),
+        callback,
+        timeout_seconds=device_tool_timeout_for_stream_budget(AGENT_STREAM_MAX_DURATION_SECONDS),
+    )
     if device_tools:
         device_tool_list = ', '.join(sorted(t.name for t in device_tools))
         logger.info('Device tools available uid=%s tools=%s', uid, device_tool_list)
