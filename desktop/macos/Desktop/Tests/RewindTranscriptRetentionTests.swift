@@ -10,7 +10,7 @@ import XCTest
 /// longer window.
 final class RewindTranscriptRetentionTests: XCTestCase {
 
-  private var testUserId: String!
+  private var testUserId = ""
   private var savedTranscriptRetentionDays: Int = 90
 
   override func setUp() async throws {
@@ -42,12 +42,14 @@ final class RewindTranscriptRetentionTests: XCTestCase {
       settings.transcriptRetentionDays, 180,
       "shortening the screen-recording window must not change transcript retention")
     XCTAssertEqual(
-      UserDefaults.standard.object(forKey: "rewindTranscriptRetentionDays") as? Int, 180,
+      UserDefaults.standard.object(forKey: DefaultsKey.transcriptRetentionDays.rawValue) as? Int,
+      180,
       "transcript retention must persist under its own key")
   }
 
   func testScreenshotSweepKeepsObservationsAndTranscriptSweepRemovesThem() async throws {
-    let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+    let thirtyDaysAgo = try XCTUnwrap(
+      Calendar.current.date(byAdding: .day, value: -30, to: Date()))
 
     _ = try await ActionItemStorage.shared.insertObservation(
       ObservationRecord(
@@ -63,7 +65,8 @@ final class RewindTranscriptRetentionTests: XCTestCase {
     // leave the 30-day-old observation alone.
     _ = try await RewindDatabase.shared.deleteScreenshotsOlderThan(Date())
 
-    let withinTranscriptWindow = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
+    let withinTranscriptWindow = try XCTUnwrap(
+      Calendar.current.date(byAdding: .day, value: -90, to: Date()))
     let untouched = try await RewindDatabase.shared.deleteTranscriptsAndObservationsOlderThan(
       withinTranscriptWindow)
     XCTAssertEqual(

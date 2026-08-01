@@ -58,6 +58,10 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  /// Rewind: how many days conversation transcripts and screen observations are
+  /// kept. Separate from the screen-recording retention window so shortening
+  /// that window never deletes transcripts.
+  case transcriptRetentionDays = "rewindTranscriptRetentionDays"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

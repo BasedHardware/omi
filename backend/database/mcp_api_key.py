@@ -311,7 +311,7 @@ def delete_all_mcp_keys_for_user(user_id: str) -> int:
         hashed_key = key_data.get("hashed_key")
         if is_valid_api_key_hash(hashed_key):
             try:
-                cache_deleted = redis_db.delete_cached_mcp_api_key_strict(cast(str, hashed_key))
+                cache_deleted = redis_db.delete_cached_mcp_api_key_strict(hashed_key)
             except Exception as exc:
                 raise ApiKeyRevocationUnavailableError("MCP API key cache invalidation failed") from exc
             if cache_deleted is not True:

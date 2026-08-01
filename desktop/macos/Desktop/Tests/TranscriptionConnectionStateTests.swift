@@ -41,9 +41,10 @@ final class TranscriptionConnectionStateTests: XCTestCase {
   /// The backend sends 1008 for transient conditions — the PTT endpoint's
   /// "Idle timeout: no audio for 60s" and "Rate limit exceeded. Retry in Ns" —
   /// so treating it as terminal permanently killed transcription until restart.
-  func testPolicyViolationCloseCodeBacksOffButStillReconnects() {
+  func testPolicyViolationCloseCodeBacksOffButStillReconnects() throws {
+    let policyViolation = try XCTUnwrap(URLSessionWebSocketTask.CloseCode(rawValue: 1008))
     XCTAssertEqual(
-      TranscriptionService.extraReconnectDelay(for: .init(rawValue: 1008)!),
+      TranscriptionService.extraReconnectDelay(for: policyViolation),
       TranscriptionService.policyCloseReconnectDelay)
     XCTAssertEqual(TranscriptionService.extraReconnectDelay(for: .abnormalClosure), 0)
     XCTAssertEqual(TranscriptionService.extraReconnectDelay(for: .goingAway), 0)

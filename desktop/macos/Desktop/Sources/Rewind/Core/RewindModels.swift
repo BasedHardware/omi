@@ -404,7 +404,7 @@ class RewindSettings: ObservableObject {
   /// never deletes transcripts.
   @Published var transcriptRetentionDays: Int {
     didSet {
-      defaults.set(transcriptRetentionDays, forKey: "rewindTranscriptRetentionDays")
+      defaults.set(transcriptRetentionDays, forKey: DefaultsKey.transcriptRetentionDays.rawValue)
     }
   }
 
@@ -433,7 +433,7 @@ class RewindSettings: ObservableObject {
     // Load settings with defaults
     self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
     self.transcriptRetentionDays =
-      defaults.object(forKey: "rewindTranscriptRetentionDays") as? Int
+      defaults.object(forKey: DefaultsKey.transcriptRetentionDays.rawValue) as? Int
       ?? Self.defaultTranscriptRetentionDays
     self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
     self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
