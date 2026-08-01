@@ -32,8 +32,14 @@ extension SBOnboardingModel {
       pollPermission(key)
     case "screen_recording":
       scrState = .waiting
-      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-      pollPermission(key)
+      appState.checkScreenRecordingPermission()
+      if appState.hasScreenRecordingPermission {
+        setPermOn(key)
+        autoAdvanceIfCurrent(key)
+      } else {
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+        pollPermission(key)
+      }
     case "full_disk_access":
       requestFullDiskAccess()
     case "accessibility":
@@ -389,17 +395,17 @@ extension SBOnboardingModel {
       // .registerCommandO), so it reliably summons Omi globally — the natural,
       // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
       // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
-      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "press to set"),
+      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "press to set"),
     ]
   }
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "hold to talk"),
-      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "hold to talk"),
-      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "hold to talk"),
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
+      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
+      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }
 
@@ -412,15 +418,28 @@ extension SBOnboardingModel {
     // Preserve a choice when the user returns with Back. A fresh stage still
     // starts empty, while an already-confirmed shortcut stays visible/editable.
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
+    let isTalk: Bool
     switch step {
-    case .shortcutOpen: rememberedSelection = openShortcutSelection
-    case .shortcutTalk: rememberedSelection = talkShortcutSelection
-    default: rememberedSelection = nil
+    case .shortcutOpen:
+      rememberedSelection = openShortcutSelection
+      isTalk = false
+    case .shortcutTalk:
+      rememberedSelection = talkShortcutSelection
+      isTalk = true
+    default:
+      rememberedSelection = nil
+      isTalk = false
     }
-    shortcutPicked = rememberedSelection != nil
-    shortcutPressed = false
-    shortcutTokens = rememberedSelection?.displayTokens ?? []
-    chosenShortcut = rememberedSelection
+    if let rememberedSelection {
+      shortcutPicked = true
+      shortcutPressed = false
+      shortcutRecording = false
+      pendingModifierOnlyShortcut = nil
+      shortcutTokens = rememberedSelection.displayTokens
+      chosenShortcut = rememberedSelection
+    } else {
+      beginShortcutRecording(isTalk: isTalk)
+    }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
@@ -473,6 +492,9 @@ extension SBOnboardingModel {
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
+    if shortcutRecording {
+      return recordShortcut(from: event)
+    }
     guard !shortcutPressed else { return false }
     // If the user already tapped a row, honor that exact pick; otherwise let ANY
     // offered combo select itself on press, so "just press the key" works and the
@@ -506,6 +528,8 @@ extension SBOnboardingModel {
     shortcutTokens = shortcut.displayTokens
     shortcutPicked = true
     shortcutPressed = false
+    shortcutRecording = false
+    pendingModifierOnlyShortcut = nil
     if isTalk {
       talkShortcutSelection = shortcut
       ShortcutSettings.shared.pttShortcut = shortcut
@@ -515,6 +539,44 @@ extension SBOnboardingModel {
       ShortcutSettings.shared.askOmiShortcut = shortcut
       ShortcutSettings.shared.askOmiEnabled = true
     }
+  }
+
+  func beginShortcutRecording(isTalk: Bool) {
+    chosenShortcut = nil
+    chosenShortcutIsPTT = isTalk
+    shortcutTokens = []
+    shortcutPicked = false
+    shortcutPressed = false
+    shortcutRecording = true
+    pendingModifierOnlyShortcut = nil
+  }
+
+  func recordShortcut(from event: NSEvent) -> Bool {
+    let isTalk = step == .shortcutTalk
+    if isTalk, event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        pickShortcut(shortcut, isTalk: true)
+        return true
+      }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
+    guard
+      let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: isTalk
+      )
+    else {
+      return event.type == .flagsChanged
+    }
+    pendingModifierOnlyShortcut = nil
+    pickShortcut(shortcut, isTalk: isTalk)
+    return true
   }
 
   func answerShortcutOpen() {
