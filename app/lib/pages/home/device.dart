@@ -296,8 +296,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipValue: provider.connectedDevice == null
                   ? context.l10n.offline
                   : provider.havingNewFirmware
-                  ? context.l10n.available
-                  : null,
+                      ? context.l10n.available
+                      : null,
               onTap: provider.connectedDevice != null
                   ? () {
                       // Route to OmiGlass OTA page for openglass devices
@@ -369,9 +369,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page = context.read<DeviceProvider>().supportsMultiFileSync
-                    ? const AutoSyncPage()
-                    : const SyncPage();
+                final page =
+                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),
@@ -592,9 +591,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.microphone,
               title: context.l10n.microphone,
-              chipValue: provider.connectedDevice != null
-                  ? context.l10n.raybanMetaMicrophoneReady
-                  : context.l10n.offline,
+              chipValue:
+                  provider.connectedDevice != null ? context.l10n.raybanMetaMicrophoneReady : context.l10n.offline,
               showChevron: false,
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),

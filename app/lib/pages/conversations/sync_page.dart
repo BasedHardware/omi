@@ -118,8 +118,7 @@ class WalListItem extends StatelessWidget {
         final timeStr = dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = secondsToHumanReadable(wal.seconds, context);
         final source = _sourceLabel(context);
-        final showBar =
-            displayState == WalSyncDisplayState.syncing &&
+        final showBar = displayState == WalSyncDisplayState.syncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -129,9 +128,8 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction: displayState == WalSyncDisplayState.syncing
-                ? DismissDirection.none
-                : DismissDirection.endToStart,
+            direction:
+                displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -711,22 +709,22 @@ class _SyncPageState extends State<SyncPage> {
             isPending
                 ? FontAwesomeIcons.circleCheck
                 : isCorrupted
-                ? FontAwesomeIcons.triangleExclamation
-                : FontAwesomeIcons.clockRotateLeft,
+                    ? FontAwesomeIcons.triangleExclamation
+                    : FontAwesomeIcons.clockRotateLeft,
             size: 24,
             color: isPending
                 ? Colors.green
                 : isCorrupted
-                ? Colors.redAccent
-                : Colors.grey,
+                    ? Colors.redAccent
+                    : Colors.grey,
           ),
           const SizedBox(height: 16),
           Text(
             isPending
                 ? context.l10n.noPendingRecordings
                 : isCorrupted
-                ? context.l10n.syncStatusFileUnavailable
-                : context.l10n.noProcessedRecordings,
+                    ? context.l10n.syncStatusFileUnavailable
+                    : context.l10n.noProcessedRecordings,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
           ),
           if (isPending) ...[
@@ -1058,9 +1056,16 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count)
+      : isHeader = true,
+        wal = null;
 
-  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
+  _PendingListItem.wal(this.wal)
+      : isHeader = false,
+        label = null,
+        icon = null,
+        color = null,
+        count = null;
 }
 
 class _ManageStorageSheet extends StatelessWidget {

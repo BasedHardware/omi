@@ -245,9 +245,9 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
               setState(() => _isLoading = true);
               PlatformManager.instance.analytics.track(_isComplete ? 'Update PayPal Details' : 'Save PayPal Details');
               await context.read<PaymentMethodProvider>().connectPayPal(
-                _emailController.text.trim(),
-                _paypalMeLinkController.text.trim(),
-              );
+                    _emailController.text.trim(),
+                    _paypalMeLinkController.text.trim(),
+                  );
 
               setState(() {
                 _isLoading = false;

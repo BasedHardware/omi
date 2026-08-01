@@ -91,8 +91,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-          ? _buildNotFound()
-          : _buildContent(),
+              ? _buildNotFound()
+              : _buildContent(),
     );
   }
 
@@ -296,8 +296,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final message = result.statusCode == 429
           ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
           : result.statusCode == 400
-          ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
-          : context.l10n.recapRegenerateFailed;
+              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+              : context.l10n.recapRegenerateFailed;
       AppSnackbar.showSnackbarError(message);
     }
   }
@@ -630,9 +630,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit: singleLocation
-                        ? null
-                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit:
+                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -875,8 +874,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-              ? '$startFormatted - $endFormatted'
-              : startFormatted)
+            ? '$startFormatted - $endFormatted'
+            : startFormatted)
         : '';
 
     return GestureDetector(
