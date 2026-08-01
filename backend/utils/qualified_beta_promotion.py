@@ -511,6 +511,10 @@ async def build_qualified_beta_manifest(
     if has_beta_identity:
         for beta_name in SANCTIONED_BETA_ASSET_NAMES:
             beta_asset = _asset(assets, beta_name)
+            # Validate the canonical release URL for each beta asset. Unlike the
+            # blob downloads removed by this change, this is a pure identity
+            # check (no bytes fetched) and must not be skipped for beta assets.
+            _asset_url(beta_asset, tag, beta_name)
             beta_assets[beta_name] = beta_asset
             release_digests[beta_name] = _asset_digest(beta_asset)
     _, run_id, run_attempt = _select_qualification_run(

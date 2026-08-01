@@ -14,6 +14,7 @@ from routers.updates import router as updates_router
 from utils.qualified_beta_promotion import (
     MAX_QUALIFICATION_ARTIFACT_BYTES,
     REPOSITORY,
+    SANCTIONED_BETA_ASSET_NAMES,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
     _asset_url,
@@ -727,6 +728,27 @@ async def test_server_admits_a_candidate_from_github_release_digests_without_blo
     assert manifest["release_id"] == TAG
     assert manifest["zip_sha256"] == release["assets"][0]["digest"]
     assert manifest["dmg_sha256"] == release["assets"][1]["digest"]
+    assert reader.download_calls == []
+
+
+@pytest.mark.asyncio
+async def test_server_rejects_a_beta_asset_with_a_noncanonical_release_url():
+    # The beta asset digest is valid and the trusted artifact matches, but the
+    # beta asset's browser_download_url is not the canonical release-asset URL.
+    # Admission must fail without reading any blob bytes.
+    release, evidence, run = _candidate_with_beta()[:3]
+    for asset in release["assets"]:
+        if asset["name"] in SANCTIONED_BETA_ASSET_NAMES:
+            asset["browser_download_url"] = "https://example.com/evil-beta"
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.downloaded = {}
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="identity does not match"):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
     assert reader.download_calls == []
 
 
