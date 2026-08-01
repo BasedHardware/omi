@@ -64,6 +64,8 @@
 		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
 		7C7857BB4A77A12B03F090B8 /* PhoneMicPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */; };
@@ -227,6 +229,7 @@
 		5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-dev.entitlements"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
@@ -477,6 +480,7 @@
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
+				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
 				FG12345678901234567890FG /* WifiNetworkPlugin.swift */,
@@ -923,6 +927,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -967,6 +972,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
+				D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,
