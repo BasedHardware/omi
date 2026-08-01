@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 import CoreGraphics
 @preconcurrency import UserNotifications
@@ -89,6 +90,12 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var externalCaptureYield = ProactiveExternalCaptureYield()
   private let screenshotAppBackoffDuration: TimeInterval = 10
   private let screenShareBackoffDuration: TimeInterval = 10
+
+  // Pause capture while macOS reports secure keyboard entry (a password field holds focus).
+  // See SecureInputCaptureGate.
+  private var secureInputGate = SecureInputCaptureGate()
+  private let secureInputBackoffDuration: TimeInterval = 2
+  private let secureInputStuckThreshold: TimeInterval = 300
 
   // Change-gated distribution: only distribute frames to assistants when context changes.
   // Eliminates continuous polling when the user stays on the same app/window.
@@ -534,6 +541,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     recoveryRetryCount = 0
     isInDelayPeriod = false
     externalCaptureYield.reset()
+    secureInputGate.reset()
     videoCallThrottleGate.reset()
     distributionGate.reset()
     captureTrigger.reset()
@@ -723,6 +731,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     captureTrigger.updateHeartbeatInterval(interval)
   }
 
+  /// Whether this frame must not reach Rewind or any assistant: the user's excluded-app
+  /// list, or a browser window in a private session. Both feed the privacy gate below.
+  private func isExcludedFromCapture(appName: String, windowTitle: String?) -> Bool {
+    if RewindSettings.shared.isAppExcluded(appName) { return true }
+    return PrivateBrowsingWindow.isPrivate(
+      windowTitle: windowTitle,
+      bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+  }
+
   private func captureFrame() async {
     guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
@@ -765,6 +782,23 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
+    // Never capture pixels while a password field holds focus. Returning here — ahead of
+    // ScreenCaptureKit — means the credential is never imaged, not imaged then discarded.
+    switch secureInputGate.nextDecision(
+      isSecureInputActive: IsSecureEventInputEnabled(),
+      now: now,
+      backoffDuration: secureInputBackoffDuration,
+      stuckThreshold: secureInputStuckThreshold
+    ) {
+    case .skip(let reportStuck):
+      if reportStuck {
+        SecureInputCaptureGate.reportStuckFlag(threshold: secureInputStuckThreshold)
+      }
+      return
+    case .capture:
+      break
+    }
+
     // Cheap early exits before resolving the active window.
     let idleSeconds = systemIdleSeconds()
     if idleSeconds >= captureTrigger.idleThreshold {
@@ -784,7 +818,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Check if the current app is excluded from Rewind capture
-    var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+    var isRewindExcluded =
+      realAppName.map { isExcludedFromCapture(appName: $0, windowTitle: windowTitle) } ?? false
 
     // Throttle capture when a video call app is frontmost to reduce CPU contention.
     // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
@@ -911,7 +946,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         if let fallbackApp = fallbackApp {
           appName = fallbackApp
           currentWindowTitle = fallbackTitle
-          isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
+          isRewindExcluded = isExcludedFromCapture(
+            appName: fallbackApp, windowTitle: fallbackTitle)
         }
       }
       switch captureResult {
@@ -1005,7 +1041,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       if let freshApp = freshApp {
         resolvedApp = freshApp
         currentWindowTitle = freshTitle
-        isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
+        isRewindExcluded = isExcludedFromCapture(appName: freshApp, windowTitle: freshTitle)
       }
 
       let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
