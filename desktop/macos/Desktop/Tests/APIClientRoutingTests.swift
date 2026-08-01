@@ -1,3 +1,4 @@
+import OmiSupport
 import XCTest
 
 @testable import Omi_Computer
@@ -251,6 +252,36 @@ final class APIClientRoutingTests: XCTestCase {
         for: "FIREBASE_API_KEY",
         launchEnvironment: launchEnvironment
       ))
+  }
+
+  @MainActor
+  func testProductionFamilyRejectsHostFirebaseAndLocalProfileOverrides() {
+    let hostOverrides = [
+      "FIREBASE_API_KEY": "wrong-key",
+      "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
+      "FIREBASE_PROJECT_ID": "based-hardware-dev",
+      "OMI_DESKTOP_LOCAL_PROFILE": "1",
+    ]
+    for bundleIdentifier in AppBuild.productionFamilyBundleIdentifiers {
+      for key in hostOverrides.keys {
+        XCTAssertFalse(
+          BundleEnvironment.shouldApplyBundledValue(
+            for: key,
+            launchEnvironment: hostOverrides,
+            bundleIdentifier: bundleIdentifier
+          ))
+      }
+      XCTAssertFalse(DesktopLocalProfile.isEnabled(bundleIdentifier: bundleIdentifier, profileValue: "1"))
+      XCTAssertEqual(
+        AppBuild.firebaseAPIKey(
+          bundleIdentifier: bundleIdentifier,
+          environmentKey: "wrong-key",
+          bundledKey: "signed-production-key"
+        ),
+        "signed-production-key"
+      )
+    }
+    XCTAssertTrue(DesktopLocalProfile.isEnabled(bundleIdentifier: "com.omi.omi-local", profileValue: "1"))
   }
 
   func testStableProductionBundleKeepsConfiguredRustBackend() {

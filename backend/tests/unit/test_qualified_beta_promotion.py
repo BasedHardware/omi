@@ -269,6 +269,29 @@ def _candidate_with_beta():
         "qualification_run_id": 123,
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
         "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "beta_uid_continuity": {
+            "schema_version": 1,
+            "status": "passed",
+            "firebase_auth": {
+                "project": "based-hardware",
+                "release_probe_uid": "omi-release-probe",
+                "token_claims": "production_project_verified",
+            },
+            "development_serving_reads": {
+                "python": {
+                    "url": "https://api.omiapi.com/",
+                    "production_authority_url": "https://api.omi.me/",
+                    "operation": "production_sentinel_development_read_cleanup",
+                    "status": "passed",
+                },
+                "desktop_backend": {
+                    "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                    "operation": "authenticated_proxy_authority_read",
+                    "status": "passed",
+                },
+            },
+            "redaction": {"customer_content_printed": False, "tokens_printed": False},
+        },
         "artifacts": {
             "Omi.zip": {
                 "url": release["assets"][0]["browser_download_url"],

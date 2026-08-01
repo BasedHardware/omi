@@ -53,6 +53,19 @@ def _url(asset: dict[str, Any]) -> str:
     return value
 
 
+def _expected_artifact_names(release: dict[str, Any]) -> set[str]:
+    """Return the only valid artifact topology for this immutable release."""
+    release_names = {asset.get("name") for asset in release.get("assets", []) if isinstance(asset, dict)}
+    beta_names = set(BETA_ARTIFACTS)
+    beta_present = release_names & beta_names
+    if beta_present and beta_present != beta_names:
+        _fail("contains an incomplete Omi Beta artifact pair")
+    expected = set(ARTIFACTS) | beta_present
+    for name in expected:
+        _asset(release, name)
+    return expected
+
+
 def file_sha256(path: Path) -> str:
     with path.open("rb") as file:
         return hashlib.file_digest(file, "sha256").hexdigest()
@@ -74,7 +87,8 @@ def _beta_uid_continuity(path: Path) -> dict[str, object]:
         "development_serving_reads": {
             "python": {
                 "url": "https://api.omiapi.com/",
-                "operation": "authenticated_firestore_user_read",
+                "production_authority_url": "https://api.omi.me/",
+                "operation": "production_sentinel_development_read_cleanup",
                 "status": "passed",
             },
             "desktop_backend": {
@@ -102,6 +116,7 @@ def build_evidence(
         _fail("release ID does not match requested tag")
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         _fail("source SHA is not an exact 40-character SHA")
+    files = dict(files)
     gate = files.pop("__candidate_gate__")
     candidate_gate = json.loads(gate.read_text(encoding="utf-8"))
     if (
@@ -112,9 +127,8 @@ def build_evidence(
         _fail("was not created after the passing candidate gate")
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}
-    required = {"Omi.zip", "omi.dmg"}
-    with_beta = required | set(BETA_ARTIFACTS)
-    if set(files) not in (required, with_beta):
+    expected_names = _expected_artifact_names(release)
+    if set(files) != expected_names:
         _fail("does not contain the exact qualified Omi.zip and omi.dmg (plus both beta artifacts when present)")
     for name, path in files.items():
         if not path.is_file():
@@ -181,7 +195,10 @@ def verify_evidence(
         _fail("does not prove exact signed artifact verification")
     if signed_artifacts.get("subject") != "exact signed ZIP/DMG bytes":
         _fail("must not claim signed production bytes ran T2")
-    if "Omi.Beta.zip" in digests:
+    expected_names = _expected_artifact_names(release)
+    if set(digests) != expected_names:
+        _fail("artifact set differs from the immutable release topology")
+    if "Omi.Beta.zip" in expected_names:
         continuity = evidence.get("beta_uid_continuity")
         if not isinstance(continuity, dict):
             _fail("does not prove Beta UID continuity")
@@ -196,7 +213,8 @@ def verify_evidence(
             "development_serving_reads": {
                 "python": {
                     "url": "https://api.omiapi.com/",
-                    "operation": "authenticated_firestore_user_read",
+                    "production_authority_url": "https://api.omi.me/",
+                    "operation": "production_sentinel_development_read_cleanup",
                     "status": "passed",
                 },
                 "desktop_backend": {
@@ -213,7 +231,6 @@ def verify_evidence(
     if not isinstance(artifacts, dict):
         _fail("does not contain artifacts")
     metadata = _metadata(str(release.get("body") or ""))
-    expected_names = set(digests)
     if set(artifacts) != expected_names:
         _fail("artifact set differs from the downloaded release")
     for name, actual_sha in digests.items():

@@ -79,6 +79,10 @@ reuse a production-family identity.
   for missing, conflicting, staging, arbitrary, and legacy assignments.
 - Signed mobile and desktop artifact smoke remains release evidence; static CI
   guards are tripwires, not a substitute for artifact verification.
+- `backend/scripts/probe_beta_uid_continuity.py` — the non-human production
+  Firebase probe creates a bounded sentinel through production, reads that
+  exact record through Beta's fixed development Python endpoint, then deletes
+  it through production before qualification can promote Beta.
 
 ## Path globs
 

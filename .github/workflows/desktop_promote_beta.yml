@@ -61,6 +61,8 @@ jobs:
             evidence="$RUNNER_TEMP/qualification-evidence.json"
             test -n "$QUALIFICATION_RUN_ID"
             test -n "$QUALIFICATION_RUN_ATTEMPT"
+            [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+            [[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
             gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID/artifacts?per_page=100" > "$artifacts"
             artifact_id=$(jq -er --arg run_id "$QUALIFICATION_RUN_ID" --arg run_attempt "$QUALIFICATION_RUN_ATTEMPT" '
               [
@@ -116,7 +118,8 @@ jobs:
                 development_serving_reads: {
                   python: {
                     url: "https://api.omiapi.com/",
-                    operation: "authenticated_firestore_user_read",
+                    production_authority_url: "https://api.omi.me/",
+                    operation: "production_sentinel_development_read_cleanup",
                     status: "passed"
                   },
                   desktop_backend: {

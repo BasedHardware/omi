@@ -2,10 +2,13 @@
 """Prove that Beta's development serving plane accepts production Firebase identity.
 
 The probe uses the fixed non-human release identity minted by
-``firebase_release_probe_token.py``.  It makes only authenticated reads:
+``firebase_release_probe_token.py``. It performs one bounded, reversible
+release-probe write and otherwise only authenticated reads:
 
-* ``GET /v3/memories?limit=1`` on the development Python API proves a Firebase
-  UID can read its Firestore-scoped data through the intended Beta Python route.
+* ``POST /v3/memories`` on production, followed by ``GET /v3/memories`` on the
+  development Python API, proves the same generated probe memory crosses the
+  production Firestore authority into Beta's intended Python route. The probe
+  deletes that non-human record through production in a ``finally`` block.
 * ``GET /v1/config/api-keys`` on the development desktop backend proves that
   same production Firebase token is accepted by the Gemini/embedding proxy
   authority without exposing the returned key material.
@@ -24,14 +27,18 @@ import stat
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, Callable
 
 FIREBASE_PROJECT = "based-hardware"
 PROBE_UID = "omi-release-probe"
+PRODUCTION_PYTHON_API_URL = "https://api.omi.me/"
 PYTHON_API_URL = "https://api.omiapi.com/"
 DESKTOP_BACKEND_URL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
 MAX_TOKEN_CHARS = 8192
+MAX_RESPONSE_BYTES = 1_048_576
 TIMEOUT_SECONDS = 30
 
 
@@ -84,34 +91,111 @@ def validate_production_firebase_claims(token: str) -> None:
         raise ContinuityProbeError("token_claims")
 
 
-def _authenticated_get(
+def _authenticated_json(
     url: str,
     token: str,
     *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
     opener: Callable[..., Any] = urllib.request.urlopen,
-) -> None:
+) -> Any:
+    encoded_payload = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         url,
-        headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
-        method="GET",
+        data=encoded_payload,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            **({"Content-Type": "application/json"} if encoded_payload is not None else {}),
+        },
+        method=method,
     )
     try:
         with opener(request, timeout=TIMEOUT_SECONDS) as response:
             if int(response.status) != 200:
                 raise ContinuityProbeError("authenticated_read")
-            # Consume a byte so a malformed, immediately aborted response cannot
-            # count as a successful read. Never retain or inspect body content.
-            response.read(1)
+            final_url = getattr(response, "geturl", lambda: url)()
+            if (
+                urllib.parse.urlsplit(final_url).scheme != "https"
+                or urllib.parse.urlsplit(final_url).netloc != urllib.parse.urlsplit(url).netloc
+            ):
+                raise ContinuityProbeError("authenticated_read")
+            body = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise ContinuityProbeError("authenticated_read")
+        return json.loads(body.decode("utf-8"))
     except ContinuityProbeError:
         raise
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, TimeoutError) as error:
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        urllib.error.HTTPError,
+        urllib.error.URLError,
+        OSError,
+        TimeoutError,
+    ) as error:
         raise ContinuityProbeError("authenticated_read") from error
+
+
+def _prove_production_firestore_sentinel(token: str, *, opener: Callable[..., Any]) -> None:
+    """Create on production, read on Beta's dev server, and clean up on production.
+
+    A status-only read could succeed against an empty or different Firestore
+    project. This isolated release-probe record makes the same generated ID
+    cross the production-authority -> development-serving boundary. It belongs
+    only to the non-human probe UID and is deleted even when the dev read fails.
+    """
+
+    marker = uuid.uuid4().hex
+    created = _authenticated_json(
+        f"{PRODUCTION_PYTHON_API_URL}v3/memories",
+        token,
+        method="POST",
+        payload={
+            "content": f"Omi release continuity probe {marker}",
+            "category": "manual",
+            "tags": ["release-probe-beta-continuity"],
+        },
+        opener=opener,
+    )
+    memory_id = created.get("id") if isinstance(created, dict) else None
+    content = f"Omi release continuity probe {marker}"
+    if (
+        not isinstance(memory_id, str)
+        or not memory_id
+        or created.get("uid") != PROBE_UID
+        or created.get("content") != content
+        or created.get("tags") != ["release-probe-beta-continuity"]
+    ):
+        raise ContinuityProbeError("production_sentinel")
+    try:
+        observed = _authenticated_json(
+            f"{PYTHON_API_URL}v3/memories?limit=500",
+            token,
+            opener=opener,
+        )
+        if not isinstance(observed, list) or not any(
+            isinstance(memory, dict)
+            and memory.get("id") == memory_id
+            and memory.get("uid") == PROBE_UID
+            and memory.get("content") == content
+            and memory.get("tags") == ["release-probe-beta-continuity"]
+            for memory in observed
+        ):
+            raise ContinuityProbeError("production_sentinel")
+    finally:
+        _authenticated_json(
+            f"{PRODUCTION_PYTHON_API_URL}v3/memories/{urllib.parse.quote(memory_id, safe='')}",
+            token,
+            method="DELETE",
+            opener=opener,
+        )
 
 
 def probe(token: str, *, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Any]:
     validate_production_firebase_claims(token)
-    _authenticated_get(f"{PYTHON_API_URL}v3/memories?limit=1", token, opener=opener)
-    _authenticated_get(f"{DESKTOP_BACKEND_URL}v1/config/api-keys", token, opener=opener)
+    _prove_production_firestore_sentinel(token, opener=opener)
+    _authenticated_json(f"{DESKTOP_BACKEND_URL}v1/config/api-keys", token, opener=opener)
     return {
         "schema_version": 1,
         "status": "passed",
@@ -123,7 +207,8 @@ def probe(token: str, *, opener: Callable[..., Any] = urllib.request.urlopen) ->
         "development_serving_reads": {
             "python": {
                 "url": PYTHON_API_URL,
-                "operation": "authenticated_firestore_user_read",
+                "production_authority_url": PRODUCTION_PYTHON_API_URL,
+                "operation": "production_sentinel_development_read_cleanup",
                 "status": "passed",
             },
             "desktop_backend": {

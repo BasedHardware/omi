@@ -38,7 +38,8 @@ class DesktopQualificationEvidenceTests(unittest.TestCase):
             "development_serving_reads": {
                 "python": {
                     "url": "https://api.omiapi.com/",
-                    "operation": "authenticated_firestore_user_read",
+                    "production_authority_url": "https://api.omi.me/",
+                    "operation": "production_sentinel_development_read_cleanup",
                     "status": "passed",
                 },
                 "desktop_backend": {
@@ -81,6 +82,12 @@ class DesktopQualificationEvidenceTests(unittest.TestCase):
             proof.write_text(json.dumps(malformed), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid Beta UID-continuity"):
                 EVIDENCE._beta_uid_continuity(proof)
+
+    def test_release_topology_rejects_orphan_beta_asset_and_stable_only_verification(self) -> None:
+        release = self._release()
+        release["assets"] = release["assets"][:-1]
+        with self.assertRaisesRegex(ValueError, "incomplete Omi Beta artifact pair"):
+            EVIDENCE._expected_artifact_names(release)
 
 
 if __name__ == "__main__":

@@ -65,6 +65,9 @@ jobs:
 
   recover-qualified-beta:
     needs: validate-recovery
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/desktop_promote_beta.yml
     with:
       release_tag: ${{ inputs.release_tag }}

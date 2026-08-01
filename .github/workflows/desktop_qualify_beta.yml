@@ -114,6 +114,11 @@ jobs:
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+      - name: Checkout trusted qualification controls
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: qualification-controls
       - name: Bind tag and checkout to the same immutable commit
         id: candidate
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
@@ -156,35 +161,31 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - name: Stage production Firebase probe signer
+      - name: Prove production Firebase UID continuity on Beta development authorities
+        working-directory: qualification-controls
         env:
           FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           signer_file="$QUALIFICATION_STAGE/firebase-probe-signer.json"
-          test ! -e "$signer_file"
-          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
-          chmod 600 "$signer_file"
-      - name: Prove production Firebase UID continuity on Beta development authorities
-        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
-        env:
-          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
           token_file="$QUALIFICATION_STAGE/firebase-probe-token"
+          test ! -e "$signer_file"
           test ! -e "$token_file"
           umask 077
-          : > "$token_file"
+          trap 'rm -f -- "$signer_file" "$token_file"' EXIT
+          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
+          chmod 600 "$signer_file"
+          unset FIREBASE_PROBE_SIGNER_B64
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$DEVELOPMENT_GCP_PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
-            --signer-credentials-file="$QUALIFICATION_STAGE/firebase-probe-signer.json" \
+            --signer-credentials-file="$signer_file" \
             --token-output "$token_file"
+          rm -f -- "$signer_file"
           python3 backend/scripts/probe_beta_uid_continuity.py \
             --bearer-token-file "$token_file" \
             --evidence "$QUALIFICATION_STAGE/beta-uid-continuity.json"
-          rm -f "$token_file"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
@@ -238,7 +239,7 @@ jobs:
               "$RELEASE_TAG"
       - name: Create immutable qualification evidence
         id: evidence
-        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
+        working-directory: qualification-controls
         env:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}

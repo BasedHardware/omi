@@ -1,8 +1,12 @@
 {
   "schema_version": 1,
   "id": "FC-customer-data-plane-divergence",
-  "violated_contract": "A production-family artifact must preserve the canonical Firebase Auth project, UID/account universe, and Firestore data plane regardless of release cohort, build flag, update channel, preference, or runtime environment. Beta's fixed development Python and desktop serving endpoints are permitted only with production desktop-login OAuth and Firebase/Firestore identity.",
-  "canonical_prevention": "Bind Stable and mobile to canonical production APIs and every production-family artifact to canonical Firebase Auth/Firestore identity. Bind the Beta identity to its two fixed development serving endpoints and production desktop-login OAuth; mutation-test contaminated endpoint settings and verify signed artifacts before publishing. Require a separate non-production identity plus explicit migration review for any other exception.",
+  "violated_contract": "A production-family artifact must not select a customer data plane different from stable, regardless of release cohort, build flag, update channel, preference, or runtime environment.",
+  "canonical_prevention": "Bind every production-family artifact to canonical production API, agent, desktop API, and Firebase/Firestore identity in build configuration and runtime resolution; mutation-test the protected settings and verify signed artifacts before publishing. Require a separate non-production identity plus explicit migration review for any exception.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/APIClientRoutingTests.swift",
+    "backend/tests/unit/test_desktop_release_scripts.py"
+  ],
   "evidence_prs": [
     10090,
     10214

@@ -864,6 +864,8 @@ def check_desktop_qualification_runner() -> list[str]:
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
+        "Checkout trusted qualification controls",
+        "path: qualification-controls",
         "group: desktop-beta-qualification-m1",
         "cancel-in-progress: false",
     ):
@@ -873,6 +875,25 @@ def check_desktop_qualification_runner() -> list[str]:
         errors.append("desktop qualification runner must not promote beta inside its own run")
     if "qualify-m4-mini" in text or "plan-fallbacks" in text:
         errors.append("desktop qualification runner must use only the global M1 fallback lane")
+    probe_start = text.find("Prove production Firebase UID continuity on Beta development authorities")
+    probe_end = text.find("Fetch candidate release inputs into this run only", probe_start)
+    probe = text[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
+    for required_fragment in (
+        "umask 077",
+        "trap 'rm -f -- \"$signer_file\" \"$token_file\"' EXIT",
+        'rm -f -- "$signer_file"',
+        "unset FIREBASE_PROBE_SIGNER_B64",
+    ):
+        if required_fragment not in probe:
+            errors.append(f"desktop qualification runner is missing Firebase probe cleanup: {required_fragment}")
+    if not (
+        probe.find("firebase_release_probe_token.py")
+        < probe.rfind('rm -f -- "$signer_file"')
+        < probe.find("probe_beta_uid_continuity.py")
+    ):
+        errors.append("desktop qualification runner must remove the Firebase probe signer after minting and before probing")
+    if "working-directory: qualification-controls" not in probe:
+        errors.append("desktop qualification runner must run the Firebase probe from trusted main controls")
 
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
@@ -891,6 +912,17 @@ def check_desktop_qualification_runner() -> list[str]:
     ):
         if required_fragment not in promotion_text:
             errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
+
+    recovery = ROOT / ".github/workflows/desktop_recover_beta.yml"
+    recovery_text = recovery.read_text(encoding="utf-8") if recovery.exists() else ""
+    for required_fragment in (
+        "actions: read",
+        "uses: ./.github/workflows/desktop_promote_beta.yml",
+        "qualification_run_id:",
+        "qualification_run_attempt:",
+    ):
+        if required_fragment not in recovery_text:
+            errors.append(f"desktop beta recovery workflow is missing retained-evidence access guard: {required_fragment}")
 
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""

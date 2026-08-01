@@ -24,8 +24,10 @@ def clean_git_environment(env: dict[str, str]) -> dict[str, str]:
 class DesktopReleaseFlowContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workflow = (ROOT / ".github/workflows/desktop_qualify_beta.yml").read_text(encoding="utf-8")
+        self.recovery = (ROOT / ".github/workflows/desktop_recover_beta.yml").read_text(encoding="utf-8")
         self.codemagic = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
         self.release_guard = (ROOT / ".github/scripts/check-release-process-guards.py").read_text(encoding="utf-8")
+        self.promotion = (ROOT / ".github/workflows/desktop_promote_beta.yml").read_text(encoding="utf-8")
 
     def _workflow_script(self, step_name: str) -> str:
         marker = f"      - name: {step_name}\n"
@@ -135,11 +137,47 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "probe_beta_uid_continuity.py",
             "beta-uid-continuity.json",
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
+            "Checkout trusted qualification controls",
         ):
             self.assertIn(fragment, self.workflow)
         compatibility = self.workflow.index("Verify live desktop-backend chat compatibility")
         qualify = self.workflow.index("Qualify exact candidate on the M1 Studio hermetic stack")
         self.assertLess(compatibility, qualify)
+
+    def test_uid_continuity_probe_removes_the_signer_before_candidate_scripts(self) -> None:
+        probe = self._workflow_script("Prove production Firebase UID continuity on Beta development authorities")
+        for fragment in (
+            "umask 077",
+            "trap 'rm -f -- \"$signer_file\" \"$token_file\"' EXIT",
+            'rm -f -- "$signer_file"',
+            "unset FIREBASE_PROBE_SIGNER_B64",
+            "probe_beta_uid_continuity.py",
+        ):
+            self.assertIn(fragment, probe)
+        self.assertLess(probe.index("firebase_release_probe_token.py"), probe.rindex('rm -f -- "$signer_file"'))
+        self.assertLess(probe.rindex('rm -f -- "$signer_file"'), probe.index("probe_beta_uid_continuity.py"))
+        self.assertLess(
+            self.workflow.index("Prove production Firebase UID continuity on Beta development authorities"),
+            self.workflow.index("Fetch candidate release inputs into this run only"),
+        )
+        self.assertIn(
+            "      - name: Prove production Firebase UID continuity on Beta development authorities\n"
+            "        working-directory: qualification-controls",
+            self.workflow,
+        )
+
+    def test_recovery_can_read_the_retained_qualification_artifact(self) -> None:
+        for fragment in (
+            "actions: read",
+            "uses: ./.github/workflows/desktop_promote_beta.yml",
+            "qualification_run_id:",
+            "qualification_run_attempt:",
+        ):
+            self.assertIn(fragment, self.recovery)
+
+    def test_reusable_promotion_validates_retained_run_identity_before_artifact_selection(self) -> None:
+        self.assertIn('[[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]', self.promotion)
+        self.assertIn('[[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]', self.promotion)
 
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
         tree = ast.parse(self.release_guard)
@@ -245,7 +283,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             ).stdout.strip()
             self.assertEqual(checked_out_sha, candidate_sha)
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "must remain untouched\n")
-            self.assertNotIn("actions/checkout@", self.workflow)
+            candidate_checkout = self.workflow.split("      - name: Checkout trusted qualification controls", 1)[0]
+            self.assertNotIn("actions/checkout@", candidate_checkout)
 
             reused_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
