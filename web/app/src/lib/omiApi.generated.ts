@@ -2010,6 +2010,10 @@ export interface DeviceToolResultRequest {
   result: Record<string, unknown>;
 }
 
+export interface DeviceToolResultResponse {
+  status: string;
+}
+
 export interface DiagnosticsReceipt {
   ticket: string;
 }
@@ -5637,6 +5641,7 @@ export interface OmiApiSchemas {
   "DeveloperSuccessResponse": DeveloperSuccessResponse;
   "DeveloperTranscriptSegment": DeveloperTranscriptSegment;
   "DeviceToolResultRequest": DeviceToolResultRequest;
+  "DeviceToolResultResponse": DeviceToolResultResponse;
   "DiagnosticsReceipt": DiagnosticsReceipt;
   "DiagnosticsUpload": DiagnosticsUpload;
   "DismissAnnouncementRequest": DismissAnnouncementRequest;
@@ -10606,7 +10611,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "submit_device_tool_result_v2_messages_device_tool__call_id__result_post";
       responses: {
-        "200": unknown;
+        "200": DeviceToolResultResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19788,7 +19793,7 @@ export async function clear_chat_messages_v2_messages_delete(query: { app_id?: s
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function submit_device_tool_result_v2_messages_device_tool__call_id__result_post(path: { call_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeviceToolResultRequest, init?: OmiApiClientInit): Promise<unknown> {
+export async function submit_device_tool_result_v2_messages_device_tool__call_id__result_post(path: { call_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeviceToolResultRequest, init?: OmiApiClientInit): Promise<DeviceToolResultResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages/device-tool/${path.call_id}/result`;
   const _search = "";
