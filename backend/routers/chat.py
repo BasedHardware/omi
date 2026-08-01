@@ -43,6 +43,7 @@ from models.chat import (
     RateMessageRequest,
     ShareChatMessagesRequest,
     DeviceToolResultRequest,
+    DeviceToolResultResponse,
 )
 from utils.apps import get_available_app_by_id
 from utils.device_tools import store_device_tool_result
@@ -151,10 +152,6 @@ class MessageReportResponse(BaseModel):
 
 
 class ChatRatingResponse(BaseModel):
-    status: str
-
-
-class DeviceToolResultResponse(BaseModel):
     status: str
 
 
@@ -489,9 +486,7 @@ def send_message(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post(
-    '/v2/messages/device-tool/{call_id}/result', tags=['chat'], response_model=DeviceToolResultResponse
-)
+@router.post('/v2/messages/device-tool/{call_id}/result', tags=['chat'], response_model=DeviceToolResultResponse)
 def submit_device_tool_result(
     call_id: str,
     data: DeviceToolResultRequest,

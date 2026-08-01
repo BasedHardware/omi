@@ -237,6 +237,12 @@ class DeviceToolResultRequest(BaseModel):
     result: Dict[str, Any]
 
 
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
+
+
 class RateMessageRequest(BaseModel):
     rating: Optional[int] = None
 
