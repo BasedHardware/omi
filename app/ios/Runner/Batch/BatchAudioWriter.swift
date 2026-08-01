@@ -134,6 +134,14 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
         lastFrameMs = 0
     }
 
+    override func onOpenedLocked(_ partURL: URL) {
+        guard let geolocationJSON = recordingGeolocationJSON(fromDefaultsKey: "flutter.nativeBleStreamConfig") else { return }
+        persistRecordingGeolocationSidecar(
+            rawGeolocation: geolocationJSON,
+            audioURL: partURL.deletingPathExtension()
+        )
+    }
+
     // MARK: - Frame extraction (mirrors Android transformFrames)
 
     private func transformFrames(deviceType: String, value: Data) -> [Data] {

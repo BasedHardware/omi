@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -75,8 +76,7 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -88,18 +88,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      startDate?.toIso8601String() ?? '',
-      endDate?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -501,7 +500,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
@@ -517,7 +517,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
@@ -617,6 +618,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
+                          if (!convoProvider.showDailySummaries)
+                            IconButton(
+                              key: const Key('conversation_map_button'),
+                              tooltip: '${context.l10n.conversations} · ${context.l10n.location}',
+                              icon: const Icon(Icons.map_outlined, color: Colors.white),
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ConversationMapPage(conversations: convoProvider.displayedConversations),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

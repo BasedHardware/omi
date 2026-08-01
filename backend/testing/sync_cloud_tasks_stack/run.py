@@ -525,6 +525,7 @@ def _assert_task_contract(stack: Stack, job_id: str, uid: str, conversation_id: 
         body.get('job_id') != job_id
         or body.get('uid') != uid
         or body.get('conversation_id') != conversation_id
+        or body.get('geolocation') is not None
         or body.get('client_device_id') != DEVICE_ID
         or body.get('client_platform') != 'ios'
         or body.get('lane') != 'fresh'
