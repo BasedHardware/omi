@@ -7,11 +7,13 @@ from __future__ import annotations
 # validation route.
 ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/DesktopAutomationBridge.swift",
+    "Desktop/Sources/Chat/ChatStreamingRevealAutomation.swift",
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
     "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+    "Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift",
 )
 
 FLOW_LINT_INPUTS = frozenset(

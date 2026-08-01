@@ -716,6 +716,7 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    registerChatStreamingRevealAutomationActions()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
@@ -1746,8 +1747,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "main_chat_busy_state",
-      summary: "Return whether main chat is currently sending or streaming (race/busy probes)",
-      params: []
+      summary: "Return whether main chat is currently sending or streaming (race/busy probes)"
     ) { _ in
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]

@@ -154,7 +154,7 @@ class TaskChatState: ObservableObject {
   private var journalGeneration = 0
   private var isRefreshingJournal = false
   private var journalRefreshRequested = false
-  private var journalUpdateTasks: [String: Task<Void, Never>] = [:]
+  private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private let boundOwnerID: String
   private let boundAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   private let ownerIDProvider: @MainActor () -> String?
@@ -244,8 +244,7 @@ class TaskChatState: ObservableObject {
     runtimeProjectionCancellable?.cancel()
     runtimeProjectionCancellable = nil
     streamingBuffer.cancelPendingFlush()
-    for task in journalUpdateTasks.values { task.cancel() }
-    journalUpdateTasks.removeAll()
+    journalWriteCoordinator.cancelAll()
     messages.removeAll()
     surfacedFailureKeys.removeAll()
     activeAssistantMessageId = nil
@@ -266,7 +265,7 @@ class TaskChatState: ObservableObject {
 
   var ownerProjectionIsEmpty: Bool {
     messages.isEmpty
-      && journalUpdateTasks.isEmpty
+      && !journalWriteCoordinator.hasPendingWrites
       && activeAssistantMessageId == nil
       && !isSending
       && !isStopping
@@ -454,9 +453,11 @@ class TaskChatState: ObservableObject {
   ) {
     guard let lease = captureOwnerLease() else { return }
     guard let message = messages.first(where: { $0.id == messageId }) else { return }
-    let previous = journalUpdateTasks[messageId]
-    journalUpdateTasks[messageId] = Task { @MainActor [weak self] in
-      _ = await previous?.value
+    journalWriteCoordinator.schedule(
+      messageID: messageId,
+      supersededByTerminalization: status == .streaming,
+      coalescingDelay: status == .streaming ? .milliseconds(150) : nil
+    ) { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
       _ = try? await TaskChatRuntime.updateJournalMessage(
         workstreamId: self.workstreamId,
@@ -474,7 +475,9 @@ class TaskChatState: ObservableObject {
     producingRunId: String,
     producingAttemptId: String
   ) async throws -> KernelJournalTurn {
-    _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+    guard await journalWriteCoordinator.beginTerminalization(messageID: messageId) else {
+      throw BridgeError.agentError("Task-chat turn terminalization is already in progress")
+    }
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
     guard let message = messages.first(where: { $0.id == messageId }) else {
       throw BridgeError.agentError("Producing task-chat turn is unavailable")
@@ -508,7 +511,7 @@ class TaskChatState: ObservableObject {
     messageId: String,
     lease: TaskChatOwnerLease
   ) async {
-    _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+    guard await journalWriteCoordinator.beginTerminalization(messageID: messageId) else { return }
     guard isCurrent(lease),
       let message = messages.first(where: { $0.id == messageId })
     else { return }
@@ -665,9 +668,18 @@ class TaskChatState: ObservableObject {
       }
       let terminalDisposition = TaskChatTerminalDisposition.classify(queryResult.terminalStatus)
 
-      // Flush remaining streaming buffers
+      // Keep the metered reveal draining until the visible backlog is
+      // exhausted: a fast terminal response (large delta then immediate
+      // terminal) must still render progressively instead of jumping to the
+      // full settled text.
+      while streamingBuffer.hasPendingSegments {
+        flushStreamingBuffer(revealAll: false)
+        if streamingBuffer.hasPendingSegments {
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+      }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
+      streamingBuffer.discardAllPendingSegments()
 
       // Finalize AI message
       if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -879,13 +891,19 @@ class TaskChatState: ObservableObject {
   private func appendToMessage(id: String, text: String) {
     guard hasCurrentOwner else { return }
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
-  private func flushStreamingBuffer() {
+  private func flushStreamingBuffer(revealAll: Bool = true) {
     guard hasCurrentOwner else { return }
-    streamingBuffer.flush(messages: &messages)
+    if revealAll {
+      streamingBuffer.flush(messages: &messages)
+    } else {
+      streamingBuffer.flushMetered(messages: &messages) { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
+      }
+    }
     if let activeAssistantMessageId {
       scheduleJournalUpdate(messageId: activeAssistantMessageId, status: .streaming)
     }
@@ -921,7 +939,7 @@ class TaskChatState: ObservableObject {
   private func appendThinking(messageId: String, text: String) {
     guard hasCurrentOwner else { return }
     streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 

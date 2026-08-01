@@ -1680,10 +1680,10 @@ class ChatProvider: ObservableObject {
   private func preparePromptContextIfNeeded() async {
     await warmupPromptContext()
   }
-
   private func resetSessionStateForAuthChange() {
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
+    streamingBuffer.discardAllPendingSegments()
     journalOwnerByMessageID.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
@@ -3357,7 +3357,6 @@ class ChatProvider: ObservableObject {
     messages = []
     resetMessagesPagination()
   }
-
   private func scheduleJournalUpdate(
     messageId: String,
     status: KernelJournalTurnStatus? = nil,
@@ -3372,7 +3371,8 @@ class ChatProvider: ObservableObject {
     // mutation and must remain journalable after the turn terminalizes.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescingDelay: status == .streaming ? .milliseconds(150) : nil
     ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(
@@ -4486,7 +4486,7 @@ class ChatProvider: ObservableObject {
         // Never let it resurrect the old bubble, overwrite a newer
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
-        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -4567,9 +4567,16 @@ class ChatProvider: ObservableObject {
         return nil
       }
 
-      // Flush any remaining buffered streaming text before finalizing
+      // Drain the remaining streaming buffers at the metered reveal pace so
+      // a fast/single-chunk success response still renders progressively
+      // instead of jumping to the full settled text.
+      while streamingBuffer.hasPendingSegments {
+        flushStreamingBuffer(revealAll: false)
+        if streamingBuffer.hasPendingSegments {
+          try? await Task.sleep(nanoseconds: 35_000_000)
+        }
+      }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
 
       // Determine the final text to display and save
       let messageText: String
@@ -4750,7 +4757,7 @@ class ChatProvider: ObservableObject {
         turnGeneration: sendGen,
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
-        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout
@@ -5316,21 +5323,29 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
-  /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-  /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+  private static func normalizeStreaming(_ message: ChatMessage, _ text: String) -> String {
+    message.sender == .ai ? normalizeAssistantSentenceSpacing(text) : text
+  }
+
+  /// Append text to a streaming message via a buffer that reveals at ~35ms intervals.
+  /// This reduces SwiftUI re-renders from once-per-token while keeping text movement smooth.
   private func appendToMessage(id: String, text: String) {
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer() {
-    streamingBuffer.flush(messages: &messages) { message, text in
-      if message.sender == .ai {
-        return Self.normalizeAssistantSentenceSpacing(text)
+  private func flushStreamingBuffer(revealAll: Bool = true) {
+    if revealAll {
+      streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreaming)
+    } else {
+      streamingBuffer.flushMetered(
+        messages: &messages,
+        normalizeText: Self.normalizeStreaming
+      ) { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
       }
-      return text
     }
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
@@ -5358,12 +5373,7 @@ class ChatProvider: ObservableObject {
         toolUseId: toolUseId,
         input: input,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
-        }
+        normalizeText: Self.normalizeStreaming
       )
     else { return }
     if status == .completed {
@@ -5386,12 +5396,7 @@ class ChatProvider: ObservableObject {
         name: name,
         output: output,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
-        }
+        normalizeText: Self.normalizeStreaming
       )
     else { return }
     attachGeneratedFileResources(
@@ -5655,7 +5660,7 @@ class ChatProvider: ObservableObject {
   /// Append thinking text to the streaming message via the shared buffer.
   private func appendThinking(messageId: String, text: String) {
     streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
@@ -5672,12 +5677,7 @@ class ChatProvider: ObservableObject {
       messageId: messageId,
       terminalStatus: terminalStatus,
       messages: &messages,
-      normalizeText: { message, text in
-        if message.sender == .ai {
-          return Self.normalizeAssistantSentenceSpacing(text)
-        }
-        return text
-      }
+      normalizeText: Self.normalizeStreaming
     )
     if scheduleJournal {
       scheduleJournalUpdate(messageId: messageId)
