@@ -344,6 +344,32 @@ final class AppleEventKitReaderService {
         let reminderID: String
         if let journaled = journaledReminderID(forItemID: item.id) {
           reminderID = journaled
+          if let reminder = eventStore.calendarItem(withIdentifier: journaled) as? EKReminder {
+            var needsSave = false
+            if reminder.title != item.description_ {
+              reminder.title = item.description_
+              needsSave = true
+            }
+            if reminder.isCompleted != item.completed {
+              reminder.isCompleted = item.completed
+              reminder.completionDate = item.completed ? Date() : nil
+              needsSave = true
+            }
+            if let dueAt = item.dueAt.flatMap(Self.parseDate) {
+              let currentDue = reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) }
+              if currentDue.map({ abs($0.timeIntervalSince(dueAt)) > 60 }) ?? true {
+                reminder.dueDateComponents = Calendar.current.dateComponents(
+                  [.year, .month, .day, .hour, .minute], from: dueAt)
+                needsSave = true
+              }
+            } else if reminder.dueDateComponents != nil {
+              reminder.dueDateComponents = nil
+              needsSave = true
+            }
+            if needsSave {
+              try eventStore.saveReminder(reminder, commit: true)
+            }
+          }
         } else {
           let reminder = eventStore.newReminder()
           reminder.title = item.description_

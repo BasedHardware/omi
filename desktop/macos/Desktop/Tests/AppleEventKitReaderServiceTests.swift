@@ -156,6 +156,54 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   }
 
   @MainActor
+  func testJournaledExportAppliesLatestPendingFieldsBeforeAck() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
+    let journal = try makeExportJournal()
+    let pending = AppleRemindersPendingSync(
+      pendingExport: [.fixture(id: "item-1", description: "Buy milk")],
+      syncedItems: []
+    )
+    let sync = AppleRemindersSyncStub(pending: pending, failAfterSyncCalls: 0)
+
+    _ = try? await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    let reminder = try XCTUnwrap(store.remindersByID["stub-reminder-1"])
+    XCTAssertEqual(reminder.title, "Buy milk")
+    XCTAssertFalse(reminder.isCompleted)
+    XCTAssertNil(reminder.dueDateComponents)
+
+    sync.pending = AppleRemindersPendingSync(
+      pendingExport: [
+        .fixture(
+          id: "item-1",
+          description: "Buy oat milk",
+          completed: true,
+          dueAt: "2026-08-15T15:00:00Z"
+        )
+      ],
+      syncedItems: []
+    )
+    sync.failAfterSyncCalls = nil
+
+    let result = try await AppleEventKitReaderService(
+      eventStore: store, remindersSync: sync, exportJournal: journal
+    ).syncReminders()
+
+    XCTAssertEqual(result.exported, 1)
+    XCTAssertEqual(reminder.title, "Buy oat milk")
+    XCTAssertTrue(reminder.isCompleted)
+    let expectedDue = try XCTUnwrap(AppleEventKitReaderService.parseDate("2026-08-15T15:00:00Z"))
+    let appleDue = try XCTUnwrap(reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) })
+    XCTAssertLessThan(abs(appleDue.timeIntervalSince(expectedDue)), 60)
+    XCTAssertEqual(sync.syncBatches.count, 1)
+    XCTAssertEqual(sync.syncBatches[0].first?.appleReminderId, "stub-reminder-1")
+    XCTAssertNil(journal.reminderID(forItemID: "item-1"))
+  }
+
+  @MainActor
   func testDeletedAppleReminderIsRecreatedOnceAfterFailedAck() async throws {
     let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
     store.defaultCalendar = EKCalendar(for: .reminder, eventStore: EKEventStore())
