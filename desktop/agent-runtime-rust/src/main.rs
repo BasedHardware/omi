@@ -146,6 +146,7 @@ impl Runtime {
             "journal_terminalize_turn" => self.journal_terminalize_turn(input.fields),
             "journal_list_turns" => self.journal_list_turns(input.fields),
             "journal_clear_turns" => self.journal_clear_turns(input.fields),
+            "journal_repair_turns" => self.journal_repair_turns(input.fields),
             "authorized_tool_execution_result" => {
                 self.authorized_tool_execution_result(input.fields)
             }
@@ -319,6 +320,13 @@ impl Runtime {
                     .cloned()
                     .unwrap_or_else(default_profile)
             });
+            if profile.working_directory.trim().is_empty() {
+                self.invalid_request(
+                    &fields,
+                    "session creation profile requires rx4 and a working directory",
+                );
+                return String::new();
+            }
             let session_id = format!("rx4-session-{}", self.next_session);
             self.next_session += 1;
             self.sessions.insert(
@@ -873,6 +881,42 @@ impl Runtime {
         }
     }
 
+    fn journal_repair_turns(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal repair requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal repair requires a surface reference");
+            return;
+        };
+        let turn_ids = fields
+            .get("turnIds")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let active_run_ids = self
+            .running
+            .values()
+            .map(|running| running.run_id.clone())
+            .collect::<Vec<_>>();
+        match self.journal.repair(&surface, &turn_ids, &active_run_ids) {
+            Ok(page) => {
+                self.emit_journal_result("repair", &request_id, &client_id, &surface, page, true)
+            }
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
     fn authorized_tool_execution_result(&mut self, fields: Map<String, Value>) {
         match self.tool_relay.complete(&mut self.journal, &fields) {
             Ok((completion, duplicate)) => self.emit(
@@ -963,11 +1007,19 @@ impl Runtime {
             .running
             .get(&request_id)
             .is_some_and(|running| *running.cancel.borrow());
+        let mut deferred = Vec::new();
         while let Ok(request) = tool_requests.try_recv() {
-            if cancelled && request.request_id == request_id {
+            if request.request_id != request_id {
+                deferred.push(request);
+                continue;
+            }
+            if cancelled {
                 continue;
             }
             self.authorize_tool_request(request);
+        }
+        for request in deferred {
+            let _ = self.tool_requests.send(request);
         }
         if cancelled {
             if let Some(running) = self.running.get(&request_id).cloned() {
@@ -1330,6 +1382,15 @@ impl Runtime {
             );
             return;
         }
+        if session.profile.working_directory.trim().is_empty() {
+            self.emit_error(
+                Some(request_id),
+                Some(client_id),
+                "invalid_request",
+                "execution profile requires a working directory",
+            );
+            return;
+        }
         let profile_generation = session.profile.generation;
         let surface_kind = session.surface_kind.clone();
         let run_identity = match self.journal.admit_run(
@@ -1660,6 +1721,7 @@ fn is_owner_scoped_message(kind: &str) -> bool {
             | "journal_terminalize_turn"
             | "journal_list_turns"
             | "journal_clear_turns"
+            | "journal_repair_turns"
             | "authorized_tool_execution_result"
     )
 }
@@ -2385,6 +2447,8 @@ mod tests {
             owner_id: "owner".into(),
             bearer_token: "test-token".into(),
         });
+        runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"rx4","workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
+        let _ = receiver.recv().await.expect("profile response must emit");
         runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
         let resolved = receiver.recv().await.expect("surface response must emit");
         let session_id = resolved.fields["sessionId"]
@@ -2413,6 +2477,8 @@ mod tests {
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
         );
+        runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"rx4","workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
+        let _ = receiver.recv().await.expect("profile response must emit");
         runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
         let resolved = receiver.recv().await.expect("surface response must emit");
         let session_id = resolved.fields["sessionId"]
@@ -2584,6 +2650,8 @@ mod tests {
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
         );
+        runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"rx4","workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
+        let _ = receiver.recv().await.expect("profile response must emit");
         runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("resolve fixture must parse"));
         let resolved = receiver.recv().await.expect("surface response must emit");
         let conversation_id = resolved.fields["conversationId"]
@@ -2688,5 +2756,174 @@ mod tests {
             policy_error.fields["failure"]["failureCode"],
             "invalid_request"
         );
+    }
+
+    #[tokio::test]
+    async fn journal_repair_turns_terminalizes_orphaned_assistant_turns() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(parse_line(r#"{"type":"journal_record_turn","requestId":"record","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{"turnId":"orphan-turn","role":"assistant","origin":"agent_runtime","status":"streaming","content":"partial","contentBlocks":[],"resources":[],"metadataJson":"{}"}}"#).expect("record fixture must parse"));
+        let _ = receiver.recv().await.expect("record response must emit");
+        let _ = receiver.recv().await.expect("record change must emit");
+
+        runtime.handle(parse_line(r#"{"type":"journal_repair_turns","requestId":"repair","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turnIds":["orphan-turn","orphan-turn","missing"]}"#).expect("repair fixture must parse"));
+        let repaired = receiver.recv().await.expect("repair response must emit");
+        assert_eq!(repaired.kind, "journal_operation_result");
+        assert_eq!(repaired.fields["operation"], "repair");
+        assert_eq!(repaired.fields["turns"].as_array().map(Vec::len), Some(1));
+        assert_eq!(repaired.fields["turns"][0]["turnId"], "orphan-turn");
+        assert_eq!(repaired.fields["turns"][0]["status"], "failed");
+        let changed = receiver.recv().await.expect("repair change must emit");
+        assert_eq!(changed.kind, "journal_turn_changed");
+        assert_eq!(changed.fields["turn"]["status"], "failed");
+    }
+
+    #[tokio::test]
+    async fn resolve_and_query_reject_empty_working_directory() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(Some("https://api.omi.me/v2".into()), output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.credentials = Some(ManagedCredentials {
+            owner_id: "owner".into(),
+            bearer_token: "test-token".into(),
+        });
+
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("resolve fixture must parse"));
+        let rejection = receiver
+            .recv()
+            .await
+            .expect("empty working directory must reject session creation");
+        assert_eq!(rejection.kind, "error");
+        assert_eq!(
+            rejection.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
+        assert!(runtime.sessions.is_empty());
+
+        runtime.sessions.insert(
+            "rx4-session-empty".into(),
+            SurfaceSession {
+                owner_id: "owner".into(),
+                surface_kind: "main_chat".into(),
+                conversation_id: "conversation".into(),
+                profile: default_profile(),
+            },
+        );
+        runtime.handle(parse_line(r#"{"type":"query","requestId":"query","clientId":"client","ownerId":"owner","sessionId":"rx4-session-empty","prompt":"hello"}"#).expect("query fixture must parse"));
+        let query_rejection = receiver
+            .recv()
+            .await
+            .expect("empty working directory must reject query");
+        assert_eq!(query_rejection.kind, "error");
+        assert_eq!(
+            query_rejection.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
+        assert!(!runtime.running.contains_key("query"));
+    }
+
+    #[tokio::test]
+    async fn complete_run_does_not_authorize_tools_for_other_runs() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let journal = JournalStore::in_memory().expect("journal must open");
+        let (tool_requests, mut queued_tool_requests) = mpsc::unbounded_channel();
+        let mut runtime = Runtime::new(
+            None,
+            journal,
+            output,
+            completed,
+            tool_requests,
+            "boot-test".into(),
+        );
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let run_a = runtime
+            .journal
+            .admit_run("owner", "session-a", "conversation", 1)
+            .expect("run a must admit");
+        let run_b = runtime
+            .journal
+            .admit_run("owner", "session-b", "conversation", 1)
+            .expect("run b must admit");
+        let (cancel_a, _) = watch::channel(false);
+        let (cancel_b, _) = watch::channel(false);
+        runtime.running.insert(
+            "request-a".into(),
+            RunningQuery {
+                cancel: cancel_a,
+                owner_id: "owner".into(),
+                session_id: "session-a".into(),
+                run_id: run_a.run_id,
+                attempt_id: run_a.attempt_id,
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime.running.insert(
+            "request-b".into(),
+            RunningQuery {
+                cancel: cancel_b,
+                owner_id: "owner".into(),
+                session_id: "session-b".into(),
+                run_id: run_b.run_id,
+                attempt_id: run_b.attempt_id,
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime
+            .tool_requests
+            .send(ToolRequest {
+                request_id: "request-b".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-b".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"other"}"#.into(),
+                },
+            })
+            .expect("other run tool must queue");
+        runtime
+            .tool_requests
+            .send(ToolRequest {
+                request_id: "request-a".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-a".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"same"}"#.into(),
+                },
+            })
+            .expect("completing run tool must queue");
+
+        runtime.complete_run("request-a".into(), &mut queued_tool_requests);
+
+        let authorized = receiver
+            .recv()
+            .await
+            .expect("completing run tool must authorize");
+        assert_eq!(authorized.kind, "authorized_tool_execution");
+        assert_eq!(authorized.fields["invocationId"], "invoke-a");
+        assert!(receiver.try_recv().is_err());
+        assert!(runtime.running.contains_key("request-b"));
+        assert!(!runtime.running.contains_key("request-a"));
+
+        let deferred = queued_tool_requests
+            .try_recv()
+            .expect("other run tool must remain queued");
+        assert_eq!(deferred.request_id, "request-b");
+        assert_eq!(deferred.call.id, "invoke-b");
     }
 }
