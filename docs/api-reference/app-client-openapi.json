@@ -16457,6 +16457,49 @@
         "title": "ResponseMessage",
         "type": "object"
       },
+      "RestoreLegacyConversationItemsResponse": {
+        "description": "Outcome of the safe action-items recovery endpoint.",
+        "properties": {
+          "has_more": {
+            "default": false,
+            "description": "Whether more marked legacy rows remain after this recovery page.",
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive recovery cursor for the next page, present only when has_more is true.",
+            "title": "Next Cursor"
+          },
+          "restored": {
+            "default": 0,
+            "description": "Number of action items safely restored.",
+            "title": "Restored",
+            "type": "integer"
+          },
+          "skipped_existing": {
+            "default": 0,
+            "description": "Rows left staged because an action item with that identity already exists.",
+            "title": "Skipped Existing",
+            "type": "integer"
+          },
+          "status": {
+            "default": "ok",
+            "description": "Ack status, e.g. \"ok\".",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "RestoreLegacyConversationItemsResponse",
+        "type": "object"
+      },
       "ReviewAppRequest": {
         "properties": {
           "response": {
@@ -23662,6 +23705,114 @@
           }
         ],
         "summary": "Get Pending Sync Items",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
+    "/v1/action-items/restore-legacy-conversation-items": {
+      "post": {
+        "description": "Safely restore rows moved by the now-retired desktop migration.",
+        "operationId": "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreLegacyConversationItemsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Legacy Conversation Items",
         "tags": [
           "action-items"
         ]

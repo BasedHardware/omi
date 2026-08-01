@@ -1,0 +1,3 @@
+{
+  "change": "Fixed large task reorder syncs by sending sort-order updates in bounded batches instead of surfacing a cloud sync error"
+}
