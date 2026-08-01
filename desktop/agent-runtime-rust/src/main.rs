@@ -547,6 +547,10 @@ impl Runtime {
             "externalRefKind",
             "externalRefId"
         ) else {
+            self.invalid_request(
+                &fields,
+                "invalidate_session requires ownerId, surfaceKind, externalRefKind, and externalRefId",
+            );
             return;
         };
         let key = (
@@ -1521,6 +1525,26 @@ impl Runtime {
             message,
         );
     }
+
+    fn handle_stdin_frame(&mut self, line: &[u8]) {
+        match std::str::from_utf8(line) {
+            Ok(line) => match parse_line(line) {
+                Ok(message) => self.handle(message),
+                Err(error) => self.emit_error(
+                    None,
+                    None,
+                    "invalid_request",
+                    &format!("invalid protocol frame: {error}"),
+                ),
+            },
+            Err(_) => self.emit_error(
+                None,
+                None,
+                "invalid_request",
+                "stdin frame is not valid UTF-8",
+            ),
+        }
+    }
 }
 
 fn map_agent_event(event: &Event, request_id: &str, client_id: &str) -> Option<Message> {
@@ -1796,11 +1820,7 @@ async fn main() {
         tokio::select! {
             line = read_bounded_jsonl_line(&mut stdin, MAX_JSONL_LINE_BYTES) => match line {
                 Ok(Some(line)) if !line.iter().all(u8::is_ascii_whitespace) => {
-                    if let Ok(line) = std::str::from_utf8(&line) {
-                        if let Ok(message) = parse_line(line) {
-                            runtime.handle(message);
-                        }
-                    }
+                    runtime.handle_stdin_frame(&line);
                 }
                 Err(error) => runtime.emit_error(None, None, "invalid_request", &error.to_string()),
                 Ok(Some(_)) => {}
@@ -2228,6 +2248,49 @@ mod tests {
             .expect("next frame must be readable")
             .expect("next frame must exist");
         assert_eq!(next, b"{\"type\":\"stop\"}\n");
+    }
+
+    #[tokio::test]
+    async fn unparseable_stdin_frame_emits_an_error_envelope() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle_stdin_frame(b"{not valid json");
+        let error = receiver
+            .recv()
+            .await
+            .expect("unparseable frame must respond");
+        assert_eq!(error.kind, "error");
+        assert_eq!(error.fields["failure"]["code"], "invalid_request");
+
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle_stdin_frame(&[0xff, 0xfe, 0xfd]);
+        let error = receiver.recv().await.expect("non-UTF-8 frame must respond");
+        assert_eq!(error.kind, "error");
+        assert_eq!(error.fields["failure"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn invalidate_session_without_surface_fields_emits_an_error() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"o"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(
+            parse_line(
+                r#"{"type":"invalidate_session","requestId":"i","clientId":"c","ownerId":"o"}"#,
+            )
+            .expect("fixture must parse"),
+        );
+        let response = receiver.recv().await.expect("invalidation must respond");
+        assert_eq!(response.kind, "error");
+        assert_eq!(response.fields["requestId"], "i");
+        assert_eq!(response.fields["failure"]["code"], "invalid_request");
     }
 
     #[tokio::test]
