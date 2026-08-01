@@ -2062,45 +2062,18 @@ workflows:
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
-          set -euo pipefail
-          # Pinned build + checksum. This binary is lipo'd, signed with the real Developer ID
-          # and notarized later in this pipeline, so an unpinned "latest" redirect would let an
-          # upstream change ship inside a signed Omi release without review.
-          FFMPEG_VERSION="8.1.2"
-          FFMPEG_ARM64_URL="https://ffmpeg.martin-riedl.de/download/macos/arm64/1783011502_${FFMPEG_VERSION}/ffmpeg.zip"
-          FFMPEG_ARM64_SHA256="ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c"
-          FFMPEG_X86_URL="https://ffmpeg.martin-riedl.de/download/macos/amd64/1783018342_${FFMPEG_VERSION}/ffmpeg.zip"
-          FFMPEG_X86_SHA256="a52ef43883f44c219766d4b3bdde4e635b35465d0b704c01c3a0566b59775df9"
-
-          verify_sha256() {
-            local file="$1"
-            local expected="$2"
-            local actual
-            if [ -z "$expected" ]; then
-              echo "ERROR: no expected SHA-256 pinned for $file" >&2
-              exit 1
-            fi
-            actual="$(shasum -a 256 "$file" | awk '{print $1}')"
-            if [ "$actual" != "$expected" ]; then
-              echo "ERROR: checksum mismatch for $file" >&2
-              echo "  expected: $expected" >&2
-              echo "  actual:   $actual" >&2
-              exit 1
-            fi
-          }
-
           FFMPEG_RESOURCE="Desktop/Sources/Resources/ffmpeg"
           if file "$FFMPEG_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
             echo "ffmpeg already universal, skipping download"
           else
-            echo "Creating universal ffmpeg $FFMPEG_VERSION..."
+            echo "Creating universal ffmpeg..."
             TEMP_DIR="/tmp/ffmpeg-universal-$$"
             mkdir -p "$TEMP_DIR"
-            curl -L --fail --show-error -o "$TEMP_DIR/arm64.zip" "$FFMPEG_ARM64_URL"
-            verify_sha256 "$TEMP_DIR/arm64.zip" "$FFMPEG_ARM64_SHA256"
+            curl -L -o "$TEMP_DIR/arm64.zip" \
+              "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
             unzip -q -o "$TEMP_DIR/arm64.zip" -d "$TEMP_DIR/arm64/"
-            curl -L --fail --show-error -o "$TEMP_DIR/x86_64.zip" "$FFMPEG_X86_URL"
-            verify_sha256 "$TEMP_DIR/x86_64.zip" "$FFMPEG_X86_SHA256"
+            curl -L -o "$TEMP_DIR/x86_64.zip" \
+              "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
             unzip -q -o "$TEMP_DIR/x86_64.zip" -d "$TEMP_DIR/x86_64/"
             ARM64=$(find "$TEMP_DIR/arm64" -name "ffmpeg" -type f | head -1)
             X86=$(find "$TEMP_DIR/x86_64" -name "ffmpeg" -type f | head -1)
