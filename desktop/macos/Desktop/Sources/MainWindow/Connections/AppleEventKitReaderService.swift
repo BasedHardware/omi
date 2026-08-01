@@ -1,5 +1,5 @@
-@preconcurrency import EventKit
 import CryptoKit
+@preconcurrency import EventKit
 import Foundation
 
 enum AppleEventKitSource: String, Sendable {
@@ -222,7 +222,8 @@ final class DefaultsAppleRemindersExportJournal: AppleRemindersExportJournaling 
   }
 
   private var ownerUserID: String {
-    let trimmed = defaults.string(forKey: .authUserId)?
+    let trimmed =
+      defaults.string(forKey: .authUserId)?
       .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? "signed-out" : trimmed
   }
