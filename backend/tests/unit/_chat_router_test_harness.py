@@ -203,6 +203,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
+    limiter.billable_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
     limiter.record_actual_duration = MagicMock()

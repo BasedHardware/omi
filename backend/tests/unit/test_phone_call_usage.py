@@ -49,3 +49,16 @@ def test_reserve_current_month_slot_is_atomic_and_rolls_back_over_limit():
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
     expected_key = f"phone_call_usage:uid1:{current_month}"
     redis_client.decr.assert_called_once_with(expected_key, 1)
+
+
+def test_reserve_current_month_slot_fails_closed_on_redis_error():
+    """A Redis outage must not grant a free-tier call — each one spends real Twilio money."""
+    redis_client = MagicMock()
+    redis_client.incr.side_effect = RuntimeError("redis down")
+    module = _load_phone_call_usage(redis_client)
+
+    reserved, used_before, reset_at = module.reserve_current_month_slot("uid1", monthly_limit=5)
+
+    assert reserved is False
+    assert used_before == 0
+    assert reset_at > 0

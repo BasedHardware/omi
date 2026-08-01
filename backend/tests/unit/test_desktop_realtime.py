@@ -7,8 +7,9 @@ from routers import desktop_realtime
 
 
 class _Client:
-    def __init__(self, response):
+    def __init__(self, response, recorder=None):
         self.response = response
+        self.recorder = recorder
 
     async def __aenter__(self):
         return self
@@ -17,7 +18,43 @@ class _Client:
         return None
 
     async def post(self, *_args, **_kwargs):
+        if self.recorder is not None:
+            self.recorder.append(_kwargs)
         return self.response
+
+
+@pytest.mark.asyncio
+async def test_openai_mint_bounds_client_secret_lifetime(monkeypatch):
+    """The OpenAI branch must bound the minted secret, like the Gemini branch does.
+
+    OpenAI client secrets have no per-secret use counter, so ``expires_after`` is
+    the only server-side bound; without it the mint is an unbounded credential on
+    the platform key.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "platform-key")
+    sent = []
+    monkeypatch.setattr(
+        desktop_realtime.httpx,
+        "AsyncClient",
+        lambda **_: _Client(httpx.Response(200, json={"value": "ek_secret", "expires_at": 123}), sent),
+    )
+
+    async def persist(*_args):
+        return None
+
+    monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
+
+    async def run(_executor, _function, *_args):
+        return False
+
+    monkeypatch.setattr(desktop_realtime, "run_blocking", run)
+
+    await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="openai"), "user-1", None)
+
+    assert sent[0]["json"]["expires_after"] == {
+        "anchor": "created_at",
+        "seconds": desktop_realtime._SESSION_MAX_MIN * 60,
+    }
 
 
 @pytest.mark.asyncio
@@ -36,12 +73,12 @@ async def test_openai_mint_returns_ephemeral_token_and_persists_no_secret(monkey
     monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
 
     async def run(_executor, function, *_args):
-        assert function is desktop_realtime.is_trial_paywalled
+        assert function in (desktop_realtime.is_trial_paywalled, desktop_realtime.enforce_chat_quota)
         return False
 
     monkeypatch.setattr(desktop_realtime, "run_blocking", run)
 
-    response = await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="openai"), "user-1")
+    response = await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="openai"), "user-1", None)
 
     assert response.status_code == 200
     assert json.loads(response.body) == {"provider": "openai", "token": "ek_secret", "expires_at": "123"}
@@ -60,12 +97,12 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
     )
 
     async def run(_executor, function, *_args):
-        assert function is desktop_realtime.is_trial_paywalled
+        assert function in (desktop_realtime.is_trial_paywalled, desktop_realtime.enforce_chat_quota)
         return False
 
     monkeypatch.setattr(desktop_realtime, "run_blocking", run)
 
-    response = await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="gemini"), "user-1")
+    response = await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="gemini"), "user-1", None)
 
     assert response.status_code == 429
     assert json.loads(response.body) == {

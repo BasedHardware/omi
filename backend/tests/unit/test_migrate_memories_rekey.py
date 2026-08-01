@@ -25,10 +25,13 @@ os.environ.setdefault(
 # so no client is constructed and no network is touched on import. Fakes are injected per-test via
 # the firestore_client parameter and monkeypatch on the module's encryption singleton.
 from database import memories  # noqa: E402
+from utils import encryption  # noqa: E402
 
 
 class FakeEnc:
     """Per-user keyed stand-in for utils.encryption: content encrypted for one uid is unreadable to another."""
+
+    DecryptionError = encryption.DecryptionError
 
     @staticmethod
     def encrypt(content, uid):
@@ -36,11 +39,11 @@ class FakeEnc:
 
     @staticmethod
     def decrypt(ciphertext, uid):
-        # Mirror production utils.encryption.decrypt: on failure (wrong key / corrupt data) it does
-        # NOT raise, it returns the input ciphertext unchanged. The migration must detect that.
+        # Mirror production utils.encryption.decrypt: on failure (wrong key / corrupt data) it
+        # raises DecryptionError. The migration must not re-encrypt an unauthenticated value.
         prefix = f"{uid}::"
         if not isinstance(ciphertext, str) or not ciphertext.startswith(prefix):
-            return ciphertext
+            raise encryption.DecryptionError("decryption failed")
         return ciphertext[len(prefix) :]
 
 

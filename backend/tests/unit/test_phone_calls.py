@@ -168,7 +168,7 @@ def test_check_verification_success(mock_check, mock_get_cid, mock_db, client):
     data = resp.json()
     assert data['verified'] is True
     assert data['phone_number_id'] is not None
-    mock_db.delete_pending_verification.assert_called_once_with('+15551234567')
+    mock_db.delete_pending_verification.assert_called_once_with('+15551234567', TEST_UID)
 
 
 @patch('routers.phone_calls.phone_calls_db')

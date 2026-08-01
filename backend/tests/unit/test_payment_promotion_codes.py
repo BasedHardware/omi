@@ -161,6 +161,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.adapt_plans_for_legacy_client = MagicMock()
     sub_mod.clear_trial_paywall_cache = MagicMock()
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
+    sub_mod.is_purchasable_price_id = MagicMock(return_value=True)
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
@@ -174,6 +175,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     apps_mod.get_is_user_paid_app = MagicMock()
     apps_mod.paid_app = MagicMock()
     apps_mod.set_user_app_sub_customer_id = MagicMock()
+    apps_mod.unpaid_app = MagicMock()
 
     endpoints_mod = sys.modules["utils.other.endpoints"]
     endpoints_mod.get_current_user_uid = lambda: "test-uid"

@@ -479,3 +479,45 @@ class TestConstants:
         from utils.voice_duration_limiter import DAILY_BUDGET_MS
 
         assert DAILY_BUDGET_MS == 7_200_000  # 2 hours
+
+
+class TestPermissiveDefaultHardening:
+    """Regressions for controls that used to become permissive when something was unset."""
+
+    def test_lua_script_registers_lazily_after_redis_recovers(self):
+        """A pod that starts while Redis is down must meter again once Redis returns."""
+        import utils.voice_duration_limiter as vdl
+
+        saved = vdl._consume_lua
+        vdl._consume_lua = None
+        try:
+            with patch.object(vdl.r, 'register_script', side_effect=RuntimeError('redis down')):
+                assert vdl._get_consume_lua() is None
+                assert vdl._consume_lua is None  # a failed registration is never cached
+
+            script = MagicMock()
+            with patch.object(vdl.r, 'register_script', return_value=script) as register:
+                assert vdl._get_consume_lua() is script
+                assert vdl._get_consume_lua() is script
+                register.assert_called_once()  # cached only after success
+        finally:
+            vdl._consume_lua = saved
+
+    def test_billable_duration_falls_back_to_size_estimate(self):
+        """An unreadable duration must still be charged, not skipped."""
+        from utils.voice_duration_limiter import billable_duration_ms
+
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as handle:
+            handle.write(b'\x00' * 32000)
+            path = handle.name
+        try:
+            with patch('utils.voice_duration_limiter.read_wav_duration_ms', return_value=None):
+                assert billable_duration_ms(path) == 1000
+        finally:
+            os.unlink(path)
+
+    def test_billable_duration_prefers_real_duration(self):
+        from utils.voice_duration_limiter import billable_duration_ms
+
+        with patch('utils.voice_duration_limiter.read_wav_duration_ms', return_value=4321):
+            assert billable_duration_ms('/nonexistent.wav') == 4321

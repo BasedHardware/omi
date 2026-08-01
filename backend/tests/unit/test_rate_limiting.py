@@ -246,7 +246,7 @@ class TestEnforceRateLimit(unittest.TestCase):
     @patch('utils.other.endpoints.check_rate_limit', return_value=(True, 50, 0))
     def test_allowed_request_passes(self, mock_check):
         # Should not raise
-        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        self.ep._enforce_rate_limit("uid123", "chat:send_message", fail_closed=False)
         mock_check.assert_called_once()
 
     @patch('utils.other.endpoints.check_rate_limit', return_value=(False, 0, 42))
@@ -255,7 +255,7 @@ class TestEnforceRateLimit(unittest.TestCase):
         from fastapi import HTTPException
 
         with self.assertRaises(HTTPException) as ctx:
-            self.ep._enforce_rate_limit("uid123", "chat:send_message")
+            self.ep._enforce_rate_limit("uid123", "chat:send_message", fail_closed=False)
         self.assertEqual(ctx.exception.status_code, 429)
         self.assertIn("42", ctx.exception.detail)
         self.assertEqual(ctx.exception.headers["Retry-After"], "42")
@@ -264,12 +264,12 @@ class TestEnforceRateLimit(unittest.TestCase):
     @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', True)
     def test_shadow_mode_logs_instead_of_blocking(self, mock_check):
         # Should not raise even though rate limit exceeded
-        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        self.ep._enforce_rate_limit("uid123", "chat:send_message", fail_closed=False)
 
     @patch('utils.other.endpoints.check_rate_limit', side_effect=_RedisError("connection lost"))
     def test_fail_open_on_redis_error(self, mock_check):
         # Should not raise — fail open
-        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        self.ep._enforce_rate_limit("uid123", "chat:send_message", fail_closed=False)
 
 
 class TestCheckRateLimitBoundary(unittest.TestCase):
@@ -345,7 +345,7 @@ class TestWithRateLimitWrapper(unittest.TestCase):
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_check_rate_limit_inline_calls_enforce(self, mock_enforce):
         self.ep.check_rate_limit_inline("app1:uid1", "integration:memories")
-        mock_enforce.assert_called_once_with("app1:uid1", "integration:memories")
+        mock_enforce.assert_called_once_with("app1:uid1", "integration:memories", fail_closed=True)
 
     def test_rate_limit_key_for_context_prefers_app_key_identity(self):
         context = types.SimpleNamespace(uid="uid1", app_id="app1", key_id="key1")
@@ -377,7 +377,7 @@ class TestWithRateLimitWrapper(unittest.TestCase):
         dep_func = self.ep.with_rate_limit(lambda: "test_uid", "chat:send_message")
         # The inner dependency expects uid as a keyword arg (from Depends)
         result = asyncio.run(dep_func(uid="user123"))
-        mock_enforce.assert_called_once_with("user123", "chat:send_message")
+        mock_enforce.assert_called_once_with("user123", "chat:send_message", fail_closed=False)
         self.assertEqual(result, "user123")
 
     @patch('utils.other.endpoints._enforce_rate_limit', side_effect=HTTPException(status_code=429, detail="blocked"))
@@ -406,7 +406,7 @@ class TestWithRateLimitWrapper(unittest.TestCase):
             entered = asyncio.Event()
             release = threading.Event()
 
-            def blocking_enforce(_uid, _policy):
+            def blocking_enforce(_uid, _policy, *, fail_closed):
                 loop.call_soon_threadsafe(entered.set)
                 release.wait()
 

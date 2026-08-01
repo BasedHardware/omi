@@ -53,7 +53,9 @@ def test_negative_offset_and_limit_are_clamped_before_reaching_firestore(monkeyp
     .offset(-1) would -- an unhandled 500 for the caller.
     """
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.conversations_db, "get_conversations_without_photos", _make_fake_get_conversations(captured)
+    )
 
     result = mcp_router.get_conversations(limit=-1, offset=-1, uid=UID)
 
@@ -66,11 +68,13 @@ def test_oversized_limit_and_offset_are_capped(monkeypatch):
     """An unbounded limit/offset must be capped so a client cannot force a full-collection
     scan (limit) or a Firestore-billed skip-scan of unbounded size (offset)."""
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.conversations_db, "get_conversations_without_photos", _make_fake_get_conversations(captured)
+    )
 
     mcp_router.get_conversations(limit=10_000_000, offset=10_000_000, uid=UID)
 
-    assert captured['limit'] == 1000
+    assert captured['limit'] == 200
     assert captured['offset'] == 100000
 
 
@@ -78,7 +82,9 @@ def test_normal_pagination_passes_through_unchanged(monkeypatch):
     """Sibling/normal-path control: in-range limit/offset must reach the query
     unmodified, both before and after the clamp fix."""
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.conversations_db, "get_conversations_without_photos", _make_fake_get_conversations(captured)
+    )
 
     mcp_router.get_conversations(limit=25, offset=10, uid=UID)
 

@@ -45,7 +45,7 @@ def test_get_conversations_negative_offset_is_clamped(mcp):
             raise ValueError("offset must be non-negative")
         return []
 
-    with patch.object(mcp.conversations_db, "get_conversations", side_effect=_firestore_like) as fake:
+    with patch.object(mcp.conversations_db, "get_conversations_without_photos", side_effect=_firestore_like) as fake:
         result = mcp.execute_tool("test-uid", "get_conversations", {"offset": -1})
 
     assert result == {"conversations": []}
@@ -54,7 +54,7 @@ def test_get_conversations_negative_offset_is_clamped(mcp):
 
 def test_get_conversations_non_int_limit_returns_invalid_params(mcp):
     """A non-integer limit must return a clean -32602, not crash in the query layer."""
-    with patch.object(mcp.conversations_db, "get_conversations", MagicMock(return_value=[])):
+    with patch.object(mcp.conversations_db, "get_conversations_without_photos", MagicMock(return_value=[])):
         with pytest.raises(mcp.ToolExecutionError) as exc:
             mcp.execute_tool("test-uid", "get_conversations", {"limit": "abc"})
 

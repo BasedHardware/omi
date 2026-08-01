@@ -118,18 +118,30 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
     assert error.value.detail == "trial_expired"
 
 
-@pytest.mark.asyncio
-async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
+def _meter_run_blocking(monkeypatch, *, daily):
+    """Install a run_blocking stub returning ``daily`` for the daily-limit check.
+
+    ``check_rate_limit`` returns (allowed, remaining, retry_after) — remaining counts
+    DOWN from the limit. Binding it as if it counted up made the daily cap unreachable
+    and inverted the pro->flash downgrade, so the stub mirrors the real contract.
+    """
+
     async def run_blocking(_, function, *args, **kwargs):
         if function is desktop_proxy.redis_db.check_rate_limit:
             if args[1] == "desktop_gemini_daily":
-                return True, 31, 86_400
-            return True, 1, 60
-        return 31, 86_400
+                return daily
+            return True, 29, 60
+        raise AssertionError("unexpected offloaded call")
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
+    # 31 of 1500 consumed today -> past the 30-request pro soft limit.
+    _meter_run_blocking(monkeypatch, daily=(True, desktop_proxy._DAILY_HARD_LIMIT - 31, 86_400))
 
     assert (
         await desktop_proxy._meter_server_request(
@@ -137,3 +149,38 @@ async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypat
         )
         == "models/gemini-2.5-flash:generateContent"
     )
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_keeps_pro_below_the_soft_limit(monkeypatch):
+    """Only 2 requests consumed today: pro must survive, not be downgraded.
+
+    The inverted binding read ``remaining`` (1498) as the consumed count, so every
+    early request looked past the soft limit.
+    """
+    _meter_run_blocking(monkeypatch, daily=(True, desktop_proxy._DAILY_HARD_LIMIT - 2, 86_400))
+
+    assert (
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+        == "models/gemini-2.5-pro:generateContent"
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_enforces_the_daily_hard_limit(monkeypatch):
+    """Once the daily policy reports not-allowed, the proxy must 429.
+
+    The previous code compared ``remaining`` against the limit, which can never
+    exceed it, so the 1500/day ceiling never fired.
+    """
+    _meter_run_blocking(monkeypatch, daily=(False, 0, 3600))
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-flash:generateContent", "gemini-2.5-flash", "generateContent"
+        )
+
+    assert error.value.status_code == 429
+    assert error.value.detail == "Gemini daily request limit exceeded"

@@ -165,7 +165,7 @@ class TestGetConversationsPoisonPage:
     @patch('routers.mcp.conversations_db')
     def test_skips_malformed_returns_only_valid(self, mock_db, _mock_redact):
         # First record is valid; second has a category that is NOT in CategoryEnum.
-        mock_db.get_conversations.return_value = [
+        mock_db.get_conversations_without_photos.return_value = [
             _conversation('conv-good', category='technology'),
             _conversation('conv-poison', category='not_a_real_category'),
         ]
@@ -178,7 +178,7 @@ class TestGetConversationsPoisonPage:
     @patch('routers.mcp.redact_conversations_for_list', side_effect=lambda convs: convs)
     @patch('routers.mcp.conversations_db')
     def test_all_valid_returned(self, mock_db, _mock_redact):
-        mock_db.get_conversations.return_value = [
+        mock_db.get_conversations_without_photos.return_value = [
             _conversation('conv-1', category='technology'),
             _conversation('conv-2', category='work'),
         ]

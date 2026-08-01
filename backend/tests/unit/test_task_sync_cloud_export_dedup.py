@@ -19,8 +19,9 @@ def _stubs(store: dict[str, dict[str, Any]], create_calls: list[dict[str, Any]],
     """Stub the database + integration ops so utils.task_sync loads without google.cloud.firestore.
 
     ``store`` maps action-item id to its persisted Firestore document. The stubbed
-    ``get_action_item`` reads from it and ``update_action_item`` writes the export fields back,
-    so a second auto-sync sees ``exported=True`` exactly like a retry against real Firestore.
+    ``claim_action_item_export`` models the real transactional CAS: it flips ``exported``
+    False->True and returns True only for the winner, so a second auto-sync sees
+    ``exported=True`` exactly like a retry against real Firestore.
     """
 
     def get_action_item(_uid: str, item_id: str):
@@ -28,6 +29,18 @@ def _stubs(store: dict[str, dict[str, Any]], create_calls: list[dict[str, Any]],
 
     def update_action_item(_uid: str, item_id: str, updates: dict[str, Any]) -> None:
         store.setdefault(item_id, {}).update(updates)
+
+    def claim_action_item_export(_uid: str, item_id: str, platform: str):
+        doc = store.get(item_id)
+        if doc is None:
+            return None
+        if doc.get('exported'):
+            return False
+        doc.update({'exported': True, 'export_platform': platform})
+        return True
+
+    def release_action_item_export_claim(_uid: str, item_id: str) -> None:
+        store.setdefault(item_id, {}).update({'exported': False, 'export_platform': None})
 
     async def create_task_internal(**kwargs: Any) -> dict[str, Any]:
         create_calls.append(kwargs)
@@ -43,6 +56,8 @@ def _stubs(store: dict[str, dict[str, Any]], create_calls: list[dict[str, Any]],
             'database.action_items',
             get_action_item=get_action_item,
             update_action_item=update_action_item,
+            claim_action_item_export=claim_action_item_export,
+            release_action_item_export_claim=release_action_item_export_claim,
             batch_set_sync_requested=lambda *_a, **_k: None,
         ),
         'utils.notifications': _module(

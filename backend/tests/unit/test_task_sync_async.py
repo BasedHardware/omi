@@ -5,7 +5,7 @@ auto_sync_action_items_batch) are async and run the task-integration sync off th
 read the user's task integration, marked Apple Reminder items pending, and marked the action item
 exported through synchronous Firestore calls (users_db.get_default_task_integration,
 users_db.get_task_integration, action_items_db.batch_set_sync_requested,
-action_items_db.update_action_item), each of which blocks the event loop for the duration of the call.
+action_items_db.claim_action_item_export), each of which blocks the event loop for the duration of the call.
 This test parses the source (no import) and asserts each is routed through an awaited
 run_blocking(db_executor, ...) and never called directly. The await check guards against a dangling
 coroutine (offloaded but not awaited).
@@ -20,7 +20,8 @@ BLOCKING_CALLS = (
     'get_default_task_integration',
     'get_task_integration',
     'batch_set_sync_requested',
-    'update_action_item',
+    'claim_action_item_export',
+    'release_action_item_export_claim',
 )
 
 

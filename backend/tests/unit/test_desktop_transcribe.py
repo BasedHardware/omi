@@ -841,6 +841,7 @@ def _stub_router_deps():
         byte_count / (sample_rate * channels * 2) * 1000
     )
     limiter_stub.read_wav_duration_ms = MagicMock(return_value=1000)
+    limiter_stub.billable_duration_ms = MagicMock(return_value=1000)
     limiter_stub.try_consume_budget = MagicMock(return_value=(True, 0, 7200000))
     limiter_stub.check_budget = MagicMock(return_value=(True, 0, 7200000))
     limiter_stub.record_actual_duration = MagicMock()
@@ -1651,7 +1652,7 @@ class TestDurationBudgetEnforcement:
 
         client, module, saved = _make_chat_client()
         try:
-            with patch.object(module, 'read_wav_duration_ms', return_value=60_000):
+            with patch.object(module, 'billable_duration_ms', return_value=60_000):
                 with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)):
                     resp = client.post(
                         '/v2/voice-message/transcribe',
@@ -1674,7 +1675,7 @@ class TestVoiceMessagesEndpointBudget:
         try:
             with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
                 with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
-                    with patch.object(module, 'read_wav_duration_ms', return_value=60_000):
+                    with patch.object(module, 'billable_duration_ms', return_value=60_000):
                         with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)):
                             resp = client.post(
                                 '/v2/voice-messages',
@@ -1765,7 +1766,7 @@ class TestNoPerSessionCap:
         client, module, saved = _make_chat_client()
         try:
             # WAV reports 300s (5 minutes) — should NOT be rejected
-            with patch.object(module, 'read_wav_duration_ms', return_value=300_000):
+            with patch.object(module, 'billable_duration_ms', return_value=300_000):
                 with patch.object(module, 'try_consume_budget', return_value=(True, 300000, 6900000)):
                     with patch.object(module, 'transcribe_voice_message_segment', return_value=('long msg', 'en')):
                         resp = client.post(
@@ -1868,7 +1869,7 @@ class TestVoiceMessagesBudgetHappyPath:
 
             with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
                 with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
-                    with patch.object(module, 'read_wav_duration_ms', return_value=45_000):
+                    with patch.object(module, 'billable_duration_ms', return_value=45_000):
                         with patch.object(
                             module, 'try_consume_budget', return_value=(True, 45000, 7155000)
                         ) as mock_budget:
@@ -1907,7 +1908,7 @@ class TestVoiceMessagesBudgetHappyPath:
 
             with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
                 with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
-                    with patch.object(module, 'read_wav_duration_ms', return_value=1_000):
+                    with patch.object(module, 'billable_duration_ms', return_value=1_000):
                         with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)):
                             with patch.object(module, 'resolve_voice_message_language', return_value='en'):
                                 with patch.object(
@@ -1938,10 +1939,12 @@ class TestMultipartBudgetAggregation:
 
         client, module, saved = _make_chat_client()
         try:
-            # Simulate 3 files: 1000ms, None (unreadable), 2000ms → budget call with 3000
-            duration_values = iter([1000, None, 2000])
+            # Simulate 3 files. The middle one has no readable duration, so
+            # billable_duration_ms charges a conservative size-derived estimate
+            # instead of returning None — an unreadable file is never free.
+            duration_values = iter([1000, 3, 2000])
 
-            with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
+            with patch.object(module, 'billable_duration_ms', side_effect=lambda p: next(duration_values)):
                 with patch.object(module, 'try_consume_budget', return_value=(True, 3000, 7197000)) as mock_budget:
                     with patch.object(module, 'transcribe_voice_message_segment', return_value=('hello', 'en')):
                         resp = client.post(
@@ -1953,11 +1956,11 @@ class TestMultipartBudgetAggregation:
                             ],
                         )
                         assert resp.status_code == 200
-                        # Budget consumed with sum: 1000 + 2000 = 3000 (None skipped)
+                        # Budget consumed with sum: 1000 + 3 (estimate) + 2000
                         mock_budget.assert_called_once()
                         call_args = mock_budget.call_args[0]
                         assert call_args[0] == 'test-uid'
-                        assert call_args[1] == 3000
+                        assert call_args[1] == 3003
         finally:
             _cleanup_chat_client(saved)
 
