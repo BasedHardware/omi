@@ -18634,17 +18634,12 @@
         "type": "object"
       },
       "SpeakerLabelSuggestion": {
-        "description": "A name the finalization pass proposed but did not apply.\n\nSpeaker naming assigns a person only when a second model fails to refute\nthe identification. Everything short of that is offered here instead, with\nthe line it was inferred from, so the user can accept it rather than having\nthe backend guess on their behalf.",
+        "description": "A name the finalization pass proposed but did not apply.\n\nSpeaker naming assigns a person only when a second model fails to refute\nthe identification. Everything short of that is offered here instead, with\nthe ids of the segments it was inferred from, so the user can accept it\nrather than having the backend guess on their behalf.\n\nThe evidence is referenced, never copied: this model is stored as plain\nFirestore fields on the conversation, outside the encryption boundary that\ncovers ``transcript_segments``, so carrying the verbatim line here would\npublish transcript content an enhanced-protection conversation exists to\nkeep opaque. ``segment_ids`` point into the transcript the client already\nholds, which is what it renders the evidence from.",
         "properties": {
           "confidence": {
             "default": 0.0,
             "title": "Confidence",
             "type": "number"
-          },
-          "evidence_quote": {
-            "default": "",
-            "title": "Evidence Quote",
-            "type": "string"
           },
           "person_name": {
             "title": "Person Name",
@@ -34688,7 +34683,7 @@
     },
     "/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}": {
       "delete": {
-        "description": "Drop the name proposed for a numbered speaker without assigning anyone.\n\nNothing but the suggestion is touched: no Person is created or resolved, no\nsegment changes hands, no voiceprint is enrolled or revoked.\n\n:return: The updated conversation.",
+        "description": "Drop the name proposed for a numbered speaker without assigning anyone.\n\nNothing but the suggestion is touched: no Person is created or resolved, no\nsegment changes hands, no voiceprint is enrolled or revoked. The removal is\ntransactional for the same reason accept's is: a dismiss that wrote back a\nwhole array computed from its own snapshot would resurrect a suggestion a\nconcurrent accept had already settled.\n\n:return: The updated conversation.",
         "operationId": "dismiss_speaker_label_suggestion_v1_conversations__conversation_id__speaker_suggestions__speaker_id__delete",
         "parameters": [
           {
@@ -34787,7 +34782,7 @@
     },
     "/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}/accept": {
       "post": {
-        "description": "Accept the name the finalization pass proposed for a numbered speaker.\n\nThe suggested name resolves to the Person already carrying it or to a new one\ncoined for it, every segment of that speaker is assigned to them, and the\nsuggestion is taken off the conversation.\n\nEnrolment differs from the pass's own: a name the user tapped is not an\ninference, so the voiceprint is tagged `user_tagged` rather than `llm_inferred`\nand carries none of the restrictions an inferred sample does.\n\n:return: The updated conversation.",
+        "description": "Accept the name the finalization pass proposed for a numbered speaker.\n\nThe suggested name resolves to the Person already carrying it or to a new one\ncoined for it, every segment of that speaker is assigned to them, and the\nsuggestion is taken off the conversation.\n\nEnrolment differs from the pass's own: a name the user tapped is not an\ninference, so the voiceprint is tagged `user_tagged` rather than `llm_inferred`\nand carries none of the restrictions an inferred sample does.\n\nThe assignment and the removal of the suggestion are one transaction rather\nthan two writes computed from this request's snapshot. Two accepts landing\ntogether would otherwise each replace the whole segment array and the whole\nsuggestion array, so the later write would undo the earlier speaker and\nresurrect the suggestion it had settled, while both still enrolled a\nvoiceprint against a transcript no longer naming them.\n\n:return: The updated conversation.",
         "operationId": "accept_speaker_label_suggestion_v1_conversations__conversation_id__speaker_suggestions__speaker_id__accept_post",
         "parameters": [
           {

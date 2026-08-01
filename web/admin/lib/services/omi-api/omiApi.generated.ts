@@ -3076,7 +3076,6 @@ export interface SpeakerAnalytics {
 
 export interface SpeakerLabelSuggestion {
   confidence?: number;
-  evidence_quote?: string;
   person_name: string;
   segment_ids?: Array<string>;
   speaker_id: number;

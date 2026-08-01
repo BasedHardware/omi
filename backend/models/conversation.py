@@ -101,13 +101,19 @@ class SpeakerLabelSuggestion(BaseModel):
 
     Speaker naming assigns a person only when a second model fails to refute
     the identification. Everything short of that is offered here instead, with
-    the line it was inferred from, so the user can accept it rather than having
-    the backend guess on their behalf.
+    the ids of the segments it was inferred from, so the user can accept it
+    rather than having the backend guess on their behalf.
+
+    The evidence is referenced, never copied: this model is stored as plain
+    Firestore fields on the conversation, outside the encryption boundary that
+    covers ``transcript_segments``, so carrying the verbatim line here would
+    publish transcript content an enhanced-protection conversation exists to
+    keep opaque. ``segment_ids`` point into the transcript the client already
+    holds, which is what it renders the evidence from.
     """
 
     speaker_id: int
     person_name: str
-    evidence_quote: str = ''
     confidence: float = 0.0
     segment_ids: List[str] = []
 

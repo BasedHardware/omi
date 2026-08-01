@@ -1,3 +1,4 @@
+import atexit
 import os
 import random
 import re
@@ -67,6 +68,7 @@ from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils.async_tasks import create_named_task, drain_tasks
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
@@ -1403,8 +1405,12 @@ def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
 
 SPEAKER_RESOLUTION_SUGGESTIONS_FIELD = 'speaker_label_suggestions'
 
+SPEAKER_RESOLUTION_DRAIN_TIMEOUT_SECONDS = 20.0
+
 _speaker_resolution_loop: Optional[asyncio.AbstractEventLoop] = None
+_speaker_resolution_thread: Optional[threading.Thread] = None
 _speaker_resolution_loop_lock = threading.Lock()
+_speaker_resolution_tasks: Set[Any] = set()
 
 
 def _get_speaker_resolution_loop() -> asyncio.AbstractEventLoop:
@@ -1417,25 +1423,85 @@ def _get_speaker_resolution_loop() -> asyncio.AbstractEventLoop:
     burst of finalized conversations could starve memory extraction, action items and
     vector indexing. One daemon loop thread runs every conversation's pass and costs
     the pools nothing while the coordinator is only awaiting.
+
+    `process_conversation` is synchronous and runs on a pool thread with no ambient
+    loop, so `utils.executors.start_background_task` — whose registry is drained on
+    the application's own loop — cannot be reached from here. The loop is therefore
+    still process-owned, but its work is not: every pass is a tracked task
+    (`utils.async_tasks.create_named_task`) that `drain_speaker_resolution` waits on
+    at process exit, so a shutdown can no longer abandon a pass midway through
+    creating a Person or writing segment assignments.
     """
-    global _speaker_resolution_loop
+    global _speaker_resolution_loop, _speaker_resolution_thread
     with _speaker_resolution_loop_lock:
         loop = _speaker_resolution_loop
         if loop is not None and not loop.is_closed():
             return loop
         loop = asyncio.new_event_loop()
-        threading.Thread(target=loop.run_forever, name='speaker-resolution-loop', daemon=True).start()
+        thread = threading.Thread(target=loop.run_forever, name='speaker-resolution-loop', daemon=True)
+        thread.start()
         _speaker_resolution_loop = loop
+        _speaker_resolution_thread = thread
         return loop
 
 
+def drain_speaker_resolution(timeout: float = SPEAKER_RESOLUTION_DRAIN_TIMEOUT_SECONDS) -> int:
+    """Wait out the in-flight naming passes, then retire the loop thread.
+
+    Registered with `atexit`, the same process-shutdown hook `utils.executors` uses
+    for `shutdown_executors`, and registered after it so it runs first and the pools
+    the passes borrow from are still alive while they finish. Tasks that outlast
+    `timeout` are cancelled rather than left to die with the interpreter. Returns the
+    number that had to be force-cancelled.
+
+    The empty round trip is the barrier, not a courtesy: a pass becomes a tracked task
+    only once the loop reaches its first step, so a conversation scheduled moments
+    before shutdown is still just a queued callback here. `run_coroutine_threadsafe`
+    enqueues thread-safe callbacks in order, so a coroutine that returns immediately
+    cannot complete until every pass queued ahead of it has registered itself.
+    """
+    global _speaker_resolution_loop, _speaker_resolution_thread
+    with _speaker_resolution_loop_lock:
+        loop = _speaker_resolution_loop
+        thread = _speaker_resolution_thread
+        _speaker_resolution_loop = None
+        _speaker_resolution_thread = None
+    if loop is None or loop.is_closed():
+        return 0
+    forced = 0
+    try:
+        asyncio.run_coroutine_threadsafe(asyncio.sleep(0), loop).result(timeout=timeout)
+        pending = list(_speaker_resolution_tasks)
+        if pending:
+            forced = asyncio.run_coroutine_threadsafe(
+                drain_tasks(pending, timeout=timeout, label='speaker_resolution', cancel=False), loop
+            ).result(timeout=timeout + 10.0)
+    except Exception as e:
+        logger.error(f"Speaker resolution drain failed: {e}")
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        if thread is not None:
+            thread.join(timeout=5.0)
+    return forced
+
+
+atexit.register(drain_speaker_resolution)
+
+
 def _speaker_suggestion_payload(suggestions: List[Any]) -> List[Dict[str, Any]]:
-    """Serialize the names that were proposed but not verified, for the client to accept."""
+    """Serialize the names that were proposed but not verified, for the client to accept.
+
+    The evidence quote the pass reasoned from is deliberately not written. These land
+    as plain fields on the conversation document and `_prepare_conversation_for_write`
+    encrypts only `transcript_segments`, so persisting the verbatim line would leave
+    transcript content readable in Firestore for an enhanced-protection conversation.
+    `segment_ids` address the same evidence inside the encrypted transcript, which is
+    what the client renders it from.
+    """
     return [
         {
             'speaker_id': suggestion.speaker_id,
             'person_name': suggestion.person_name,
-            'evidence_quote': suggestion.evidence_quote,
             'confidence': suggestion.confidence,
             'segment_ids': list(suggestion.segment_ids),
         }
@@ -1472,6 +1538,27 @@ async def _run_speaker_resolution(uid: str, conversation: Conversation) -> None:
         logger.error(f"Error persisting speaker label suggestions: {e} {uid} {conversation.id}")
 
 
+async def _tracked_speaker_resolution(uid: str, conversation: Conversation) -> None:
+    """Run one pass as a named, tracked task and own everything it can raise.
+
+    The concurrent `Future` the scheduler hands back is discarded by every caller, so
+    anything raised outside `_run_speaker_resolution`'s own guards would otherwise be
+    swallowed with it. Membership of the tracked set is what makes the pass drainable:
+    `drain_speaker_resolution` waits on exactly these tasks at process exit.
+    """
+    try:
+        await create_named_task(
+            _run_speaker_resolution(uid, conversation),
+            name=f'speaker_resolution:{conversation.id}',
+            task_set=_speaker_resolution_tasks,
+        )
+    except asyncio.CancelledError:
+        logger.warning(f"Speaker resolution cancelled at shutdown: {uid} {conversation.id}")
+        raise
+    except Exception as e:
+        logger.error(f"Speaker resolution task failed: {e} {uid} {conversation.id}")
+
+
 def schedule_speaker_resolution(uid: str, conversation: Conversation) -> Optional[Future]:
     """Start the speaker naming pass for a finalized conversation.
 
@@ -1492,7 +1579,7 @@ def schedule_speaker_resolution(uid: str, conversation: Conversation) -> Optiona
     except Exception as e:
         logger.error(f"Error snapshotting conversation for speaker resolution: {e} {uid} {conversation.id}")
         return None
-    return asyncio.run_coroutine_threadsafe(_run_speaker_resolution(uid, snapshot), _get_speaker_resolution_loop())
+    return asyncio.run_coroutine_threadsafe(_tracked_speaker_resolution(uid, snapshot), _get_speaker_resolution_loop())
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
