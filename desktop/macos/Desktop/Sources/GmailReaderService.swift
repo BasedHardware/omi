@@ -435,10 +435,11 @@ actor GmailReaderService {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    let browserConfigs = BrowserGoogleSession.configsForPython(
-      logPrefix: "GmailReaderService",
-      userInitiated: userInitiated
-    )
+let browserConfigs = GmailSelectionStore.filter(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "GmailReaderService",
+        userInitiated: userInitiated
+      ))
 
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
