@@ -1518,8 +1518,11 @@ mod tests {
             )
             .expect("producing run binding must succeed");
 
-        let skipped =
-            must(store.repair(&surface, &["assistant-turn".into()], &[run.run_id.clone()]));
+        let skipped = must(store.repair(
+            &surface,
+            &["assistant-turn".into()],
+            std::slice::from_ref(&run.run_id),
+        ));
         assert!(skipped.turns.is_empty());
 
         let repaired = must(store.repair(&surface, &["assistant-turn".into()], &[]));
