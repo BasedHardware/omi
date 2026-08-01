@@ -603,15 +603,12 @@ impl Runtime {
         };
         // Cancel every active run bound to this session only after revoking its claims.
         let mut cancelled = 0_u64;
-        self.running.retain(|_request_id, running| {
+        for running in self.running.values() {
             if running.session_id == session_id {
                 let _ = running.cancel.send(true);
                 cancelled += 1;
-                false
-            } else {
-                true
             }
-        });
+        }
         self.sessions.remove(&session_id);
         self.surfaces.remove(&key);
         self.emit(
@@ -2305,6 +2302,78 @@ mod tests {
         assert!(runtime
             .journal
             .pending_tool_claim("invoke-queued-after-cancel")
+            .expect("queued claim lookup must succeed")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn invalidated_session_discards_queued_tool_calls_on_complete_run() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"rx4","workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
+        let _ = receiver.recv().await.expect("profile response must emit");
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
+        let resolved = receiver.recv().await.expect("surface response must emit");
+        let session_id = resolved.fields["sessionId"]
+            .as_str()
+            .expect("session id must be present")
+            .to_owned();
+        let conversation_id = runtime
+            .sessions
+            .get(&session_id)
+            .expect("resolved session must exist")
+            .conversation_id
+            .clone();
+        let run = runtime
+            .journal
+            .admit_run("owner", &session_id, &conversation_id, 1)
+            .expect("run must admit");
+        let (cancel, cancel_receiver) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: session_id.clone(),
+                run_id: run.run_id,
+                attempt_id: run.attempt_id,
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+
+        runtime.handle(parse_line(r#"{"type":"invalidate_session","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("invalidation fixture must parse"));
+        let invalidation = receiver.recv().await.expect("invalidation must emit");
+        assert_eq!(invalidation.kind, "session_invalidated");
+        assert_eq!(invalidation.fields["cancelledRuns"], 1);
+        assert!(*cancel_receiver.borrow());
+        assert!(runtime.running.contains_key("request"));
+
+        let (tool_requests, mut queued_tool_requests) = mpsc::unbounded_channel();
+        tool_requests
+            .send(ToolRequest {
+                request_id: "request".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-queued-after-invalidation".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"after"}"#.into(),
+                },
+            })
+            .expect("queued tool call must send");
+
+        runtime.complete_run("request".into(), &mut queued_tool_requests);
+
+        assert!(receiver.try_recv().is_err());
+        assert!(!runtime.running.contains_key("request"));
+        assert!(runtime
+            .journal
+            .pending_tool_claim("invoke-queued-after-invalidation")
             .expect("queued claim lookup must succeed")
             .is_none());
     }
