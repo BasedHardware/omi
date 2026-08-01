@@ -58,6 +58,8 @@ from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.byok import get_byok_key
+from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
@@ -1536,6 +1538,30 @@ def process_conversation(
         # Return the conversation as-is with no LLM work performed. If it has
         # a status field, mark it processed so the client doesn't show a stuck
         # "processing" state forever.
+        if isinstance(conversation, Conversation):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        report_persistence(False)
+        return cast(Conversation, conversation)
+
+    # Custom-STT conversations are transcribed on the user's own provider, so no
+    # Omi transcription credits were consumed. Their LLM post-processing still
+    # runs on Omi's infrastructure; without a cap that is unbounded Omi spend.
+    # Skip the Omi-paid enrichment unless the request carries an LLM BYOK key
+    # (the user then pays their own LLM bill — the same discriminator
+    # enforce_chat_quota uses). Mirrors the trial-paywall gate: keep the
+    # conversation valid and completed, but do no LLM / Pinecone / app work.
+    if should_skip_custom_stt_postprocessing(
+        uses_custom_stt=getattr(conversation, 'uses_custom_stt', False) is True,
+        has_llm_byok_key=bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic'))),
+    ):
+        logger.info(
+            "custom STT: skipping Omi-paid post-processing for uid=%s conv=%s",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
         if isinstance(conversation, Conversation):
             try:
                 conversation.status = ConversationStatus.completed

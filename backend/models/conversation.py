@@ -169,6 +169,13 @@ class Conversation(BaseModel):
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
+    # True when this conversation was transcribed on a third-party (custom STT)
+    # provider, so no Omi transcription credits were consumed. The durable marker
+    # lets post-processing decide whether Omi-paid LLM work (structure, summaries,
+    # memories, action items) should run at all: a custom-STT user without their
+    # own LLM BYOK key must not rack up unbounded Omi LLM cost.
+    uses_custom_stt: bool = False
+
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False

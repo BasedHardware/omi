@@ -1213,6 +1213,79 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert written.get('suggested_summarization_apps') == ['app-1']
 
 
+def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch):
+    """Regression for #7690: a custom-STT conversation with no LLM BYOK key must
+    not run any Omi-paid LLM post-processing (structure, summaries, memories)."""
+    completed_conversation = Conversation(
+        id='conversation-custom-stt',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+        uses_custom_stt=True,
+    )
+
+    structured_calls = []
+    monkeypatch.setattr(
+        process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
+    )
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
+    monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
+    monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: None)
+
+    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
+
+    # The gate returns the conversation untouched (no LLM work, no persistence).
+    assert result is completed_conversation
+    assert structured_calls == [], 'LLM structuring ran for a custom-STT conversation without an LLM key'
+    assert completed_conversation.status == ConversationStatus.completed
+
+
+def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
+    """A custom-STT user who brings their own LLM key pays their own bill, so
+    Omi-paid enrichment must still run (BYOK escape hatch)."""
+    completed_conversation = Conversation(
+        id='conversation-custom-stt-byok',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+        uses_custom_stt=True,
+    )
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+    input_conversation.uses_custom_stt = True
+
+    structured_calls = []
+    monkeypatch.setattr(
+        process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
+    )
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    # The user carries an OpenAI key — enrichment runs on their bill.
+    monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: True)
+    monkeypatch.setattr(
+        process_conversation, 'get_byok_key', lambda provider: 'sk-test' if provider == 'openai' else None
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    assert structured_calls, 'LLM structuring was skipped despite an LLM BYOK key'
+
+
 def test_dedup_candidates_exclude_own_and_merge_source_items():
     """Regression: on reprocess/merge, the conversation's own previous action
     items (and the merge sources') came back as dedup candidates — the LLM

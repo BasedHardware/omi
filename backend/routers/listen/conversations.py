@@ -226,6 +226,7 @@ class LiveConversationController:
             status=ConversationStatus.in_progress,
             source=source,
             private_cloud_sync_enabled=self.host.private_cloud_sync_enabled,
+            uses_custom_stt=self.host.use_custom_stt,
             call_id=request.call_id if self.host.is_multi_channel else None,
             client_device_id=context.client_device_id,
             client_platform=context.platform,
