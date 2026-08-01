@@ -322,7 +322,7 @@ class ShortcutSettings: ObservableObject {
   @Published var floatingBarNotificationPreviewsEnabled: Bool {
     didSet {
       UserDefaults.standard.set(
-        floatingBarNotificationPreviewsEnabled, forKey: "shortcut_floatingBarNotificationPreviewsEnabled")
+        floatingBarNotificationPreviewsEnabled, forKey: .floatingBarNotificationPreviewsEnabled)
     }
   }
 
@@ -596,7 +596,7 @@ class ShortcutSettings: ObservableObject {
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
     self.floatingBarNotificationPreviewsEnabled =
-      UserDefaults.standard.object(forKey: "shortcut_floatingBarNotificationPreviewsEnabled") as? Bool ?? true
+      UserDefaults.standard.object(forKey: .floatingBarNotificationPreviewsEnabled) as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
     self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
