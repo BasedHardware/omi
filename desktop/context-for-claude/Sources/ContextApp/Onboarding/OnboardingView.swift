@@ -161,6 +161,9 @@ struct OnboardingView: View {
     /// The by-hand grant the choreography is currently offering, and how far along it is.
     @State private var handGrant: Capability?
     @State private var guiding = false
+    /// The capability the overlay is currently pointing at on the gate's behalf. See `syncSpotlight`.
+    @State private var spotlit: Capability?
+    @State private var spotlightTask: Task<Void, Never>?
 
     /// Whatever the sign-in attempt threw, shown as-is. A preamble in front of it would be a
     /// sentence that says nothing the error does not.
@@ -450,7 +453,18 @@ struct OnboardingView: View {
         )
         // The watch is unbounded on purpose, so it needs an owner that ends it. Leaving the card is
         // that owner — and the card can only be left once the gate has its answers.
-        .onDisappear { setupTask?.cancel() }
+        .onDisappear {
+            setupTask?.cancel()
+            // The overlay is a window over another application. It outlives this view unless
+            // something takes it down, and a spotlight left pointing at System Settings after
+            // onboarding has moved on is worse than one that never appeared.
+            spotlightTask?.cancel()
+            spotlit = nil
+            PermissionOverlay.hide()
+        }
+        // **The gate's wait is what the spotlight is for.** Every other route to the overlay is a
+        // special case; this is the one the three promptable capabilities take.
+        .onChange(of: gate.phase, initial: true) { _, phase in syncSpotlight(to: phase) }
         .onReceive(permissionTick) { _ in refreshPermissions() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
@@ -562,6 +576,47 @@ struct OnboardingView: View {
         PermissionOverlay.hide()
         handGrant = nil
         advanceIfAnswered()
+    }
+
+    /// **Points at the row for whichever capability the gate is standing in System Settings for.**
+    ///
+    /// The gate's own `waitingInSettings` phase is what drives this, and that is the fix: the
+    /// spotlight used to be reachable only from `beginHandGrant` — which is offered for Accessibility
+    /// alone — and from the finale. The three capabilities the gate actually walks reached System
+    /// Settings through `PermissionGate.waitInSettings`, which opens the pane and polls and never
+    /// asked for an overlay at all. `PermissionGate.spotlightSubject` is the predicate; this is only
+    /// the wiring, and it is deliberately the *only* wiring, so there is one answer to "should
+    /// something be pointing right now" rather than one per call site.
+    private func syncSpotlight(to phase: PermissionGate.Phase) {
+        let subject = PermissionGate.spotlightSubject(of: phase)
+        guard subject != spotlit else { return }
+        let previous = spotlit
+        spotlit = subject
+        spotlightTask?.cancel()
+        spotlightTask = nil
+
+        guard let subject else {
+            guard previous != nil else { return }
+            // A grant that landed gets its confirmation witnessed on the overlay — the user sees the
+            // thing they just did register. Anything else takes it straight down.
+            if case .confirming = phase {
+                PermissionOverlay.confirmGranted()
+            } else {
+                PermissionOverlay.hide()
+            }
+            return
+        }
+
+        spotlightTask = Task { @MainActor in
+            // The pane has to be up before there is anything to find. Pointing before it exists is
+            // how an overlay ends up ringing the last pane's rows — the same reason `beginHandGrant`
+            // waits, and the same duration.
+            try? await Task.sleep(for: .milliseconds(1_200))
+            guard !Task.isCancelled, spotlit == subject else { return }
+            PermissionOverlay.show(
+                for: subject,
+                caption: "Switch on \(PermissionChoreography.appDisplayName).")
+        }
     }
 
     // MARK: - 5. Claude connector

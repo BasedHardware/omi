@@ -339,6 +339,40 @@ final class PermissionGateTests: XCTestCase {
         await elsewhere.value
     }
 
+    /// **The defect, closed at the other end.**
+    ///
+    /// `SpotlightIsActuallyRequestedTests` asserts the predicate — that `waitingInSettings(.screen)`
+    /// names screen recording. That is only half a guard: a predicate that is right about a phase
+    /// nothing ever reaches is the same as no predicate at all. So this drives the **real gate**
+    /// through the **real screen-recording episode** and asserts it genuinely lands in a phase the
+    /// predicate names, with the pane really opened.
+    ///
+    /// Which is exactly the shape of what shipped. `waitingInSettings(.screen)` was reached on every
+    /// single run, the pane was opened every time, the card said so — and nothing asked for an
+    /// overlay, because no call site existed to ask.
+    @MainActor
+    func testTheScreenRecordingEpisodeReachesAPhaseThatAsksForTheSpotlight() async {
+        let asker = RecordingAsker(grants: [])
+        // macOS has spent the prompt, which is the ordinary state for Screen Recording: it is the one
+        // grant that can only be given in System Settings.
+        asker.promptSpent = [.screen]
+        let gate = instantGate(asker, required: [.screen])
+
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.phase == .waitingInSettings(.screen) },
+            "the gate never reached the Settings watch for screen recording")
+
+        XCTAssertEqual(
+            PermissionGate.spotlightSubject(of: gate.phase), .screen,
+            "the gate is standing in the Screen Recording pane for the user and nothing is being "
+                + "asked to point at the row — this is the defect, exactly as it shipped")
+        XCTAssertEqual(asker.settingsOpened, [.screen], "and the pane really was opened")
+
+        gate.postpone(.screen)
+        await run.value
+    }
+
     /// **D2, the headline bug.** Nothing granted, nothing answered — the card may not be left.
     @MainActor
     func testTheStepDoesNotCompleteWhileAnyRequiredCapabilityIsUnanswered() async {
@@ -530,19 +564,23 @@ final class CapabilityGroupTests: XCTestCase {
 
 /// A stand-in accessibility tree, so the locator runs with no System Settings, no grant, and no
 /// window server.
-private struct FakeElement: SettingsElement {
+/// Internal rather than file-private: `SettingsSpotlightTests` builds scenes out of these panes, and
+/// a second copy of the tree shapes measured off a real macOS is exactly the kind of duplicate that
+/// drifts from the thing it was copied from.
+struct FakeElement: SettingsElement {
     var elementRole: String?
     var elementIdentifier: String?
     var elementValue: String?
     var elementFrame: CGRect?
+    var elementDescription: String?
     var children: [FakeElement] = []
 
     var elementChildren: [any SettingsElement] { children }
 }
 
-/// The two pane shapes measured on macOS 26.5.2 (build 25F84), reproduced from the real trees dumped
+/// The pane shapes measured on macOS 26.5.2 (build 25F84), reproduced from the real trees dumped
 /// off this machine — different structures, one pair of identifiers.
-private enum PaneFixture {
+enum PaneFixture {
     static let appName = "Context for Claude"
 
     static func title(_ name: String, y: CGFloat) -> FakeElement {
@@ -625,6 +663,59 @@ private enum PaneFixture {
                     elementRole: kAXScrollAreaRole,
                     elementFrame: CGRect(x: 583, y: 86, width: 500, height: 1_900),
                     children: groups)
+            ])
+    }
+
+    /// **The Screen Recording pane as a first run actually meets it**: other applications listed, and
+    /// ours sitting *below* the list as a loose row that has to be dragged up into it.
+    ///
+    /// This is macOS 26's own affordance and it is the shape the whole two-region overlay exists for.
+    /// The stray row is a sibling of the section rather than a child of it, which is precisely what
+    /// makes `SettingsRowLocator` report `notListed` with a `strayRow` instead of a hit — the walk
+    /// only records a stray label when it is outside every section.
+    /// The window the *window server* reports for this pane, which is the only authority on the
+    /// window and is deliberately shorter than the scroll content the accessibility tree describes.
+    static let dragPaneWindow = CGRect(x: 360, y: 34, width: 723, height: 948)
+    /// The list rows live in — the drop target.
+    static let dragPaneList = CGRect(x: 603, y: 145, width: 460, height: 300)
+    /// Our row, loose below the list.
+    static let dragPaneStrayRow = CGRect(x: 611, y: 520, width: 420, height: 32)
+
+    static func dragPane(listed: [String] = ["Claude", "Cursor", "Granola"]) -> FakeElement {
+        var rows: [FakeElement] = []
+        var y = dragPaneList.minY
+        for app in listed {
+            rows.append(
+                FakeElement(
+                    elementRole: kAXRowRole,
+                    elementFrame: CGRect(x: dragPaneList.minX, y: y, width: dragPaneList.width, height: 40),
+                    children: [
+                        FakeElement(
+                            elementRole: kAXCellRole,
+                            elementFrame: CGRect(
+                                x: dragPaneList.minX, y: y, width: dragPaneList.width, height: 40),
+                            children: [title(app, y: y + 8), toggle(app, y: y + 8, on: true)])
+                    ]))
+            y += 40
+        }
+        return FakeElement(
+            elementRole: kAXWindowRole,
+            elementFrame: dragPaneWindow,
+            children: [
+                FakeElement(
+                    elementRole: kAXScrollAreaRole,
+                    elementFrame: CGRect(x: 583, y: 86, width: 500, height: 860),
+                    children: [
+                        FakeElement(
+                            elementRole: kAXOutlineRole, elementFrame: dragPaneList, children: rows),
+                        // The loose row: a label of ours, outside every section. That is exactly what
+                        // makes the locator answer `notListed` with a `strayRow` rather than a hit.
+                        FakeElement(
+                            elementRole: kAXStaticTextRole,
+                            elementIdentifier: "\(appName)_Title",
+                            elementValue: appName,
+                            elementFrame: dragPaneStrayRow),
+                    ])
             ])
     }
 }

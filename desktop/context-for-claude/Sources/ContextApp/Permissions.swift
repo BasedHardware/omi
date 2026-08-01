@@ -777,6 +777,31 @@ final class PermissionGate: ObservableObject {
         }
     }
 
+    /// **Which capability the spotlight over System Settings is for, if any.**
+    ///
+    /// This is the wiring whose absence was the whole of the "no spotlight was drawn" defect, and it
+    /// is a pure function of the phase for exactly that reason. The overlay was reachable from two
+    /// places — the by-hand offer, which is only ever Accessibility, and the finale, which only runs
+    /// at `step == .done` — and from neither of them during `waitingInSettings`, which is the phase
+    /// the card is in for **microphone, system audio and screen recording**. So the card said "System
+    /// Settings is open on the right row", System Settings *was* open on the right row, and nothing
+    /// pointed at it. Nothing failed; nothing was ever asked.
+    ///
+    /// Only `waitingInSettings` points, and each exclusion is a case where pointing would be wrong
+    /// rather than merely absent:
+    ///
+    /// - `prompting` — a TCC dialog is up. The thing to answer is the dialog, and System Settings may
+    ///   not even be open.
+    /// - `explaining` — the lead-in, deliberately before the pane is opened. There is nothing there.
+    /// - `confirming` — the grant landed. `PermissionOverlay.confirmGranted` owns that beat; a fresh
+    ///   `show` would replace the confirmation with an arrow at a switch already flipped.
+    nonisolated static func spotlightSubject(of phase: Phase) -> Capability? {
+        switch phase {
+        case .waitingInSettings(let capability): return capability
+        case .idle, .explaining, .prompting, .confirming, .blocked, .complete: return nil
+        }
+    }
+
     /// What the card says right now.
     var caption: String? {
         switch phase {

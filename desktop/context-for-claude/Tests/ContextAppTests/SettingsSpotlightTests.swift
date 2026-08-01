@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 
 @testable import ContextApp
@@ -619,5 +620,386 @@ final class SpotlightWindowTests: XCTestCase {
         XCTAssertEqual(window.frame, display.appKitFrame, "the frame is the display's, verbatim")
         // This app records the screen. Its own guidance chrome must not land in the user's history.
         XCTAssertEqual(window.sharingType, SpotlightWindow.isCapturable ? .readOnly : .none)
+    }
+}
+
+// MARK: - The spotlight was requested and nothing was drawn
+//
+//  The defect this section exists for was not a rendering fault, a coordinate fault or an
+//  accessibility fault. On a cold first run the card said "System Settings is open on the right row",
+//  System Settings *was* open on the right row, and no boundary, no glow and no arrow appeared —
+//  because **nothing ever asked for one**. `PermissionOverlay.show` had two call sites: the by-hand
+//  offer, which is only ever Accessibility, and the finale, which only runs at `step == .done`. The
+//  gate's own `waitingInSettings` phase — the one microphone, system audio and screen recording all
+//  pass through — asked for nothing.
+//
+//  Two claims, and both have to hold or the overlay is decorative:
+//
+//  1. **Something asks.** `PermissionGate.spotlightSubject` is the single predicate, so "should
+//     anything be pointing right now" has one answer rather than one per call site.
+//  2. **What comes back draws.** Guidance can be requested and still resolve to a scene that puts
+//     nothing on screen, and from the call site the two are indistinguishable — the window is created
+//     either way and the user simply sees nothing.
+
+final class SpotlightIsActuallyRequestedTests: XCTestCase {
+
+    /// Claim 1, for **every** capability rather than the one that was reported. Screen recording is
+    /// how the defect was found; microphone and system audio were equally unpointed at.
+    func testEveryCapabilityTheGateWaitsOnGetsASpotlight() {
+        for capability in Capability.allCases {
+            XCTAssertEqual(
+                PermissionGate.spotlightSubject(of: .waitingInSettings(capability)), capability,
+                "the gate stands in System Settings for \(capability.rawValue) and nothing points at "
+                    + "the row — which is the whole of the defect, on that capability")
+        }
+    }
+
+    /// And the phases that must **not** point, because pointing there would be wrong rather than
+    /// merely missing: a TCC dialog is up, the pane has not been opened yet, or the grant has landed
+    /// and the confirmation beat owns the overlay.
+    func testNoOtherPhaseClaimsToBePointing() {
+        let quiet: [PermissionGate.Phase] = [
+            .idle, .explaining(.screen), .prompting(.screen), .confirming(.screen), .blocked,
+            .complete,
+        ]
+        for phase in quiet {
+            XCTAssertNil(
+                PermissionGate.spotlightSubject(of: phase),
+                "\(phase) must not put an overlay over System Settings")
+        }
+    }
+
+    /// **Claim 2, end to end, for the capability the defect was reported on.**
+    ///
+    /// A real pane shape, through the real decision, into the real scene builder — and the assertion
+    /// is that what comes out *draws*: a resolved control, both regions, and an arrow between them.
+    /// A scene with `focus == nil` and no regions is what "the overlay appeared and was empty" looks
+    /// like from the model, and it is the state this asserts cannot be reached from a pane we can
+    /// read.
+    func testScreenRecordingGuidanceProducesADrawableSceneAndNotAnEmptyOne() {
+        let display = DisplayGeometry(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982), backingScaleFactor: 2)
+        let space = ScreenSpace(displays: [display])
+
+        let guidance = PermissionChoreography.guidance(
+            for: .screen, appName: PaneFixture.appName, windows: [PaneFixture.dragPane()],
+            windowFrame: PaneFixture.dragPaneWindow, space: space)
+
+        guard case .pointing(let target) = guidance else {
+            return XCTFail(
+                "a readable Screen Recording pane must produce something to point at, got \(guidance)")
+        }
+        guard let scene = SettingsSpotlightScene.make(
+            target: target,
+            caption: PermissionChoreography.caption(
+                for: target.gesture, appName: PaneFixture.appName, isOn: target.isOn,
+                listed: target.isListed),
+            display: display, space: space)
+        else { return XCTFail("the target is on this display and must produce a scene") }
+
+        XCTAssertTrue(
+            scene.isDrawable,
+            "guidance was requested for screen recording and the scene draws nothing — this is the "
+                + "defect: the overlay window is created, and the user sees an empty screen")
+        XCTAssertNotNil(scene.focus, "no resolved target means no arrow may be drawn at all")
+        XCTAssertNotNil(scene.destination, "the list is the drop target and has to be drawn")
+        XCTAssertNotNil(scene.source, "the row being dragged has to be drawn")
+        XCTAssertNotNil(scene.arrow)
+        XCTAssertEqual(scene.caption, "Drag \(PaneFixture.appName) up into the list")
+    }
+
+    /// The honest degrade, asserted in the same breath — because the cheapest way to make the test
+    /// above pass forever is to draw a confident box around a guess.
+    func testAPaneThatCannotBeReadStillRefusesToPointAtAnything() {
+        let display = DisplayGeometry(appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982))
+        let space = ScreenSpace(displays: [display])
+        let guidance = PermissionChoreography.guidance(
+            for: .screen, appName: PaneFixture.appName, windows: [], windowFrame: .zero, space: space)
+        guard case .instruction = guidance else {
+            return XCTFail("nothing was readable, so nothing may be aimed: got \(guidance)")
+        }
+    }
+}
+
+// MARK: - Two regions, not one window
+//
+//  "The dotted lines should be on the particular section." The overlay used to draw **one** dashed
+//  rectangle around the whole settings area, which on a pane holding two lists and a loose row below
+//  them says "somewhere in here" — a gesture at a window rather than an instruction. What is dashed
+//  now is the destination and the source: the two particular rects the gesture is between.
+
+final class SpotlightRegionTests: XCTestCase {
+    private let display = DisplayGeometry(
+        appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982), backingScaleFactor: 2)
+    private var space: ScreenSpace { ScreenSpace(displays: [display]) }
+
+    private func dragScene() -> SettingsSpotlightScene? {
+        let guidance = PermissionChoreography.guidance(
+            for: .screen, appName: PaneFixture.appName, windows: [PaneFixture.dragPane()],
+            windowFrame: PaneFixture.dragPaneWindow, space: space)
+        guard case .pointing(let target) = guidance else { return nil }
+        return SettingsSpotlightScene.make(
+            target: target, caption: "Drag it up", display: display, space: space)
+    }
+
+    /// The destination is the **list**, and the source is the **row** — each drawn round the element
+    /// it belongs to, and both strictly inside the window rather than being it.
+    func testTheRegionsAreTheListAndTheRowRatherThanTheWholePane() throws {
+        let scene = try XCTUnwrap(dragScene())
+        let destination = try XCTUnwrap(scene.destination)
+        let source = try XCTUnwrap(scene.source)
+
+        XCTAssertEqual(destination, PaneFixture.dragPaneList, "the drop target is the list itself")
+        XCTAssertEqual(source, PaneFixture.dragPaneStrayRow, "the source is the loose row")
+        XCTAssertFalse(
+            destination.contains(source),
+            "the row is below the list, not inside it — a source drawn inside its own destination "
+                + "describes no movement at all")
+        // The complaint, stated as arithmetic: neither dashed region may be the size of the pane.
+        let window = PaneFixture.dragPaneWindow
+        for (name, region) in [("destination", destination), ("source", source)] {
+            XCTAssertLessThan(
+                region.width * region.height, window.width * window.height * 0.5,
+                "the \(name) covers half the window — that is the coarse boundary this replaced")
+        }
+    }
+
+    /// The arrow runs **from the row up into the list**, and its tip lands inside the destination:
+    /// a drag arrow that stops short of its target is describing a different gesture.
+    func testTheArrowRunsFromTheRowUpIntoTheList() throws {
+        let scene = try XCTUnwrap(dragScene())
+        let arrow = try XCTUnwrap(scene.arrow)
+        let destination = try XCTUnwrap(scene.destination)
+        let source = try XCTUnwrap(scene.source)
+
+        XCTAssertTrue(source.insetBy(dx: -2, dy: -2).contains(arrow.tail), "it starts on the row")
+        XCTAssertTrue(destination.contains(arrow.tip), "and ends inside the list")
+        XCTAssertLessThan(arrow.tip.y, arrow.tail.y, "up the pane, which is the half of the "
+            + "instruction the user cannot infer from the pane itself")
+        XCTAssertEqual(arrow.approach, .fromBelow)
+    }
+
+    /// A listed row is a click, not a drag — and the dashes go round **that row**, not round the
+    /// pane. Same complaint, the other gesture.
+    func testAClickOnAListedRowDashesTheRowAndNotThePane() throws {
+        let row = CGRect(x: 611, y: 289, width: 442, height: 40)
+        let target = SettingsSpotlightTarget(
+            row: row, toggle: CGRect(x: 1_017, y: 301, width: 36, height: 16), isOn: false,
+            focus: CGRect(x: 1_007, y: 296, width: 56, height: 30),
+            area: CGRect(x: 603, y: 145, width: 460, height: 500),
+            list: CGRect(x: 603, y: 145, width: 460, height: 500), isListed: true, gesture: .click,
+            window: PaneFixture.dragPaneWindow)
+        let scene = try XCTUnwrap(
+            SettingsSpotlightScene.make(target: target, caption: "x", display: display, space: space))
+
+        XCTAssertEqual(scene.source, row, "the dashes belong on the row being pointed at")
+        XCTAssertNil(scene.destination, "a click moves nothing, so there is no drop target")
+        XCTAssertNotNil(scene.focus, "and the switch still glows")
+    }
+
+    /// The degrade keeps its shape: when only the window is known, the settings area is dashed and
+    /// **no** region claims to be a row. `isDrawable` is true — a boundary round a measured window is
+    /// something — but nothing is aimed.
+    func testTheFramingTierDashesTheWindowAndNamesNoRow() throws {
+        let framed = SettingsWindowFrame(
+            window: CGRect(x: 360, y: 34, width: 723, height: 948), instruction: "Switch it on.")
+        let scene = try XCTUnwrap(
+            SettingsSpotlightScene.make(framing: framed, display: display, space: space))
+        XCTAssertNil(scene.destination)
+        XCTAssertNil(scene.source)
+        XCTAssertNil(scene.focus)
+        XCTAssertFalse(scene.isDrawable, "nothing was resolved, so nothing is being pointed at")
+        XCTAssertNotNil(scene.area)
+    }
+
+    /// The sentence goes beside the whole gesture. It may sit on neither end of a drag: a plate over
+    /// the row hides the thing being dragged, and a plate over the list hides where it goes.
+    func testTheDragCaptionSitsBesideTheGestureRatherThanOnEitherEndOfIt() throws {
+        let scene = try XCTUnwrap(dragScene())
+        guard case .rightOf(let anchor) = scene.captionPlacement else {
+            return XCTFail("with a display this wide the sentence belongs beside the pane")
+        }
+        let destination = try XCTUnwrap(scene.destination)
+        XCTAssertGreaterThan(anchor.x, destination.maxX, "clear of the list it is talking about")
+    }
+}
+
+// MARK: - The hand
+
+final class DragHandPlanTests: XCTestCase {
+    private let arrow = ArrowPlan.dragging(
+        from: CGRect(x: 611, y: 520, width: 420, height: 32),
+        to: CGRect(x: 603, y: 145, width: 460, height: 300))
+
+    private func plan(_ phase: CGFloat) -> DragHandPlan { .at(phase, along: arrow) }
+
+    /// The gesture, in order: on the row with an open hand, closed on it, travelling, arrived, let
+    /// go. Asserted as a sequence rather than at one instant, because "it animates" is not the claim
+    /// — "it performs the drag" is.
+    func testItReachesGraspsTravelsAndReleasesInThatOrder() {
+        XCTAssertEqual(plan(0.02).grip, 0, "open, over the row")
+        XCTAssertEqual(plan(0.02).position, arrow.tail)
+
+        XCTAssertGreaterThan(plan(0.21).grip, 0, "closing")
+        XCTAssertLessThan(plan(0.21).grip, 1)
+
+        XCTAssertEqual(plan(DragHandPlan.grasp).grip, 1, "closed before it moves")
+        XCTAssertEqual(plan(DragHandPlan.grasp).position, arrow.tail, "and it has not moved yet")
+
+        XCTAssertEqual(plan(DragHandPlan.arrive).position, arrow.tip, "arrived inside the list")
+        XCTAssertEqual(plan(DragHandPlan.arrive).grip, 1, "still holding when it gets there")
+
+        XCTAssertEqual(plan(0.95).grip, 0, "let go")
+    }
+
+    /// **It never travels with an open hand.** A hand crossing the pane without gripping is a cursor
+    /// moving, which is the one reading this animation cannot afford — the user's failure mode is
+    /// clicking the row instead of dragging it.
+    func testTheGripIsClosedForEveryInstantTheRowIsCarried() {
+        for step in 0...200 {
+            let phase = CGFloat(step) / 200
+            let hand = plan(phase)
+            guard hand.isCarrying else { continue }
+            XCTAssertEqual(
+                hand.grip, 1, accuracy: 0.001,
+                "the hand is carrying the row at phase \(phase) with grip \(hand.grip)")
+        }
+    }
+
+    /// The hand travels monotonically along the arrow and stays on it — it and the arrow can never
+    /// disagree about the path, because there is only one path.
+    func testItTravelsForwardsAlongTheArrowAndNeverBacktracks() {
+        var previous = plan(0).position.y
+        for step in 0...200 {
+            let y = plan(CGFloat(step) / 200).position.y
+            XCTAssertLessThanOrEqual(y, previous + 0.001, "the hand went back down the pane")
+            previous = y
+        }
+        XCTAssertEqual(plan(1).position, arrow.tip)
+    }
+
+    /// The loop has no seam: the hand is invisible at both ends, so it never snaps from the list back
+    /// to the row in view. A visible jump every two seconds reads as a rendering fault, which is
+    /// worse than no animation.
+    func testTheLoopHasNoVisibleSeam() {
+        XCTAssertEqual(plan(0).opacity, 0, accuracy: 0.001)
+        XCTAssertEqual(plan(1).opacity, 0, accuracy: 0.001)
+        XCTAssertGreaterThan(plan(0.5).opacity, 0.9, "and it is solid while it does the work")
+    }
+
+    /// Reduce Motion gets the one frame that carries the whole instruction: closed, holding the row,
+    /// inside the list. Asserted on the geometry, because freezing at phase 0 would compile, satisfy
+    /// "no animation", and leave a hand resting on a row — which is the problem, not the answer.
+    func testTheReduceMotionStillFrameShowsTheRowArrivedInsideTheList() {
+        let still = plan(CGFloat(SettingsSpotlightCanvas.stillHandPhase))
+        XCTAssertEqual(still.grip, 1)
+        XCTAssertTrue(still.isCarrying, "a still hand holding nothing shows no gesture")
+        XCTAssertGreaterThan(still.opacity, 0.9)
+        XCTAssertTrue(
+            CGRect(x: 603, y: 145, width: 460, height: 300).contains(still.position),
+            "the frozen frame has to show the row where it has to end up")
+    }
+}
+
+// MARK: - The one colour it draws
+
+/// **INV-UI-1 on the overlay, which is the surface with the most to lose by getting it wrong.**
+///
+/// This canvas used to be white-only, and the comment saying so was itself the guard. It draws a hue
+/// now — the two dashed regions and the arrow — because the pane it lands on contains System
+/// Settings' *own* dashed row, and two dashed outlines in the same colour a few inches apart is a
+/// worse instruction than either alone.
+///
+/// A hue on another application's window is exactly where the accent defect would be worst: it is
+/// not our window, the user cannot restyle it, and it is drawn during the first ninety seconds of
+/// the product. So it is asserted on the **rendered pixel**, through the shared `BrandColour`
+/// predicate — never a second copy of the rule — and separately asserted to be the guarded token
+/// rather than a blue somebody typed in here.
+final class SpotlightBrandTests: XCTestCase {
+    private let display = DisplayGeometry(
+        appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982), backingScaleFactor: 2)
+
+    @MainActor
+    private func drawn(over ground: Color) throws -> NSColor {
+        let space = ScreenSpace(displays: [display])
+        let guidance = PermissionChoreography.guidance(
+            for: .screen, appName: PaneFixture.appName, windows: [PaneFixture.dragPane()],
+            windowFrame: PaneFixture.dragPaneWindow, space: space)
+        guard case .pointing(let target) = guidance else {
+            throw XCTSkip("the drag scene must resolve for this to mean anything")
+        }
+        let scene = try XCTUnwrap(
+            SettingsSpotlightScene.make(
+                target: target, caption: "Drag it up", display: display, space: space))
+
+        let renderer = ImageRenderer(
+            content: ZStack {
+                ground
+                SettingsSpotlightCanvas(scene: scene, phase: 0.4, handPhase: 0.4)
+            }
+            .frame(width: 1_512, height: 982))
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.nsImage, "the spotlight did not render")
+        return try XCTUnwrap(Self.mostSaturatedPixel(of: image), "the overlay drew no colour at all")
+    }
+
+    /// The colour it puts on screen is on brand — over a light pane **and** over a dark one, because
+    /// which of the two System Settings is showing is a setting this app does not control.
+    @MainActor
+    func testTheSpotlightDrawsAnOnBrandColourOverEitherAppearance() throws {
+        for (name, ground) in [("a light pane", Color.white), ("a dark pane", Color.black)] {
+            assertReadsOnBrand(try drawn(over: ground), "the spotlight's dashed region over \(name)")
+        }
+    }
+
+    /// And it is **the guarded token**, not a blue chosen here. `Ink.accent` is pinned to
+    /// `systemBlue` and asserted by `InkAccentTests` never to be the machine's own accent — which on
+    /// a Mac set to Purple would put purple over System Settings' window. A literal in this file
+    /// would sit outside that guard entirely.
+    ///
+    /// Compared by hue within 8°, not by equality: the stroke is composited over a blurred dark
+    /// ribbon and SwiftUI blends in linear light, which moves the measured hue a little and is not a
+    /// number to pretend away. 8° still separates `systemBlue` from every other hue in the product —
+    /// `systemTeal` is 20° off it and `systemIndigo` 28°.
+    @MainActor
+    func testTheColourIsTheGuardedAccentAndNotALiteral() throws {
+        let pixel = try XCTUnwrap(BrandColour.read(try drawn(over: .white)))
+        let token = try XCTUnwrap(BrandColour.read(NSColor(Ink.accent)))
+        XCTAssertEqual(
+            pixel.hue, token.hue, accuracy: 8,
+            "the overlay renders at hue \(pixel.hue) where Ink.accent is at \(token.hue) — so the "
+                + "guard over the token says nothing about what lands on System Settings' window")
+    }
+
+    /// The negative control. A guard that never rejects anything is documentation wearing a test's
+    /// clothes — and purple is the specific colour INV-UI-1 exists for.
+    func testTheGuardWouldRejectPurple() {
+        assertReadsOffBrand(.systemPurple, "the accent macOS ships as Purple")
+    }
+
+    private static func mostSaturatedPixel(of image: NSImage) -> NSColor? {
+        guard
+            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+            let bitmap = NSBitmapImageRep(cgImage: cgImage).converting(
+                to: .sRGB, renderingIntent: .default)
+        else { return nil }
+        var best: NSColor?
+        var bestChroma = 0.0
+        // Every fourth pixel: this is a 1512 × 982 frame and the dashes are hundreds of pixels long,
+        // so a full sweep costs seconds and finds the same colour.
+        for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+                guard let pixel = bitmap.colorAt(x: x, y: y), pixel.alphaComponent > 0.99 else { continue }
+                let r = Double(pixel.redComponent)
+                let g = Double(pixel.greenComponent)
+                let b = Double(pixel.blueComponent)
+                let chroma = max(r, max(g, b)) - min(r, min(g, b))
+                if chroma > bestChroma {
+                    bestChroma = chroma
+                    best = pixel
+                }
+            }
+        }
+        return best
     }
 }

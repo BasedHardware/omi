@@ -587,7 +587,10 @@ enum PermissionChoreography {
     static func caption(for gesture: SettingsGesture, appName: String, isOn: Bool, listed: Bool) -> String {
         switch gesture {
         case .drag:
-            return "Drag \(appName) into the list"
+            // "up into the list" and not "into the list": the direction is the half of this
+            // instruction a user cannot infer from the pane, and naming it is what the overlay's
+            // arrow and hand are both saying anyway.
+            return "Drag \(appName) up into the list"
         case .click where !listed:
             return "Click + and choose \(appName)"
         case .click:

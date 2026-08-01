@@ -504,6 +504,102 @@ struct ArrowPlan: Equatable, Sendable {
     }
 }
 
+// MARK: - The hand
+
+/// A hand performing the drag: where it is, how closed it is, and whether it is carrying anything —
+/// as a pure function of a 0…1 phase.
+///
+/// **This is the instruction, not an ornament.** A dashed box around a row and a second one around a
+/// list says the two are related; an arrow between them says *this goes there*; only something that
+/// closes on the row, moves it, and lets go says **drag**. macOS 26's own affordance is a gesture the
+/// user has never performed in a Privacy pane before, and the failure mode is not "they cannot find
+/// the row" — it is "they click the row and nothing happens". Demonstrating the gesture is the only
+/// form of guidance that answers that.
+///
+/// Pure and separate from the drawing for the same reason `ArrowPlan` is: the claims worth making
+/// about it — that it starts on the row, that it is closed for the whole of the carry, that it
+/// arrives inside the list, that the loop has no visible seam — are claims about *this*, and can be
+/// asserted at every phase without rendering anything.
+struct DragHandPlan: Equatable, Sendable {
+    /// The grab point: where the fingers meet. On the source row at the start, inside the
+    /// destination at the end, on the arrow's own curve in between — so the hand and the arrow can
+    /// never disagree about the path.
+    var position: CGPoint
+    /// 0 open, 1 closed. Interpolated rather than switched, because the closing *is* the "grab".
+    var grip: CGFloat
+    /// Fades in before the reach and out after the release, so the loop restarts unseen. A hand that
+    /// snapped back to the row every 2 seconds would read as a glitch.
+    var opacity: CGFloat
+    /// Whether the row travels with the hand at this instant.
+    var isCarrying: Bool
+
+    // The beats, as fractions of one loop. Named because the numbers are a rhythm and a rhythm read
+    // as four bare literals inside an interpolation is a rhythm nobody can adjust.
+
+    /// Fades in over the row, hand open.
+    static let reach: CGFloat = 0.14
+    /// Closed on it.
+    static let grasp: CGFloat = 0.28
+    /// Arrived inside the list, still holding.
+    static let arrive: CGFloat = 0.72
+    /// Let go.
+    static let release: CGFloat = 0.86
+
+    /// The plan at `phase`, travelling `arrow`.
+    static func at(_ phase: CGFloat, along arrow: ArrowPlan) -> DragHandPlan {
+        let t = phase.clampedToUnit
+
+        let travel: CGFloat
+        if t <= grasp {
+            travel = 0
+        } else if t >= arrive {
+            travel = 1
+        } else {
+            // Eased, because a hand that moves at a constant speed reads as a machine. Ease-in-out
+            // is what a person's arm does.
+            travel = ((t - grasp) / (arrive - grasp)).easedInOut
+        }
+
+        let grip: CGFloat
+        if t <= reach {
+            grip = 0
+        } else if t < grasp {
+            grip = ((t - reach) / (grasp - reach)).clampedToUnit
+        } else if t <= arrive {
+            grip = 1
+        } else if t < release {
+            grip = 1 - ((t - arrive) / (release - arrive)).clampedToUnit
+        } else {
+            grip = 0
+        }
+
+        // In over the first half of the reach, out over what is left after the release. Both ends
+        // are dead time in the gesture, which is exactly what makes them the right place to fade.
+        let fadeIn = (t / (reach * 0.6)).clampedToUnit
+        let fadeOut = ((1 - t) / max(1 - release, 0.001)).clampedToUnit
+        return DragHandPlan(
+            position: arrow.point(at: travel),
+            grip: grip,
+            opacity: min(fadeIn, fadeOut),
+            // The carry ends at `arrive`, not at `release`. `release` is when the *hand* finishes
+            // opening; the row is let go the moment it starts, because that is what opening a hand
+            // does. Carrying it through the release beat draws a row still stuck to a hand that is
+            // visibly no longer holding it — which `testTheGripIsClosedForEveryInstantTheRowIsCarried`
+            // caught, and which is the difference between "it dropped it in the list" and "it took it
+            // with it".
+            isCarrying: t >= grasp && t <= arrive)
+    }
+}
+
+extension CGFloat {
+    fileprivate var clampedToUnit: CGFloat { Swift.min(Swift.max(self, 0), 1) }
+    /// Smoothstep. The one easing curve in this file, spelled once.
+    fileprivate var easedInOut: CGFloat {
+        let t = clampedToUnit
+        return t * t * (3 - 2 * t)
+    }
+}
+
 // MARK: - The scene
 
 /// Everything the overlay draws, in the overlay window's own coordinates: y **down**, origin at the
@@ -520,13 +616,23 @@ struct SettingsSpotlightScene: Equatable, Sendable {
     /// the words-alone tier consults it: every other tier is anchored to something it measured in
     /// System Settings, and this is the one that has nothing to anchor to.
     var visibleBounds: CGRect?
-    /// The dotted boundary. `nil` when nothing at all could be measured, which never happens in
-    /// practice — a scene exists because something was.
+    /// The whole settings area. **Not drawn as a boundary any more** — it is the scrim's hole and the
+    /// rect the arrow is laid clear of, and it is still what the `framing` tier outlines when the
+    /// pane cannot be read at all. `nil` when nothing could be measured.
+    ///
+    /// It used to be the one dotted boundary, and that was the defect: a window-sized dashed box
+    /// says "somewhere in here", which on a pane with two lists and a row below them is not an
+    /// instruction. What is dashed now is `destination` and `source` — the two particular rects the
+    /// gesture is actually between.
     var area: CGRect?
+    /// **Where the thing has to end up**: the list inside the pane. Dashed and tinted, so it reads
+    /// as a drop target rather than as a decoration. `nil` for a gesture that moves nothing.
+    var destination: CGRect?
     /// The glowing control. `nil` when we know where the window is and nothing about its contents:
-    /// the boundary is still drawn, and nothing claims to know which control to press.
+    /// the region is still drawn, and nothing claims to know which control to press.
     var focus: CGRect?
-    /// What the user is dragging, when they are dragging.
+    /// **The thing being acted on**: the row to drag, or the row whose switch is to be flipped.
+    /// Dashed, and never tinted — only the destination is a target.
     var source: CGRect?
     /// `nil` for the same reason as `focus`. **An arrow is only ever drawn when there is a measured
     /// control at the end of it** — that invariant is this type's whole job.
@@ -563,24 +669,42 @@ struct SettingsSpotlightScene: Equatable, Sendable {
         }
         let bounds = CGRect(origin: .zero, size: displayGlobal.size)
         let focus = local(target.focus)
-        // The boundary is clipped to the display as well as to the window: a settings area that
-        // runs past the bottom of the screen would otherwise be outlined across the dock.
-        let area = target.area.map(local).map { $0.intersection(bounds) }.flatMap { $0.isNull ? nil : $0 }
+        /// Everything measured is clipped to the display as well as to the window: a settings area
+        /// that runs past the bottom of the screen would otherwise be outlined across the dock.
+        func onDisplay(_ rect: CGRect?) -> CGRect? {
+            rect.map(local).map { $0.intersection(bounds) }.flatMap { $0.isNull ? nil : $0 }
+        }
+        let area = onDisplay(target.area)
+        let list = onDisplay(target.list)
 
         let arrow: ArrowPlan
         var source: CGRect?
+        var destination: CGRect?
         switch target.gesture {
+        case .click where target.isListed:
+            // The row is right there. **The dashes go round the row, not round the pane** — the
+            // particular thing, which is the whole difference between showing somebody where to look
+            // and gesturing at a window.
+            source = onDisplay(target.row)
+            arrow = .pointing(at: focus, keepClearOf: area, within: bounds)
         case .click:
+            // Not listed, and the pane offers a **+**. The list is still where the app has to end up,
+            // so it is still the drop target — the glow on **+** is what says how to get it there.
+            destination = list
             arrow = .pointing(at: focus, keepClearOf: area, within: bounds)
         case .drag(let from):
             let localSource = local(from)
             source = localSource
-            arrow = .dragging(from: localSource, to: focus)
+            // `clamped` already made `focus` the list for a drag; `list` is the same rect and is what
+            // this is *about*, so it is what the arrow aims into.
+            destination = list ?? focus
+            arrow = .dragging(from: localSource, to: destination ?? focus)
         }
 
         return SettingsSpotlightScene(
             bounds: bounds,
             area: area,
+            destination: destination,
             focus: focus,
             source: source,
             arrow: arrow,
@@ -588,6 +712,15 @@ struct SettingsSpotlightScene: Equatable, Sendable {
             exclusions: exclusions.map(local),
             backingScaleFactor: display.backingScaleFactor)
     }
+
+    /// **Something was resolved and something will therefore be drawn.**
+    ///
+    /// The predicate the defect this file's regression test is named for turns on: guidance can be
+    /// *requested* for a capability and come back as a scene that puts nothing on screen, and from
+    /// the call site those two are indistinguishable — the overlay window is created either way and
+    /// the user simply sees nothing. A scene that claims to be pointing has to have a control at the
+    /// end of the arrow and at least one region to draw round.
+    var isDrawable: Bool { focus != nil && (destination != nil || source != nil || area != nil) }
 
     /// The scene for a window we can see and cannot read into: a boundary and a sentence, no glow
     /// and no arrow.
@@ -637,6 +770,18 @@ struct SettingsSpotlightScene: Equatable, Sendable {
     }
 
     var captionPlacement: CaptionPlacement {
+        // A drag has two ends and a hand travelling between them, and the sentence may sit on
+        // neither. Beside the whole gesture is the only place left — which is also where the
+        // reference puts it, for the same reason.
+        if let arrow, let region = destination, source != nil, !confirmed {
+            let gap: CGFloat = 30
+            let middle = arrow.point(at: 0.5).y
+            if bounds.maxX - region.maxX > 340 { return .rightOf(CGPoint(x: region.maxX + gap, y: middle)) }
+            if region.minX - bounds.minX > 340 { return .leftOf(CGPoint(x: region.minX - gap, y: middle)) }
+            // No room either side of the pane: above the list, which is the one band the gesture
+            // never crosses.
+            return .above(CGPoint(x: region.midX, y: region.minY))
+        }
         if let arrow, !confirmed { return .above(arrow.tail) }
         guard let area else {
             // **Words alone: nothing was located, so nothing may be pointed at.** The plate is
@@ -675,30 +820,60 @@ struct SettingsSpotlightScene: Equatable, Sendable {
 /// System Settings in front of them, which is the only way to iterate on something that otherwise
 /// only exists for four seconds in the middle of somebody's first run.
 ///
-/// **Never coloured.** Every stroke here is white over a dark halo. The window it lands on belongs
-/// to System Settings, whose background is light or dark depending on a setting we do not control
-/// and cannot read reliably, so a single colour would be invisible half the time — hence the halo
-/// under every white line rather than a colour chosen to contrast with a guess. The accent is
-/// deliberately not used: it is whatever the user picked in Appearance, and this app never draws
-/// purple.
+/// **Coloured in one place only, and never with the machine's accent.** The two dashed regions and
+/// the arrow between them are `Ink.accent` — a fixed `systemBlue`, guarded by `InkAccentTests`,
+/// never `NSColor.controlAccentColor`, which on a machine set to Purple would put purple over
+/// another application's window (`INV-UI-1`). Everything else is still white.
+///
+/// The colour is not decoration: it is what separates *our* dashed rectangles from System Settings'
+/// own dashed row, which sits inside the same pane and is also dashed. Two dashed boxes in the same
+/// colour a foot apart, one theirs and one ours, is a worse instruction than either alone.
+///
+/// The dark ribbon under every stroke stays, and is why a hue is affordable at all. The window this
+/// lands on belongs to System Settings, whose background is light or dark depending on a setting we
+/// do not control and cannot read reliably; a continuous dark band under the dashes gives the blue
+/// the same ground either way.
 struct SettingsSpotlightCanvas: View {
     var scene: SettingsSpotlightScene
     /// 0…1, wrapping. Drives the marching dashes, the glow's breath and the token that runs along
     /// the arrow. Frozen by the caller under Reduce Motion.
     var phase: Double
+    /// 0…1, wrapping. The hand's own clock.
+    ///
+    /// Separate from `phase` for one reason: under Reduce Motion the two want to be frozen at
+    /// *different* instants. The dashes and the token are still at the end of their travel
+    /// (`stillPhase`); a hand frozen there has already let go and faded out, which is a still frame
+    /// showing no gesture at all. See `stillHandPhase`.
+    var handPhase: Double
+
+    init(scene: SettingsSpotlightScene, phase: Double, handPhase: Double? = nil) {
+        self.scene = scene
+        self.phase = phase
+        self.handPhase = handPhase ?? phase
+    }
 
     /// The phase a still frame is shown at: dashes at rest and the token arrived at the tip, which
     /// is the frame the motion existed to arrive at.
     static let stillPhase: Double = 0.999
 
+    /// The phase the **hand** is frozen at under Reduce Motion: arrived in the list, still closed on
+    /// the row it carried there.
+    ///
+    /// `DragHandPlan.arrive`, and not `stillPhase`, because the two motions end in different places.
+    /// This is the single frame that carries the whole instruction — a closed hand and a row, inside
+    /// the destination — which is what "collapses to a static, still-legible state" has to mean for a
+    /// gesture. Frozen anywhere after `release` it is a hand holding nothing, and frozen at 0 it is a
+    /// hand resting on a row, which is the *problem* rather than the answer.
+    static let stillHandPhase: Double = Double(DragHandPlan.arrive)
+
     var body: some View {
         Canvas(rendersAsynchronously: false) { context, size in
             let bounds = CGRect(origin: .zero, size: size)
             drawScrim(in: &context, bounds: bounds)
-            drawBoundary(in: &context)
-            drawSource(in: &context)
+            drawRegions(in: &context)
             drawFocusGlow(in: &context)
             drawArrow(in: &context)
+            drawDrag(in: &context)
             drawCaption(in: &context, bounds: bounds)
         }
         .allowsHitTesting(false)
@@ -718,83 +893,118 @@ struct SettingsSpotlightCanvas: View {
     private static let holeInset: CGFloat = 4
     private static let boundaryInset: CGFloat = 11
 
-    /// A wash over everything except the settings area, the thing being dragged and our own windows.
+    /// The dashed stroke. ~2 pt, 6 on / 4 off — fine enough to sit *inside* a pane without reading as
+    /// a border the pane grew, which a heavy dash does.
+    private static let dashWidth: CGFloat = 2
+    private static let dash: [CGFloat] = [6, 4]
+    /// One dash plus one gap: the distance the pattern has to march to land back on itself, so a
+    /// wrapping phase produces a seamless loop instead of a jump.
+    private static let dashPeriod: CGFloat = 10
+
+    /// A wash over everything except the regions the gesture is between and our own windows.
     private func drawScrim(in context: inout GraphicsContext, bounds: CGRect) {
         // Nothing measured means nothing to spotlight, and dimming a whole display to say so would
         // be an overlay shouting about its own failure.
-        guard scene.area != nil else { return }
+        let openings = holes()
+        guard !openings.isEmpty else { return }
         var wash = Path(bounds)
-        for hole in holes() {
-            wash.addPath(
+        for hole in openings {
+            // **Subtracted, not added with an even-odd fill.** Even-odd counts windings, so a hole
+            // that overlaps another hole is a hole that fills itself back in: the settings area and
+            // the destination are routinely the *same* rect — any pane with one list — and the first
+            // cut of this dimmed the very list it had just cut out, which the render harness showed
+            // immediately and no assertion would have.
+            wash = wash.subtracting(
                 Path(
                     roundedRect: hole.insetBy(dx: -Self.holeInset, dy: -Self.holeInset),
                     cornerRadius: 10))
         }
-        context.fill(wash, with: .color(.black.opacity(0.34)), style: FillStyle(eoFill: true))
+        context.fill(wash, with: .color(.black.opacity(0.34)))
     }
 
+    /// What the scrim leaves undimmed.
+    ///
+    /// The **whole settings area**, not just the two regions — the user has to be able to read the
+    /// rest of the pane to know they are in the right place, and a pane dimmed everywhere but two
+    /// rectangles reads as broken rendering. The regions are picked out by their dashes, which is
+    /// what dashes are for.
     private func holes() -> [CGRect] {
         var holes: [CGRect] = []
         if let area = scene.area { holes.append(area) }
+        if let destination = scene.destination { holes.append(destination) }
         if let source = scene.source { holes.append(source) }
         holes.append(contentsOf: scene.exclusions)
         return holes
     }
 
-    /// The white dotted boundary around the whole settings area.
+    /// **The two dashed regions.**
     ///
-    /// The dashes march toward the target rather than sitting still, which is what makes an outline
-    /// read as "this region" instead of as a decoration somebody left on the screen.
-    private func drawBoundary(in context: inout GraphicsContext) {
-        guard let area = scene.area else { return }
-        let line = ScreenSpace.snapped(3, to: scene.backingScaleFactor)
-        let path = Path(
-            roundedRect: area.insetBy(dx: -Self.boundaryInset, dy: -Self.boundaryInset),
-            cornerRadius: 14)
-        let period: CGFloat = 16  // one dash plus one gap
+    /// A rounded rectangle round the destination with a tint inside it, and a second one round the
+    /// source. The tint is the only thing that distinguishes them and it is doing real work: a drop
+    /// target has to look like somewhere a thing can be *put*, and an outline alone looks like
+    /// something already selected.
+    ///
+    /// When nothing is being moved — the `framing` tier, where all we know is where the window is —
+    /// the settings area is dashed instead, and the honest degrade holds: still a rect somebody
+    /// measured, never a guess at a row.
+    private func drawRegions(in context: inout GraphicsContext) {
+        if scene.destination == nil, scene.source == nil, let area = scene.area {
+            return drawRegion(in: &context, rect: area, cornerRadius: 14, filled: false, inset: Self.boundaryInset)
+        }
+        if let destination = scene.destination {
+            drawRegion(in: &context, rect: destination, cornerRadius: 12, filled: true, inset: 6)
+        }
+        if let source = scene.source {
+            drawRegion(in: &context, rect: source, cornerRadius: 8, filled: false, inset: 5)
+        }
+    }
+
+    /// One dashed region: dark ribbon, bloom, tint, dashes.
+    ///
+    /// The dashes march rather than sitting still, which is what makes an outline read as "this
+    /// region" instead of as a decoration somebody left on the screen. `cornerRadius` is the caller's
+    /// because it has to match the element being surrounded — a 14 pt radius round a 32 pt row is a
+    /// lozenge, and reads as a shape of ours rather than as an outline of theirs.
+    private func drawRegion(
+        in context: inout GraphicsContext, rect: CGRect, cornerRadius: CGFloat, filled: Bool,
+        inset: CGFloat
+    ) {
+        let line = ScreenSpace.snapped(Self.dashWidth, to: scene.backingScaleFactor)
+        let outer = rect.insetBy(dx: -inset, dy: -inset)
+        let path = Path(roundedRect: outer, cornerRadius: cornerRadius)
         // Solid once the grant lands: the dashes were saying "look here", and the looking is done.
         let style =
             scene.confirmed
             ? StrokeStyle(lineWidth: line, lineCap: .round)
             : StrokeStyle(
-                lineWidth: line, lineCap: .round, dash: [9, 7], dashPhase: -CGFloat(phase) * period)
+                lineWidth: line, lineCap: .round, dash: Self.dash,
+                dashPhase: -CGFloat(phase) * Self.dashPeriod)
 
         // A dark ribbon, laid **continuously** under the dashes rather than dash-for-dash.
         //
-        // This is what makes a white boundary white. System Settings' window is light or dark
-        // depending on a setting we cannot read, and a white line on a light window disappears
-        // however wide you make it. Haloing each dash individually does not fix it either — the halo
-        // is wider than a 9 pt dash, so the two merge and the boundary reads as a row of grey blobs,
-        // which is exactly how the first cut of this looked. A continuous dark band gives every dash
-        // the same dark background, whatever is underneath.
+        // This is what makes a thin blue line visible on a light pane. Haloing each dash individually
+        // does not work — the halo is wider than a 6 pt dash, so the two merge and the outline reads
+        // as a row of grey blobs. A continuous dark band gives every dash the same ground, whatever
+        // is underneath it.
         var ribbon = context
-        ribbon.addFilter(.blur(radius: 5))
+        ribbon.addFilter(.blur(radius: 4))
         ribbon.stroke(
-            path, with: .color(.black.opacity(0.5)),
-            style: StrokeStyle(lineWidth: line + 13, lineCap: .round))
+            path, with: .color(.black.opacity(0.42)),
+            style: StrokeStyle(lineWidth: line + 10, lineCap: .round))
 
-        // A soft white bloom over it, so the region has a presence at the edge of vision. White,
-        // never a hue.
-        var bloom = context
-        bloom.addFilter(.blur(radius: 8))
-        bloom.stroke(path, with: .color(.white.opacity(0.4)), style: StrokeStyle(lineWidth: line + 7))
+        if filled {
+            // The drop target. Faint on purpose — the rows underneath have to stay readable, and a
+            // wash strong enough to be noticed on its own is a wash that hides the list it marks.
+            context.fill(path, with: .color(Ink.accent.opacity(0.13)))
+        }
 
-        context.stroke(path, with: .color(.white), style: style)
-    }
-
-    /// The thing being dragged, outlined so "what" is as clear as "where".
-    private func drawSource(in context: inout GraphicsContext) {
-        guard let source = scene.source else { return }
-        // Outside the scrim's hole, for the same reason the boundary is: on the dimming, where white
-        // is legible.
-        let path = Path(
-            roundedRect: source.insetBy(dx: -Self.boundaryInset + 2, dy: -Self.boundaryInset + 2),
-            cornerRadius: 10)
+        // The blue's own bloom, so the region has a presence at the edge of vision.
         var bloom = context
         bloom.addFilter(.blur(radius: 7))
-        bloom.stroke(path, with: .color(.white.opacity(0.4)), style: StrokeStyle(lineWidth: 9))
-        context.stroke(path, with: .color(.black.opacity(0.55)), style: StrokeStyle(lineWidth: 5))
-        context.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 2.5))
+        bloom.stroke(
+            path, with: .color(Ink.accent.opacity(0.55)), style: StrokeStyle(lineWidth: line + 5))
+
+        context.stroke(path, with: .color(Ink.accent), style: style)
     }
 
     /// The glow around the one control that has to be acted on.
@@ -807,6 +1017,10 @@ struct SettingsSpotlightCanvas: View {
     /// glow alone leaves the user guessing at the edge of what they are meant to hit.
     private func drawFocusGlow(in context: inout GraphicsContext) {
         guard let focus = scene.focus else { return }
+        // A drag's focus *is* the list, which the dashed drop target already surrounds. Ringing it a
+        // second time draws two different highlights round one rect and says there are two things to
+        // look at.
+        guard focus != scene.destination else { return }
         let breath = scene.confirmed ? 1 : 0.5 + 0.5 * sin(phase * 2 * .pi)
         let ring = Path(roundedRect: focus.insetBy(dx: -8, dy: -8), cornerRadius: 11)
 
@@ -870,20 +1084,23 @@ struct SettingsSpotlightCanvas: View {
         let shaft = arrow.path
 
         context.stroke(
-            shaft, with: .color(.black.opacity(0.5)),
+            shaft, with: .color(.black.opacity(0.45)),
             style: StrokeStyle(lineWidth: 8, lineCap: .round))
         context.stroke(
-            shaft, with: .color(.white.opacity(0.95)),
+            shaft, with: .color(Ink.accent),
             style: StrokeStyle(lineWidth: 4, lineCap: .round))
 
-        // The head is stroked dark first so the white fill keeps a rim on a light window; a stroke
-        // rather than a second larger fill, which would lengthen the tip and move where it points.
+        // The head is stroked dark first so the fill keeps a rim on a light window; a stroke rather
+        // than a second larger fill, which would lengthen the tip and move where it points.
         let head = headPath(at: arrow.tip, heading: arrow.heading(at: 1))
         context.stroke(
-            head, with: .color(.black.opacity(0.5)),
+            head, with: .color(.black.opacity(0.45)),
             style: StrokeStyle(lineWidth: 4, lineJoin: .round))
-        context.fill(head, with: .color(.white))
+        context.fill(head, with: .color(Ink.accent))
 
+        // The travelling token is the *click* gesture's motion. A drag has the hand instead, and two
+        // things moving along one curve at two speeds is a race rather than an instruction.
+        guard scene.source == nil || scene.destination == nil else { return }
         drawToken(in: &context, arrow: arrow)
     }
 
@@ -899,6 +1116,101 @@ struct SettingsSpotlightCanvas: View {
         bloom.addFilter(.blur(radius: 9))
         bloom.fill(Path(ellipseIn: dot.insetBy(dx: -5, dy: -5)), with: .color(.white.opacity(0.6 * opacity)))
         context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.95 * opacity)))
+    }
+
+    // MARK: The gesture
+
+    /// **The hand performing the drag**, with the row travelling under it.
+    ///
+    /// Drawn, not an SF Symbol and certainly not anyone's asset: it has to close, and a glyph cannot.
+    /// Two passes — a dark silhouette then the white hand over it — so the shape keeps a rim on a
+    /// pane whose lightness is not ours to know, and so the fingers overlapping the palm never show a
+    /// seam between them.
+    private func drawDrag(in context: inout GraphicsContext) {
+        guard !scene.confirmed, let arrow = scene.arrow, let source = scene.source,
+            scene.destination != nil
+        else { return }
+        let hand = DragHandPlan.at(CGFloat(handPhase), along: arrow)
+        guard hand.opacity > 0.01 else { return }
+
+        drawCarriedRow(in: &context, hand: hand, source: source)
+        drawHand(in: &context, hand: hand)
+    }
+
+    /// The row, in the hand's grip. Without it the hand is a cursor wandering across the pane; with
+    /// it the gesture is unmistakable, because moving the thing is what a drag *is*.
+    private func drawCarriedRow(
+        in context: inout GraphicsContext, hand: DragHandPlan, source: CGRect
+    ) {
+        guard hand.isCarrying else { return }
+        let carried = CGRect(
+            x: hand.position.x - source.width / 2, y: hand.position.y - source.height / 2,
+            width: source.width, height: source.height)
+        let path = Path(roundedRect: carried, cornerRadius: 7)
+
+        var shadow = context
+        shadow.addFilter(.blur(radius: 10))
+        shadow.fill(
+            Path(roundedRect: carried.offsetBy(dx: 0, dy: 5), cornerRadius: 7),
+            with: .color(.black.opacity(0.34 * hand.opacity)))
+        context.fill(path, with: .color(Ink.accent.opacity(0.24 * hand.opacity)))
+        context.stroke(
+            path, with: .color(Ink.accent.opacity(hand.opacity)),
+            style: StrokeStyle(lineWidth: 2, dash: Self.dash))
+    }
+
+    private func drawHand(in context: inout GraphicsContext, hand: DragHandPlan) {
+        let palm = CGRect(x: -13, y: 3, width: 27, height: 26)
+        let segments = Self.fingerSegments(grip: hand.grip)
+
+        func pass(_ shading: GraphicsContext.Shading, widen: CGFloat, opacity: Double) {
+            var pass = context
+            pass.opacity = opacity
+            pass.translateBy(x: hand.position.x, y: hand.position.y)
+            pass.fill(
+                Path(roundedRect: palm.insetBy(dx: -widen / 2, dy: -widen / 2), cornerRadius: 12 + widen / 2),
+                with: shading)
+            for segment in segments {
+                var line = Path()
+                line.move(to: segment.from)
+                line.addLine(to: segment.to)
+                pass.stroke(
+                    line, with: shading,
+                    style: StrokeStyle(lineWidth: segment.width + widen, lineCap: .round))
+            }
+        }
+
+        // Silhouette first, whole hand at once. Drawing each finger's rim as it is laid down would
+        // put a dark line across the palm wherever a finger crosses it.
+        pass(.color(.black.opacity(0.5)), widen: 5, opacity: Double(hand.opacity))
+        pass(.color(.white), widen: 0, opacity: Double(hand.opacity))
+    }
+
+    /// The four fingers and the thumb, as capsules. Each shortens toward the palm as the grip closes,
+    /// which is what a hand closing looks like from the front; the thumb folds across instead.
+    ///
+    /// Local coordinates, origin at the **grab point** — where the fingertips meet when closed — so
+    /// the plan's `position` can be a point on the arrow's own curve and the hand hangs off it.
+    private static func fingerSegments(grip: CGFloat) -> [(from: CGPoint, to: CGPoint, width: CGFloat)] {
+        // x, knuckle y, open length, closed length, width
+        let fingers: [(CGFloat, CGFloat, CGFloat, CGFloat, CGFloat)] = [
+            (-8.5, 11, 23, 6, 8),
+            (0.5, 10, 27, 7, 8.5),
+            (9, 11, 23, 6, 8),
+            (16, 14, 16, 4, 7),
+        ]
+        var segments = fingers.map { finger -> (from: CGPoint, to: CGPoint, width: CGFloat) in
+            let (x, knuckle, open, closed, width) = finger
+            let length = open + (closed - open) * grip
+            return (CGPoint(x: x, y: knuckle), CGPoint(x: x, y: knuckle - length), width)
+        }
+        // The thumb swings in rather than retracting: open it sticks out to the side, closed it lies
+        // across the front of the fist.
+        let tip = CGPoint(
+            x: -22 + 9 * grip,
+            y: 13 + 4 * grip)
+        segments.append((CGPoint(x: -10, y: 22), tip, 8.5))
+        return segments
     }
 
     private func headPath(at tip: CGPoint, heading: CGFloat) -> Path {
@@ -950,7 +1262,7 @@ struct SettingsSpotlightCanvas: View {
         // Never over the thing it is describing. A plate covering the row it says to drag is the
         // instruction hiding its own subject, and the drag tail sits *on* that row by construction.
         var plate = CGRect(origin: origin, size: size)
-        for obstacle in [scene.source, scene.focus].compactMap({ $0 }) {
+        for obstacle in [scene.source, scene.destination, scene.focus].compactMap({ $0 }) {
             guard plate.intersects(obstacle.insetBy(dx: -10, dy: -10)) else { continue }
             let above = obstacle.minY - size.height - 22
             let below = obstacle.maxY + 22
@@ -969,11 +1281,6 @@ struct SettingsSpotlightCanvas: View {
                 width: measured.width, height: measured.height))
     }
 
-    private func haloed(_ style: StrokeStyle, by extra: CGFloat) -> StrokeStyle {
-        StrokeStyle(
-            lineWidth: style.lineWidth + extra, lineCap: style.lineCap, dash: style.dash,
-            dashPhase: style.dashPhase)
-    }
 }
 
 /// The canvas with a clock attached. Split so the drawing above stays a pure function of `phase`
@@ -985,9 +1292,12 @@ struct SettingsSpotlightView: View {
 
     var body: some View {
         if InkReduceMotion.isEnabled {
-            // Reduce Motion gets the still frame the motion was heading for: the token at the tip,
-            // the dashes at rest. The instruction is unchanged; only the travelling is gone.
-            SettingsSpotlightCanvas(scene: scene, phase: SettingsSpotlightCanvas.stillPhase)
+            // Reduce Motion gets the still frame each motion was heading for: the token at the tip,
+            // the dashes at rest, and the hand arrived in the list still holding the row. The
+            // instruction is unchanged; only the travelling is gone.
+            SettingsSpotlightCanvas(
+                scene: scene, phase: SettingsSpotlightCanvas.stillPhase,
+                handPhase: SettingsSpotlightCanvas.stillHandPhase)
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
                 SettingsSpotlightCanvas(

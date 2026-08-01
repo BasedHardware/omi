@@ -272,11 +272,83 @@ final class OnboardingWindow {
     /// centred where geometric centre reads as low. Sized to the *window*, which is the card plus
     /// the margin its shadow needs; the card itself still lands where it always did.
     private static func centredFrame(on screen: NSScreen) -> NSRect {
-        let visible = screen.visibleFrame
-        let size = windowSize
-        let x = visible.midX - size.width / 2
-        let y = visible.midY - size.height / 2 + visible.height * 0.05
+        placement(of: windowSize, in: screen.visibleFrame)
+    }
+
+    /// **Where a card of any size goes inside any usable area, always wholly on screen.**
+    ///
+    /// Pure, and separated from `NSScreen`, because the failure it prevents is invisible on the
+    /// machine it is written on and obvious on somebody else's. The optical-centre nudge is
+    /// unconditional arithmetic — `visible.midY - height / 2 + visible.height * 0.05` — and it is
+    /// only *safe* while the card is comfortably shorter than the display. It was: at 520 pt the card
+    /// needed 702 pt of usable height. Then the card grew to 640 to stop the permissions copy
+    /// truncating, which took the requirement to 836 pt — past what a 13-inch display with a Dock
+    /// actually has — and the card started hanging off the bottom edge, taking the "I'll do this
+    /// later" button with it. That button is the *only* escape from an unanswered permission, so
+    /// clipping it strands the run.
+    ///
+    /// The clamp is last and applies to both axes, so the nudge is a preference that yields rather
+    /// than an offset that wins. When the card is genuinely taller than the usable area there is no
+    /// right answer left, and it is pinned to the top — losing the foot of a card is survivable,
+    /// losing its head means the user cannot tell what they are looking at.
+    ///
+    /// `OnboardingWindowPlacementTests` sweeps every display this app could plausibly open on, at
+    /// every card height, which is the only way the arithmetic above gets exercised at all.
+    nonisolated static func placement(of size: NSSize, in visible: NSRect) -> NSRect {
+        /// Clamps one axis. `whenTooBig` is the origin to keep when the card is larger than the area
+        /// and the two bounds cross — the edge whose content matters most, which is not the same edge
+        /// on both axes: the **top** vertically (a card missing its headline cannot be identified)
+        /// and the **left** horizontally (that is where every line of it starts).
+        func clamp(_ value: CGFloat, low: CGFloat, high: CGFloat, whenTooBig: CGFloat) -> CGFloat {
+            guard high >= low else { return whenTooBig }
+            return min(max(value, low), high)
+        }
+        let x = clamp(
+            visible.midX - size.width / 2,
+            low: visible.minX, high: visible.maxX - size.width, whenTooBig: visible.minX)
+        let y = clamp(
+            visible.midY - size.height / 2 + visible.height * 0.05,
+            low: visible.minY, high: visible.maxY - size.height,
+            whenTooBig: visible.maxY - size.height)
         return NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
+    }
+
+    /// **A frame that has ended up off screen, put back.** Returns `frame` untouched when it is
+    /// already wholly inside `visible`.
+    ///
+    /// Placing the card once, at creation, is not enough, and assuming it is was the other half of
+    /// the clipped-card defect. Three things move a card that was placed correctly:
+    ///
+    /// - the window is `isMovableByWindowBackground`, so a drag anywhere on the glass moves it, and
+    ///   a borderless window is **not** constrained by AppKit the way a titled one is — there is
+    ///   nothing to stop it being dragged half off the bottom and nothing to bring it back;
+    /// - `visibleFrame` changes underneath it — the Dock shown, hidden, resized or moved, the menu
+    ///   bar auto-hiding, a display added or removed — all while the card is faded out mid-yield;
+    /// - the card's own height changed in this app's lifetime (520 → 640), which shrank the slack
+    ///   every one of the above eats into.
+    ///
+    /// So it is re-checked on every return from a yield, which is the instant before the user looks
+    /// at it again. Only a card that is genuinely outside is moved: one the user dragged somewhere
+    /// they wanted it stays where they put it.
+    nonisolated static func reclaimed(_ frame: NSRect, into visible: NSRect) -> NSRect {
+        visible.contains(frame) ? frame : placement(of: frame.size, in: visible)
+    }
+
+    /// `reclaimed`, against whichever screen the card is on — or the pointer's, when it is so far off
+    /// screen that AppKit no longer associates it with one.
+    private static func reclaimOnScreen(_ window: NSWindow) {
+        let pointer = NSEvent.mouseLocation
+        let screen =
+            window.screen
+            ?? NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+        let reclaimed = reclaimed(window.frame, into: screen.visibleFrame)
+        guard reclaimed != window.frame else { return }
+        ContextLog.info(
+            "onboarding card was off the usable area at \(window.frame); moved to \(reclaimed)",
+            "onboarding")
+        window.setFrame(reclaimed, display: false)
     }
 
     /// Gets out of the way while the user is dealing with something else on screen — the browser
@@ -330,6 +402,11 @@ final class OnboardingWindow {
             // show of an already-ordered-out window starts from zero instead of flashing at full
             // opacity for a frame.
             if !window.isVisible { window.alphaValue = 0 }
+            // Before it is looked at again. A yield is exactly when the usable area is most likely to
+            // have changed under the card — the user has been in another application, resizing the
+            // Dock, plugging in a display, answering a dialog — and a card that comes back with its
+            // escape button off the bottom edge is the defect this guards.
+            reclaimOnScreen(window)
             // `orderFrontRegardless`, not `makeKeyAndOrderFront` + activate: coming back should not
             // yank focus off whatever the user just finished doing.
             window.orderFrontRegardless()
