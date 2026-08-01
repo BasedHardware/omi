@@ -55,6 +55,8 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  case tasksCategoryOrder = "TasksCategoryOrder"
+  case tasksSortOrderMigrated = "TasksSortOrderMigrated"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -76,6 +78,10 @@ struct ScopedDefaultsKey {
 
   static func restoreLegacyConversationItemsCompleted(ownerID: String) -> Self {
     Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
+  }
+
+  static func tasksSortOrderMigrated(ownerID: String) -> Self {
+    Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }
 }
 

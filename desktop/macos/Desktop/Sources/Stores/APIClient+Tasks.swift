@@ -124,15 +124,20 @@ extension APIClient {
     }
     struct BatchRequest: Encodable { let items: [SortUpdate] }
     struct StatusResponse: Decodable { let status: String }
-    let request = BatchRequest(
-      items: updates.map {
-        SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-      })
-    let _: StatusResponse = try await patch(
-      "v1/action-items/batch",
-      body: request,
-      expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot)
+    // The backend validates this endpoint's request body at 500 items. A
+    // user's local task database can contain more rows than one request can
+    // carry, so preserve order while sending bounded sequential requests.
+    for updateBatch in updates.chunked(maxSize: 500) {
+      let request = BatchRequest(
+        items: updateBatch.map {
+          SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
+        })
+      let _: StatusResponse = try await patch(
+        "v1/action-items/batch",
+        body: request,
+        expectedOwnerId: expectedOwnerId,
+        authorizationSnapshot: authorizationSnapshot)
+    }
   }
 
   // MARK: - Workstream-backed task threads
