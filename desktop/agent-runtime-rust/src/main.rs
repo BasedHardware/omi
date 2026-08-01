@@ -1391,6 +1391,7 @@ impl Runtime {
             );
             return;
         }
+        let working_directory = session.profile.working_directory.clone();
         let profile_generation = session.profile.generation;
         let surface_kind = session.surface_kind.clone();
         let run_identity = match self.journal.admit_run(
@@ -1450,8 +1451,7 @@ impl Runtime {
                 let _ = completed.send(request_id);
                 return;
             };
-            let mut agent = Agent::new();
-            agent.set_model(model);
+            let mut agent = prepare_query_agent(model, working_directory);
             agent.set_provider(std::sync::Arc::new(transport.provider()));
             let events = output.clone();
             let event_request_id = request_id.clone();
@@ -1746,6 +1746,13 @@ fn context_source_kinds() -> [&'static str; 7] {
     ]
 }
 
+fn prepare_query_agent(model: String, working_directory: String) -> Agent {
+    let mut agent = Agent::new();
+    agent.set_model(model);
+    agent.set_workspace_root(working_directory);
+    agent
+}
+
 fn default_profile() -> ExecutionProfile {
     ExecutionProfile {
         generation: 1,
@@ -1927,6 +1934,16 @@ mod tests {
             tool_requests,
             "boot-test".into(),
         )
+    }
+
+    #[test]
+    fn prepare_query_agent_binds_session_working_directory() {
+        let working_directory = "/tmp/omi-repo-workspace";
+        let agent = prepare_query_agent("omi-fast".into(), working_directory.into());
+        assert_eq!(
+            agent.workspace_root,
+            std::path::PathBuf::from(working_directory)
+        );
     }
 
     #[test]
