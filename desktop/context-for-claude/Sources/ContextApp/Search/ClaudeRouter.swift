@@ -11,12 +11,10 @@ import UniformTypeIdentifiers
 ///
 /// Two targets, matching the reference's "Claude target" dropdown:
 ///
-/// - **Claude app** — `claude://code/new?q=…` opens a Claude Code tab with the prompt already in the
-///   composer. This is a real, supported deep link, not a guess: the installed Claude registers the
-///   `claude` URL scheme, and its main-process handler for the `code` host reads `q` (or `prompt`),
-///   truncates it, and routes to the Claude Code surface. The prompt is **pre-filled, not sent** —
-///   the user still presses Return, which is the honest thing for a shortcut that can fire by
-///   accident.
+/// - **Claude app** — a `claude://` deep link that opens Claude with the prompt already in the
+///   composer. Which *surface* it lands on is `Surface`, chosen by the caller, because Claude has
+///   two of them and they are not interchangeable. The prompt is **pre-filled, not sent** — the user
+///   still presses Return, which is the honest thing for a shortcut that can fire by accident.
 /// - **Terminal** — runs the `claude` CLI with the prompt, in whichever app owns `.command` files.
 ///
 /// If nothing on the machine claims the `claude` scheme, delivery falls back to the clipboard and
@@ -55,10 +53,48 @@ enum ClaudeRouter {
         }
     }
 
+    /// Which Claude the prompt lands in.
+    ///
+    /// Claude registers one scheme and routes on the host, and the two hosts are two different
+    /// products: `claude.ai/new` is the ordinary chat you get from Claude's home surface, and
+    /// `code/new` is the Claude Code tab. Making this a parameter rather than a constant is the fix
+    /// for the bug where the tutorial — which is teaching somebody to *ask a question* — silently
+    /// inherited the search bar's coding surface.
+    ///
+    /// Both links are documented ("Open Claude Desktop with a link", support.claude.com) and both are
+    /// in the installed app's own handler, which reads `q`, caps it, and navigates: `claude.ai/new`
+    /// to `/new?q=…` and `code/new` to the Claude Code route. Neither one sends the prompt.
+    enum Surface: String, CaseIterable, Sendable {
+        /// `claude://claude.ai/new?q=…` — a normal new chat, prompt in the composer.
+        case chat
+        /// `claude://code/new?q=…` — the Claude Code tab, prompt in the composer.
+        case code
+
+        /// The deep link, without the query.
+        var prefillPath: String {
+            switch self {
+            case .chat: return "claude://claude.ai/new"
+            case .code: return "claude://code/new"
+            }
+        }
+
+        /// What it is called in a sentence, as the thing that got opened.
+        var opened: String {
+            switch self {
+            case .chat: return "a new Claude chat"
+            case .code: return "a Claude Code tab"
+            }
+        }
+    }
+
     /// How the query actually got there. Surfaced so the UI's promise matches what happened.
     enum Mechanism: Equatable, Sendable {
-        /// A Claude Code tab, prompt already filled in.
-        case prefilledTab(URL)
+        /// Claude opened on `surface`, prompt already filled in.
+        ///
+        /// It carries the surface rather than only the URL so the sentence below cannot name the
+        /// wrong one: a note claiming a Claude Code tab after a chat opened is the same class of
+        /// untruth as claiming a pre-fill after a clipboard copy.
+        case prefilledTab(surface: Surface, url: URL)
         /// No handler for the scheme, so the query went on the clipboard and Claude came forward.
         case clipboard
         /// A one-shot launcher run by the user's terminal.
@@ -67,8 +103,8 @@ enum ClaudeRouter {
         /// What the search bar says after it routes. First person, and never a claim we did not earn.
         var note: String {
             switch self {
-            case .prefilledTab:
-                return "Opened a Claude Code tab with your question in the prompt."
+            case .prefilledTab(let surface, _):
+                return "Opened \(surface.opened) with your question in the prompt."
             case .clipboard:
                 return "Nothing here answers claude:// links, so I copied your question and opened Claude — paste it in."
             case .terminal(_, let handler):
@@ -101,20 +137,23 @@ enum ClaudeRouter {
 
     // MARK: - The deep link
 
-    /// The scheme the installed Claude registers, and the host/path its main process routes to the
-    /// Claude Code surface.
+    /// The scheme the installed Claude registers. Every `Surface` is a host under it, so this is what
+    /// LaunchServices is asked about — a machine either answers `claude://` or it does not.
     static let scheme = "claude"
-    private static let prefillPath = "claude://code/new"
+
+    /// The URL the availability probe hands LaunchServices. Any host would resolve the same handler;
+    /// this one is named so nobody reads a surface choice into it.
+    private static let schemeProbePath = "claude://claude.ai/new"
 
     /// Claude truncates the prompt at `16 KiB − 2 KiB` characters before it ever reaches the composer,
     /// so we truncate to the same number rather than handing over a string we know it will cut.
     static let promptLimit = 16 * 1024 - 2 * 1024
 
-    /// `claude://code/new?q=<query>`, or `nil` for a query with nothing in it.
-    static func prefillURL(for query: String) -> URL? {
+    /// `<surface>?q=<query>`, or `nil` for a query with nothing in it.
+    static func prefillURL(for query: String, surface: Surface) -> URL? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        var components = URLComponents(string: prefillPath)
+        var components = URLComponents(string: surface.prefillPath)
         components?.queryItems = [URLQueryItem(name: "q", value: String(trimmed.prefix(promptLimit)))]
         return components?.url
     }
@@ -131,7 +170,7 @@ enum ClaudeRouter {
         static func live(home: String = NSHomeDirectory()) -> Probe {
             Probe(
                 handlerForClaudeScheme: {
-                    guard let url = URL(string: prefillPath) else { return nil }
+                    guard let url = URL(string: schemeProbePath) else { return nil }
                     return NSWorkspace.shared.urlForApplication(toOpen: url)
                 },
                 handlerForCommandFiles: {
@@ -164,14 +203,16 @@ enum ClaudeRouter {
         candidates.first(where: isExecutable)
     }
 
-    static func availability(of target: Target, probe: Probe = .live()) -> Availability {
+    /// - Parameter surface: the surface the sentence promises, so the row cannot name one Claude
+    ///   while `route` opens another. Ignored by `.terminal`.
+    static func availability(of target: Target, surface: Surface, probe: Probe = .live()) -> Availability {
         switch target {
         case .claudeApp:
             guard let handler = probe.handlerForClaudeScheme() else {
                 return .missing(detail: "Nothing on this Mac answers claude:// links, so I'd have to use your clipboard.")
             }
             let name = handler.deletingPathExtension().lastPathComponent
-            return .available(detail: "Opens a Claude Code tab in \(name) with your question in the prompt.")
+            return .available(detail: "Opens \(surface.opened) in \(name) with your question in the prompt.")
         case .terminal:
             guard let cli = claudeCLIPath(candidates: probe.claudeCLICandidates, isExecutable: probe.isExecutable) else {
                 return .missing(detail: "I can't find the claude command on this Mac.")
@@ -183,8 +224,13 @@ enum ClaudeRouter {
 
     // MARK: - Routing
 
+    /// - Parameter surface: which Claude the `.claudeApp` target opens. Required rather than
+    ///   defaulted: the two call sites want different ones, and the last time this was implicit the
+    ///   tutorial shipped pointing at Claude Code. Ignored by `.terminal`, whose CLI *is* Claude Code.
     @MainActor
-    static func route(_ query: String, to target: Target, probe: Probe = .live()) -> Result<Delivery, RouteError> {
+    static func route(
+        _ query: String, to target: Target, surface: Surface, probe: Probe = .live()
+    ) -> Result<Delivery, RouteError> {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .failure(.emptyQuery) }
         let delivered = String(trimmed.prefix(promptLimit))
@@ -192,7 +238,7 @@ enum ClaudeRouter {
 
         switch target {
         case .claudeApp:
-            return routeToApp(delivered, truncated: truncated, probe: probe)
+            return routeToApp(delivered, surface: surface, truncated: truncated, probe: probe)
         case .terminal:
             return routeToTerminal(delivered, truncated: truncated, probe: probe)
         }
@@ -200,16 +246,16 @@ enum ClaudeRouter {
 
     @MainActor
     private static func routeToApp(
-        _ query: String, truncated: Bool, probe: Probe
+        _ query: String, surface: Surface, truncated: Bool, probe: Probe
     ) -> Result<Delivery, RouteError> {
         // Never log the query itself: it is the user's own words, and it is the single most sensitive
         // string this app handles.
-        if let url = prefillURL(for: query), probe.handlerForClaudeScheme() != nil {
+        if let url = prefillURL(for: query, surface: surface), probe.handlerForClaudeScheme() != nil {
             NSWorkspace.shared.open(url)
-            ContextLog.info("Routed \(query.count) characters to a Claude Code tab", logCategory)
+            ContextLog.info("Routed \(query.count) characters to \(surface.opened)", logCategory)
             return .success(
                 Delivery(
-                    target: .claudeApp, mechanism: .prefilledTab(url),
+                    target: .claudeApp, mechanism: .prefilledTab(surface: surface, url: url),
                     deliveredCharacters: query.count, wasTruncated: truncated))
         }
 
@@ -318,9 +364,9 @@ enum ClaudeRouter {
     // MARK: - Copy
 
     /// The reference's "Claude target" subtitle, rewritten to describe what actually happens.
-    static func targetSubtitle(probe: Probe = .live()) -> String {
-        let app = availability(of: .claudeApp, probe: probe)
-        let terminal = availability(of: .terminal, probe: probe)
+    static func targetSubtitle(surface: Surface, probe: Probe = .live()) -> String {
+        let app = availability(of: .claudeApp, surface: surface, probe: probe)
+        let terminal = availability(of: .terminal, surface: surface, probe: probe)
         return "\(app.detail) \(terminal.detail)"
     }
 

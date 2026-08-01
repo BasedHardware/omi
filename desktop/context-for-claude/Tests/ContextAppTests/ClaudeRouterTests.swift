@@ -11,30 +11,50 @@ final class ClaudeRouterTests: XCTestCase {
 
     // MARK: - The deep link
 
-    /// This is the whole product claim — "opens a Claude Code tab with the prompt pre-filled" — and
-    /// it rests on this exact host, path, and parameter name.
-    func testThePrefillURLIsTheDeepLinkClaudeActuallyRoutes() throws {
-        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: "what was I working on today?"))
-        XCTAssertEqual(url.scheme, "claude")
-        XCTAssertEqual(url.host, "code")
-        XCTAssertEqual(url.path, "/new")
-        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "q", value: "what was I working on today?")])
+    /// This is the whole product claim — "opens Claude with the prompt pre-filled" — and it rests on
+    /// these exact hosts, paths, and the parameter name.
+    ///
+    /// Both values are documented in *Open Claude Desktop with a link*
+    /// (support.claude.com/en/articles/14729294): `claude://claude.ai/new?q=…` is "new chat with
+    /// prefilled prompt (not sent)" and `claude://code/new?q=…` is "Claude Code with prefilled
+    /// composer text". Both are also branches of the installed app's own URL handler, which reads `q`,
+    /// caps it, and navigates — `claude.ai/new` to the chat surface, `code/new` to Claude Code.
+    func testEachSurfaceIsTheDeepLinkClaudeActuallyRoutes() throws {
+        let chat = try XCTUnwrap(ClaudeRouter.prefillURL(for: "what was I working on today?", surface: .chat))
+        XCTAssertEqual(chat.scheme, "claude")
+        XCTAssertEqual(chat.host, "claude.ai")
+        XCTAssertEqual(chat.path, "/new")
+
+        let code = try XCTUnwrap(ClaudeRouter.prefillURL(for: "what was I working on today?", surface: .code))
+        XCTAssertEqual(code.scheme, "claude")
+        XCTAssertEqual(code.host, "code")
+        XCTAssertEqual(code.path, "/new")
+
+        for url in [chat, code] {
+            let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            XCTAssertEqual(
+                components.queryItems, [URLQueryItem(name: "q", value: "what was I working on today?")],
+                url.absoluteString)
+        }
     }
 
     /// A question with a `&`, a `#`, or a `+` in it has to survive the trip intact — a fragment in
     /// particular is dropped on the far side, so an unescaped `#` would silently truncate the prompt.
     func testCharactersThatWouldBreakAURLArePercentEncoded() throws {
         let query = "ship it? A&B #1 + 2 = 3 / 100%"
-        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query))
-        XCTAssertNil(url.fragment)
-        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        XCTAssertEqual(components.queryItems?.first?.value, query)
+        for surface in ClaudeRouter.Surface.allCases {
+            let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query, surface: surface))
+            XCTAssertNil(url.fragment, url.absoluteString)
+            let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            XCTAssertEqual(components.queryItems?.first?.value, query, url.absoluteString)
+        }
     }
 
     func testAnEmptyOrBlankQueryProducesNoURL() {
-        XCTAssertNil(ClaudeRouter.prefillURL(for: ""))
-        XCTAssertNil(ClaudeRouter.prefillURL(for: "   \n\t "))
+        XCTAssertNil(ClaudeRouter.prefillURL(for: "", surface: .chat))
+        XCTAssertNil(ClaudeRouter.prefillURL(for: "   \n\t ", surface: .chat))
+        XCTAssertNil(ClaudeRouter.prefillURL(for: "", surface: .code))
+        XCTAssertNil(ClaudeRouter.prefillURL(for: "   \n\t ", surface: .code))
     }
 
     /// Claude cuts the prompt at 14 336 characters before it reaches the composer, so we cut it at the
@@ -42,7 +62,7 @@ final class ClaudeRouterTests: XCTestCase {
     func testAnOverlongQueryIsTruncatedToTheLimitClaudeAccepts() throws {
         XCTAssertEqual(ClaudeRouter.promptLimit, 14_336)
         let query = String(repeating: "a", count: ClaudeRouter.promptLimit + 500)
-        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query))
+        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query, surface: .chat))
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         XCTAssertEqual(components.queryItems?.first?.value?.count, ClaudeRouter.promptLimit)
     }
@@ -80,25 +100,31 @@ final class ClaudeRouterTests: XCTestCase {
     }
 
     /// The row names the app that will actually open, not "Claude" — if something else claimed the
-    /// scheme, saying "Claude" would be a lie.
-    func testTheClaudeAppRowNamesTheAppThatWillOpen() {
-        let availability = ClaudeRouter.availability(
-            of: .claudeApp, probe: probe(claudeHandler: URL(fileURLWithPath: "/Applications/Claude.app")))
-        XCTAssertTrue(availability.isAvailable)
-        XCTAssertTrue(availability.detail.contains("Claude"), availability.detail)
-        XCTAssertTrue(availability.detail.contains("prompt"), availability.detail)
+    /// scheme, saying "Claude" would be a lie. And it names the *surface* it will open there, so the
+    /// promise made before routing is the one `route` keeps.
+    func testTheClaudeAppRowNamesTheAppAndTheSurfaceThatWillOpen() {
+        let claude = probe(claudeHandler: URL(fileURLWithPath: "/Applications/Claude.app"))
+        let code = ClaudeRouter.availability(of: .claudeApp, surface: .code, probe: claude)
+        XCTAssertTrue(code.isAvailable)
+        XCTAssertTrue(code.detail.contains("Claude"), code.detail)
+        XCTAssertTrue(code.detail.contains("prompt"), code.detail)
+        XCTAssertTrue(code.detail.contains("Claude Code tab"), code.detail)
+
+        let chat = ClaudeRouter.availability(of: .claudeApp, surface: .chat, probe: claude)
+        XCTAssertTrue(chat.detail.contains("new Claude chat"), chat.detail)
+        XCTAssertFalse(chat.detail.contains("Claude Code"), chat.detail)
     }
 
     /// With no handler the row says so *and* says what would happen instead. A dropdown option that
     /// silently degrades to the clipboard is the dishonest version of this.
     func testWithNoSchemeHandlerTheRowAdmitsItWouldUseTheClipboard() {
-        let availability = ClaudeRouter.availability(of: .claudeApp, probe: probe())
+        let availability = ClaudeRouter.availability(of: .claudeApp, surface: .code, probe: probe())
         XCTAssertFalse(availability.isAvailable)
         XCTAssertTrue(availability.detail.contains("clipboard"), availability.detail)
     }
 
     func testTheTerminalRowIsMissingWhenTheCLIIsNotOnDisk() {
-        let availability = ClaudeRouter.availability(of: .terminal, probe: probe())
+        let availability = ClaudeRouter.availability(of: .terminal, surface: .code, probe: probe())
         XCTAssertFalse(availability.isAvailable)
         XCTAssertTrue(availability.detail.contains("claude command"), availability.detail)
     }
@@ -107,6 +133,7 @@ final class ClaudeRouterTests: XCTestCase {
     func testTheTerminalRowNamesWhicheverTerminalOwnsCommandFiles() {
         let availability = ClaudeRouter.availability(
             of: .terminal,
+            surface: .code,
             probe: probe(
                 terminalHandler: URL(fileURLWithPath: "/Applications/Ghostty.app"), executable: { _ in true }))
         XCTAssertTrue(availability.isAvailable)
@@ -115,12 +142,16 @@ final class ClaudeRouterTests: XCTestCase {
 
     @MainActor
     func testRoutingAnEmptyQueryFailsBeforeItTouchesAnything() {
-        XCTAssertEqual(ClaudeRouter.route("  ", to: .claudeApp, probe: probe()), .failure(.emptyQuery))
+        for surface in ClaudeRouter.Surface.allCases {
+            XCTAssertEqual(
+                ClaudeRouter.route("  ", to: .claudeApp, surface: surface, probe: probe()),
+                .failure(.emptyQuery))
+        }
     }
 
     @MainActor
     func testRoutingToTerminalWithoutTheCLIFailsWithAnHonestSentence() {
-        let result = ClaudeRouter.route("hello", to: .terminal, probe: probe())
+        let result = ClaudeRouter.route("hello", to: .terminal, surface: .code, probe: probe())
         guard case .failure(.unavailable(let sentence)) = result else {
             return XCTFail("expected an unavailable failure, got \(result)")
         }
@@ -195,11 +226,17 @@ final class ClaudeRouterTests: XCTestCase {
     // MARK: - Copy
 
     /// Every mechanism has a sentence, and none of them claims a pre-fill that did not happen.
-    func testTheClipboardFallbackSaysWhatItActuallyDid() {
+    func testTheClipboardFallbackSaysWhatItActuallyDid() throws {
         XCTAssertTrue(ClaudeRouter.Mechanism.clipboard.note.contains("copied"), ClaudeRouter.Mechanism.clipboard.note)
         XCTAssertTrue(ClaudeRouter.Mechanism.clipboard.note.contains("paste"), ClaudeRouter.Mechanism.clipboard.note)
-        let prefilled = ClaudeRouter.Mechanism.prefilledTab(URL(string: "claude://code/new?q=x")!)
-        XCTAssertTrue(prefilled.note.contains("prompt"), prefilled.note)
-        XCTAssertFalse(prefilled.note.contains("clipboard"), prefilled.note)
+        // Every surface's sentence names *its own* surface. A note that says "Claude Code tab" after
+        // a chat opened would be the same class of untruth as claiming a pre-fill after a copy.
+        for surface in ClaudeRouter.Surface.allCases {
+            let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: "x", surface: surface))
+            let prefilled = ClaudeRouter.Mechanism.prefilledTab(surface: surface, url: url)
+            XCTAssertTrue(prefilled.note.contains("prompt"), prefilled.note)
+            XCTAssertFalse(prefilled.note.contains("clipboard"), prefilled.note)
+            XCTAssertTrue(prefilled.note.contains(surface.opened), prefilled.note)
+        }
     }
 }

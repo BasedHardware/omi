@@ -36,7 +36,8 @@ final class ClaudeHandoffTests: XCTestCase {
     private func probe(
         _ claudes: [FakeClaude],
         registeredAt: Date?,
-        mechanism: ClaudeRouter.Mechanism = .prefilledTab(URL(string: "claude://code/new?q=x")!)
+        mechanism: ClaudeRouter.Mechanism = .prefilledTab(
+            surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!)
     ) -> ClaudeHandoff.Probe {
         ClaudeHandoff.Probe(
             isInstalled: { true },
@@ -181,6 +182,42 @@ final class ClaudeHandoffTests: XCTestCase {
         ClaudeHandoff.ask("what was I reading", restartingFirst: true, probe: probe) { answer = $0 }
         XCTAssertEqual(answer, .notInstalled)
         XCTAssertEqual(copied, ["what was I reading"], "and the question is somewhere to paste from")
+    }
+
+    // MARK: - Which Claude the question lands in
+
+    /// The regression. The tutorial shipped routing through `claude://code/new`, so "open Claude and
+    /// type the first thing in" dropped the user into the **Code tab** — the wrong product for the
+    /// beat, and not what the card had just promised.
+    ///
+    /// Asserted on the URL the handoff's own surface constant produces, through the real
+    /// `prefillURL`, because the alternative — routing for real — opens Claude on whoever is running
+    /// the suite. The expected value is not this change's invention: `claude://claude.ai/new?q=…` is
+    /// the documented "new chat with prefilled prompt (not sent)" link in *Open Claude Desktop with a
+    /// link* (support.claude.com/en/articles/14729294), and it is the `ClaudeAIPath.New` branch of the
+    /// installed app's own URL handler, which builds `/new?q=…` and navigates to it.
+    func testTheTutorialHandsOffToANewChatAndNotTheCodeTab() throws {
+        XCTAssertEqual(ClaudeHandoff.surface, .chat)
+        let url = try XCTUnwrap(
+            ClaudeRouter.prefillURL(for: "what was I working on today?", surface: ClaudeHandoff.surface))
+        XCTAssertEqual(url.scheme, "claude", url.absoluteString)
+        XCTAssertEqual(url.host, "claude.ai", url.absoluteString)
+        XCTAssertEqual(url.path, "/new", url.absoluteString)
+        XCTAssertNotEqual(url.host, "code", "the Code tab is not where the tutorial's question goes")
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(
+            components.queryItems,
+            [URLQueryItem(name: "q", value: "what was I working on today?")],
+            "the prompt still arrives pre-filled, and `q` is what fills it")
+    }
+
+    /// The degrade chain is unchanged by the surface move: only a real pre-fill may look like one.
+    func testOnlyARealPrefillOnTheChatSurfaceReportsAPrefill() {
+        let chat = ClaudeRouter.Mechanism.prefilledTab(
+            surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!)
+        XCTAssertTrue(chat.note.contains("chat"), chat.note)
+        XCTAssertFalse(chat.note.contains("Claude Code"), chat.note)
+        XCTAssertFalse(ClaudeRouter.Mechanism.clipboard.note.contains("prompt"))
     }
 
     /// No `claude://` handler is the clipboard branch, and it is never a pre-fill.

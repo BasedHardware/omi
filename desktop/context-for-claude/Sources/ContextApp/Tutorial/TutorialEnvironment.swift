@@ -306,11 +306,20 @@ enum TutorialHotkeyWatch {
 
 /// Puts the tutorial's first question into Claude, rather than telling the user to type it.
 ///
-/// The prompt is **pre-filled, not sent**: `ClaudeRouter` opens `claude://code/new?q=…`, which lands
-/// the question in the composer with the user still holding the Return key. That is the reused
-/// mechanism, not a second one — the search bar routes exactly the same way. Every failure is then
-/// reported as itself: no handler for the scheme is the clipboard branch, no Claude at all is its
-/// own branch, and neither is allowed to come back looking like a pre-fill.
+/// The prompt is **pre-filled, not sent**: `ClaudeRouter` opens `claude://claude.ai/new?q=…`, which
+/// lands the question in the composer of a *normal new chat* with the user still holding the Return
+/// key. That is the reused mechanism, not a second one — the search bar routes through the same
+/// `ClaudeRouter`, only asking for its own surface. Every failure is then reported as itself: no
+/// handler for the scheme is the clipboard branch, no Claude at all is its own branch, and neither is
+/// allowed to come back looking like a pre-fill.
+///
+/// ## The surface is a decision, not an inherited default
+///
+/// This beat is teaching somebody to *ask a question about their own screen*, and the answer comes
+/// from an MCP server `ClaudeRegistrar` writes into **both** of Claude's configs. So either surface
+/// could answer — but only one of them is where a person asks a question. Shipping the search bar's
+/// `claude://code/new` here dropped the user into the Code tab mid-tutorial, which is why `surface`
+/// is now named at this call site instead of being whatever the router happened to hard-code.
 ///
 /// ## Quitting the user's Claude is not something this gets to decide
 ///
@@ -334,6 +343,13 @@ enum TutorialHotkeyWatch {
 /// quit — which any app with unsaved state may — reports `restarted: false`.
 @MainActor
 enum ClaudeHandoff {
+
+    /// Where the tutorial's question goes: a normal new chat on Claude's home surface.
+    ///
+    /// Named, and a stored constant rather than a literal inside `Probe.live`, so the choice is a
+    /// thing a test can read without opening a URL — asserting this by launching Claude would mean
+    /// taking over the screen of whoever ran the suite.
+    static let surface = ClaudeRouter.Surface.chat
 
     /// One running Claude, reduced to what the decision needs.
     ///
@@ -386,7 +402,7 @@ enum ClaudeHandoff {
                     }
                 },
                 registeredAt: { ClaudeRegistrar.claudeDesktopRegisteredAt },
-                route: { ClaudeRouter.route($0, to: .claudeApp) },
+                route: { ClaudeRouter.route($0, to: .claudeApp, surface: surface) },
                 copyToClipboard: { text in
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)

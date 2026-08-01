@@ -74,8 +74,15 @@ struct SearchBarView: View {
         }
     }
 
+    /// The bar's half of the "Claude target" choice is Claude Code, deliberately and in both
+    /// directions: its other target runs the `claude` CLI, so the dropdown is one agent in two
+    /// places, and every sentence around it — the row detail, the "Run on Claude Code" hint, the
+    /// Settings subtitle — already says so. The tutorial wants an ordinary chat and asks for one;
+    /// this does not.
+    private static let surface = ClaudeRouter.Surface.code
+
     private var availability: ClaudeRouter.Availability {
-        ClaudeRouter.availability(of: target)
+        ClaudeRouter.availability(of: target, surface: Self.surface)
     }
 
     /// The one line under the field, or nil when there is nothing to say and the keyboard hint has
@@ -186,7 +193,7 @@ struct SearchBarView: View {
     private func submit() {
         // The shared chrome cue; it honours the system UI-sound setting itself.
         Sound.effect(.click)
-        switch ClaudeRouter.route(query, to: target) {
+        switch ClaudeRouter.route(query, to: target, surface: Self.surface) {
         case .success(let delivery):
             outcome = .delivered(delivery)
             query = ""

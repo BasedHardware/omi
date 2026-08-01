@@ -209,10 +209,17 @@ Permissions stay one-at-a-time with the existing lead-in/after-grant pacing
 3. **"Your screen is now searchable."** Only shown once frames actually landed.
 4. **Hand off to Claude — by doing it.** Direct user instruction: "Open claude for me and type the
    first thing in." The tutorial routes the suggested question through `ClaudeRouter` as
-   `claude://code/new?q=…`, which lands it in the composer. The prompt is **pre-filled, not sent** —
-   pressing Return stays the user's. Every branch that could not pre-fill says so instead: no
-   `claude://` handler falls back to the clipboard, and no Claude Desktop at all is its own admission
-   (`TutorialClaudeAsk`).
+   `claude://claude.ai/new?q=…`, which lands it in the composer of a **normal new chat**. The prompt
+   is **pre-filled, not sent** — pressing Return stays the user's. Every branch that could not
+   pre-fill says so instead: no `claude://` handler falls back to the clipboard, and no Claude Desktop
+   at all is its own admission (`TutorialClaudeAsk`).
+
+   **The surface is named at the call site** (`ClaudeHandoff.surface`), because Claude has two and
+   they are not interchangeable: `claude://claude.ai/new` is an ordinary chat and `claude://code/new`
+   is the Claude Code tab. This beat shipped on the second one — inherited from the search bar, whose
+   "Claude target" dropdown deliberately *is* Claude Code in the app or the `claude` CLI in Terminal —
+   and dropped the user into the Code tab mid-tutorial. Either surface can answer (`ClaudeRegistrar`
+   writes the MCP entry into both configs); only one of them is where a person asks a question.
 
    **The restart is conditional and consented.** Claude reads its MCP config at startup, so a Claude
    open from *before* we registered cannot call our tools — but that is a conditional justification
