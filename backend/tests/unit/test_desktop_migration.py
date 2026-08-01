@@ -2179,9 +2179,10 @@ class TestLegacyConversationRecovery:
         batch.delete.assert_called_once_with(staged_ref)
         batch.commit.assert_called_once()
 
-    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self):
+    @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, conflict_error):
         """An identity collision preserves both copies instead of overwriting current task data."""
-        from google.api_core.exceptions import AlreadyExists
+        from google.api_core.exceptions import AlreadyExists, Conflict
 
         staged_snapshot = MagicMock()
         staged_snapshot.id = 'legacy-task'
@@ -2199,7 +2200,10 @@ class TestLegacyConversationRecovery:
         recovery_query.stream.return_value = [staged_snapshot]
         staged_col.where.return_value = recovery_query
         batch = MagicMock()
-        batch.commit.side_effect = AlreadyExists('task already exists')
+        batch.commit.side_effect = {
+            'already_exists': AlreadyExists('task already exists'),
+            'conflict': Conflict('task already exists'),
+        }[conflict_error]
 
         def col_side_effect(collection_name):
             return action_items_col if collection_name == 'action_items' else staged_col

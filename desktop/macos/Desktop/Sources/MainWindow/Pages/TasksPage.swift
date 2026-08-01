@@ -803,12 +803,10 @@ class TasksViewModel: ObservableObject {
     orderedTasks(categorizedTasks[category] ?? [], inCategory: category)
   }
 
-  /// The category's canonical order in the active UI scope. Start with the
-  /// full SQLite search/filter result when present, then include the active
-  /// store cache so hidden rows retain their slots. This makes a Done row or a
-  /// search row outside the first incomplete cache page persist through the
-  /// debounce instead of falling out of the subsequent full-order write.
-  private func getFullOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
+  /// The category order currently available to the interactive view. This is
+  /// intentionally limited to its rendered/search/cache sources; the debounced
+  /// persistence path separately loads every local row before rebasing it.
+  private func getActiveScopeOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
     var scope: [TaskActionItem] = []
     if !searchText.isEmpty {
       scope.append(contentsOf: searchResults)
@@ -817,6 +815,53 @@ class TasksViewModel: ObservableObject {
     }
     scope.append(contentsOf: getSourceTasks())
     scope.append(contentsOf: displayTasks)
+    return orderedTasks(
+      deduplicateById(scope).filter { currentCategoryFor($0) == category },
+      inCategory: category
+    )
+  }
+
+  /// Merge the reordered IDs from an interactive subset into the full local
+  /// category sequence. The subset replaces only its own original slots, so a
+  /// search result or first-page cache cannot displace unseen tasks when the
+  /// reorder is finally persisted.
+  nonisolated static func rebaseVisibleTaskIDs(
+    fullOrder: [String], reorderedVisibleIDs: [String]
+  ) -> [String] {
+    var knownIDs = Set<String>()
+    var rebasedOrder: [String] = []
+    for id in fullOrder where knownIDs.insert(id).inserted {
+      rebasedOrder.append(id)
+    }
+    for id in reorderedVisibleIDs where knownIDs.insert(id).inserted {
+      rebasedOrder.append(id)
+    }
+
+    let visibleIDs = Set(reorderedVisibleIDs)
+    var reorderedVisible = reorderedVisibleIDs.makeIterator()
+    for index in rebasedOrder.indices where visibleIDs.contains(rebasedOrder[index]) {
+      guard let reorderedID = reorderedVisible.next() else { return fullOrder }
+      rebasedOrder[index] = reorderedID
+    }
+    return rebasedOrder
+  }
+
+  /// The complete order used only for persistence. Database rows are appended
+  /// after the active scope so an optimistic in-memory task record wins while
+  /// every off-page or filtered-out local row remains available for rebasing.
+  private func getCompleteOrderedTasksForPersistence(
+    for category: TaskCategory,
+    allLocalTasks: [TaskActionItem]
+  ) -> [TaskActionItem] {
+    var scope: [TaskActionItem] = []
+    if !searchText.isEmpty {
+      scope.append(contentsOf: searchResults)
+    } else if !filteredFromDatabase.isEmpty {
+      scope.append(contentsOf: filteredFromDatabase)
+    }
+    scope.append(contentsOf: getSourceTasks())
+    scope.append(contentsOf: displayTasks)
+    scope.append(contentsOf: allLocalTasks)
     return orderedTasks(
       deduplicateById(scope).filter { currentCategoryFor($0) == category },
       inCategory: category
@@ -942,7 +987,7 @@ class TasksViewModel: ObservableObject {
     // Always start from the exact visual sequence instead.
     let visibleOrder = getOrderedTasks(for: category).map(\.id)
     let order = Self.mergedReorderedTaskIDs(
-      fullOrder: getFullOrderedTasks(for: category).map(\.id),
+      fullOrder: getActiveScopeOrderedTasks(for: category).map(\.id),
       visibleOrder: visibleOrder,
       moving: task.id,
       toPostRemovalIndex: targetIndex
@@ -1338,22 +1383,46 @@ class TasksViewModel: ObservableObject {
       }
     }
     let committedReorderOrders = pendingReorderOrders
-    let updates = collectSortOrderUpdates()
-    await syncSortOrderUpdates(
-      updates,
-      lease: lease,
-      committedReorderOrders: committedReorderOrders
-    )
+    do {
+      let updates = try await collectSortOrderUpdates()
+      await syncSortOrderUpdates(
+        updates,
+        lease: lease,
+        committedReorderOrders: committedReorderOrders
+      )
+    } catch {
+      guard isCurrent(lease) else { return }
+      let errorDescription = String(describing: error)
+      log("TasksVM: Failed to load complete local task order: \(error)")
+      recordSortOrderSyncFailure(
+        storageErrorDescription: errorDescription,
+        backendErrorDescription: nil,
+        updates: [],
+        committedReorderOrders: committedReorderOrders
+      )
+    }
   }
 
-  private func collectSortOrderUpdates() -> [SortOrderUpdate] {
+  private func collectSortOrderUpdates() async throws -> [SortOrderUpdate] {
     var updates: [SortOrderUpdate] = []
+    // The reorder debounce can outlive a search/filter change. Resolve every
+    // pending ID from SQLite, not the mutable UI scope, so an off-page search
+    // result and all hidden category rows receive one collision-free rebase.
+    let allLocalTasks = try await ActionItemStorage.shared.getAllLocalActionItems()
 
     for category in TaskCategory.allCases {
-      let currentTasks = getFullOrderedTasks(for: category)
+      let currentTasks = getCompleteOrderedTasksForPersistence(
+        for: category,
+        allLocalTasks: allLocalTasks
+      )
       let currentTasksByID = Dictionary(lastWriteWins: currentTasks.map { ($0.id, $0) })
       let orderedTaskIDs = Self.persistedTaskIDs(
-        reorderedIDs: pendingReorderOrders[category],
+        reorderedIDs: pendingReorderOrders[category].map {
+          Self.rebaseVisibleTaskIDs(
+            fullOrder: currentTasks.map(\.id),
+            reorderedVisibleIDs: $0
+          )
+        },
         currentIDs: currentTasks.map(\.id)
       )
       let orderedTasks = orderedTaskIDs.compactMap { currentTasksByID[$0] }

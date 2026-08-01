@@ -169,6 +169,29 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertEqual(Set(persisted).count, persisted.count, "persistence must not create duplicate sort-order updates")
   }
 
+  func testDatabaseBackedPersistenceRebasesOffPageSearchRowsWithoutDisplacingHiddenTasks() {
+    // The drag begins in a search result, then the search can change before
+    // the debounce fires. Persistence therefore receives the post-drop visible
+    // IDs plus the complete SQLite category sequence. Replacing only those
+    // visible slots preserves every unseen row and retains the off-page record.
+    let completeDatabaseOrder = ["hidden-start", "search-row", "hidden-middle", "visible-target"]
+    let reorderedVisibleIDs = ["visible-target", "search-row"]
+
+    let rebased = TasksViewModel.rebaseVisibleTaskIDs(
+      fullOrder: completeDatabaseOrder,
+      reorderedVisibleIDs: reorderedVisibleIDs
+    )
+
+    XCTAssertEqual(rebased, ["hidden-start", "visible-target", "hidden-middle", "search-row"])
+    XCTAssertEqual(Set(rebased).count, completeDatabaseOrder.count)
+    XCTAssertTrue(rebased.contains("search-row"), "the search row must survive after its UI scope changes")
+
+    var completeCategory = completeDatabaseOrder.map { item($0) }
+    TasksViewModel.applyReorder(rebased, categoryIndex: 0, to: &completeCategory)
+    let sortOrders = rebased.compactMap { sortOrder(completeCategory, $0) }
+    XCTAssertEqual(Set(sortOrders).count, completeDatabaseOrder.count, "all hidden rows must be rebased uniquely")
+  }
+
   func testSuccessfulCommitClearsOnlyTheSnapshotItPersisted() {
     // A reorder snapshot is needed through its SQLite/backend write, but must
     // not survive a successful commit: a later indent/reorder would otherwise

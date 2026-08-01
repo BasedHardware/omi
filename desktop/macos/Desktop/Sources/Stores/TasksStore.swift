@@ -1946,6 +1946,23 @@ class TasksStore: ObservableObject {
     UserDefaults.standard.bool(forKey: Self.legacyConversationRecoveryKey(for: lease.ownerID))
   }
 
+  /// The dashboard's exact-ID reconciliation can hard-delete a local row for
+  /// a server 404. Keep that destructive authority behind the same recovery
+  /// boundary as the full Tasks list so no independent dashboard caller can
+  /// erase a migrated cache row while a pre-deploy backend rejects recovery.
+  func canReconcileDashboardServerState(
+    expectedOwnerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return false }
+    return legacyConversationRecoveryCompleted(for: lease)
+  }
+
   /// Retry syncing locally-created tasks that failed to push to the backend.
   /// These are records with backendSynced=false and no backendId — the API call
   /// failed during extraction and there was no retry mechanism.

@@ -417,6 +417,41 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testDashboardReconciliationAuthorityRequiresCompletedLegacyRecovery() async throws {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareStore(store)
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let previousRecoveryValue = defaults.object(forKey: recoveryKey)
+    defer {
+      if let previousRecoveryValue {
+        defaults.set(previousRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
+    }
+    let authorizationSnapshot = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "owner-a")
+    )
+
+    defaults.removeObject(forKey: recoveryKey)
+    XCTAssertFalse(
+      store.canReconcileDashboardServerState(
+        expectedOwnerID: "owner-a",
+        authorizationSnapshot: authorizationSnapshot
+      )
+    )
+
+    defaults.set(true, forKey: recoveryKey)
+    XCTAssertTrue(
+      store.canReconcileDashboardServerState(
+        expectedOwnerID: "owner-a",
+        authorizationSnapshot: authorizationSnapshot
+      )
+    )
+  }
+
   // MARK: - Auto-refresh reconcile (refreshTasksIfNeeded)
 
   @MainActor
