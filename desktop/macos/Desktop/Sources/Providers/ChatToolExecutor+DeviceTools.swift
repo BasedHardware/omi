@@ -31,11 +31,54 @@ extension ChatToolExecutor {
     return deviceToolJSON(payload)
   }
 
+  /// Reads an integer argument, treating anything unusable as absent.
+  ///
+  /// The tool schemas declare `type: number` with no bounds, so `1e100` and
+  /// `NaN` are both protocol-legal. `Int(_: Double)` traps on either, which
+  /// would take the whole app down on a model typo — the range check is what
+  /// keeps a bad argument a validation matter rather than a crash.
   private static func boundedInt(_ args: [String: Any], _ key: String, default fallback: Int) -> Int {
     if let value = args[key] as? Int { return value }
-    if let value = args[key] as? Double { return Int(value) }
+    if let value = args[key] as? Double {
+      guard value.isFinite,
+        value >= Double(Int.min), value <= Double(Int.max)
+      else { return fallback }
+      return Int(value)
+    }
     if let value = args[key] as? String, let parsed = Int(value) { return parsed }
     return fallback
+  }
+
+  /// Runs a blocking child-process call off the main actor.
+  ///
+  /// `ChatToolExecutor` is `@MainActor`, so `osascript` and Messages sends were
+  /// running on the UI thread and holding it for as long as the timeout allowed
+  /// — up to two minutes. That froze the whole desktop, including the
+  /// cancellation and account-transition controls the user would reach for to
+  /// stop it. The owner checks stay at the physical-effect boundary; only the
+  /// waiting moves.
+  private static func offMainActor<T: Sendable>(
+    _ work: @escaping @Sendable () throws -> T
+  ) async throws -> T {
+    try await Task.detached(priority: .userInitiated) { try work() }.value
+  }
+
+  /// Reads a chat identifier, accepting the JSON shapes a model actually emits.
+  ///
+  /// A quoted `"12345"` used to fall through to nil and silently become a handle
+  /// lookup or a missing-reference error, reading a different conversation than
+  /// the one asked for.
+  private static func chatIdentifier(_ args: [String: Any]) -> Int64? {
+    if let value = args["chat_id"] as? Int64 { return value }
+    if let value = args["chat_id"] as? Int { return Int64(value) }
+    if let value = args["chat_id"] as? Double {
+      guard value.isFinite, value >= Double(Int64.min), value <= Double(Int64.max) else { return nil }
+      return Int64(value)
+    }
+    if let value = args["chat_id"] as? String {
+      return Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return nil
   }
 
   private static func iso8601(_ date: Date?) -> String? {
@@ -116,16 +159,7 @@ extension ChatToolExecutor {
   }
 
   static func executeReadMessageHistory(_ args: [String: Any]) async -> String {
-    let chatID: Int64?
-    if let value = args["chat_id"] as? Int64 {
-      chatID = value
-    } else if let value = args["chat_id"] as? Int {
-      chatID = Int64(value)
-    } else if let value = args["chat_id"] as? Double {
-      chatID = Int64(value)
-    } else {
-      chatID = nil
-    }
+    let chatID = chatIdentifier(args)
     let handle = (args["handle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
     guard chatID != nil || (handle?.isEmpty == false) else {
       return deviceToolFailure(
@@ -182,8 +216,9 @@ extension ChatToolExecutor {
     log("Executing send_message to a resolved handle via \(service.rawValue)")
 
     do {
-      let outcome = try MessagesSenderService.send(
-        to: to, text: text, service: service, filePath: filePath)
+      let outcome = try await offMainActor {
+        try MessagesSenderService.send(to: to, text: text, service: service, filePath: filePath)
+      }
       return deviceToolJSON([
         "ok": true,
         "status": "sent",
@@ -196,7 +231,7 @@ extension ChatToolExecutor {
       return deviceToolFailure(
         reason: error.reasonCode,
         message: error.errorDescription ?? "Messages automation was refused.",
-        requiredPermission: "automation")
+        requiredPermission: error.requiredPermission)
     } catch let error as MessagesSenderError {
       return deviceToolFailure(
         reason: error.reasonCode,
@@ -217,7 +252,9 @@ extension ChatToolExecutor {
     let timeout = TimeInterval(boundedInt(args, "timeout_seconds", default: 30))
 
     do {
-      let result = try AppleScriptRunner.run(script: script, timeoutSeconds: timeout)
+      let result = try await offMainActor {
+        try AppleScriptRunner.run(script: script, timeoutSeconds: timeout)
+      }
       if result.timedOut {
         return deviceToolFailure(
           reason: "timed_out",
@@ -240,7 +277,7 @@ extension ChatToolExecutor {
       return deviceToolFailure(
         reason: error.reasonCode,
         message: error.errorDescription ?? "AppleScript failed.",
-        requiredPermission: error.reasonCode == "automation_not_permitted" ? "automation" : nil)
+        requiredPermission: error.requiredPermission)
     } catch {
       return deviceToolFailure(reason: "execution_failed", message: error.localizedDescription)
     }

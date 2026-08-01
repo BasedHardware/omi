@@ -15,7 +15,7 @@ struct ContactRecord: Identifiable, Sendable {
   /// The handle to offer `send_message` first: a mobile number when one exists,
   /// then any other number, then email.
   var preferredMessagingHandle: String? {
-    if let mobile = phoneNumbers.first(where: { $0.label.localizedCaseInsensitiveContains("mobile") }) {
+    if let mobile = phoneNumbers.first(where: { $0.isMobile }) {
       return mobile.value
     }
     return phoneNumbers.first?.value ?? emailAddresses.first?.value
@@ -23,8 +23,21 @@ struct ContactRecord: Identifiable, Sendable {
 }
 
 struct ContactHandle: Sendable {
+  /// Localized, for the approval card the user reads.
   let label: String
+  /// The `CNLabelPhoneNumber*` constant, for the code that has to choose.
+  let rawLabel: String
   let value: String
+
+  /// Matched on the constant, never on the localized text. `localizedString(forLabel:)`
+  /// returns the user's language — "Mobile" only on an English Mac — so a
+  /// substring test for "mobile" failed everywhere else and the preferred handle
+  /// silently fell through to whatever number came first, often a home or work
+  /// line. The tool contract promises a mobile number; sending to the landline
+  /// instead is a wrong-recipient bug, not a cosmetic one.
+  var isMobile: Bool {
+    rawLabel == CNLabelPhoneNumberMobile || rawLabel == CNLabelPhoneNumberiPhone
+  }
 }
 
 enum ContactsReaderError: LocalizedError {
@@ -105,11 +118,13 @@ enum ContactsReaderService {
           phoneNumbers: contact.phoneNumbers.map { entry in
             ContactHandle(
               label: entry.label.map { CNLabeledValue<NSString>.localizedString(forLabel: $0) } ?? "",
+              rawLabel: entry.label ?? "",
               value: entry.value.stringValue)
           },
           emailAddresses: contact.emailAddresses.map { entry in
             ContactHandle(
               label: entry.label.map { CNLabeledValue<NSString>.localizedString(forLabel: $0) } ?? "",
+              rawLabel: entry.label ?? "",
               value: entry.value as String)
           })
       }
