@@ -14,6 +14,10 @@ covers:
   - desktop/macos/Desktop/Sources/GmailAccountSelection.swift
   - desktop/macos/Desktop/Sources/GmailAccountPickerView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthConnection.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthFlow.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthReader.swift
 preconditions:
   - automation_bridge_ready
 
