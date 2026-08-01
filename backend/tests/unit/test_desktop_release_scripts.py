@@ -513,7 +513,12 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     assert "verify_stable_appcast.py" in workflow
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'Authorization: Bearer ***' not in workflow
-    assert 'ref: ${{ inputs.release_tag }}' in workflow
+    # The promotion controls must come from main, never from the dispatched tag:
+    # this job runs .github/scripts/* inside `environment: prod`, so checking the
+    # tag out would let anyone who can push a tag execute their own code with the
+    # prod credentials in scope. The beta sibling has always done it this way.
+    assert 'ref: main' in workflow
+    assert 'ref: ${{ inputs.release_tag }}' not in workflow
     assert "operation:" not in workflow
     assert "repoint" not in workflow
 
