@@ -1754,6 +1754,18 @@ class ChatProvider: ObservableObject {
     let snapshot: AgentContextSnapshot
   }
 
+  static func responseLanguageInstruction(languageCodes: [String]) -> String? {
+    guard let code = languageCodes.first?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty else {
+      return nil
+    }
+    let baseCode = AssistantSettings.baseLanguageCode(code)
+    let name =
+      AssistantSettings.supportedLanguages.first {
+        AssistantSettings.baseLanguageCode($0.code) == baseCode
+      }?.name ?? code
+    return "Reply in \(name) (\(code)) unless the user asks for another language."
+  }
+
   private func resolveKernelQuerySession(
     surface: AgentSurfaceReference,
     requestedModelProfile: String?
@@ -1811,8 +1823,17 @@ class ChatProvider: ObservableObject {
     if let systemPromptPrefix, !systemPromptPrefix.isEmpty {
       surfacePayload["experienceContext"] = systemPromptPrefix
     }
-    if let systemPromptSuffix, !systemPromptSuffix.isEmpty {
-      surfacePayload["responseContext"] = systemPromptSuffix
+    let responseContext = [
+      systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
+      AssistantSettings.shared.hasExplicitVoiceLanguages
+        ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
+        : nil,
+    ]
+    .compactMap { $0 }
+    .filter { !$0.isEmpty }
+    .joined(separator: "\n")
+    if !responseContext.isEmpty {
+      surfacePayload["responseContext"] = responseContext
     }
     if let notificationContext, !notificationContext.isEmpty {
       surfacePayload["notificationContext"] = notificationContext

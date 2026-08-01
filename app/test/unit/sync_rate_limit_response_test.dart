@@ -9,6 +9,15 @@ void main() {
       expect(shouldRequestSyncCaptureManifest('conversation', SyncUploadLane.backfill), isFalse);
       expect(shouldRequestSyncCaptureManifest(null, SyncUploadLane.fresh), isFalse);
     });
+
+    test('a batch with no issued manifest uploads on the backfill lane instead of stalling', () {
+      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.fresh, null), SyncUploadLane.backfill);
+    });
+
+    test('an issued manifest keeps the requested lane', () {
+      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.fresh, 'manifest-token'), SyncUploadLane.fresh);
+      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.backfill, 'manifest-token'), SyncUploadLane.backfill);
+    });
   });
 
   group('syncRateLimitKindForResponse', () {

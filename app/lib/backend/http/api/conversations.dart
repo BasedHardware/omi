@@ -457,6 +457,17 @@ enum SyncUploadLane { fresh, backfill }
 bool shouldRequestSyncCaptureManifest(String? conversationId, SyncUploadLane syncLane) =>
     conversationId != null && syncLane == SyncUploadLane.fresh;
 
+/// The lane a batch actually uploads on once fresh-capture provenance resolved.
+///
+/// A batch with no capture manifest is exactly what the server classifies as
+/// backfill (`unbound_capture_time`), so it uploads on the paced backfill lane.
+/// Holding it back on the client instead strands the account: a manifest denial
+/// is often permanent (403 unverifiable provenance, 409 already claimed), so a
+/// client-side cooldown retries the same denial forever and never uploads.
+@visibleForTesting
+SyncUploadLane syncUploadLaneForCaptureManifest(SyncUploadLane requestedLane, String? captureManifest) =>
+    captureManifest == null ? SyncUploadLane.backfill : requestedLane;
+
 Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
   final claims = <Map<String, String>>[];
   for (final file in files) {
@@ -478,9 +489,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -553,12 +562,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-    if (captureManifest == null) {
-      throw SyncRateLimitedException(
-        kind: SyncRateLimitKind.backfillPaced,
-        retryAfterSeconds: 30,
-      );
-    }
+    syncLane = syncUploadLaneForCaptureManifest(syncLane, captureManifest);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
@@ -581,9 +585,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     final completed = SyncLocalFilesResponse.fromGenerated(
       wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
-    return UploadFilesResult.done(
-      requireCompleteSyncUpload(completed),
-    );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(

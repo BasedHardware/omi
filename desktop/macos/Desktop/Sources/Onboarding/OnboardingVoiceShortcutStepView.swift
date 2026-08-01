@@ -17,6 +17,7 @@ struct OnboardingVoiceShortcutStepView: View {
   @State private var showContinue = false
   @State private var isRecordingCustomShortcut = false
   @State private var captureError: String?
+  @State private var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   @State private var localKeyMonitor: Any?
   @State private var globalKeyMonitor: Any?
 
@@ -245,7 +246,7 @@ struct OnboardingVoiceShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.pttShortcut == shortcut && !shortcutSettings.pttUsesCustomShortcut
     return Button {
-      shortcutSettings.pttShortcut = shortcut
+      Self.selectPreset(shortcut, settings: shortcutSettings)
       isRecordingCustomShortcut = false
       captureError = nil
       resetDetectionState()
@@ -267,9 +268,14 @@ struct OnboardingVoiceShortcutStepView: View {
     .buttonStyle(.plain)
   }
 
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.pttShortcut = shortcut
+  }
+
   private func beginCustomShortcutCapture() {
     isRecordingCustomShortcut = true
     captureError = nil
+    pendingModifierOnlyShortcut = nil
     resetDetectionState()
   }
 
@@ -322,6 +328,7 @@ struct OnboardingVoiceShortcutStepView: View {
       NSApp.mainMenu = menu
       Self.savedMenu = nil
     }
+    pendingModifierOnlyShortcut = nil
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
@@ -349,14 +356,27 @@ struct OnboardingVoiceShortcutStepView: View {
   }
 
   private func captureCustomShortcut(from event: NSEvent) -> Bool {
-    guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: true) else {
-      if event.type == .flagsChanged, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
-        return false
+    if event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        shortcutSettings.pttShortcut = shortcut
+        isRecordingCustomShortcut = false
+        captureError = nil
+        return true
       }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
+    guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: true) else {
       captureError = "Press the key combination you want to use."
       return false
     }
 
+    pendingModifierOnlyShortcut = nil
     shortcutSettings.pttShortcut = shortcut
     isRecordingCustomShortcut = false
     captureError = nil

@@ -111,7 +111,7 @@ resolve_rpath_dependency() {
   local resolved_rpath
   local resolved_dep
 
-  for rpath in "${candidate_rpaths[@]}"; do
+  for rpath in "${candidate_rpaths[@]+${candidate_rpaths[@]}}"; do
     case "$rpath" in
       @executable_path/*|@loader_path/*)
         resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
@@ -231,7 +231,7 @@ done < <(
     -print0
 )
 
-node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/node"
+node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"

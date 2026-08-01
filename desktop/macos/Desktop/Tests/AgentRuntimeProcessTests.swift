@@ -657,7 +657,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(
       candidates.contains(
-        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"))
     XCTAssertTrue(
       candidates.contains(
         "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))

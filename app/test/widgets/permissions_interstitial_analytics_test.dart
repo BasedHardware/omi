@@ -20,16 +20,15 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      permissionsChannel,
-      (call) async {
-        if (call.method == 'checkServiceStatus') return 0;
-        if (call.method == 'requestPermissions') {
-          return {for (final permission in call.arguments as List<dynamic>) permission: 0};
-        }
-        return null;
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(permissionsChannel, (
+      call,
+    ) async {
+      if (call.method == 'checkServiceStatus') return 0;
+      if (call.method == 'requestPermissions') {
+        return {for (final permission in call.arguments as List<dynamic>) permission: 0};
+      }
+      return null;
+    });
   });
 
   tearDown(() {
@@ -47,18 +46,18 @@ void main() {
     final provider = OnboardingProvider();
 
     Widget app() => ChangeNotifierProvider.value(
-          value: provider,
-          child: const MaterialApp(
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: PermissionsInterstitialPage(),
-          ),
-        );
+      value: provider,
+      child: const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: PermissionsInterstitialPage(),
+      ),
+    );
 
     await tester.pumpWidget(app());
     provider.setLoading(true);
@@ -68,23 +67,17 @@ void main() {
     await tester.idle();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(
-      analytics.events,
-      ['Permissions Interstitial Shown', 'Permissions Interstitial Completed'],
-    );
+    expect(analytics.events, ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(app());
     await AnalyticsManager.flushPending(force: true);
 
-    expect(
-      analytics.events,
-      [
-        'Permissions Interstitial Shown',
-        'Permissions Interstitial Completed',
-        'Permissions Interstitial Shown',
-      ],
-    );
+    expect(analytics.events, [
+      'Permissions Interstitial Shown',
+      'Permissions Interstitial Completed',
+      'Permissions Interstitial Shown',
+    ]);
   });
 }
 

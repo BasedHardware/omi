@@ -94,6 +94,7 @@ else:
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
+client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
 
 # Stub database.action_items (imported by staged_tasks)
