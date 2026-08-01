@@ -6,7 +6,6 @@ from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional
-import uuid
 import time
 from urllib.parse import urljoin
 
@@ -31,6 +30,7 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
+    is_purchasable_price_id,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -42,7 +42,13 @@ from database.users import (
     get_user_profile,
 )
 from utils import stripe as stripe_utils
-from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
+from utils.apps import (
+    find_app_subscription,
+    get_is_user_paid_app,
+    paid_app,
+    set_user_app_sub_customer_id,
+    unpaid_app,
+)
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
@@ -284,6 +290,18 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
         )
 
 
+def _assert_purchasable_price(price_id: str) -> None:
+    """Reject any price the client named that is not in the live catalog.
+
+    The price id arrives straight from the client and is handed to Stripe, so
+    without this a user can check out against a retired price (the old $19.99
+    Unlimited, still resolvable via LEGACY_PRICE_MAP) or any other price object
+    in the Stripe account, and receive current entitlements for it.
+    """
+    if not is_purchasable_price_id(price_id):
+        raise HTTPException(status_code=400, detail="Invalid plan selected.")
+
+
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
@@ -523,6 +541,8 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     response_model_exclude_none=True,
 )
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    _assert_purchasable_price(request.price_id)
+
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
     if not can_pay:
@@ -542,7 +562,11 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
         return reactivation_result
 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
-    idempotency_key = str(uuid.uuid4())
+    # A fresh uuid per call deduplicated nothing: a double-tap created two live
+    # subscriptions, and DELETE /v1/payments/subscription only cancels the one
+    # Firestore kept. Derive the key from the request so a retry collapses onto
+    # the same Stripe session.
+    idempotency_key = f'checkout:{uid}:{request.price_id}:{request.promotion_code or ""}'
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     try:
         session = stripe_utils.create_subscription_checkout_session(
@@ -598,6 +622,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    _assert_purchasable_price(request.price_id)
+
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
@@ -806,6 +832,41 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
+async def _app_entitlement_from_subscription_id(subscription_id: str | None) -> tuple[str, str] | None:
+    """Resolve (app_id, uid) from a Stripe subscription's metadata.
+
+    App subscriptions carry `{uid, app_id}` metadata (written by the
+    checkout.session.completed handler). Returns None for plain user
+    subscriptions, which have no app_id.
+    """
+    if not subscription_id:
+        return None
+    try:
+        stripe_sub = await run_blocking(stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id))
+    except Exception as e:
+        logger.error(f"Error retrieving subscription {subscription_id} for app entitlement: {sanitize(str(e))}")
+        return None
+    metadata = stripe_sub.to_dict().get('metadata', {}) or {}
+    app_id = metadata.get('app_id')
+    uid = metadata.get('uid')
+    if not app_id or not uid:
+        return None
+    return app_id, uid
+
+
+async def _resolve_app_entitlement_from_charge(charge: dict) -> tuple[str, str] | None:
+    """Resolve (app_id, uid) for a charge, via its invoice's subscription."""
+    invoice_id = charge.get('invoice')
+    if not invoice_id:
+        return None
+    try:
+        invoice = (await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(invoice_id))).to_dict()
+    except Exception as e:
+        logger.error(f"Error retrieving invoice {invoice_id} for app entitlement: {sanitize(str(e))}")
+        return None
+    return await _app_entitlement_from_subscription_id(invoice.get('subscription'))
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
@@ -825,10 +886,25 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if session.get('metadata', {}).get('app_id'):
             logger.info(f"Payment completed for session: {session['id']}")
             app_id = session['metadata']['app_id']
-            uid = session['client_reference_id']
-            if not uid or len(uid) < 4:
+            raw_reference = session.get('client_reference_id') or ''
+            # The reference is built as `uid_{uid}` by /v1/apps/{app_id}. A bare
+            # 4-char strip accepted any string and silently produced a bogus uid;
+            # require the literal prefix and a uid that resolves to a real user
+            # before granting anything.
+            if not raw_reference.startswith('uid_') or len(raw_reference) <= 4:
+                logger.error(f"[WEBHOOK ERROR] Malformed client_reference_id on session {session.get('id')}")
                 raise HTTPException(status_code=400, detail="Invalid client")
-            uid = uid[4:]
+            uid = raw_reference[4:]
+            metadata_uid = session.get('metadata', {}).get('uid')
+            if metadata_uid and metadata_uid != uid:
+                logger.error(
+                    f"[WEBHOOK ERROR] client_reference_id uid does not match session metadata uid "
+                    f"on session {session.get('id')}"
+                )
+                raise HTTPException(status_code=400, detail="Invalid client")
+            if not await run_blocking(db_executor, users_db.get_user_profile, uid):
+                logger.warning(f"Stripe webhook: app payment for unknown user {uid}, skipping entitlement grant")
+                return {"status": "success"}
 
             if session.get("subscription"):
                 subscription_id = session["subscription"]
@@ -945,6 +1021,44 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                                 )
                 except Exception as e:
                     logger.error(f"Error retrieving subscription for notification: {sanitize(str(e))}")
+
+    # Paid-app entitlement lifecycle. The 30-day Redis key set by
+    # checkout.session.completed used to be write-only: a refund, dispute, or
+    # cancellation left access intact for the rest of the window, and a
+    # legitimate annual subscriber lost access on day 31.
+    if event['type'] in ('charge.refunded', 'charge.dispute.created'):
+        charge = event['data']['object']
+        if event['type'] == 'charge.dispute.created':
+            charge_id = charge.get('charge')
+            charge = None
+            if charge_id:
+                try:
+                    charge = (await run_blocking(stripe_executor, lambda: stripe.Charge.retrieve(charge_id))).to_dict()
+                except Exception as e:
+                    logger.error(f"Error retrieving disputed charge {charge_id}: {sanitize(str(e))}")
+        binding = await _resolve_app_entitlement_from_charge(charge) if charge else None
+        if binding:
+            app_id, uid = binding
+            await run_blocking(db_executor, unpaid_app, app_id, uid)
+            logger.info(f"Revoked paid-app entitlement for user {uid} app {app_id} on {event['type']}")
+
+    if event['type'] == 'invoice.payment_succeeded':
+        invoice = event['data']['object']
+        binding = await _app_entitlement_from_subscription_id(invoice.get('subscription'))
+        if binding:
+            app_id, uid = binding
+            await run_blocking(db_executor, paid_app, app_id, uid)
+            logger.info(f"Refreshed paid-app entitlement for user {uid} app {app_id} on invoice.payment_succeeded")
+
+    if event['type'] == 'customer.subscription.deleted':
+        sub_metadata = event['data']['object'].get('metadata', {}) or {}
+        app_id = sub_metadata.get('app_id')
+        app_sub_uid = sub_metadata.get('uid')
+        if app_id and app_sub_uid:
+            await run_blocking(db_executor, unpaid_app, app_id, app_sub_uid)
+            logger.info(
+                f"Revoked paid-app entitlement for user {app_sub_uid} app {app_id} on customer.subscription.deleted"
+            )
 
     if event['type'] in [
         'customer.subscription.updated',

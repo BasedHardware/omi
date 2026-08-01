@@ -153,7 +153,7 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         )
         if not burst_allowed:
             raise HTTPException(status_code=429, detail="Gemini request rate limit exceeded")
-        _, current, _ = await run_blocking(
+        daily_allowed, daily_remaining, _ = await run_blocking(
             critical_executor,
             redis_db.check_rate_limit,
             uid,
@@ -165,10 +165,11 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Gemini rate limiter is unavailable") from exc
-    if int(current) > _DAILY_HARD_LIMIT:
+    if not daily_allowed:
         raise HTTPException(status_code=429, detail="Gemini daily request limit exceeded")
+    consumed = _DAILY_HARD_LIMIT - int(daily_remaining)
     soft_limit = 300 if os.getenv("OMI_MODEL_TIER", "").strip().lower() == "max" else 30
-    if int(current) > soft_limit and action not in {"embedContent", "batchEmbedContents"} and model == "gemini-2.5-pro":
+    if consumed > soft_limit and action not in {"embedContent", "batchEmbedContents"} and model == "gemini-2.5-pro":
         return f"models/gemini-2.5-flash:{action}"
     return path
 

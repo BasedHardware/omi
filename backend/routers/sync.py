@@ -145,6 +145,12 @@ logger = logging.getLogger(__name__)
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
 
+# @max_part_size bounds each uploaded part, not how many parts a request carries.
+# Without a count cap one multipart POST can enqueue hundreds of hours of STT, so
+# reject oversized batches before any part is read or staged. The app syncs WAL
+# chunks in small batches; this is well above any real client batch.
+_MAX_SYNC_FILES_PER_REQUEST = 50
+
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
@@ -491,6 +497,16 @@ async def sync_local_files(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
 ):
+    if len(files) > _MAX_SYNC_FILES_PER_REQUEST:
+        logger.warning('sync: v1 batch file-count cap exceeded uid=%s files=%d', uid, len(files))
+        return JSONResponse(
+            status_code=413,
+            headers={**_V1_DEPRECATION_HEADERS},
+            content={
+                'code': 'too_many_files',
+                'detail': f'At most {_MAX_SYNC_FILES_PER_REQUEST} files per request; split the batch and retry',
+            },
+        )
     if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(
             status_code=503,
@@ -684,7 +700,10 @@ async def sync_local_files(
                 triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
-                    asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                    start_background_task(
+                        trigger_classifier_if_needed(uid, triggered_caps),
+                        name='sync_fair_use_classifier',
+                    )
 
         is_locked = should_lock
 
@@ -876,6 +895,15 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    if len(files) > _MAX_SYNC_FILES_PER_REQUEST:
+        logger.warning('sync_v2: batch file-count cap exceeded uid=%s files=%d', uid, len(files))
+        return JSONResponse(
+            status_code=413,
+            content={
+                'code': 'too_many_files',
+                'detail': f'At most {_MAX_SYNC_FILES_PER_REQUEST} files per request; split the batch and retry',
+            },
+        )
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         # The one-time hard-revision-retirement cutover intentionally blocks

@@ -65,8 +65,9 @@ from database.redis_db import (
     set_app_usage_count_cache,
     set_user_paid_app,
     get_user_paid_app,
+    delete_user_paid_app,
     delete_app_cache_by_id,
-    is_username_taken,
+    save_username,
     get_user_app_subscription_customer_id,
     set_user_app_subscription_customer_id,
     can_update_persona,
@@ -715,6 +716,11 @@ def paid_app(app_id: str, uid: str):
     set_user_paid_app(app_id, uid, expired_seconds)
 
 
+def unpaid_app(app_id: str, uid: str):
+    """Revoke paid-app access (refund, dispute, or subscription cancellation)."""
+    delete_user_paid_app(app_id, uid)
+
+
 def set_user_app_sub_customer_id(app_id: str, uid: str, customer_id: str):
     set_user_app_subscription_customer_id(app_id, uid, customer_id)
 
@@ -1001,14 +1007,25 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
 
 
-def increment_username(username: str) -> str:
-    if is_username_taken(username):
-        i = 1
-        while is_username_taken(f"{username}{i}"):
-            i += 1
-        return f"{username}{i}"
-    else:
-        return username
+_USERNAME_ALLOCATION_MAX_ATTEMPTS = 1000
+
+
+def increment_username(username: str, uid: str) -> str:
+    """Allocate and claim the first free `username`/`username{n}` for `uid`.
+
+    The claim is the SETNX inside save_username, and the loop retries on a lost
+    race. Probing with is_username_taken and claiming afterwards was a
+    check-then-act: two concurrent creates both saw the name free and the second
+    overwrote the first.
+    """
+    candidate = username
+    i = 0
+    while i <= _USERNAME_ALLOCATION_MAX_ATTEMPTS:
+        if save_username(candidate, uid):
+            return candidate
+        i += 1
+        candidate = f"{username}{i}"
+    raise ValueError(f"Could not allocate a unique username for base '{username}'")
 
 
 def generate_api_key() -> Tuple[str, str, str]:

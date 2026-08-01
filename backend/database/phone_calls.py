@@ -1,11 +1,16 @@
 import copy
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
+
+from google.cloud import firestore
 
 from database._client import db
 from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 from utils import encryption
+
+logger = logging.getLogger(__name__)
 
 phone_numbers_collection = 'phone_numbers'
 
@@ -38,7 +43,11 @@ def _prepare_phone_number_for_read(data: Dict[str, Any], uid: str) -> Dict[str, 
     data = copy.deepcopy(data)
     level = data.get('data_protection_level')
     if level == 'enhanced' and 'phone_number' in data:
-        data['phone_number'] = encryption.decrypt(data['phone_number'], uid)
+        try:
+            data['phone_number'] = encryption.decrypt(data['phone_number'], uid)
+        except encryption.DecryptionError:
+            logger.error(f"phone_calls: phone_number decryption failed for {uid}")
+            data['phone_number'] = None
     return data
 
 
@@ -138,19 +147,59 @@ def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
 PENDING_VERIFICATION_TTL_SECONDS = 300  # 5 minutes
 
 
+class PendingVerificationConflict(Exception):
+    """Another user already holds the pending-verification claim for this number."""
+
+
+def _pending_verification_is_expired(data: Dict[str, Any]) -> bool:
+    created_at_raw = data.get('created_at')
+    try:
+        created_at = (
+            datetime.fromisoformat(str(created_at_raw))
+            if created_at_raw is not None
+            else datetime.min.replace(tzinfo=timezone.utc)
+        )
+    except (TypeError, ValueError):
+        # Malformed/legacy record: treat as expired so it can be reclaimed.
+        return True
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created_at).total_seconds() > PENDING_VERIFICATION_TTL_SECONDS
+
+
 def set_pending_verification(uid: str, phone_number: str) -> None:
     """Record that a user initiated verification for a phone number.
 
     Uses a hash of the phone number as the document ID for efficient lookup.
+
+    The claim is created inside a transaction that refuses to overwrite a live
+    claim held by a different uid. With an unconditional `.set()` this document
+    was a global, last-writer-wins slot: an attacker could re-claim it while the
+    real owner was mid-verification, then poll `check_phone_verification` and
+    have the victim's number attached to the attacker's account.
     """
     doc_id = _hash_phone_number(phone_number)
-    db.collection('pending_verifications').document(doc_id).set(
-        {
-            'uid': uid,
-            'phone_number_hash': doc_id,
-            'created_at': datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    doc_ref = db.collection('pending_verifications').document(doc_id)
+
+    @firestore.transactional
+    def _claim(transaction: Any) -> None:
+        snapshot = doc_ref.get(transaction=transaction)
+        if getattr(snapshot, "exists", False):
+            raw: object = snapshot.to_dict()
+            existing: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            existing_uid = existing.get('uid')
+            if existing_uid and existing_uid != uid and not _pending_verification_is_expired(existing):
+                raise PendingVerificationConflict(doc_id)
+        transaction.set(
+            doc_ref,
+            {
+                'uid': uid,
+                'phone_number_hash': doc_id,
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    _claim(db.transaction())
 
 
 def get_pending_verification_uid(phone_number: str) -> Optional[str]:
@@ -164,30 +213,37 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
         return None
     raw: object = doc.to_dict()
     data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    try:
-        created_at_raw = data.get('created_at')
-        created_at = (
-            datetime.fromisoformat(str(created_at_raw))
-            if created_at_raw is not None
-            else datetime.min.replace(tzinfo=timezone.utc)
-        )
-    except (TypeError, ValueError):
-        # Malformed/legacy pending verification (missing or non-ISO created_at); treat as expired.
-        db.collection('pending_verifications').document(doc_id).delete()
-        return None
-    # A stored created_at without a timezone (legacy/naive value) would raise on the aware/naive
-    # subtraction below; normalize it to UTC so the elapsed-time check never 500s.
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
-    if elapsed > PENDING_VERIFICATION_TTL_SECONDS:
+    # A stored created_at without a timezone (legacy/naive value), or a malformed/missing
+    # one, is normalized inside the helper so the elapsed-time check never 500s.
+    if _pending_verification_is_expired(data):
         db.collection('pending_verifications').document(doc_id).delete()
         return None
     uid_value = data.get('uid')
     return str(uid_value) if uid_value is not None else None
 
 
-def delete_pending_verification(phone_number: str) -> None:
-    """Delete a pending verification record after it has been processed."""
+def delete_pending_verification(phone_number: str, uid: Optional[str] = None) -> None:
+    """Delete a pending verification record after it has been processed.
+
+    When `uid` is given the delete is a compare-and-delete inside a transaction:
+    a caller may only clear the claim it owns, so a concurrent claim by another
+    user is never silently dropped.
+    """
     doc_id = _hash_phone_number(phone_number)
-    db.collection('pending_verifications').document(doc_id).delete()
+    doc_ref = db.collection('pending_verifications').document(doc_id)
+    if uid is None:
+        doc_ref.delete()
+        return
+
+    @firestore.transactional
+    def _delete_if_owned(transaction: Any) -> None:
+        snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(snapshot, "exists", False):
+            return
+        raw: object = snapshot.to_dict()
+        existing: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        if existing.get('uid') != uid:
+            return
+        transaction.delete(doc_ref)
+
+    _delete_if_owned(db.transaction())

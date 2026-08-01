@@ -105,10 +105,10 @@ class CreateCalendarEventRequest(BaseModel):
 def get_conversations(
     start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
-    limit: int = Query(default=20, ge=1, le=5000),
+    limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     include_transcript: bool = Query(default=True),
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:read")),
 ):
     result = get_conversations_text(
         uid=uid,

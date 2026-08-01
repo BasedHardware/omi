@@ -5,8 +5,9 @@ from typing import cast
 from urllib.parse import quote
 
 import websockets
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, WebSocketException
 
+from database import redis_db
 from utils.byok import (
     BYOK_HEADERS,
     extract_byok_from_websocket,
@@ -16,6 +17,7 @@ from utils.byok import (
 )
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.other.endpoints import check_rate_limit_inline
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 from utils.subscription import is_trial_paywalled
 
@@ -41,6 +43,35 @@ GEMINI_URL = (
     "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={key}"
 )
 OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
+
+# A relay session bills the platform provider key for as long as it stays open,
+# so bound both how many a single uid may hold and how long any one may live.
+# The slot key TTL is the session cap plus a grace margin so a crashed backend
+# instance cannot strand slots forever.
+_MAX_CONCURRENT_RELAYS = 3
+_MAX_SESSION_SECONDS = 30 * 60
+_SLOT_TTL_SECONDS = _MAX_SESSION_SECONDS + 120
+
+
+def _slot_key(uid: str) -> str:
+    return f'omni_relay:conns:{uid}'
+
+
+def _acquire_relay_slot(uid: str) -> bool:
+    """Reserve one concurrent-relay slot for uid. Fail-closed on Redis errors."""
+    key = _slot_key(uid)
+    count = int(redis_db.r.incr(key))
+    redis_db.r.expire(key, _SLOT_TTL_SECONDS)
+    if count > _MAX_CONCURRENT_RELAYS:
+        redis_db.r.decr(key)
+        return False
+    return True
+
+
+def _release_relay_slot(uid: str) -> None:
+    key = _slot_key(uid)
+    if int(redis_db.r.decr(key)) < 0:
+        redis_db.r.set(key, 0, ex=_SLOT_TTL_SECONDS)
 
 
 def _upstream(provider: str, model: str | None) -> tuple[tuple[str, dict[str, str]], None] | tuple[None, str]:
@@ -104,6 +135,15 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1008, reason="trial_expired")
         return
 
+    # Connect-rate cap. Reuses the shared per-UID policy table so the relay is
+    # tunable with every other metered surface (RATE_LIMIT_BOOST / shadow mode).
+    try:
+        await run_blocking(critical_executor, check_rate_limit_inline, uid, "omni:relay")
+    except HTTPException as e:
+        logger.info(f"omni relay rate limited uid={uid}")
+        await websocket.close(code=1008, reason=str(e.detail)[:120])
+        return
+
     provider = websocket.query_params.get("provider", "gemini")
     model = websocket.query_params.get("model")
     upstream_cfg, err = _upstream(provider, model)
@@ -111,6 +151,19 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1011, reason=err)
         return
     url, headers = cast(tuple[str, dict[str, str]], upstream_cfg)
+
+    # Concurrent-session cap. Acquired last so no earlier rejection path can leak
+    # a slot, and released unconditionally in the finally below.
+    try:
+        slot_acquired = await run_blocking(critical_executor, _acquire_relay_slot, uid)
+    except Exception as e:
+        logger.error(f"omni relay slot check failed uid={uid}: {e}")
+        await websocket.close(code=1013, reason="relay capacity check unavailable")
+        return
+    if not slot_acquired:
+        logger.info(f"omni relay concurrency cap hit uid={uid}")
+        await websocket.close(code=1008, reason="too many concurrent relay sessions")
+        return
 
     await websocket.accept()
     try:
@@ -137,9 +190,15 @@ async def omni_relay(websocket: WebSocket):
 
             t1 = asyncio.create_task(client_to_upstream(), name=f"ws:{uid}:omni_c2u")
             t2 = asyncio.create_task(upstream_to_client(), name=f"ws:{uid}:omni_u2c")
-            done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            # Hard session-duration cap: an idle-but-open relay still holds a
+            # provider session, so time it out instead of waiting on the peers.
+            done, pending = await asyncio.wait(
+                {t1, t2}, timeout=_MAX_SESSION_SECONDS, return_when=asyncio.FIRST_COMPLETED
+            )
             for t in pending:
                 t.cancel()
+            if not done:
+                logger.info(f"omni relay session duration cap reached uid={uid}")
             for t in done:
                 if t.exception():
                     logger.warning(f"omni relay task ended: {t.exception()}")
@@ -148,6 +207,10 @@ async def omni_relay(websocket: WebSocket):
     except Exception as e:
         logger.error(f"omni relay error (uid={uid}, provider={provider}): {e}")
     finally:
+        try:
+            await run_blocking(critical_executor, _release_relay_slot, uid)
+        except Exception as e:
+            logger.warning(f"omni relay slot release failed uid={uid}: {e}")
         try:
             await websocket.close()
         except Exception:

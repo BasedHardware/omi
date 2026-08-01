@@ -486,14 +486,16 @@ def get_conversations(
     # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
     # Mirrors the sibling MCP tool (routers/mcp_sse.py get_conversations) and every other
     # paginated list endpoint in this file (get_action_items, get_chat_messages, etc.).
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 200))
     offset = max(0, min(offset, 100000))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    conversations = conversations_db.get_conversations(
+    # SimpleConversation carries no photos; get_conversations is @with_photos and
+    # streams a per-row photos subcollection (N+1 reads of base64 blobs).
+    conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,

@@ -6,7 +6,7 @@ from html import escape
 from datetime import datetime, timezone
 
 import httpx
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
@@ -14,6 +14,7 @@ from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPExcept
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.admin_auth import has_admin_authorization, require_admin_authorization
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
     critical_executor,
@@ -23,7 +24,12 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import (
+    UnsafeWebhookURLError,
+    get_webhook_client,
+    get_webhook_semaphore,
+    safe_request_target,
+)
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -889,9 +895,13 @@ async def create_persona(
     data['email'] = user.get('email')
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
-        data['username'] = data['name'].replace(' ', '').lower()
-        data['username'] = await run_blocking(db_executor, increment_username, data['username'])
-    await run_blocking(db_executor, save_username, data['username'], uid)
+        data['username'] = await run_blocking(
+            db_executor, increment_username, data['name'].replace(' ', '').lower(), uid
+        )
+    elif not await run_blocking(db_executor, save_username, data['username'], uid):
+        # Caller-supplied username never passed an availability check before, so
+        # it deterministically clobbered whoever already owned it.
+        raise HTTPException(status_code=409, detail='This username is already taken')
 
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
@@ -947,7 +957,8 @@ async def update_persona(
         img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
-    await run_blocking(db_executor, save_username, data['username'], uid)
+    if not await run_blocking(db_executor, save_username, data['username'], uid):
+        raise HTTPException(status_code=409, detail='This username is already taken')
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
 
@@ -1011,7 +1022,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
         'username': await run_blocking(
-            db_executor, increment_username, (user.get('display_name') or 'MyPersona').replace(' ', '').lower()
+            db_executor, increment_username, (user.get('display_name') or 'MyPersona').replace(' ', '').lower(), uid
         ),
         'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
         'image': '',  # Empty image as specified in the task
@@ -1035,8 +1046,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Save username
-    await run_blocking(db_executor, save_username, persona_data['username'], uid)
+    # Username was already claimed atomically by increment_username above.
 
     # Add persona to database
     await run_blocking(db_executor, add_app_to_db, persona_create.model_dump(exclude_unset=True))
@@ -1245,6 +1255,11 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
 
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
+
+    # Ratings drive marketplace ranking, so they must come from someone who
+    # actually installed the app — otherwise any account can rate anything.
+    if not is_app_enabled(uid, app_id):
+        raise HTTPException(status_code=403, detail='You must install this app before reviewing it')
 
     review_data = {
         'score': data.score,
@@ -1990,10 +2005,11 @@ async def mcp_oauth_callback(code: str, state: str):
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
 
-    # Update app with tokens and tools
+    # Update app with tokens and tools. `status` is deliberately left alone:
+    # this handler is reachable without an Omi session, so it must never
+    # promote an app's review status.
     update_dict = {
         'id': app_id,
-        'status': 'approved',
         'external_integration': {
             'mcp_server_url': resolved_url,
             'mcp_oauth_tokens': oauth_tokens,
@@ -2003,8 +2019,18 @@ async def mcp_oauth_callback(code: str, state: str):
     await run_blocking(db_executor, update_app_in_db, update_dict)
     await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
-    # Auto-enable the app for the user
-    await run_blocking(db_executor, enable_app, uid, app_id)
+    # Auto-enable the app for the user — through the same policy as
+    # /v1/apps/enable rather than a bare enable_app write.
+    refreshed = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
+    if not refreshed:
+        return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+    try:
+        await _enable_app_for_user(App(**refreshed), uid)
+    except HTTPException as e:
+        return HTMLResponse(
+            f'<html><body><h1>Could not enable app</h1><p>{escape(str(e.detail))}</p></body></html>',
+            status_code=e.status_code,
+        )
 
     tool_count = len(tools)
     tool_names = ', '.join(escape(t.name) for t in tools)
@@ -2108,12 +2134,15 @@ def _setup_completed_from_response(res: httpx.Response) -> bool:
     return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
 
 
-@router.post('/v1/apps/enable', response_model=AppMutationResponse)
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
-    app = App(**app) if app else None
-    if not app:
-        raise HTTPException(status_code=404, detail='App not found')
+async def _enable_app_for_user(app: App, uid: str) -> None:
+    """Run the full enable policy for `uid`, then enable and count the install.
+
+    Every caller that enables an app on a user's behalf must go through here —
+    the checks below (disabled, private, third-party setup completion, paid
+    entitlement) are the entitlement boundary, and the install-count increment
+    is guarded so a repeat enable cannot inflate marketplace ranking.
+    """
+    app_id = app.id
     if app.disabled:
         raise HTTPException(
             status_code=400,
@@ -2123,9 +2152,31 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
+        # Developer-controlled URL: validate + pin it (SSRF/DNS-rebinding) and
+        # bound concurrency, exactly as routers/oauth.py does for the same call.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(
+                db_executor, safe_request_target, app.external_integration.setup_completed_url
+            )
+        except UnsafeWebhookURLError as e:
+            logger.warning(f'Rejected setup_completed_url for app {app_id}: {e}')
+            raise HTTPException(
+                status_code=400,
+                detail='This app is misconfigured (setup URL is not a public address). Please contact the app developer.',
+            )
         client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
-        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
+        async with get_webhook_semaphore():
+            try:
+                res = await client.get(
+                    pinned_url + f'?uid={uid}',
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
+                )
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                logger.warning(f'setup_completed_url request failed for app {app_id}: {e}')
+                raise HTTPException(status_code=400, detail='App setup is not completed')
+        logger.info(f'enable_app_endpoint {res.status_code}')
         if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
@@ -2133,13 +2184,33 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if app.is_paid and await run_blocking(db_executor, get_is_user_paid_app, app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
+    # enable_app is a set add and therefore idempotent, but the install counter
+    # is a bare INCR — without this precheck a client can re-enable in a loop
+    # and inflate the count that drives marketplace ranking.
+    already_enabled = await run_blocking(db_executor, is_app_enabled, uid, app_id)
     await run_blocking(db_executor, enable_app, uid, app_id)
     if (
-        (app.private is None or not app.private)
+        not already_enabled
+        and (app.private is None or not app.private)
         and (app.uid is None or app.uid != uid)
         and not await run_blocking(db_executor, is_tester, uid)
     ):
         await run_blocking(db_executor, increase_app_installs_count, app_id)
+
+
+@router.post('/v1/apps/enable', response_model=AppMutationResponse)
+async def enable_app_endpoint(
+    app_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    _rate_limit: Any = Depends(
+        auth.rate_limit_dependency(endpoint="apps_enable", requests_per_window=60, window_seconds=3600)
+    ),
+):
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    await _enable_app_for_user(app, uid)
     return {'status': 'ok'}
 
 
@@ -2166,8 +2237,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
     if not data.apps:
@@ -2180,8 +2250,7 @@ def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
     if not data.app_id:
@@ -2192,8 +2261,7 @@ def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(..
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
     if not data.app_id:
@@ -2211,16 +2279,14 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     apps = get_unapproved_public_apps_db()
     return apps
 
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
     invalidate_popular_apps_cache()
@@ -2229,8 +2295,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)
@@ -2245,8 +2310,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
@@ -2295,8 +2359,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     personas = get_persona_by_id_db(persona_id)
     if not personas:
         raise HTTPException(status_code=404, detail='Persona not found')
@@ -2306,8 +2369,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    require_admin_authorization(secret_key)
     persona = get_personas_by_username_db(persona_id)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
@@ -2368,7 +2430,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 @router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
@@ -2379,7 +2441,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
 @router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = add_conversation_summary_app_id(app_id)
@@ -2392,7 +2454,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
 @router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = remove_conversation_summary_app_id(app_id)

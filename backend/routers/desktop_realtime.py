@@ -6,15 +6,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Response
 from fastapi.responses import JSONResponse
 from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
 from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
-from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.subscription import enforce_chat_quota, is_trial_paywalled
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -138,12 +138,19 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 
 @router.post("/v2/realtime/session")
-async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
+async def mint_session(
+    request: MintRequest,
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "realtime:session")),
+    x_app_platform: str | None = Header(None, alias="X-App-Platform"),
+) -> JSONResponse:
     if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
         return JSONResponse(
             status_code=402,
             content={"error": "trial_expired", "message": "Desktop trial expired. Upgrade or bring your own keys."},
         )
+    # Same plan/usage gate /v2/chat/completions applies: a minted secret is a
+    # billable provider session, so it must not outrun the caller's chat quota.
+    await run_blocking(db_executor, enforce_chat_quota, uid, x_app_platform)
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -152,7 +159,13 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
             _OPENAI_CLIENT_SECRETS_URL,
             "openai",
             {"Authorization": f"Bearer {key}"},
-            {"session": {"type": "realtime", "model": _OPENAI_REALTIME_MODEL}},
+            {
+                "session": {"type": "realtime", "model": _OPENAI_REALTIME_MODEL},
+                # Bound the secret's lifetime the same way the Gemini branch does.
+                # OpenAI client secrets have no "uses" counter, so expiry is the
+                # only server-side bound available on this provider.
+                "expires_after": {"anchor": "created_at", "seconds": _SESSION_MAX_MIN * 60},
+            },
         )
         if error:
             return error
@@ -162,10 +175,13 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
                 502, "provider_mint_transport_error", "openai mint: no client secret in response", retryable=True
             )
         expires_at = json.dumps(data["expires_at"], separators=(",", ":")) if data and "expires_at" in data else None
-        await _persist_session(uid, token, "openai", _OPENAI_REALTIME_MODEL, expires_at or "")
-        return JSONResponse(
-            {"provider": "openai", "token": token, **({"expires_at": expires_at} if expires_at is not None else {})}
-        )
+        if expires_at is None:
+            expires_at = json.dumps(
+                int((datetime.now(timezone.utc) + timedelta(minutes=_SESSION_MAX_MIN)).timestamp()),
+                separators=(",", ":"),
+            )
+        await _persist_session(uid, token, "openai", _OPENAI_REALTIME_MODEL, expires_at)
+        return JSONResponse({"provider": "openai", "token": token, "expires_at": expires_at})
     if request.provider == "gemini":
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key:

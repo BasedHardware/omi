@@ -693,6 +693,29 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
+def get_purchasable_price_ids() -> set[str]:
+    """Price IDs a client is allowed to check out / switch to, right now.
+
+    Built from the live catalog only. LEGACY_PRICE_MAP exists so *inbound*
+    Stripe events for existing subscribers on retired pricing still resolve to a
+    plan; it must never widen what an outbound checkout will accept, otherwise a
+    client can name a retired price (e.g. the old $19.99 Unlimited) — or any
+    other price object in the Stripe account — and buy current entitlements at
+    it.
+    """
+    allowed: set[str] = set()
+    for definition in get_paid_plan_definitions():
+        for interval in ('monthly_price_id', 'annual_price_id'):
+            price_id = definition.get(interval)
+            if price_id:
+                allowed.add(price_id)
+    return allowed
+
+
+def is_purchasable_price_id(price_id: str) -> bool:
+    return bool(price_id) and price_id in get_purchasable_price_ids()
+
+
 def validate_stripe_price_ids():
     """Validate configured Stripe price IDs at startup outside the dev environment."""
     if os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev':
@@ -1159,6 +1182,7 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
             # If target price is provided, check if it's different from current plan
             if target_price_id:
                 current_price_id = None
+                lookup_failed = False
                 # Try to get current price ID from Stripe subscription
                 if subscription.stripe_subscription_id:
                     try:
@@ -1168,7 +1192,15 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
                             if stripe_sub_dict['items']['data']:
                                 current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
+                        lookup_failed = True
                         logger.error(f"Error retrieving current price ID: {e}")
+
+                # A Stripe outage must not grant permission. Fail closed, the
+                # same way _has_active_stripe_subscription blocks checkout when
+                # Stripe is unreachable — otherwise an existing subscriber can
+                # double-subscribe during the outage.
+                if lookup_failed:
+                    return False, "Cannot verify current subscription"
 
                 # If different price, allow upgrade/downgrade
                 if current_price_id and current_price_id != target_price_id:

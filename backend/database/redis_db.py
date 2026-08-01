@@ -139,12 +139,22 @@ def get_uid_by_username(username: str) -> Optional[str]:
     return uid.decode() if uid else None
 
 
-def save_username(username: str, uid: str) -> None:
-    """Save username and add to owner's set"""
-    # Save username:uid mapping
-    r.set(f'username:{username}:uid', uid)
+def save_username(username: str, uid: str) -> bool:
+    """Atomically claim `username` for `uid`.
+
+    Returns True when the claim succeeded (or `uid` already owns it), False when
+    another uid owns it. The SETNX is what makes concurrent creates safe — a
+    bare SET let two callers racing on the same name clobber each other, and let
+    a caller-supplied username steal a name that was already allocated.
+    """
+    claimed = r.set(f'username:{username}:uid', uid, nx=True)
+    if not claimed:
+        existing = r.get(f'username:{username}:uid')
+        if not existing or _decode_redis_value(existing) != uid:
+            return False
     # Add to owner's set of usernames
     r.sadd(f'uid:{uid}:usernames', username)
+    return True
 
 
 # ******************************************************
@@ -243,6 +253,11 @@ def get_user_paid_app(app_id: str, uid: str) -> Optional[str]:
     return val.decode()
 
 
+def delete_user_paid_app(app_id: str, uid: str) -> None:
+    """Revoke a user's paid-app entitlement (refund / dispute / cancellation)."""
+    r.delete(f'users:{uid}:paid_apps:{app_id}')
+
+
 def set_user_app_subscription_customer_id(app_id: str, uid: str, customer_id: str) -> None:
     """Store the Stripe customer ID for a user's app subscription"""
     r.set(f'users:{uid}:app_subs:{app_id}:customer_id', customer_id)
@@ -254,6 +269,34 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     if not val:
         return None
     return val.decode()
+
+
+MCP_OAUTH_STATE_TTL_SECONDS = 15 * 60
+
+
+def set_mcp_oauth_state(state: str, app_id: str, uid: str, ttl: int = MCP_OAUTH_STATE_TTL_SECONDS) -> None:
+    """Persist the app_id/uid binding for an MCP OAuth `state` value.
+
+    The state is opaque and server-generated; the callback can only act on a
+    binding that this backend issued, and only once.
+    """
+    r.set(f'mcp_oauth_state:{state}', json.dumps({'app_id': app_id, 'uid': uid}), ex=ttl)
+
+
+def consume_mcp_oauth_state(state: str) -> Optional[Dict[str, Any]]:
+    """Atomically fetch and delete an MCP OAuth state binding.
+
+    Returns None when the state is unknown, expired, or already consumed —
+    which makes the callback single-use and unforgeable.
+    """
+    raw = r.getdel(f'mcp_oauth_state:{state}')
+    if not raw:
+        return None
+    try:
+        loaded: object = json.loads(_decode_redis_value(raw))
+    except (TypeError, ValueError):
+        return None
+    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
 
 
 def enable_app(uid: str, app_id: str) -> None:

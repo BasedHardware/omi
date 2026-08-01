@@ -94,6 +94,11 @@ OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
+# Streamable-HTTP transport accepts a JSON-RPC array; every element is a full
+# tool execution, so the array length is an amplification factor on the per-request
+# rate limit. Bound it, and charge one token per message (see mcp_streamable_http).
+_MAX_JSONRPC_BATCH = 20
+
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
@@ -1002,7 +1007,7 @@ def execute_tool(
         raw_categories = arguments.get("categories", [])
         categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         try:
-            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=1000)
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=200)
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
@@ -1031,7 +1036,9 @@ def execute_tool(
             except ValueError:
                 pass
 
-        conversations = conversations_db.get_conversations(
+        # The projection below carries no photos; get_conversations is @with_photos
+        # and streams a per-row photos subcollection (N+1 reads of base64 blobs).
+        conversations = conversations_db.get_conversations_without_photos(
             user_id,
             limit,
             offset,
@@ -1731,7 +1738,18 @@ async def mcp_streamable_http(
     raw_messages: List[Dict[str, Any]] = (
         cast(List[Dict[str, Any]], body) if isinstance(body, list) else [cast(Dict[str, Any], body)]
     )
+    if len(raw_messages) > _MAX_JSONRPC_BATCH:
+        raise HTTPException(
+            status_code=413,
+            detail=f"JSON-RPC batch too large; at most {_MAX_JSONRPC_BATCH} messages per request",
+        )
     messages: List[Dict[str, Any]] = raw_messages
+
+    # The pre-parse check above charged one token. Each additional message in a
+    # batch is a separate tool execution, so charge the rest before running any
+    # of them — otherwise one token buys a whole batch of tool calls.
+    for _ in range(len(messages) - 1):
+        await run_blocking(critical_executor, check_rate_limit_inline, user_id, "mcp:sse")
 
     # Check if all messages are notifications/responses (no id)
     all_notifications = all(msg.get("id") is None for msg in messages)

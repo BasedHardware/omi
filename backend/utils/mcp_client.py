@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
+from database.redis_db import consume_mcp_oauth_state, set_mcp_oauth_state
 from models.app import ChatTool
 from utils.log_sanitizer import sanitize
 import logging
@@ -754,14 +755,29 @@ async def fetch_brandfetch_logo(domain: str) -> Optional[str]:
 
 
 def generate_state_token(app_id: str, uid: str) -> str:
-    """Generate a state parameter for OAuth that encodes app_id and uid."""
-    nonce = secrets.token_urlsafe(16)
-    return f"{app_id}:{uid}:{nonce}"
+    """Generate an opaque OAuth state parameter bound server-side to app_id/uid.
+
+    The state carries no caller-readable identity: it is a random value whose
+    (app_id, uid) binding lives in Redis with a short TTL. The callback is
+    unauthenticated by nature, so the binding — not the URL — is what proves
+    which app/user the authorization belongs to.
+    """
+    state = secrets.token_urlsafe(32)
+    set_mcp_oauth_state(state, app_id, uid)
+    return state
 
 
 def parse_state_token(state: str) -> tuple[str, str]:
-    """Parse app_id and uid from an OAuth state parameter."""
-    parts = state.split(":", 2)
-    if len(parts) < 2:
+    """Consume an OAuth state parameter and return its (app_id, uid) binding.
+
+    Single-use: the binding is deleted as it is read, so a replayed or forged
+    state raises ValueError.
+    """
+    binding = consume_mcp_oauth_state(state)
+    if not binding:
         raise ValueError("Invalid state token")
-    return parts[0], parts[1]
+    app_id = binding.get('app_id')
+    uid = binding.get('uid')
+    if not app_id or not uid:
+        raise ValueError("Invalid state token")
+    return str(app_id), str(uid)

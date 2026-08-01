@@ -12,6 +12,7 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
+from database.phone_calls import PendingVerificationConflict
 from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
@@ -127,6 +128,11 @@ def verify_phone_number(
         result = start_caller_id_verification(phone_number)
         phone_calls_db.set_pending_verification(uid, phone_number)
         return VerifyPhoneNumberResponse(**result)
+    except PendingVerificationConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
+        )
     except TwilioRestException as e:
         # Error 21450: a validation request already exists for this number.
         # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
@@ -191,7 +197,7 @@ def check_phone_verification(
         'is_primary': len(existing_numbers) == 0,
     }
     phone_calls_db.upsert_phone_number(uid, phone_number_data)
-    phone_calls_db.delete_pending_verification(phone_number)
+    phone_calls_db.delete_pending_verification(phone_number, uid)
 
     return CheckVerificationResponse(verified=True, phone_number_id=phone_number_id)
 

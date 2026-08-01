@@ -56,6 +56,14 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),
+    # Platform tools — paginated list reads. Each request can fan out to a full
+    # Firestore page, so it gets its own budget separate from :search.
+    "tools:read": (120, 3600),
+    # Realtime — each accepted connection/mint spends platform provider credit on
+    # an audio-rate session, so these are deliberately tighter than chat.
+    # omni:relay is charged once per WebSocket connect attempt.
+    "omni:relay": (30, 3600),
+    "realtime:session": (30, 3600),
     # MCP transport POSTs (initialize/tools-list/tool-calls) are cheap reads, but
     # one user often runs many concurrent MCP clients (multiple IDE/agent sessions)
     # under a single account, and clients reconnect in bursts. A tight cap here turns
