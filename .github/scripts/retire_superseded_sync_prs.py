@@ -31,18 +31,23 @@ GithubRunner = object  # gh subprocess seam for tests
 class SyncPullRequest:
     number: int
     head_ref: str
+    is_cross_repository: bool = False
 
 
 def select_superseded(prs: Sequence[SyncPullRequest], current_number: int, prefix: str) -> list[SyncPullRequest]:
     """Return the PRs to close: same-repo `prefix*` heads, excluding the current PR.
 
-    The current PR is retained and unrelated heads (no matching prefix) are never
-    selected, so a release can only retire the exact class of PR it replaces.
+    The current PR is retained, unrelated heads (no matching prefix) are never
+    selected, and fork-origin PRs (is_cross_repository) are never closed — this
+    workflow manages only the repository's own release sync PRs, so a release
+    can only retire the exact class of PR it replaces.
     """
     return [
         pr
         for pr in prs
-        if pr.number != current_number and pr.head_ref.startswith(prefix)
+        if pr.number != current_number
+        and not pr.is_cross_repository
+        and pr.head_ref.startswith(prefix)
     ]
 
 
@@ -74,7 +79,8 @@ def retire(
             "--base", base,
             "--state", "open",
             "--search", f"head:{search_head}",
-            "--json", "number,headRefName",
+            "--json", "number,headRefName,isCrossRepository",
+            "--limit", "100",
         ],
         gh=gh,
     )
@@ -86,7 +92,14 @@ def retire(
     except json.JSONDecodeError:
         return []
 
-    prs = [SyncPullRequest(number=item["number"], head_ref=item["headRefName"]) for item in raw]
+    prs = [
+        SyncPullRequest(
+            number=item["number"],
+            head_ref=item["headRefName"],
+            is_cross_repository=bool(item.get("isCrossRepository", False)),
+        )
+        for item in raw
+    ]
     to_close = select_superseded(prs, current_number, search_head)
 
     for pr in to_close:

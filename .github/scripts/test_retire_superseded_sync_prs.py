@@ -44,6 +44,18 @@ class SelectSupersededTests(unittest.TestCase):
         prs = [SyncPullRequest(number=42, head_ref="my-release/windows-v-something")]
         self.assertEqual(select_superseded(prs, current_number=1, prefix="release/windows-v"), [])
 
+    def test_fork_prs_are_never_closed(self) -> None:
+        # A fork-origin PR that happens to use a release/windows-v* branch name
+        # must not be retired by this release job (it only manages same-repo
+        # sync PRs), even though its head matches the prefix.
+        prs = [
+            SyncPullRequest(number=10419, head_ref="release/windows-v1.0.3"),
+            SyncPullRequest(number=70000, head_ref="release/windows-v1.0.7", is_cross_repository=True),
+            SyncPullRequest(number=10960, head_ref="release/windows-v1.0.30"),
+        ]
+        selected = select_superseded(prs, current_number=10960, prefix="release/windows-v")
+        self.assertEqual([pr.number for pr in selected], [10419])
+
 
 if __name__ == "__main__":
     unittest.main()
