@@ -227,12 +227,16 @@ jobs:
       # jobs), GitHub Actions reuses the cached plan-and-tag outputs and does not
       # re-execute the probe that ran there. Re-validate the route now so a
       # backend rollback between tagging and publishing cannot mint a broken cohort.
+      - name: Setup Python for re-probe
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
       - name: Re-probe production Windows update-feed before publish
         if: ${{ !contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
         shell: bash
         working-directory: ${{ github.workspace }}
         run: |
-          python3 .github/scripts/probe_windows_update_feed.py \
+          python .github/scripts/probe_windows_update_feed.py \
             --channel beta \
             --channel stable
 
