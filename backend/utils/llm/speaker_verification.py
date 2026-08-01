@@ -17,11 +17,14 @@ unusable answer -- resolves to refuted for the same reason.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, cast
+from typing import Any, List, Mapping, Optional, Sequence, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
+
+from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 
 from .clients import get_llm
 from .speaker_resolution import MAX_TRANSCRIPT_CHARS, build_speaker_transcript
@@ -52,6 +55,24 @@ class SpeakerVerdict:
 
 
 REFUTED_ON_ERROR = SpeakerVerdict(refuted=True, reason="verification_unavailable")
+
+
+def record_verification_exhausted(reason: str) -> None:
+    """Report a refutation that came from a broken verifier, not from the evidence.
+
+    Refuting on failure is deliberate, but it silently downgrades the feature
+    from automatic assignment to suggestion-only, and a log line alone leaves
+    that invisible to operations. The shared counter is what distinguishes a
+    provider outage from a transcript that genuinely names nobody.
+    """
+    record_fallback(
+        component='other',
+        from_mode='verified_assignment',
+        to_mode='suggestion_only',
+        reason=reason,
+        outcome='exhausted',
+        log=logger,
+    )
 
 
 def build_speaker_lines(segments: Sequence[Any], speaker_id: int) -> str:
@@ -85,6 +106,7 @@ def verify_speaker_identification(
     person_name: str,
     evidence_quote: str = "",
     user_name: Optional[str] = None,
+    person_names: Optional[Mapping[str, str]] = None,
 ) -> SpeakerVerdict:
     """Try to refute "speaker N is <name>". Blocking; run it off the event loop.
 
@@ -95,12 +117,17 @@ def verify_speaker_identification(
         evidence_quote: The line the proposal rests on, already grounded.
         user_name: The account owner's display name, so the model does not read
             the owner's own turns as a third person.
+        person_names: ``person_id`` to display name for the people already bound
+            in this transcript. Without it every decided speaker renders as a
+            number and the "another speaker fits the name at least as well" test
+            below cannot see that one of them already *is* this name, which is
+            how a second voice gets enrolled into an existing person.
 
     Returns:
         A ``SpeakerVerdict``. ``refuted`` is true on any failure, so a caller
         that treats false as permission to enrol stays safe when this breaks.
     """
-    transcript = build_speaker_transcript(segments)
+    transcript = build_speaker_transcript(segments, person_names)
     if not transcript:
         return REFUTED_ON_ERROR
 
@@ -154,7 +181,8 @@ When in doubt, refute. A wrongly accepted identification is not recoverable; a w
             ),
         )
     except Exception as e:
-        logger.error('Speaker verification LLM call failed speaker=%s: %s', speaker_id, e)
+        logger.error('Speaker verification LLM call failed speaker=%s: %s', speaker_id, sanitize(e))
+        record_verification_exhausted('other')
         return REFUTED_ON_ERROR
 
     return SpeakerVerdict(refuted=bool(response.refuted), reason=response.reason.strip())
