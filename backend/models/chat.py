@@ -745,6 +745,12 @@ class DeviceToolResultRequest(BaseModel):
     result: Dict[str, Any]
 
 
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
+
+
 class GenerateReplyTurn(BaseModel):
     """A prior turn supplied by the caller purely as generation context."""
 

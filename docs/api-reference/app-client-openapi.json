@@ -12710,6 +12710,7 @@
         "type": "object"
       },
       "DeviceToolResultResponse": {
+        "description": "Acknowledgement that a device tool result was handed over.",
         "properties": {
           "status": {
             "title": "Status",
