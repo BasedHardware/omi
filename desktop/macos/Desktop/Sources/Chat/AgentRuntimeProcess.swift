@@ -2852,35 +2852,15 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/hermes-agent",
       "\(home)/.local/bin",
     ]
-    let managedNodeRoots = [
-      "\(home)/.nvm/versions/node",
-      "\(home)/.fnm/node-versions",
-      "\(home)/.local/share/fnm/node-versions",
-      "\(home)/.nodenv/versions",
-      "\(home)/.asdf/installs/nodejs",
-    ]
     // User-managed Node installations take precedence over machine-wide fallbacks.
     return Self.uniquePaths(
       adapterPathDirs
-        + managedNodeRoots.flatMap {
-          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
-        }
+        + LocalAgentProviderDetector.managedNodeBinDirectories(
+          homeDirectory: home, fileManager: fileManager)
         + [
           "/opt/homebrew/bin",
           "/usr/local/bin",
         ])
-  }
-
-  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
-    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
-    return versions.compactMap { version in
-      let versionDirectory = (root as NSString).appendingPathComponent(version)
-      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
-      if fileManager.fileExists(atPath: directBin) { return directBin }
-      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
-      if fileManager.fileExists(atPath: installationBin) { return installationBin }
-      return nil
-    }
   }
 
   private static func uniquePaths(_ paths: [String]) -> [String] {

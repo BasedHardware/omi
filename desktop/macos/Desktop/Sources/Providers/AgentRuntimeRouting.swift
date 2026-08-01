@@ -160,7 +160,7 @@ enum LocalAgentProviderDetector {
     let directories =
       searchDirectories
       ?? adapterActivationSearchDirectories(
-        environment: environment, homeDirectory: homeDirectory)
+        environment: environment, homeDirectory: homeDirectory, fileManager: fileManager)
     for dir in directories {
       let path = (dir as NSString).appendingPathComponent(name)
       if fileManager.isExecutableFile(atPath: path) {
@@ -176,7 +176,8 @@ enum LocalAgentProviderDetector {
   // behavior agree even on machines with globally-installed adapters.
   static func adapterActivationSearchDirectories(
     environment: [String: String],
-    homeDirectory: String
+    homeDirectory: String,
+    fileManager: FileManager = .default
   ) -> [String] {
     let pathDirectories = (environment["PATH"] ?? "")
       .split(separator: ":")
@@ -189,8 +190,38 @@ enum LocalAgentProviderDetector {
         "\(homeDirectory)/.hermes/hermes-agent",
         "\(homeDirectory)/.local/bin",
       ]
+      + managedNodeBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager)
     return candidates.reduce(into: [String]()) { result, directory in
       if !result.contains(directory) { result.append(directory) }
+    }
+  }
+
+  /// npm-global CLIs (`codex`, `openclaw`) land in the bin directory of
+  /// whichever Node version manager installed them. A directly launched app
+  /// bundle inherits none of those shell-managed PATH entries, so detection
+  /// must enumerate the stable, home-scoped install roots itself. Machine-wide
+  /// roots stay out: detection is hermetic in the supplied home directory.
+  static func managedNodeBinDirectories(
+    homeDirectory: String,
+    fileManager: FileManager = .default
+  ) -> [String] {
+    let roots = [
+      "\(homeDirectory)/.nvm/versions/node",
+      "\(homeDirectory)/.fnm/node-versions",
+      "\(homeDirectory)/.local/share/fnm/node-versions",
+      "\(homeDirectory)/.nodenv/versions",
+      "\(homeDirectory)/.asdf/installs/nodejs",
+    ]
+    return roots.flatMap { root -> [String] in
+      guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
+      return versions.sorted().compactMap { version in
+        let versionDirectory = (root as NSString).appendingPathComponent(version)
+        let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
+        if fileManager.fileExists(atPath: directBin) { return directBin }
+        let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
+        if fileManager.fileExists(atPath: installationBin) { return installationBin }
+        return nil
+      }
     }
   }
 }

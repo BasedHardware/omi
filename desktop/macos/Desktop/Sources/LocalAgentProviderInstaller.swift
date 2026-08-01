@@ -337,7 +337,7 @@ final class LocalAgentProviderInstaller {
   ) -> String {
     let inherited = (existingPath ?? "").split(separator: ":").map(String.init)
     let providerDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(
-      environment: ["PATH": existingPath ?? ""], homeDirectory: homeDirectory)
+      environment: ["PATH": existingPath ?? ""], homeDirectory: homeDirectory, fileManager: fileManager)
     let standardDirs = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
     var elements: [String] = []
     for dir in inherited + providerDirs + standardDirs where !dir.isEmpty && !elements.contains(dir) {
