@@ -91,7 +91,11 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
 
     assert '  scope:\n' in workflow
     scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
-    assert 'github.event.pull_request.base.sha' in scope
+    # The PR base is resolved live against the checkout (origin/<base-ref>) rather
+    # than the event-payload base.sha, which can be stale for a queued run
+    # (FC-stale-event-payload-diff-base, #10785).
+    assert 'github.event.pull_request.base.sha' not in scope
+    assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
