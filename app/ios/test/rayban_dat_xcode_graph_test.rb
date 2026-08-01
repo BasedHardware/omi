@@ -46,15 +46,17 @@ class RayBanDatXcodeGraphTest < Minitest::Test
 
     refute_includes runner, 'MWDATCore'
     refute_includes runner, 'MWDATCamera'
+    refute_includes runner, 'MWDATDisplay'
   end
 
   def test_separate_dat_target_owns_only_the_required_meta_products
     dat = native_target('RunnerRayBanDat')
     product_names = package_product_names(dat)
 
-    assert_equal %w[MWDATCamera MWDATCore], product_names.sort
+    assert_equal %w[MWDATCamera MWDATCore MWDATDisplay], product_names.sort
     assert_package_product('MWDATCore')
     assert_package_product('MWDATCamera')
+    assert_package_product('MWDATDisplay')
   end
 
   def test_meta_package_is_pinned_to_exact_0_8_0
@@ -135,6 +137,7 @@ class RayBanDatXcodeGraphTest < Minitest::Test
     assert_includes frameworks, 'WatchConnectivity.framework in Frameworks'
     assert_includes frameworks, 'MWDATCore in Frameworks'
     assert_includes frameworks, 'MWDATCamera in Frameworks'
+    assert_includes frameworks, 'MWDATDisplay in Frameworks'
     refute_includes frameworks, 'Foundation.framework in Frameworks'
     refute_includes frameworks, 'Pods_Runner.framework in Frameworks'
   end
@@ -189,7 +192,7 @@ class RayBanDatXcodeGraphTest < Minitest::Test
   def package_product_names(target)
     list = target[/packageProductDependencies = \((.*?)\);/m, 1]
     refute_nil list, 'DAT target must declare packageProductDependencies'
-    list.scan(%r{/\* (MWDAT(?:Core|Camera)) \*/}).flatten
+    list.scan(%r{/\* (MWDAT\w+) \*/}).flatten
   end
 
   def assert_package_product(name)

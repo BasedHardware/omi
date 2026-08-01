@@ -414,6 +414,109 @@ struct BluetoothHfpInput: Hashable {
   }
 }
 
+/// One rendered row of a HUD screen. [style] is 'heading' | 'body' | 'meta'.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct HudLineWire: Hashable {
+  var text: String
+  var style: String
+  var muted: Bool
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> HudLineWire? {
+    let text = pigeonVar_list[0] as! String
+    let style = pigeonVar_list[1] as! String
+    let muted = pigeonVar_list[2] as! Bool
+
+    return HudLineWire(
+      text: text,
+      style: style,
+      muted: muted
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      text,
+      style,
+      muted,
+    ]
+  }
+  static func == (lhs: HudLineWire, rhs: HudLineWire) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
+/// A tappable control on a HUD screen; [id] comes back through
+/// RayBanMetaFlutterAPI.onDisplayActionTapped.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct HudActionWire: Hashable {
+  var id: String
+  var label: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> HudActionWire? {
+    let id = pigeonVar_list[0] as! String
+    let label = pigeonVar_list[1] as! String
+
+    return HudActionWire(
+      id: id,
+      label: label
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      id,
+      label,
+    ]
+  }
+  static func == (lhs: HudActionWire, rhs: HudActionWire) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
+/// A whole HUD screen. The native side owns the translation into the vendor's
+/// renderer, so nothing here is Meta-specific.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct HudScreenWire: Hashable {
+  var title: String
+  var lines: [HudLineWire]
+  var actions: [HudActionWire]
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> HudScreenWire? {
+    let title = pigeonVar_list[0] as! String
+    let lines = pigeonVar_list[1] as! [HudLineWire]
+    let actions = pigeonVar_list[2] as! [HudActionWire]
+
+    return HudScreenWire(
+      title: title,
+      lines: lines,
+      actions: actions
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      title,
+      lines,
+      actions,
+    ]
+  }
+  static func == (lhs: HudScreenWire, rhs: HudScreenWire) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
 private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -431,6 +534,12 @@ private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
       return RayBanMetaGlasses.fromList(self.readValue() as! [Any?])
     case 135:
       return BluetoothHfpInput.fromList(self.readValue() as! [Any?])
+    case 136:
+      return HudLineWire.fromList(self.readValue() as! [Any?])
+    case 137:
+      return HudActionWire.fromList(self.readValue() as! [Any?])
+    case 138:
+      return HudScreenWire.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -459,6 +568,15 @@ private class PigeonCommunicatorPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? BluetoothHfpInput {
       super.writeByte(135)
+      super.writeValue(value.toList())
+    } else if let value = value as? HudLineWire {
+      super.writeByte(136)
+      super.writeValue(value.toList())
+    } else if let value = value as? HudActionWire {
+      super.writeByte(137)
+      super.writeValue(value.toList())
+    } else if let value = value as? HudScreenWire {
+      super.writeByte(138)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1415,6 +1533,17 @@ protocol RayBanMetaHostAPI {
   func stopCamera() throws
   /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
   func capturePhoto() throws
+  /// Whether the connected glasses can render, from the toolkit's own
+  /// capability check rather than the device type. False on builds without
+  /// the Display module, so the HUD gate closes instead of throwing.
+  func deviceSupportsDisplay() throws -> Bool
+  /// Attaches a display capability to the active device session. Requires the
+  /// DAT App Model (DAMEnabled in Info.plist).
+  func attachDisplay() throws
+  func detachDisplay() throws
+  /// Renders [screen], replacing whatever the glasses currently show.
+  func sendDisplayScreen(screen: HudScreenWire) throws
+  func clearDisplay() throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1683,6 +1812,79 @@ class RayBanMetaHostAPISetup {
     } else {
       capturePhotoChannel.setMessageHandler(nil)
     }
+    /// Whether the connected glasses can render, from the toolkit's own
+    /// capability check rather than the device type. False on builds without
+    /// the Display module, so the HUD gate closes instead of throwing.
+    let deviceSupportsDisplayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.deviceSupportsDisplay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      deviceSupportsDisplayChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.deviceSupportsDisplay()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      deviceSupportsDisplayChannel.setMessageHandler(nil)
+    }
+    /// Attaches a display capability to the active device session. Requires the
+    /// DAT App Model (DAMEnabled in Info.plist).
+    let attachDisplayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.attachDisplay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      attachDisplayChannel.setMessageHandler { _, reply in
+        do {
+          try api.attachDisplay()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      attachDisplayChannel.setMessageHandler(nil)
+    }
+    let detachDisplayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.detachDisplay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      detachDisplayChannel.setMessageHandler { _, reply in
+        do {
+          try api.detachDisplay()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      detachDisplayChannel.setMessageHandler(nil)
+    }
+    /// Renders [screen], replacing whatever the glasses currently show.
+    let sendDisplayScreenChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.sendDisplayScreen\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      sendDisplayScreenChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let screenArg = args[0] as! HudScreenWire
+        do {
+          try api.sendDisplayScreen(screen: screenArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      sendDisplayScreenChannel.setMessageHandler(nil)
+    }
+    let clearDisplayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.clearDisplay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      clearDisplayChannel.setMessageHandler { _, reply in
+        do {
+          try api.clearDisplay()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      clearDisplayChannel.setMessageHandler(nil)
+    }
   }
 }
 /// Native → Dart events for Ray-Ban Meta.
@@ -1702,6 +1904,10 @@ protocol RayBanMetaFlutterAPIProtocol {
   func onCameraStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCameraPermissionChanged(status statusArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onError(code codeArg: String, message messageArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// 'unavailable' | 'detached' | 'attaching' | 'ready' | 'error'.
+  func onDisplayStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// The id of the HudActionWire the wearer tapped.
+  func onDisplayActionTapped(actionId actionIdArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class RayBanMetaFlutterAPI: RayBanMetaFlutterAPIProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1865,6 +2071,44 @@ class RayBanMetaFlutterAPI: RayBanMetaFlutterAPIProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([codeArg, messageArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// 'unavailable' | 'detached' | 'attaching' | 'ready' | 'error'.
+  func onDisplayStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onDisplayStateChanged\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([stateArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// The id of the HudActionWire the wearer tapped.
+  func onDisplayActionTapped(actionId actionIdArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onDisplayActionTapped\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([actionIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
