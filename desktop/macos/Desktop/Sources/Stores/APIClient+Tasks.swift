@@ -112,6 +112,12 @@ extension APIClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
+  /// The backend ``BatchUpdateActionItemsRequest.items`` field is capped at 500
+  /// entries (`max_length=500` in ``backend/routers/action_items.py``). Sending
+  /// an unbounded list for a large account returns 422 after SQLite has already
+  /// been mutated, so chunk the payload into page-sized requests.
+  static let sortOrderBatchLimit = 500
+
   func batchUpdateSortOrders(
     _ updates: [(id: String, sortOrder: Int, indentLevel: Int)],
     expectedOwnerId: String? = nil,
@@ -124,15 +130,22 @@ extension APIClient {
     }
     struct BatchRequest: Encodable { let items: [SortUpdate] }
     struct StatusResponse: Decodable { let status: String }
-    let request = BatchRequest(
-      items: updates.map {
-        SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-      })
-    let _: StatusResponse = try await patch(
-      "v1/action-items/batch",
-      body: request,
-      expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot)
+    let mapped = updates.map {
+      SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
+    }
+    let batchSize = Self.sortOrderBatchLimit
+    var index = mapped.startIndex
+    while index < mapped.endIndex {
+      let end = min(index + batchSize, mapped.endIndex)
+      let chunk = Array(mapped[index..<end])
+      let request = BatchRequest(items: chunk)
+      let _: StatusResponse = try await patch(
+        "v1/action-items/batch",
+        body: request,
+        expectedOwnerId: expectedOwnerId,
+        authorizationSnapshot: authorizationSnapshot)
+      index = end
+    }
   }
 
   // MARK: - Workstream-backed task threads
