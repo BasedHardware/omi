@@ -124,6 +124,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_analytics = add("utils.analytics")
     utils_analytics.record_usage = MagicMock()
 
+    utils_byok = add("utils.byok")
+    utils_byok.get_byok_key = MagicMock(return_value=None)
+
+    utils_transcribe_decisions = add("utils.transcribe_decisions")
+    utils_transcribe_decisions.should_skip_custom_stt_postprocessing = MagicMock(return_value=False)
+
     llm_memories = add("utils.llm.memories")
     for attr in [
         "resolve_memory_conflict",
