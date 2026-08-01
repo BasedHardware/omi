@@ -154,8 +154,14 @@ actor GmailReaderService {
   ) async throws
     -> [GmailEmail]
   {
-    if userInitiated {
+if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
+    if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
+      let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
+      let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+        token: token, maxResults: maxResults, query: query)
+      return emails.sorted { $0.date > $1.date }
     }
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {

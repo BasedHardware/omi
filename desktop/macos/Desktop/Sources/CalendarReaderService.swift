@@ -238,6 +238,13 @@ actor CalendarReaderService {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     await APIKeyService.shared.waitForKeys()
+    if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
+      let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
+      let events = try await GoogleOAuthCalendarReader.readEvents(
+        token: token, daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+      return events.sorted { $0.startTime > $1.startTime }
+    }
+
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack,
       daysForward: daysForward,

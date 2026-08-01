@@ -1,5 +1,10 @@
 # Gmail + Calendar: cookie-scraping → Google OAuth (migration plan)
 
+> Status: the desktop app now ships an app-level OAuth connector
+> (Settings → Advanced → Email & Calendar) with per-account grants, and the
+> Gmail/Calendar readers prefer OAuth grants over cookies when present. This
+> doc's backend-phased plan remains for the server-side ingestion path.
+
 Status: **planned** · Scope: desktop onboarding "connect your context" import.
 
 Ponytail note: this plan is deliberately reuse-first. It builds almost nothing new —

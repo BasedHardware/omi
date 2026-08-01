@@ -534,6 +534,9 @@ struct SettingsContentView: View {
   @State var gmailAccounts: [GmailAccountOption] = []
   @State var isProbingGmailAccounts: Bool = false
   @State var showingGmailAccountPicker: Bool = false
+  @State var googleOAuthAccounts: [GoogleOAuthConnection] = []
+  @State var isConnectingGoogleOAuth: Bool = false
+  @State var googleOAuthMessage: String?
 
   // Calendar Sync states
   @State var calendarEvents: [CalendarEvent] = []
