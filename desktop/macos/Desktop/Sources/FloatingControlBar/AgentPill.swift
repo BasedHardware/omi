@@ -485,7 +485,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     var setupNeededStatus: String {
-      "\(displayName) needs setup"
+      "\(displayName) needs setup — run `\(installCommand)`, then `\(loginCommand)`. Or run the task with Omi's own agent instead."
     }
   }
 
