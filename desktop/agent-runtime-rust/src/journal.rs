@@ -56,17 +56,7 @@ pub struct ToolClaim {
 
 impl JournalStore {
     pub fn open_default() -> Result<Self, String> {
-        let state_dir = env::var_os("OMI_AGENT_STATE_DIR")
-            .map(PathBuf::from)
-            .or_else(|| {
-                env::var_os("HOME").map(|home| {
-                    PathBuf::from(home)
-                        .join("Library")
-                        .join("Application Support")
-                        .join("Omi")
-                        .join("agent")
-                })
-            })
+        let state_dir = default_agent_state_dir()
             .ok_or_else(|| "cannot determine Omi agent state directory".to_owned())?;
         fs::create_dir_all(&state_dir).map_err(|error| error.to_string())?;
         Self::open(state_dir.join("omi-agentd.sqlite3"))
@@ -1194,14 +1184,116 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn default_agent_state_dir() -> Option<PathBuf> {
+    resolve_default_agent_state_dir(|key| env::var_os(key))
+}
+
+fn resolve_default_agent_state_dir(
+    mut lookup: impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if let Some(explicit) = lookup("OMI_AGENT_STATE_DIR") {
+        return Some(PathBuf::from(explicit));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        lookup("HOME").map(|home| {
+            PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("Omi")
+                .join("agent")
+        })
+    }
+    #[cfg(target_os = "windows")]
+    {
+        lookup("APPDATA")
+            .map(|app_data| PathBuf::from(app_data).join("Omi").join("agent"))
+            .or_else(|| {
+                lookup("USERPROFILE").map(|profile| {
+                    PathBuf::from(profile)
+                        .join("AppData")
+                        .join("Roaming")
+                        .join("Omi")
+                        .join("agent")
+                })
+            })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        lookup("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| lookup("HOME").map(|home| PathBuf::from(home).join(".local").join("share")))
+            .map(|base| base.join("omi").join("agent"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::ffi::OsString;
 
     fn must<T>(value: Result<T, String>) -> T {
         match value {
             Ok(value) => value,
             Err(error) => panic!("journal setup failed: {error}"),
+        }
+    }
+
+    fn lookup_from(
+        map: HashMap<&'static str, &'static str>,
+    ) -> impl FnMut(&str) -> Option<OsString> {
+        move |key| map.get(key).map(|value| OsString::from(*value))
+    }
+
+    #[test]
+    fn default_state_dir_prefers_explicit_override() {
+        let path = resolve_default_agent_state_dir(lookup_from(HashMap::from([(
+            "OMI_AGENT_STATE_DIR",
+            "/tmp/omi-state",
+        )])))
+        .expect("explicit state dir must resolve");
+        assert_eq!(path, PathBuf::from("/tmp/omi-state"));
+    }
+
+    #[test]
+    fn default_state_dir_uses_platform_data_home() {
+        #[cfg(target_os = "macos")]
+        {
+            let path = resolve_default_agent_state_dir(lookup_from(HashMap::from([(
+                "HOME",
+                "/Users/me",
+            )])))
+            .expect("macOS state dir must resolve");
+            assert_eq!(
+                path,
+                PathBuf::from("/Users/me/Library/Application Support/Omi/agent")
+            );
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let path = resolve_default_agent_state_dir(lookup_from(HashMap::from([(
+                "APPDATA",
+                r"C:\Users\me\AppData\Roaming",
+            )])))
+            .expect("Windows state dir must resolve");
+            assert_eq!(
+                path,
+                PathBuf::from(r"C:\Users\me\AppData\Roaming\Omi\agent")
+            );
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let xdg_path = resolve_default_agent_state_dir(lookup_from(HashMap::from([(
+                "XDG_DATA_HOME",
+                "/var/data",
+            )])))
+            .expect("XDG state dir must resolve");
+            assert_eq!(xdg_path, PathBuf::from("/var/data/omi/agent"));
+            let home_path =
+                resolve_default_agent_state_dir(lookup_from(HashMap::from([("HOME", "/home/me")])))
+                    .expect("Linux home state dir must resolve");
+            assert_eq!(home_path, PathBuf::from("/home/me/.local/share/omi/agent"));
         }
     }
 
