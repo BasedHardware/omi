@@ -1121,4 +1121,28 @@ void main() {
       provider.dispose();
     });
   });
+
+  // Regression coverage for issue #6311: before this change
+  // `transcriptServiceReady` was `_transcriptServiceReady && _isConnected`, so a
+  // transient ConnectivityService flicker (WiFi↔cellular handoff, brief DNS
+  // hiccup) flipped the header to "Recording, reconnecting" even while the
+  // transcript WebSocket was alive and segments were flowing. The socket
+  // lifecycle is the authoritative signal; a connectivity change must never
+  // change transcript-service readiness.
+  group('transcriptServiceReady is socket-driven, not connectivity-driven (#6311)', () {
+    test('connectivity flicker does not toggle transcript readiness', () {
+      final provider = CaptureProvider();
+      // Fresh provider: socket not yet ready, so readiness must be false.
+      expect(provider.transcriptServiceReady, isFalse);
+
+      // A connectivity flip must not change readiness on its own — before the
+      // fix, onConnectionStateChanged(false) ANDed _isConnected into the getter
+      // and could manufacture a "reconnecting" state from a healthy socket.
+      provider.onConnectionStateChanged(false);
+      expect(provider.transcriptServiceReady, isFalse);
+      provider.onConnectionStateChanged(true);
+      expect(provider.transcriptServiceReady, isFalse);
+      provider.dispose();
+    });
+  });
 }
