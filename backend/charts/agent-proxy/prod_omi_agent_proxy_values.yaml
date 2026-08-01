@@ -18,6 +18,16 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+podSecurityContext: {}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 10001
+
 service:
   type: ClusterIP
   backendConfig: prod-agent-proxy-backend-config

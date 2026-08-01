@@ -545,8 +545,10 @@ class AgentSession:
             )
         server = create_sdk_mcp_server("omi-tools", "1.0", tools=tools)
         mcp_servers: dict[str, Any] = {"omi-tools": server}
+        allowed_tools = ["mcp__omi-tools", "WebSearch"]
         playwright_command = os.environ.get("PLAYWRIGHT_MCP_COMMAND")
         if playwright_command:
+            allowed_tools.append("mcp__playwright")
             mcp_servers["playwright"] = {
                 "type": "stdio",
                 "command": playwright_command,
@@ -560,9 +562,9 @@ class AgentSession:
         options = ClaudeAgentOptions(
             model="claude-sonnet-4-6",
             system_prompt=system_prompt(),
-            allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+            allowed_tools=allowed_tools,
             mcp_servers=mcp_servers,
-            permission_mode="bypassPermissions",
+            permission_mode="default",
             cwd=os.environ.get("HOME", "/"),
         )
         self.client = ClaudeSDKClient(options=options)

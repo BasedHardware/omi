@@ -17,12 +17,21 @@ FROM ${PYTHON_BASE_IMAGE}
 WORKDIR /app
 ENV BUN_INSTALL=/opt/bun
 ENV PATH="/opt/bun/bin:/opt/venv/bin:$PATH"
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 
 COPY --from=bun /usr/local/bin/bun /opt/bun/bin/bun
 RUN bunx playwright@1.59.0-alpha-1770338664000 install --with-deps chromium
 RUN bun add --global @playwright/mcp@0.0.64
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/agent_vm/main.py .
+
+ENV HOME=/home/omi
+RUN groupadd --system --gid 10001 omi && \
+    useradd --system --uid 10001 --gid omi --home-dir /home/omi --create-home omi && \
+    mkdir -p /home/omi/omi-agent/data /app/chrome-profile && \
+    chown -R omi:omi /home/omi /app && \
+    chmod -R a+rX /opt/ms-playwright /opt/bun
+USER omi
 
 EXPOSE 8080
 

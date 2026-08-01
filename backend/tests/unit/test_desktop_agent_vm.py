@@ -21,6 +21,7 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     async def run_blocking(_, function, *args):
         return function(*args)
 
+    monkeypatch.setenv("AGENT_VM_ENABLED", "true")
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     tasks = BackgroundTasks()
@@ -52,6 +53,7 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     async def run_blocking(_, function, *args):
         return function(*args)
 
+    monkeypatch.setenv("AGENT_VM_ENABLED", "true")
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
@@ -80,6 +82,42 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 
     assert error.value.status_code == 402
     assert error.value.detail == "trial_expired"
+
+
+@pytest.mark.asyncio
+async def test_provision_is_disabled_unless_explicitly_enabled(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("AGENT_VM_ENABLED", raising=False)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "user")
+
+    assert error.value.status_code == 503
+    assert await desktop_agent_vm.get_agent_status(BackgroundTasks(), "user") is None
+
+
+@pytest.mark.asyncio
+async def test_provision_names_vms_by_full_width_uid_hash(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_ENABLED", "true")
+    names = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: None)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda project: "image")
+    monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm", lambda *args: names.append(args[1]))
+
+    # Two uids sharing a 12-character lowercase prefix must not collide.
+    first = await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "AbCdEfGhIjKl" + "1" * 16)
+    second = await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "abcdefghijkl" + "2" * 16)
+
+    assert first.vm_name != second.vm_name
+    assert len(first.vm_name) == len("omi-agent-") + 32 <= 63
+    assert names == [first.vm_name, second.vm_name]
 
 
 async def _stopped_instance():

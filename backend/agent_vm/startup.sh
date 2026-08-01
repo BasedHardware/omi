@@ -7,11 +7,13 @@ anthropic_api_key="$(gcloud secrets versions access latest --secret=DESKTOP_ANTH
 gemini_api_key="$(gcloud secrets versions access latest --secret=GEMINI_API_KEY)"
 data_dir="${AGENT_VM_DATA_DIR:-/var/lib/omi-agent}"
 mkdir -p "$data_dir"
+chown -R 10001:10001 "$data_dir" || true
 gcloud auth configure-docker gcr.io --quiet
 docker pull "$image"
 docker rm -f omi-agent-vm >/dev/null 2>&1 || true
 docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:8080 \
+  --cap-drop=ALL --security-opt no-new-privileges \
   --env ANTHROPIC_API_KEY="$anthropic_api_key" --env AUTH_TOKEN="$auth_token" --env GEMINI_API_KEY="$gemini_api_key" \
   --env PLAYWRIGHT_MCP_COMMAND=playwright-mcp \
   --env PLAYWRIGHT_MCP_ARGS='["--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]' \
-  --volume "$data_dir:/root/omi-agent" "$image"
+  --volume "$data_dir:/home/omi/omi-agent" "$image"

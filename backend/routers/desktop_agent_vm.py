@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 import uuid
@@ -45,7 +46,9 @@ class ProvisionAgentResponse(BaseModel):
 
 
 def _agent_disabled() -> bool:
-    return os.getenv("ENVIRONMENT") == "local-dev-harness"
+    if os.getenv("ENVIRONMENT") == "local-dev-harness":
+        return True
+    return os.getenv("AGENT_VM_ENABLED", "").strip().lower() != "true"
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
@@ -179,9 +182,24 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
         ],
         "tags": {"items": ["omi-agent-vm"]},
         "metadata": {
-            "items": [{"key": "startup-script", "value": startup}, {"key": "auth-token", "value": auth_token}]
+            "items": [
+                {"key": "startup-script", "value": startup},
+                {"key": "auth-token", "value": auth_token},
+                {"key": "block-project-ssh-keys", "value": "TRUE"},
+                {"key": "enable-oslogin", "value": "TRUE"},
+            ]
+        },
+        "shieldedInstanceConfig": {
+            "enableSecureBoot": True,
+            "enableVtpm": True,
+            "enableIntegrityMonitoring": True,
         },
     }
+    service_account = os.getenv("AGENT_VM_SERVICE_ACCOUNT")
+    if service_account:
+        body["serviceAccounts"] = [
+            {"email": service_account, "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}
+        ]
     token = await run_blocking(db_executor, _get_access_token)
     response = await _gce_request("POST", url, token, body)
     response.raise_for_status()
@@ -280,7 +298,7 @@ async def provision_agent_vm(
         bucket = _gcs_bucket()
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    vm_name = f"omi-agent-{uid[:12].lower()}"
+    vm_name = f"omi-agent-{hashlib.sha256(uid.encode()).hexdigest()[:32]}"
     auth_token = f"omi-{uuid.uuid4()}"
     created_at = _now()
     await run_blocking(db_executor, _set_vm, uid, vm_name, "provisioning", auth_token, created_at)
