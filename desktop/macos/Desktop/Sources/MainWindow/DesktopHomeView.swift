@@ -101,54 +101,61 @@ struct DesktopHomeView: View {
   }
 
   var body: some View {
+    // Erase root shell branches so release type-checking stays bounded.
     Group {
       if authState.isRestoringAuth {
-        // State 0: Restoring auth session - show loading
-        Color.clear
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(OmiColors.backgroundPrimary)
-          .onAppear {
-            log("DesktopHomeView: Showing auth loading splash")
-          }
+        AnyView(
+          Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(OmiColors.backgroundPrimary)
+            .onAppear {
+              log("DesktopHomeView: Showing auth loading splash")
+            }
+        )
       } else if authState.sessionPhase == .recoveryRequired {
-        SessionRecoveryView()
-          .onAppear {
-            log("DesktopHomeView: Showing recoverable auth state")
-          }
+        AnyView(
+          SessionRecoveryView()
+            .onAppear {
+              log("DesktopHomeView: Showing recoverable auth state")
+            }
+        )
       } else if !authState.isSignedIn {
-        // State 1: Not signed in - show sign in
-        SignInView(authState: authState)
-          .onAppear {
-            log("DesktopHomeView: Showing SignInView (not signed in)")
-          }
+        AnyView(
+          SignInView(authState: authState)
+            .onAppear {
+              log("DesktopHomeView: Showing SignInView (not signed in)")
+            }
+        )
       } else if !hasCompletedOnboardingAtAuthorityRead {
-        // State 2: Signed in but onboarding not complete
-        if shouldSkipOnboarding() {
-          Color.clear.onAppear {
-            log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
-            appState.hasCompletedOnboarding = true
+        AnyView(
+          Group {
+            if shouldSkipOnboarding() {
+              Color.clear.onAppear {
+                log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
+                appState.hasCompletedOnboarding = true
+              }
+            } else {
+              SBOnboardingView(
+                appState: appState,
+                chatProvider: viewModelContainer.chatProvider,
+                importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+                onComplete: nil
+              )
+              .onAppear {
+                log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
+              }
+            }
           }
-        } else {
-          SBOnboardingView(
-            appState: appState,
-            chatProvider: viewModelContainer.chatProvider,
-            importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
-            onComplete: nil
-          )
-          .onAppear {
-            log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
-          }
-        }
+        )
       } else if case .unresolved = chatFirstCapabilitySample.variant {
-        // Do not flash the legacy shell while the server-authoritative cohort
-        // sample is in flight. No Main Chat resolution or startup warmup runs
-        // until this settles to an immutable session choice.
-        ChatFirstCapabilityLoadingView()
-          .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
-            await resolveChatFirstCapabilityIfNeeded()
-          }
+        // Hold the legacy shell until the server-authoritative cohort settles.
+        AnyView(
+          ChatFirstCapabilityLoadingView()
+            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+              await resolveChatFirstCapabilityIfNeeded()
+            }
+        )
       } else {
-        // State 3: Signed in and onboarded with a fixed shell choice.
         ZStack {
           // After onboarding completes, navigate to Tasks page
           Color.clear
