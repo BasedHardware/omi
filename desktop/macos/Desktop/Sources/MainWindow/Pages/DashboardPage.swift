@@ -1323,9 +1323,10 @@ struct DashboardPage: View {
       onOpenPrimaryChat()
       return
     }
-    guard homeMode != .chat else { return }
-    OmiMotion.withGated(Self.homeStageAnimation) {
-      homeMode = .chat
+    if homeMode != .chat {
+      OmiMotion.withGated(Self.homeStageAnimation) {
+        homeMode = .chat
+      }
     }
     if focusInput {
       focusHomeAskFieldAfterStageTransition()
