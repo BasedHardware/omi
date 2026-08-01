@@ -114,13 +114,31 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
         entry = _as_config_dict(raw_entry)
         if entry is None or 'secret' not in entry:
             raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
+        if not secret_binding_enabled(entry):
+            continue
         version = entry.get('version', 'latest')
         lines.append(f'{name}={entry["secret"]}:{version}')
     return '\n'.join(lines)
 
 
 def _render_secret_names(secret_entries: ConfigDict) -> str:
-    return ','.join(secret_entries.keys())
+    names: list[str] = []
+    for name, raw_entry in secret_entries.items():
+        entry = _as_config_dict(raw_entry)
+        if entry is None or 'secret' not in entry:
+            raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
+        if secret_binding_enabled(entry):
+            names.append(name)
+    return ','.join(names)
+
+
+def secret_binding_enabled(entry: ConfigDict) -> bool:
+    enabled_if = entry.get('enabled_if_env_var')
+    if enabled_if is None:
+        return True
+    if not isinstance(enabled_if, str) or not enabled_if:
+        raise ValueError('enabled_if_env_var must name a non-empty environment variable')
+    return bool(os.environ.get(enabled_if, '').strip())
 
 
 def _render_flags(flag_entries: ConfigDict) -> str:

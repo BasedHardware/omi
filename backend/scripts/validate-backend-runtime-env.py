@@ -22,6 +22,7 @@ from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
 )
+from scripts.render_backend_runtime_env import secret_binding_enabled  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     ValidationError,
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
@@ -196,7 +197,7 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 )
         for secret_name, raw_entry in (service_config.get('secrets') or {}).items():
             entry = _as_config_dict(raw_entry)
-            if entry is None or 'secret' not in entry:
+            if entry is None or 'secret' not in entry or not secret_binding_enabled(entry):
                 continue
             env_entries.append(
                 {
@@ -230,7 +231,7 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 )
         for secret_name, raw_entry in (job_config.get('secrets') or {}).items():
             entry = _as_config_dict(raw_entry)
-            if entry is None or 'secret' not in entry:
+            if entry is None or 'secret' not in entry or not secret_binding_enabled(entry):
                 continue
             env_entries.append(
                 {
@@ -1229,7 +1230,7 @@ def _validate_env_entries(
             if actual_value != expected_value:
                 errors.append(ValidationError(scope, f'env {name} value mismatch: expected {expected_value!r}'))
         elif 'env_var' in expected_entry:
-            if not _has_literal_value(actual_entry):
+            if expected_entry.get('optional') is not True and not _has_literal_value(actual_entry):
                 errors.append(ValidationError(scope, f'env {name} must have a literal value'))
         elif 'secret' in expected_entry:
             expected_secret = expected_entry['secret']
@@ -1281,7 +1282,7 @@ def _validate_cloud_run_secret_entries(
     actual: EnvEntryMap,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
-    for name, expected_entry in expected.items():
+    for name, expected_entry in filter(lambda item: secret_binding_enabled(item[1]), expected.items()):
         actual_entry = actual.get(name)
         if actual_entry is None:
             errors.append(ValidationError(scope, f'missing secret binding {name}'))
@@ -1618,7 +1619,7 @@ def _render_cloud_run_secrets(secret_entries: object) -> str:
     lines: list[str] = []
     for name, raw_entry in secret_entry_map.items():
         entry = _as_config_dict(raw_entry)
-        if entry is None or 'secret' not in entry:
+        if entry is None or 'secret' not in entry or not secret_binding_enabled(entry):
             continue
         version = entry.get('version', 'latest')
         lines.append(f'{name}={entry["secret"]}:{version}')

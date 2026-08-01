@@ -88,6 +88,19 @@ def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     )
 
 
+def with_backend_projection_env(payload: str) -> str:
+    """Keep offline backend fixtures aligned with owner-private projection delivery."""
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n'
+        r'        {"name": "BASE_API_URL", "value": "https://api.omiapi.com"},\n'
+        r'        {"name": "BUCKET_PROJECTION_IMAGES", "value": "fixture-projection-images"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -126,9 +139,11 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_projection_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+                )
             )
         )
     )
@@ -1373,6 +1388,24 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
     assert errors == []
 
 
+def test_conditional_cloud_run_secret_is_required_only_when_enabled(monkeypatch):
+    validator = load_validator()
+    expected = {
+        'TOKEN': {
+            'secret': 'TOKEN',
+            'version': 'latest',
+            'enabled_if_env_var': 'ROLLOUT_COHORT',
+        }
+    }
+
+    monkeypatch.delenv('ROLLOUT_COHORT', raising=False)
+    assert validator._validate_cloud_run_secret_entries(scope='cloud_run/job', expected=expected, actual={}) == []
+
+    monkeypatch.setenv('ROLLOUT_COHORT', 'owner-a')
+    errors = validator._validate_cloud_run_secret_entries(scope='cloud_run/job', expected=expected, actual={})
+    assert [error.message for error in errors] == ['missing secret binding TOKEN']
+
+
 def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
@@ -1576,6 +1609,42 @@ def test_empty_literal_env_matches_cloud_run_entry_without_value():
     )
 
     assert errors == []
+
+
+def test_explicitly_optional_env_var_matches_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/notifications-job',
+        expected={
+            'PROJECTION_ENABLED_USERS': {
+                'env_var': 'PROJECTION_ENABLED_USERS',
+                'default': '',
+                'optional': True,
+            }
+        },
+        actual={'PROJECTION_ENABLED_USERS': {'name': 'PROJECTION_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_empty_env_var_default_does_not_implicitly_bypass_validation():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/notifications-job',
+        expected={
+            'PROJECTION_ENABLED_USERS': {
+                'env_var': 'PROJECTION_ENABLED_USERS',
+                'default': '',
+            }
+        },
+        actual={'PROJECTION_ENABLED_USERS': {'name': 'PROJECTION_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert len(errors) == 1
+    assert errors[0].message == 'env PROJECTION_ENABLED_USERS must have a literal value'
 
 
 def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():

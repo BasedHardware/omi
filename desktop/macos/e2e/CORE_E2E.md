@@ -95,6 +95,7 @@ healthy enough to boot the hermetic T2 stack. Stable nomination and production p
 | `settings-basic` | v2 | typed bridge | 2 | Settings sections + Advanced snapshot |
 | `dashboard` | v2 | typed bridge | 2 | Dashboard load + conversation list snapshot |
 | `home-stage` | v2 | typed bridge | 2 | Redesigned Home hub/chat/connect via `homeMode` assertions |
+| `projections` | v2 | typed bridge | 2 | Omens loading, grounded result, provenance, empty, and main-error presentations |
 | `chat-fault-5xx` | v2 | typed bridge | fault | Backend 5xx via `omi-fault-inject` (`--fault-suite`) |
 | `language` | v2 | typed bridge | 2 | Transcription language set + snapshot |
 | `tasks-crud` | v2 | typed bridge | 2 | Task create/toggle/delete via bridge |

@@ -78,6 +78,11 @@ def _get_storage_client() -> Any:
     return storage_client
 
 
+def get_storage_bucket(bucket_name: str) -> Any:
+    """Return one named bucket without exposing the shared client to feature modules."""
+    return _get_storage_client().bucket(bucket_name)
+
+
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None

@@ -421,6 +421,7 @@ jobs:
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          BUCKET_PROJECTION_IMAGES: ${{ vars.BUCKET_PROJECTION_IMAGES }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}

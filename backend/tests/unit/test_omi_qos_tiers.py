@@ -262,6 +262,8 @@ class TestModelQosProfiles:
             'goals_advice',
             'notifications',
             'proactive_notification',
+            'projection_emotions',
+            'projection_subject',
             'what_matters_now',
             'openglass',
             'app_generator',
@@ -1101,6 +1103,8 @@ class TestStructuredOutputFeatureTracking:
             'translation',
             'conv_app_select',
             'external_structure',
+            'projection_subject',
+            'projection_emotions',
             'trends',
             'what_matters_now',
         }

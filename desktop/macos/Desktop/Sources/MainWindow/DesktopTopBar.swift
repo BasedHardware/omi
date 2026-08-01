@@ -1,3 +1,4 @@
+import Foundation
 import OmiTheme
 import SwiftUI
 
@@ -389,12 +390,33 @@ struct TopNavigationItem: Identifiable, Equatable {
 }
 
 enum TopNavigationRoutes {
-  static let primaryItems = [
-    TopNavigationItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
-    TopNavigationItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
-    TopNavigationItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
-    TopNavigationItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
-  ]
+  static var primaryItems: [TopNavigationItem] {
+    primaryItems(
+      bundleIdentifier: Bundle.main.bundleIdentifier,
+      productionOmensRolloutEnabled: false)
+  }
+
+  static func primaryItems(
+    bundleIdentifier: String?,
+    productionOmensRolloutEnabled: Bool
+  ) -> [TopNavigationItem] {
+    let visibleSidebarItems = Set(
+      SidebarNavItem.mainItems(
+        bundleIdentifier: bundleIdentifier,
+        productionOmensRolloutEnabled: productionOmensRolloutEnabled))
+    return [
+      TopNavigationItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
+      TopNavigationItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
+      TopNavigationItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
+      TopNavigationItem(
+        index: SidebarNavItem.projections.rawValue, title: "Omens",
+        icon: "sparkles.rectangle.stack.fill"),
+      TopNavigationItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
+    ].filter { item in
+      guard let sidebarItem = SidebarNavItem(rawValue: item.index) else { return false }
+      return visibleSidebarItems.contains(sidebarItem)
+    }
+  }
 
   static let memoryDestinations = MemoryHubDestination.allCases
 }
@@ -415,6 +437,8 @@ enum TopNavigationPillMetrics {
       baseWidth = 128
     case SidebarNavItem.tasks.rawValue:
       baseWidth = 84
+    case SidebarNavItem.projections.rawValue:
+      baseWidth = 96
     case SidebarNavItem.apps.rawValue:
       baseWidth = 80
     default:

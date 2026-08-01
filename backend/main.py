@@ -28,6 +28,7 @@ from routers import (
     speech_profile,
     agents,
     users,
+    projections,
     trends,
     sync,
     apps,
@@ -157,6 +158,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(projections.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
