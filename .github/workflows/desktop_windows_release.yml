@@ -41,7 +41,7 @@ on:
         required: false
         type: string
       bypass_update_feed_probe_reason:
-        description: 'Emergency only: type a tracking-issue/reason to skip the production update-feed probe. Empty = probe runs.'
+        description: 'Emergency only: supply a tracking-issue URL or reason AND the literal phrase I ACKNOWLEDGE THE ROUTE IS REQUIRED to skip the probe. Empty or any other text = probe runs.'
         required: false
         type: string
 
@@ -77,25 +77,28 @@ jobs:
       # stable (the default for fresh installs and un-toggled settings). The
       # backend never falls stable through to beta, so a beta-only probe passing
       # while stable 404s would still ship a broken default cohort.
+      #
+      # Break-glass: the probe is skipped only when the dispatcher supplies the
+      # literal confirmation sentinel "I ACKNOWLEDGE THE ROUTE IS REQUIRED" plus a
+      # tracking-issue/reason. An empty or arbitrary value still runs the probe.
+      # The sentinel is checked through an env var (not direct interpolation) so
+      # operator-supplied reason text is treated as data, not shell syntax.
       - name: Probe production Windows update-feed (beta + stable)
-        if: ${{ github.event.inputs.bypass_update_feed_probe_reason == '' }}
+        if: ${{ !contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
         shell: bash
         run: |
           python3 .github/scripts/probe_windows_update_feed.py \
             --channel beta \
             --channel stable
 
-      # Break-glass: probe itself broken, or the GitHub runner cannot reach
-      # api.omi.me. Requires a non-empty reason (tracked in the run log) so a
-      # transient probe failure cannot indefinitely block Windows hotfixes,
-      # while still preventing an un-audited release when the route is genuinely
-      # absent.
       - name: Probe bypassed (audited emergency release)
-        if: ${{ github.event.inputs.bypass_update_feed_probe_reason != '' }}
+        if: ${{ contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
         shell: bash
+        env:
+          BYPASS_REASON: ${{ github.event.inputs.bypass_update_feed_probe_reason }}
         run: |
           echo "::warning::Windows update-feed probe BYPASSED."
-          echo "Reason: ${{ github.event.inputs.bypass_update_feed_probe_reason }}"
+          printf 'Reason: %s\n' "$BYPASS_REASON"
           echo "This is recorded for audit. The route deploy (#10610) is still required."
 
       - name: Plan release (compute next version, tag, sync back to main)

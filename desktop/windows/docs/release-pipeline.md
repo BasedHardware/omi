@@ -104,10 +104,12 @@ fails with "missing /v2/desktop/update-feed/windows", deploy backend `main` via
 release-eligible main SHA) and re-run the release.
 
 **Break-glass.** If the probe itself is broken or the GitHub runner cannot reach
-`api.omi.me`, supply a `bypass_update_feed_probe_reason` (a tracking-issue URL or
-short rationale) when dispatching the workflow. That skips the probe for that one
-release while leaving the reason in the run log for audit. Do not use this to
-ship when the route is genuinely absent.
+`api.omi.me`, supply a `bypass_update_feed_probe_reason` that contains a
+tracking-issue URL or short rationale **and** the literal phrase
+`I ACKNOWLEDGE THE ROUTE IS REQUIRED` when dispatching the workflow. The
+sentinel must be present or the probe runs regardless. That skips the probe for
+that one release while leaving the reason in the run log for audit. Do not use
+this to ship when the route is genuinely absent.
 
 The workflow marks new Windows builds **prerelease**. Stable users receive only
 releases that have been promoted by clearing that flag; beta users receive the
