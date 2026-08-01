@@ -26,12 +26,9 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
-/// Files per upload batch, the same for both lanes. The lanes exist to keep
-/// rate-limit domains separate — a backfill cooldown must not stall a freshly
-/// captured recording — not to throttle throughput. Draining a backlog a few
-/// files at a time made offline recovery needlessly slow; the backend caps part
-/// size (200 MB), not file count.
-const _syncUploadBatchLimit = 20;
+/// One batch is one server-side sync job, and a job must finish inside the
+/// backend's 600s stale guard (backend/database/sync_jobs.py).
+const _syncUploadBatchLimit = 5;
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
