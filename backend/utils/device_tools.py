@@ -88,6 +88,10 @@ class SearchContactsInput(BaseModel):
     limit: Optional[int] = Field(default=10, description="Maximum contacts to return (max 50).")
 
 
+class PermissionRequestInput(BaseModel):
+    type: str = Field(description="Which permission to ask for. iOS supports only 'contacts'.")
+
+
 # Descriptions are written for the model and must state the consent model, so it
 # does not promise the user a message was sent when it only opened a sheet.
 DEVICE_TOOL_SPECS: dict[str, dict[str, Any]] = {
@@ -107,6 +111,14 @@ DEVICE_TOOL_SPECS: dict[str, dict[str, Any]] = {
             "Resolve a person's name to their phone numbers and email addresses from the "
             "contacts on the user's own device. Use before propose_message when the user names "
             "a person instead of giving a raw handle. Ask which one when several match."
+        ),
+    },
+    'request_permission': {
+        'args_schema': PermissionRequestInput,
+        'description': (
+            "Prompt the user for a device permission this turn needs. Call only when a tool "
+            "result says next_tool=request_permission, and pass the type it named. On iOS the "
+            "only supported type is 'contacts'; the system prompt is the approval."
         ),
     },
 }

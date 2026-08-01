@@ -90,6 +90,7 @@ surface exposes a *propose* verb instead:
 | Tool | Mechanism | Consent |
 |---|---|---|
 | `search_contacts` | `CNContactStore` | Contacts permission |
+| `request_permission` | system permission prompt | the prompt itself |
 | `propose_message` | `MFMessageComposeViewController` | the compose sheet itself |
 
 `DeviceToolsService.swift` presents the sheet prefilled with recipient and body;
