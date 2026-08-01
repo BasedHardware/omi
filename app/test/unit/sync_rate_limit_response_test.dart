@@ -4,19 +4,10 @@ import 'package:omi/backend/http/api/conversations.dart';
 
 void main() {
   group('sync capture manifest admission', () {
-    test('requests proof only for conversation-targeted fresh uploads', () {
-      expect(shouldRequestSyncCaptureManifest('conversation', SyncUploadLane.fresh), isTrue);
-      expect(shouldRequestSyncCaptureManifest('conversation', SyncUploadLane.backfill), isFalse);
-      expect(shouldRequestSyncCaptureManifest(null, SyncUploadLane.fresh), isFalse);
-    });
-
-    test('a batch with no issued manifest uploads on the backfill lane instead of stalling', () {
-      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.fresh, null), SyncUploadLane.backfill);
-    });
-
-    test('an issued manifest keeps the requested lane', () {
-      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.fresh, 'manifest-token'), SyncUploadLane.fresh);
-      expect(syncUploadLaneForCaptureManifest(SyncUploadLane.backfill, 'manifest-token'), SyncUploadLane.backfill);
+    test('requests proof only when the caller claims a live capture for a conversation', () {
+      expect(shouldRequestSyncCaptureManifest('conversation', true), isTrue);
+      expect(shouldRequestSyncCaptureManifest('conversation', false), isFalse);
+      expect(shouldRequestSyncCaptureManifest(null, true), isFalse);
     });
   });
 
@@ -27,10 +18,12 @@ void main() {
       expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.fairUse);
     });
 
-    test('recognizes historical pacing and capacity headers', () {
+    test('historical pacing and capacity are transient capacity, never a persisted fair-use cooldown', () {
+      // #10948: these mapped to their own persisted cooldown that re-armed every
+      // 30s and rendered as benign "ready to sync" copy.
       for (final reason in ['backfill_paced', 'backfill_capacity']) {
         final response = http.Response('', 503, headers: {'x-omi-rate-limit-reason': reason});
-        expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.backfillPaced);
+        expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.backendCapacity);
       }
     });
 
