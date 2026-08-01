@@ -101,8 +101,8 @@ final class RewindStorePermissionsTests: XCTestCase {
     testUserId = userId
     RewindDatabase.currentUserId = userId
 
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let appSupport = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
     let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
     let usersDir = omiDir.appendingPathComponent("users", isDirectory: true)
     let userDirectory = usersDir.appendingPathComponent(userId, isDirectory: true)
