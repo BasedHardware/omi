@@ -666,7 +666,10 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     capabilityDoc: doc(
       "Setup Agent Provider",
       "Install a missing local agent provider (OpenClaw, Hermes, or Codex) with native consent dialog.",
-      ["Requires Swift LocalAgentProviderInstaller."],
+      [
+        "Call setup_agent_provider ONLY after the user explicitly agrees in this conversation to install that provider — never unprompted.",
+        "Requires Swift LocalAgentProviderInstaller.",
+      ],
     ),
     executor: { kind: "swiftTool" },
   },
