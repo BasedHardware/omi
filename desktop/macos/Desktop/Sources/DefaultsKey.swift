@@ -37,6 +37,9 @@ enum DefaultsKey: String {
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// Task Agent: whether to launch Claude with permission prompts bypassed.
+  /// Absent means false — an unset key must not grant the permissive behaviour.
+  case taskAgentSkipPermissions = "taskAgentSkipPermissions"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"

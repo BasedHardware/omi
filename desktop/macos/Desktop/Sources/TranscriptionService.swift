@@ -102,7 +102,13 @@ class TranscriptionService: @unchecked Sendable {
 
   private var _webSocketTask: URLSessionWebSocketTask?
   private var _urlSession: URLSession?
-  private var _webSocketDelegate: WebSocketConnectionDelegate?
+  /// Held strongly on purpose, and deliberately not named `*Delegate`: this is not a
+  /// back-reference to an owner, it is an object we construct, hand to a `URLSession` we
+  /// also own, and nil out alongside that session in `disconnect()`. A weak reference
+  /// would let it deallocate between construction and the
+  /// `URLSession(configuration:delegate:delegateQueue:)` call, silently dropping the
+  /// open/close callbacks the reconnect path depends on.
+  private var _webSocketConnectionObserver: WebSocketConnectionDelegate?
   private var _isConnected = false
   private var _shouldReconnect = false
 
@@ -112,29 +118,69 @@ class TranscriptionService: @unchecked Sendable {
   private var _connectionGeneration: UInt64 = 0
 
   private var webSocketTask: URLSessionWebSocketTask? {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _webSocketTask }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _webSocketTask = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _webSocketTask
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _webSocketTask = newValue
+    }
   }
 
   private var urlSession: URLSession? {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _urlSession }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _urlSession = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _urlSession
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _urlSession = newValue
+    }
   }
 
   private var webSocketDelegate: WebSocketConnectionDelegate? {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _webSocketDelegate }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _webSocketDelegate = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _webSocketConnectionObserver
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _webSocketConnectionObserver = newValue
+    }
   }
 
   // Internal for @testable import access in unit tests
   var isConnected: Bool {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _isConnected }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _isConnected = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _isConnected
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _isConnected = newValue
+    }
   }
 
   var shouldReconnect: Bool {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _shouldReconnect }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _shouldReconnect = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _shouldReconnect
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _shouldReconnect = newValue
+    }
   }
 
   // Callbacks
@@ -198,8 +244,16 @@ class TranscriptionService: @unchecked Sendable {
   // Reconnection (internal for @testable import)
   private var _reconnectAttempts = 0
   var reconnectAttempts: Int {
-    get { stateLock.lock(); defer { stateLock.unlock() }; return _reconnectAttempts }
-    set { stateLock.lock(); defer { stateLock.unlock() }; _reconnectAttempts = newValue }
+    get {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      return _reconnectAttempts
+    }
+    set {
+      stateLock.lock()
+      defer { stateLock.unlock() }
+      _reconnectAttempts = newValue
+    }
   }
   let maxReconnectAttempts = 10
   private var _reconnectTask: Task<Void, Never>?
@@ -547,7 +601,7 @@ class TranscriptionService: @unchecked Sendable {
       log("TranscriptionService: Connect superseded before resume — discarding socket")
       return
     }
-    _webSocketDelegate = delegate
+    _webSocketConnectionObserver = delegate
     _urlSession = session
     _webSocketTask = task
     stateLock.unlock()
@@ -640,7 +694,7 @@ class TranscriptionService: @unchecked Sendable {
     _webSocketTask = nil
     let session = _urlSession
     _urlSession = nil
-    _webSocketDelegate = nil
+    _webSocketConnectionObserver = nil
     stateLock.unlock()
 
     watchdogTask?.cancel()
@@ -681,7 +735,7 @@ class TranscriptionService: @unchecked Sendable {
     _webSocketTask = nil
     let session = _urlSession
     _urlSession = nil
-    _webSocketDelegate = nil
+    _webSocketConnectionObserver = nil
     let canRetry = _shouldReconnect && _reconnectAttempts < maxReconnectAttempts
     let exhausted = _reconnectAttempts >= maxReconnectAttempts
     if canRetry {
@@ -723,7 +777,7 @@ class TranscriptionService: @unchecked Sendable {
     _webSocketTask = nil
     let session = _urlSession
     _urlSession = nil
-    _webSocketDelegate = nil
+    _webSocketConnectionObserver = nil
     let canRetry = _shouldReconnect && _reconnectAttempts < maxReconnectAttempts
     let exhausted = _reconnectAttempts >= maxReconnectAttempts
     if canRetry {

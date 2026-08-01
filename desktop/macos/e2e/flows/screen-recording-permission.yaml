@@ -32,6 +32,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
   - desktop/macos/Desktop/Sources/ModelQoS.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
 preconditions:
   - auth_ready
 

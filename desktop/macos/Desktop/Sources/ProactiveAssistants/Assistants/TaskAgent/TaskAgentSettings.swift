@@ -58,7 +58,7 @@ class TaskAgentSettings: ObservableObject, @unchecked Sendable {
     self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? ""
     self.customPromptPrefix = UserDefaults.standard.string(forKey: "taskAgentPromptPrefix") ?? ""
     self.defaultPrompt = UserDefaults.standard.string(forKey: "taskAgentDefaultPrompt") ?? Self.defaultPromptTemplate
-    self.skipPermissions = UserDefaults.standard.object(forKey: "taskAgentSkipPermissions") as? Bool ?? false
+    self.skipPermissions = UserDefaults.standard.bool(forKey: DefaultsKey.taskAgentSkipPermissions.rawValue)
   }
 
   /// Reset to default settings

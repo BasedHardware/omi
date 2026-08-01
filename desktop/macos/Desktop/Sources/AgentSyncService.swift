@@ -768,7 +768,9 @@ actor AgentSyncService {
         return .success
       } else if httpResponse.statusCode == 429 {
         let body = String(data: data, encoding: .utf8) ?? ""
-        log("AgentSync: push \(table) rate limited — HTTP 429 (retryAfter=\(retryAfter.map { "\($0)s" } ?? "none")): \(body)")
+        log(
+          "AgentSync: push \(table) rate limited — HTTP 429 (retryAfter=\(retryAfter.map { "\($0)s" } ?? "none")): \(body)"
+        )
         return .rateLimited(retryAfter: retryAfter)
       } else if httpResponse.statusCode >= 500 {
         let body = String(data: data, encoding: .utf8) ?? ""
