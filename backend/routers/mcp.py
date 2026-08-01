@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from utils.executors import db_executor, postprocess_executor
+from utils.mcp_data import date_only_to_utc_epoch
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -516,24 +517,6 @@ def get_conversations(
     return valid_conversations
 
 
-def _date_only_to_utc_epoch(value: str, *, end_of_day: bool = False) -> float:
-    """Parse a YYYY-MM-DD string into a UTC epoch seconds boundary.
-
-    Conversation vectors are stored with a UTC epoch ``created_at``
-    (``int(datetime.now(timezone.utc).timestamp())``), so a date-only filter must
-    be anchored to UTC, not the server's local timezone. Naive
-    ``datetime.strptime(value, '%Y-%m-%d').timestamp()`` silently shifts the window
-    by the server's UTC offset and drops the end day entirely. Matches the
-    integration-router convention: start = 00:00:00 UTC, end = 23:59:59.999999 UTC.
-    """
-    parsed = datetime.strptime(value, '%Y-%m-%d')
-    if end_of_day:
-        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
-    else:
-        parsed = parsed.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
-    return parsed.timestamp()
-
-
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
 def search_conversations(
     query: str,
@@ -548,14 +531,14 @@ def search_conversations(
     ends_at = None
     if start_date:
         try:
-            starts_at = int(_date_only_to_utc_epoch(start_date))
+            starts_at = int(date_only_to_utc_epoch(start_date))
         except ValueError:
             raise HTTPException(
                 status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
             )
     if end_date:
         try:
-            ends_at = int(_date_only_to_utc_epoch(end_date, end_of_day=True))
+            ends_at = int(date_only_to_utc_epoch(end_date, end_of_day=True))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 

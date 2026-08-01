@@ -12,7 +12,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
@@ -61,7 +61,14 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_person,
+    clean_screen_activity_row,
+    end_of_day_utc,
+    parse_date_only_utc,
+)
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -777,8 +784,7 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     if not value:
         return None
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%d")
-        return parsed.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+        return parse_date_only_utc(value)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
@@ -1019,7 +1025,7 @@ def execute_tool(
         end_dt = _parse_mcp_date(end_date, "end_date")
         if end_dt is not None:
             # Include the entire end day, matching the integration-router convention.
-            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            end_dt = end_of_day_utc(end_dt)
 
         # Validate categories
         valid_categories: List[str] = []
@@ -1149,7 +1155,7 @@ def execute_tool(
         end_dt = _parse_mcp_date(end_date, "end_date")
         starts_at = int(start_dt.timestamp()) if start_dt is not None else None
         if end_dt is not None:
-            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            end_dt = end_of_day_utc(end_dt)
         ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
         conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
@@ -1231,7 +1237,7 @@ def execute_tool(
         due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
         if due_end is not None:
             # Include the entire end day, matching the integration-router convention.
-            due_end = due_end.replace(hour=23, minute=59, second=59, microsecond=999999)
+            due_end = end_of_day_utc(due_end)
         items = action_items_db.get_action_items(
             user_id,
             completed=completed,
@@ -1332,6 +1338,12 @@ def execute_tool(
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        if end is not None:
+            # Include the entire end day, matching the integration-router
+            # convention. The DB layer formats the bound via strftime, so the
+            # end-of-day increment must be applied here (the parsed midnight
+            # would otherwise match only up to 00:00:00.999 of the end day).
+            end = end_of_day_utc(end)
         app = arguments.get("app")
         try:
             summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
