@@ -2,8 +2,9 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// TASK-07: a reorder must keep the three source arrays the displayed task list can
-/// be backed by — `store.incompleteTasks`, `filteredFromDatabase`, `searchResults` —
+/// TASK-07: a reorder must keep the source arrays the displayed task list can
+/// be backed by — `store.incompleteTasks`, `store.completedTasks`,
+/// `filteredFromDatabase`, `searchResults` —
 /// in agreement. `TasksViewModel.moveTask` writes the new sortOrders to all three via
 /// the single `applyReorder` helper; writing to only one diverges when filters/search
 /// are active (BL-030, fixed in #9121). These pin that helper's guarantees: the same
@@ -152,13 +153,29 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertEqual(Set(sortOrders).count, merged.count, "a filtered reorder must rebase hidden rows too")
   }
 
-  /// BL-030 regression guard: `moveTask` must fan the reorder out to ALL THREE mirrored
+  func testDebouncedPersistenceKeepsDoneAndOffPageReorderedIDs() {
+    // The active Done/search scope can contain a row not present in the first
+    // incomplete-cache page. Persistence must retain that drag order rather
+    // than rebuilding exclusively from incompleteTasks after the debounce.
+    let pendingOrder = ["done-visible", "cached-incomplete"]
+    let currentCacheOrder = ["cached-incomplete", "newly-loaded"]
+
+    let persisted = TasksViewModel.persistedTaskIDs(
+      reorderedIDs: pendingOrder,
+      currentIDs: currentCacheOrder
+    )
+
+    XCTAssertEqual(persisted, ["done-visible", "cached-incomplete", "newly-loaded"])
+    XCTAssertEqual(Set(persisted).count, persisted.count, "persistence must not create duplicate sort-order updates")
+  }
+
+  /// BL-030 regression guard: `moveTask` must fan the reorder out to every mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the
   /// exact call sites (the helper's own correctness is covered behaviourally above).
   func testMoveTaskFansReorderOutToAllThreeMirroredArrays() throws {
     let source = try tasksPageSource()
-    for target in ["&incomplete", "&filteredFromDatabase", "&searchResults"] {
+    for target in ["&incomplete", "&completed", "&filteredFromDatabase", "&searchResults"] {
       XCTAssertTrue(
         source.contains("Self.applyReorder(order, categoryIndex: categoryIndex, to: \(target))"),
         "moveTask must apply the reorder to \(target) so all three mirrored arrays agree (BL-030)")

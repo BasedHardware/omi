@@ -1967,7 +1967,7 @@ class TestPromoteResponseWireCompat:
 
         with patch.object(
             staged_tasks_db,
-            'restore_legacy_conversation_items',
+            'restore_all_legacy_conversation_items',
             return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
         ):
             result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
@@ -2154,10 +2154,13 @@ class TestLegacyConversationRecovery:
         def col_side_effect(collection_name):
             return action_items_col if collection_name == 'action_items' else staged_col
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            patched_db.batch.return_value = batch
-            result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        get_firestore_client.assert_not_called()
 
         assert result == {
             'restored': 1,
@@ -2201,10 +2204,10 @@ class TestLegacyConversationRecovery:
         def col_side_effect(collection_name):
             return action_items_col if collection_name == 'action_items' else staged_col
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            patched_db.batch.return_value = batch
-            result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
         assert result == {
             'restored': 0,
@@ -2236,11 +2239,13 @@ class TestLegacyConversationRecovery:
         recovery_query.stream.return_value = snapshots
         staged_col.where.return_value = recovery_query
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
-                action_items_col if collection_name == 'action_items' else staged_col
-            )
-            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', limit=2)
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', limit=2, firestore_client=firestore_client
+        )
 
         recovery_query.order_by.assert_called_once_with('__name__')
         recovery_query.limit.assert_called_once_with(3)
@@ -2264,11 +2269,13 @@ class TestLegacyConversationRecovery:
         cursor_ref = MagicMock()
         staged_col.document.return_value = cursor_ref
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda collection_name: (
-                action_items_col if collection_name == 'action_items' else staged_col
-            )
-            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', cursor='legacy-1')
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', cursor='legacy-1', firestore_client=firestore_client
+        )
 
         recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
         assert result == {
@@ -2277,6 +2284,35 @@ class TestLegacyConversationRecovery:
             'has_more': False,
             'next_cursor': None,
         }
+
+    def test_restore_all_legacy_conversation_items_completes_every_page_before_success(self):
+        """Released single-call clients must never receive an acknowledged partial recovery."""
+        first_page = {'restored': 50, 'skipped_existing': 1, 'has_more': True, 'next_cursor': 'legacy-49'}
+        second_page = {'restored': 2, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+
+        with patch.object(
+            staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=[first_page, second_page],
+        ) as restore_page:
+            result = staged_tasks_db.restore_all_legacy_conversation_items('test-uid', firestore_client=MagicMock())
+
+        assert result == {
+            'restored': 52,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert [call.args for call in restore_page.call_args_list] == [('test-uid',), ('test-uid',)]
+        assert [call.kwargs['cursor'] for call in restore_page.call_args_list] == [None, 'legacy-49']
+        assert all(
+            call.kwargs['limit'] == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
+            for call in restore_page.call_args_list
+        )
+        assert (
+            restore_page.call_args_list[0].kwargs['firestore_client']
+            is restore_page.call_args_list[1].kwargs['firestore_client']
+        )
 
 
 # ============================================================================

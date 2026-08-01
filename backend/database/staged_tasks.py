@@ -12,7 +12,8 @@ from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from ._client import db
+from ._client import db, get_firestore_client
+from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
 
 logger = logging.getLogger(__name__)
@@ -356,6 +357,7 @@ def restore_legacy_conversation_items(
     *,
     limit: int = LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
     cursor: Optional[str] = None,
+    firestore_client=None,
 ) -> dict:
     """Restore rows moved by the retired desktop conversation migration.
 
@@ -369,9 +371,18 @@ def restore_legacy_conversation_items(
     if limit < 1:
         raise ValueError('limit must be positive')
 
-    action_items_col = _user_col(uid, 'action_items')
-    staged_col = _user_col(uid, 'staged_tasks')
-    migrated_query = staged_col.where(filter=FieldFilter('source', '==', 'conversation_migration')).order_by('__name__')
+    # Resolve the client at the call boundary. The legacy ``db`` proxy is safe
+    # for older helpers in this module, but recovery must be independently
+    # testable and must not capture a client during import.
+    client = firestore_client or get_firestore_client()
+    user_doc = client.collection('users').document(uid)
+    action_items_col = user_doc.collection('action_items')
+    staged_col = user_doc.collection('staged_tasks')
+    migrated_query = LEGACY_CONVERSATION_RECOVERY_QUERY.build(
+        staged_col,
+        {'source': 'conversation_migration'},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
     if cursor:
         migrated_query = migrated_query.start_after({'__name__': staged_col.document(cursor)})
     # Read one look-ahead document so the caller can distinguish a complete
@@ -398,7 +409,7 @@ def restore_legacy_conversation_items(
         action_item.pop('id', None)
         action_item.pop('source', None)
 
-        batch = db.batch()
+        batch = client.batch()
         batch.create(action_item_ref, action_item)
         batch.delete(staged_col.document(staged_snapshot.id))
         try:
@@ -417,3 +428,46 @@ def restore_legacy_conversation_items(
         'has_more': has_more,
         'next_cursor': next_cursor,
     }
+
+
+def restore_all_legacy_conversation_items(uid: str, *, firestore_client=None) -> dict:
+    """Complete the retired single-call migration route without returning a partial success.
+
+    Released desktop clients invoke the compatibility endpoint once and do not
+    understand recovery cursors. Keep their successful response all-or-complete
+    while the dedicated action-items endpoint remains cursor-paginated for
+    current clients. Every inner request stays page-bounded, and a malformed
+    continuation raises instead of incorrectly acknowledging the sweep.
+    """
+
+    client = firestore_client or get_firestore_client()
+    cursor = None
+    seen_cursors = set()
+    restored = 0
+    skipped_existing = 0
+
+    while True:
+        page = restore_legacy_conversation_items(
+            uid,
+            limit=LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+            cursor=cursor,
+            firestore_client=client,
+        )
+        restored += page['restored']
+        skipped_existing += page['skipped_existing']
+
+        if not page['has_more']:
+            if page['next_cursor'] is not None:
+                raise ValueError('complete legacy recovery returned a continuation cursor')
+            return {
+                'restored': restored,
+                'skipped_existing': skipped_existing,
+                'has_more': False,
+                'next_cursor': None,
+            }
+
+        next_cursor = page['next_cursor']
+        if not next_cursor or next_cursor == cursor or next_cursor in seen_cursors:
+            raise ValueError('legacy recovery returned an invalid continuation cursor')
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor

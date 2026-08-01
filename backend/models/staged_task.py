@@ -72,11 +72,11 @@ class MigrateConversationItemsResponse(BaseModel):
     )
     has_more: bool = Field(
         default=False,
-        description='Whether more marked legacy rows remain after this recovery page.',
+        description='Always false: the released single-call route completes recovery before acknowledging success.',
     )
     next_cursor: Optional[str] = Field(
         default=None,
-        description='Exclusive recovery cursor for the next page, present only when has_more is true.',
+        description='Always absent on the released single-call compatibility route.',
     )
 
 

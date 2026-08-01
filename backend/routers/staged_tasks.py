@@ -578,10 +578,13 @@ def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
     response_model=MigrateConversationItemsResponse,
 )
 def migrate_conversation_items(
-    limit: int = Query(default=50, ge=1, le=100),
-    cursor: str | None = Query(default=None, min_length=1, max_length=256),
+    # Kept accepted for released callers that included the old page controls.
+    # The compatibility route ignores them and is now always all-or-complete.
+    limit: int = Query(default=50, ge=1, le=100, deprecated=True),
+    cursor: str | None = Query(default=None, min_length=1, max_length=256, deprecated=True),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    del limit, cursor
     control = task_control_db.get_task_workflow_control(uid)
     # In canonical modes, a marked row may already have a matching
     # legacy_staged Candidate. Restoring it as an action item while that
@@ -598,9 +601,11 @@ def migrate_conversation_items(
             'next_cursor': None,
         }
 
-    # The legacy route remains response-compatible but now restores only rows
-    # that it explicitly marked, never live action items.
-    result = staged_tasks_db.restore_legacy_conversation_items(uid, limit=limit, cursor=cursor)
+    # This released endpoint is single-call only: old desktop clients mark
+    # migration complete after one successful response and never consume a
+    # cursor. Keep it all-or-complete; the dedicated action-items endpoint is
+    # the bounded, cursor-paginated API used by current clients.
+    result = staged_tasks_db.restore_all_legacy_conversation_items(uid)
     return {'status': 'ok', 'migrated': 0, 'deleted': 0, **result}
 
 
