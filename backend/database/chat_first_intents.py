@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from config.canonical_memory_cohort import is_canonical_memory_user
 from database._client import get_firestore_client
@@ -541,13 +542,15 @@ def fetch_ready_intents(
     client = _db(firestore_client)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    # Push the delivery-state filter to Firestore so delivered historical rows
+    # are never transferred for a foreground materialization.  The caller only
+    # ever needs ready or pending-receipt intents, which are bounded; the full
+    # collection otherwise grows with account age.
+    query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
     ready: list[ProactiveIntent] = []
-    for snapshot in collection.stream():
+    for snapshot in query.stream():
         intent = _intent_from_snapshot(snapshot)
-        if intent.account_generation != account_generation or intent.delivery_state not in {
-            'ready',
-            'pending_kernel_receipt',
-        }:
+        if intent.account_generation != account_generation:
             continue
         ready.append(intent)
     ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))

@@ -71,6 +71,40 @@ class _Collection:
             if path[: len(self._path)] == self._path and len(path) == child_length
         ]
 
+    def where(self, *, filter):
+        """Minimal FieldFilter mock: filter by a single ``in`` or ``==`` field."""
+        child_length = len(self._path) + 1
+        snapshots = [
+            _Snapshot(self._database, path)
+            for path in sorted(self._database.rows)
+            if path[: len(self._path)] == self._path and len(path) == child_length
+        ]
+        field = filter.field_path
+        op = filter.op_string
+        value = filter.value
+        matched = []
+        for snap in snapshots:
+            snap_data = snap.to_dict() or {}
+            if op == 'in':
+                if snap_data.get(field) in value:
+                    matched.append(snap)
+            elif op == '==':
+                if snap_data.get(field) == value:
+                    matched.append(snap)
+            else:  # pragma: no cover - only ``in``/``==`` used by this suite
+                matched.append(snap)
+        return _FilteredCollection(matched)
+
+
+class _FilteredCollection:
+    """Result of ``_Collection.where`` — supports ``stream`` only."""
+
+    def __init__(self, snapshots):
+        self._snapshots = snapshots
+
+    def stream(self):
+        return self._snapshots
+
 
 class _Transaction:
     def __init__(self):
