@@ -296,6 +296,7 @@ async def execute_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -341,6 +342,7 @@ async def execute_chat_stream(
         platform=platform,
         current_datetime_block=current_datetime_block,
         tz=tz,
+        device_tool_names=device_tool_names,
     ):
         yield chunk
 

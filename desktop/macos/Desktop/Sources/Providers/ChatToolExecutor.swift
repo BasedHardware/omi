@@ -93,6 +93,18 @@ class ChatToolExecutor {
     "full_disk_access",
   ]
 
+  /// Permissions the device tool surface needs but onboarding never asks for.
+  /// `contacts` backs search_contacts; the rest are the TCC grants macOS demands
+  /// when run_applescript drives Calendar, Reminders, or Photos.
+  nonisolated static let deviceToolPermissionTypes = [
+    "contacts",
+    "calendars",
+    "reminders",
+    "photos",
+  ]
+
+  nonisolated static let allPermissionTypes = onboardingPermissionTypes + deviceToolPermissionTypes
+
   nonisolated static var onboardingPermissionTypesDescription: String {
     onboardingPermissionTypes.joined(separator: ", ")
   }
@@ -191,7 +203,7 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     backendAPIClient: APIClient
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    log("Executing tool: \(toolCall.name) with args: \(redactedArgumentSummary(for: toolCall))")
     let telemetryContext = ScreenContextTelemetryContext.from(
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
@@ -366,6 +378,37 @@ class ChatToolExecutor {
         toolCall.arguments,
         context: telemetryContext,
         expectedOwnerID: expectedOwnerID)
+
+    case .searchContacts:
+      return await executeSearchContacts(toolCall.arguments)
+
+    case .listMessageChats:
+      return await executeListMessageChats(toolCall.arguments)
+
+    case .readMessageHistory:
+      return await executeReadMessageHistory(toolCall.arguments)
+
+    case .listMailMessages:
+      return await executeListMailMessages(toolCall.arguments)
+
+    // send_message and run_applescript actuate the machine. The kernel already
+    // resolved a dispatch or scoped grant before dispatching here; the owner
+    // bind below is the second gate, matching request_permission.
+    case .sendMessage:
+      guard
+        let result = await performOwnerBoundAsyncPhysicalEffect(
+          expectedOwnerID: expectedOwnerID,
+          effect: { await executeSendMessage(toolCall.arguments) })
+      else { return authorizedOwnerChangedResult() }
+      return result
+
+    case .runApplescript:
+      guard
+        let result = await performOwnerBoundAsyncPhysicalEffect(
+          expectedOwnerID: expectedOwnerID,
+          effect: { await executeRunAppleScript(toolCall.arguments) })
+      else { return authorizedOwnerChangedResult() }
+      return result
 
     case .fillCloudConnectorForm:
       guard
@@ -1878,12 +1921,15 @@ class ChatToolExecutor {
       )
 
     default:
+      if deviceToolPermissionTypes.contains(type) {
+        return await requestDeviceToolPermission(type)
+      }
       return permissionJSON([
         "ok": false,
         "status": "error",
         "error": "unknown_permission_type",
         "permission": type,
-        "valid_types": onboardingPermissionTypes,
+        "valid_types": allPermissionTypes,
       ])
     }
   }
@@ -1911,15 +1957,16 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
-    if let type = permissionType(from: args), onboardingPermissionTypes.contains(type) {
+    let allStatuses = statuses.merging(deviceToolPermissionStatuses()) { existing, _ in existing }
+    if let type = permissionType(from: args), allPermissionTypes.contains(type) {
       return permissionJSON([
         "ok": true,
         "permission": type,
-        "status": statuses[type] ?? "unknown",
+        "status": allStatuses[type] ?? "unknown",
       ])
     }
 
-    return permissionJSON(["ok": true, "permissions": statuses])
+    return permissionJSON(["ok": true, "permissions": allStatuses])
   }
 
   private static func permissionType(from args: [String: Any]) -> String? {
@@ -2173,18 +2220,7 @@ class ChatToolExecutor {
   }
 
   private static func checkFullDiskAccessDirectly() -> Bool {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let protectedPaths = [
-      "\(home)/Library/Safari",
-      "\(home)/Library/Mail",
-      "\(home)/Library/Messages",
-    ]
-    for path in protectedPaths {
-      if FileManager.default.fileExists(atPath: path) {
-        return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
-      }
-    }
-    return false
+    FullDiskAccessProbe.currentState() == .granted
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results

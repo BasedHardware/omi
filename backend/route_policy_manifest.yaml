@@ -115,6 +115,29 @@ routes:
     policy: *desktop_migration_policy
   - route_type: http
     method: POST
+    path: /v2/messages/device-tool/{call_id}/result
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: chat:device_tool_result
+        key_subject: uid
+        enforcement: fail_closed
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v1/conversations/shared/chat
     policy:
       review_status: reviewed

@@ -32,6 +32,12 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
   case getWorkContext = "get_work_context"
+  case searchContacts = "search_contacts"
+  case listMessageChats = "list_message_chats"
+  case readMessageHistory = "read_message_history"
+  case listMailMessages = "list_mail_messages"
+  case sendMessage = "send_message"
+  case runApplescript = "run_applescript"
 }
 
 enum GeneratedSwiftToolExecutor: String {
@@ -41,7 +47,7 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:63a4895fd703c99bd01ea56ed74a06c003ffe23d5dd20a18c1499975a7b04e34"
+  static let manifestDigest = "sha256:fadfb80a3b4186f23cc236c65996961dd888d34dca6a20035d349c2a0eec828a"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -79,7 +85,13 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
-    .getWorkContext: .chatToolExecutor
+    .getWorkContext: .chatToolExecutor,
+    .searchContacts: .chatToolExecutor,
+    .listMessageChats: .chatToolExecutor,
+    .readMessageHistory: .chatToolExecutor,
+    .listMailMessages: .chatToolExecutor,
+    .sendMessage: .chatToolExecutor,
+    .runApplescript: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -136,6 +148,12 @@ enum GeneratedToolExecutors {
     case getEmailInsights
     case createCalendarEvent
     case getWorkContext
+    case searchContacts
+    case listMessageChats
+    case readMessageHistory
+    case listMailMessages
+    case sendMessage
+    case runApplescript
     case unhandled
   }
 
@@ -169,6 +187,12 @@ enum GeneratedToolExecutors {
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
     case .getWorkContext: return .getWorkContext
+    case .searchContacts: return .searchContacts
+    case .listMessageChats: return .listMessageChats
+    case .readMessageHistory: return .readMessageHistory
+    case .listMailMessages: return .listMailMessages
+    case .sendMessage: return .sendMessage
+    case .runApplescript: return .runApplescript
     default: return .unhandled
     }
   }

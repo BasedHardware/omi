@@ -81,6 +81,7 @@ sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
+sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
@@ -145,6 +146,8 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+langchain_tools_mod = _stub_module("langchain_core.tools")
+langchain_tools_mod.StructuredTool = MagicMock()
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")

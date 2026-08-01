@@ -36,7 +36,15 @@
     <key>NSScreenCaptureUsageDescription</key>
     <string>Omi needs screen recording permission to monitor your focus and detect distractions.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Omi needs permission to detect which application is currently active.</string>
+    <string>Omi needs permission to detect which application is currently active, and to send messages or run automations in your apps when you approve them.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Omi reads your contacts so it can resolve a name to the right phone number or email before you approve sending a message.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Omi reads and updates your calendar when you ask it to check your schedule or create events.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Omi reads and updates your reminders when you ask it to check or create them.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Omi accesses your photo library only when you ask it to attach or look up a photo.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Omi needs microphone access to transcribe your conversations in real-time.</string>
     <key>NSAudioCaptureUsageDescription</key>
