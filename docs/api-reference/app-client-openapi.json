@@ -19676,7 +19676,7 @@
           },
           "integrations": {
             "additionalProperties": true,
-            "description": "Map of app_key to connection details",
+            "description": "Map of app_key to non-secret connection details",
             "title": "Integrations",
             "type": "object"
           }
