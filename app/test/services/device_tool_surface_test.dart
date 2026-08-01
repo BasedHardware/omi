@@ -35,10 +35,14 @@ void main() {
       expect(unsupportedSurface().tools, isEmpty);
     });
 
-    test('advertises exactly the two mobile tools', () {
+    test('advertises exactly the three mobile tools', () {
       expect(
         supportedSurface().tools.map((tool) => tool.name),
-        [DeviceToolSurface.searchContactsTool, DeviceToolSurface.proposeMessageTool],
+        [
+          DeviceToolSurface.searchContactsTool,
+          DeviceToolSurface.proposeMessageTool,
+          DeviceToolSurface.requestPermissionTool,
+        ],
       );
     });
 
@@ -50,17 +54,24 @@ void main() {
 
       final available = await supportedSurface().availableTools();
 
-      expect(available.map((tool) => tool.name), [DeviceToolSurface.searchContactsTool]);
+      expect(
+        available.map((tool) => tool.name),
+        [DeviceToolSurface.searchContactsTool, DeviceToolSurface.requestPermissionTool],
+      );
     });
 
-    test('offers both tools on a device that can send text', () async {
+    test('offers all tools on a device that can send text', () async {
       nextResponse = {'ok': true, 'can_send_text': true};
 
       final available = await supportedSurface().availableTools();
 
       expect(
         available.map((tool) => tool.name),
-        [DeviceToolSurface.searchContactsTool, DeviceToolSurface.proposeMessageTool],
+        [
+          DeviceToolSurface.searchContactsTool,
+          DeviceToolSurface.proposeMessageTool,
+          DeviceToolSurface.requestPermissionTool,
+        ],
       );
     });
 
@@ -163,6 +174,24 @@ void main() {
       expect(calls.single.method, 'searchContacts');
       expect(calls.single.arguments['query'], 'Ada');
       expect(calls.single.arguments['limit'], 5);
+    });
+
+    test('routes a contacts permission request to the native prompt', () async {
+      nextResponse = {'ok': true, 'status': 'granted'};
+
+      final result = await supportedSurface().execute('request_permission', {'type': 'contacts'});
+
+      expect(calls.single.method, 'requestContactsPermission');
+      expect(result.ok, isTrue);
+      expect(result.payload['status'], 'granted');
+    });
+
+    test('rejects a permission type iOS cannot prompt for', () async {
+      final result = await supportedSurface().execute('request_permission', {'type': 'calendars'});
+
+      expect(result.ok, isFalse);
+      expect(result.reason, 'unsupported_permission');
+      expect(calls, isEmpty);
     });
 
     test('surfaces a missing native registration as a typed failure', () async {

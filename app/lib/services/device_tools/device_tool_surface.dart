@@ -81,6 +81,7 @@ class DeviceToolSurface {
 
   static const String searchContactsTool = 'search_contacts';
   static const String proposeMessageTool = 'propose_message';
+  static const String requestPermissionTool = 'request_permission';
 
   /// iOS is the only mobile platform with a compose-sheet API and a Contacts
   /// store this surface can reach. Android would need its own implementations,
@@ -116,6 +117,16 @@ class DeviceToolSurface {
           'subject': {'type': 'string', 'description': 'Optional subject, when the device supports it.'},
         },
         required: ['to', 'text'],
+        requiresUserConfirmation: true,
+      ),
+      DeviceToolDescriptor(
+        name: requestPermissionTool,
+        description:
+            'Ask the user for a device permission this turn needs. Call only when a tool result says next_tool=request_permission, and pass the type it named. On iOS the only supported type is contacts.',
+        parameters: {
+          'type': {'type': 'string', 'description': 'Which permission to ask for (iOS: contacts).'},
+        },
+        required: ['type'],
         requiresUserConfirmation: true,
       ),
     ];
@@ -171,6 +182,16 @@ class DeviceToolSurface {
           'query': query,
           if (arguments['limit'] != null) 'limit': arguments['limit'],
         });
+
+      case requestPermissionTool:
+        final type = (arguments['type'] as String?)?.trim() ?? '';
+        if (type.isEmpty || type != 'contacts') {
+          return DeviceToolResult.failure(
+            'unsupported_permission',
+            'iOS can only prompt for the contacts permission.',
+          );
+        }
+        return requestContactsPermission();
 
       case proposeMessageTool:
         final recipients = _recipients(arguments['to']);

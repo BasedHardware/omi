@@ -65,7 +65,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
 ### MethodChannel (On-device tool surface)
-- Channel `com.omi.device_tools`; Dart `lib/services/device_tools/device_tool_surface.dart`; iOS `ios/Runner/DeviceToolsService.swift`. Tools: `search_contacts`, `propose_message`.
+- Channel `com.omi.device_tools`; Dart `lib/services/device_tools/device_tool_surface.dart`; iOS `ios/Runner/DeviceToolsService.swift`. Tools: `search_contacts`, `propose_message`, `request_permission`.
 - iOS cannot send silently, so the verb is **propose**: the prefilled `MFMessageComposeViewController` sheet *is* the approval. Never add a second in-app confirmation, and never treat a cancelled sheet as delivered.
 - The model calls these mid-turn: the client declares `device_tools` on `POST /v2/messages`, the backend emits a `tool:` SSE frame on the already-open stream, and `device_tool_dispatcher.dart` executes it and POSTs to `/v2/messages/device-tool/{call_id}/result`. Never surface a `tool:` frame to the chat UI — the server is still waiting on that turn.
 - Details, macOS parity, and the transport contract: `desktop/macos/docs/device-tool-surface.md`.
