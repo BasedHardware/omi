@@ -35862,7 +35862,7 @@
     },
     "/v1/dev/user/ask": {
       "post": {
-        "description": "Answer a natural-language question grounded in the user's own conversations.\n\nSemantically searches the user's conversations for the question, then synthesizes a\ncited answer from the most relevant ones — the same retrieval + RAG the chat surface\nuses, exposed for headless / Developer-API callers (CLI, CI, scripts). Read-only:\nit never writes, and locked conversations are excluded by the search layer.",
+        "description": "Answer a natural-language question grounded in the user's own conversations.\n\nSemantically searches the user's conversations for the question, then synthesizes a\ncited answer from the most relevant ones — the same retrieval + RAG the chat surface\nuses, exposed for headless / Developer-API callers (CLI, CI, scripts). Read-only:\nit never writes; discarded conversations are excluded from retrieval and locked\nconversations are re-checked on the authoritative record before any go to the LLM.",
         "operationId": "ask",
         "requestBody": {
           "content": {

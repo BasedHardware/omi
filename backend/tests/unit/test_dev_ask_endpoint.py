@@ -53,6 +53,38 @@ def test_ask_does_not_call_the_llm_when_no_conversation_matches():
     qa.assert_not_called()  # no billable RAG call on an empty retrieval
 
 
+def test_ask_excludes_discarded_conversations_from_retrieval():
+    """Discarded/deleted conversations must never reach the LLM. search_conversations
+    defaults include_discarded=True, so the endpoint must override it to False
+    (maintainer review on #10314)."""
+    with patch.object(dev, "search_conversations", return_value={"items": []}) as search, patch.object(dev, "qa_rag"):
+        dev.ask_conversations(dev.DeveloperAskRequest(question="q"), uid="u1")
+
+    assert search.call_args.kwargs.get("include_discarded") is False
+
+
+def test_ask_drops_a_locked_conversation_even_when_the_search_index_is_stale():
+    """The search index's is_locked can lag Firestore, so a stale hit could surface a
+    since-locked conversation. The endpoint must re-check is_locked on the authoritative
+    record and never send a locked conversation into the LLM (maintainer review on
+    #10314)."""
+    locked = {"id": "c1", "is_locked": True}
+    unlocked = {"id": "c2"}
+    with patch.object(dev, "search_conversations", return_value={"items": [{"id": "c1"}, {"id": "c2"}]}), patch.object(
+        dev.conversations_db, "get_conversations_by_id", return_value=[locked, unlocked]
+    ), patch.object(
+        dev, "deserialize_conversations", side_effect=lambda raw: [_conv(cid=c["id"]) for c in raw]
+    ) as deser, patch.object(
+        dev, "qa_rag", return_value="answer"
+    ):
+        resp = dev.ask_conversations(dev.DeveloperAskRequest(question="q"), uid="u1")
+
+    # The locked conversation was filtered before hydration; only the unlocked one remains.
+    passed_to_deserialize = deser.call_args.args[0]
+    assert [c["id"] for c in passed_to_deserialize] == ["c2"]
+    assert [s.id for s in resp.sources] == ["c2"]
+
+
 def test_ask_endpoint_is_bound_to_the_dev_ask_rate_limited_dependency():
     """The billable LLM endpoint carries its own tight per-key budget (dev:ask), not the
     cheap dev:conversations_read list limit — a leaked/overused key can't run the RAG path

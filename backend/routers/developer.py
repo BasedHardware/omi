@@ -1456,19 +1456,28 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     Semantically searches the user's conversations for the question, then synthesizes a
     cited answer from the most relevant ones — the same retrieval + RAG the chat surface
     uses, exposed for headless / Developer-API callers (CLI, CI, scripts). Read-only:
-    it never writes, and locked conversations are excluded by the search layer.
+    it never writes; discarded conversations are excluded from retrieval and locked
+    conversations are re-checked on the authoritative record before any go to the LLM.
     """
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="question must not be empty")
 
-    results = search_conversations(uid, question, per_page=request.limit)
+    # Exclude discarded conversations from retrieval (the search default includes
+    # them), so a deleted/discarded conversation is never fed into the LLM.
+    results = search_conversations(uid, question, per_page=request.limit, include_discarded=False)
     items = results.get("items", []) if isinstance(results, dict) else []
     conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
-    conversations = deserialize_conversations(conversations_db.get_conversations_by_id(uid, conversation_ids))
+    # Re-check is_locked on the authoritative Firestore records: the search index's
+    # is_locked can lag, so a stale hit could otherwise leak a locked conversation
+    # into the answer. Mirrors the post-hydration filter in /v1/conversations/search.
+    raw_conversations = [
+        c for c in conversations_db.get_conversations_by_id(uid, conversation_ids) if not c.get('is_locked')
+    ]
+    conversations = deserialize_conversations(raw_conversations)
     if not conversations:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
