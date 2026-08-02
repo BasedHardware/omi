@@ -143,7 +143,13 @@ final class CanonicalGoalsStore: ObservableObject {
 
   func load() async {
     guard let scope = captureScope() else { return }
-    guard activeLoadToken == nil else { return }
+    if activeLoadToken != nil {
+      // A same-scope load is already running. Await it rather than returning a
+      // no-op, so callers that depend on the fetched projection see the result
+      // of the in-flight fetch instead of stale state.
+      await waitForActiveLoadToFinish()
+      return
+    }
 
     let token = UUID()
     activeLoadToken = token
@@ -235,7 +241,7 @@ final class CanonicalGoalsStore: ObservableObject {
       guard scopeIsCurrent(scope) else { return false }
       await waitForActiveLoadToFinish()
       guard scopeIsCurrent(scope) else { return false }
-      await load()
+      await reloadWhenIdle()
       guard scopeIsCurrent(scope) else { return false }
       return true
     } catch {
@@ -267,6 +273,13 @@ final class CanonicalGoalsStore: ObservableObject {
       }
       activeLoadWaiters.append(continuation)
     }
+  }
+
+  private func reloadWhenIdle() async {
+    while activeLoadToken != nil {
+      await waitForActiveLoadToFinish()
+    }
+    await load()
   }
 
   private func resumeActiveLoadWaiters() {
