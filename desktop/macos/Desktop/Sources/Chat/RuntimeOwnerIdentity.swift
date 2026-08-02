@@ -364,6 +364,11 @@ enum RuntimeOwnerIdentity {
     await OCREmbeddingService.shared.reset()
     await ScreenKnowledgeGraphExtractor.shared.reset()
     await RewindDatabase.shared.retargetEffectiveOwner(to: nextOwner)
+    if nextOwner != nil {
+      Task(priority: .background) {
+        await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded()
+      }
+    }
     await TranscriptionStorage.shared.invalidateCache()
     await MemoryStorage.shared.invalidateCache()
     await ActionItemStorage.shared.invalidateCache()

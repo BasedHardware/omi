@@ -12,6 +12,7 @@ actor ScreenKnowledgeGraphExtractor {
     let id: Int64
     let input: ScreenKGExtractionInput
     let contentHash: String
+    let ownerID: String
   }
 
   private let minTextLength = 20
@@ -35,10 +36,12 @@ actor ScreenKnowledgeGraphExtractor {
     @Sendable (_ limit: Int) async throws -> [(
       id: Int64, ocrText: String, appName: String, windowTitle: String?
     )]
+  typealias OwnerIDProvider = @Sendable () async -> String?
 
   private let extractEntities: ExtractionBackend
   private let markExtracted: KGMarkedWriter
   private let fetchPending: PendingFetcher
+  private let activeOwnerID: OwnerIDProvider
 
   private init() {
     self.extractEntities = { input in
@@ -51,12 +54,14 @@ actor ScreenKnowledgeGraphExtractor {
     self.fetchPending = { limit in
       try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(limit: limit)
     }
+    self.activeOwnerID = { RuntimeOwnerIdentity.currentOwnerId() }
   }
 
   init(
     extractEntitiesForTesting: @escaping ExtractionBackend,
     markExtractedForTesting: @escaping KGMarkedWriter,
-    fetchPendingForTesting: PendingFetcher? = nil
+    fetchPendingForTesting: PendingFetcher? = nil,
+    activeOwnerIDForTesting: @escaping OwnerIDProvider = { "test-owner" }
   ) {
     self.extractEntities = extractEntitiesForTesting
     self.markExtracted = markExtractedForTesting
@@ -64,6 +69,7 @@ actor ScreenKnowledgeGraphExtractor {
       fetchPendingForTesting ?? { limit in
         try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(limit: limit)
       }
+    self.activeOwnerID = activeOwnerIDForTesting
   }
 
   var pendingCount: Int { pendingItems.count }
@@ -79,24 +85,58 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   /// Queue a newly captured screenshot for extraction.
-  func queueScreenshot(id: Int64, ocrText: String, appName: String, windowTitle: String?) async {
-    guard !pausedForProductGate else { return }
+  func queueScreenshot(
+    id: Int64,
+    ocrText: String,
+    appName: String,
+    windowTitle: String?,
+    expectedOwnerID: String? = nil
+  ) async {
     guard ocrText.count >= minTextLength else { return }
+    guard let ownerID = await resolvedOwnerID(expectedOwnerID: expectedOwnerID) else { return }
+    let generation = ownerGeneration
+
+    let wasPausedForProductGate = pausedForProductGate
+    if wasPausedForProductGate {
+      pausedForProductGate = false
+      backfillScheduled = false
+    }
 
     let input = Self.makeInput(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
     let hash = Self.contentHash(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
 
     if recentHashes.contains(hash) {
-      try? await markExtracted([id])
+      guard generation == ownerGeneration else { return }
+      guard await resolvedOwnerID(expectedOwnerID: ownerID) != nil else { return }
+      guard generation == ownerGeneration else { return }
+      do {
+        try await markExtracted([id])
+      } catch {
+        log(
+          "ScreenKnowledgeGraphExtractor: failed to mark duplicate screenshot \(id): \(error.localizedDescription)"
+        )
+        if wasPausedForProductGate {
+          await scheduleBackfillIfNeeded()
+        }
+        return
+      }
+      if wasPausedForProductGate {
+        await scheduleBackfillIfNeeded()
+      }
       return
     }
 
-    pendingItems.append(PendingItem(id: id, input: input, contentHash: hash))
+    guard generation == ownerGeneration else { return }
+    pendingItems.append(PendingItem(id: id, input: input, contentHash: hash, ownerID: ownerID))
 
     if pendingItems.count >= maxPendingItems {
       await flushPendingExtractions()
     } else {
       startFlushTimerIfNeeded()
+    }
+
+    if wasPausedForProductGate {
+      await scheduleBackfillIfNeeded()
     }
   }
 
@@ -111,10 +151,7 @@ actor ScreenKnowledgeGraphExtractor {
     flushTask?.cancel()
     flushTask = nil
     guard !pendingItems.isEmpty else { return }
-    guard !pausedForProductGate else {
-      pendingItems.removeAll()
-      return
-    }
+    guard !pausedForProductGate else { return }
 
     let generation = ownerGeneration
     let batch = Array(pendingItems.prefix(maxItemsPerFlush))
@@ -125,9 +162,14 @@ actor ScreenKnowledgeGraphExtractor {
         return
       }
       guard !pausedForProductGate else {
+        pendingItems.removeAll()
         return
       }
       await processItem(item, generation: generation)
+      if pausedForProductGate {
+        pendingItems.removeAll()
+        return
+      }
     }
 
     if !pendingItems.isEmpty && !pausedForProductGate {
@@ -154,6 +196,16 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   // MARK: - Private
+
+  private func resolvedOwnerID(expectedOwnerID: String?) async -> String? {
+    guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else { return nil }
+    guard let current = await activeOwnerID() else { return nil }
+    if let expectedOwnerID {
+      guard expectedOwnerID == current else { return nil }
+      return expectedOwnerID
+    }
+    return current
+  }
 
   private func startFlushTimerIfNeeded() {
     guard flushTask == nil else { return }
@@ -188,6 +240,7 @@ actor ScreenKnowledgeGraphExtractor {
         }
 
         if pausedForProductGate { break }
+        if !pendingItems.isEmpty { break }
 
         processedThisLaunch += rows.count
         if processedThisLaunch < maxBackfillItemsPerLaunch {
@@ -200,9 +253,12 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   private func processItem(_ item: PendingItem, generation: Int) async {
+    guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+
     do {
       let jsonText = try await extractEntities(item.input)
       guard generation == ownerGeneration else { return }
+      guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
 
       guard let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) else {
         log(
@@ -218,18 +274,19 @@ actor ScreenKnowledgeGraphExtractor {
       }
 
       guard generation == ownerGeneration else { return }
+      guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+      try await markExtracted([item.id])
+      guard generation == ownerGeneration else { return }
       recentHashes.insert(item.contentHash)
       if recentHashes.count > maxRecentHashes {
         recentHashes.removeAll(keepingCapacity: true)
       }
-      try await markExtracted([item.id])
       log(
         "ScreenKnowledgeGraphExtractor: extracted from screenshot \(item.id) via \(backendName())")
     } catch {
       guard generation == ownerGeneration else { return }
       if let geminiError = error as? GeminiClient.GeminiClientError, geminiError.isExpectedProductState {
         pausedForProductGate = true
-        pendingItems.removeAll()
         log(
           "ScreenKnowledgeGraphExtractor: pausing — expected product state for screenshot \(item.id): \(error.localizedDescription)"
         )

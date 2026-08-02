@@ -62,25 +62,29 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
   }
 
   func testQueueSkipsShortOCR() async {
-    await ScreenKnowledgeGraphExtractor.shared.reset()
-    await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },
+      markExtractedForTesting: { _ in })
+    await extractor.queueScreenshot(
       id: 1, ocrText: "too short", appName: "Notes", windowTitle: nil)
-    let pending = await ScreenKnowledgeGraphExtractor.shared.pendingCount
+    let pending = await extractor.pendingCount
     XCTAssertEqual(pending, 0)
   }
 
   func testResetDropsPendingQueue() async {
-    await ScreenKnowledgeGraphExtractor.shared.reset()
-    await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },
+      markExtractedForTesting: { _ in })
+    await extractor.queueScreenshot(
       id: 9,
       ocrText: String(repeating: "on-screen entity text ", count: 3),
       appName: "Safari",
       windowTitle: "Docs")
-    var pending = await ScreenKnowledgeGraphExtractor.shared.pendingCount
+    var pending = await extractor.pendingCount
     XCTAssertEqual(pending, 1)
 
-    await ScreenKnowledgeGraphExtractor.shared.reset()
-    pending = await ScreenKnowledgeGraphExtractor.shared.pendingCount
+    await extractor.reset()
+    pending = await extractor.pendingCount
     XCTAssertEqual(pending, 0)
   }
 
@@ -155,6 +159,187 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertEqual(pending, 0)
   }
 
+  func testProductGateResumeAllowsNewScreenshotsAndBackfill() async {
+    let extractCount = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let remaining = LockedBox(
+      [
+        (
+          id: Int64(99),
+          ocrText: String(repeating: "backfill after upgrade ", count: 3),
+          appName: "Notes",
+          windowTitle: nil as String?
+        )
+      ])
+    let shouldGate = LockedBox(true)
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        if await shouldGate.value {
+          throw GeminiClient.GeminiClientError.apiError("trial_expired")
+        }
+        await extractCount.increment()
+        return "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      fetchPendingForTesting: { limit in
+        await remaining.takePrefix(limit)
+      })
+
+    await extractor.queueScreenshot(
+      id: 7,
+      ocrText: String(repeating: "gated entity payload ", count: 3),
+      appName: "Notes",
+      windowTitle: nil)
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractor.pendingCount, 0)
+    XCTAssertTrue(await marked.value.isEmpty)
+
+    await shouldGate.set(false)
+    await extractor.queueScreenshot(
+      id: 8,
+      ocrText: String(repeating: "post upgrade capture ", count: 3),
+      appName: "Notes",
+      windowTitle: nil)
+
+    let ids = await marked.value
+    XCTAssertTrue(ids.contains(8))
+    XCTAssertTrue(ids.contains(99), "live resume must reschedule backfill for gated rows")
+    XCTAssertGreaterThanOrEqual(await extractCount.value, 2)
+  }
+
+  func testStaleExpectedOwnerIsRejected() async {
+    let owner = LockedBox("owner-a")
+    let marked = LockedBox<[Int64]>([])
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      activeOwnerIDForTesting: { await owner.value })
+
+    await extractor.queueScreenshot(
+      id: 1,
+      ocrText: String(repeating: "owner a screen text ", count: 3),
+      appName: "Mail",
+      windowTitle: nil,
+      expectedOwnerID: "owner-a")
+    XCTAssertEqual(await extractor.pendingCount, 1)
+
+    await owner.set("owner-b")
+    await extractor.queueScreenshot(
+      id: 2,
+      ocrText: String(repeating: "stale owner a screen text ", count: 3),
+      appName: "Mail",
+      windowTitle: nil,
+      expectedOwnerID: "owner-a")
+    XCTAssertEqual(await extractor.pendingCount, 1, "stale capture owner must not enqueue")
+
+    await extractor.flushPendingExtractions()
+    XCTAssertTrue(
+      await marked.value.isEmpty,
+      "pending from previous owner must not mark after owner change without reset")
+  }
+
+  func testMarkFailureDoesNotRecordDedupHash() async {
+    let markShouldFail = LockedBox(true)
+    let extractCount = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let text = String(repeating: "hash ordering payload ", count: 3)
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await extractCount.increment()
+        return "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { ids in
+        if await markShouldFail.value {
+          throw NSError(domain: "ScreenKGTest", code: 1)
+        }
+        await marked.append(contentsOf: ids)
+      })
+
+    await extractor.queueScreenshot(id: 1, ocrText: text, appName: "Docs", windowTitle: nil)
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractCount.value, 1)
+    XCTAssertTrue(await marked.value.isEmpty)
+    XCTAssertEqual(await extractor.pendingCount, 1, "failed mark must re-queue for retry")
+
+    await markShouldFail.set(false)
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await marked.value, [1])
+
+    await extractor.queueScreenshot(id: 2, ocrText: text, appName: "Docs", windowTitle: nil)
+    XCTAssertEqual(await extractCount.value, 1, "hash dedup only after successful mark")
+    XCTAssertEqual(await marked.value, [1, 2])
+  }
+
+  func testBackfillStopsWithoutCountingWhenFlushStalls() async {
+    let fetchCalls = LockedBox(0)
+    let remaining = LockedBox(
+      (1...80).map { id -> (id: Int64, ocrText: String, appName: String, windowTitle: String?) in
+        (
+          id: Int64(id),
+          ocrText: String(repeating: "stall entity \(id) ", count: 3),
+          appName: "App",
+          windowTitle: nil
+        )
+      })
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        "not-json{{{broken"
+      },
+      markExtractedForTesting: { _ in },
+      fetchPendingForTesting: { limit in
+        await fetchCalls.increment()
+        return await remaining.takePrefix(limit)
+      })
+
+    await extractor.scheduleBackfillIfNeeded()
+
+    let calls = await fetchCalls.value
+    XCTAssertEqual(calls, 1, "stalled flush must not keep refetching the same pending rows")
+    XCTAssertEqual(await remaining.value.count, 30)
+  }
+
+  func testResetAllowsBackfillToBeRescheduled() async {
+    let fetchCalls = LockedBox(0)
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },
+      markExtractedForTesting: { _ in },
+      fetchPendingForTesting: { _ in
+        await fetchCalls.increment()
+        return []
+      })
+
+    await extractor.scheduleBackfillIfNeeded()
+    XCTAssertEqual(await fetchCalls.value, 1)
+
+    await extractor.scheduleBackfillIfNeeded()
+    XCTAssertEqual(await fetchCalls.value, 1, "second schedule is a no-op until reset")
+
+    await extractor.reset()
+    await extractor.scheduleBackfillIfNeeded()
+    XCTAssertEqual(await fetchCalls.value, 2, "reset must allow backfill to run again")
+  }
+
+  func testOwnerRetargetReschedulesScreenKGBackfill() throws {
+    // omi-test-quality: source-inspection -- static contract: owner retarget must
+    // reschedule ScreenKnowledgeGraphExtractor backfill after reset; RuntimeOwnerIdentity
+    // transition has no injectable seam for hermetic scheduling assertions.
+    let source = try XCTUnwrap(
+      String(
+        contentsOfFile: RewindIndexerSourcePath.runtimeOwnerIdentitySwift,
+        encoding: .utf8))
+    XCTAssertTrue(source.contains("ScreenKnowledgeGraphExtractor.shared.reset()"))
+    XCTAssertTrue(
+      source.contains("ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded()"),
+      "owner retarget must reschedule KG backfill after reset")
+  }
+
   func testInvalidExtractionJSONDoesNotMarkExtracted() async {
     let marked = LockedBox<[Int64]>([])
     let extractor = ScreenKnowledgeGraphExtractor(
@@ -225,6 +410,9 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertTrue(
       source.contains("ScreenKnowledgeGraphExtractor.shared.queueScreenshot"),
       "battery OCR backfill must queue KG extraction for newly indexed screenshots")
+    XCTAssertTrue(
+      source.contains("expectedOwnerID: captureOwnerID"),
+      "capture paths must fence queueScreenshot with the capture-time owner")
 
     if let updateRange = source.range(of: "updateOCRResult(id: id, ocrResult: ocrResult)"),
       let backfillRange = source.range(of: "func backfillUnindexedScreenshots")
@@ -268,13 +456,19 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
 }
 
 private enum RewindIndexerSourcePath {
-  static var rewindIndexerSwift: String {
-    let thisFile = URL(fileURLWithPath: #filePath)
-    return thisFile
+  static var desktopSourcesRoot: URL {
+    URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()  // Tests/
       .deletingLastPathComponent()  // Desktop/
-      .appendingPathComponent("Sources/Rewind/Services/RewindIndexer.swift")
-      .path
+      .appendingPathComponent("Sources")
+  }
+
+  static var rewindIndexerSwift: String {
+    desktopSourcesRoot.appendingPathComponent("Rewind/Services/RewindIndexer.swift").path
+  }
+
+  static var runtimeOwnerIdentitySwift: String {
+    desktopSourcesRoot.appendingPathComponent("Chat/RuntimeOwnerIdentity.swift").path
   }
 }
 
@@ -282,6 +476,10 @@ private actor LockedBox<T> {
   private(set) var value: T
 
   init(_ value: T) {
+    self.value = value
+  }
+
+  func set(_ value: T) {
     self.value = value
   }
 
