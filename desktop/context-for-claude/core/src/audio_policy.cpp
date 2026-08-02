@@ -50,9 +50,9 @@ extern "C" size_t ctx_pcm_encode_int16le(const float *samples, size_t sample_cou
         } else if (value > 1.0f) {
             value = 1.0f;
         }
-        // Round to nearest, then scale. `rintf` rounds half-away-from-zero on most platforms,
+        // Round to nearest, then scale. `round` rounds half-away-from-zero,
         // matching Swift's `rounded()`.
-        const int32_t scaled = static_cast<int32_t>(std::rintf(value * kPeakAmplitude));
+        const int32_t scaled = static_cast<int32_t>(std::round(value * kPeakAmplitude));
         const uint16_t pattern = static_cast<uint16_t>(static_cast<int16_t>(scaled));
         out_bytes[index * 2] = static_cast<uint8_t>(pattern & 0xFFU);
         out_bytes[index * 2 + 1] = static_cast<uint8_t>((pattern >> 8U) & 0xFFU);
