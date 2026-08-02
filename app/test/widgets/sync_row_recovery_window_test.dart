@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/http/api/conversations.dart' show SyncUploadLane;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -67,7 +66,7 @@ class _WalService implements IWalService {
 
 SyncUploadGate _offlineGate() => SyncUploadGate(
       limiter: SyncRateLimiter.instance,
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
         throw StateError('unexpected upload in a widget test');
       },
       fairUseStatusLoader: () async => {'stage': 'none'},
