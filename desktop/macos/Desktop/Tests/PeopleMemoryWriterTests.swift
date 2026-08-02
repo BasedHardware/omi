@@ -149,4 +149,120 @@ final class PeopleMemoryWriterTests: XCTestCase {
       FileManager.default.fileExists(atPath: ledgerURL.path),
       "the ledger is persisted at people_memory_ledger.json")
   }
+
+  // MARK: - Wire contract
+
+  /// Regression: relationship facts were submitted with `source: "people_intelligence"` only, and
+  /// `source` is not a field on the backend `Memory` model (`backend/models/memories.py`) — Pydantic
+  /// dropped it, so every fact ever written was untagged and unfindable by provenance. `tags` *is* a
+  /// persisted field (`MemoryDB.from_memory` copies `memory.tags` verbatim), so the durable
+  /// provenance rides there. Asserted on the real serialized request body, not on a helper's return
+  /// value: drop `tags:` from the `createMemory` call and this fails.
+  func testSubmittedRequestBodyCarriesDurablePersonTags() async throws {
+    PeopleMemoryWriteCapture.reset()
+    setenv("OMI_PYTHON_API_URL", "http://people-memory-contract-test:9002", 1)
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      PeopleMemoryWriteCapture.reset()
+    }
+
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [PeopleMemoryWriteCapture.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    let fact = PeopleMemoryWriter.Fact(
+      subject: "person:alice", text: "Alice \u{2014} in your \u{201C}Tahoe\u{201D} group.")
+    let submitted = await PeopleMemoryWriter.submit(facts: [fact], client: client)
+    XCTAssertEqual(submitted, [fact.hash], "a 2xx write records the fact's hash")
+
+    let request = try XCTUnwrap(PeopleMemoryWriteCapture.request)
+    XCTAssertEqual(request.httpMethod, "POST")
+    XCTAssertEqual(request.url?.path, "/v3/memories")
+
+    let body = try XCTUnwrap(PeopleMemoryWriteCapture.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let tags = try XCTUnwrap(json["tags"] as? [String], "tags must reach the wire")
+    XCTAssertTrue(
+      tags.contains("person:alice"),
+      "the write must carry person:<id> so the profile page can find it back: \(tags)")
+    XCTAssertTrue(
+      tags.contains(PeopleMemoryWriter.memorySource),
+      "and the cohort tag so every relationship fact stays enumerable: \(tags)")
+    XCTAssertEqual(json["content"] as? String, fact.text)
+    XCTAssertEqual(json["category"] as? String, "interesting")
+  }
+
+  /// A "they know each other" fact belongs on *both* profiles, so it carries both person tags.
+  func testPairFactTagsBothEndpoints() {
+    let tags = PeopleMemoryWriter.tags(forSubject: "pair:alice|bob")
+    XCTAssertEqual(
+      Set(tags), ["people_intelligence", "person:alice", "person:bob"],
+      "a pair fact must be findable from either person's profile")
+  }
+}
+
+/// Captures the serialized `POST /v3/memories` request the writer actually sends.
+private final class PeopleMemoryWriteCapture: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var _request: URLRequest?
+  private nonisolated(unsafe) static var _body: Data?
+
+  static var request: URLRequest? {
+    lock.lock()
+    defer { lock.unlock() }
+    return _request
+  }
+
+  static var body: Data? {
+    lock.lock()
+    defer { lock.unlock() }
+    return _body
+  }
+
+  static func reset() {
+    lock.lock()
+    _request = nil
+    _body = nil
+    lock.unlock()
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    let captured = Self.bodyData(from: request)
+    Self.lock.lock()
+    Self._request = request
+    Self._body = captured
+    Self.lock.unlock()
+
+    let response = HTTPURLResponse(
+      url: request.url!,
+      statusCode: 200,
+      httpVersion: nil,
+      headerFields: ["Content-Type": "application/json"]
+    )!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(
+      self, didLoad: Data("{\"id\":\"memory-1\",\"content\":\"Alice\"}".utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+
+  private static func bodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var body = Data()
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4_096)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+      let readCount = stream.read(buffer, maxLength: 4_096)
+      if readCount > 0 { body.append(buffer, count: readCount) } else { break }
+    }
+    return body
+  }
 }

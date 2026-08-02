@@ -24,18 +24,61 @@ enum PeopleMemoryWriter {
   /// flooding the memory store. Remaining new facts are picked up on subsequent throttled runs.
   static let maxFactsPerRun = 40
 
-  /// Provenance tag on every memory this writer creates (also aids debugging / auditing).
+  /// Provenance marker on every memory this writer creates.
+  ///
+  /// Sent **as a tag**, not as `source`: `source` is not a field on the backend `Memory` model
+  /// (`backend/models/memories.py`), so Pydantic silently drops it and nothing written before this
+  /// was findable by provenance. `tags: List[str]` is a real persisted field — `MemoryDB.from_memory`
+  /// copies it verbatim — and the desktop already filters on tags locally
+  /// (`MemoryStorage.getFilteredMemories(matchAnyTag:)`). `source` is still sent because it is
+  /// harmless and shows up in request logs, but nothing may depend on it round-tripping.
   static let memorySource = "people_intelligence"
+
+  /// Prefix of the per-person tag that binds a fact to one person card, e.g. `person:alice`.
+  /// `PersonMemoriesModel` reads facts back by exactly this tag.
+  static let personTagPrefix = "person:"
+
+  // MARK: - Fact text format
+  //
+  // These separators are the literal glue in every generated fact. They live here as constants
+  // because the person-profile page has to recognise facts written *before* tagging existed by
+  // their content shape alone (`PersonMemoryMatcher`), and a silent drift between the writer's
+  // format and that matcher would quietly empty the profile's memory list.
+
+  /// Between a subject's display name and the fact body: `"Alice — in your … group."`
+  static let nameSeparator = " \u{2014} "
+  /// Between the two names of a "they know each other" fact: `"Alice and Bob …"`
+  static let pairConjunction = " and "
+  /// Follows both names of a "they know each other" fact.
+  static let pairMarker = " both belong to your "
 
   /// A single grounded relationship fact plus a stable subject key (for readability / debugging).
   struct Fact: Equatable {
-    /// e.g. `person:alice` or `pair:alice|bob` — not sent to the server, only for reasoning/tests.
+    /// e.g. `person:alice` or `pair:alice|bob` — not sent verbatim, but the tags are derived from it.
     let subject: String
     /// The memory content submitted verbatim.
     let text: String
     /// Content hash used for the dedupe ledger. Changed fact text yields a new hash, so a genuinely
     /// updated fact is re-submitted while an unchanged one never is.
     var hash: String { PeopleMemoryWriter.contentHash(text) }
+    /// Durable provenance sent with the write. A pair fact tags *both* endpoints so it surfaces on
+    /// either person's profile.
+    var tags: [String] { PeopleMemoryWriter.tags(forSubject: subject) }
+  }
+
+  /// Derive the persisted tags from a fact's subject key.
+  ///
+  /// `person:<id>` becomes that tag verbatim; `pair:<a>|<b>` becomes one `person:` tag per endpoint.
+  /// Always includes `memorySource` so the whole cohort stays enumerable.
+  static func tags(forSubject subject: String) -> [String] {
+    var tags = [memorySource]
+    if subject.hasPrefix(personTagPrefix) {
+      tags.append(subject)
+    } else if subject.hasPrefix("pair:") {
+      let ids = subject.dropFirst("pair:".count).split(separator: "|")
+      tags.append(contentsOf: ids.map { personTagPrefix + $0 })
+    }
+    return tags
   }
 
   // MARK: - Entry point (gated, throttled, off-main, silent)
@@ -54,21 +97,7 @@ enum PeopleMemoryWriter {
     }.value
     guard let plan, !plan.facts.isEmpty else { return }
 
-    // Submit sequentially via the app's authenticated memory client. Only successfully submitted
-    // hashes are recorded, so a transient failure is simply retried on the next run.
-    var submitted: Set<String> = []
-    for fact in plan.facts {
-      do {
-        _ = try await APIClient.shared.createMemory(
-          content: fact.text,
-          category: .interesting,
-          source: memorySource
-        )
-        submitted.insert(fact.hash)
-      } catch {
-        // Silent: not-signed-in / offline / server error. Unrecorded hashes retry next run.
-      }
-    }
+    let submitted = await submit(facts: plan.facts)
     guard !submitted.isEmpty else { return }
     await Task.detached(priority: .utility) {
       appendLedger(directory: plan.directory, hashes: submitted)
@@ -79,6 +108,29 @@ enum PeopleMemoryWriter {
   struct SubmissionPlan {
     let directory: URL
     let facts: [Fact]
+  }
+
+  /// Submit a prepared batch through the app's authenticated memory client, returning the hashes the
+  /// server accepted. Sequential on purpose: this is background enrichment, never a burst.
+  ///
+  /// `client` is injectable so the write contract — content, category, and above all the durable
+  /// `tags` provenance — is assertable at the wire level without a live backend.
+  static func submit(facts: [Fact], client: APIClient = .shared) async -> Set<String> {
+    var submitted: Set<String> = []
+    for fact in facts {
+      do {
+        _ = try await client.createMemory(
+          content: fact.text,
+          category: .interesting,
+          tags: fact.tags,
+          source: memorySource
+        )
+        submitted.insert(fact.hash)
+      } catch {
+        // Silent: not-signed-in / offline / server error. Unrecorded hashes retry next run.
+      }
+    }
+    return submitted
   }
 
   /// Off-main preparation: resolve the user directory, read the deterministic outputs, generate
@@ -127,12 +179,12 @@ enum PeopleMemoryWriter {
           groups: person["groups"] as? [[String: Any]] ?? [],
           circle: person["circle"] as? [String: Any])
       else { continue }  // no community / relationship context → nothing grounded to say
-      let subject = "person:\(nonEmpty(person["id"] as? String) ?? name)"
+      let subject = personTagPrefix + (nonEmpty(person["id"] as? String) ?? name)
       let channels = channelClause(person["channels"] as? [[String: Any]] ?? [])
       let text =
         channels.isEmpty
-        ? "\(name) — \(role)."
-        : "\(name) — \(role); you know them via \(channels)."
+        ? "\(name)\(nameSeparator)\(role)."
+        : "\(name)\(nameSeparator)\(role); you know them via \(channels)."
       facts.append(Fact(subject: subject, text: text))
     }
 
@@ -148,7 +200,8 @@ enum PeopleMemoryWriter {
       else { continue }
       let subject = a < b ? "pair:\(a)|\(b)" : "pair:\(b)|\(a)"
       let text =
-        "\(na) and \(nb) both belong to your \u{201C}\(group)\u{201D} group — they know each other."
+        "\(na)\(pairConjunction)\(nb)\(pairMarker)"
+        + "\u{201C}\(group)\u{201D} group\(nameSeparator)they know each other."
       facts.append(Fact(subject: subject, text: text))
     }
 
