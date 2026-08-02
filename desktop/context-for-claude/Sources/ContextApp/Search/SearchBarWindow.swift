@@ -68,20 +68,21 @@ final class SearchBarWindow {
         )
         window.isFloatingPanel = true
         window.becomesKeyOnlyIfNeeded = false
-        // Pinned to the glass appearance, and this is not cosmetic. `InkGlass` is light in both
-        // system appearances, and the bar's field is an `NSTextField` whose `Ink.nsPrimary` resolves
-        // against its *view's* appearance rather than SwiftUI's environment — so on a Dark Mac an
-        // unpinned window puts near-white type on a near-white panel. Pinning the window is what
-        // makes the AppKit half of this surface agree with the SwiftUI half.
-        InkGlass.pin(window)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        // **No window shadow.** The surface is no longer one rectangle — it is two panels with a gap
-        // between them — and AppKit's window shadow traces the window's frame, so it would draw a
-        // shadow across the gap and weld the two panels back into the slab this design exists to
-        // stop being. Each panel casts its own inside the view instead (`SearchPanel`), which is also
-        // the only shadow that can follow their rounded corners.
-        window.hasShadow = false
+        // The window-side half of the glass: transparent ground, the light pin, and no window shadow.
+        //
+        // `.floating` is right for this surface twice over. Once for the ordinary reason — the panels
+        // draw the broad ambient shadow themselves, inside the window, which is the only shadow that
+        // can follow their rounded corners. And once for a reason peculiar to this window: the
+        // surface is not one rectangle but *two* panels with a gap between them, and AppKit's window
+        // shadow traces the frame, so leaving it on would draw a shadow straight across the gap and
+        // weld them back into the single slab this design exists to stop being.
+        //
+        // The pin is not cosmetic either. `InkGlass` is light in both system appearances, and the
+        // bar's field is an `NSTextField` whose `Ink.nsPrimary` resolves against its *view's*
+        // appearance rather than SwiftUI's environment — so on a Dark Mac an unpinned window puts
+        // near-white type on a near-white panel. Pinning the window is what makes the AppKit half of
+        // this surface agree with the SwiftUI half.
+        WindowGlass.wear(window, as: .floating)
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isReleasedWhenClosed = false

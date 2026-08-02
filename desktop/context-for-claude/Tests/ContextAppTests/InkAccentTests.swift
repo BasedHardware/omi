@@ -176,7 +176,7 @@ final class InkAccentTests: XCTestCase {
     /// explain *why* they do not use the machine's accent, and a check that punished them for
     /// naming it would delete the reasoning it is trying to preserve.
     func testNoUISourceReadsTheMachinesAccent() {
-        let root = Self.uiSourceRoot
+        let root = InkSourceSweep.uiSourceRoot
         var scanned = 0
         var offenders: [String] = []
 
@@ -188,8 +188,8 @@ final class InkAccentTests: XCTestCase {
             }
             scanned += 1
             let relative = url.path.replacingOccurrences(of: root.path + "/", with: "")
-            guard !Self.declaredAccentIntake.contains(relative) else { continue }
-            for (offset, line) in Self.strippingComments(from: text).components(separatedBy: "\n").enumerated()
+            for (offset, line) in InkSourceSweep.strippingComments(from: text).components(separatedBy: "\n")
+                .enumerated()
             where line.contains("controlAccentColor") {
                 offenders.append("\(relative):\(offset + 1)")
             }
@@ -206,80 +206,23 @@ final class InkAccentTests: XCTestCase {
                 + "(INV-UI-1). Use Ink.accent, which is a named system colour this app chooses.")
     }
 
-    /// The one place the machine's accent is allowed to enter the app: the `AccentChoice.system`
-    /// preference, which a user opts into by name in the Appearance pane.
-    ///
-    /// It is listed rather than hidden because it is **not** settled. It is the same exposure as the
-    /// one this file was written to remove — `system` is the *default*, and `SettingsView` tints the
-    /// whole window with it, so a purple-accent Mac still gets a purple Settings window without ever
-    /// choosing purple. It is left alone here only because `SettingsTests.testSystemAccentIsTheUsersOwn`
-    /// deliberately pins the current behaviour, and reversing another guard's stated decision is not
-    /// something a sweep should do quietly. **The intended end state is an empty list.**
-    ///
-    /// Membership is an allowance, never a requirement: removing the last reference from that file
-    /// leaves this entry harmlessly stale rather than failing the build. Nothing may be added to it
-    /// without the same argument being made in the open.
-    private static let declaredAccentIntake: Set<String> = [
-        "Settings/SettingsPreferences.swift"
-    ]
-
-    /// `Sources/ContextApp`, found from this file rather than from the working directory, which is
-    /// not the package root under every runner.
-    private static var uiSourceRoot: URL {
-        URL(fileURLWithPath: #filePath)  // Tests/ContextAppTests/InkAccentTests.swift
-            .deletingLastPathComponent()  // Tests/ContextAppTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // package root
-            .appendingPathComponent("Sources/ContextApp")
-    }
-
-    /// Swift source with `//` and `/* */` comments removed, quote-aware so a `//` inside a string
-    /// literal does not truncate the line it is on.
-    private static func strippingComments(from source: String) -> String {
-        var out = ""
-        var inString = false
-        var inLineComment = false
-        var inBlockComment = false
-        var escaped = false
-        var iterator = source.startIndex
-
-        while iterator < source.endIndex {
-            let c = source[iterator]
-            let next = source.index(after: iterator) < source.endIndex ? source[source.index(after: iterator)] : nil
-
-            if inLineComment {
-                if c == "\n" {
-                    inLineComment = false
-                    out.append(c)
-                }
-            } else if inBlockComment {
-                if c == "*", next == "/" {
-                    inBlockComment = false
-                    iterator = source.index(after: iterator)
-                } else if c == "\n" {
-                    out.append(c)  // keep line numbers honest
-                }
-            } else if inString {
-                if escaped {
-                    escaped = false
-                } else if c == "\\" {
-                    escaped = true
-                } else if c == "\"" || c == "\n" {
-                    inString = false
-                }
-                out.append(c)
-            } else if c == "/", next == "/" {
-                inLineComment = true
-            } else if c == "/", next == "*" {
-                inBlockComment = true
-                iterator = source.index(after: iterator)
-            } else {
-                if c == "\"" { inString = true }
-                out.append(c)
-            }
-
-            iterator = source.index(after: iterator)
-        }
-        return out
-    }
+    // **There is no allowlist here, and there must not be one again.**
+    //
+    // There was: `Settings/SettingsPreferences.swift` was exempted from the sweep for the
+    // `AccentChoice.system` preference, whose `nsColor` resolved to `controlAccentColor` so a
+    // purple-accent Mac got a purple Settings window without ever choosing purple. That was written
+    // down as an exposure that was open rather than settled, and it was left in place because
+    // `SettingsTests.testSystemAccentIsTheUsersOwn` was said to pin the behaviour deliberately.
+    //
+    // `AccentChoice` has since been deleted, and so has the test that was cited as the reason to keep
+    // the entry. What was left was an exemption that named a file with nothing to exempt — which is
+    // the worst state for one to be in, because it reads as settled and *stays* green: a
+    // `Color(nsColor: .controlAccentColor)` added to that file tomorrow would ship purple on a
+    // purple-accent Mac and this sweep would never see it. The file passes with no exemption at all,
+    // so it has none.
+    //
+    // Anything proposed for a new allowlist has to answer the same question this one could not: what
+    // catches the *next* line added to the exempted file. Skipping a whole file is a hole; the
+    // per-spelling counts `InkGlassTests` uses are the shape to copy if an exception is ever genuinely
+    // needed.
 }

@@ -74,9 +74,13 @@ struct SettingsView: View {
         }
         // Deliberately no background: `SettingsWindow` hosts this on `InkGlassView`, which owns the
         // material and the scrim. An opaque `Ink.surface` here would paint the glass out.
-        // The accent choice takes effect the moment it is picked, everywhere in this window: toggles,
-        // radio fills, the selected-tile ring and the preview all read `.tint`.
-        .tint(store.accentColor)
+        //
+        // There is deliberately no `.tint` here either. A picked accent used to be applied to the
+        // whole window, and the comment that stood here claimed radio fills, the selected-tile ring
+        // and the preview all followed it — they never did; each reads `Ink.accent` directly. So the
+        // control recoloured its own switches and nothing else, while its default was the machine's
+        // `controlAccentColor` — which on a Mac set to Purple painted this window the one colour
+        // `INV-UI-1` forbids. The accent is fixed at `Ink.accent`, and there is nothing left to tint.
         .frame(minWidth: SettingsMetrics.minimumSize.width, minHeight: SettingsMetrics.minimumSize.height)
     }
 

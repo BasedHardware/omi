@@ -57,14 +57,19 @@ final class InkGlassTests: XCTestCase {
 
     // MARK: - Contrast
 
-    /// The label ladder still clears WCAG AA **on the glass**, in both system appearances, over both
-    /// of the two desktops that can be behind it.
+    /// **The ladder on glass is two rungs, and both of them clear WCAG AA** — in both system
+    /// appearances, over both of the two desktops that can be behind the panel.
     ///
     /// Four combinations, and all four have to hold. `Ink`'s alphas were tuned against an opaque
     /// `surface`, and `MenuBarPresentationTests` still asserts them there; that assertion does not
-    /// cover any of these windows any more, because the ground is now `surface` at `InkGlass.scrim`,
-    /// over the material, over whatever the user has on screen. So the same ladder is measured again
-    /// against *that* ground, at both extremes — a solid black desktop and a solid white one.
+    /// cover any of these windows, because the ground is `surface` at `InkGlass.scrim`, over the
+    /// material, over whatever the user has on screen. So the ladder is measured again against
+    /// *that* ground, at both extremes — a solid black desktop and a solid white one.
+    ///
+    /// **`tertiary` is deliberately not asserted here and is asserted to fail below.** The ground is
+    /// tuned to the faintest rung the panel carries, so which rungs the panel carries *is* the
+    /// design: three rungs bought a ground of 205.5/255 and 17% passthrough, which was reported as an
+    /// opaque slab three times. Two rungs buy 154.1/255 and 34.8%. See `Ink.tertiary`.
     ///
     /// The system appearance is varied and is expected to make no difference at all. That is the
     /// point: it is the assertion that the pin, and not the machine, decides what this surface is.
@@ -76,22 +81,19 @@ final class InkGlassTests: XCTestCase {
                 let ladder = InkContrastProbe.glassLadder(system: system, over: desktop)
                 let where_ = "\(label), system \(system.rawValue)"
 
-                // Every step here carries text under 18 pt, so the bar is AA's 4.5:1 for normal text
-                // and not the 3:1 large-text allowance. `tertiary` is included and is the binding
-                // one: the search results panel sets dense small copy on this glass, so a floor that
-                // only held for headlines would be no floor at all.
+                // Both steps carry text under 18 pt, so the bar is AA's 4.5:1 for normal text and not
+                // the 3:1 large-text allowance. `secondary` is the binding one: the search results
+                // panel sets dense small copy on this glass, so a floor that only held for headlines
+                // would be no floor at all.
                 XCTAssertGreaterThanOrEqual(
                     ladder.primary, 4.5, "primary is \(ladder.primary):1 on the glass — \(where_)")
                 XCTAssertGreaterThanOrEqual(
                     ladder.secondary, 4.5, "secondary is \(ladder.secondary):1 on the glass — \(where_)")
-                XCTAssertGreaterThanOrEqual(
-                    ladder.tertiary, 4.5, "tertiary is \(ladder.tertiary):1 on the glass — \(where_)")
 
-                // …and it is still a ladder on glass, not one colour three times.
+                // …and it is still a ladder on glass, not one colour twice.
                 XCTAssertGreaterThan(ladder.primary, ladder.secondary, where_)
-                XCTAssertGreaterThan(ladder.secondary, ladder.tertiary, where_)
 
-                readings.append(ladder.tertiary)
+                readings.append(ladder.secondary)
             }
         }
 
@@ -101,49 +103,384 @@ final class InkGlassTests: XCTestCase {
         XCTAssertEqual(readings[1], readings[3], accuracy: 1e-9, "system appearance changed the glass")
     }
 
-    /// **`Ink.tertiary` is what pays for the glass, and it is spent.**
+    /// **Whatever rung sits at the bottom is what pays for the glass, and the ground sits directly on
+    /// that rung's floor.**
     ///
-    /// This assertion used to be about the scrim, and it was right about the wrong number. The old
-    /// scrim of 0.36 was a floor only because `tertiary` was `labelColor` @ 0.66: at that alpha the
-    /// bottom rung needed a ground of 219/255 to clear WCAG AA over the worst desktop there is, and
-    /// holding the ground that bright is what capped every panel in the app at 14.1% passthrough. It
-    /// was never a property of the material or of the scrim — the material is white, the scrim is
-    /// white, and only the total whiteness reaches the eye.
+    /// This assertion has three times been right about the wrong number, and the shape of the mistake
+    /// is worth keeping in front of whoever tunes this next. It first held the *scrim* to a maximum,
+    /// then held the scrim to a fraction of `1 − measuredMaterialOpacity` — both quantities of the
+    /// scrim, which was never what the desktop had to survive. Then it held the **ground**, which is
+    /// the right quantity, but held it against `tertiary`, which is the wrong rung: the ground can
+    /// only be as thin as the *faintest thing anyone sets on it*, so the real lever was never a
+    /// number in `InkGlass` at all. It was the ladder.
     ///
-    /// Darkening that one token to 0.68 removed the cap, which is what let the scrim come down to
-    /// 0.10 and the panel go from passing 12.8% of the desktop to 18.0% of it. So the floor moved to
-    /// the ladder, and this is the measurement that shows the move really happened: **at the alpha
-    /// this surface used to ship, today's glass would be under AA.** Anyone who thins `tertiary`
-    /// back towards a lighter grey fails here rather than shipping illegible glass.
+    /// So the claim is made about the ground, against **the bottom rung the panel actually carries**,
+    /// which on glass is `Ink.secondary`. Three boundaries:
+    ///
+    /// - the ground is light enough that `secondary` clears AA (or the panel is illegible), and
+    /// - the ground is *no lighter than it has to be* (or the panel is paper, which is the complaint
+    ///   that was made three times), and
+    /// - `tertiary` **fails** on this ground, which is what makes "never on glass" a fact about the
+    ///   product rather than a convention someone can forget.
+    ///
+    /// The second is a ratchet rather than a floor: it fails if someone thickens the ground for
+    /// comfort, which is the direction every previous retune drifted. The third is the one that
+    /// cannot be satisfied by drifting in either direction — lighten the ground far enough to make
+    /// `tertiary` legal again and it fails, which is precisely the regression it exists to catch.
     @MainActor
     func testTheBottomRungIsWhatPaysForTheGlass() {
         let shipped = InkContrastProbe.glassLadder(system: .aqua, over: .black)
-        XCTAssertGreaterThanOrEqual(shipped.tertiary, 4.5)
+        XCTAssertGreaterThanOrEqual(shipped.secondary, 4.5)
 
-        // The rung really is spent: put the old alpha back on today's ground and it fails.
+        // **The ground is on the floor, not above it.** Measured on the real material over a real
+        // banded desktop: at scrim 0.14 the ground is 154.1/255 and `secondary` is 4.58:1; at 0.115
+        // it is 151.2/255 and 4.48:1 — under AA. The whole remaining budget is under three points of
+        // ground, so anything more than a rounding error of headroom here means the ground drifted.
+        let headroom = shipped.secondary - 4.5
         XCTAssertLessThan(
-            InkGlassTests.tertiaryOnGlass(scrim: InkGlass.scrim, alpha: 0.66), 4.5,
-            "at the old 0.66 the ladder still clears AA on a \(InkGlass.scrim) scrim, so the scrim is "
-                + "not as thin as it is documented to be — re-derive both numbers together")
+            headroom, 0.30,
+            "the bottom rung on glass clears AA by \(headroom). That is contrast the panel bought "
+                + "with opacity nobody asked for: this surface has been reported as an opaque slab "
+                + "three times, and spare contrast on the bottom rung is precisely what that is made "
+                + "of. Thin the ground until this rung is just over 4.5.")
 
-        // …and the scrim is spent too, in the only sense left: the panel is inside two points of the
-        // most any panel of this material can pass, which is `1 − measuredMaterialOpacity`.
-        let ceiling = 1 - Double(InkGlass.measuredMaterialOpacity * InkGlass.measuredMaterialTint)
-        let passthrough = ceiling * (1 - Double(InkGlass.scrim))
+        // **And the rung below it does not fit on this ground.** This is the arithmetic behind
+        // `Ink.tertiary`'s "never on glass": it is not a taste rule, it is that at 0.68 the glance
+        // rung measures 3.60:1 here. Two things fail this line — putting the ground back up where
+        // `tertiary` is legal (the panel becomes paper again), or quietly darkening `tertiary` to fit
+        // (at which point it is `secondary` with a different name, see that token).
+        XCTAssertLessThan(
+            shipped.tertiary, 4.5,
+            "tertiary clears AA on the shipped glass ground (\(shipped.tertiary):1), which means the "
+                + "ground has drifted back up to where a three-rung ladder fits — and a three-rung "
+                + "ladder is a 17%-passthrough panel. See Ink.tertiary and InkGlass.scrim.")
+
+        // The negative control for the sweep below: the rule only means anything if the two rungs are
+        // genuinely different colours on this ground.
+        XCTAssertGreaterThan(
+            shipped.secondary - shipped.tertiary, 0.5,
+            "secondary and tertiary measure the same on the glass, so promoting a call site from one "
+                + "to the other changes nothing and this whole rule is decoration")
+
+        // **And there is no alpha that rescues a third rung on this ground.** The faintest alpha on
+        // `labelColor` that still clears AA here is `secondary`'s own, to within a hundredth — so a
+        // "darker tertiary for glass" is `secondary` with a second name and a second value to keep
+        // true. This is the arithmetic that makes the answer *drop the rung* rather than retune it,
+        // and it is asserted rather than written down because it is the step every retune skipped.
+        let rescued = InkGlassTests.faintestRungClearingAA(scrim: InkGlass.scrim)
+        XCTAssertEqual(
+            rescued, 0.80, accuracy: 0.02,
+            "the faintest rung this ground supports is \(rescued), which is no longer secondary's "
+                + "0.80 — if these have genuinely come apart there may be room for a third rung on "
+                + "glass again, and the two-rung rule should be re-derived rather than assumed")
+    }
+
+    /// **The panel passes materially more of the desktop than it did, and the number is measured.**
+    ///
+    /// Held as passthrough — the fraction of the desktop's own luminance that survives to the eye —
+    /// because that, and not any alpha, is what "see-through" means. It is derived from the sampled
+    /// material constants rather than from the scrim, so a future change that thins the scrim while
+    /// swapping in a denser material cannot pass this by moving one number.
+    ///
+    /// The value asserted is the one taken off the real material on a real desktop (see
+    /// `GlassRenderHarness` and the header of `InkGlass.swift`): `.hudWindow` at this scrim measures
+    /// **34.8%**, against **17.0%** for the three-rung recipe this replaces and **14.5%** for the
+    /// `.headerView` recipe before that. The floor is set below the measurement rather than at it
+    /// because the two-layer model reproduces the sampled composite to about 3/255, and a bound tuned
+    /// tighter than the model's own error is a flake.
+    @MainActor
+    func testThePanelPassesMoreOfTheDesktopThanTheRecipeItReplaced() {
+        let opacity = Double(InkGlass.measuredMaterialOpacity)
+        let passthrough = (1 - opacity) * (1 - Double(InkGlass.scrim))
+
+        XCTAssertGreaterThan(
+            passthrough, 0.30,
+            "the glass passes \(passthrough) of the desktop. Both previous recipes sat at 14.5% and "
+                + "17.0% and both were reported as an opaque slab; the two-rung ladder is what buys "
+                + "the difference, so a number back down there means the ground crept up again")
+        // …and the material really is a thin one. `.headerView` could not reach the contrast floor at
+        // any scrim because its own opacity held the ground above it; a material denser than this
+        // puts the surface straight back into that trap.
+        XCTAssertLessThan(
+            opacity, 0.70,
+            "a material \(opacity) opaque owns the ground before the scrim is applied at all, so the "
+                + "scrim can no longer reach the contrast floor — which is the defect this recipe fixes")
+    }
+
+    /// **The timeline's hour labels clear AA on the glass**, measured on the colour the view actually
+    /// hands AppKit.
+    ///
+    /// The one call site that proved the sweep below is not enough on its own. `RewindTrackView` draws
+    /// the 9 pt hour marks with an `NSAttributedString`, and it set them in `NSColor
+    /// .tertiaryLabelColor` — never `Ink.tertiary`, so the token sweep was blind to it, and never a
+    /// rung anyone had measured. On the ground this window ships with, that is **1.70:1**: not merely
+    /// under AA but roughly half as legible as the rung the two-rung rule exists to ban, on the axis
+    /// `drawHourTicks` itself calls "what makes the time-linearity legible".
+    ///
+    /// Asserted on `RewindTrackView.hourLabelAttributes` rather than on a rendered bitmap. That
+    /// dictionary is the object AppKit is handed — a real seam through production code, not a
+    /// restatement of it — and it is stable, where reading a 9 pt glyph's darkest pixel out of a
+    /// render would depend on font rasterisation and would be the sort of test people learn to
+    /// re-run.
+    @MainActor
+    func testTheTimelinesHourLabelsClearWCAGAAOnTheGlass() throws {
+        let attributes = RewindTrackView.hourLabelAttributes
+
+        let font = try XCTUnwrap(attributes[.font] as? NSFont, "the hour labels name no font")
+        XCTAssertLessThan(
+            font.pointSize, 18,
+            "the hour labels are large text now, which would move the applicable WCAG bar from 4.5:1 "
+                + "to 3:1 — re-derive this assertion rather than letting the bar fall by accident")
+
+        let colour = try XCTUnwrap(
+            attributes[.foregroundColor] as? NSColor,
+            "the hour labels no longer name a foreground colour, so AppKit draws them in its own "
+                + "default and nothing measured here describes what is on screen")
+        let ratio = Self.contrastOnGlass(colour)
         XCTAssertGreaterThanOrEqual(
-            passthrough / ceiling, 0.85,
-            "the panel passes \(passthrough) of the desktop against a ceiling of \(ceiling); a scrim "
-                + "that keeps more than 15% of the available passthrough is paper, not glass")
+            ratio, 4.5,
+            "the timeline's hour labels measure \(ratio):1 on the shipped glass ground over a black "
+                + "desktop, under WCAG AA for text this size. The timeline window is glass "
+                + "(`RewindWindow` hosts `RewindView` on `InkGlassView`), so these labels sit on the "
+                + "panel's ground — use Ink.secondary, which is the bottom rung glass carries.")
+
+        // The negative control, and the exact colour that shipped here. Without it a ground that had
+        // drifted light enough to rescue anything would pass the line above and mean nothing.
+        let was = Self.contrastOnGlass(.tertiaryLabelColor)
+        XCTAssertLessThan(
+            was, 2.0,
+            "NSColor.tertiaryLabelColor now measures \(was):1 on this ground, which is not the "
+                + "invisible it was (1.70:1) — the ground has drifted light and every claim in this "
+                + "file about what glass can carry needs re-deriving")
+    }
+
+    // MARK: - Static tripwire
+
+    /// **STATIC TRIPWIRE — not behavioural coverage.**
+    ///
+    /// This test reads source text. It cannot tell you what any view draws, and it must never be
+    /// counted as evidence that the app is legible; `testTheBottomRungIsWhatPaysForTheGlass` is the
+    /// test that measures the rungs, `testTheTimelinesHourLabelsClearWCAGAAOnTheGlass` measures the
+    /// one call site this sweep was blind to, and `SearchSurfaceTests` measures the one panel that
+    /// puts type on something other than the ground. What no assertion over a token can cover is a
+    /// *new call site* setting faint type on a glass surface — a file no guard has heard of,
+    /// rendering 3.6:1 or worse over someone's dark wallpaper. That is a question about the source,
+    /// so it is answered with a check on the source, labelled as one.
+    ///
+    /// **It sweeps for more than `Ink.tertiary`, because the token spelling was never the whole
+    /// rule.** The rule is *no faint type on glass*, and the way it was actually broken had nothing
+    /// to do with the token: `RewindTrack` set the timeline's hour labels straight in
+    /// `NSColor.tertiaryLabelColor` — 1.70:1 on the shipped ground, about half as legible as the rung
+    /// this rule exists to ban — and a check that greps one string could not see it. So every faint
+    /// spelling a call site can reach for is swept (see `faintTypeOnGlass`), and the app's own token
+    /// is one entry in that list rather than the subject of the test.
+    ///
+    /// Every surface in this app is glass except the menu bar popover (`StatusView`, which is
+    /// AppKit's own popover chrome — see the note at the top of that file), so the sweep's default is
+    /// "this is glass, faint type is not allowed" and every exception is declared below with its
+    /// reason.
+    ///
+    /// **The declarations are exact counts, not ceilings, and that is the entire ratchet.** The
+    /// version this replaces compared `uses > allowed`, which is a ceiling: a file declared at 4
+    /// could be migrated to 0 and then grow all four back without the test noticing, and its
+    /// companion assertion (`outstanding <= debt`, both derived from the same declaration) could not
+    /// fail on a *decrease* at all. That is exactly what happened — nineteen call sites were paid off
+    /// in parallel and the list sat there licensing their return. An equality means a re-addition
+    /// fails and paying one off *also* fails, with the new number in the message, so the declaration
+    /// cannot stay stale in either direction.
+    func testNoGlassSurfaceSetsTypeOnTheBottomRung() {
+        let root = InkSourceSweep.uiSourceRoot
+        var scanned = 0
+        var counts: [String: [String: Int]] = [:]
+
+        let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        while let url = files?.nextObject() as? URL {
+            guard url.pathExtension == "swift" else { continue }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                return XCTFail("could not read \(url.path)")
+            }
+            scanned += 1
+            let relative = url.path.replacingOccurrences(of: root.path + "/", with: "")
+            // Comments stripped, deliberately: the files that explain *why* the rule exists all name
+            // the tokens, and a check that punished them would delete its own reasoning.
+            let lines = InkSourceSweep.strippingComments(from: text).components(separatedBy: "\n")
+            for spelling in Self.faintTypeOnGlass {
+                let uses = lines.filter { $0.contains(spelling) }.count
+                if uses > 0 { counts[relative, default: [:]][spelling] = uses }
+            }
+        }
+
+        // A scan that found nothing because it looked nowhere passes silently, which is the failure
+        // mode of every check like this one.
+        XCTAssertGreaterThan(scanned, 40, "the sweep found almost no Swift files — check \(root.path)")
+
+        // A declaration naming a spelling the sweep does not look for is a hole that reads like a
+        // rule, so the two lists are held together rather than merely written next to each other.
+        for (file, spellings) in Self.declaredFaintType {
+            for spelling in spellings.keys {
+                XCTAssertTrue(
+                    Self.faintTypeOnGlass.contains(spelling),
+                    "\(file) declares \"\(spelling)\", which is not a spelling this sweep looks for — "
+                        + "the entry allows nothing and hides that it allows nothing")
+            }
+        }
+
+        var added: [String] = []
+        var paid: [String] = []
+        for file in Set(counts.keys).union(Self.declaredFaintType.keys).sorted() {
+            for spelling in Self.faintTypeOnGlass {
+                let uses = counts[file]?[spelling] ?? 0
+                let allowed = Self.declaredFaintType[file]?[spelling] ?? 0
+                guard uses != allowed else { continue }
+                let entry = "\(file): \(spelling) — \(uses) uses, \(allowed) declared"
+                if uses > allowed { added.append(entry) } else { paid.append(entry) }
+            }
+        }
+
+        XCTAssertEqual(
+            added, [],
+            "these set faint type on a surface that is glass. On the shipped ground Ink.tertiary "
+                + "measures 3.60:1 and the system's own faint label steps are far worse "
+                + "(secondaryLabelColor 2.98:1, tertiaryLabelColor 1.70:1, quaternaryLabelColor "
+                + "1.21:1, all over a solid black desktop) — text a user cannot read over a dark "
+                + "wallpaper. Use Ink.secondary; glass carries two rungs (see Ink.tertiary). If the "
+                + "call site is a *fill* rather than type, declare it in `declaredFaintType` with "
+                + "that reason, the way Ink.rowHover and the timeline's empty channel are.")
+
+        XCTAssertEqual(
+            paid, [],
+            "these are declared above the number of uses actually in the file. That is a stale "
+                + "allowance — it is what let a nineteen-entry migration debt sit here after the "
+                + "debt was paid, licensing every one of those call sites to come back. Lower each "
+                + "count to the number reported here, or delete the entry when it reaches zero.")
+    }
+
+    /// **The spellings a glass surface may not set type in**, and what each measures on the shipped
+    /// ground over a solid black desktop — the worst desktop a translucent panel can be over.
+    ///
+    /// | spelling | resolved in `.aqua` | on the glass |
+    /// |---|---|---|
+    /// | `Ink.tertiary` | `labelColor` @ 0.68 → black @ 0.576 | 3.60:1 |
+    /// | `secondaryLabelColor` | black @ 0.498 | 2.98:1 |
+    /// | `tertiaryLabelColor` | black @ 0.259 | 1.70:1 |
+    /// | `quaternaryLabelColor` | black @ 0.098 | 1.21:1 |
+    ///
+    /// The SwiftUI hierarchical styles are the same three steps reached by another name, and they are
+    /// swept even though the app currently uses none: a rule with a spelling nobody has used yet is
+    /// precisely where the next instance lands, and an entry that matches nothing costs nothing.
+    /// `placeholderTextColor` (2.98:1 here) and `disabledControlTextColor` (1.66:1) are on the list
+    /// for the same reason — both are unused today, both are far under AA on this ground, and both
+    /// are what a call site reaches for when it wants "quieter" and has no rung left to drop to.
+    ///
+    /// Not on the list, deliberately: `Ink.secondary`, which *is* the bottom rung on glass, and
+    /// `NSColor.separatorColor`, which is not type — it draws rules and tick marks, where the
+    /// applicable floor is WCAG's 3:1 for graphical objects rather than 4.5:1 for text, and where a
+    /// blanket ban would be a different rule than the one this file states.
+    private static let faintTypeOnGlass: [String] = [
+        "Ink.tertiary",
+        "secondaryLabelColor",
+        "tertiaryLabelColor",
+        "quaternaryLabelColor",
+        "placeholderTextColor",
+        "disabledControlTextColor",
+        "foregroundStyle(.secondary)",
+        "foregroundStyle(.tertiary)",
+        "foregroundStyle(.quaternary)",
+        "foregroundColor(.secondary)",
+        "foregroundColor(.tertiary)",
+    ]
+
+    /// **Every exception, per file and per spelling, with the reason it is one.**
+    ///
+    /// Per *spelling* and not per file: a single number for a file lets one exception be spent on a
+    /// different and worse colour — swap `Ink.tertiary` (5.24:1 on the popover) for
+    /// `tertiaryLabelColor` (1.88:1 there) and a per-file count would not move.
+    ///
+    /// **There is no migration debt here any more.** There was: six glass files carrying nineteen
+    /// `Ink.tertiary` call sites, excluded because the two-rung change landed while they were being
+    /// edited elsewhere. All six are at zero, so the entries are gone rather than kept at their old
+    /// numbers — which is the whole point, because a stale entry is an allowance to put them back.
+    private static let declaredFaintType: [String: [String: Int]] = [
+        // **Not glass.** The deliberate exception documented at the top of `StatusView`: an
+        // `NSPopover` brings its own frosted chrome from a window this process does not own, so the
+        // app does not put `InkGlassView` inside it. Its ground is AppKit's, not `InkGlass.scrim`,
+        // and the ladder on it is measured against opaque `Ink.surface` by `MenuBarPresentationTests`
+        // rather than here.
+        "MenuBar/StatusView.swift": ["Ink.tertiary": 2],
+        "Onboarding/Ink.swift": [
+            // `InkPermissionRow` renders on both surfaces, and its `native` branch — the menu row —
+            // only ever appears inside that popover.
+            "Ink.tertiary": 1,
+            // `Ink.rowHover`. A **fill**, not type: a menu row under the pointer, deliberately barely
+            // there. The legibility argument that moved the type ladder does not apply to something
+            // nobody reads, and it is on the popover in any case.
+            "tertiaryLabelColor": 1,
+        ],
+        // The timeline track's empty channel — also a **fill**, and one whose whole job is to read as
+        // absence. See the note at `RewindTrackView.draw`.
+        "Rewind/RewindTrack.swift": ["quaternaryLabelColor": 1],
+    ]
+
+    // MARK: - Contrast helpers
+
+    /// The faintest alpha on `labelColor` that still clears AA on the glass at this scrim.
+    ///
+    /// Scanned rather than solved: the inverse of the sRGB transfer function is easy to get subtly
+    /// wrong, and a 0.001 sweep of the same forward model the guard uses cannot disagree with it.
+    @MainActor
+    private static func faintestRungClearingAA(scrim: CGFloat) -> CGFloat {
+        var alpha: CGFloat = 0.50
+        while alpha < 1.0 {
+            if rungOnGlass(scrim: scrim, alpha: alpha) >= 4.5 { return alpha }
+            alpha += 0.001
+        }
+        return 1.0
+    }
+
+    /// The WCAG contrast of an **arbitrary colour** on the shipped glass ground, over a solid black
+    /// desktop — the worst ground a translucent panel can have.
+    ///
+    /// `InkContrastProbe.glassLadder` measures the same ground but only knows the three `Ink` tokens,
+    /// and the defect this was written for was a call site that never touched them: AppKit views hand
+    /// `NSColor` straight to an `NSAttributedString`, so a guard that can only ask about tokens
+    /// cannot see the type they draw. Same two-layer model, same constants, one colour at a time.
+    @MainActor
+    static func contrastOnGlass(_ colour: NSColor) -> Double {
+        var value = 0.0
+        NSAppearance(named: InkGlass.appearanceName)!.performAsCurrentDrawingAppearance {
+            func linear(_ c: Double) -> Double {
+                c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+            }
+            func luminance(_ r: Double, _ g: Double, _ b: Double) -> Double {
+                0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+            }
+            // The ground is neutral — grey material tint, white scrim, black desktop — so one channel
+            // describes it. The *colour* being measured is not assumed neutral.
+            let material = Double(InkGlass.measuredMaterialOpacity)
+            let tint = Double(InkGlass.measuredMaterialTint)
+            let frosted = tint * material  // over a black desktop
+            let scrim = Double(InkGlass.groundAlpha(reduceTransparency: false))
+            let ground = 1.0 * scrim + frosted * (1 - scrim)
+
+            guard let sRGB = colour.usingColorSpace(.sRGB) else { return }
+            let alpha = Double(sRGB.alphaComponent)
+            func over(_ channel: CGFloat) -> Double {
+                Double(channel) * alpha + ground * (1 - alpha)
+            }
+            let text = luminance(over(sRGB.redComponent), over(sRGB.greenComponent), over(sRGB.blueComponent))
+            let back = luminance(ground, ground, ground)
+            value = (max(text, back) + 0.05) / (min(text, back) + 0.05)
+        }
+        return value
     }
 
     /// The same model as `InkContrastProbe.glassLadder`, at an arbitrary scrim and an arbitrary alpha
-    /// on `labelColor`, so the floor above can be shown to be one. Only `tertiary` — it is the
-    /// binding rung and the only one worth modelling twice.
+    /// on `labelColor`, so the floors above can be shown to be ones.
     ///
-    /// `alpha` is a multiplier on `labelColor`'s own alpha, exactly as `Ink.tertiary` is: a raw
-    /// number here would be a second definition of what the token means.
+    /// `alpha` is a multiplier on `labelColor`'s own alpha, exactly as `Ink.secondary` and
+    /// `Ink.tertiary` are: a raw number here would be a second definition of what the tokens mean.
     @MainActor
-    private static func tertiaryOnGlass(scrim: CGFloat, alpha: CGFloat) -> Double {
+    private static func rungOnGlass(scrim: CGFloat, alpha: CGFloat) -> Double {
         var value = 0.0
         NSAppearance(named: InkGlass.appearanceName)!.performAsCurrentDrawingAppearance {
             func linear(_ c: Double) -> Double {
@@ -186,12 +523,14 @@ final class InkGlassTests: XCTestCase {
         XCTAssertLessThan(alpha, 1, "the default ground has to let the desktop through")
         XCTAssertTrue(InkGlass.showsMaterial(reduceTransparency: false))
 
-        // And it has to be *substantially* translucent, not a token 0.95. This is the number the
-        // surface was reported on twice — it shipped at 0.80 and read as an opaque slab, then at
-        // 0.36 and still read as paper. The bar is where the second report left it: a ground that
-        // keeps more than a sixth of itself is not glass.
-        XCTAssertLessThanOrEqual(
-            alpha, 0.16, "a scrim this thick is a sheet with a blur behind it, not glass")
+        // **Deliberately no bound on this alpha.** There used to be one — `alpha <= 0.16` — and it is
+        // removed rather than retuned, because it measured the wrong thing and reading it as a
+        // translucency guarantee is what let three retunes ship without changing what anyone saw. The
+        // scrim is a fraction of *whatever the material left*, so it is only comparable between two
+        // recipes with the same material: 0.56 of white over `.hudWindow` is a thinner ground than
+        // 0.10 of white over `.headerView` was. What the surface has to be is asserted on the ground
+        // and on passthrough instead — see `testThePanelPassesMoreOfTheDesktopThanTheRecipeItReplaced`
+        // and `testTheBottomRungIsWhatPaysForTheGlass`.
     }
 
     /// …and the panel the app actually installs really does what those two values say, in **every**
@@ -218,11 +557,66 @@ final class InkGlassTests: XCTestCase {
             XCTAssertEqual(
                 opaque.alpha, 1, accuracy: 1e-9, "\(name): the ground is still letting the desktop in")
 
+            XCTAssertTrue(
+                glass.sheen.isHidden,
+                "\(name): the specular highlight is still drawn on a surface that is no longer glass")
+
             glass.apply(reduceTransparency: false)
             XCTAssertFalse(glass.material.isHidden, "\(name): the material never came back")
+            XCTAssertFalse(glass.sheen.isHidden, "\(name): the highlight never came back")
             let glassy = try XCTUnwrap(glass.ground.layer?.backgroundColor)
             XCTAssertEqual(glassy.alpha, InkGlass.scrim, accuracy: 1e-6, name)
         }
+    }
+
+    // MARK: - The specular edge
+
+    /// **The highlight is a line along the top, and it stays there when the panel resizes.**
+    ///
+    /// It exists because the ground is pinned to the contrast floor and cannot be thinned, so every
+    /// remaining bit of "this is glass rather than paper" has to come from cues that spend no
+    /// contrast. Two things can go wrong with it and both look like a rendering bug rather than a
+    /// tuning one: it grows into a band (a second, lighter panel stacked on the first), or it stops
+    /// tracking the top edge on a resize — which is not hypothetical, because the onboarding window
+    /// resizes from full screen down to the card when the cinematic lands.
+    @MainActor
+    func testTheSpecularEdgeIsAHairlineOnTheTopEdgeAtEverySize() {
+        let glass = InkGlassView(frame: NSRect(x: 0, y: 0, width: 832, height: 752), style: .floating)
+        glass.layoutSubtreeIfNeeded()
+
+        func check(_ label: String) {
+            let panel = glass.panel.bounds
+            XCTAssertEqual(
+                glass.sheen.frame.maxY, panel.maxY, accuracy: 0.5,
+                "\(label): the highlight is not on the panel's top edge — a glass panel lit from "
+                    + "somewhere other than above reads as a rendering fault")
+            XCTAssertEqual(glass.sheen.frame.width, panel.width, accuracy: 0.5, label)
+            XCTAssertEqual(
+                glass.sheen.frame.height, InkGlassView.sheenHeight, accuracy: 0.01,
+                "\(label): a highlight with height is a gradient band, which reads as a second panel")
+        }
+        check("at the size it was built")
+
+        // The cinematic's landing: the same view, resized under the window.
+        glass.setFrameSize(NSSize(width: 500, height: 400))
+        glass.layoutSubtreeIfNeeded()
+        check("after a resize")
+    }
+
+    /// The highlight is **white**, not a palette colour — it is a light source reflecting off the
+    /// panel, and INV-UI-1 wants that light neutral.
+    @MainActor
+    func testTheSpecularEdgeIsNeutralWhiteAndNotAPaletteColour() throws {
+        let glass = InkGlassView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        glass.layoutSubtreeIfNeeded()
+        glass.apply(reduceTransparency: false)
+
+        let colour = try XCTUnwrap(glass.sheen.layer?.backgroundColor)
+        let sampled = try XCTUnwrap(NSColor(cgColor: colour)?.usingColorSpace(.sRGB))
+        XCTAssertEqual(sampled.redComponent, 1, accuracy: 1e-6)
+        XCTAssertEqual(sampled.greenComponent, 1, accuracy: 1e-6)
+        XCTAssertEqual(sampled.blueComponent, 1, accuracy: 1e-6)
+        XCTAssertEqual(sampled.alphaComponent, InkGlass.sheenAlpha, accuracy: 1e-6)
     }
 
     // MARK: - The shape and the shadow
@@ -349,5 +743,79 @@ final class InkGlassTests: XCTestCase {
         XCTAssertFalse(
             OnboardingWindow.hideMayComplete(startedAt: 4, current: 6, stillHidden: true),
             "a stale fade must not order the window out on a newer request's behalf")
+    }
+}
+
+// MARK: - Sweeping the UI sources
+
+/// The plumbing the two static tripwires over `Sources/ContextApp` share — this file's "no bottom
+/// rung on glass" and `InkAccentTests`'s "no view reads the machine's accent".
+///
+/// One copy, for the same reason the palette is one file: two sweeps that disagree about what counts
+/// as a comment would report different offenders for the same source, and the one that under-reports
+/// is the one nobody notices. Lives beside a test rather than in the package because it exists only
+/// to check the package's own source text, exactly as `InkContrastProbe` lives beside
+/// `MenuBarPresentationTests`.
+enum InkSourceSweep {
+
+    /// `Sources/ContextApp`, found from this file rather than from the working directory, which is
+    /// not the package root under every runner.
+    static var uiSourceRoot: URL {
+        URL(fileURLWithPath: #filePath)  // Tests/ContextAppTests/InkGlassTests.swift
+            .deletingLastPathComponent()  // Tests/ContextAppTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
+            .appendingPathComponent("Sources/ContextApp")
+    }
+
+    /// Swift source with `//` and `/* */` comments removed, quote-aware so a `//` inside a string
+    /// literal does not truncate the line it is on. Line numbering is preserved, so an offender's
+    /// reported line is the one a person can open.
+    static func strippingComments(from source: String) -> String {
+        var out = ""
+        var inString = false
+        var inLineComment = false
+        var inBlockComment = false
+        var escaped = false
+        var iterator = source.startIndex
+
+        while iterator < source.endIndex {
+            let c = source[iterator]
+            let next = source.index(after: iterator) < source.endIndex ? source[source.index(after: iterator)] : nil
+
+            if inLineComment {
+                if c == "\n" {
+                    inLineComment = false
+                    out.append(c)
+                }
+            } else if inBlockComment {
+                if c == "*", next == "/" {
+                    inBlockComment = false
+                    iterator = source.index(after: iterator)
+                } else if c == "\n" {
+                    out.append(c)  // keep line numbers honest
+                }
+            } else if inString {
+                if escaped {
+                    escaped = false
+                } else if c == "\\" {
+                    escaped = true
+                } else if c == "\"" || c == "\n" {
+                    inString = false
+                }
+                out.append(c)
+            } else if c == "/", next == "/" {
+                inLineComment = true
+            } else if c == "/", next == "*" {
+                inBlockComment = true
+                iterator = source.index(after: iterator)
+            } else {
+                if c == "\"" { inString = true }
+                out.append(c)
+            }
+
+            iterator = source.index(after: iterator)
+        }
+        return out
     }
 }

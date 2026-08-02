@@ -289,8 +289,13 @@ struct SearchScrollFade: View {
 ///
 /// Uppercase with tracking is the one place this app adds letter-spacing to reading type, and it is
 /// legitimate here for the reason it is legitimate in every native inspector: at 11 pt an all-caps
-/// run closes up and stops being scannable without it. The size sits at `InkType.minimumSize` and the
-/// colour is `Ink.tertiary`, which is what a header a reader *skips* should cost them.
+/// run closes up and stops being scannable without it. The size sits at `InkType.minimumSize`.
+///
+/// The colour is `Ink.secondary`, not the glance-word rung it reads like: this panel is glass, and
+/// glass carries a two-rung ladder (`Ink.tertiary`). The header is still the quietest thing on the
+/// card — it is small, tracked and uppercase, which is most of what made it recede — but at 12 pt on
+/// a ground that now shows a third of the desktop, a fainter rung is a header that is simply gone
+/// over a dark wallpaper.
 private struct SearchSection<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
@@ -300,7 +305,7 @@ private struct SearchSection<Content: View>: View {
             Text(title.uppercased())
                 .font(.system(size: InkType.minimumSize, weight: .semibold))
                 .tracking(0.7)
-                .foregroundStyle(Ink.tertiary)
+                .foregroundStyle(Ink.secondary)
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -518,13 +523,13 @@ struct SearchResultCard: View {
             HStack(spacing: 5) {
                 sourceGlyph
                 Text(moment.source)
-                    .inkStyle(.statusLabel, color: Ink.tertiary)
+                    .inkStyle(.statusLabel, color: Ink.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
-                Text("•").inkStyle(.statusLabel, color: Ink.tertiary)
+                Text("•").inkStyle(.statusLabel, color: Ink.secondary)
                 Text(SearchTime.describe(moment.capturedAt))
-                    .inkStyle(.statusLabel, color: Ink.tertiary)
+                    .inkStyle(.statusLabel, color: Ink.secondary)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -555,7 +560,7 @@ struct SearchResultCard: View {
             // which is a confident picture of nothing.
             Image(systemName: "waveform")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Ink.tertiary)
+                .foregroundStyle(Ink.secondary)
                 .frame(width: 12, height: 12)
                 .accessibilityHidden(true)
         }
@@ -654,7 +659,7 @@ struct SearchSpokenWell: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Image(systemName: "quote.opening")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Ink.tertiary)
+                        .foregroundStyle(Ink.secondary)
                     Text(line)
                         .inkStyle(.statusLabel, color: Ink.primary)
                         .lineLimit(4)
@@ -723,7 +728,7 @@ struct SearchThumbnail: View {
                     // quiet glyph is honest; nothing here is ever a broken-image icon.
                     Image(systemName: "photo")
                         .font(.system(size: 18, weight: .light))
-                        .foregroundStyle(Ink.tertiary)
+                        .foregroundStyle(Ink.secondary)
                 }
             }
             .clipShape(shape)

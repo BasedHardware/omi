@@ -21,9 +21,15 @@ enum SettingsWindow {
     /// Held so a second `present(pane:)` can move an already-open window to another pane. The sidebar
     /// writes to the same object, so there is one answer to "which pane is showing".
     private static var selection: SettingsSelection?
-    /// The global-shortcut layer is being built separately; until it lands the window binds to the
-    /// in-memory stand-in, which keeps real state and registers nothing. Assigning to this before the
-    /// first `present()` is how the real provider is swapped in.
+    /// The real provider is `LiveShortcutBindings`, assigned in `ContextApp` beside
+    /// `GlobalShortcuts.shared.start()` so the ordering is visible at the call site.
+    ///
+    /// The default is deliberately still the in-memory stand-in, which keeps state and registers
+    /// nothing: this is a `static var` read by `present()`, and a default that reached into
+    /// `GlobalShortcuts` would arm Carbon hot keys from a SwiftUI preview or from a test that only
+    /// wanted to open the window. The cost is that dropping the assignment silently returns the pane
+    /// to reporting success into a dictionary — which is the bug that shipped — so
+    /// `ShortcutBindingsTests` pins the live provider's behaviour rather than the stand-in's.
     static var shortcutProvider: ShortcutBindingProvider = InMemoryShortcutBindings()
 
     /// - Parameter pane: which pane to open on. A caller that has a reason to be specific — the
@@ -60,20 +66,19 @@ enum SettingsWindow {
             backing: .buffered,
             defer: false)
         window.title = "Settings"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.minSize = SettingsMetrics.minimumSize
         window.isReleasedWhenClosed = false
         // Deliberately `.normal`: settings is worked in beside other windows, not floated over them.
         window.level = .normal
-        // Glass, pinned light on the *window* so the title bar and traffic lights convert with it.
-        // `RewindWindow` carries the same three lines and the same reason.
-        InkGlass.pin(window)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.titlebarSeparatorStyle = .none
+        // The window-side half of the glass — transparent ground, the light pin, and a title bar the
+        // panel runs edge to edge underneath. One call rather than the five properties this file used
+        // to restate: `WindowGlass` is where "a glass window paints no ground of its own" is stated
+        // once and asserted once, so this window cannot drift from the timeline or the search bar.
+        WindowGlass.wear(window, as: .titled)
 
+        // The shared glass, full-bleed: no corner and no shadow of its own, because the window frame
+        // already owns both. `RewindWindow` carries the same pair of views and the same reason.
         let container = InkGlassView(
             frame: NSRect(origin: .zero, size: window.frame.size), style: .fullBleed)
         container.autoresizingMask = [.width, .height]
@@ -88,6 +93,13 @@ enum SettingsWindow {
                 selection: selected))
         // No `.intrinsicContentSize`, so the pane can fill a resized window; `.minSize`/`.maxSize` keep
         // the real constraints. See `RewindWindow` for what the other spellings break.
+        //
+        // Constrained to the glass *host* rather than handed to `InkGlassView.setContent`, which is
+        // the seam a floating panel uses: `setContent` is frame-and-autoresizing, and this window is
+        // resizable with a minimum size that only Auto Layout expresses. It is the same rectangle
+        // either way — `.fullBleed` is inset 0, so the panel fills its host exactly — and the ground
+        // stays entirely AppKit's, which is the property that matters. `SettingsView` therefore paints
+        // no background of its own; see the note on its `body`.
         hosting.sizingOptions = [.minSize, .maxSize]
         hosting.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(hosting)

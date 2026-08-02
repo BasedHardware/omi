@@ -114,7 +114,7 @@ Sources/ContextApp/      ContextApp  Engine  Permissions
                          Search/     SearchBarWindow  SearchBarView  SearchSurface
                                      SearchResultsModel  SearchResultsView  SearchRanking
                                      ClaudeRouter (tutorial + settings only, not the bar)
-                         Support/    Log
+                         Support/    Log  Sound  Telemetry  WindowGlass (the NSWindow half of InkGlass)
 ```
 
 `CONTRACTS.md` holds the interface each file must satisfy; `docs/design-system.md` holds the

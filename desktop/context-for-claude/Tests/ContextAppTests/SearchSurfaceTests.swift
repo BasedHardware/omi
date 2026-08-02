@@ -1038,10 +1038,15 @@ final class SearchSurfaceTests: XCTestCase {
                     + "tertiary \(SearchContrastProbe.ratio(of: Ink.tertiary, over: ground).rounded(2)):1, "
                     + "query-in-chip \(SearchContrastProbe.ratio(of: Ink.primary, over: SearchContrastProbe.composite(SearchInk.queryChipFill, over: ground)).rounded(2)):1")
 
+            // Two rungs, not three. This panel is glass, and glass carries `primary` and `secondary`
+            // only — the ground is tuned to whatever the faintest rung on it is, so a third rung here
+            // would cost the surface half its transparency. `Ink.tertiary` states the rule and
+            // `InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` holds the arithmetic; what is
+            // checked *here* is that this panel's own dense small copy really does clear AA on the
+            // real ground, which is the case the rule was written for.
             for (name, colour, floor) in [
                 ("primary", Ink.primary, 4.5),
                 ("secondary", Ink.secondary, 4.5),
-                ("tertiary", Ink.tertiary, 4.5),
             ] {
                 let ratio = SearchContrastProbe.ratio(of: colour, over: ground)
                 XCTAssertGreaterThanOrEqual(

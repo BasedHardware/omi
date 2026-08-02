@@ -20,7 +20,7 @@ Twelve roles. The right-hand column is the whole definition; there are no hex va
 surface        NSColor.controlBackgroundColor   the onboarding sheet, the popover ground
 primary        NSColor.labelColor               headlines, row copy, the primary button fill
 secondary      labelColor @ 0.80                a sentence someone reads
-tertiary       labelColor @ 0.68                a word someone glances at
+tertiary       labelColor @ 0.68                a glance word — opaque surfaces only, never on glass
 separator      NSColor.separatorColor           a rule between blocks
 hairline       labelColor @ 0.22                the edge of something you press
 accent         NSColor.systemBlue               the one actionable link
@@ -49,6 +49,66 @@ the reader has to do with the text, not by how deep it sits in a stack:
 A state with something to do about it ("Not signed in…", "Not connected to Claude") gets full
 `primary`, not less. `tertiary` is for a single word beside its subject and never for a sentence.
 
+### The ladder is three rungs on an opaque surface and **two on glass**
+
+> **On glass, `tertiary` is not available. Promote it to `secondary`.**
+
+This is the single most consequential rule in this document, and it is arithmetic rather than taste.
+A translucent panel's ground can only be as dark as the *faintest* rung anyone sets on it, and the
+ground is what "glassmorphic" means. So whichever rung sits at the bottom decides how see-through
+every panel in the app is:
+
+| ladder on glass | ground over black | passthrough | bottom rung there |
+|---|---|---|---|
+| three rungs | 205.5/255 | 17.0% | `tertiary` 4.56:1 |
+| **two rungs** | **154.1/255** | **34.8%** | **`secondary` 4.58:1** |
+
+Twice the desktop, at the same 4.5:1. Everything else — the material, the corner, the shadow — is
+identical between those two rows; the ladder is the whole difference. Three separate retunes of the
+material and the scrim were shipped before this was understood, each moving the panel by a few levels
+out of 255 and each correctly reported as no change at all.
+
+**Every surface in the app is glass except the menu bar popover**, which is AppKit's own `NSPopover`
+chrome (see *The glass*). So the popover keeps all three rungs and everything else gets two.
+
+What this costs: a run that was `tertiary` because it is a *sentence* was on the wrong rung anyway
+and is simply corrected. A run that was genuinely a glance word — the status on a permission row, a
+card's `app · time` caption, a section header — loses a step of hierarchy and has to earn its
+recession from size, weight, tracking or position instead. That is the price of the panel, paid
+deliberately.
+
+And it really is drop-or-nothing. To clear AA on the shipped ground `tertiary` would have to darken
+to **0.796**, which is `secondary`'s 0.80 to within a hundredth — a third rung that measures as the
+second is the same colour twice with an extra token to keep true. Asserted, not asserted-looking:
+`InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` measures the rescue alpha and fails if it ever
+comes apart from `secondary`.
+
+Held four ways:
+
+- `InkGlassTests.testTheLadderClearsWCAGAAOnTheGlass…` — `primary` and `secondary` clear AA on the
+  real ground, in both system appearances, over both extreme desktops.
+- `InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` — `secondary` clears AA by less than 0.30
+  (the ground is *on* its floor, not above it) **and `tertiary` fails there** (so the ground cannot
+  drift back up to where a third rung would fit).
+- `InkGlassTests.testTheTimelinesHourLabelsClearWCAGAAOnTheGlass` — the timeline's hour marks, which
+  are drawn in AppKit and hand an `NSColor` straight to an `NSAttributedString`, measured on the
+  colour `RewindTrackView.hourLabelAttributes` actually carries.
+- `InkGlassTests.testNoGlassSurfaceSetsTypeOnTheBottomRung` — a labelled **static tripwire** over
+  `Sources/ContextApp`. Its default is "this file is glass", and every exception is declared per file
+  *and per spelling*, as an exact count rather than a ceiling.
+
+**The migration debt is paid.** Six glass files once carried nineteen `Ink.tertiary` call sites at
+~3.6:1; all six are at zero and the debt list is gone rather than kept at its old numbers — a stale
+allowance is an allowance to put the call sites back, which is precisely what a ceiling-shaped ratchet
+had been licensing. The declarations that remain are the popover (not glass) and two *fills*.
+
+**The rule is "no faint type on glass", not "no `Ink.tertiary` on glass".** The token is one spelling
+of it. The sweep also looks for the system's own faint label steps and SwiftUI's hierarchical styles,
+because the way this was actually broken never touched the token: the timeline set its hour labels in
+`NSColor.tertiaryLabelColor` — 1.70:1 on the shipped ground, about half as legible as the rung the
+rule bans. On that ground `secondaryLabelColor` is 2.98:1, `tertiaryLabelColor` 1.70:1 and
+`quaternaryLabelColor` 1.21:1, all over a solid black desktop.
+
 Why the two lower steps are **alpha on `labelColor`** and not `secondaryLabelColor` /
 `tertiaryLabelColor`: the system's steps are 50% and 26% black in Light, tuned for dense system
 chrome — an inspector row, a table cell, a menu — where the reader glances at a word beside its
@@ -64,18 +124,19 @@ Measured over `surface`, composited in linear light (`MenuBarPresentationTests` 
 | `secondary` (`labelColor` @ 0.80) | 7.8:1 | 8.3:1 |
 | `tertiary` (`labelColor` @ 0.68) | 5.2:1 | 6.3:1 |
 
-`secondary` is held to AAA (7:1) because it is the only step that carries whole sentences.
-`tertiary`'s alpha is set by the *worst* ground rather than the best: on the glass over a solid black
-desktop it falls to 4.62:1, and thinning it would put it under AA. The ladder is still three visible
-steps — L\* 15.6 / 35.0 / 45.7 in Light, 88.0 / 74.2 / 65.7 in Dark. **`surface` is no longer the
-whole ground on any window that wears the glass** — see *The glass* for the ladder measured there, and
-for why `tertiary`'s alpha, not the scrim, is what decides how see-through every panel in the app is.
+That table is the **opaque** surface — the popover, and any sheet drawn on `surface` alone. On glass
+the ground is not `surface` and the readings are different; see *The glass*.
 
-**`tertiary` is pinned from both sides, and that is the whole tuning surface for the glass.** It was
-0.66; the two points it gained are what paid for a panel that passes 18.0% of the desktop instead of
-12.8%. It cannot go lighter — the glass falls under AA. It cannot go darker — at 0.69 it is 7.8 L\*
-from `secondary` on a Dark sheet, under the 8 L\* the rungs are held apart by, and a ladder that
-measures as two steps is a worse defect than a slightly less see-through panel.
+`secondary` is held to AAA (7:1) over `surface` because it is the only step that carries whole
+sentences — and on glass it is the *bottom* rung, where its alpha is set by the worst ground rather
+than the best: over a solid black desktop it measures 4.58:1, eight hundredths above AA. That is what
+pins it from both sides. It cannot be thinned (the glass falls under AA) and it must not be thickened
+(contrast the rung does not need is opacity the panel paid for, which is what an opaque-looking panel
+is made of).
+
+`tertiary` is the glance step on the opaque surface only. It cannot go darker either — at 0.69 it is
+7.8 L\* from `secondary` on a Dark sheet, under the 8 L\* the rungs are held apart by. On `surface`
+the ladder is still three visible steps: L\* 15.6 / 35.0 / 45.7 in Light, 88.0 / 74.2 / 65.7 in Dark.
 
 Why the fills are **alpha on `labelColor`** rather than named fill colours, and the same reason the
 type steps are: they have to composite correctly over both the onboarding sheet *and* the popover's
@@ -99,9 +160,14 @@ through the shared `BrandColour` predicate, the token's *catalog identity* (whic
 being run on a blue Mac), and a labelled static tripwire over `Sources/ContextApp` for a view that
 skips `Ink` and reaches for `controlAccentColor` inline.
 
-One exposure of the same class is still open and is listed in that test: `AccentChoice.system`, the
-default in the Appearance pane, resolves to `controlAccentColor` and tints the whole Settings window
-with it. `SettingsTests.testSystemAccentIsTheUsersOwn` currently pins that behaviour deliberately.
+There is **no exemption left in that sweep, and there must not be a new one**. One used to be listed
+here and in the test: `AccentChoice.system`, the default in the Appearance pane, resolved to
+`controlAccentColor` and tinted the whole Settings window with it, pinned by a
+`SettingsTests.testSystemAccentIsTheUsersOwn`. `AccentChoice` and that test have both since been
+deleted, and what survived them was a whole-file exemption with nothing to exempt — the worst state
+for one to be in, because it reads as settled and stays green while licensing the *next*
+`Color(nsColor: .controlAccentColor)` added to that file. Skipping a file is a hole; if an exception
+is ever genuinely needed, the shape to copy is `InkGlassTests`'s per-spelling exact counts.
 
 ### Appearance
 
@@ -126,74 +192,100 @@ pin is also what makes `labelColor` — and therefore the whole `Ink` ladder —
 panel; a surface forced light whose type did not follow is white-on-white, which is nothing on screen
 at all. `InkGlassTests.testTheTypeResolvesDarkOnTheLightGlass` is that assertion.
 
-**The material is `.headerView`, and it was measured rather than picked.** Fourteen candidates were
-put over solid black and solid white full-screen backdrops, pinned to `.aqua`, and sampled
-(macOS 15.5, `.behindWindow`, `.active`). Solving each composite for its own opacity and tint:
+**The material is `.hudWindow`, and the number that decides that is the material's own opacity — not
+the scrim.** This corrects an argument that stood here for two releases and is the reason two separate
+attempts to make these panels see-through changed nothing anybody could perceive.
 
-| material | opacity | tint | material | opacity | tint |
+Every candidate was re-sampled on this machine (macOS 26, `.behindWindow`, `.active`, pinned `.aqua`)
+over solid black, mid-grey and white full-screen backdrops, **at scrim zero** — each material at its
+most transparent, which is the honest way to rank them:
+
+| material | ground over black | passthrough | material | ground over black | passthrough |
 |---|---|---|---|---|---|
-| `headerView` | 0.800 | (255,255,255) | `hudWindow` | 0.525 | (221,221,221) |
-| `titlebar` | 0.809 | (246,246,247) | `fullScreenUI` | 0.525 | (221,221,219) |
-| `sidebar` | 0.903 | (228,228,228) | `popover` | 0.651 | (229,229,229) |
-| `menu` | 0.776 | (227,227,227) | `underWindowBackground` | 0.906 | (222,222,222) |
-| `toolTip` | 0.902 | (222,222,222) | `selection` | 0.902 | (200,200,200) |
+| `hudWindow` | 136.2/255 | **41.2%** | `menu` | 188.4/255 | 18.8% |
+| `fullScreenUI` | 136.2/255 | 41.2% | `titlebar` | 208.0/255 | 15.4% |
+| `popover` | 163.7/255 | 29.4% | `headerView` | 212.9/255 | 16.2% |
+| `selection` | 193.4/255 | 8.5% | `sidebar` / `underWindowBackground` | 213.9/255 | 7.9% |
 
-`sheet`, `windowBackground`, `contentBackground` and `underPageBackground` are opaque in `.aqua`.
+`sheet`, `windowBackground` and `contentBackground` are opaque in `.aqua`.
 
-The choice is not "which is most translucent" — it is **"which passes the most desktop through at a
-fixed legibility floor"**, which is a different question with a different answer. Writing the ground
-over a black desktop as `255·s + tint·a·(1−s)` and the desktop's share as `(1−a)(1−s)`, a **pure white
-tint is optimal**: it is the only tint for which brightening the panel costs nothing in passthrough.
-`.headerView` is the only translucent candidate that measures pure white. Solved for the scrim that
-lands each candidate on the ground this app ships (209.1/255), `.headerView` passes **18.0%** of the
-desktop; `titlebar` and `hudWindow` pass 15.7%, `popover` 15.1%, `menu` 13.0%, `sidebar` 9.1%. Its
-lead widens as the ground thins, because every other material has to spend scrim making up for a tint
-that is not white.
+**The old ranking asked the wrong question.** It held the ground fixed at 209.1/255 and asked which
+material passed the most desktop *there*, concluding that a pure white tint was optimal and
+`.headerView` won. But 209.1 is not the legibility floor — it is well above it. The floor is the
+darkest ground on which the *faintest rung the panel carries* still clears WCAG AA over a solid black
+desktop. `.headerView` is ~84% opaque white on its own, so its ground *bottoms out at 212.9/255*: it
+cannot reach any plausible floor at any scrim, and the scrim is worth four points of ground in total.
+That is exactly what was observed — dropping the scrim 0.36 → 0.10 moved the onboarding card from
+228.0/255 to 217.0/255, eleven levels out of 255, and was reported as no change at all.
+
+`.hudWindow` is 59% opaque at a near-white tint (232/255), so it *can* be scrimmed a long way down.
+Measured on the real material over a real banded desktop (`.aqua`, `.behindWindow`, `.active`,
+sampled out of a `screencapture`):
+
+| material / scrim | ground over black | passthrough | bottom rung there |
+|---|---|---|---|
+| `headerView` @ 0.10 (shipped, three-rung) | 217.0/255 | 14.5% | `tertiary` 4.74:1 |
+| `hudWindow` @ 0.56 (shipped, three-rung) | 205.5/255 | 17.0% | `tertiary` 4.56:1 |
+| `hudWindow` @ 0.115 | 151.2/255 | 35.9% | `secondary` 4.48:1 — **under AA** |
+| **`hudWindow` @ 0.14** | **154.1/255** | **34.8%** | **`secondary` 4.58:1** |
+| `hudWindow` @ 0.00 — *the material's ceiling* | 136.2/255 | 41.2% | `secondary` 3.96:1 ✗ |
 
 The pin, not the machine, decides: re-run under a Light system and under a Dark one, the sampled
-composites are identical, and a live render over a neutral desktop is pixel-identical between the two.
+composites are identical.
 
-**The scrim is `surface` @ 0.10**, flat and full-bleed, painted over the material and under the
-content. It shipped at 0.80, then at 0.36 — reported both times as reading more like paper than like
-glass. Measured through the real material over the two extreme desktops, in both system appearances:
+**The scrim is `surface` @ 0.14**, flat and full-bleed, painted over the material and under the
+content. Its alpha is **not comparable across materials and must never be read as a translucency
+figure** — it is a fraction of whatever the material left. Reading this number as "how see-through the
+panel is" is what let three retunes ship without changing the picture. The quantities to reason about
+are the **ground** and the **passthrough**. The ladder on the shipped ground, measured through the
+real material over the two extreme desktops, in both system appearances:
 
 | step | black desktop | white desktop |
 |---|---|---|
-| `primary` | 10.68:1 | 14.94:1 |
-| `secondary` | 6.44:1 | 7.79:1 |
-| `tertiary` | 4.62:1 | 5.24:1 |
+| `primary` | 6.34:1 | 13.78:1 |
+| **`secondary`** (the bottom rung on glass) | **4.58:1** | 7.46:1 |
+| ~~`tertiary`~~ — *not available on glass* | 3.61:1 ✗ | 5.09:1 |
 
-**Only the total whiteness reaches the eye.** The material's tint and the scrim are both pure white,
-so over a black desktop the desktop's surviving share is exactly `1 − ground` — it makes no difference
-which layer contributed the whiteness. That is also why the material's own alpha is never touched:
-dimming an `NSVisualEffectView` does not thin the ground, it lets a *sharp* unblurred desktop past the
-blur, which is the one thing legibility on glass cannot survive. So there are two numbers and no more:
-this scrim, and `tertiary`.
+**The floor is the bottom rung, and the ground sits on it rather than above it.** Three points of
+ground thinner and `secondary` is under AA. `InkGlassTests` holds this from three sides — it fails if
+the ground goes under the floor, if the rung ever clears AA by more than 0.30, *and* if `tertiary`
+ever clears AA there (which would mean the ground had drifted back up to a three-rung panel).
 
-| scrim | ground over black | passthrough | `tertiary` there |
-|---|---|---|---|
-| 0.36 (was) | 222.4/255 | 12.8% | 4.55:1 at alpha 0.66 |
-| **0.10** | **209.1/255** | **18.0%** | **4.62:1 at alpha 0.68** |
-| 0.00 | 204.0/255 | 20.0% | 4.54:1 at alpha 0.68 |
+### What the glass is, and what it still cannot be
 
-**The scrim is no longer the floor — `tertiary` is.** At 0.66 that rung needed a ground of 219/255
-just to clear AA, and holding the ground that bright is what capped every panel at 14.1%. Two points
-of alpha on that one token clear AA on *no* scrim at all, so the panel now spends 18.0 of the 20.0
-points the material can pass, rather than 12.8. `1 − 0.800 = 20%` is the ceiling and there is nothing
-brighter to reach for; the last two points are held back as the model's margin, because a surface with
-nothing of its own left is a hole rather than a panel — and because it is the scrim, not the material,
-that goes opaque under Reduce Transparency.
+**A light panel over a dark desktop cannot show all of it, and no amount of tuning changes that.**
+Dark type needs a light ground; the ground is pinned at the bottom rung's floor; so the whole range
+the panel occupies across every desktop that can exist is **154.1…242.8 of 255** — an 89-level span,
+against the 43 levels a three-rung panel had.
 
-**The number worth knowing before re-tuning this**: thinning the scrim further is nearly free and
-nearly pointless. *Thickening* it is the direction to be suspicious of — it is how the surface walks
-back towards paper. The value that cannot move without re-deriving both is `tertiary`, and it is
-already at the darkest the ladder's L\* separation allows.
+The remaining moves are exhausted, and each was checked rather than assumed:
+
+- **The material.** `.hudWindow` and `.fullScreenUI` are the thinnest macOS ships in `.aqua`; at scrim
+  zero they bottom out at 136.2/255, and the shipped ground is 18 levels above that. There is at most
+  6% more passthrough available in the whole material catalogue and it is below the contrast floor.
+- **A third rung.** Gone, and it is what bought the current panel. Going further means spending
+  `secondary` too, which leaves one type colour and no ladder at all.
+- **Dark glass** — what "glassmorphic" usually means over a dark desktop — is **worse** under the same
+  rule, because the binding case inverts: light type on a dark ground is worst over a *white* desktop,
+  and a two-rung dark ladder caps out well under the 34.8% a light one reaches.
+
+**Everything left that reads as glass costs no contrast**, so it is all spent: the broad ambient
+shadow, and a **specular top edge** — white @ 0.50, one point tall, top edge only, clipped by the
+panel's corner. A bright line where a light source above would catch the panel is the difference
+between a rectangle of pale grey and an object with a face on it, and because it *brightens* the
+ground it can only help dark type. Both are worth more now than they were, because a ground at 154
+has real desktop moving under it for them to sit on. Both are hidden under Reduce Transparency along
+with the material: there is no glass there for light to catch.
 
 A scrim only *under the copy* would be the speech bubble's grey slab drawn a second time, so it is
 full-bleed. `InkGlassTests` asserts the ladder on a two-layer model of this ground — checked against
-the real composite to under 1/255 — and `InkGlass.measuredMaterialOpacity` / `measuredMaterialTint`
+the real composite to about 3/255 — and `InkGlass.measuredMaterialOpacity` / `measuredMaterialTint`
 record the samples the model needs, because a material's opacity is not published and cannot be
-derived.
+derived. **Re-take those samples rather than adjusting them**: the pair that stood here before were
+`.headerView` at 0.800/pure-white from macOS 15.5, and re-measured it is 0.835 — which is why the
+documented passthrough (18.0%) never matched the panel anyone was looking at (14.5%).
+`GlassRenderHarness` (`CONTEXT_GLASS_RENDER=1`) renders the card over a dark synthetic desktop and
+samples its own output, which is the check that could not have passed while the panel was a slab.
 
 **The corner is 22 pt**, continuous, and it is one value for every panel: a 56 pt bar and a 760 pt
 timeline rounded differently read as two products. **The edge is `labelColor` @ 0.06** — much fainter
@@ -355,9 +447,11 @@ sentences into three grey slabs. Hover goes to `rowFillHover`.
 
 Leading: an 18 × 18 checkbox, corner radius 6, 1 pt `hairline`, filling **`primary` with a `surface`
 checkmark** when granted (180 ms). Then an 11 pt gap, the first-person sentence in `primary` at the
-row-copy role, then the status word in `tertiary` at the status-label role: `Granted` / `Open` /
-`Checking` / `Action required`. The checkbox and the two gaps take ~116 pt out of the row before the
-sentence starts, which is why the list column is wider than the reading one.
+row-copy role, then the status word in **`secondary`** at the status-label role: `Granted` / `Open` /
+`Checking` / `Action required`. `secondary` and not the glance rung because this card is on glass —
+see *The ladder is three rungs on an opaque surface and two on glass*; the status still reads as
+subordinate to the sentence beside it, which is `primary`. The checkbox and the two gaps take ~116 pt
+out of the row before the sentence starts, which is why the list column is wider than the reading one.
 
 **Menu bar (`native: true`) — a menu item.** See the next section. No fill at rest, no border, no
 tracking, no drawn checkbox.
@@ -369,6 +463,10 @@ The whole row is tappable on both surfaces and requests the capability.
 **This surface is a menu, so it is drawn like one.** It sits beside every other menu bar extra on the
 machine; a filled row capsule and letter-spaced type are the single clearest tell that a panel was
 drawn by a website rather than by macOS. None of the `InkType` roles appear here.
+
+**It is also the one surface in the app that is not `InkGlassView`** — an `NSPopover` brings its own
+frosted chrome from a window this process does not own — which is why it is the one surface that
+keeps all three rungs of the ladder. Every `tertiary` below is on that basis.
 
 - 320 pt wide, 12 pt horizontal / 8 pt vertical padding, 6 pt between groups.
 - `Divider()` between groups — never a hand-drawn `Rectangle`.

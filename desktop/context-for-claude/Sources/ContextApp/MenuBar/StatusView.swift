@@ -15,7 +15,28 @@ import SwiftUI
 /// the onboarding sheet's type roles appear here: `.inkStyle` carries the letter-spacing that gives
 /// that sheet its character, and letter-spaced type in a menu bar panel is the single clearest tell
 /// that the panel was drawn by a website rather than by macOS. Colour is `Ink`, which is system
-/// semantics throughout, so the panel follows the menu bar's own appearance.
+/// semantics throughout, resolved in the appearance `StatusItemController` pins the popover to.
+///
+/// **It has no ground of its own, and must not grow one.** Every other surface in this app wears
+/// `InkGlassView`; this one is the exception, and the exception is deliberate. An `NSPopover` brings
+/// its own frosted chrome — a translucent frame *and the arrow that ties it to the menu bar icon* —
+/// drawn by AppKit in a window this process does not own, and there is no public way to switch it
+/// off. Putting the app's glass inside it would not replace that chrome, it would stack a second
+/// material on top of the first: roughly a third of the desktop passthrough the panel is tuned for,
+/// arrived at by paying twice for the same blur. `StatusItemController` pins the popover to
+/// `InkGlass.appearance` instead, which is what makes the system's own material light and `Ink`'s
+/// ladder resolve dark on it. So this view stays entirely transparent, which is exactly what lets
+/// that chrome show through.
+///
+/// **It shares the glass's appearance, not the glass's ground, and that distinction is the reason
+/// this file keeps a rung the rest of the app has lost.** `InkGlassTests` measures the ladder against
+/// `Ink.surface` at `InkGlass.scrim` over `.hudWindow` over the desktop — a ground of 154/255 over a
+/// black desktop, where `Ink.tertiary` is 3.60:1 and therefore banned. None of that describes this
+/// surface: AppKit owns the popover's chrome, this app cannot measure or tune it, and the ladder here
+/// is held against **opaque `Ink.surface`** by `MenuBarPresentationTests.testTheLabelLadderMeetsWCAG…`,
+/// where `tertiary` is 5.24:1 and a legitimate glance step. This line used to claim the two grounds
+/// were the same; they are not, and reading it that way is how the popover's exemption in
+/// `InkGlassTests` looks arbitrary instead of load-bearing.
 struct StatusView: View {
     @ObservedObject private var engine = Engine.shared
     @ObservedObject private var auth = OmiAuth.shared

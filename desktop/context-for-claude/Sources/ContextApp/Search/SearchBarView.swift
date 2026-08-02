@@ -154,9 +154,13 @@ struct SearchBarView: View {
     /// refresh reads as a bar that has not searched yet.
     private var keyboardHint: some View {
         Button(action: submit) {
+            // Both halves on the same rung. The word used to sit a step below the keycap, which is
+            // the right emphasis on paper and unavailable here: this bar is glass and glass carries
+            // two rungs (see `Ink.tertiary`), so the choice is one rung or an invisible word. The
+            // keycap still leads by shape.
             HStack(spacing: 6) {
                 Text("↵").inkStyle(.statusLabel, color: Ink.secondary)
-                Text("Search").inkStyle(.statusLabel, color: Ink.tertiary)
+                Text("Search").inkStyle(.statusLabel, color: Ink.secondary)
             }
             .fixedSize()
         }
@@ -288,10 +292,13 @@ private struct SearchField: NSViewRepresentable {
         field.textColor = Ink.nsPrimary
         field.lineBreakMode = .byTruncatingTail
         // The placeholder carries the role too, or it renders in the system body font beside the
-        // query and the bar looks like two different components.
+        // query and the bar looks like two different components. `secondary` and not the fainter
+        // rung a placeholder usually gets: this bar is glass, and a placeholder is the *only* thing
+        // on an untouched bar — a rung that vanishes over a dark wallpaper leaves an empty capsule
+        // with no idea what to type into it. See `Ink.tertiary` for the two-rung rule.
         field.placeholderAttributedString = NSAttributedString(
             string: SearchMetrics.placeholder,
-            attributes: [.font: face, .foregroundColor: NSColor(Ink.tertiary)])
+            attributes: [.font: face, .foregroundColor: NSColor(Ink.secondary)])
         // Both Return paths, because AppKit picks between them depending on whether the field editor
         // is active: a live editor reports `insertNewline:` through the delegate, an inactive one fires
         // the cell's target/action instead. Wiring only one leaves Return dead half the time.

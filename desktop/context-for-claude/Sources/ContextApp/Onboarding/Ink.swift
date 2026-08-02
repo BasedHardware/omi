@@ -66,50 +66,67 @@ enum Ink {
     // `surface` the three steps land at L* 15.6 / 35.0 / 47.4 in Light and 88.0 / 74.2 / 64.3 in
     // Dark — roughly even rungs, and an order of magnitude more separation than the eye needs to
     // read them as three.
+    //
+    // **There are three rungs, but glass only gets two.** `primary` and `secondary` may go on any
+    // surface in the app; `tertiary` may only go on an *opaque* one, which in practice means the
+    // menu bar popover. This is not a style preference — it is arithmetic, and it is the single
+    // thing that decides how see-through every panel in this app is. See `tertiary`.
 
     /// Headlines, row copy, the primary button's fill, the granted checkbox — and any state with
     /// something to do about it.
     static let primary = Color(nsColor: .labelColor)
-    /// A sentence someone reads: prose, a status line, an upload note.
+    /// A sentence someone reads: prose, a status line, an upload note — **and, on glass, everything
+    /// that is not `primary`.**
     ///
     /// `labelColor` at 0.80 — 7.8:1 over `surface` in Light and 8.3:1 in Dark. AAA (7:1), which is
     /// the right target for the only step that carries whole sentences.
     ///
-    /// Most of this app's surfaces are glass now, so `surface` is no longer the whole ground: it is
+    /// Most of this app's surfaces are glass, so `surface` is no longer the whole ground: it is
     /// `InkGlass.scrim` of `surface` over a light-pinned blurred desktop. Because the glass pins its
-    /// appearance, that ground does not depend on the machine's — measured through the real material
-    /// over the two desktops that can exist, this step lands at **6.44:1 over a solid black desktop
-    /// and 7.79:1 over a solid white one**, in both system appearances. AA everywhere with room to
-    /// spare, and AAA on everything but the worst desktop there is.
+    /// appearance, that ground does not depend on the machine's. **This is now the bottom rung on
+    /// glass, so it is the rung that sets how see-through those panels are allowed to be**, and it is
+    /// therefore measured rather than assumed: through the real material over the two desktops that
+    /// can exist, it lands at **4.58:1 over a solid black desktop and 7.46:1 over a solid white
+    /// one**, in both system appearances. Eight hundredths above AA on the worst desktop there is —
+    /// this rung is spent, and `InkGlass.scrim` is what spent it.
     ///
-    /// It is deliberately *not* darkened alongside `tertiary` when the scrim thins. Only the bottom
-    /// rung is binding, and pulling this one down with it would spend the ladder's separation on a
-    /// step that already has 1.9 points of AA headroom on the worst ground there is.
+    /// It cannot be thinned. It is deliberately not *thickened* either: contrast this rung does not
+    /// need is contrast the panel paid for in opacity, which is exactly what an opaque-looking panel
+    /// is made of.
     static let secondary = Color(nsColor: .labelColor).opacity(0.80)
-    /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence.
+    /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence — **and
+    /// never on glass.**
     ///
-    /// `labelColor` at 0.68 — 5.2:1 over `surface` in Light, 6.3:1 in Dark. The alpha is set by the
-    /// worst ground rather than the best: on the glass, over a solid black desktop, it measures
-    /// **4.62:1**, and thinning it would put that under AA.
+    /// `labelColor` at 0.68 — 5.2:1 over `surface` in Light, 6.3:1 in Dark, which is a comfortable
+    /// glance step on an *opaque* sheet. Its one remaining surface is the menu bar popover, which is
+    /// AppKit's own chrome and not `InkGlassView`.
     ///
-    /// This is the floor of the ladder and there is no room below it. It is also, and much more
-    /// consequentially, **the constraint that decides how translucent every glass surface in the app
-    /// is allowed to be**: `InkGlass` is already using the brightest material macOS offers, so the
-    /// only way a panel can pass more of the desktop through is for this rung to get darker.
+    /// **The rule "never on glass" is the whole of why those panels are see-through, and it was
+    /// arrived at the hard way.** The ground under dark type has to stay light enough for the
+    /// *faintest* rung set on it, so whichever rung is at the bottom is what decides the ground, and
+    /// the ground is what "glassmorphic" means. With this rung on the panel the floor was a ground of
+    /// ≈203/255 and 17% passthrough — pale paper — and three separate retunes of the material and the
+    /// scrim moved it by fourteen levels out of 255, correctly reported each time as no change at
+    /// all. Dropping it moved the floor to 154/255 and **34.8% passthrough**, twice the desktop, at
+    /// the same 4.5:1.
     ///
-    /// **0.68 is what "make the glass more transparent" cost, and it is the value pinned from both
-    /// sides.** It was 0.66, which capped every panel in the app at 14.1% passthrough over a black
-    /// desktop — the scrim had to keep the ground at 219/255 for this rung to clear AA at all, and
-    /// the shipped scrim spent only 12.8% of that ceiling. Two points of alpha buy the whole
-    /// remainder: at 0.68 the ladder still clears AA on a scrim of *zero*, so the ground stopped
-    /// being the binding number and `InkGlass.scrim` came down to 0.10 (18.0% passthrough). The
-    /// ceiling is now the material itself, at 20%.
+    /// **And it really is drop-or-nothing: there is no alpha that rescues it.** To clear AA on
+    /// today's ground this rung would have to darken to ≈0.79, which *is* `secondary` to within a
+    /// hundredth — a third step that measures as the second is not a ladder, it is the same colour
+    /// twice with an extra token to keep true. Nor can it darken a little to buy the glass a little:
+    /// at 0.69 it is already 7.8 L\* from `secondary` on a Dark sheet, under the 8 L\* the rungs are
+    /// held apart by.
     ///
-    /// It cannot go further. At 0.69 this rung and `secondary` are 7.8 L\* apart on a Dark sheet,
-    /// under the 8 L\* separation the ladder is held to, and three steps that measure as two is a
-    /// worse defect than a slightly less see-through panel. Below 0.68 the glass fails AA. Both
-    /// edges are asserted — `InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` and
-    /// `MenuBarPresentationTests.testTheLabelLadderKeepsVisibleStepsBetweenItsRungs`.
+    /// So on a glass surface, promote to `secondary`. A run that was `tertiary` because it is a
+    /// sentence rather than a glance word was on the wrong rung anyway; one that was genuinely a
+    /// glance word loses a step of hierarchy, which is the price of the panel, paid deliberately.
+    ///
+    /// Held from three directions: `InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` asserts
+    /// this rung is *under* AA on the shipped ground (so the ground cannot drift back up to where it
+    /// would be legal), `InkGlassTests.testNoGlassSurfaceSetsTypeOnTheBottomRung` is a static
+    /// tripwire over the glass-hosted sources, and
+    /// `MenuBarPresentationTests.testTheLabelLadderKeepsVisibleStepsBetweenItsRungs` keeps it a
+    /// distinct step on the opaque surface it still serves.
     static let tertiary = Color(nsColor: .labelColor).opacity(0.68)
 
     // Edges.
@@ -575,7 +592,8 @@ enum InkType {
     }
 
     /// SF Pro 12 / regular. Every small line in the popover and the status word in a permission row.
-    /// Pair with `Ink.secondary`, or `Ink.tertiary` for a single glanceable word.
+    /// Pair with `Ink.secondary` — and on the popover, and only there, `Ink.tertiary` for a single
+    /// glanceable word. Small type on glass is exactly where the bottom rung disappears.
     ///
     /// No tracking, and now for a boundary rather than a margin: 12 pt is the floor the ladder
     /// tightens *above*. At this size and under, closing the counters costs more legibility than
@@ -768,12 +786,14 @@ struct InkButtonStyle: ButtonStyle {
 /// The same row appears on two surfaces that must not look alike, which is what `native` selects
 /// between:
 ///
-/// - **Onboarding** is the app's own sheet. The row is a card: a wash, a hairline, a drawn checkbox,
-///   the capability introduced as a first-person sentence.
+/// - **Onboarding** is the app's own sheet, and it is *glass*. The row is a card: a wash, a
+///   hairline, a drawn checkbox, the capability introduced as a first-person sentence, and the
+///   status word in `secondary` — glass carries a two-rung ladder (see `Ink.tertiary`).
 /// - **The menu bar popover** is a system surface sitting beside every other menu bar extra on the
 ///   machine, so the row is a *menu item*: 22 pt tall, one system-size label, the status trailing in
-///   secondary, no fill of its own, no tracking, no border. A filled capsule with letter-spaced type
-///   is the single clearest tell that a panel was drawn by a website rather than by macOS.
+///   `tertiary` (this surface is opaque chrome, so it keeps all three rungs), no fill of its own, no
+///   tracking, no border. A filled capsule with letter-spaced type is the single clearest tell that
+///   a panel was drawn by a website rather than by macOS.
 struct InkPermissionRow: View {
     private let title: String
     private let granted: Bool
@@ -833,6 +853,10 @@ struct InkPermissionRow: View {
 
             Spacer(minLength: 8)
 
+            // The one `Ink.tertiary` left in this file, and it is on the *opaque* surface: this
+            // branch only ever renders inside the menu bar popover, which is AppKit's own chrome
+            // rather than `InkGlassView`. The card branch below sets the same word in `secondary`,
+            // because glass carries a two-rung ladder — see `Ink.tertiary`.
             Text(status)
                 .font(.system(size: NSFont.systemFontSize))
                 .foregroundStyle(Ink.tertiary)
@@ -875,8 +899,11 @@ struct InkPermissionRow: View {
                 // instead of copy that quietly disappears.
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // `secondary` and not the glance-word rung: this row is on the onboarding glass, which
+            // carries two rungs. The status still reads as subordinate to the sentence beside it,
+            // which is `primary`.
             Text(status)
-                .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                .inkStyle(InkType.statusLabel, color: Ink.secondary)
                 .fixedSize()
         }
         .padding(.horizontal, 14)
