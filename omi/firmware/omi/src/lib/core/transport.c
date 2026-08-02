@@ -1289,6 +1289,10 @@ int transport_clear_bonds(void)
         for (int i = 0; i < 10 && current_connection != NULL; i++) {
             k_sleep(K_MSEC(50));
         }
+        if (current_connection != NULL) {
+            bt_conn_unref(current_connection);
+            current_connection = NULL;
+        }
     }
 
     err = bt_unpair(BT_ID_DEFAULT, NULL);
@@ -1308,7 +1312,7 @@ int transport_clear_bonds(void)
     }
 
     LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
-    return 0;
+    return adv_err;
 }
 
 int transport_off()
