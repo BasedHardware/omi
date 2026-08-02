@@ -970,60 +970,21 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     return edge_data
 
 
-def _knowledge_graph_endpoint_ids_exist(
+def _knowledge_graph_existing_endpoint_ids(
     uid: str,
-    source_id: str,
-    target_id: str,
+    endpoint_ids: Iterable[str],
     *,
     db_client: Any = None,
-) -> bool:
+) -> set[str]:
     client = _firestore_client(db_client)
     nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
-    if source_id == target_id:
-        return bool(nodes_ref.document(source_id).get().exists)
-    snapshots = client.get_all([nodes_ref.document(source_id), nodes_ref.document(target_id)])
-    return all(bool(snapshot.exists) for snapshot in snapshots)
+    refs = [nodes_ref.document(node_id) for node_id in sorted(set(endpoint_ids))]
+    return {snapshot.id for snapshot in client.get_all(refs) if snapshot.exists}
 
 
 def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str, int]:
-    """Evict excess nodes/edges beyond the public GET caps.
-
-    Keep the same document-id prefix GET returns (order_by('__name__').limit(cap)),
-    then drop dangling edges whose endpoints are no longer present.
-    """
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    edges_ref = user_ref.collection(knowledge_edges_collection)
-    nodes_evicted = 0
-    edges_evicted = 0
-
-    node_docs = list(nodes_ref.stream())
-    if len(node_docs) > MAX_KNOWLEDGE_GRAPH_NODES:
-        sorted_nodes = sorted(node_docs, key=lambda doc: cast(str, doc.id))
-        for doc in sorted_nodes[MAX_KNOWLEDGE_GRAPH_NODES:]:
-            doc.reference.delete()
-            nodes_evicted += 1
-
-    surviving_node_ids = {cast(str, doc.id) for doc in nodes_ref.stream()}
-
-    edge_docs = list(edges_ref.stream())
-    for doc in edge_docs:
-        edge = _typed_doc(doc)
-        source_id = edge.get("source_id")
-        target_id = edge.get("target_id")
-        if source_id not in surviving_node_ids or target_id not in surviving_node_ids:
-            doc.reference.delete()
-            edges_evicted += 1
-
-    edge_docs = list(edges_ref.stream())
-    if len(edge_docs) > MAX_KNOWLEDGE_GRAPH_EDGES:
-        sorted_edges = sorted(edge_docs, key=lambda doc: cast(str, doc.id))
-        for doc in sorted_edges[MAX_KNOWLEDGE_GRAPH_EDGES:]:
-            doc.reference.delete()
-            edges_evicted += 1
-
-    return {"nodes_evicted": nodes_evicted, "edges_evicted": edges_evicted}
+    """Report response caps without deleting persisted graph data."""
+    return {"nodes_evicted": 0, "edges_evicted": 0}
 
 
 def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Any], *, db_client: Any = None) -> Dict[str, Any]:
@@ -1046,7 +1007,6 @@ def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Any], *, db_client: Any
 def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any = None) -> Dict[str, Any]:
     merged = 0
     skipped = 0
-    missing_endpoints = 0
     pending_edges: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -1056,12 +1016,14 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any
         if edge_data is None:
             skipped += 1
             continue
-        source_id = cast(str, edge_data["source_id"])
-        target_id = cast(str, edge_data["target_id"])
-        if not _knowledge_graph_endpoint_ids_exist(uid, source_id, target_id, db_client=db_client):
-            missing_endpoints += 1
-            continue
         pending_edges.append(edge_data)
+    endpoint_ids = {cast(str, edge[field]) for edge in pending_edges for field in ("source_id", "target_id")}
+    existing_endpoint_ids = _knowledge_graph_existing_endpoint_ids(uid, endpoint_ids, db_client=db_client)
+    missing_endpoints = sum(
+        1
+        for edge in pending_edges
+        if edge["source_id"] not in existing_endpoint_ids or edge["target_id"] not in existing_endpoint_ids
+    )
     if missing_endpoints:
         raise MissingKnowledgeGraphEndpointsError(
             f"{missing_endpoints} local_kg edge(s) reference missing endpoint nodes"
