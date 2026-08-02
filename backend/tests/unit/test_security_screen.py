@@ -360,6 +360,27 @@ async def test_the_total_screen_budget_bounds_all_retries():
     assert len(calls) == 1
 
 
+async def test_retry_backoff_recomputes_the_remaining_deadline(monkeypatch):
+    delays = []
+
+    async def classifier(system, prompt, cancel):
+        await asyncio.sleep(0.04)
+        return None
+
+    async def sleep_or_cancel(delay_seconds, cancel):
+        delays.append(delay_seconds)
+        return False
+
+    monkeypatch.setattr(SecurityScreener, '_sleep_or_cancel', staticmethod(sleep_or_cancel))
+    screener = SecurityScreener(classifier, retry_delays_seconds=(1.0,))
+    deadline = asyncio.get_running_loop().time() + 0.12
+    outcome = await screener.screen(_tool_result('hello'), deadline=deadline)
+
+    assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
+    assert len(delays) == 1
+    assert delays[0] < 0.09
+
+
 async def test_an_expired_absolute_deadline_stops_screening_before_the_classifier():
     screener, calls = _screener('{"decision":"auto"}')
     deadline = asyncio.get_running_loop().time() - 1
