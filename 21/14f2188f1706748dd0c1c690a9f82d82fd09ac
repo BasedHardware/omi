@@ -1,0 +1,103 @@
+desktop/context-for-claude/Tests/ContextAppTests/AirgapEgressTests.swift
+  s_1833483671ebc5::t_e8b148c103d810 428-432
+  s_1833483671ebc5::t_485765cd9d575c 1-427
+desktop/context-for-claude/Sources/ContextApp/Backend/ConversationUploader.swift
+  s_1833483671ebc5::t_fa9216c5678009 131-132
+  s_1833483671ebc5::t_5c34206d622643 119-130,133-135
+  s_1833483671ebc5::t_c3bff0950d68d0 55-57
+  s_1833483671ebc5::t_69be155a85d8eb 136
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerTests.swift
+  s_1833483671ebc5::t_8c82e3331aab5f 31-69
+desktop/context-for-claude/Sources/ContextApp/Backend/ScreenActivityUploader.swift
+  s_1833483671ebc5::t_e1be174fde2dd2 85-93,141,206,292-311,316-320,346
+  s_1833483671ebc5::t_916415050bec9c 105,111-119,123-128,130-131,142-151
+  s_1833483671ebc5::t_6f34d8241bed29 129
+  s_1833483671ebc5::t_982e017f3031b6 347-349
+  s_1833483671ebc5::t_c39a69cfe838c6 120-122
+  s_1833483671ebc5::t_2b1d6c7c9ec840 18-23
+  s_1833483671ebc5::t_44752a59fcf477 132,136,167,173,207,214-221,225-228,232-290,324,405-406,429,453,483,587,596
+  s_1833483671ebc5::t_d8973eebabfbcf 79,82-84
+  s_1833483671ebc5::t_53c40d79e66e9e 321-322
+  s_1833483671ebc5::t_23dd912f1be04a 94-97,133-135,137-140,152-153,159-162,165-166,168-169,172,199-205,291,323,325-345,353,358,367,373,377-379,403-404,407-408,420,439,451-452,507,517,569,585-586,588-589,592,595,613,722
+desktop/context-for-claude/Sources/ContextApp/Support/Telemetry.swift
+  s_1833483671ebc5::t_27cc83791e6be7 55-58
+  s_1833483671ebc5::t_5e11f441d4b4b9 11-18
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_1833483671ebc5::t_5210b61adf3dde 41
+  s_1833483671ebc5::t_69bac93caf2bf4 21-29,37-40
+  s_1833483671ebc5::t_a37ebb84effad6 53-62
+desktop/context-for-claude/Sources/ContextMCPKit/Airgap.swift
+  s_1833483671ebc5::t_251690644f0f75 1-99
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiAPI.swift
+  s_1833483671ebc5::t_a9b4495efbfa56 257-269
+  s_1833483671ebc5::t_293e431cf0ccff 188-193
+  s_1833483671ebc5::t_4ff364b17b5a5c 7-10,13-17,27-28
+desktop/context-for-claude/Sources/ContextApp/Backend/NetworkEgress.swift
+  s_1833483671ebc5::t_e5d09cf8cc8155 1-100
+  s_1833483671ebc5::t_aba44568fac9de 101-103
+  s_bae7028f52850b::t_48fa4022ac54b0 104-123
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_1833483671ebc5::t_3fadae4533c38d 783-786
+  s_1833483671ebc5::t_591c8f96b1bc3b 253-259,261
+  s_1833483671ebc5::t_3f1dec791f8821 201-218
+  s_1833483671ebc5::t_21b78614d2240f 1975-1977
+desktop/context-for-claude/Sources/ContextMCPKit/StatusTool.swift
+  s_1833483671ebc5::t_baa17c8040811b 117,126-132
+desktop/context-for-claude/Sources/ContextApp/Backend/MCPKeyProvisioner.swift
+  s_1833483671ebc5::t_0ed9a644f722a6 104-105,107-115
+  s_1833483671ebc5::t_0bfd215f4c7925 48
+  s_1833483671ebc5::t_dd6a4a4c3fd4e4 103,106,116-127
+  s_1833483671ebc5::t_c8010dfac27db7 190-195
+desktop/context-for-claude/Sources/ContextMCPKit/OmiBackend.swift
+  s_1833483671ebc5::t_92485e5dd79964 615-632
+  s_1833483671ebc5::t_a4124fd2d50d23 111-113
+  s_1833483671ebc5::t_5cb8618d87e504 130-134
+  s_1833483671ebc5::t_43d8c101442828 378,381,385-388,390
+  s_1833483671ebc5::t_1bc2470d42e515 379-380
+  s_1833483671ebc5::t_cdda41b80f8a7a 633-634
+desktop/context-for-claude/Sources/ContextApp/Account/OmiAuth.swift
+  s_1833483671ebc5::t_43d35319050187 15-21,31-32
+  s_1833483671ebc5::t_8455966e353f77 153-165,171-180
+  s_1833483671ebc5::t_c936acbd470b72 305-314
+desktop/context-for-claude/Sources/ContextApp/Backend/ListenSocket.swift
+  s_1833483671ebc5::t_6c2d81fd053504 615-637
+  s_1833483671ebc5::t_61b3cebf124752 177-179
+  s_1833483671ebc5::t_35a09772370483 562-565
+  s_1833483671ebc5::t_28ce177890dea5 567,780-804
+  s_1833483671ebc5::t_2e67cd186d76ba 88-91
+  s_1833483671ebc5::t_18a5ae535c73eb 220
+  s_1833483671ebc5::t_aea1b3bf3edb76 683,685-686
+  s_1833483671ebc5::t_660e9b8db92de4 262-270,566
+  s_1833483671ebc5::t_e9c096eef9a7bd 242-245
+  s_1833483671ebc5::t_a51db12e7ed623 638-639,805-806
+desktop/context-for-claude/Tests/ContextMCPKitTests/AirgapTests.swift
+  s_1833483671ebc5::t_25540ac9741427 1-167
+  s_1833483671ebc5::t_222751f3ae1fc1 168-170
+  s_1833483671ebc5::t_243062162a4515 171-174
+desktop/context-for-claude/Sources/ContextApp/Transcribe/Transcriber.swift
+  s_bae7028f52850b::t_1d1bdebc6c5e0e 103-108,121-122,131,137-177,667-757,774-782
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "2114f2188f1706748dd0c1c690a9f82d82fd09ac",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_bae7028f52850b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a2ddb8a3140f095d0",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
