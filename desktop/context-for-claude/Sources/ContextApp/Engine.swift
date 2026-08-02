@@ -261,6 +261,10 @@ final class Engine: ObservableObject {
                 .sink { _ in Task { await MCPKeyProvisioner.shared.ensureKey() } }
                 .store(in: &self.keyProvisioning)
 
+            // Started unconditionally, and that is now safe: each of these owns its own Airgap Mode
+            // guard and observes the switch live (`NetworkEgress`). Gating them here instead would
+            // read the flag exactly once per launch and leave `syncNow()` and the reconnect paths
+            // ungated — which is how the switch came to suppress favicons and nothing else.
             ScreenActivityUploader.shared.start()
             Task { await ConversationUploader.shared.drain() }
         }
@@ -547,6 +551,19 @@ final class Engine: ObservableObject {
         let store = self.store
         watcher.onFrame = { frame in store.record(frame) }
         watcher.onAXNodes = { records in store.record(axNodes: records) }
+        // "Pause on Inactivity" suppressing capture is a state the user has to be able to see. It
+        // reaches the menu bar and `capture-state.json` the same way a dead microphone does, because
+        // it has the same consequence — nothing is being recorded — and the reader of a heartbeat
+        // has no other way to tell a gap in the day from a gap in the app.
+        watcher.onPaused = { [weak self] reason in
+            guard let self else { return }
+            if let reason {
+                self.note(.screen, reason, isFailure: false)
+            } else {
+                self.clear(.screen)
+            }
+            self.publishState()
+        }
         watcher.start(interval: 3.0)
         screenWatcher = watcher
         running.insert(.screen)
@@ -555,10 +572,19 @@ final class Engine: ObservableObject {
     }
 
     private func stopScreen() {
-        screenWatcher?.onFrame = nil
+        // `stop()` is what clears the hand-overs, and it clears *all* of them. Doing it here left
+        // `onAXNodes` set: cancelling the loop does not resume a tick already suspended in OCR or in
+        // an accessibility walk, so that tick finished and wrote a window's full accessibility text
+        // into the database after the user had switched screen capture off — into rows that no
+        // `frames` row references and that pruning therefore never reaches.
         screenWatcher?.stop()
         screenWatcher = nil
         running.remove(.screen)
+        // Whatever the watcher was last standing down for is no longer why capture is off. Removed
+        // rather than `clear(.screen)`, which announces "Screen is capturing" — the opposite of what
+        // just happened.
+        reasons[.screen] = nil
+        publishState()
     }
 
     private func observeScreenCaptureSetting() {
@@ -602,10 +628,17 @@ final class Engine: ObservableObject {
 
     // MARK: - Published state
 
-    private func note(_ component: CaptureComponent, _ reason: String) {
+    /// `isFailure: false` for a component that is standing down on purpose — a deliberate pause is
+    /// still a reason capture is not whole, and still belongs in the published state, but logging it
+    /// at error level would teach whoever reads these logs to ignore the level.
+    private func note(_ component: CaptureComponent, _ reason: String, isFailure: Bool = true) {
         guard reasons[component] != reason else { return }  // a steady failure logs once, not forever
         reasons[component] = reason
-        ContextLog.error(reason, "engine")
+        if isFailure {
+            ContextLog.error(reason, "engine")
+        } else {
+            ContextLog.info(reason, "engine")
+        }
     }
 
     private func clear(_ component: CaptureComponent) {

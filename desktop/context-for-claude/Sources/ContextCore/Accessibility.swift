@@ -1,3 +1,4 @@
+import CoreGraphics
 import CryptoKit
 import Foundation
 
@@ -139,6 +140,82 @@ public enum AccessibilityTree {
         "AXStaticText", "AXTextField", "AXTextArea", "AXValueIndicator", "AXLink",
     ]
 
+    // MARK: - The address of what is on screen
+
+    /// The host of the page the window is showing, or nil when nothing in it claims one.
+    ///
+    /// This exists because the exclusion gate had no honest evidence to work with. "Exclude this
+    /// website" was decided from the **window title**, and a browser's title is the page's title:
+    /// measured against this machine's database, **0 of 955 browser frames** yielded a host from the
+    /// title (Arc titles them `LinkedIn`, `Anthropic`, `Context for Claude`) while 133 yielded one
+    /// from the accessibility text the gate never saw. So a user who excluded their bank was
+    /// protected by nothing at all, and the Settings pane — which builds its "Recently Recorded"
+    /// list from that same accessibility text — offered them exactly the domains it would then fail
+    /// to hide.
+    ///
+    /// Breadth-first, and that ordering is the policy: the element nearest the window is the window
+    /// itself (Safari and every document-based app answer `AXDocument` there), then its web area
+    /// (`AXWebArea`, which WebKit and Chromium both answer `AXURL` on — 236 of them are in this
+    /// machine's stored trees, so the walk does reach them). An iframe or an embedded preview is
+    /// deeper than the page containing it, so the shallowest address is the page the user is on.
+    ///
+    /// **Ask this of the window whose pixels were captured, and of no other window.** The address
+    /// and the picture have to be the same window: an address read from a *different* window of the
+    /// same application is not weaker evidence about this frame, it is evidence about something
+    /// else, and the gate treats an address it is given as authoritative. ``AXWindowMatch`` is what
+    /// establishes that they are the same window; no proof there means no address here.
+    ///
+    /// Bounded on every axis the walker is, and for the same reason: this runs against another
+    /// process on every capture tick, and an application that is beachballing must cost a missing
+    /// URL rather than a stalled pipeline. The per-message half of that bound is the caller's — see
+    /// `AXElement.messagingTimeout`, without which the clock below cannot interrupt a read that
+    /// never returns.
+    public static func pageHost(
+        of element: any AXElementSource,
+        limits: AXCaptureLimits = .urlProbe,
+        clock: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSinceReferenceDate }
+    ) -> String? {
+        let deadline = clock() + limits.budget
+        var remaining = limits.maxNodes
+        // An index rather than `removeFirst`, which is O(n) on an Array and would make the probe
+        // quadratic in the number of elements a window claims to have.
+        var frontier: [(element: any AXElementSource, depth: Int)] = [(element, 1)]
+        var cursor = 0
+
+        while cursor < frontier.count {
+            guard remaining > 0, clock() < deadline else { return nil }
+            let (current, depth) = frontier[cursor]
+            cursor += 1
+            remaining -= 1
+
+            if let raw = current.axURL, let host = webHost(raw) { return host }
+            guard depth < limits.maxDepth else { continue }
+            for child in current.axChildren { frontier.append((child, depth + 1)) }
+        }
+        return nil
+    }
+
+    /// The **host** of a *website* URL, and nil for everything else an element can answer.
+    ///
+    /// Two narrowings, both load-bearing:
+    ///
+    /// - **Websites only.** `subject.url` is the authoritative tier of the website gate, so
+    ///   answering `file:///Users/…`, `chrome://settings` or `about:blank` here would not widen the
+    ///   gate, it would push a value the gate cannot match into the one field that outranks the
+    ///   evidence beneath it.
+    /// - **The host only.** The sole consumer normalises to a host as its first act, so the path,
+    ///   the query and the fragment are carried no further — and what they carry is a password-reset
+    ///   token, a document identifier, a search term. `CaptureSubject` is `Codable` and travels with
+    ///   the capture to the write; returning the host is what makes carrying the rest structurally
+    ///   impossible rather than merely currently unused.
+    private static func webHost(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scheme = trimmed.lowercased()
+        guard scheme.hasPrefix("http://") || scheme.hasPrefix("https://") else { return nil }
+        // A URL whose authority is not host-shaped tells the gate nothing it can match on.
+        return DomainMatcher.normalize(trimmed)
+    }
+
     // MARK: - Content addressing
 
     /// Every distinct subtree in `node`, children before parents, root last.
@@ -216,6 +293,139 @@ public enum AccessibilityTree {
     }
 }
 
+// MARK: - Which window the pixels came from
+
+/// The window a capture's pixels came from, in the only terms both sides of the question can answer.
+///
+/// Assembled from the window-server snapshot the capture is filtered on, so that the accessibility
+/// side can be asked to produce *that* window rather than whichever one happens to be focused.
+public struct CapturedWindow: Sendable, Equatable {
+    /// Where the window server said the window was, in points.
+    public var frame: CGRect
+    /// The window's own title, exactly as the window server reported it.
+    ///
+    /// Unscrubbed on purpose, and never stored: this is an identity being compared against another
+    /// unscrubbed copy of the same string, not text on its way to a database. Redaction happens to
+    /// the copy that is stored, in ``ScreenWatcher``.
+    public var title: String?
+
+    /// Whether the window server listed exactly one capturable window for this application.
+    ///
+    /// The escape hatch, and it is not a shortcut — it is the only case in which identity needs no
+    /// evidence, because there is nothing the captured window could be confused *with*. It exists
+    /// because the accessibility API cannot always answer the question at all: measured live on
+    /// macOS 26, `AXFocusedWindow` on Warp and on Arc both answered the **application element**
+    /// rather than a window, with no frame and no window title, and the same is documented in this
+    /// app's onboarding code for System Settings' `AXWindows`. Requiring proof unconditionally would
+    /// therefore have turned "the exclusion reads the wrong window" into "the exclusion reads
+    /// nothing", which is a worse product on more machines.
+    ///
+    /// So the rule is: with one window, read what the application offers, exactly as before. With
+    /// two or more — the only shape in which one window's address can be attached to another's
+    /// picture — the evidence has to say which.
+    public var wasOnlyWindow: Bool
+
+    public init(frame: CGRect, title: String?, wasOnlyWindow: Bool = false) {
+        self.frame = frame
+        self.title = title
+        self.wasOnlyWindow = wasOnlyWindow
+    }
+}
+
+/// Picking the accessibility window that *is* the window whose pixels were captured.
+///
+/// The two halves of a capture used to come from two different places. The **pixels** are the
+/// largest on-screen window of the frontmost application, taken from a window-server snapshot that
+/// may be seconds old. The **address** and the **text** were read from whatever window that
+/// application says is *focused*, now. Those are the same window on almost every tick and not on all
+/// of them — a large browser window on a bank sitting behind a small focused window on something
+/// else is enough — and when they differed the consequences were not symmetrical:
+///
+/// - the stored row mixed two windows: one window's picture and OCR beside another's text;
+/// - and the *wrong* address silenced the tier of the website gate that measurably works. An address
+///   outranks the page text beneath it, so a URL belonging to an unexcluded window was enough to
+///   admit a frame of an excluded one — worse than reading no address at all.
+///
+/// So an address is read only from a window that can be shown to be the captured one. Failing to
+/// prove it costs a tier of evidence for one tick; reading the wrong window costs the exclusion.
+///
+/// **Identity is proven by uniqueness, never by resemblance.** A candidate is accepted only when it
+/// is the *only* window of that application answering to one of the two things the snapshot knows,
+/// and neither signal is a fallback for the other:
+///
+/// 1. **The title**, first, because it is the application's own statement of what a window is, and
+///    two windows sharing one is rarer than two windows sharing a rectangle — tiled or maximised
+///    windows have byte-identical frames.
+/// 2. **The frame**, when no single window claims the title. A title changes as the user types in an
+///    address bar or switches a tab, and the snapshot's copy of it cannot follow that; geometry
+///    outlives it.
+///
+/// Ambiguity is refused rather than resolved: two candidates matching, or none, yields nil. An
+/// application that does not list a window, a window moved inside the snapshot's lifetime, a
+/// coordinate space that does not line up — every one of them degrades to "no address, no text",
+/// which is the only direction that cannot store the wrong thing.
+public enum AXWindowMatch {
+
+    /// Points of slack allowed on each edge. The window server and the accessibility API both report
+    /// window geometry in points from the same top-left origin, so an exact match is the ordinary
+    /// case and this absorbs rounding rather than disagreement.
+    public static let frameTolerance: CGFloat = 2
+
+    public static func window<Element: AXElementSource>(
+        matching captured: CapturedWindow,
+        in windows: [Element],
+        tolerance: CGFloat = frameTolerance
+    ) -> Element? {
+        if let title = captured.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty
+        {
+            let named = windows.filter { candidate in
+                guard
+                    let candidateTitle = candidate.axTitle?
+                        .trimmingCharacters(in: .whitespacesAndNewlines), !candidateTitle.isEmpty
+                else { return false }
+                return candidateTitle == title
+            }
+            if named.count == 1 { return named[0] }
+        }
+
+        let placed = windows.filter { candidate in
+            guard let frame = candidate.axFrame else { return false }
+            return isSameFrame(frame, captured.frame, tolerance: tolerance)
+        }
+        return placed.count == 1 ? placed[0] : nil
+    }
+
+    /// Whether `element` may be read as the captured window.
+    ///
+    /// Two ways to answer yes, and they are different kinds of answer. Either the element says which
+    /// window it is and it is the captured one — the ordinary proof — or the window server listed no
+    /// other window this application could have been showing, in which case there is nothing to
+    /// prove: one window is its own identity, whatever the accessibility API is willing to say about
+    /// it. See ``CapturedWindow/wasOnlyWindow`` for why the second clause is load-bearing rather
+    /// than a loophole.
+    public static func isCapturedWindow(
+        _ element: some AXElementSource,
+        matching captured: CapturedWindow,
+        tolerance: CGFloat = frameTolerance
+    ) -> Bool {
+        if window(matching: captured, in: [element], tolerance: tolerance) != nil { return true }
+        return captured.wasOnlyWindow
+    }
+
+    /// The same rectangle, within `tolerance` on every edge.
+    ///
+    /// A window with no geometry is a window with no identity, so an empty rectangle never matches —
+    /// and a NaN cannot match anything, because every comparison against one is false. Both are the
+    /// answer wanted here.
+    static func isSameFrame(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat) -> Bool {
+        guard !lhs.isEmpty, !rhs.isEmpty else { return false }
+        return abs(lhs.origin.x - rhs.origin.x) <= tolerance
+            && abs(lhs.origin.y - rhs.origin.y) <= tolerance
+            && abs(lhs.size.width - rhs.size.width) <= tolerance
+            && abs(lhs.size.height - rhs.size.height) <= tolerance
+    }
+}
+
 // MARK: - The seam
 
 /// Everything the walker asks of an accessibility element, and nothing else.
@@ -230,7 +440,28 @@ public protocol AXElementSource {
     var axTitle: String? { get }
     var axValue: String? { get }
     var axDescription: String? { get }
+    /// The address of the document this element is showing, when it is showing one.
+    ///
+    /// Separate from ``axValue`` because it is not text a person read: it is the application saying
+    /// what the window's subject *is*. That distinction is the whole reason the exclusion gate can
+    /// trust it — a host in a page's body is a mention, a host in this attribute is the page.
+    var axURL: String? { get }
+    /// Where this element is on screen, in points, when it is the kind of element that has a place.
+    ///
+    /// Read for exactly one purpose: telling one window of an application from another, so that the
+    /// window being *read* is provably the window that was *captured*. See ``AXWindowMatch``.
+    var axFrame: CGRect? { get }
     var axChildren: [any AXElementSource] { get }
+}
+
+extension AXElementSource {
+    /// Almost nothing on screen has an address, so not answering is the ordinary case rather than a
+    /// gap to be filled at every conformance.
+    public var axURL: String? { nil }
+
+    /// Only windows are ever asked where they are, so every other element answers the same absence
+    /// rather than each conformance restating it.
+    public var axFrame: CGRect? { nil }
 }
 
 public enum AXElementSubrole {
@@ -264,6 +495,19 @@ public struct AXCaptureLimits: Sendable {
     }
 
     public static let `default` = AXCaptureLimits()
+
+    /// Ceilings for ``AccessibilityTree/pageHost(of:limits:clock:)``.
+    ///
+    /// Tighter than ``default`` because this walk runs *before* the gate decides anything, so its
+    /// cost is paid on every browser tick including the ones that are about to be refused — and
+    /// because it stops at the first address it finds, which is normally within a handful of
+    /// elements of the window. The text ceilings are zero: nothing here reads text.
+    public static let urlProbe = AXCaptureLimits(
+        maxDepth: 24,
+        maxNodes: 400,
+        maxTextCharacters: 0,
+        maxTotalTextCharacters: 0,
+        budget: 0.1)
 }
 
 /// One captured element: what it is, what it said, and what was inside it.

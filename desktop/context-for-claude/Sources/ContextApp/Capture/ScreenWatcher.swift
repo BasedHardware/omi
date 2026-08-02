@@ -42,6 +42,32 @@ final class ScreenWatcher {
     /// ticks contribute a handful of new rows to a table that already holds the rest of the window.
     var onAXNodes: (([AXNodeRecord]) -> Void)?
 
+    /// Why screen capture is standing down, or nil the moment it is not.
+    ///
+    /// Called only on a change, and it is the only route from this loop to anything a person can
+    /// see. "Pause on Inactivity" used to stand capture down with nothing but a log line, so the
+    /// menu bar went on saying the app was capturing and the heartbeat file went on reporting a
+    /// healthy pipeline while nothing at all was being recorded — a recorder that lies about
+    /// recording is worse than one that admits it stopped.
+    var onPaused: (@MainActor (String?) -> Void)?
+
+    /// How the stored picture reaches disk.
+    ///
+    /// A property rather than a call so that the *ordering* is testable: what matters about an
+    /// excluded window is not that its screenshot was deleted afterwards but that its bytes were
+    /// never produced, and nothing can observe that from the filesystem afterwards.
+    var writeImage: @MainActor (Data, Double) -> String? = { data, capturedAt in
+        ScreenPipeline.writeFrameImage(data, capturedAt: capturedAt)
+    }
+
+    /// The gate this watcher answers to. Injected so a test drives a real engine over a temporary
+    /// configuration rather than the process-wide one holding the user's own exclusions.
+    private let exclusions: ExclusionEngine
+
+    init(exclusions: ExclusionEngine = .shared) {
+        self.exclusions = exclusions
+    }
+
     // MARK: - Lifecycle
 
     private var loop: Task<Void, Never>?
@@ -69,9 +95,27 @@ final class ScreenWatcher {
     }
 
     func stop() {
-        guard let loop else { return }
-        loop.cancel()
-        self.loop = nil
+        // Deliberately not guarded on there being a loop to cancel. "Stopped" is a statement about
+        // what may still be handed over, not about a task handle, and the tick that matters here is
+        // one already suspended somewhere in the middle of itself.
+        loop?.cancel()
+        let wasRunning = loop != nil
+        loop = nil
+        // A last, truthful word before the hand-overs go: whatever this watcher was holding capture
+        // down for, it is not holding it down any more — the owner is about to say why capture
+        // stopped, and a stale "no activity for 5 minutes" underneath that would contradict it.
+        reportPause(nil)
+        // Cancelling a task does not resume an `await` that is already suspended, so a tick sitting
+        // in OCR or in an accessibility walk still runs to completion after this returns — that is
+        // seconds of work, and it used to end in a write. Clearing *every* hand-over here is what
+        // makes "stopped" mean stopped: the frame is dropped, its image is never written, and the
+        // accessibility rows it would have referenced are never stored. Those rows are why this is
+        // not the caller's business to remember — nothing points at them, so nothing prunes them,
+        // and one forgotten `= nil` left a window's full text in the database after the user had
+        // switched screen capture off.
+        onFrame = nil
+        onAXNodes = nil
+        onPaused = nil
         // Resuming should always produce one full observation: whatever is on screen after a pause
         // is new information regardless of what was there before.
         recentHashes.removeAll()
@@ -81,7 +125,7 @@ final class ScreenWatcher {
         lastSkipReason = nil
         cachedContent = nil
         cachedContentAt = nil
-        ContextLog.info("Screen watcher stopped", "screen")
+        if wasRunning { ContextLog.info("Screen watcher stopped", "screen") }
     }
 
     // MARK: - Permission
@@ -125,6 +169,8 @@ final class ScreenWatcher {
 
     private var lastSkipReason: String?
     private var lastErrorLoggedAt: Date?
+    /// The last sentence handed to ``onPaused``, so a steady state is announced once.
+    private var pausedReason: String?
 
     // MARK: - One tick
 
@@ -135,6 +181,22 @@ final class ScreenWatcher {
         }
         guard !ScreenPipeline.isScreenLocked() else {
             noteSkip("screen locked")
+            return
+        }
+        // Settings > Capture > "Pause on Inactivity", which until now was a switch wired to nothing.
+        // Read live rather than cached: the answer is a system counter, and caching it is how a
+        // paused recorder stays paused after the user comes back.
+        //
+        // Reported before it is acted on, and cleared on the first tick that is *not* idle, so the
+        // sentence in the menu bar and in the heartbeat file tracks the gate rather than lagging a
+        // tick behind it. A returning user sees live capture on their next tick, not on their next
+        // frame — those are not the same moment when the screen has not changed.
+        let idlePause = Self.idlePauseReason(
+            pausesOnInactivity: SettingsStore.shared.pausesOnInactivity,
+            isIdle: CaptureActivity.isIdle())
+        reportPause(idlePause)
+        if let idlePause {
+            noteSkip(idlePause)
             return
         }
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
@@ -157,15 +219,22 @@ final class ScreenWatcher {
             noteSkip("own output: \(appName)")
             return
         }
-        if let reason = ExclusionEngine.shared.exclusionReason(for: CaptureSubject(bundleID: bundleID, appName: appName)) {
+        if let reason = exclusions.exclusionReason(for: CaptureSubject(bundleID: bundleID, appName: appName)) {
             noteSkip(reason.logDescription)
             return
         }
 
-        guard let window = await activeWindow(pid: frontApp.processIdentifier) else {
+        guard let front = await activeWindow(pid: frontApp.processIdentifier) else {
             noteSkip("frontmost app has no capturable window: \(appName)")
             return
         }
+        let window = front.window
+
+        // Which window the pixels are about to come from, taken from the same snapshot the capture
+        // is filtered on. Everything read out of the accessibility API below has to belong to *this*
+        // window before it may describe this frame — see ``AXWindowMatch``.
+        let capturedWindow = CapturedWindow(
+            frame: window.frame, title: window.title, wasOnlyWindow: front.isSole)
 
         // Titles are stored and indexed exactly like OCR text, and a terminal title carrying
         // `--token=…` or a callback URL is the same leak, so the same scrub runs before this value
@@ -178,8 +247,16 @@ final class ScreenWatcher {
             noteSkip("own output: \(appName)")
             return
         }
-        let subject = CaptureSubject(bundleID: bundleID, appName: appName, windowTitle: windowTitle)
-        let admission = ExclusionEngine.shared.admit(subject)
+        let subject = CaptureSubject(
+            bundleID: bundleID,
+            appName: appName,
+            windowTitle: windowTitle,
+            url: await Self.pageHost(
+                pid: frontApp.processIdentifier,
+                bundleID: bundleID,
+                appName: appName,
+                window: capturedWindow))
+        let admission = exclusions.admit(subject)
         guard let ticket = admission.ticket else {
             noteSkip(admission.reason?.logDescription ?? "excluded")
             return
@@ -223,17 +300,22 @@ final class ScreenWatcher {
 
         // Whether this window is already the newest row on the timeline. Computed here because the
         // decision it feeds — is there enough new text to be worth a row — has to be made before
-        // the image is written, and `lastAppName`/`lastWindowTitle` belong to this actor.
+        // the image is even encoded, and `lastAppName`/`lastWindowTitle` belong to this actor.
         let repeatsLastStoredWindow = appName == lastAppName && windowTitle == lastWindowTitle
 
         let pid = frontApp.processIdentifier
         let captured = CapturedImage(image: image)
+        // Read here rather than inside the pipeline: `ScreenPipeline` is file-private and runs off
+        // the main actor, and `SettingsStore` is main-actor state. Carrying the selection in is what
+        // makes the four Capture Quality tiles a setting rather than a picture of one.
+        let quality = SettingsStore.shared.captureQuality
         let processed = await Task.detached(priority: .utility) {
             ScreenPipeline.process(
                 captured,
-                capturedAt: capturedAt,
                 repeatsLastStoredWindow: repeatsLastStoredWindow,
-                pid: pid
+                pid: pid,
+                window: capturedWindow,
+                quality: quality
             )
         }.value
 
@@ -256,13 +338,35 @@ final class ScreenWatcher {
                 bundleId: bundleID.nilIfEmpty,
                 windowTitle: windowTitle,
                 ocrText: processed.ocrText,
-                imagePath: processed.imagePath,
                 axText: processed.axText,
                 axRootHash: processed.axRootHash
             ),
             ticket: ticket,
-            axNodes: processed.axNodes
+            axNodes: processed.axNodes,
+            // Encoded, not written. `emit` decides whether these bytes are ever allowed on disk.
+            imageData: processed.imageData
         )
+    }
+
+    /// What this tick means for anything showing the user whether capture is live.
+    ///
+    /// Pure, and separate from the tick, because the sentence is a promise about a setting and a
+    /// threshold rather than a log line: the switch's own words are "suspends recording when no
+    /// keyboard or mouse activity is detected", and the app has to say so where the user can see it.
+    /// Nil means capture is live — including when the switch is off, which is the case a "was the
+    /// machine idle" question alone would get wrong.
+    nonisolated static func idlePauseReason(pausesOnInactivity: Bool, isIdle: Bool) -> String? {
+        guard pausesOnInactivity, isIdle else { return nil }
+        return CaptureActivity.pausedSentence
+    }
+
+    /// Announces a change in why capture is standing down. Repeats are swallowed: this is called on
+    /// every tick, and re-publishing an unchanged sentence would re-write the heartbeat file every
+    /// three seconds for as long as a machine sits idle.
+    func reportPause(_ reason: String?) {
+        guard pausedReason != reason else { return }
+        pausedReason = reason
+        onPaused?(reason)
     }
 
     /// Records a screen we have now seen, evicting the oldest once the ring is full.
@@ -273,19 +377,48 @@ final class ScreenWatcher {
         }
     }
 
-    private func emit(_ frame: Frame, ticket: CaptureTicket, axNodes: [AXNodeRecord]) {
-        if let reason = ExclusionEngine.shared.revalidate(ticket) {
-            ExclusionEngine.shared.discard(frame, reason: reason)
+    /// The one place an observation becomes durable, and the order is the whole of it.
+    ///
+    /// Judge, then check that anybody is still listening, then write the bytes, then hand the rows
+    /// over — with no suspension point anywhere between the judgement and the write. That is why the
+    /// image arrives here as encoded `Data` rather than as a path: encoding is expensive and belongs
+    /// off the main actor, but *writing* used to happen there too, four lines after a comment
+    /// promising that "a frame nobody stores must leave nothing behind". It did leave something
+    /// behind — an excluded website's screenshot went to disk and was unlinked a moment later, which
+    /// is not the same thing as never having been written, and no `frames` row ever referenced it,
+    /// so nothing would have cleaned it up if the unlink had failed.
+    ///
+    /// Internal rather than private because this ordering is the property under test.
+    func emit(
+        _ frame: Frame, ticket: CaptureTicket, axNodes: [AXNodeRecord], imageData: Data? = nil
+    ) {
+        var frame = frame
+        // Re-judged with the accessibility text, not merely revalidated against the subject the
+        // ticket was minted from. That text is read after admission — it is the one piece of
+        // evidence about *which site this was* that the gate has never seen, and writing it
+        // unexamined is how an `axText` carrying an excluded domain reached a permanent, searchable
+        // database. The engine only consults it when no address could be read; see `websiteReason`.
+        if let reason = exclusions.revalidate(ticket, pageText: frame.axText) {
+            // Carries no image path: nothing has been written yet, and this is the reason why. The
+            // call stays for its log line and as the barrier for any future caller that does arrive
+            // here with bytes already on disk.
+            exclusions.discard(frame, reason: reason)
             noteSkip(reason.logDescription)
             return
         }
+        // Nobody left to hand this to: capture was stopped while the tick was suspended in OCR or in
+        // an accessibility walk, which is seconds of work. Returning before the write is what stops
+        // a stopped recorder from leaving a screenshot — and an accessibility subtree — behind it.
+        guard let onFrame else { return }
+
+        if let imageData { frame.imagePath = writeImage(imageData, frame.capturedAt) }
         // Nodes before the frame, always. The frame carries a root hash into a table those rows have
         // to be in already, and both writes land on the same serialised queue in the order they are
         // handed over — so a frame is never stored pointing at a subtree nobody wrote.
         if !axNodes.isEmpty { onAXNodes?(axNodes) }
         lastAppName = frame.appName
         lastWindowTitle = frame.windowTitle
-        onFrame?(frame)
+        onFrame(frame)
     }
 
     // MARK: - Window resolution
@@ -315,7 +448,7 @@ final class ScreenWatcher {
         }
     }
 
-    private func activeWindow(pid: pid_t) async -> SCWindow? {
+    private func activeWindow(pid: pid_t) async -> FrontWindow? {
         if let content = await shareableContent(forceRefresh: false),
             let window = ScreenPipeline.frontWindow(in: content, pid: pid)
         {
@@ -325,6 +458,46 @@ final class ScreenWatcher {
         // losing the first few seconds of everything the user newly opens.
         guard let fresh = await shareableContent(forceRefresh: true) else { return nil }
         return ScreenPipeline.frontWindow(in: fresh, pid: pid)
+    }
+
+    /// The host the captured window is showing, read before the gate judges it.
+    ///
+    /// The whole point is the *before*. `ExclusionSet.websiteReason` has always been able to match a
+    /// URL; nothing had ever put one on a `CaptureSubject`, so "exclude this website" fell through
+    /// to matching the hostname against the window title — which browsers do not put there. Measured
+    /// on this machine's database: 0 of 955 browser frames yielded a host from the title. The
+    /// exclusion protected nothing.
+    ///
+    /// Four things bound the cost and the blast radius, because this runs on the way to every
+    /// capture:
+    ///
+    /// - **Browsers only.** A website exclusion is about websites, and `websiteReason` already
+    ///   refuses to read a domain out of a non-browser window. Asking every editor and terminal for
+    ///   an address would be inter-process traffic spent on a question with no answer.
+    /// - **Off the main actor**, like the tree walk that follows it, because every attribute read is
+    ///   a synchronous message to an application that may be beachballing.
+    /// - **Bounded** by ``AXCaptureLimits/urlProbe``, and by `AXElement.messagingTimeout` inside a
+    ///   single read, which is the half a wall clock checked between elements cannot provide.
+    /// - **The captured window only.** Read from whichever window the application says is *focused*,
+    ///   this answered about a different window than the one being stored — and a wrong address is
+    ///   worse than none, because an address outranks the page text beneath it and therefore
+    ///   silences the tier that measurably works. `AXElement.window(pid:matching:)` will not answer
+    ///   unless it can show that the window it read is the window that was captured.
+    ///
+    /// Nil when Accessibility is not granted, when the captured window cannot be identified, when
+    /// the window answers nothing, or when the walk runs out of budget. Nil is not "no exclusion
+    /// applies": it drops the gate back to the title, and then to the window's own text once
+    /// ``emit(_:ticket:axNodes:imageData:)`` has it.
+    private static func pageHost(
+        pid: pid_t, bundleID: String, appName: String, window: CapturedWindow
+    ) async -> String? {
+        guard PrivateBrowsing.isBrowser(bundleID: bundleID, appName: appName),
+            Permissions.check(.accessibility)
+        else { return nil }
+        return await Task.detached(priority: .utility) {
+            guard let matched = AXElement.window(pid: pid, matching: window) else { return nil }
+            return AccessibilityTree.pageHost(of: matched)
+        }.value
     }
 
     private func capture(_ window: SCWindow) async -> CGImage? {
@@ -379,7 +552,91 @@ final class ScreenWatcher {
     }
 }
 
+// MARK: - Is anybody there
+
+/// When a Mac has been left alone long enough that capturing it is recording an empty room.
+///
+/// Internal rather than file-private because the threshold is a product decision with a test on it,
+/// and the decision itself has to be assertable without a WindowServer.
+enum CaptureActivity {
+
+    /// How long the machine must go untouched before "Pause on Inactivity" stops capture.
+    ///
+    /// Five minutes, and the number is bounded from below by this pipeline's own behaviour rather
+    /// than picked round. **Reading is inactivity.** `ScreenPipeline.forceCaptureInterval` exists
+    /// precisely because a person sitting still in front of a document produced no rows at all, and
+    /// a short idle threshold would delete that same activity a second time — a minute of reading a
+    /// contract is not an absence, and an always-on recorder that forgets the deepest work of the
+    /// day is worse than one that keeps a few idle frames.
+    ///
+    /// Five is also what this app already means by "the user has gone": `SessionPolicy.gapSeconds`
+    /// ends a conversation after five minutes of silence. One answer to that question is better than
+    /// two that can drift.
+    ///
+    /// What it costs: a video watched without touching anything stops being captured after five
+    /// minutes. That is the honest reading of the switch's own promise — "suspends recording when no
+    /// keyboard or mouse activity is detected" — and it is off by a toggle.
+    static let idleThreshold: TimeInterval = 300
+
+    /// What the menu bar and the heartbeat file say while this gate is holding capture down.
+    ///
+    /// Derived from ``idleThreshold`` rather than written out, because the two drifting apart is the
+    /// specific way this sentence would become a lie: a threshold moved to two minutes and a
+    /// sentence still promising five is worse than no sentence, since the user would go looking for
+    /// three minutes of capture that were never taken.
+    ///
+    /// Named as a *pause* rather than an error. Nothing has failed — this is the switch doing
+    /// exactly what it says — and the app's job here is only to stop claiming it is recording.
+    static var pausedSentence: String {
+        let minutes = (idleThreshold / 60).rounded()
+        guard minutes >= 1, minutes * 60 == idleThreshold else {
+            let seconds = Int(idleThreshold.rounded())
+            return "Paused — no activity for \(seconds) second\(seconds == 1 ? "" : "s")"
+        }
+        let whole = Int(minutes)
+        return "Paused — no activity for \(whole) minute\(whole == 1 ? "" : "s")"
+    }
+
+    /// Seconds since the last keyboard, mouse or trackpad event anywhere in this login session.
+    ///
+    /// `.combinedSessionState` rather than `.hidSystemState` so that a wake from another input
+    /// source counts, and `kCGAnyInputEventType` — spelled by hand because the Swift overlay does
+    /// not import the C macro — so that a mouse *move* is activity, not just a click.
+    static func secondsSinceInput() -> TimeInterval {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInputEvent)
+    }
+
+    private static let anyInputEvent = CGEventType(rawValue: ~0)!
+
+    /// Whether capture should stand down.
+    ///
+    /// **This cannot wedge capture off**, and that property is the reason it is written as a pure
+    /// function of a number read fresh on every tick rather than as a state machine. There is no
+    /// paused flag, nothing is cleared, and no timer has to fire: any input at all resets the
+    /// counter the WindowServer keeps, so the next tick — at most one interval later — captures
+    /// normally. The first tick after a pause is also always a full pass, because more than
+    /// `forceCaptureInterval` will have elapsed and `isForceDue` therefore says yes even if the
+    /// screen never changed.
+    ///
+    /// A negative or non-finite reading means the clock moved under us rather than that the user has
+    /// been gone for a negative time, and is treated as activity: the direction that keeps recording.
+    static func isIdle(
+        secondsSinceInput seconds: TimeInterval = secondsSinceInput(),
+        threshold: TimeInterval = idleThreshold
+    ) -> Bool {
+        guard seconds.isFinite, seconds >= 0 else { return false }
+        return seconds >= threshold
+    }
+}
+
 // MARK: - Off-actor pipeline
+
+/// The window a tick will capture, and whether the application had any other.
+private struct FrontWindow {
+    let window: SCWindow
+    /// Exactly one capturable window belonged to this application in the snapshot.
+    let isSole: Bool
+}
 
 /// A `CGImage` handed to a background task. CoreGraphics images are immutable once created, so
 /// crossing an isolation boundary with one is safe; the compiler just cannot prove it.
@@ -389,7 +646,9 @@ private struct CapturedImage: @unchecked Sendable {
 
 private struct ProcessedFrame: Sendable {
     let ocrText: String?
-    let imagePath: String?
+    /// The stored picture, encoded and **not written**. Encoding is the expensive half and belongs
+    /// off the main actor; the write belongs after the last judgement, which is `ScreenWatcher.emit`.
+    let imageData: Data?
     let axText: String?
     let axRootHash: Data?
     let axNodes: [AXNodeRecord]
@@ -408,13 +667,13 @@ private enum ScreenPipeline {
 
     // MARK: Tunables
 
-    /// Longest side of the stored frame image. Storage only — it must never decide what Vision sees.
-    static let maxPixelSize = 1600
-
     /// Longest side of the image handed to Vision.
     ///
-    /// Split from ``maxPixelSize`` because one constant governing both meant OCR resolution could
-    /// not be tuned without changing storage, and the storage bound won.
+    /// Split from the *stored* image's longest side because one constant governing both meant OCR
+    /// resolution could not be tuned without changing storage, and the storage bound won. That split
+    /// is also what lets Settings > Capture Quality exist at all: the tiles move the stored picture
+    /// and this stays where the measurement put it, which is exactly what the pane promises when it
+    /// says text search is unaffected.
     ///
     /// Measured, not chosen: `.accurate` recognition of a screenful of UI text is non-monotonic in
     /// input size and peaks near 2400 px on the longest side. On this machine's built-in display,
@@ -426,32 +685,6 @@ private enum ScreenPipeline {
     /// from one fixture family on one machine: re-run the sweep in `docs/ocr-quality.md` §3 before
     /// moving it, and re-run it whenever the pinned Vision revision changes.
     static let ocrMaxPixelSize = 2400
-
-    /// Quality of the stored frame image, which is HEIC rather than JPEG.
-    ///
-    /// The number is low because the retention policy makes it the honest choice, and it was picked
-    /// by measurement, not taste. Encoding 60 real frames from this machine through the exact path
-    /// below — same downscale, same `CGImageDestination` call — gave, per frame:
-    ///
-    ///     jpeg q0.50   183.1 KB     heic q0.30    90.3 KB  (-51%)
-    ///     heic q0.50   131.1 KB     heic q0.25    80.3 KB  (-56%)
-    ///     heic q0.40   110.2 KB     heic q0.20    68.4 KB  (-63%)
-    ///
-    /// Note HEIC's quality scale is not JPEG's: 0.5 buys only 28%, and matching a "low" preset from
-    /// `sips` takes roughly 0.15. Anyone re-tuning this must re-measure rather than reason from the
-    /// JPEG number they replaced.
-    ///
-    /// Why it matters: capture burns ~200 MB a day, `defaultRetentionDays` is 30, and
-    /// `defaultFrameBytesCap` is 4 GB. As JPEG that is ~6 GB for the window the policy promises, so
-    /// the byte cap bit around three weeks in and silently deleted the rest — the user lost history
-    /// the settings told them they had. At this quality the same 30 days is ~2.2 GB, under the cap
-    /// with room for a heavier week, and the promise holds.
-    ///
-    /// Fidelity is the cheap side of that trade because nothing decodes these files: no MCP tool
-    /// returns pixels and the uploader sends only text. OCR reads a separate, larger image
-    /// (``ocrMaxPixelSize``) before this one is written and is untouched by this number. Keeping a
-    /// month at lower fidelity beats keeping three weeks at higher fidelity and calling it a month.
-    static let frameQuality: CGFloat = 0.20
 
     /// Longest accessibility text stored per frame.
     ///
@@ -606,7 +839,7 @@ private enum ScreenPipeline {
 
     // MARK: Window choice
 
-    static func frontWindow(in content: SCShareableContent, pid: pid_t) -> SCWindow? {
+    static func frontWindow(in content: SCShareableContent, pid: pid_t) -> FrontWindow? {
         let candidates = content.windows.filter { window in
             window.owningApplication?.processID == pid
                 && window.windowLayer == 0
@@ -618,7 +851,12 @@ private enum ScreenPipeline {
         }
         // `windows` comes back front-to-back, so among equally large windows the first one is the
         // one the user is looking at rather than the backmost (omi #6552).
-        return candidates.first { $0.frame.width * $0.frame.height == largest }
+        guard let window = candidates.first(where: { $0.frame.width * $0.frame.height == largest })
+        else { return nil }
+        // How many there were, not just which one won. It is the only cheap fact that says whether
+        // "which window is this?" is even a question for this application — see
+        // ``CapturedWindow/wasOnlyWindow``.
+        return FrontWindow(window: window, isSole: candidates.count == 1)
     }
 
     /// Pixel dimensions to capture, preserving aspect ratio.
@@ -709,37 +947,45 @@ private enum ScreenPipeline {
     // MARK: Off-main work
 
     /// Reads the frame and decides whether it earns a row. Nil means store nothing at all.
+    ///
+    /// Nothing here touches the filesystem. Everything expensive — OCR, the accessibility walk, the
+    /// downscale and the HEIC encode — happens off the main actor, and the *write* happens after the
+    /// caller's last judgement; see ``ScreenWatcher/emit(_:ticket:axNodes:imageData:)``.
     static func process(
         _ captured: CapturedImage,
-        capturedAt: Double,
         repeatsLastStoredWindow: Bool,
-        pid: pid_t
+        pid: pid_t,
+        window: CapturedWindow,
+        quality: CaptureQuality
     ) -> ProcessedFrame? {
         // Detached tasks run on the cooperative pool, which does not drain autorelease pools; the
         // CoreGraphics and Vision temporaries below would otherwise accumulate for the app's life.
         autoreleasepool { () -> ProcessedFrame? in
             let text = recognizeText(in: captured.image)
 
-            // Judged before the image is written rather than after: a frame nobody stores must leave
-            // nothing behind, and an orphaned image is never cleaned up — pruning walks the frames
-            // table, so a file with no row outlives the database itself.
+            // Judged before anything is encoded rather than after: a frame nobody stores must cost
+            // nothing at all, and the encode is the most expensive step in the tick.
             if repeatsLastStoredWindow, contentLength(of: text) < minimumContentCharacters {
                 return nil
             }
 
-            let path = writeFrameImage(captured.image, capturedAt: capturedAt)
-
             // The same window, read rather than looked at. Done here, off the main actor, because
             // every attribute is a synchronous message to another process: an application that is
             // beachballing would otherwise stall the tick that is trying to observe it. The walker's
-            // own wall-clock budget is what bounds that, and a window that answers nothing simply
-            // leaves these nil — OCR above has already produced a usable row either way.
+            // own wall-clock budget and `AXElement.messagingTimeout` are what bound that, and a
+            // window that answers nothing simply leaves these nil — OCR above has already produced a
+            // usable row either way.
+            //
+            // `window` rather than "whatever is focused": this text is stored on the same row as the
+            // picture above and is judged by the exclusion gate as evidence about it, so reading it
+            // from a different window of the same application both mixes two windows into one row
+            // and hands the gate evidence about the wrong one.
             var axText: String?
             var axRootHash: Data?
             var axNodes: [AXNodeRecord] = []
             if Permissions.check(.accessibility),
-               let window = AXElement.focusedWindow(pid: pid),
-               let tree = AccessibilityTree.capture(window) {
+               let element = AXElement.window(pid: pid, matching: window),
+               let tree = AccessibilityTree.capture(element) {
                 axText = AccessibilityTree
                     .flattenedText(of: tree, limit: maxAXTextCharacters)
                     .nilIfEmpty
@@ -747,9 +993,12 @@ private enum ScreenPipeline {
                 axNodes = AccessibilityTree.records(of: tree)
             }
 
+            let imageData = FrameImage.encoded(captured.image, quality: quality)
+            if imageData == nil { ContextLog.error("Failed to encode frame image", "screen") }
+
             return ProcessedFrame(
                 ocrText: text,
-                imagePath: path,
+                imageData: imageData,
                 axText: axText,
                 axRootHash: axRootHash,
                 axNodes: axNodes)
@@ -834,13 +1083,26 @@ private enum ScreenPipeline {
             .nilIfEmpty
     }
 
-    static func writeFrameImage(_ image: CGImage, capturedAt: Double) -> String? {
-        let sized = downscaled(image, longestSide: maxPixelSize) ?? image
-        guard let data = frameImageData(from: sized) else {
-            ContextLog.error("Failed to encode frame image", "screen")
-            return nil
-        }
-
+    /// Puts already-encoded bytes on disk, and does nothing else.
+    ///
+    /// The bytes arrive encoded because *when* they are produced and *when* they are written are two
+    /// different decisions: encoding is expensive and belongs off the main actor, while the write is
+    /// the last irreversible step of a tick and belongs after the last judgement, with nothing
+    /// suspended in between. See ``ScreenWatcher/emit(_:ticket:axNodes:imageData:)``.
+    ///
+    /// The size and fidelity the user asked for were applied by ``FrameImage/encoded(_:quality:)``.
+    /// That selection governs **storage only** — it must never decide what Vision sees, which is why
+    /// the downscale happens after OCR, from an image captured at ``ocrMaxPixelSize``.
+    ///
+    /// `CaptureQuality.standard` (1600 px) is the tile the retention measurement was taken at, and
+    /// the reason the default is where it is: capture burns ~200 MB a day, `defaultRetentionDays` is
+    /// 30, and `defaultFrameBytesCap` is 4 GB. As JPEG that is ~6 GB for the window the policy
+    /// promises, so the byte cap bit around three weeks in and silently deleted the rest — the user
+    /// lost history the settings told them they had. At the default tile the same 30 days is ~2.2
+    /// GB, under the cap with room for a heavier week, and the promise holds. A user who picks
+    /// **Best Quality** is choosing to spend that headroom, which is a choice they are allowed to
+    /// make and the Storage pane is what bounds.
+    static func writeFrameImage(_ data: Data, capturedAt: Double) -> String? {
         // The extension changes with the format, and nothing downstream cares: `frames.imagePath`
         // is opaque text, and both prune paths delete by path rather than by suffix. So the older
         // `.jpg` files already on disk keep working and expire on the same schedule — the format
@@ -866,13 +1128,34 @@ private enum ScreenPipeline {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter
     }()
+}
 
-    /// Brings the stored frame image back to `maxPixelSize`.
+// MARK: - The stored picture
+
+/// Turning a captured screen into the bytes that go on disk, at the fidelity the user chose.
+///
+/// Separate from ``ScreenPipeline`` because it is the one part of the write path that is pure: an
+/// image in, bytes out, no clock, no filesystem, no WindowServer. That is what makes "the four
+/// Capture Quality tiles actually move the stored picture" assertable rather than merely written
+/// down — the tiles quoted four pixel sizes for a pipeline that hard-coded one.
+enum FrameImage {
+
+    /// The bytes to write for `image` at `quality`: downscaled, then encoded.
+    ///
+    /// Downscale first. Encoding the full-size capture and shrinking afterwards would spend the
+    /// compression budget on pixels that are about to be thrown away, and would make the tile's
+    /// stated resolution a description of nothing.
+    static func encoded(_ image: CGImage, quality: CaptureQuality) -> Data? {
+        let sized = downscaled(image, longestSide: quality.longestSide) ?? image
+        return data(from: sized, quality: quality)
+    }
+
+    /// Brings the stored frame image down to the selected tile's longest side.
     ///
     /// This used to be a no-op, because the capture itself was clamped to 1600 — which is precisely
     /// why the OCR input size could not be raised without inflating storage. Now the capture is
-    /// sized for Vision (up to `ocrMaxPixelSize`) and this is the only thing holding the stored
-    /// image where it has always been.
+    /// sized for Vision (up to `ocrMaxPixelSize`) and this is the only thing deciding how large the
+    /// stored image is.
     static func downscaled(_ image: CGImage, longestSide: Int) -> CGImage? {
         let longest = max(image.width, image.height)
         guard longest > longestSide else { return nil }
@@ -897,7 +1180,24 @@ private enum ScreenPipeline {
         return context.makeImage()
     }
 
-    static func frameImageData(from image: CGImage) -> Data? {
+    /// Encodes the stored frame as HEIC at the selected fidelity.
+    ///
+    /// The scale `CaptureQuality` moves along was picked by measurement, not taste. Encoding 60 real
+    /// frames from this machine through this exact path — same downscale, same `CGImageDestination`
+    /// call — gave, per frame:
+    ///
+    ///     jpeg q0.50   183.1 KB     heic q0.30    90.3 KB  (-51%)
+    ///     heic q0.50   131.1 KB     heic q0.25    80.3 KB  (-56%)
+    ///     heic q0.40   110.2 KB     heic q0.20    68.4 KB  (-63%)
+    ///
+    /// Note HEIC's quality scale is not JPEG's: 0.5 buys only 28%, and matching a "low" preset from
+    /// `sips` takes roughly 0.15 — which is why the tiles land at 0.40/0.20/0.15/0.10 rather than at
+    /// the round JPEG-shaped numbers a reader would expect. Anyone re-tuning them must re-measure.
+    ///
+    /// Fidelity is the cheap side of this trade because nothing decodes these files: no MCP tool
+    /// returns pixels and the uploader sends only text. OCR reads a separate, larger image
+    /// (``ocrMaxPixelSize``) before this one is written and is untouched by the selection.
+    static func data(from image: CGImage, quality: CaptureQuality) -> Data? {
         let data = NSMutableData()
         guard
             let destination = CGImageDestinationCreateWithData(
@@ -911,7 +1211,7 @@ private enum ScreenPipeline {
         CGImageDestinationAddImage(
             destination,
             image,
-            [kCGImageDestinationLossyCompressionQuality: frameQuality] as CFDictionary
+            [kCGImageDestinationLossyCompressionQuality: quality.compressionQuality] as CFDictionary
         )
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data

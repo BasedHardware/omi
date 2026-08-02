@@ -31,8 +31,26 @@ public struct CaptureSubject: Sendable, Equatable, Codable {
     public var bundleID: String?
     public var appName: String?
     public var windowTitle: String?
-    /// The page the window was showing, if anything could read it: a full URL or a bare host.
+    /// The page the window was showing, if anything could read it: normally a bare host.
+    ///
+    /// **Only ever set from the window whose pixels were captured.** A producer that cannot show the
+    /// address belongs to that window must leave this nil, because this field outranks the evidence
+    /// beneath it: a wrong address does not merely fail to exclude, it silences the window's own
+    /// text as well. See `AXWindowMatch`.
+    ///
+    /// A full URL still matches — everything here is normalised to a host before it is compared —
+    /// but nothing in-tree puts one here any more: a query string is a session token or a document
+    /// identifier, and this struct is `Codable` and travels with the capture.
     public var url: String?
+    /// The window's own accessibility text — evidence of last resort about which site was on screen.
+    ///
+    /// It arrives after the window has already been admitted, because reading a window's text costs
+    /// an inter-process walk and happens beside OCR rather than in front of it. That timing is the
+    /// reason this field exists: without it the text was written to a permanent, searchable database
+    /// having never been judged, and an `axText` carrying `gmail.com` was stored unexamined.
+    ///
+    /// Only ever consulted when ``url`` is nil — see ``ExclusionSet/reason(for:)``.
+    public var pageText: String?
     public var privacy: WindowPrivacy
 
     public init(
@@ -40,12 +58,14 @@ public struct CaptureSubject: Sendable, Equatable, Codable {
         appName: String? = nil,
         windowTitle: String? = nil,
         url: String? = nil,
+        pageText: String? = nil,
         privacy: WindowPrivacy = .unknown
     ) {
         self.bundleID = bundleID
         self.appName = appName
         self.windowTitle = windowTitle
         self.url = url
+        self.pageText = pageText
         self.privacy = privacy
     }
 }
@@ -507,6 +527,26 @@ public enum PrivateBrowsing {
         "com.openai.atlas",
     ]
 
+    /// Product names that mean "browser" whatever the bundle identifier says.
+    public static let browserNameFragments = [
+        "safari", "chrome", "chromium", "firefox", "edge", "brave", "arc", "opera", "vivaldi",
+        "browser", "atlas", "dia",
+    ]
+
+    /// Whether this is a browser, by bundle id when there is one and by name otherwise.
+    ///
+    /// Name matching is a *widening* fallback for the write barrier, which has no bundle id: without
+    /// it a queued frame from an excluded domain could never be dropped. Public because capture asks
+    /// the same question before it spends an accessibility walk looking for a page address — a
+    /// second copy of this list is how "it stopped hiding my bank in the browser I added" happens.
+    public static func isBrowser(bundleID: String?, appName: String?) -> Bool {
+        if let bundleID = bundleID?.lowercased(), !bundleID.isEmpty {
+            return browserBundleIdentifiers.contains(bundleID)
+        }
+        guard let name = appName?.lowercased() else { return false }
+        return browserNameFragments.contains { name.contains($0) }
+    }
+
     /// Best evidence from what a capture tick already has in hand.
     ///
     /// `bundleID` is deliberately *not* used to gate the title check. Gating on a known browser would
@@ -730,21 +770,59 @@ public struct ExclusionSet: Sendable, Equatable {
         }
     }
 
+    /// Three tiers of evidence, weakest last, and the order is the whole design.
+    ///
+    /// 1. **The address**, when capture could read one *from the window it captured*. Authoritative:
+    ///    this is the application stating which page it is showing.
+    /// 2. **The window title**, browsers only. Almost never carries a host in practice (0 of 955
+    ///    browser frames on this machine's database) but it costs nothing and a browser that does
+    ///    put one there is stating the same fact.
+    /// 3. **The window's own text**, browsers only, *and only when no host could be read at all.*
+    ///
+    /// The condition on the third tier is not caution, it is correctness. Page text mentions hosts
+    /// constantly — a `t.co` link in a quoted tweet, a sidebar listing every other open tab, a
+    /// `gmail.com` in someone's signature — and every one of those is a mention rather than a
+    /// destination. Consulting it *beside* an address we already trust would mean a user who
+    /// excluded one site lost frames from every unrelated page that happened to name it. Consulting
+    /// it when there is no address is the opposite trade: the alternative there is capturing the
+    /// bank.
+    ///
+    /// **What makes that exclusivity safe is that tier 1 is now provably about this window.** It was
+    /// not: the address was read from whichever window the application said was focused while the
+    /// pixels came from the largest one, so an address belonging to a *different* window could
+    /// silence the only tier that measurably fires (133 of 955 frames, against 0 from titles) —
+    /// admitting a frame of an excluded site because an unexcluded one happened to be focused.
+    /// `AXWindowMatch` is what closed that, and the guard below is the rest of it: silencing is
+    /// earned by a host the gate could actually match on, never by the mere presence of a string in
+    /// the field. A URL that normalises to nothing — `file:///…`, a fragment, whitespace — leaves
+    /// the tier beneath it exactly as loud as if the field had been empty, because that is what it
+    /// means.
     private func websiteReason(for subject: CaptureSubject) -> ExclusionReason? {
         let patterns = effectiveWebsites
         guard !patterns.isEmpty else { return nil }
 
         // Normalised once, then compared against every pattern: the reverse order re-parsed the same
         // host a few hundred times per frame.
-        if let url = subject.url, let host = DomainMatcher.normalize(url) {
-            if let pattern = patterns.first(where: { $0.matches(normalizedHost: host) }) {
-                return .excludedWebsite(pattern: pattern.host)
-            }
+        let host = subject.url.flatMap(DomainMatcher.normalize)
+        if let host, let pattern = patterns.first(where: { $0.matches(normalizedHost: host) }) {
+            return .excludedWebsite(pattern: pattern.host)
         }
-        // No URL: the title is the only evidence there is. Browsers only, so a document named after
-        // a domain in an editor does not cost its frame.
-        guard let title = subject.windowTitle, isBrowser(subject) else { return nil }
-        for host in DomainMatcher.hostCandidates(in: title) {
+        // Browsers only, so a document named after a domain in an editor does not cost its frame.
+        guard isBrowser(subject) else { return nil }
+        if let title = subject.windowTitle,
+            let reason = firstExcluded(in: title, patterns: patterns, limit: 12)
+        {
+            return reason
+        }
+        guard host == nil, let pageText = subject.pageText else { return nil }
+        return firstExcluded(in: pageText, patterns: patterns, limit: Self.pageTextHostLimit)
+    }
+
+    /// The first excluded host named anywhere in `text`, or nil.
+    private func firstExcluded(
+        in text: String, patterns: Set<DomainPattern>, limit: Int
+    ) -> ExclusionReason? {
+        for host in DomainMatcher.hostCandidates(in: text, limit: limit) {
             if let pattern = patterns.first(where: { $0.matches(normalizedHost: host) }) {
                 return .excludedWebsite(pattern: pattern.host)
             }
@@ -752,22 +830,18 @@ public struct ExclusionSet: Sendable, Equatable {
         return nil
     }
 
-    /// Whether this subject is a browser, by bundle id when there is one and by name otherwise.
+    /// How many distinct hosts are read out of a window's text before the search gives up.
     ///
-    /// Name matching here is a *widening* fallback for the write barrier, which has no bundle id:
-    /// without it a queued frame from an excluded domain could never be dropped.
-    private func isBrowser(_ subject: CaptureSubject) -> Bool {
-        if let bundleID = subject.bundleID?.lowercased(), !bundleID.isEmpty {
-            return PrivateBrowsing.browserBundleIdentifiers.contains(bundleID)
-        }
-        guard let name = subject.appName?.lowercased() else { return false }
-        return Self.browserNameFragments.contains { name.contains($0) }
-    }
+    /// A ceiling rather than "all of them" because the text is bounded at thousands of characters
+    /// and a page of links would otherwise allocate a host per link on every frame. Well above the
+    /// title's twelve, because unlike a title this text is long and the excluded host is not
+    /// necessarily near its front — an under-count here is a frame that should have been refused.
+    private static let pageTextHostLimit = 64
 
-    private static let browserNameFragments = [
-        "safari", "chrome", "chromium", "firefox", "edge", "brave", "arc", "opera", "vivaldi",
-        "browser", "atlas", "dia",
-    ]
+    /// Whether this subject is a browser, by bundle id when there is one and by name otherwise.
+    private func isBrowser(_ subject: CaptureSubject) -> Bool {
+        PrivateBrowsing.isBrowser(bundleID: subject.bundleID, appName: subject.appName)
+    }
 
     // MARK: Construction
 
@@ -887,7 +961,7 @@ struct ExclusionConfiguration: Codable, Equatable, Sendable {
 /// - **Immediate effect, including in-flight work.** A mutation lands in memory first and is
 ///   persisted afterwards, so an exclusion is in force before the write to disk is attempted and
 ///   whether or not it succeeds. Captures carry a ``CaptureTicket`` stamped with the generation that
-///   admitted them, and ``revalidate(_:)`` re-judges anything stamped under an older one — which is
+///   admitted them, and ``revalidate(_:pageText:)`` re-judges anything stamped under an older one — which is
 ///   how a frame captured before the click and written after it is still dropped.
 /// - **Fail closed.** A configuration that cannot be read or parsed produces *more* exclusions than
 ///   the file asked for, never fewer, and says so through ``health``.
@@ -992,27 +1066,42 @@ public final class ExclusionEngine: @unchecked Sendable {
     /// may still be written; a reason means it must be dropped, along with anything already on disk
     /// for it (see ``discard(_:reason:)``).
     ///
-    /// Cheap in the common case: if nothing has changed since the ticket was issued, the earlier
-    /// verdict still stands and no matching is redone.
-    public func revalidate(_ ticket: CaptureTicket) -> ExclusionReason? {
+    /// Cheap in the common case: if nothing has changed since the ticket was issued *and* the
+    /// capture learned nothing new about itself, the earlier verdict still stands and no matching is
+    /// redone.
+    ///
+    /// `pageText` is the second half of that, and it is why this is not just a generation check. A
+    /// window's accessibility text is read after admission, beside OCR — so evidence about which
+    /// site the frame was showing arrives *after* the only decision that ever looked at it. An
+    /// unchanged configuration is not a reason to skip judging something the gate has never seen, so
+    /// new evidence re-opens the verdict even at the same generation.
+    public func revalidate(_ ticket: CaptureTicket, pageText: String? = nil) -> ExclusionReason? {
         lock.lock()
         let set = state
         let generation = generationCounter
         lock.unlock()
 
-        if ticket.generation == generation { return nil }
-        if let reason = CapturePolicy.exclusion(for: ticket.subject, using: set) { return reason }
+        var subject = ticket.subject
+        // Only ever *adds*. A ticket's own evidence is what admitted it and cannot be weakened here.
+        let grew = subject.pageText == nil && pageText?.isEmpty == false
+        if grew { subject.pageText = pageText }
+
+        let stale = ticket.generation != generation
+        guard stale || grew else { return nil }
+        if let reason = CapturePolicy.exclusion(for: subject, using: set) { return reason }
         // The configuration stopped being trustworthy after this capture was admitted, so what the
         // user actually excluded is now unknown. Dropping one frame is recoverable; writing a frame
-        // they excluded is not.
-        if set.health.isFailClosed { return .configurationUnavailable }
+        // they excluded is not. Gated on the generation because a capture admitted *while* already
+        // fail-closed was judged under exactly this state — refusing it here would refuse
+        // everything, for as long as the file stays unreadable.
+        if stale, set.health.isFailClosed { return .configurationUnavailable }
         return nil
     }
 
     /// The barrier for a caller that no longer has a ticket — a `Frame` on its way to the database
     /// carries `appName` and `windowTitle` and nothing else.
     ///
-    /// Weaker than ``revalidate(_:)`` by construction: with no bundle identifier and no URL it can
+    /// Weaker than ``revalidate(_:pageText:)`` by construction: with no bundle identifier and no URL it can
     /// only match on display name and on hosts named in the title. Prefer the ticket; this exists so
     /// that a caller which lost one still refuses password managers rather than writing them.
     public func shouldDropQueuedFrame(
@@ -1024,9 +1113,13 @@ public final class ExclusionEngine: @unchecked Sendable {
 
     /// Drops a capture that has become excluded, including anything already written for it.
     ///
-    /// The image matters: `ScreenPipeline` writes the HEIC before the row exists, and pruning walks
-    /// the `frames` table — so a frame dropped at the barrier without this leaves a screenshot of an
-    /// excluded window on disk that nothing will ever delete.
+    /// The image matters whenever a caller reaches here with one: pruning walks the `frames` table,
+    /// so a frame dropped at the barrier without this would leave a screenshot of an excluded window
+    /// on disk that nothing will ever delete. The screen watcher no longer arrives with one — it
+    /// judges before it writes, so an excluded window's bytes are never produced rather than
+    /// produced and unlinked, which are different things to anyone holding a backup or a snapshot of
+    /// that second. This stays the barrier for any caller that does have bytes on disk, and the log
+    /// line for every caller.
     ///
     /// Only ever unlinks inside the frames directory. A refusal is not a licence to delete a path
     /// that arrived from somewhere unexpected.

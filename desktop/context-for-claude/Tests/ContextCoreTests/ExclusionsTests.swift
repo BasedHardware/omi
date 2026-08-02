@@ -302,16 +302,29 @@ final class ExclusionsTests: XCTestCase {
         XCTAssertTrue(engine.current.websites.isEmpty)
     }
 
-    /// Without a URL the title is the only evidence there is, and a browser title that names an
-    /// excluded domain counts. Deliberately over-inclusive, and deliberately browsers only: a
-    /// `barclays.co.uk.swift` open in an editor is a filename, not a bank.
-    func testABrowserTitleNamingAnExcludedDomainIsRefusedButAnEditorTitleIsNot() {
+    /// A browser title that names an excluded domain counts — but almost none ever does, and that
+    /// limit is asserted here rather than left to be discovered in a database.
+    ///
+    /// This test used to stop at the first assertion, with a title of `Barclays | barclays.co.uk`.
+    /// It passed, and it protected nobody: that shape occurs **0 times in 955 real browser frames**
+    /// on this machine, because a browser titles its window with the page title. The title tier is
+    /// real and cheap and stays; what it is not is the thing standing between a user and their bank.
+    /// `CaptureAddressTests` covers the tier that is.
+    func testABrowserTitleNamingAnExcludedDomainIsRefusedButAlmostNoRealTitleDoes() {
         let engine = makeEngine()
         engine.setCategory(.banks, excluded: true)
 
         XCTAssertNotNil(
             engine.exclusionReason(for: chrome(title: "Barclays | barclays.co.uk")),
             "a browser window naming the bank must not be captured just because no URL was read")
+
+        // What a browser really writes there. Arc titles its windows `LinkedIn`, `Anthropic`,
+        // `Apple Inc.` — the page's own title, with no host in it anywhere.
+        XCTAssertNil(
+            engine.exclusionReason(for: chrome(title: "Barclays")),
+            "a page title is not a host, and pretending otherwise is what made this control a "
+                + "decoration for as long as the title was the only evidence")
+
         XCTAssertNil(
             engine.exclusionReason(
                 for: CaptureSubject(
