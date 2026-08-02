@@ -1,5 +1,6 @@
 import pytest
 
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 from models.task_intelligence import TaskWorkflowMode
 from utils.task_intelligence import rollout as rollout_module
 from utils.task_intelligence.rollout import (
@@ -73,6 +74,30 @@ def test_noncanonical_dev_fixture_cannot_bypass_the_code_owned_cohort(monkeypatc
     monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
 
     decision = resolve_task_intelligence_for_user(uid='fixture-user', workflow_mode='read')
+
+    assert decision.memory_cohort_eligible is False
+    assert decision.intelligence_product_enabled is False
+
+
+def test_dev_runtime_entitles_the_code_owned_what_matters_now_smoke_fixture(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+
+    decision = resolve_task_intelligence_for_user(uid=WHAT_MATTERS_NOW_SMOKE_UID, workflow_mode='read')
+
+    assert decision.memory_cohort_eligible is True
+    assert decision.intelligence_product_enabled is True
+
+
+@pytest.mark.parametrize('stage', ['', 'local', 'prod'])
+def test_what_matters_now_smoke_fixture_fails_closed_outside_an_explicit_dev_runtime(monkeypatch, stage):
+    if stage:
+        monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    else:
+        monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+
+    decision = resolve_task_intelligence_for_user(uid=WHAT_MATTERS_NOW_SMOKE_UID, workflow_mode='read')
 
     assert decision.memory_cohort_eligible is False
     assert decision.intelligence_product_enabled is False
