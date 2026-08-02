@@ -1,5 +1,6 @@
 ---
 id: omi-upstream-rebase-cloudflare-isolation
+story_id: omi-upstream-rebase-cloudflare-isolation
 title: Omi OSS最新版への再ベースとCloudflareセルフホスト差分の隔離
 period: 2026-08
 status: active
@@ -7,8 +8,13 @@ source_of_truth: user-approved implementation request
 pr_scope_strategy: atomic_single_pr
 pr_scope_reason: >-
   requirements-ssot、runtime-behavior、misc-follow-upは同じread-only縦スライスの契約と接続点を検証するため不可分である。生成l10nはARB由来の派生物、overlay docは設定境界であり、これらを分割すると契約と実装の原子性が失われる。
-pr_scope_review_facets: requirements-ssot, runtime-behavior, misc-follow-up
-pr_scope_dependency_boundaries: requirements-ssot->runtime-behavior, runtime-behavior->misc-follow-up
+pr_scope_review_facets:
+  - requirements-ssot
+  - runtime-behavior
+  - misc-follow-up
+pr_scope_dependency_boundaries:
+  - requirements-ssot->runtime-behavior
+  - runtime-behavior->misc-follow-up
 ---
 
 # Story: Omi OSS最新版への再ベースとCloudflareセルフホスト差分の隔離
