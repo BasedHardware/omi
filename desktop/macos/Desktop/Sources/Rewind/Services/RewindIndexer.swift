@@ -334,12 +334,18 @@ actor RewindIndexer {
       markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+            id: id,
+            ocrText: ocrText,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -426,12 +432,18 @@ actor RewindIndexer {
       markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
-            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+            id: id,
+            ocrText: ocrText,
+            appName: appName,
+            windowTitle: windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -554,12 +566,18 @@ actor RewindIndexer {
       }
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+            id: id,
+            ocrText: ocrText,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -705,9 +723,15 @@ actor RewindIndexer {
             let ocrText = ocrResult.fullText
             let appName = screenshot.appName
             let windowTitle = screenshot.windowTitle
-            Task(priority: .utility) {
-              await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
-                id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+            if let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId() {
+              Task(priority: .utility) {
+                await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+                  id: id,
+                  ocrText: ocrText,
+                  appName: appName,
+                  windowTitle: windowTitle,
+                  expectedOwnerID: captureOwnerID)
+              }
             }
           } catch RewindError.screenshotNotFound {
             // Screenshot/video file is permanently missing — clear skippedForBattery so we don't retry forever
