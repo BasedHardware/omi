@@ -772,6 +772,53 @@ struct SettingsSpotlightScene: Equatable, Sendable {
         return clipped.isNull || clipped.isEmpty ? list : clipped
     }
 
+    /// One rect the overlay may dash, and what the dashes are claiming about it.
+    struct DashedRegion: Equatable, Sendable {
+        var rect: CGRect
+        /// Matched to the element being surrounded. A 14 pt radius round a 32 pt row is a lozenge,
+        /// and reads as a shape of ours rather than as an outline of theirs.
+        var cornerRadius: CGFloat
+        /// How far outside `rect` the dashes are laid.
+        var inset: CGFloat
+        /// Tinted inside, which is what makes a rect read as somewhere a thing can be *put* rather
+        /// than as something already selected.
+        var isDropTarget: Bool
+    }
+
+    /// **Every rect this overlay is allowed to dash — and during the Accessibility grant there are
+    /// none.**
+    ///
+    /// The dashes are this overlay's word for *this particular thing*. That is the whole reason
+    /// `dropSlot` exists: `destination` is a list, and one dashed rectangle around a list says
+    /// "somewhere in here", which is a gesture at a pane rather than an instruction.
+    ///
+    /// The `framing` tier is the same sentence one level up, and for a long time it was drawn
+    /// anyway: it knows a window and, by construction, **nothing about what is inside it**, and it
+    /// dashed the window. A user standing on Privacy & Security ▸ Accessibility, looking straight at
+    /// their own row with the switch off, saw a dotted boundary drawn around all forty rows and the
+    /// sidebar and the title bar — and reported it, in as many words, as the dotted line being
+    /// around the wrong thing. It was: the window is measured, but *measured* is only half the
+    /// claim, and the other half — that this is the thing to act on — was not ours to make.
+    ///
+    /// So the tier keeps what it can honestly say. The window is still the scrim's hole, so
+    /// everything else on the display dims and System Settings is the only lit thing left; the
+    /// sentence still sits beside it naming the pane and the row. Neither claims a target. The row
+    /// itself cannot be located until the grant lands — see `PermissionChoreography`'s header for
+    /// the measurements that close every route to it — and the instant it does, this list stops
+    /// being empty.
+    var dashedRegions: [DashedRegion] {
+        var regions: [DashedRegion] = []
+        // The drop target first, so the source row's outline is stroked over it where they touch.
+        if let dropSlot {
+            regions.append(
+                DashedRegion(rect: dropSlot, cornerRadius: 9, inset: 4, isDropTarget: true))
+        }
+        if let source {
+            regions.append(DashedRegion(rect: source, cornerRadius: 8, inset: 5, isDropTarget: false))
+        }
+        return regions
+    }
+
     /// **Something was resolved and something will therefore be drawn.**
     ///
     /// The predicate the defect this file's regression test is named for turns on: guidance can be
@@ -940,17 +987,14 @@ struct SettingsSpotlightCanvas: View {
 
     // MARK: Pieces
 
-    /// How far outside the settings area the dotted boundary is drawn, and how far outside it the
-    /// scrim's hole stops.
+    /// How far outside a region the scrim's hole stops.
     ///
-    /// The order matters and is the difference between a boundary you can see and one you cannot.
-    /// The hole stops **inside** the boundary, so the dotted line lands on the dimmed side of the
-    /// edge rather than on System Settings' own background. A white line on a light window is
-    /// invisible whatever you do to it; a white line on the dimming is unmissable, and precision is
-    /// read at that edge — a point of misalignment on a dimmed border is glaringly obvious, which is
-    /// exactly why it is trustworthy when it is right.
+    /// The hole stops **inside** the dashes, so a dotted line lands on the dimmed side of the edge
+    /// rather than on System Settings' own background. A white line on a light window is invisible
+    /// whatever you do to it; a white line on the dimming is unmissable, and precision is read at
+    /// that edge — a point of misalignment on a dimmed border is glaringly obvious, which is exactly
+    /// why it is trustworthy when it is right.
     private static let holeInset: CGFloat = 4
-    private static let boundaryInset: CGFloat = 11
 
     /// The dashed stroke. ~2 pt, 6 on / 4 off — fine enough to sit *inside* a pane without reading as
     /// a border the pane grew, which a heavy dash does.
@@ -996,30 +1040,25 @@ struct SettingsSpotlightCanvas: View {
         return holes
     }
 
-    /// **The two dashed regions, and neither of them is the list.**
+    /// **The dashed regions, and none of them is ever a list or a window.**
     ///
-    /// A rounded rectangle round the **drop slot** with a tint inside it, and a second one round the
-    /// source row. The tint is the only thing that distinguishes them and it is doing real work: a
-    /// drop target has to look like somewhere a thing can be *put*, and an outline alone looks like
-    /// something already selected.
+    /// Which rects those are is `scene.dashedRegions`' answer and not this method's, so the rule can
+    /// be asserted as a value rather than only inferred from pixels. What is left here is how one
+    /// gets drawn.
     ///
-    /// It used to dash `destination`, which is a whole list, and that is the defect the reference
-    /// screenshots were sent to describe: one dashed rectangle around every row in the pane says
-    /// "somewhere in here", and on a pane holding two lists and a loose row below them that is a
-    /// gesture at a window rather than an instruction. `dropSlot` is one row of it.
+    /// Two shapes come out of it in practice: a rounded rectangle round the **drop slot** with a
+    /// tint inside it, and a second one round the source row. The tint is the only thing that
+    /// distinguishes them and it is doing real work — a drop target has to look like somewhere a
+    /// thing can be *put*, and an outline alone looks like something already selected.
     ///
-    /// When nothing is being moved — the `framing` tier, where all we know is where the window is —
-    /// the settings area is dashed instead, and the honest degrade holds: still a rect somebody
-    /// measured, never a guess at a row.
+    /// And on the `framing` tier the loop runs zero times, which is the point of it: a tier that
+    /// knows a window and nothing inside it has nothing particular to point at, and dashing the
+    /// window said otherwise.
     private func drawRegions(in context: inout GraphicsContext) {
-        if scene.destination == nil, scene.source == nil, let area = scene.area {
-            return drawRegion(in: &context, rect: area, cornerRadius: 14, filled: false, inset: Self.boundaryInset)
-        }
-        if let slot = scene.dropSlot {
-            drawRegion(in: &context, rect: slot, cornerRadius: 9, filled: true, inset: 4)
-        }
-        if let source = scene.source {
-            drawRegion(in: &context, rect: source, cornerRadius: 8, filled: false, inset: 5)
+        for region in scene.dashedRegions {
+            drawRegion(
+                in: &context, rect: region.rect, cornerRadius: region.cornerRadius,
+                filled: region.isDropTarget, inset: region.inset)
         }
     }
 

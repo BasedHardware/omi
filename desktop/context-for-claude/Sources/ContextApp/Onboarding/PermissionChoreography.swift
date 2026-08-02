@@ -29,6 +29,36 @@ import SwiftUI
 //  list is scrolled, the pane relaid out on a macOS we have not seen, the window dragged half off a
 //  second display. Every one of those degrades to `PermissionGuidance.instruction`: words, no
 //  boundary, no glow, no arrow, nothing aimed anywhere.
+//
+//  **The Accessibility step cannot be rescued by cleverness, and the measurement is written down
+//  here so nobody spends another afternoon looking.** Measured on macOS 26.5.2 (build 25F84), from a
+//  process with `AXIsProcessTrusted() == false`, against a live System Settings sitting on Privacy &
+//  Security ▸ Accessibility with our row plainly in the list:
+//
+//  - `AXUIElementCopyAttributeValue(app, AXWindows)` → `kAXErrorAPIDisabled` (-25211).
+//  - `AXUIElementCopyAttributeValue(app, AXRole)` → the same. So does `AXTitle`, and so does
+//    `AXFocusedWindow`.
+//  - `AXUIElementCopyAttributeNames(app)` → the same. Not one attribute is readable; the tree cannot
+//    even be *enumerated*, so "read the list container instead of the row" is not a smaller ask, it
+//    is the same forbidden ask.
+//  - `AXUIElementCopyElementAtPosition(systemWide, x, y)` → the same. Hit-testing is not a side door.
+//  - Asking **System Events** to do the read on our behalf — it is privileged, we are not — fails
+//    with the same -25211 and the message *"… is not allowed assistive access"*. The gate is on the
+//    sender, not on the reader.
+//  - `CGWindowListCopyWindowInfo` lists exactly **one** ordinary System Settings window (723 × 948)
+//    and four offscreen 1920 × 30 strips. There is no sub-window whose bounds are the content pane,
+//    so the window server cannot narrow the rect either.
+//
+//  So during the Accessibility step the row is not merely hard to find: it is **structurally
+//  unreadable**, and every route to it is closed by the same check. Inferring where the list "ought
+//  to be" from the window rect would be the one thing the paragraph above forbids — a boundary drawn
+//  round a rect nobody measured, correct on the machine it was written on and wrong on the first
+//  resized window, wider sidebar or unfamiliar macOS. It is not done, and this is why.
+//
+//  What *is* done is the only honest thing left: the tier says so (`SettingsWindowFrame.Cause`),
+//  claims nothing about the pane's contents (it draws no dashes — see
+//  `SettingsSpotlightScene.dashedRegions`), and watches for the grant closely enough that the instant
+//  the user flips the switch the overlay stops degrading and rings the real row.
 
 // MARK: - What the choreography is allowed to say
 
@@ -45,8 +75,14 @@ enum PermissionGuidance: Equatable, Sendable {
     /// the row that grants Accessibility requires Accessibility. The old overlay spent that step
     /// asking the Accessibility API 24 times in 9 seconds for an answer it was structurally forbidden
     /// from getting, then printed a sentence in the middle of the screen. `CGWindowListCopyWindowInfo`
-    /// needs no grant at all, so the boundary can still go around the real window — everything drawn
-    /// is still something measured, and nothing is aimed at a control we did not find.
+    /// needs no grant at all, so the window rect is still something measured — it is what the scrim
+    /// opens a hole in, and what the sentence is placed beside.
+    ///
+    /// **It is not something to dash.** Knowing the window and nothing inside it is knowing that the
+    /// answer is one of forty rows, and a dashed rectangle around forty rows says "somewhere in
+    /// here", which is not an instruction — it is the same defect this overlay already fixed one
+    /// level down, where the dashes used to go round a whole list instead of round the slot a row
+    /// lands in. See `SettingsSpotlightScene.dashedRegions`.
     case framing(SettingsWindowFrame)
     /// Nothing could be located, or it was located somewhere the user cannot see. Words only.
     case instruction(String)
@@ -65,6 +101,36 @@ struct SettingsWindowFrame: Equatable, Sendable {
     /// API — which is the whole point of it.
     var window: CGRect
     var instruction: String
+    /// **Why the pane could not be read.**
+    ///
+    /// The rect is the same either way and the two causes are three orders of magnitude apart in
+    /// what it costs to ask again, so the tracker cannot tell them apart from the rect alone and
+    /// must be told. Defaults to the pessimistic one: a caller that has not thought about it gets
+    /// the slow schedule, never the fast one.
+    var cause: Cause = .unreadable
+
+    /// The two ways the contents of a window can be unknown.
+    enum Cause: Equatable, Sendable {
+        /// **We are not AX-trusted, so the pane is structurally unreadable** — see this file's
+        /// header for the measurements, every one of which is `kAXErrorAPIDisabled`. Two things
+        /// follow, and both matter to the tracker.
+        ///
+        /// Re-asking is nearly free: `liveGuidance` returns at the `AXElement.isTrusted` guard
+        /// without touching the tree, and the whole pass measured **0.55 ms** on macOS 26.5.2 —
+        /// `AXIsProcessTrusted` 0.008 ms, `CGWindowListCopyWindowInfo` 0.42 ms, the display list
+        /// 0.011 ms, `runningApplications` 0.108 ms.
+        ///
+        /// And the answer is about to change: the one event this tier is waiting for is the user
+        /// flipping the very switch the overlay was opened to talk about, and Accessibility takes
+        /// effect live with no relaunch. Waiting out the expensive schedule before noticing is
+        /// paying a 800 ms delay for a cost that is not being incurred.
+        case awaitingTrust
+        /// We are trusted and the walk still found nothing: a pane whose shape we have never seen,
+        /// one that has not finished laying out, or a list we are simply not in. Re-asking costs the
+        /// whole walk — 270–727 ms, measured live — and nothing the user is about to do makes it
+        /// cheaper, so this keeps the slow schedule.
+        case unreadable
+    }
 }
 
 /// A located row in System Settings: what to ring, what the hand points at, and whether the switch
@@ -771,13 +837,23 @@ enum PermissionChoreography {
     }
 
     /// The window, when we know where it is; words, when we do not. The overlay's floor.
-    private static func framingOrWords(
+    ///
+    /// Internal rather than private because `trusted` is the one input that decides how the tier
+    /// behaves afterwards and it is not reachable from a unit test any other way: the live call
+    /// reads it from `AXIsProcessTrusted()`, and a test that has to revoke a real grant to reach a
+    /// branch is a test nobody runs. `PermissionGuidanceTests` drives this directly.
+    static func framingOrWords(
         for capability: Capability, frame: CGRect?, space: ScreenSpace, trusted: Bool, windows: Int
     ) -> PermissionGuidance {
         let words = instruction(for: capability, appName: appDisplayName, scrolled: false)
         let decision: PermissionGuidance
         if let frame, space.isOnScreen(frame) {
-            decision = .framing(SettingsWindowFrame(window: frame, instruction: words))
+            decision = .framing(
+                SettingsWindowFrame(
+                    window: frame, instruction: words,
+                    // The bootstrap case carries *why* it is degraded, because that is what tells
+                    // the tracker the answer is cheap to re-take and about to change.
+                    cause: trusted ? .unreadable : .awaitingTrust))
         } else {
             decision = .instruction(words)
         }
@@ -858,13 +934,34 @@ struct SpotlightTrackPolicy: Equatable, Sendable {
     /// pane change or a grant landing, and every one of those is something a person did with their
     /// hands. Window drags are caught by `translate` at tick rate instead.
     var fullSolve: Duration = .milliseconds(800)
+    /// How often the answer is re-taken while the only reason it is degraded is that we are **not
+    /// trusted yet** — `SettingsWindowFrame.Cause.awaitingTrust`.
+    ///
+    /// The tick, deliberately: that tier's whole pass costs 0.55 ms against a 40 ms budget, and the
+    /// tracker is already paying 0.42 ms of it every tick to read the window frame. `fullSolve` is
+    /// 800 ms because the *walk* costs up to 727 ms, and on this tier there is no walk — so a step
+    /// that cannot read the tree at all was waiting out a schedule built for the cost of reading it,
+    /// and staying degraded for up to 800 ms after the user had already flipped the switch.
+    var trustWatch: Duration = .milliseconds(40)
     /// How often the *window frame* is read. Cheap — one `CGWindowListCopyWindowInfo`, no
     /// Accessibility grant, no walk — so it can run fast enough that a dragged window does not
     /// leave the overlay behind.
     var tick: Duration = .milliseconds(40)
 
-    func decide(sinceLastSolve: Duration, windowThen: CGRect?, windowNow: CGRect?) -> SpotlightTick {
-        let due = sinceLastSolve >= fullSolve
+    /// How long `showing` is worth keeping before it is worth re-taking. One schedule per *cost*,
+    /// not one per tier: what makes a re-solve expensive is the tree walk, and only the tiers that
+    /// perform one have to be rationed.
+    func interval(after showing: PermissionGuidance?) -> Duration {
+        guard case .framing(let framed) = showing, framed.cause == .awaitingTrust else {
+            return fullSolve
+        }
+        return trustWatch
+    }
+
+    func decide(
+        sinceLastSolve: Duration, windowThen: CGRect?, windowNow: CGRect?, showing: PermissionGuidance?
+    ) -> SpotlightTick {
+        let due = sinceLastSolve >= interval(after: showing)
         guard let then = windowThen, let now = windowNow else {
             // Either we never had a window or it has gone. Only a solve can say which, and it is
             // the solve that degrades to words.
@@ -873,10 +970,18 @@ struct SpotlightTrackPolicy: Equatable, Sendable {
         // A resize relays the pane out: every row moves relative to the window, so nothing can be
         // carried over and the tree has to be read again.
         if then.size != now.size { return .solve }
+        // **A due solve is never traded away for the cheap answer.** This used to answer `translate`
+        // before it consulted the schedule, and the tracker does not reset its clock on a
+        // translation — so a window whose origin changed on consecutive ticks starved the solve
+        // outright. Dragging System Settings does that for as long as the mouse is down, which is
+        // exactly when a user hunting for a row is most likely to be moving the window, and a grant
+        // landing during it was never noticed. Translation is the cheap answer for the ticks
+        // *between* solves; it is not a way to skip one.
+        if due { return .solve }
         if then.origin != now.origin {
             return .translate(CGVector(dx: now.minX - then.minX, dy: now.minY - then.minY))
         }
-        return due ? .solve : .hold
+        return .hold
     }
 }
 
@@ -1026,7 +1131,11 @@ enum PermissionOverlay {
                 let seen = await offMain { SettingsWindowProbe.windowFrame() }
                 switch policy.decide(
                     sinceLastSolve: lastSolve.duration(to: .now),
-                    windowThen: guidance.anchorWindow, windowNow: seen)
+                    windowThen: guidance.anchorWindow, windowNow: seen,
+                    // What is on screen decides how soon it is worth asking again: a boundary that
+                    // is only a boundary because we are not trusted yet is watched at tick rate, so
+                    // the grant is seen the moment it lands.
+                    showing: guidance)
                 {
                 case .hold:
                     continue

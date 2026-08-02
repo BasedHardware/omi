@@ -368,13 +368,13 @@ final class SettingsSpotlightSceneTests: XCTestCase {
 
     /// The invariant that makes the arrow trustworthy: **no arrow without a measured control at the
     /// end of it.** The framing scene — everything we can honestly draw during the Accessibility
-    /// grant, when the pane cannot be read at all — has a boundary and a sentence and neither a glow
-    /// nor an arrow.
-    func testTheFramingSceneOutlinesTheWindowAndAimsAtNothing() {
+    /// grant, when the pane cannot be read at all — keeps the window as the scrim's hole and the
+    /// sentence beside it, and has neither a glow nor an arrow.
+    func testTheFramingSceneKeepsTheWindowAndAimsAtNothing() {
         let framed = SettingsWindowFrame(
             window: CGRect(x: 0, y: 33, width: 723, height: 948), instruction: "Switch it on.")
         guard let scene = SettingsSpotlightScene.make(framing: framed, display: laptop, space: space)
-        else { return XCTFail("a window on screen must still be outlined") }
+        else { return XCTFail("a window on screen must still light the pane out of the desktop") }
         XCTAssertEqual(scene.area, CGRect(x: 0, y: 33, width: 723, height: 948))
         XCTAssertNil(scene.focus)
         XCTAssertNil(scene.arrow)
@@ -384,6 +384,59 @@ final class SettingsSpotlightSceneTests: XCTestCase {
         XCTAssertEqual(
             scene.captionPlacement,
             .rightOf(CGPoint(x: 723 + 26, y: 33 + 474)))
+    }
+
+    /// **The dotted line is never drawn round the whole window.**
+    ///
+    /// The report, in the user's words: *"The dotted line should be exactly on Context for Claude
+    /// here for accessibility."* They were standing on Privacy & Security ▸ Accessibility with their
+    /// own row in the list and its switch off, and the overlay had dashed the entire System Settings
+    /// window — sidebar, title bar and forty other applications' rows inside the boundary.
+    ///
+    /// The row cannot be found from there. Measured on macOS 26.5.2 (25F84) from an untrusted
+    /// process: every read of System Settings' accessibility tree returns `kAXErrorAPIDisabled`,
+    /// including the attribute *name* list, including `AXUIElementCopyElementAtPosition`, and
+    /// including the same read asked through System Events. `PermissionChoreography`'s header has
+    /// the full set. So the honest answer is not a better boundary, it is **no boundary**: the
+    /// dashes are this overlay's word for *this particular thing*, and this tier has no particular
+    /// thing. It keeps the scrim's hole and the sentence, both of which are true.
+    func testTheFramingTierDashesNothingAtAll() {
+        let framed = SettingsWindowFrame(
+            window: CGRect(x: 0, y: 33, width: 723, height: 948), instruction: "Switch it on.",
+            cause: .awaitingTrust)
+        guard let scene = SettingsSpotlightScene.make(framing: framed, display: laptop, space: space)
+        else { return XCTFail("expected a scene") }
+        XCTAssertEqual(
+            scene.dashedRegions, [],
+            "the window is dashed again — that is a dotted boundary round forty rows, told as if it "
+                + "were round one")
+        // The tier is not silent, though. The window is still what the scrim opens a hole in, so
+        // System Settings is the only lit thing left on the display.
+        XCTAssertEqual(scene.area, framed.window)
+    }
+
+    /// The counterpart, so the assertion above cannot be passing because nothing is ever dashed. A
+    /// located row **is** dashed, and what is dashed is the row rather than anything containing it.
+    func testALocatedRowIsStillDashed() throws {
+        let window = CGRect(x: 0, y: 33, width: 723, height: 948)
+        let row = CGRect(x: 243, y: 282, width: 460, height: 40)
+        let located = SettingsSpotlightTarget(
+            row: row, toggle: CGRect(x: 647, y: 288, width: 56, height: 30), isOn: false,
+            focus: CGRect(x: 647, y: 285, width: 56, height: 36),
+            area: CGRect(x: 233, y: 122, width: 480, height: 700),
+            list: CGRect(x: 243, y: 142, width: 460, height: 640), isListed: true,
+            gesture: .click, window: window)
+        guard let scene = SettingsSpotlightScene.make(
+            target: located, caption: "Switch it on.", display: laptop, space: space)
+        else { return XCTFail("expected a scene") }
+
+        let dashed = try XCTUnwrap(scene.dashedRegions.first)
+        XCTAssertEqual(scene.dashedRegions.count, 1)
+        XCTAssertEqual(dashed.rect, row, "the dashes belong on the row that was measured")
+        XCTAssertLessThan(
+            dashed.rect.height * dashed.rect.width,
+            (scene.area?.height ?? 0) * (scene.area?.width ?? 0) / 4,
+            "a 'row' the size of a quarter of the pane is the old boundary under a new name")
     }
 
     // MARK: Words alone
@@ -501,11 +554,133 @@ final class SettingsSpotlightSceneTests: XCTestCase {
     }
 }
 
+// MARK: - The bootstrap tier, on the rendered frame
+
+/// **The complaint, answered in pixels.**
+///
+/// `testTheFramingTierDashesNothingAtAll` asserts the model, and the model is the seam the drawing
+/// consumes — but "what gets dashed" ultimately lives in `SettingsSpotlightCanvas`, so the claim is
+/// worth making where the user made it: on the frame. This renders the shipping canvas over the
+/// shipping scene and looks for the overlay's blue along the window's own edge, which is exactly
+/// where the reported boundary was.
+///
+/// Restoring the branch that dashed `scene.area` fails it immediately — measured, not asserted in a
+/// comment: 750 accent pixels down the left edge and 600 along the top. That is what makes it a
+/// regression test rather than a description.
+final class SpotlightFramingBoundaryTests: XCTestCase {
+    private let display = DisplayGeometry(
+        appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982), backingScaleFactor: 2)
+    private var space: ScreenSpace { ScreenSpace(displays: [display]) }
+    private let window = CGRect(x: 300, y: 60, width: 723, height: 860)
+
+    @MainActor
+    func testNoDottedBoundaryIsDrawnRoundTheSystemSettingsWindow() throws {
+        let framed = SettingsWindowFrame(
+            window: window,
+            instruction: "In System Settings, open Privacy & Security ▸ Accessibility and switch on "
+                + PaneFixture.appName + ".",
+            cause: .awaitingTrust)
+        let scene = try XCTUnwrap(
+            SettingsSpotlightScene.make(framing: framed, display: display, space: space))
+        let bitmap = try Self.render(scene)
+
+        // A band straddling the window's left edge, clear of the caption plate (which sits to the
+        // right of the window) and of the display's own edges. The boundary was drawn 11 pt outside
+        // the window, so this band is where it lived.
+        let edge = CGRect(x: window.minX - 24, y: window.minY + 120, width: 48, height: 500)
+        XCTAssertEqual(
+            Self.accentPixels(in: edge, of: bitmap), 0,
+            "the System Settings window is being dashed again — a dotted boundary round the whole "
+                + "pane says 'somewhere in here', and the row it is standing in for is one of forty")
+
+        let top = CGRect(x: window.minX + 100, y: window.minY - 24, width: 400, height: 48)
+        XCTAssertEqual(Self.accentPixels(in: top, of: bitmap), 0, "nor along its top edge")
+    }
+
+    /// The negative control. Without it the counts above could be measuring a renderer that drew
+    /// nothing at all — the same clean frame a broken canvas produces.
+    @MainActor
+    func testThePointingTierStillDrawsTheAccentSoTheCountMeansSomething() throws {
+        let guidance = PermissionChoreography.guidance(
+            for: .screen, appName: PaneFixture.appName, windows: [PaneFixture.dragPane()],
+            windowFrame: PaneFixture.dragPaneWindow, space: space)
+        guard case .pointing(let target) = guidance else {
+            throw XCTSkip("the drag scene must resolve for this to mean anything")
+        }
+        let scene = try XCTUnwrap(
+            SettingsSpotlightScene.make(
+                target: target, caption: "Drag it up", display: display, space: space))
+        let slot = try XCTUnwrap(scene.dropSlot)
+        let bitmap = try Self.render(scene)
+        XCTAssertGreaterThan(
+            Self.accentPixels(
+                in: CGRect(x: slot.minX, y: slot.minY - 10, width: slot.width, height: 20),
+                of: bitmap),
+            20,
+            "the canvas drew no accent anywhere, so a zero count proves nothing about the framing "
+                + "tier")
+    }
+
+    // MARK: Pixels
+
+    /// `ImageRenderer` over the shipping canvas at scale 1, so a point is a pixel and the scene's
+    /// own coordinates address it. The same technique `SpotlightDropSlotTests` uses.
+    @MainActor
+    private static func render(_ scene: SettingsSpotlightScene) throws -> NSBitmapImageRep {
+        let renderer = ImageRenderer(
+            content: ZStack {
+                Color.white
+                SettingsSpotlightCanvas(scene: scene, phase: 0.5, handPhase: 0.05)
+            }
+            .frame(width: scene.bounds.width, height: scene.bounds.height))
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.cgImage, "the spotlight did not render")
+        return try XCTUnwrap(
+            NSBitmapImageRep(cgImage: image).converting(to: .sRGB, renderingIntent: .default))
+    }
+
+    /// Pixels that are unmistakably the overlay's blue rather than the white ground, the grey scrim
+    /// or the black caption plate. A wide margin on purpose: the dashes are composited over a
+    /// blurred dark ribbon, so the exact value moves and only the direction is stable.
+    private static func accentPixels(in rect: CGRect, of bitmap: NSBitmapImageRep) -> Int {
+        var count = 0
+        for x in stride(from: Int(rect.minX), to: Int(rect.maxX), by: 2) {
+            for y in stride(from: Int(rect.minY), to: Int(rect.maxY), by: 2) {
+                guard x >= 0, y >= 0, x < bitmap.pixelsWide, y < bitmap.pixelsHigh,
+                    let pixel = bitmap.colorAt(x: x, y: y)
+                else { continue }
+                let blue = Double(pixel.blueComponent)
+                if blue - Double(pixel.redComponent) > 0.20 && blue > 0.35 { count += 1 }
+            }
+        }
+        return count
+    }
+}
+
 // MARK: - Tracking
 
 final class SpotlightTrackPolicyTests: XCTestCase {
     private let policy = SpotlightTrackPolicy()
     private let window = CGRect(x: 0, y: 33, width: 723, height: 948)
+
+    /// A boundary drawn only because the Accessibility grant has not landed yet — the bootstrap
+    /// tier, and the one the whole Accessibility step is spent in.
+    private var awaitingTrust: PermissionGuidance {
+        .framing(
+            SettingsWindowFrame(window: window, instruction: "Switch it on.", cause: .awaitingTrust))
+    }
+    /// The same rect reached the expensive way: we *are* trusted, the tree was walked, and the row
+    /// was still not found.
+    private var unreadable: PermissionGuidance {
+        .framing(
+            SettingsWindowFrame(window: window, instruction: "Switch it on.", cause: .unreadable))
+    }
+    private var pointing: PermissionGuidance {
+        .pointing(
+            SettingsSpotlightTarget(
+                row: CGRect(x: 243, y: 282, width: 460, height: 40),
+                toggle: CGRect(x: 647, y: 288, width: 56, height: 30), isOn: false, window: window))
+    }
 
     /// The measurement that dictates the whole design. Re-reading the window's bounds costs a
     /// fraction of a millisecond; walking the tree to find the row costs ~270 ms, and the old
@@ -513,7 +688,9 @@ final class SpotlightTrackPolicyTests: XCTestCase {
     /// 727 ms tick. So an unchanged window between full solves must do **nothing**.
     func testAnUnchangedWindowBetweenSolvesDoesNothing() {
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: window),
+            policy.decide(
+                sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: window,
+                showing: pointing),
             .hold)
     }
 
@@ -521,7 +698,9 @@ final class SpotlightTrackPolicyTests: XCTestCase {
     func testAMovedWindowTranslatesInsteadOfRewalkingTheTree() {
         let moved = window.offsetBy(dx: 240, dy: -60)
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: moved),
+            policy.decide(
+                sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: moved,
+                showing: pointing),
             .translate(CGVector(dx: 240, dy: -60)))
     }
 
@@ -530,13 +709,17 @@ final class SpotlightTrackPolicyTests: XCTestCase {
     func testAResizedWindowForcesAFullSolve() {
         let resized = CGRect(x: 0, y: 33, width: 723, height: 470)
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: resized),
+            policy.decide(
+                sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: resized,
+                showing: pointing),
             .solve)
     }
 
     func testTheTreeIsRewalkedOnlyOnItsOwnSlowSchedule() {
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: policy.fullSolve, windowThen: window, windowNow: window),
+            policy.decide(
+                sinceLastSolve: policy.fullSolve, windowThen: window, windowNow: window,
+                showing: pointing),
             .solve)
         XCTAssertGreaterThanOrEqual(
             policy.fullSolve, .milliseconds(500),
@@ -549,9 +732,82 @@ final class SpotlightTrackPolicyTests: XCTestCase {
     /// A window that has gone is not a reason to walk the tree every 40 ms hunting for it.
     func testAMissingWindowStillWaitsForTheSlowSchedule() {
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: nil), .hold)
+            policy.decide(
+                sinceLastSolve: .milliseconds(40), windowThen: window, windowNow: nil,
+                showing: pointing),
+            .hold)
         XCTAssertEqual(
-            policy.decide(sinceLastSolve: policy.fullSolve, windowThen: window, windowNow: nil), .solve)
+            policy.decide(
+                sinceLastSolve: policy.fullSolve, windowThen: window, windowNow: nil,
+                showing: pointing),
+            .solve)
+    }
+
+    // MARK: Noticing the grant
+
+    /// **A due solve is never starved by a window that keeps moving.**
+    ///
+    /// `decide` answered `translate` before it consulted the schedule, and the tracker does not
+    /// reset its clock on a translation — so for as long as the origin differed from one tick to the
+    /// next, the solve that would have noticed the grant never ran. Dragging System Settings does
+    /// exactly that for as long as the mouse is down, which is when somebody hunting for a row is
+    /// most likely to be moving the window out of their own way.
+    ///
+    /// Driven the way the tick loop drives it: a window creeping 4 pt per tick, far past the point a
+    /// solve was due.
+    func testADueSolveIsNotStarvedByAWindowThatKeepsMoving() {
+        var moving = window
+        var elapsed = Duration.zero
+        for _ in 0..<200 {
+            let next = moving.offsetBy(dx: 4, dy: 0)
+            elapsed += policy.tick
+            if policy.decide(
+                sinceLastSolve: elapsed, windowThen: moving, windowNow: next, showing: pointing)
+                == .solve
+            {
+                return
+            }
+            moving = next
+        }
+        XCTFail(
+            "200 ticks of a moving window and never one solve — a grant landing during a drag is "
+                + "invisible for as long as the drag lasts")
+    }
+
+    /// **The bootstrap tier is watched at tick rate, because it costs a tick to watch.**
+    ///
+    /// `fullSolve` is 800 ms because the tree walk costs up to 727 ms. The `awaitingTrust` tier
+    /// performs no walk at all — `liveGuidance` returns at the `AXElement.isTrusted` guard — and the
+    /// whole pass measured 0.55 ms on macOS 26.5.2, of which the tracker was already paying 0.42 ms
+    /// every tick to read the window frame. Rationing it on the walk's schedule left the overlay
+    /// degraded for up to 800 ms after the user had already flipped the switch.
+    func testTheGrantIsWatchedAtTickRateRatherThanOnTheWalksSchedule() {
+        XCTAssertLessThanOrEqual(
+            policy.trustWatch, policy.tick,
+            "the grant has to be seen on the first tick after it lands, not on the walk's schedule")
+        XCTAssertEqual(policy.interval(after: awaitingTrust), policy.trustWatch)
+        XCTAssertEqual(
+            policy.decide(
+                sinceLastSolve: policy.tick, windowThen: window, windowNow: window,
+                showing: awaitingTrust),
+            .solve,
+            "a boundary that is only a boundary because we are not trusted yet has to re-ask every "
+                + "tick — the answer is free to take and is about to change")
+    }
+
+    /// The other half of it, or the fast schedule would just be the schedule. A pane we **are**
+    /// trusted for and still could not read costs a whole walk to re-ask, and nothing the user is
+    /// about to do makes it cheaper.
+    func testAPaneWeAreTrustedForAndStillCannotReadKeepsTheSlowSchedule() {
+        XCTAssertEqual(policy.interval(after: unreadable), policy.fullSolve)
+        XCTAssertEqual(
+            policy.decide(
+                sinceLastSolve: policy.tick, windowThen: window, windowNow: window,
+                showing: unreadable),
+            .hold,
+            "re-walking the tree every 40 ms is the 727 ms main-actor stall this policy exists for")
+        XCTAssertEqual(policy.interval(after: pointing), policy.fullSolve)
+        XCTAssertEqual(policy.interval(after: nil), policy.fullSolve)
     }
 }
 
@@ -797,10 +1053,11 @@ final class SpotlightRegionTests: XCTestCase {
         XCTAssertNotNil(scene.focus, "and the switch still glows")
     }
 
-    /// The degrade keeps its shape: when only the window is known, the settings area is dashed and
-    /// **no** region claims to be a row. `isDrawable` is true — a boundary round a measured window is
-    /// something — but nothing is aimed.
-    func testTheFramingTierDashesTheWindowAndNamesNoRow() throws {
+    /// The degrade keeps its shape: when only the window is known, **no** region claims to be a row
+    /// — and, since the report, no region claims to be anything at all. `isDrawable` is false and
+    /// `dashedRegions` is empty; what is left is the scrim's hole over a measured window and the
+    /// sentence beside it.
+    func testTheFramingTierNamesNoRowAndDashesNothing() throws {
         let framed = SettingsWindowFrame(
             window: CGRect(x: 360, y: 34, width: 723, height: 948), instruction: "Switch it on.")
         let scene = try XCTUnwrap(
@@ -809,7 +1066,10 @@ final class SpotlightRegionTests: XCTestCase {
         XCTAssertNil(scene.source)
         XCTAssertNil(scene.focus)
         XCTAssertFalse(scene.isDrawable, "nothing was resolved, so nothing is being pointed at")
-        XCTAssertNotNil(scene.area)
+        XCTAssertEqual(
+            scene.dashedRegions, [],
+            "the window was dashed as though it were the row — the reported defect")
+        XCTAssertNotNil(scene.area, "but it is still the hole the scrim opens, so the pane is lit")
     }
 
     /// The sentence goes beside the whole gesture. It may sit on neither end of a drag: a plate over

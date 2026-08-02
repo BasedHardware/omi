@@ -905,6 +905,49 @@ final class PermissionGuidanceTests: XCTestCase {
         else { return XCTFail("the label's own text should still find the row") }
     }
 
+    /// **The Accessibility bootstrap says *why* it is degraded, not merely that it is.**
+    ///
+    /// The step that asks for Accessibility cannot read the row that grants it. Measured on macOS
+    /// 26.5.2 (25F84) from a process with `AXIsProcessTrusted() == false`, every read of System
+    /// Settings' tree comes back `kAXErrorAPIDisabled`: the windows, the role, the title, the
+    /// attribute *name* list, hit testing through `AXUIElementCopyElementAtPosition`, and the same
+    /// read asked through System Events. There is no narrower question that is allowed, which is why
+    /// this tier exists at all.
+    ///
+    /// So it carries the cause. `awaitingTrust` is not a label: it is what tells the tracker this
+    /// answer costs 0.55 ms to re-take rather than a 727 ms tree walk, and that the one event it is
+    /// waiting for is the user flipping the very switch the overlay was opened to talk about.
+    /// Reported as `unreadable`, the overlay would keep showing a degraded boundary for up to 800 ms
+    /// after the grant had already landed.
+    func testTheUntrustedBootstrapReportsThatItIsWaitingForTheGrant() {
+        let space = ScreenSpace(displays: [
+            DisplayGeometry(appKitFrame: CGRect(x: 0, y: 0, width: 1_512, height: 982))
+        ])
+        let window = CGRect(x: 0, y: 33, width: 723, height: 948)
+
+        let bootstrap = PermissionChoreography.framingOrWords(
+            for: .accessibility, frame: window, space: space, trusted: false, windows: 0)
+        guard case .framing(let framed) = bootstrap else {
+            return XCTFail("a window on screen is still worth lighting out of the desktop")
+        }
+        XCTAssertEqual(framed.window, window)
+        XCTAssertEqual(framed.cause, .awaitingTrust)
+
+        // And the expensive case is not mislabelled as the cheap one. Trusted, the tree walked, the
+        // row still not found: re-asking costs the whole walk, and nothing the user is about to do
+        // changes that.
+        let walked = PermissionChoreography.framingOrWords(
+            for: .accessibility, frame: window, space: space, trusted: true, windows: 1)
+        guard case .framing(let unreadable) = walked else { return XCTFail("expected a framing") }
+        XCTAssertEqual(unreadable.cause, .unreadable)
+
+        // No window at all is still words alone — knowing *why* we cannot read the pane has not
+        // become a licence to draw around something nobody measured.
+        guard case .instruction = PermissionChoreography.framingOrWords(
+            for: .accessibility, frame: nil, space: space, trusted: false, windows: 0)
+        else { return XCTFail("nothing measured means nothing drawn") }
+    }
+
     /// Every capability has a sentence, and every sentence names a place. A capability that fell
     /// through to a generic "check System Settings" would be the degraded path degrading further.
     func testEveryCapabilityHasAnInstructionThatNamesItsPane() {
