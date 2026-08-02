@@ -337,7 +337,9 @@ actor ScreenKnowledgeGraphExtractor {
             generation: generation)
           guard generation == ownerGeneration else { return }
           guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
-          ChatToolExecutor.onKnowledgeGraphUpdated?()
+          await MainActor.run {
+            ChatToolExecutor.onKnowledgeGraphUpdated?()
+          }
         }
         mergeCompleted = true
       }
