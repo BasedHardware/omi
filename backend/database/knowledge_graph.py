@@ -877,10 +877,13 @@ def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str
     return {"nodes_evicted": nodes_evicted, "edges_evicted": edges_evicted}
 
 
-def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Dict[str, Any]], *, db_client: Any = None) -> Dict[str, Any]:
+def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Any], *, db_client: Any = None) -> Dict[str, Any]:
     merged = 0
     skipped = 0
     for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
         node_data = _local_kg_node_to_firestore(row)
         if node_data is None:
             skipped += 1
@@ -891,10 +894,13 @@ def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Dict[str, Any]], *, db_
     return {"table": "local_kg_nodes", "merged": merged, "skipped": skipped, **eviction}
 
 
-def merge_synced_local_kg_edges(uid: str, rows: Iterable[Dict[str, Any]], *, db_client: Any = None) -> Dict[str, Any]:
+def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any = None) -> Dict[str, Any]:
     merged = 0
     skipped = 0
     for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
         edge_data = _local_kg_edge_to_firestore(row)
         if edge_data is None:
             skipped += 1
