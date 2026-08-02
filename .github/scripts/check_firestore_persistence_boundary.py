@@ -4,12 +4,15 @@
 Outside ``backend/database/`` (and the documented exceptions below) no module may:
   * import the client / SDK — ``database._client``, ``google.cloud.firestore*``,
     ``firebase_admin.firestore`` (or ``from firebase_admin import firestore``); or
+  * import ``database.sentinels`` — it re-exports Firestore SDK sentinels (``DELETE_FIELD``, …)
+    that do not translate on the Mongo adapter; neutral ``database.store.sentinels`` is the port; or
   * run a raw persistence op — a ``.document(...)`` / ``.collection(...)`` /
     ``.collection_group(...)`` / ``.transaction(...)`` method call.
 
-Blessed database/ ports (``database.document_store``, ``database.sentinels``,
-``database.firestore_errors``, ``database.document_ids`` and every other
-``database.*`` module) are allowed everywhere — that is how callers reach persistence now.
+Blessed database/ ports (``database.document_store``, ``database.store`` and its
+``database.store.sentinels``, ``database.firestore_errors``, ``database.document_ids`` and every
+other ``database.*`` module except the Firestore-specific ``database.sentinels``) are allowed
+everywhere — that is how callers reach persistence now.
 
 Ratchets against a baseline (WP1 target: empty). Companion of ADR-0001/0002/0004: this is the
 seal that makes the storage layer swappable (Firestore | Mongo | ArcadeDB) in WP2.
@@ -47,6 +50,11 @@ def _is_forbidden_import_module(module: str | None) -> bool:
         or module.startswith('google.cloud.firestore')
         or module == 'firebase_admin.firestore'
         or module.startswith('firebase_admin.firestore')
+        # ``database.sentinels`` re-exports Firestore SDK sentinels (DELETE_FIELD, ArrayUnion, …).
+        # Domain code writing through the neutral store must use ``database.store.sentinels`` instead —
+        # a Firestore sentinel does not translate on the Mongo adapter (it is stored as a literal).
+        or module == 'database.sentinels'
+        or module.startswith('database.sentinels.')
     )
 
 
@@ -58,9 +66,16 @@ def _is_forbidden_firestore_member(name: str) -> bool:
 
 
 def _is_forbidden_database_member(name: str) -> bool:
-    # ``from database import _client`` (parent-package form) reaches the raw client; the blessed
-    # ``database.*`` ports (document_store, sentinels, firestore_errors, document_ids, …) stay allowed.
-    return name == '_client' or name.startswith('_client.')
+    # ``from database import _client`` (parent-package form) reaches the raw client, and
+    # ``from database import sentinels`` reaches the Firestore SDK sentinels (use
+    # ``database.store.sentinels`` instead). The remaining blessed ``database.*`` ports
+    # (document_store, firestore_errors, document_ids, store, …) stay allowed.
+    return (
+        name == '_client'
+        or name.startswith('_client.')
+        or name == 'sentinels'
+        or name.startswith('sentinels.')
+    )
 
 
 class _BoundaryVisitor(ast.NodeVisitor):

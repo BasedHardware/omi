@@ -51,9 +51,21 @@ txn = self._db_client.transaction()
     assert _MODULE.count_boundary_violations(source) == 4
 
 
+def test_flags_firestore_sentinels_import():
+    # Regression (CR PR#10887): ``database.sentinels`` re-exports Firestore SDK sentinels
+    # (DELETE_FIELD, …) that are stored as literals on the Mongo adapter; domain code must use
+    # the neutral ``database.store.sentinels``. Both import forms must be flagged.
+    source = '''
+from database.sentinels import DELETE_FIELD
+from database import sentinels
+'''
+    assert _MODULE.count_boundary_violations(source) == 2
+
+
 def test_ignores_blessed_database_ports_and_unrelated_code():
     source = '''
-from database import document_store, sentinels
+from database import document_store
+from database.store.sentinels import DELETE
 from database.firestore_errors import is_document_size_limit_error
 from database.document_ids import document_id_from_seed
 
