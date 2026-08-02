@@ -267,34 +267,31 @@ struct ConversationDetailView: View {
         allSegments: displayConversation.transcriptSegments,
         people: people,
         onSave: { personId, isUser, segmentIndices in
-          Task {
-            let assignment = Self.assignmentMetadata(
-              for: segmentIndices,
-              in: displayConversation.transcriptSegments
-            )
-            let success =
-              await onAssignSpeaker?(
-                conversation.id,
-                assignment.targets,
-                personId,
-                isUser
-              ) ?? false
-            if success {
-              await persistSpeakerAssignment(
-                conversationId: conversation.id,
-                backendSegmentIds: assignment.backendIds,
-                fallbackSegmentOrders: assignment.fallbackOrders,
-                isUser: isUser,
-                personId: personId
-              )
-              updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
-            }
-            selectedSegmentForNaming = nil
-          }
+          guard let onAssignSpeaker else { return false }
+
+          let assignment = Self.assignmentMetadata(
+            for: segmentIndices,
+            in: displayConversation.transcriptSegments
+          )
+          let success = await onAssignSpeaker(
+            conversation.id,
+            assignment.targets,
+            personId,
+            isUser
+          )
+          guard success else { return false }
+
+          await persistSpeakerAssignment(
+            conversationId: conversation.id,
+            backendSegmentIds: assignment.backendIds,
+            fallbackSegmentOrders: assignment.fallbackOrders,
+            isUser: isUser,
+            personId: personId
+          )
+          updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
+          return true
         },
-        onCreatePerson: { name in
-          await onCreatePerson?(name)
-        },
+        onCreatePerson: onCreatePerson,
         onDismiss: {
           selectedSegmentForNaming = nil
         }
@@ -757,7 +754,7 @@ struct ConversationDetailView: View {
         segment: segment,
         isUser: segment.isUser,
         personName: segment.personId.flatMap { peopleDict[$0]?.name },
-        onSpeakerTapped: segment.isUser
+        onSpeakerTapped: segment.isUser || onAssignSpeaker == nil
           ? nil
           : {
             selectedSegmentForNaming = segment
