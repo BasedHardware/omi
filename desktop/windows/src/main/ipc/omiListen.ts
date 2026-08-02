@@ -155,7 +155,7 @@ type Session = {
   // only fires once per semantic unit rather than on every segment.
   transcriptBuffer: string
   lastTranslationTime: number
-  lastTranslatedBufferLength: number
+  translationInFlight: boolean
   // Audio captured before the socket reaches OPEN. The renderer starts streaming
   // PCM the moment the mic is live, but the WS handshake can take a beat (esp. PTT
   // transcribe-stream under load). Without this, a quick hold ("hello") is spoken
@@ -230,7 +230,7 @@ export function startTestListenSession(sessionId: string, source: 'mic' | 'syste
     closed: false,
     transcriptBuffer: '',
     lastTranslationTime: 0,
-    lastTranslatedBufferLength: 0,
+    translationInFlight: false,
     pending: [],
     pendingBytes: 0,
     lastFeedAt: Date.now(),
@@ -348,7 +348,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     closed: false,
     transcriptBuffer: '',
     lastTranslationTime: 0,
-    lastTranslatedBufferLength: 0,
+    translationInFlight: false,
     pending: [],
     pendingBytes: 0,
     lastFeedAt: Date.now(),
@@ -416,36 +416,32 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       // Live Sign Language translation: accumulate the latest segment text and
       // translate (throttled) so the renderer can drive the sign avatar.
       // Opt-in only — disabled by default until a maintainer confirms consent.
-       if (isSignLanguageEnabled()) {
-         let textToTranslate = ''
-         segments.forEach((seg) => {
-           textToTranslate += (textToTranslate ? ' ' : '') + seg.text
-         })
-         if (textToTranslate) {
-           const now = Date.now()
-           const lastTranslated = now - session.lastTranslationTime
-           // Throttle: translate either after a silence >2 s or when
-           // enough new text has accumulated (>50 chars) since the
-           // last translation. This avoids re-translating the same
-           // stale buffer on every subsequent segment.
-           const bufferExceedsThreshold =
-             session.transcriptBuffer.length -
-               (session.lastTranslatedBufferLength ?? 0) >
-             50
-           if (lastTranslated > 2000 || bufferExceedsThreshold) {
-             const limitedText = (session.transcriptBuffer + ' ' + textToTranslate)
-               .slice(-256)
-             translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
-               .then((result) => {
-                 const wc = webContents.fromId(session.ownerId)
-                 if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
-               })
-               .catch((e) => console.error('[omi-listen] live translation failed:', e))
-             session.lastTranslationTime = now
-             session.lastTranslatedBufferLength = session.transcriptBuffer.length
-           }
-         }
-       }
+      if (isSignLanguageEnabled()) {
+        let textToTranslate = ''
+        segments.forEach((seg) => {
+          textToTranslate += (textToTranslate ? ' ' : '') + seg.text
+        })
+        if (textToTranslate) {
+          session.transcriptBuffer = `${session.transcriptBuffer} ${textToTranslate}`.trim().slice(-256)
+          const now = Date.now()
+          const lastTranslated = now - session.lastTranslationTime
+          if (!session.translationInFlight && (lastTranslated > 2000 || session.transcriptBuffer.length > 50)) {
+            const limitedText = session.transcriptBuffer
+            session.transcriptBuffer = ''
+            session.lastTranslationTime = now
+            session.translationInFlight = true
+            translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
+              .then((result) => {
+                const wc = webContents.fromId(session.ownerId)
+                if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
+              })
+              .catch((e) => console.error('[omi-listen] live translation failed:', e))
+              .finally(() => {
+                session.translationInFlight = false
+              })
+          }
+        }
+      }
       return
     }
     if (json && typeof json === 'object' && 'type' in (json as object)) {
