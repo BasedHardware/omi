@@ -216,6 +216,14 @@ retains evidence. Backfill never invokes keyword, vector, or legacy KG writers
 directly; historical graph repair must use an explicit assertion migration or
 normal promotion admission.
 
+## Backend-authoritative platform
+
+The public authority and zkr replica boundary is documented in
+`docs/memory/backend-authority.md`. The capability contract is exposed through
+`GET /v1/memory/platform` and the hosted MCP `memory_platform` tool. Both are
+discovery surfaces; memory content continues through the existing scoped
+`MemoryService` and MCP tools.
+
 ## Rollout and legacy sunset
 
 `backend/config/memory_rollout.py` owns the runtime contract:
