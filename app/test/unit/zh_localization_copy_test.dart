@@ -14,6 +14,7 @@ void main() {
   test('Chinese labels distinguish transcript and summary actions', () {
     expect(l10n.transcriptTab, '文字记录');
     expect(l10n.summarize, '生成摘要');
+    expect(l10n.generateSummary, '生成摘要');
     expect(l10n.summary, '摘要');
     expect(l10n.allCaughtUp, '已全部完成');
   });
@@ -28,6 +29,7 @@ void main() {
   test('Chinese feedback copy is consistent and interpolates dates', () {
     expect(l10n.summaryGeneratedForDate('2026/8/2'), '已为 2026/8/2 生成摘要');
     expect(l10n.summaryGeneratedFor('2026/8/2'), '已为 2026/8/2 生成摘要');
+    expect(l10n.failedToGenerateSummary, '生成摘要失败。请确保当天有对话记录。');
     expect(l10n.keepGoingGreat, '加油，继续保持！');
     expect(l10n.wrappedLetsHitRewind, '让我们回顾一下你的');
   });

@@ -2267,7 +2267,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summarize => '生成摘要';
 
   @override
-  String get generateSummary => '生成总结';
+  String get generateSummary => '生成摘要';
 
   @override
   String get conversationNotFoundOrDeleted => '未找到对话或已被删除';
@@ -5557,7 +5557,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummary => '生成总结失败。请确保当天有对话记录。';
+  String get failedToGenerateSummary => '生成摘要失败。请确保当天有对话记录。';
 
   @override
   String get recap => '回顾';
