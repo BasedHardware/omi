@@ -559,24 +559,40 @@ extension View {
         self
             .environment(\.colorScheme, .light)
             .background {
-                ZStack {
+                // **The sheen is a layer of the stack, not an overlay sitting on top of the clip.**
+                //
+                // It used to be an `.overlay(alignment: .top)` carrying a `.clipShape(shape)` of its
+                // own, which reads as "clipped to the panel" and is not: a `clipShape` is evaluated
+                // in the frame of the view it modifies, and that view is `sheenHeight` tall. A 22 pt
+                // corner radius inside a ~1 pt box degenerates to a straight bar, so the highlight
+                // ran the full width of the card and carried straight past both corners as the glass
+                // curved away from it.
+                //
+                // Reported as two complaints that were one defect: *"there's a weird line showing
+                // up… it's not completely rounded"* and *"I can see like weird like boxy edges and
+                // it's not completely rounded."* A single hairline across the top is exactly what
+                // squares off a rounded card.
+                //
+                // Inside the stack there is one clip, applied once, in the panel's own coordinate
+                // space — so the corner cuts the material, the ground and the highlight together.
+                // `InkGlassView` has always drawn it this way; this is the modifier reaching the same
+                // result rather than a second, subtly different implementation of it.
+                ZStack(alignment: .top) {
                     if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
                         InkGlassBackdrop()
                     }
                     Ink.surface.opacity(InkGlass.groundAlpha(reduceTransparency: reduceTransparency))
-                }
-                .environment(\.colorScheme, .light)
-                .clipShape(shape)
-                // The specular top edge, drawn inside the clip so the corner cuts it — the same
-                // highlight `InkGlassView.sheen` draws, reached the other way. Hidden under Reduce
-                // Transparency for the same reason the material is: there is no glass to catch light.
-                .overlay(alignment: .top) {
+                    // Hidden under Reduce Transparency for the same reason the material is: there is
+                    // no glass to catch the light. The outer `maxHeight` pins it to the top edge
+                    // without letting a 1 pt band stretch the stack.
                     if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
                         Color.white.opacity(InkGlass.sheenAlpha)
                             .frame(height: InkGlassView.sheenHeight)
-                            .clipShape(shape)
+                            .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
+                .environment(\.colorScheme, .light)
+                .clipShape(shape)
                 .overlay(shape.strokeBorder(Ink.glassEdge, lineWidth: 1))
                 .shadow(
                     color: .black.opacity(shadow.map { Double($0.opacity) } ?? 0),

@@ -122,11 +122,23 @@ app's own UI sounds, whereas failing closed would silently disable the product's
 `/Applications` symlink is already there; nothing else is styled.
 
 - **`scripts/make-dmg-background.sh`** — ImageMagick (installed, 7.1.1-47) renders the background at
-  1x and 2x: wordmark top-left, "Drag Context for Claude into Applications to install", and an arrow
-  between the two icon positions. **No mark.** It shipped with the app's glyph lifted out of the
+  1x and 2x: wordmark top-left, "Drag Context for Claude into Applications to install", and — in the
+  corridor between the two icon positions — a picture of the drag itself. A plain arrow used to sit
+  there, which states a direction and demonstrates nothing; install testers read it, understood it,
+  and still wanted to be *shown* the gesture. So the corridor now carries a dotted arc from the app
+  slot to the Applications slot, a translucent tilted tile partway along it, and an arrowhead into a
+  drop ring drawn darker than the one the tile left. Finder cannot animate a background picture, so
+  this is the single frame that carries the most motion.
+  **No mark.** It shipped with the app's glyph lifted out of the
   `.icns` at the top left, which put the mark on screen twice — Finder draws the real app icon in the
   left-hand slot 130 pt below it, and that icon is the thing the window exists to have dragged. A
-  second, smaller copy of it is a decoy, not branding.
+  second, smaller copy of it is a decoy, not branding. The tile in flight obeys the same rule: it is
+  *drawn* rather than lifted from the `.icns`, so it has no identity to be confused with the real
+  icon, and it is tilted — Finder never draws an item rotated, so nothing off-square can be misread
+  as a third installable thing. Its clearance from both icons, from the header and from the window
+  edge is asserted at render time, as is the rule that the finished raster carries no hue at all
+  (INV-UI-1); the window is 720 pt wide rather than 680 because the old corridor had no room for a
+  tile and a legible trail at once.
 - **`package-dmg.sh`** gains the standard styling dance, no new dependency (`create-dmg` is *not*
   installed and is not worth adding): `hdiutil create -format UDRW` → `hdiutil attach -readwrite
   -noverify -noautoopen` → drop `.background/background.png` + `.VolumeIcon.icns`, `SetFile -a C` the
@@ -211,8 +223,10 @@ before the sentence explaining it could be read.
 ## Phase 6 — The tutorial, which ends inside Claude
 
 1. **"Learn how this works"** card — Start / Skip.
-2. **Collect frames.** Open `anthropic.com` — Claude's own home, and the one page this app can put on
-   somebody's screen without choosing a third party's content for them — and ask them to scroll it.
+2. **Collect frames.** Open `anthropic.com/research` — Claude's own site, the one this app can put on
+   somebody's screen without choosing a third party's content for them, and the page on it there is
+   enough of to scroll — and ask them to scroll it. The home page is short and largely static, and
+   capture dedupes perceptually, so scrolling it to the end produced very little for the gate.
    The gate **reads our own store** (`TutorialGate.realFrames`): real frames, not a timer pretending.
    The count is not narrated; the card says "Scroll through it for a bit" and then "Got it", and it
    claims the page was opened only when `NSWorkspace` says it really was.

@@ -69,7 +69,15 @@ final class TutorialModel: ObservableObject {
     /// suite. Anthropic's own site, which is the one page this app may open without choosing a third
     /// party's content for somebody — see `TutorialEnvironment.openPage` for why the beat opens a
     /// page at all after a version of it deliberately did not.
-    static let readingMaterial = URL(string: "https://www.anthropic.com")!
+    ///
+    /// **The research index rather than the home page, and the reason is the gate.** This beat is
+    /// asking for a scroll, and the frames it waits for only exist if there is something under the
+    /// scroll to make each screen distinct — the capture path dedupes perceptually, so a short,
+    /// mostly-static marketing page can be scrolled to its end and still produce almost nothing. The
+    /// research index is a long list of text entries: it is the same host, chosen for the same
+    /// reason, and it gives the gesture somewhere to go. Reported as: "open anthropic's research
+    /// page, maybe, because there's just more content to read and people can scroll through."
+    static let readingMaterial = URL(string: "https://www.anthropic.com/research")!
 
     /// The chord the timeline really opens on, read through the environment from the shortcut layer
     /// that registers it rather than written out here. A tutorial that taught a chord the app does
@@ -160,6 +168,11 @@ final class TutorialModel: ObservableObject {
     private var stepEnteredAt: Double = 0
     private var didOpenTimeline = false
     private var hasBegun = false
+    /// Whether the bed this run started is still running. Held so the fade is asked for exactly once
+    /// however the run ends: the beat that hands the user to another app stops it (see
+    /// `TutorialStep.handsOverToAnotherApp`), and a teardown that follows must not ask for a second
+    /// fade on a bed that has already gone.
+    private var bedIsPlaying = false
 
     init(environment: TutorialEnvironment) {
         self.environment = environment
@@ -173,6 +186,7 @@ final class TutorialModel: ObservableObject {
         screenIsGranted = environment.screenIsGranted()
         plan = TutorialStep.flow.filter { !($0 == .screenAccess && screenIsGranted) }
         environment.startMusic()
+        bedIsPlaying = true
         enter(.invitation)
     }
 
@@ -555,8 +569,12 @@ final class TutorialModel: ObservableObject {
                         "Open something you would read.",
                         aside: "Then scroll through it for a bit, and I will tell you when I have it.")
                 }
+                // Named for what it is rather than for the host. "Anthropic's website" was true of
+                // the home page this used to open and would be a *vague* description of the research
+                // index — the user is being asked to look at a browser window and find the thing the
+                // card is talking about, and "research page" is what is written across the top of it.
                 return TutorialSpeech(
-                    "I opened Anthropic's website.", stress: "Anthropic",
+                    "I opened Anthropic's research page.", stress: "Anthropic",
                     aside: "Scroll through it for a bit, and I will tell you when I have it.")
             }
 
@@ -723,6 +741,12 @@ final class TutorialModel: ObservableObject {
         // so no watcher can outlive the step whose gate it feeds.
         environment.stopWatchingTimelineHotkey()
         environment.stopWatchingDrag()
+        // The bed's last beat, decided by the step rather than by a timer — see
+        // `TutorialStep.handsOverToAnotherApp`. Here rather than in `tearDown` because the run's end
+        // is not something the tutorial gets to schedule: the proof beat waits on Claude and can wait
+        // a very long time. `stopTheBed` is idempotent, so the later beats that are also handovers
+        // change nothing.
+        if next.handsOverToAnotherApp { stopTheBed() }
         // One line per beat. A tutorial that stalls is the kind of thing a user reports as "it just
         // sat there", and the step it sat on is the whole diagnosis.
         ContextLog.info("step \(next.rawValue)", "tutorial")
@@ -824,9 +848,19 @@ final class TutorialModel: ObservableObject {
             environment.dismissTimeline()
             didOpenTimeline = false
         }
-        environment.stopMusic()
+        // Idempotent, and it has to be: on every run that got as far as the browser the bed was
+        // already faded out by the step that opened it, and a second `stopMusic()` here would ask
+        // the audio layer for a fade on a bed that is not playing.
+        stopTheBed()
         targetFrame = nil
         claudeFrame = nil
+    }
+
+    /// Fades the bed out, once.
+    private func stopTheBed() {
+        guard bedIsPlaying else { return }
+        bedIsPlaying = false
+        environment.stopMusic()
     }
 }
 

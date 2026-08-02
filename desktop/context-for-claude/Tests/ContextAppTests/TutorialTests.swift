@@ -1,4 +1,6 @@
+import AppKit
 import ContextCore
+import SwiftUI
 import XCTest
 
 @testable import ContextApp
@@ -330,7 +332,7 @@ final class TutorialTests: XCTestCase {
             model.poll()
         }
         let waiting = model.speech
-        XCTAssertEqual(waiting.lead, "I opened Anthropic's website.")
+        XCTAssertEqual(waiting.lead, "I opened Anthropic's research page.")
         XCTAssertNotEqual(waiting.lead, "Got it.", "idling must never read as success")
 
         world.frameCount = TutorialModel.frameTarget
@@ -1111,6 +1113,70 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(model.step, .claudeHandoff)
     }
 
+    /// **The bed has a last beat, and it is not "whenever the tutorial ends".**
+    ///
+    /// `Sound.music` is a 24-second loop. It used to be started at `begin()` and stopped only by
+    /// teardown — and the tutorial does not end on a schedule: `claudeProof` waits on Claude calling
+    /// one of our tools and cannot be waived, so a run that sits there loops the same bar at somebody
+    /// for as long as they leave it open. Reported from that very beat: "you should really stop the
+    /// noise after a while."
+    ///
+    /// What ends it is the first beat that hands the user to another application — see
+    /// `TutorialStep.carriesTheBed`. Two claims, and the second is the one a naive fix gets wrong:
+    /// it stops **once**, so the teardown that follows does not ask the audio layer for a second fade
+    /// on a bed that has already gone.
+    func testTheBedStopsWhenTheTutorialHandsTheUserToAnotherAppAndOnlyOnce() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+
+        drive(model, world, to: .invitation)
+        XCTAssertEqual(world.musicStarts, 1)
+        XCTAssertEqual(world.musicStops, 0, "the opening card is the thing on screen; it keeps the bed")
+
+        drive(model, world, to: .collectFrames)
+        XCTAssertEqual(
+            world.musicStops, 1,
+            "the bed is still looping under the browser window this beat just opened")
+
+        // The rest of the run, including a long stall on the beat only Claude can end.
+        drive(model, world, to: .claudeProof)
+        for _ in 0..<200 {
+            world.clock += 6
+            model.poll()
+        }
+        XCTAssertEqual(world.musicStops, 1, "something restarted or re-stopped the bed mid-run")
+        XCTAssertEqual(world.musicStarts, 1)
+
+        model.skip()
+        XCTAssertEqual(
+            world.musicStops, 1, "teardown asked for a second fade on a bed that had already gone")
+    }
+
+    /// Which beats hand the user somewhere that is not this app — named rather than derived, because
+    /// the derivation is the production code's and a test that repeated it would pass however the
+    /// rule happened to be wired.
+    func testTheBedEndsAtTheFirstBeatThatHandsTheUserToAnotherApp() throws {
+        // Ours, and the bed belongs over them.
+        XCTAssertFalse(TutorialStep.invitation.handsOverToAnotherApp)
+        XCTAssertFalse(TutorialStep.screenAccess.handsOverToAnotherApp)
+        XCTAssertFalse(TutorialStep.timeline.handsOverToAnotherApp, "the timeline is our own window")
+        XCTAssertFalse(TutorialStep.query.handsOverToAnotherApp)
+        // Somebody else's: the browser, and Claude twice.
+        XCTAssertTrue(TutorialStep.collectFrames.handsOverToAnotherApp)
+        XCTAssertTrue(TutorialStep.claudeHandoff.handsOverToAnotherApp)
+        XCTAssertTrue(TutorialStep.claudeProof.handsOverToAnotherApp)
+
+        // The end therefore falls *inside* the run rather than at the end of it, which is the whole
+        // point: the beat that can wait on Claude indefinitely must not be the one holding the bed.
+        let flow = TutorialStep.flow
+        let firstHandover = try XCTUnwrap(
+            flow.firstIndex(where: \.handsOverToAnotherApp), "nothing ends the bed at all")
+        XCTAssertLessThan(
+            firstHandover, try XCTUnwrap(flow.firstIndex(of: .claudeProof)),
+            "the bed outlasts every beat that is guaranteed to end")
+    }
+
     func testEveryAdvanceClicksAndTheMusicRunsForExactlyOneRun() {
         let world = World()
         world.screenGranted = true
@@ -1194,6 +1260,12 @@ final class TutorialTests: XCTestCase {
     ///
     /// The URL is asserted through the constant rather than by opening anything: a test that proved
     /// this by launching a browser would take over the screen of whoever ran the suite.
+    ///
+    /// The **path** is held as well as the host, and it is not decoration. This beat's gate is real
+    /// frames, capture dedupes perceptually, and a short mostly-static page can be scrolled end to
+    /// end while producing almost none — so "somewhere on anthropic.com" is not enough, it has to be
+    /// a page there is something to scroll through. Reported as: "open anthropic's research page,
+    /// maybe, because there's just more content to read and people can scroll through."
     func testTheCaptureBeatOpensAnthropicsSiteAndAsksForAScroll() {
         let world = World()
         world.screenGranted = true
@@ -1202,6 +1274,9 @@ final class TutorialTests: XCTestCase {
 
         XCTAssertEqual(world.pagesOpened, [TutorialModel.readingMaterial])
         XCTAssertEqual(TutorialModel.readingMaterial.host(), "www.anthropic.com")
+        XCTAssertEqual(
+            TutorialModel.readingMaterial.path(), "/research",
+            "the home page has too little on it for the gesture this beat asks for to produce frames")
         XCTAssertTrue(model.didOpenReadingMaterial)
 
         let said = model.speech.everythingSaid
@@ -1293,34 +1368,71 @@ final class TutorialTests: XCTestCase {
 
     // MARK: - The chord, being typed
 
-    /// **A double tap is drawn as a double tap.**
+    /// **A double tap is drawn as one key struck twice, and the drawing is checked against the
+    /// detector rather than against an opinion.**
     ///
-    /// `⌘⌘` is the app's own default for `openTimeline`, and it is one key struck twice. The two caps
-    /// therefore never light together — a picture of two ⌘ keys held at once is a gesture no hand can
-    /// make, and a user copying it would never fire the shortcut.
-    func testARepeatedTapIsDrawnAsTwoSeparatePresses() {
+    /// This replaces `testARepeatedTapIsDrawnAsTwoSeparatePresses`, which asserted the same timing
+    /// over *two* caps. The timing was never the defect; the cap count was. A Mac has two Command
+    /// keys, so two ⌘ caps lighting in turn is a good drawing of "press the left one, then the right
+    /// one" — and it was read that way and reported: *"expressing both the command keys one by one.
+    /// It's supposed to be both the command keys together."*
+    ///
+    /// The expected value is not taken from that report and is not taken from the new code either.
+    /// It is taken from `ModifierDoubleTap`, the production detector `GlobalShortcuts` runs on real
+    /// `flagsChanged` events, which is the only thing on this machine that decides what the gesture
+    /// *is*. The demonstration's beats are replayed through it and it has to fire — and the reading
+    /// the report asked for is replayed through it too, and must not.
+    func testTheDemonstratedTapIsOneCapAndIsTheGestureTheDetectorFires() {
         let cycle = TutorialChordCycle(chord: "⌘⌘")
-        XCTAssertEqual(cycle.keys, ["⌘", "⌘"])
+        XCTAssertEqual(cycle.keys, ["⌘"], "two caps put a second Command key in the picture")
+        XCTAssertEqual(cycle.taps, 2)
         XCTAssertTrue(cycle.isRepeatedTap)
+        XCTAssertEqual(cycle.spoken, "Tap ⌘ twice", "the label a screen reader gets says the gesture")
 
-        var beatsWithFirstDown: [Int] = []
-        var beatsWithSecondDown: [Int] = []
+        // A hand's tempo, not the demonstration's. `TutorialChordCycle.beat` is deliberately slower
+        // than a real double tap — the loop is being read rather than performed — so what is under
+        // test is the *shape* the beats describe, played at a speed a person would use.
+        let tempo: TimeInterval = 0.10
+        var detector = ModifierDoubleTap(tapped: .command)
+        var fired = false
         for beat in 0..<cycle.beats {
-            let first = cycle.isDown(0, at: beat)
-            let second = cycle.isDown(1, at: beat)
-            XCTAssertFalse(first && second, "both caps are down at beat \(beat), which is not a tap")
-            if first { beatsWithFirstDown.append(beat) }
-            if second { beatsWithSecondDown.append(beat) }
+            let snapshot = ModifierDoubleTap.Snapshot(
+                modifiers: cycle.isDown(0, at: beat) ? [.command] : [],
+                at: Double(beat) * tempo)
+            if detector.flagsChanged(snapshot) != nil { fired = true }
         }
+        XCTAssertTrue(fired, "the card draws a gesture that does not fire the shortcut it is teaching")
 
-        XCTAssertFalse(beatsWithFirstDown.isEmpty, "the first tap never happens")
-        XCTAssertFalse(beatsWithSecondDown.isEmpty, "the second tap never happens")
-        XCTAssertLessThan(
-            beatsWithFirstDown.last!, beatsWithSecondDown.first!,
-            "the second tap has to follow the first, not precede it")
-        XCTAssertGreaterThan(
-            beatsWithSecondDown.first! - beatsWithFirstDown.last!, 1,
-            "there is no gap between the taps, so they read as one long press")
+        // And the literal reading of the report — both Command keys held down together — cannot fire
+        // it at any tempo, because the two keys share one modifier mask: holding both is one press.
+        // This is why "show them pressed at the same time" is not the fix.
+        var together = ModifierDoubleTap(tapped: .command)
+        XCTAssertNil(together.flagsChanged(.init(modifiers: [.command], at: 0)))
+        XCTAssertNil(together.flagsChanged(.init(modifiers: [.command], at: tempo)))
+        XCTAssertNil(
+            together.flagsChanged(.init(modifiers: [], at: tempo * 2)),
+            "two Command keys held together fired the shortcut, so the picture could have shown that")
+    }
+
+    /// The other double tap this app ships: `⌘⌘⇧`, a repeated ⌘ with Shift **held across both
+    /// halves**. Collapsing the duplicate must not collapse the modifier with it, and the held cap
+    /// must not blink in sympathy with the tapped one.
+    func testADoubleTapWithAHeldModifierKeepsTheModifierDownThroughout() {
+        let cycle = TutorialChordCycle(chord: "⌘⌘⇧")
+        XCTAssertEqual(cycle.keys, ["⌘", "⇧"], "the held modifier is a cap; the repeat is not")
+        XCTAssertTrue(cycle.isRepeatedTap)
+        XCTAssertEqual(cycle.spoken, "Tap ⌘ twice while holding ⇧")
+
+        var tappedGaps = 0
+        for beat in 1..<cycle.beats {
+            let tappedLifted = cycle.isDown(0, at: beat - 1) && !cycle.isDown(0, at: beat)
+            if tappedLifted, cycle.isDown(0, at: (beat + 1) % cycle.beats) { tappedGaps += 1 }
+            // Shift is down for every beat the tap is, and never lifts between the two halves.
+            if cycle.isDown(0, at: beat) {
+                XCTAssertTrue(cycle.isDown(1, at: beat), "⇧ let go mid-chord at beat \(beat)")
+            }
+        }
+        XCTAssertEqual(tappedGaps, 1, "the tapped cap has to lift once, between the two strikes")
     }
 
     /// An ordinary chord is held together: the modifiers stay down while the last key is struck, and
@@ -1349,8 +1461,11 @@ final class TutorialTests: XCTestCase {
     /// rather than running off the end of a step that can last minutes.
     func testTheCycleSplitsByKeycapAndRepeatsForever() {
         XCTAssertEqual(TutorialChordCycle(chord: "⌘⇧Space").keys, ["⌘", "⇧", "Space"])
-        XCTAssertEqual(TutorialChordCycle(chord: "⌥⌥").keys, ["⌥", "⌥"])
+        // One cap and a count, not two caps — see `testTheDemonstratedTapIsOneCapAnd…`.
+        XCTAssertEqual(TutorialChordCycle(chord: "⌥⌥").keys, ["⌥"])
+        XCTAssertEqual(TutorialChordCycle(chord: "⌥⌥").taps, 2)
         XCTAssertEqual(TutorialChordCycle(chord: "F5").keys, ["F5"])
+        XCTAssertEqual(TutorialChordCycle(chord: "F5").taps, 1, "an ordinary key is struck once")
 
         for chord in ["⌘⌘", "⌘⇧K", "F5"] {
             let cycle = TutorialChordCycle(chord: chord)
@@ -1515,6 +1630,71 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(visible.contains(parked))
     }
 
+    // MARK: - The card's own surface
+
+    /// **The card's surface is the app's one glass object, so its highlight is cut by its corner.**
+    ///
+    /// One look at the capture beat produced two complaints — "above it, there's a weird line showing
+    /// up" and "I can see like weird like boxy edges and it's not completely rounded" — and they were
+    /// one defect. The card wore `.inkGlassPanel()`, which cuts the material and the scrim with a
+    /// `.clipShape` and then hangs the specular top edge on as an `.overlay` **outside** that cut. A
+    /// 1 pt white line then runs the card's full width at its very top, straight past both corners as
+    /// the panel curves away from it, which squares the card off.
+    ///
+    /// Behavioural rather than a source scrape: the production card is hosted for real and the AppKit
+    /// tree it produces is walked. The old path is not merely a different spelling of the same thing
+    /// — it puts *no* `InkGlassView` in that tree at all, so this fails on it, and for the right
+    /// reason. The claims after that are the ones that make the corner correct, asserted on the real
+    /// view the card ended up with rather than on the type it was built from.
+    ///
+    /// A tree walk cannot see the old sheen directly and that is worth writing down: SwiftUI draws a
+    /// `Color` straight into its parent's layer without making an `NSView` for it, so "find the white
+    /// line and check what clips it" is not a question at this level. What can be asked is which
+    /// object the card's surface *is* — and `InkGlassView` puts the sheen inside the masked panel by
+    /// construction, which is the thing being relied on.
+    @MainActor
+    func testTheCardsSurfaceIsTheAppsGlassSoItsHighlightIsCutByTheCorner() throws {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        model.begin()
+
+        // Hosted the way `TutorialOverlay` hosts it — a plain container with the hosting view inside
+        // it, never as a borderless window's `contentView`, which re-enters AppKit's window-sizing
+        // negotiation and crashes.
+        let size = NSSize(width: TutorialOverlay.width, height: 300)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
+            backing: .buffered, defer: false)
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        window.contentView = container
+        let hosting = NSHostingView(
+            rootView: TutorialCardView(model: model, chrome: TutorialOverlayChrome()))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        container.addSubview(hosting)
+        hosting.layoutSubtreeIfNeeded()
+
+        let found = hosting.descendants(of: InkGlassView.self)
+        XCTAssertEqual(
+            found.count, 1,
+            "the card's surface is not the app's one glass, so nothing here can say what cuts it")
+        let glass = try XCTUnwrap(found.first)
+
+        // The corner is real: masked *and* rounded. A layer that rounds without masking rounds only
+        // its own background, which is how a rounded scrim ends up under a square everything-else.
+        XCTAssertTrue(
+            glass.panel.layer?.masksToBounds == true, "the panel does not clip its own contents")
+        XCTAssertEqual(glass.panel.layer?.cornerRadius, InkGlass.cornerRadius)
+
+        // And the two things drawn *on* the glass are inside it, which is what the corner then cuts.
+        // The sheen is the one that was wrong: outside the panel it is a hairline drawn over the
+        // card, and inside it, it is light caught on the card's face.
+        XCTAssertTrue(
+            glass.sheen.isDescendant(of: glass.panel),
+            "the specular top edge is drawn outside the corner and runs off both ends of it")
+        XCTAssertTrue(glass.material.isDescendant(of: glass.panel))
+    }
+
     /// **The proof beat never takes the keyboard.** It is waiting for Claude to call one of our
     /// tools, which happens when the user presses Return in Claude's composer — and an accessory app
     /// that activates over Claude eats exactly that keystroke.
@@ -1529,5 +1709,21 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(TutorialStep.findMoments.takesFocusOnEntry)
         XCTAssertTrue(TutorialStep.query.takesFocusOnEntry)
         XCTAssertTrue(TutorialStep.invitation.takesFocusOnEntry)
+    }
+}
+
+// MARK: - Walking the rendered tree
+
+/// Enough of a view walk for the card's surface to be asserted on the thing that reaches the screen
+/// rather than on the source that built it.
+extension NSView {
+    /// Every view of `type` beneath this one, self excluded.
+    fileprivate func descendants<T: NSView>(of type: T.Type) -> [T] {
+        var found: [T] = []
+        for view in subviews {
+            if let match = view as? T { found.append(match) }
+            found.append(contentsOf: view.descendants(of: type))
+        }
+        return found
     }
 }

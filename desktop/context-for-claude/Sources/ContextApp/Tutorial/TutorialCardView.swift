@@ -50,10 +50,42 @@ struct TutorialCardView: View {
         .frame(width: TutorialOverlay.width - (chrome.arrow == nil ? 0 : 18), alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         // The app's shared glass, not a fill of its own: a coach mark floats over the desktop beside
-        // the very windows it points at, and it has to be made of the same thing they are. The
-        // modifier carries the material, the scrim, the corner, the faint edge, the ambient shadow
-        // *and* the light appearance — which is what makes `Ink`'s dynamic colours resolve dark on it.
-        .inkGlassPanel()
+        // the very windows it points at, and it has to be made of the same thing they are.
+        //
+        // **`InkGlassSurface` and not `.inkGlassPanel()`, because the modifier draws the specular top
+        // edge outside its own clip.**
+        //
+        // The modifier assembles the panel in SwiftUI — an `InkGlassBackdrop` and the scrim in a
+        // `ZStack`, cut with `.clipShape` — and then hangs the sheen on as an `.overlay` *after* that
+        // cut. The material and the scrim come out rounded (the clip really does become a
+        // `masksToBounds` layer at 22 pt continuous — checked by walking the hosted tree, not
+        // assumed); the sheen does not. It is a 1 pt white line at 50%, laid across the card's full
+        // width at its very top — and the top corners are exactly where the panel is curving away
+        // from it, so the line carries straight on past both of them into transparent space and
+        // squares the card off.
+        //
+        // Which is why one look at this card produced two complaints: "above it, there's a weird line
+        // showing up", and "I can see like weird like boxy edges and it's not completely rounded".
+        // One defect; the second is what the first looks like from a step back.
+        //
+        // `InkGlassSurface` is the app's real `InkGlassView`, where the sheen is a *subview of the
+        // panel* and is therefore cut by the same corner as everything else on it — the highlight
+        // stops where the glass does, which is what makes it read as light caught on a face rather
+        // than as a hairline drawn over one. Two things the modifier also carried do not come with it
+        // and are therefore stated here: the ambient shadow, and the light appearance that makes
+        // `Ink`'s dynamic colours resolve dark on the panel.
+        //
+        // The modifier itself still has the defect and `SearchSurface` still wears it. Fixing it
+        // there is moving one `.overlay` inside the `.clipShape` in `InkGlass.swift`.
+        .environment(\.colorScheme, .light)
+        .background {
+            InkGlassSurface()
+                .shadow(
+                    color: .black.opacity(Double(InkGlassShadow.ambient.opacity)),
+                    // SwiftUI's blur radius is half Core Animation's for the same visual spread.
+                    radius: InkGlassShadow.ambient.radius / 2,
+                    y: -InkGlassShadow.ambient.offsetY)
+        }
         .overlay(alignment: .top) { arrow(.top) }
         .overlay(alignment: .bottom) { arrow(.bottom) }
         .padding(chrome.arrow == nil ? 0 : 9)
@@ -112,7 +144,9 @@ struct TutorialCardView: View {
         // there, and this beat cannot be earned on such a machine at all.
         //
         // It moves because the app's own default chord is a *double tap* of ⌘, and a still picture
-        // of two ⌘ symbols side by side says the opposite of that. See `TutorialChordCycle`.
+        // of two ⌘ symbols side by side says the opposite of that. Drawing the tap as two caps did
+        // too: a Mac has two Command keys, so two ⌘ caps lighting in turn was read — and reported —
+        // as "both the command keys, one by one". One cap, struck twice. See `TutorialChordCycle`.
         case .openTimeline where model.timelineChordIsArmed:
             HStack(spacing: 10) {
                 TutorialChordDemo(chord: model.timelineChord)

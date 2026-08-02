@@ -149,7 +149,7 @@ struct TutorialEnvironment {
     /// Opens a URL in whatever the user's default browser is, and answers whether it really opened.
     ///
     /// The `Bool` is the whole reason this is not a `-> Void`. The capture beat's card says "I opened
-    /// Anthropic's website" — a claim about something the user can look up by glancing at their
+    /// Anthropic's research page" — a claim about something the user can look up by glancing at their
     /// Dock — and a card that says it while `NSWorkspace` answered false is the same class of lie as
     /// a frame count driven by a clock. The model records what came back and the copy follows it.
     ///
@@ -159,7 +159,9 @@ struct TutorialEnvironment {
     /// app watch their screen. What replaced it — "go and look at something of your own" — was worse
     /// on the machine that matters: a first run is a fresh Mac with an empty desktop, and the beat
     /// sat there waiting for frames the user had nothing to generate. `anthropic.com` is the one
-    /// page this app can open without choosing somebody else's content for them.
+    /// host this app can open without choosing somebody else's content for them, and
+    /// `TutorialModel.readingMaterial` names the page on it that the beat's gate can actually be
+    /// satisfied from.
     var openPage: (URL) -> Bool = { _ in false }
 
     /// Hands a question to Claude, and answers what really happened.

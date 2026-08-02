@@ -37,6 +37,23 @@ import SwiftUI
 /// The split is by keycap, and a keycap is not a character: `Space`, `⌫` and the `Key 40` fallback
 /// are single keys with multi-character labels, so the leading run of modifier glyphs is peeled off
 /// and everything after it is one cap.
+///
+/// ## A repeated tap is one cap, and this is the correction
+///
+/// `displayString` writes a double tap as the glyph *twice* — `⌘⌘` — and the first version of this
+/// type took that literally: two caps, drawn side by side, lit one after the other. The timing was
+/// right and the picture was wrong, because **a Mac has two Command keys**. Two ⌘ caps lighting in
+/// turn is a perfectly good drawing of "press the left one, then the right one", which is not the
+/// gesture and is not something `ModifierDoubleTap` can ever see — it watches the `.command` mask go
+/// down, up and down again, and holding one Command while adding the other produces no such
+/// transition at all. It was reported exactly that way: *"expressing both the command keys one by
+/// one. It's supposed to be both the command keys together."*
+///
+/// Neither reading of that report is the fix. Lighting both caps together would teach the gesture
+/// the detector genuinely cannot see; keeping two caps at all leaves "which two keys?" on the card.
+/// So the *count of caps* is what changes: `keys` now carries the caps that are actually **drawn**,
+/// which for a repeated tap is one, and `taps` carries how many times it is struck. One ⌘, hit
+/// twice, is the whole gesture and there is no second key left to read into it.
 struct TutorialChordCycle: Equatable {
     /// The modifier glyphs `SettingsShortcutChord.displayString` can put in front of a key. Listed
     /// here rather than shared with that type because this is a question about *rendering* a string
@@ -56,8 +73,15 @@ struct TutorialChordCycle: Equatable {
     /// continuous stutter rather than as a gesture with a beginning.
     static let restBeats = 2
 
-    /// One cap each, in the order they are typed.
+    /// The caps that are **drawn**, one each, in the order they are typed.
+    ///
+    /// For a repeated tap the duplicate is collapsed away, so `⌘⌘` is `["⌘"]` and `⌘⌘⇧` — the search
+    /// default, a double tap of ⌘ with Shift held across both halves — is `["⌘", "⇧"]`. Index 0 is
+    /// then the key being struck and everything after it is held throughout.
     let keys: [String]
+
+    /// How many times `keys.first` is struck: 2 for a double tap, 1 for an ordinary chord.
+    let taps: Int
 
     init(chord: String) {
         var caps: [String] = []
@@ -67,18 +91,28 @@ struct TutorialChordCycle: Equatable {
             rest = rest.dropFirst()
         }
         if !rest.isEmpty { caps.append(String(rest)) }
-        self.keys = caps
+
+        // Two identical leading caps is the one thing a repeated tap can look like in a display
+        // string, and the second of them is not a second key — see the type's note on why drawing it
+        // as one was read as "both the command keys".
+        if caps.count >= 2, caps[0] == caps[1] {
+            caps.remove(at: 1)
+            self.keys = caps
+            self.taps = 2
+        } else {
+            self.keys = caps
+            self.taps = 1
+        }
     }
 
-    /// Whether this chord is the *same key struck twice*, which is what the two leading caps being
-    /// identical means and the only thing they can mean.
-    var isRepeatedTap: Bool { keys.count >= 2 && keys[0] == keys[1] }
+    /// Whether this chord is the *same key struck twice* rather than a set of keys held together.
+    var isRepeatedTap: Bool { taps > 1 }
 
     /// The length of one loop, in beats. Never zero: a chord this app could not parse still has to
     /// divide by something.
     var beats: Int {
         // A repeated tap is three beats of movement whatever else is in the chord — down, up, down —
-        // because the caps after the second one are modifiers held across both taps rather than
+        // because the caps after the first one are modifiers held across both taps rather than
         // presses of their own.
         let movement = isRepeatedTap ? 3 : max(1, keys.count)
         return movement + Self.holdBeats + Self.restBeats
@@ -98,13 +132,26 @@ struct TutorialChordCycle: Equatable {
             if beat < keys.count { return index < beat + 1 }
             return beat < keys.count + Self.holdBeats && index < keys.count
         }
-        // A double tap, with any remaining modifiers held across both of them.
+        // The tapped cap is index 0 and lifts between the two strikes; anything after it is a
+        // modifier held across both of them, which is why it never has a gap.
+        let isHeldThroughout = index > 0
         switch beat {
-        case 0: return index == 0 || index >= 2
-        case 1: return index >= 2
-        case 2..<(3 + Self.holdBeats): return index == 1 || index >= 2
+        case 0, 2..<(3 + Self.holdBeats): return index == 0 || isHeldThroughout
+        case 1: return isHeldThroughout
         default: return false
         }
+    }
+
+    /// The gesture said out loud, for the one label a screen reader gets.
+    ///
+    /// Spoken rather than spelled, because the drawing is the thing being described and "⌘ ⌘" read
+    /// aloud has exactly the ambiguity this type exists to remove.
+    var spoken: String {
+        guard let struck = keys.first else { return "" }
+        guard isRepeatedTap else { return "Press \(keys.joined(separator: " "))" }
+        let held = keys.dropFirst()
+        guard !held.isEmpty else { return "Tap \(struck) twice" }
+        return "Tap \(struck) twice while holding \(held.joined(separator: " "))"
     }
 }
 
@@ -129,6 +176,16 @@ struct TutorialChordDemo: View {
             ForEach(cycle.keys.indices, id: \.self) { index in
                 TutorialKeycap(label: cycle.keys[index], isDown: isDown(index))
             }
+            // The count, in words, beside the one cap it belongs to. A second keycap said "there is
+            // another key here" — see `TutorialChordCycle` — and a badge on the cap itself would be
+            // read as part of the key's legend. This is the only thing on the board that is not a
+            // key, so it is set in secondary ink rather than on a cap.
+            if cycle.isRepeatedTap {
+                Text("twice")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(Ink.secondary)
+                    .padding(.trailing, 2)
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
@@ -140,7 +197,7 @@ struct TutorialChordDemo: View {
                         .strokeBorder(Ink.hairline, lineWidth: 1)))
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: tick)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Press \(chord)"))
+        .accessibilityLabel(Text(cycle.spoken))
         // `.task` rather than a `Timer` publisher: it is tied to this view's lifetime, so it is
         // cancelled the instant the card stops rendering the demonstration — which is the instant
         // the user presses the chord for real — and, unlike a publisher built in `init`, it does not

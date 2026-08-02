@@ -121,6 +121,27 @@ enum TutorialStep: String, CaseIterable, Sendable {
         }
     }
 
+    /// Whether this beat has put **another application's window** in front of the user.
+    ///
+    /// True for exactly three: the browser at `collectFrames`, and Claude at the handoff and the
+    /// proof. The timeline is ours and does not count.
+    ///
+    /// **What it decides is where the cinematic bed ends** (`TutorialModel`). `Sound.music` is a
+    /// 24-second loop, started once at `begin()`, and the only thing that used to stop it was the
+    /// tutorial ending — but the tutorial does not end on a schedule. `claudeProof` waits on Claude
+    /// calling one of our tools and cannot be waived, so a run left sitting there looped the same bar
+    /// at somebody for as long as they left it open. Reported from that beat as "you should really
+    /// stop the noise after a while", and the honest reading is not *quieter*: the bed was never
+    /// given a last beat. The first of these three is it. Music is ours; the window now in front of
+    /// the user is not, and a loop running under somebody else's page is noise rather than
+    /// atmosphere.
+    ///
+    /// Derived from `placement` rather than listed again, because it is the same fact: a card leaves
+    /// the middle of the screen precisely when the user has been asked to work somewhere that is not
+    /// this app. One answer, so the two cannot drift — and a beat added later has to answer the
+    /// placement question anyway.
+    var handsOverToAnotherApp: Bool { placement != .centred }
+
     /// Whether the card takes the keyboard when it appears.
     ///
     /// A card is a thing to press, so most of them do: this app is an accessory and is almost never
