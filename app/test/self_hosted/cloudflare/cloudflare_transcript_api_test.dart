@@ -53,6 +53,24 @@ void main() {
     expect(sessions.map((session) => session.characterCount), [42, 7]);
   });
 
+  test('rejects a non-object session in the Worker list response', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{"sessions":["not-a-session"]}', 200)),
+    );
+
+    await expectLater(api.listSessions(), throwsA(isA<CloudflareTranscriptApiException>()));
+  });
+
+  test('rejects a Worker list session without an id', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{"sessions":[{"status":"ready"}]}', 200)),
+    );
+
+    await expectLater(api.listSessions(), throwsA(isA<CloudflareTranscriptApiException>()));
+  });
+
   test('sorts transcript chunks by sequence', () async {
     final api = CloudflareTranscriptHttpApi(
       configuration: configuration,
@@ -68,6 +86,28 @@ void main() {
     final transcript = await api.getTranscript('session/one');
 
     expect(transcript.fullText, 'first\nsecond');
+  });
+
+  test('rejects a non-object transcript chunk in the Worker detail response', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient(
+        (_) async => http.Response('{"session":{"id":"session-1"},"chunks":["not-a-chunk"]}', 200),
+      ),
+    );
+
+    await expectLater(api.getTranscript('session-1'), throwsA(isA<CloudflareTranscriptApiException>()));
+  });
+
+  test('rejects a malformed transcript chunk in the Worker detail response', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient(
+        (_) async => http.Response('{"session":{"id":"session-1"},"chunks":[{"sequence":1}]}', 200),
+      ),
+    );
+
+    await expectLater(api.getTranscript('session-1'), throwsA(isA<CloudflareTranscriptApiException>()));
   });
 
   test('refuses non-loopback HTTP Worker URLs', () {

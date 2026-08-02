@@ -41,11 +41,7 @@ class CloudflareTranscriptHttpApi implements CloudflareTranscriptApi {
       final body = await _getJson(_endpoint('/v1/transcript-sessions', queryParameters: query));
       final rawSessions = body['sessions'];
       if (rawSessions is! List) throw const CloudflareTranscriptApiException('Worker response is missing sessions.');
-      sessions.addAll(
-        rawSessions
-            .whereType<Map>()
-            .map((item) => CloudflareTranscriptSession.fromJson(Map<String, dynamic>.from(item))),
-      );
+      sessions.addAll(rawSessions.map(_parseSession));
       final nextCursor = body['next_cursor'];
       cursor = nextCursor is String && nextCursor.isNotEmpty ? nextCursor : null;
       if (cursor != null && !seenCursors.add(cursor)) {
@@ -60,8 +56,41 @@ class CloudflareTranscriptHttpApi implements CloudflareTranscriptApi {
     if (!enabled) throw const CloudflareTranscriptApiException('Cloudflare transcripts are not configured.');
     if (sessionId.isEmpty) throw const CloudflareTranscriptApiException('A transcript session id is required.');
     final encodedId = Uri.encodeComponent(sessionId);
-    return CloudflareTranscriptDetail.fromJson(await _getJson(_endpoint('/v1/upload-sessions/$encodedId/transcript')));
+    final body = await _getJson(_endpoint('/v1/upload-sessions/$encodedId/transcript'));
+    _validateTranscriptDetail(body);
+    return CloudflareTranscriptDetail.fromJson(body);
   }
+
+  CloudflareTranscriptSession _parseSession(Object? rawSession) {
+    if (rawSession is! Map) {
+      throw const CloudflareTranscriptApiException('Worker response contains a non-object session.');
+    }
+    final session = Map<String, dynamic>.from(rawSession);
+    final id = session['id'];
+    if (id is! String || id.trim().isEmpty) {
+      throw const CloudflareTranscriptApiException('Worker response contains a session without an id.');
+    }
+    return CloudflareTranscriptSession.fromJson(session);
+  }
+
+  void _validateTranscriptDetail(Map<String, dynamic> body) {
+    _parseSession(body['session']);
+    final rawChunks = body['chunks'];
+    if (rawChunks is! List) {
+      throw const CloudflareTranscriptApiException('Worker response is missing transcript chunks.');
+    }
+    for (final rawChunk in rawChunks) {
+      if (rawChunk is! Map) {
+        throw const CloudflareTranscriptApiException('Worker response contains a non-object transcript chunk.');
+      }
+      final chunk = Map<String, dynamic>.from(rawChunk);
+      if (_parseSequence(chunk['sequence']) == null || chunk['text'] is! String) {
+        throw const CloudflareTranscriptApiException('Worker response contains a malformed transcript chunk.');
+      }
+    }
+  }
+
+  int? _parseSequence(Object? value) => value is int ? value : int.tryParse(value?.toString() ?? '');
 
   Uri _endpoint(String path, {Map<String, String>? queryParameters}) {
     final base = _configuration.baseUri;

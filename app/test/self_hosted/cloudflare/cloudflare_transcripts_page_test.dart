@@ -73,6 +73,32 @@ void main() {
     expect(find.text('No Cloudflare transcripts are available yet.'), findsOneWidget);
   });
 
+  testWidgets('disabled Cloudflare keeps existing Omi and daily-summary headers', (tester) async {
+    final provider = CloudflareTranscriptProvider(api: _FakeApi(enabled: false));
+
+    await tester.pumpWidget(
+      _app(
+        provider,
+        const Scaffold(
+          body: ConversationsSectionHeader(showDailySummaries: false, hasOmiConversationState: true),
+        ),
+      ),
+    );
+    expect(find.text('Conversations'), findsOneWidget);
+    expect(find.byKey(const Key('cloudflare_transcripts_entry')), findsNothing);
+
+    await tester.pumpWidget(
+      _app(
+        provider,
+        const Scaffold(
+          body: ConversationsSectionHeader(showDailySummaries: true, hasOmiConversationState: false),
+        ),
+      ),
+    );
+    expect(find.text('Daily Recaps'), findsOneWidget);
+    expect(find.byKey(const Key('cloudflare_transcripts_entry')), findsNothing);
+  });
+
   testWidgets('detail empty keeps the detail-specific no-transcript message', (tester) async {
     final provider = CloudflareTranscriptProvider(
       api: _FakeApi(

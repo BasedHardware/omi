@@ -21,7 +21,7 @@ status: approved-for-minimum-slice
 | list sessions | `GET /v1/transcript-sessions?limit=<n>&cursor=<cursor>` | `sessions` と任意の `next_cursor` | 非2xx、不正JSON、循環cursor、timeoutは値を含まないエラー |
 | transcript detail | `GET /v1/upload-sessions/{id}/transcript` | `session` と `chunks` | 非2xx、不正JSON、timeoutは値を含まないエラー |
 
-一覧はcursorを重複なく最後まで追い、詳細chunksはsequence昇順で表示する。Worker正本の文字数は `transcript_char_count` とし、Flutterは旧response互換のため `character_count` を明示的なfallbackとしてのみ読む。tokenはHTTP header以外へ出力しない。
+一覧はcursorを重複なく最後まで追い、各session要素はobjectかつ空でない `id` を必須にする。詳細はobjectの `session` とobject要素だけの `chunks` を必須にし、各chunkは整数の `sequence` と文字列の `text` を持つ。違反は `CloudflareTranscriptApiException` として扱い、詳細chunksはsequence昇順で表示する。Worker正本の文字数は `transcript_char_count` とし、Flutterは旧response互換のため `character_count` を明示的なfallbackとしてのみ読む。tokenはHTTP header以外へ出力しない。
 
 ## Adapter contract
 
@@ -39,9 +39,16 @@ status: approved-for-minimum-slice
 - 行を選ぶと詳細で時系列順のtranscript textを表示する。
 - 設定無効・ネットワーク失敗は既存Omi会話一覧を壊さず、Cloudflare画面だけで明示する。
 
+## Slice alignment and release boundary
+
+- Story、Spec、ADR、local overlay runbookは同じ製品slice、すなわちCloudflare transcriptのread-only一覧/詳細とWAL no-op boundaryを正本として記述する。生成l10nはARBからの機械生成であり、独立した製品laneではない。
+- Worker deployはこのPRで実行しない。URL/tokenのdart-definesが未設定なら機能は無効であり、request・data write・WAL mutationを行わない。
+- rollbackはdefinesの除去で無効化するか、Provider/Conversationsの薄い接続点だけをrevertする。Workerや既存WALの状態を変更しない。
+- HTTP 200、build、hermetic testは必要な局所証拠であってE2E完了ではない。新baseでのWorker runtimeとiPhone経路は別証跡を要し、現時点では `未確認` である。画面のscoped errorとcontract testは失敗を観測する範囲であり、production telemetryやdeploy完了を主張しない。
+
 ## Verification
 
-1. API/model/provider/unit tests: pagination、順序、timeout、HTTP failure、token非露出、設定無効。
-2. Widget test: 有効時の入口、一覧、詳細、error/empty。
+1. API/model/provider/unit tests: pagination、session/chunk shape、順序、timeout、HTTP failure、token非露出、設定無効。
+2. Widget test: 有効時の入口、一覧、詳細、error/empty、Cloudflare無効時の既存Omi/daily-summary header。
 3. analyzer ratchet: 新しいwarning/infoを増やさない。
 4. 実機E2EとWorker APIは独立して記録する。ここでテストが緑でも実機/Worker/deploy成功とはしない。音声upload/ack/deleteと新base iPhone E2EはこのPRの受入対象外である。

@@ -29,6 +29,7 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 5. 個人用Firebase、iOS署名、entitlementは製品tracked差分に含めない。必要な値なしで読めるlocal overlay契約だけを文書化する。
 6. UI表示文言はARB正本で管理し、生成Dartはコピー移植せず `flutter gen-l10n` で再生成する。
 7. 証拠はこの新baseでのコード/テストと、旧スパイクに存在する実機・Worker・デプロイ証拠を明確に分離する。旧証拠は新baseの成功証拠にしない。
+8. Story、Spec、ADR、local overlay runbookは同一のread-only製品sliceを表す。生成l10nはARBからの機械生成物であり、独立した製品laneではない。
 
 ## KPI と証拠境界
 
@@ -58,3 +59,9 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 - 含む: Cloudflare Workerのread-only一覧・詳細、Omi会話が0件でも設定有効時に到達できる入口、実Worker response shapeを写したhermetic fixture、WALのno-op boundary。
 - 含まない: `POST` upload、chunk/finalize、ack、ローカルWAL削除、新base iPhone E2E。これらは後続sliceでWorker idempotency契約と実機証跡を揃えて受け入れる。
 - 旧スパイクの成功記録は新baseの成功証拠へ混ぜない。
+
+## Release・rollback・observability
+
+- Worker deployはこのPRの対象外である。URL/tokenのdart-definesが未設定ならCloudflare機能は無効で、既存Omi会話を変更せずread requestもdata writeも行わない。
+- HTTP非2xx、timeout、不正response shapeはCloudflare read moduleのscoped errorであり、WAL upload、ack、deleteへ進まない。rollbackはdefinesを除去するか、Provider/Conversationsの薄い接続点をrevertする。
+- focused tests、analyzer、HTTP 200、buildは局所証拠にすぎない。新baseのWorker runtimeとiPhone E2Eは別途必要で、ともに `未確認` のまま維持する。
