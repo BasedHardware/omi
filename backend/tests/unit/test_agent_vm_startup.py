@@ -13,7 +13,7 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {
-        "curl": "printf '%s\\n' omi-token\n",
+        "curl": "if [[ \"$*\" == *backend-url* ]]; then printf '%s\\n' https://api.omi.me; else printf '%s\\n' omi-token; fi\n",
         "gcloud": "printf 'gcloud %s\\n' \"$*\" >> \"$COMMAND_LOG\"\ncase \"$1 $2\" in\n  'secrets versions') printf '%s\\n' secret-value ;;\nesac\n",
         "docker": "printf 'docker %s\\n' \"$*\" >> \"$COMMAND_LOG\"\n",
     }.items():
@@ -41,15 +41,33 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     )
 
     commands = log.read_text(encoding="utf-8")
-    assert "gcloud secrets versions access latest --secret=DESKTOP_ANTHROPIC_API_KEY" in commands
-    assert "gcloud secrets versions access latest --secret=GEMINI_API_KEY" in commands
+    assert "DESKTOP_ANTHROPIC_API_KEY" not in commands
+    assert "GEMINI_API_KEY" not in commands
     assert "gcloud auth configure-docker gcr.io --quiet" in commands
     assert "docker pull gcr.io/project/agent-vm:abcdef0" in commands
-    assert "--env ANTHROPIC_API_KEY=secret-value" in commands
+    assert "--env ANTHROPIC_API_KEY=omi-token" in commands
+    assert "--env ANTHROPIC_BASE_URL=https://api.omi.me/v1/agent/anthropic" in commands
     assert "--env AUTH_TOKEN=omi-token" in commands
-    assert "--env GEMINI_API_KEY=secret-value" in commands
+    assert "--env BACKEND_URL=https://api.omi.me" in commands
     assert "--env PLAYWRIGHT_MCP_COMMAND=playwright-mcp" in commands
     assert (
         "--env PLAYWRIGHT_MCP_ARGS=[\"--user-data-dir\", \"/app/chrome-profile\", \"--headless\", \"--no-sandbox\"]"
         in commands
     )
+
+    (bin_dir / "curl").write_text("#!/bin/bash\nprintf '%s\\n' https://attacker.example\n", encoding="utf-8")
+    (bin_dir / "curl").chmod(0o755)
+    result = subprocess.run(
+        bash_command(
+            "-c",
+            'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\nexec "$BASH" "$@"',
+            "bash",
+            STARTUP,
+            cwd=ROOT,
+        ),
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0

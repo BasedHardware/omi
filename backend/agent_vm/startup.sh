@@ -3,8 +3,11 @@ set -euo pipefail
 
 image="${AGENT_VM_IMAGE}"
 auth_token="$(curl -fsS -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/auth-token)"
-anthropic_api_key="$(gcloud secrets versions access latest --secret=DESKTOP_ANTHROPIC_API_KEY)"
-gemini_api_key="$(gcloud secrets versions access latest --secret=GEMINI_API_KEY)"
+backend_url="$(curl -fsS -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/backend-url)"
+case "$backend_url" in
+  https://api.omi.me|https://api.omiapi.com) ;;
+  *) echo "unsupported backend URL" >&2; exit 1 ;;
+esac
 data_dir="${AGENT_VM_DATA_DIR:-/var/lib/omi-agent}"
 mkdir -p "$data_dir"
 chown -R 10001:10001 "$data_dir" || true
@@ -13,7 +16,7 @@ docker pull "$image"
 docker rm -f omi-agent-vm >/dev/null 2>&1 || true
 docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:8080 \
   --cap-drop=ALL --security-opt no-new-privileges \
-  --env ANTHROPIC_API_KEY="$anthropic_api_key" --env AUTH_TOKEN="$auth_token" --env GEMINI_API_KEY="$gemini_api_key" \
+  --env ANTHROPIC_API_KEY="$auth_token" --env ANTHROPIC_BASE_URL="$backend_url/v1/agent/anthropic" --env AUTH_TOKEN="$auth_token" --env BACKEND_URL="$backend_url" \
   --env PLAYWRIGHT_MCP_COMMAND=playwright-mcp \
   --env PLAYWRIGHT_MCP_ARGS='["--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]' \
   --volume "$data_dir:/home/omi/omi-agent" "$image"

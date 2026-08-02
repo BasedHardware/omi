@@ -416,9 +416,8 @@ def execute_sql(query: str) -> str:
 async def semantic_search(query: str, days: int = 7, app_filter: str | None = None) -> str:
     if runtime.db is None:
         return json.dumps({"error": "Database not loaded. Upload omi.db first."})
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return json.dumps({"error": "GEMINI_API_KEY not set"})
+    if not runtime.firebase_token:
+        return json.dumps({"error": "Firebase token is not set"})
     body = {
         "model": "models/gemini-embedding-001",
         "content": {"parts": [{"text": query}]},
@@ -427,7 +426,8 @@ async def semantic_search(query: str, days: int = 7, app_filter: str | None = No
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={api_key}",
+                f"{runtime.backend_url}/v1/proxy/gemini/models/gemini-embedding-001:embedContent",
+                headers={"Authorization": f"Bearer {runtime.firebase_token}"},
                 json=body,
             )
             response.raise_for_status()
