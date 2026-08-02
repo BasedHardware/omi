@@ -31,14 +31,16 @@
 //
 //  The choice is not "which is most translucent" — it is "which passes the most desktop through *at
 //  a fixed legibility floor*", which is a different question and has a different answer. The floor
-//  is `Ink.tertiary` clearing WCAG AA over a solid black desktop, which needs a ground of 219/255
-//  (see `scrim`). Writing the ground over black as `255·s + tint·a·(1−s)` and the desktop's share as
-//  `(1−a)(1−s)`, a **pure white tint is optimal**: it is the only tint for which brightening the
-//  panel costs nothing in passthrough, because the material *is* the brightest thing available.
-//  `.headerView` is the only translucent candidate that measures pure white. At the shared floor it
-//  passes 12.8% of the desktop; `titlebar` and `hudWindow` pass 11.6%, `popover` 11.2%, `sidebar`
-//  6.7%. Rendered side by side over a colour wallpaper at equal legibility, they confirm the
-//  arithmetic — `.headerView` shows the most of what is behind it.
+//  is `Ink.tertiary` clearing WCAG AA over a solid black desktop (see `scrim`). Writing the ground
+//  over black as `255·s + tint·a·(1−s)` and the desktop's share as `(1−a)(1−s)`, a **pure white tint
+//  is optimal**: it is the only tint for which brightening the panel costs nothing in passthrough,
+//  because the material *is* the brightest thing available. `.headerView` is the only translucent
+//  candidate that measures pure white. Solving each candidate for the scrim that lands it on the
+//  ground this app now ships (209.1/255): `.headerView` passes **18.0%** of the desktop, `titlebar`
+//  and `hudWindow` 15.7%, `popover` 15.1%, `menu` 13.0%, `sidebar` 9.1%. Rendered side by side over
+//  a colour wallpaper at equal legibility, they confirm the arithmetic — `.headerView` shows the
+//  most of what is behind it, and its lead widens as the ground gets thinner, because the others
+//  have to spend scrim making up for a tint that is not white.
 //
 //  Brand: neutrals and system semantics only, never purple (INV-UI-1). Nothing here reaches for
 //  `Ink.accent` at all — glass is defined by its brightness and its shadow, not by a hue.
@@ -87,25 +89,42 @@ enum InkGlass {
     /// rewriting the guard.
     static let measuredMaterialTint: CGFloat = 1.0
 
-    /// `Ink.surface` at 0.36, painted over the material and under the content. Down from the 0.80
-    /// this surface shipped with, which is most of why it read as an opaque slab.
+    /// `Ink.surface` at 0.10, painted over the material and under the content. It shipped at 0.80,
+    /// then at 0.36, and is now a tenth — the panel was still reported as reading more like paper
+    /// than like glass.
     ///
-    /// **This is a floor, not a taste.** The binding constraint is `Ink.tertiary` — `labelColor` at
-    /// 0.66, so black at an effective 0.559 on a light panel — clearing WCAG AA (4.5:1) over the
-    /// worst desktop that can be behind the glass, a solid black one. Solved against the real
-    /// measurement that needs a ground of **219/255**, which for a pure-white material at 0.800
-    /// opacity is a scrim of 0.295. 0.36 is that floor plus a margin: it lands `tertiary` at 4.55:1
-    /// over black and 4.92:1 over white, and it costs 1.2 points of desktop passthrough (12.8% vs
-    /// 14.1%), which is under the threshold of noticing.
+    /// **The whiteness is what matters, not where it comes from.** Both the material's tint and this
+    /// scrim are pure white, so over a black desktop the ground is `255·s + 255·a·(1−s)` and the
+    /// desktop's surviving share is exactly `1 − ground`: passthrough is a function of the *final*
+    /// ground alone, and it makes no difference whether the whiteness was contributed by the
+    /// material or by the scrim. That is why the material's own alpha is never touched — dimming an
+    /// `NSVisualEffectView` does not thin the ground, it lets a *sharp*, unblurred desktop past the
+    /// blur, which is the one thing legibility on glass cannot survive.
     ///
-    /// The number worth knowing when this gets re-tuned: **the panel can never pass more than
-    /// `1 − 219/255 = 14.1%` of the desktop while `Ink.tertiary` stays at 0.66**, because the
-    /// material is already the brightest thing available. Wanting a more see-through panel than that
-    /// is not a scrim decision — it is a request to darken the bottom rung of the type ladder, which
-    /// is a change to `Ink` and to every opaque surface in the app, not to this file.
+    /// So there are only two numbers: this one and `Ink.tertiary`, the bottom rung of the label
+    /// ladder and the rung that binds. The ceiling is `1 − 0.800 = 20%` — the material is the
+    /// brightest thing macOS offers and no scrim can pass more of the desktop than it already does.
+    ///
+    /// | scrim | ground over black | passthrough | `tertiary` there |
+    /// |---|---|---|---|
+    /// | 0.36 (was) | 222.4/255 | 12.8% | 4.55:1 at alpha 0.66 |
+    /// | **0.10** | **209.1/255** | **18.0%** | **4.62:1 at alpha 0.68** |
+    /// | 0.00 | 204.0/255 | 20.0% | 4.54:1 at alpha 0.68 |
+    ///
+    /// **The scrim is no longer the floor — `Ink.tertiary` is.** At the old 0.66 this rung needed a
+    /// ground of 219/255 just to clear AA, which is what capped every panel in the app at 14.1%; two
+    /// points of alpha on that one token clear AA on *no* scrim at all, so the panel now spends 18.0
+    /// of the 20.0 points available instead of 12.8. The last two are kept as the model's margin:
+    /// the arithmetic here reproduces the sampled composite to under 1/255, but a surface with
+    /// nothing of its own left is a hole rather than a panel, and it is this alpha — not the
+    /// material — that goes to 1 under Reduce Transparency.
+    ///
+    /// Thinning it further is nearly free and nearly pointless (2 points), and *thickening* it is
+    /// the change to be suspicious of: it is the direction that quietly walks the surface back
+    /// towards paper. The value that must not move without re-deriving both is `Ink.tertiary`.
     ///
     /// Deliberately flat and full-bleed. A scrim only under the copy is a grey slab, drawn again.
-    static let scrim: CGFloat = 0.36
+    static let scrim: CGFloat = 0.10
 
     /// The corner every panel is cut to.
     ///
@@ -241,8 +260,9 @@ final class InkGlassView: NSView {
 
     /// Draws nothing itself; it exists to own a `shadowPath` and a mask that keeps the shadow from
     /// falling *under* the panel. It would otherwise: Core Animation renders a `shadowPath` as a
-    /// filled, blurred shape behind the layer's content, and behind a 12%-transparent panel a filled
-    /// black rounded rect is very much visible.
+    /// filled, blurred shape behind the layer's content, and behind an 18%-transparent panel a
+    /// filled black rounded rect is very much visible — more so now than when the scrim was 0.36,
+    /// which is the half of this component that a thinner ground makes *more* load-bearing.
     private let shadowHost = NSView()
     private var observer: (any NSObjectProtocol)?
 

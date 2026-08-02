@@ -101,33 +101,49 @@ final class InkGlassTests: XCTestCase {
         XCTAssertEqual(readings[1], readings[3], accuracy: 1e-9, "system appearance changed the glass")
     }
 
-    /// The scrim is a **floor**, and this is the measurement that sets it.
+    /// **`Ink.tertiary` is what pays for the glass, and it is spent.**
     ///
-    /// The pressure on this number is entirely one way: the surface is meant to look like glass, so
-    /// every future pass will want it thinner. What stops that from silently walking `Ink.tertiary`
-    /// under AA is showing that the shipped value is *already* near the edge — the same model, run a
-    /// few points lower, has to fail.
+    /// This assertion used to be about the scrim, and it was right about the wrong number. The old
+    /// scrim of 0.36 was a floor only because `tertiary` was `labelColor` @ 0.66: at that alpha the
+    /// bottom rung needed a ground of 219/255 to clear WCAG AA over the worst desktop there is, and
+    /// holding the ground that bright is what capped every panel in the app at 14.1% passthrough. It
+    /// was never a property of the material or of the scrim — the material is white, the scrim is
+    /// white, and only the total whiteness reaches the eye.
     ///
-    /// Stated against the model rather than as `scrim >= 0.36` so it survives a change of material:
-    /// swap the material and this test still says "thin it until the ladder breaks, then back off".
+    /// Darkening that one token to 0.68 removed the cap, which is what let the scrim come down to
+    /// 0.10 and the panel go from passing 12.8% of the desktop to 18.0% of it. So the floor moved to
+    /// the ladder, and this is the measurement that shows the move really happened: **at the alpha
+    /// this surface used to ship, today's glass would be under AA.** Anyone who thins `tertiary`
+    /// back towards a lighter grey fails here rather than shipping illegible glass.
     @MainActor
-    func testTheScrimIsTheThinnestTheLadderCanBeReadOn() {
+    func testTheBottomRungIsWhatPaysForTheGlass() {
         let shipped = InkContrastProbe.glassLadder(system: .aqua, over: .black)
         XCTAssertGreaterThanOrEqual(shipped.tertiary, 4.5)
 
-        // The floor really is a floor: taking a fifth off the scrim puts the bottom rung under AA.
-        let thinned = InkGlassTests.tertiaryOnGlass(scrim: InkGlass.scrim * 0.8)
+        // The rung really is spent: put the old alpha back on today's ground and it fails.
         XCTAssertLessThan(
-            thinned, 4.5,
-            "at \(InkGlass.scrim * 0.8) the ladder still clears AA, so \(InkGlass.scrim) is not the "
-                + "floor it is documented as — re-derive it or thin the scrim")
+            InkGlassTests.tertiaryOnGlass(scrim: InkGlass.scrim, alpha: 0.66), 4.5,
+            "at the old 0.66 the ladder still clears AA on a \(InkGlass.scrim) scrim, so the scrim is "
+                + "not as thin as it is documented to be — re-derive both numbers together")
+
+        // …and the scrim is spent too, in the only sense left: the panel is inside two points of the
+        // most any panel of this material can pass, which is `1 − measuredMaterialOpacity`.
+        let ceiling = 1 - Double(InkGlass.measuredMaterialOpacity * InkGlass.measuredMaterialTint)
+        let passthrough = ceiling * (1 - Double(InkGlass.scrim))
+        XCTAssertGreaterThanOrEqual(
+            passthrough / ceiling, 0.85,
+            "the panel passes \(passthrough) of the desktop against a ceiling of \(ceiling); a scrim "
+                + "that keeps more than 15% of the available passthrough is paper, not glass")
     }
 
-    /// The same model as `InkContrastProbe.glassLadder`, at an arbitrary scrim, so the floor above can
-    /// be shown to be one. Only `tertiary` — it is the binding rung and the only one worth modelling
-    /// twice.
+    /// The same model as `InkContrastProbe.glassLadder`, at an arbitrary scrim and an arbitrary alpha
+    /// on `labelColor`, so the floor above can be shown to be one. Only `tertiary` — it is the
+    /// binding rung and the only one worth modelling twice.
+    ///
+    /// `alpha` is a multiplier on `labelColor`'s own alpha, exactly as `Ink.tertiary` is: a raw
+    /// number here would be a second definition of what the token means.
     @MainActor
-    private static func tertiaryOnGlass(scrim: CGFloat) -> Double {
+    private static func tertiaryOnGlass(scrim: CGFloat, alpha: CGFloat) -> Double {
         var value = 0.0
         NSAppearance(named: InkGlass.appearanceName)!.performAsCurrentDrawingAppearance {
             func linear(_ c: Double) -> Double {
@@ -138,8 +154,8 @@ final class InkGlassTests: XCTestCase {
             let tint = Double(InkGlass.measuredMaterialTint)
             let frosted = tint * material  // over a black desktop
             let ground = 1.0 * Double(scrim) + frosted * (1 - Double(scrim))
-            let alpha = Double(NSColor(Ink.tertiary).usingColorSpace(.sRGB)!.alphaComponent)
-            let text = ground * (1 - alpha)
+            let label = Double(NSColor(Ink.primary).usingColorSpace(.sRGB)!.alphaComponent)
+            let text = ground * (1 - label * Double(alpha))
             value = (linear(ground) + 0.05) / (linear(text) + 0.05)
         }
         return value
@@ -171,9 +187,11 @@ final class InkGlassTests: XCTestCase {
         XCTAssertTrue(InkGlass.showsMaterial(reduceTransparency: false))
 
         // And it has to be *substantially* translucent, not a token 0.95. This is the number the
-        // surface was reported on — it shipped at 0.80 and read as an opaque slab.
+        // surface was reported on twice — it shipped at 0.80 and read as an opaque slab, then at
+        // 0.36 and still read as paper. The bar is where the second report left it: a ground that
+        // keeps more than a sixth of itself is not glass.
         XCTAssertLessThanOrEqual(
-            alpha, 0.5, "a scrim this thick is a sheet with a blur behind it, not glass")
+            alpha, 0.16, "a scrim this thick is a sheet with a blur behind it, not glass")
     }
 
     /// …and the panel the app actually installs really does what those two values say, in **every**

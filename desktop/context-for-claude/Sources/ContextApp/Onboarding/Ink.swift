@@ -78,24 +78,39 @@ enum Ink {
     /// Most of this app's surfaces are glass now, so `surface` is no longer the whole ground: it is
     /// `InkGlass.scrim` of `surface` over a light-pinned blurred desktop. Because the glass pins its
     /// appearance, that ground does not depend on the machine's — measured through the real material
-    /// over the two desktops that can exist, this step lands at **6.86:1 over a solid black desktop
+    /// over the two desktops that can exist, this step lands at **6.44:1 over a solid black desktop
     /// and 7.79:1 over a solid white one**, in both system appearances. AA everywhere with room to
     /// spare, and AAA on everything but the worst desktop there is.
+    ///
+    /// It is deliberately *not* darkened alongside `tertiary` when the scrim thins. Only the bottom
+    /// rung is binding, and pulling this one down with it would spend the ladder's separation on a
+    /// step that already has 1.9 points of AA headroom on the worst ground there is.
     static let secondary = Color(nsColor: .labelColor).opacity(0.80)
     /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence.
     ///
-    /// `labelColor` at 0.66 — 4.9:1 over `surface` in Light, 6.1:1 in Dark. The alpha is set by the
+    /// `labelColor` at 0.68 — 5.2:1 over `surface` in Light, 6.3:1 in Dark. The alpha is set by the
     /// worst ground rather than the best: on the glass, over a solid black desktop, it measures
-    /// **4.55:1**, and thinning it would put that under AA.
+    /// **4.62:1**, and thinning it would put that under AA.
     ///
     /// This is the floor of the ladder and there is no room below it. It is also, and much more
     /// consequentially, **the constraint that decides how translucent every glass surface in the app
     /// is allowed to be**: `InkGlass` is already using the brightest material macOS offers, so the
-    /// only way a panel can pass more of the desktop through is for this rung to get darker. The
-    /// arithmetic is in `InkGlass.scrim` — at 0.66 the ceiling is 14.1% passthrough over a black
-    /// desktop, and the shipped scrim spends 12.8% of that. Anyone asked for "more see-through" has
-    /// been asked to change this line, not that one.
-    static let tertiary = Color(nsColor: .labelColor).opacity(0.66)
+    /// only way a panel can pass more of the desktop through is for this rung to get darker.
+    ///
+    /// **0.68 is what "make the glass more transparent" cost, and it is the value pinned from both
+    /// sides.** It was 0.66, which capped every panel in the app at 14.1% passthrough over a black
+    /// desktop — the scrim had to keep the ground at 219/255 for this rung to clear AA at all, and
+    /// the shipped scrim spent only 12.8% of that ceiling. Two points of alpha buy the whole
+    /// remainder: at 0.68 the ladder still clears AA on a scrim of *zero*, so the ground stopped
+    /// being the binding number and `InkGlass.scrim` came down to 0.10 (18.0% passthrough). The
+    /// ceiling is now the material itself, at 20%.
+    ///
+    /// It cannot go further. At 0.69 this rung and `secondary` are 7.8 L\* apart on a Dark sheet,
+    /// under the 8 L\* separation the ladder is held to, and three steps that measure as two is a
+    /// worse defect than a slightly less see-through panel. Below 0.68 the glass fails AA. Both
+    /// edges are asserted — `InkGlassTests.testTheBottomRungIsWhatPaysForTheGlass` and
+    /// `MenuBarPresentationTests.testTheLabelLadderKeepsVisibleStepsBetweenItsRungs`.
+    static let tertiary = Color(nsColor: .labelColor).opacity(0.68)
 
     // Edges.
 
