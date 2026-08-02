@@ -134,33 +134,80 @@ void main() {
     expect(find.text("This conversation doesn't have a transcript."), findsOneWidget);
   });
 
-  testWidgets('list failures remain in the Cloudflare page and offer retry', (tester) async {
-    final provider = CloudflareTranscriptProvider(
-      api: _FakeApi(
-        listOutcomes: [const CloudflareTranscriptApiException('safe list Worker error')],
-      ),
-    );
+  for (final localeCase in _localeCases) {
+    testWidgets('${localeCase.name} list failure uses localized copy instead of the API error', (tester) async {
+      const apiError = 'safe list Worker error that must stay below the presentation boundary';
+      final provider = CloudflareTranscriptProvider(
+        api: _FakeApi(listOutcomes: [const CloudflareTranscriptApiException(apiError)]),
+      );
 
-    await tester.pumpWidget(_app(provider, const CloudflareTranscriptsPage()));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_app(provider, const CloudflareTranscriptsPage(), locale: localeCase.locale));
+      await tester.pumpAndSettle();
 
-    expect(find.text('safe list Worker error'), findsOneWidget);
-    expect(find.byType(OutlinedButton), findsOneWidget);
-  });
+      expect(find.text(localeCase.loadError), findsOneWidget);
+      expect(find.text(apiError), findsNothing);
+      expect(find.text(localeCase.retry), findsOneWidget);
+    });
 
-  testWidgets('detail failures remain visible and offer retry', (tester) async {
-    final provider = CloudflareTranscriptProvider(
-      api: _FakeApi(
-        transcriptOutcomes: [const CloudflareTranscriptApiException('safe detail Worker error')],
-      ),
-    );
+    testWidgets('${localeCase.name} detail failure uses localized copy instead of the API error', (tester) async {
+      const apiError = 'safe detail Worker error that must stay below the presentation boundary';
+      final provider = CloudflareTranscriptProvider(
+        api: _FakeApi(transcriptOutcomes: [const CloudflareTranscriptApiException(apiError)]),
+      );
 
-    await tester.pumpWidget(_app(provider, const CloudflareTranscriptDetailPage(session: session)));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _app(provider, const CloudflareTranscriptDetailPage(session: session), locale: localeCase.locale),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('safe detail Worker error'), findsOneWidget);
-    expect(find.byType(OutlinedButton), findsOneWidget);
-  });
+      expect(find.text(localeCase.loadError), findsOneWidget);
+      expect(find.text(apiError), findsNothing);
+      expect(find.text(localeCase.retry), findsOneWidget);
+    });
+
+    testWidgets('${localeCase.name} list session metadata is self-describing in text and semantics', (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        final provider = CloudflareTranscriptProvider(api: _FakeApi(sessions: const [session]));
+
+        await tester.pumpWidget(_app(provider, const CloudflareTranscriptsPage(), locale: localeCase.locale));
+        await tester.pumpAndSettle();
+
+        expect(find.text(localeCase.metadata), findsOneWidget);
+        final semanticsNode = tester.getSemantics(find.byKey(const Key('cloudflare_transcript_session_session-1')));
+        expect(semanticsNode.label, localeCase.sessionSemantics);
+        expect(semanticsNode.flagsCollection.isButton, isTrue);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets('${localeCase.name} detail session metadata is self-describing in text and semantics', (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        final provider = CloudflareTranscriptProvider(
+          api: _FakeApi(
+            detail: const CloudflareTranscriptDetail(
+              session: session,
+              chunks: [CloudflareTranscriptChunk(sequence: 1, text: 'transcript body')],
+            ),
+          ),
+        );
+
+        await tester.pumpWidget(
+          _app(provider, const CloudflareTranscriptDetailPage(session: session), locale: localeCase.locale),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('cloudflare_transcript_detail_metadata')), findsOneWidget);
+        expect(find.text(localeCase.metadata), findsOneWidget);
+        final semanticsNode = tester.getSemantics(find.byKey(const Key('cloudflare_transcript_detail_metadata')));
+        expect(semanticsNode.label, localeCase.sessionSemantics);
+      } finally {
+        semantics.dispose();
+      }
+    });
+  }
 
   testWidgets('detail retry replaces an error with the retried transcript', (tester) async {
     final api = _FakeApi(
@@ -176,26 +223,65 @@ void main() {
 
     await tester.pumpWidget(_app(provider, const CloudflareTranscriptDetailPage(session: session)));
     await tester.pumpAndSettle();
-    expect(find.text('safe retryable detail error'), findsOneWidget);
+    expect(find.text("Cloudflare transcripts couldn't be loaded. Try again."), findsOneWidget);
+    expect(find.text('safe retryable detail error'), findsNothing);
 
     await tester.tap(find.byType(OutlinedButton));
     await tester.pumpAndSettle();
 
     expect(api.transcriptCalls, 2);
     expect(find.text('retried transcript'), findsOneWidget);
-    expect(find.text('safe retryable detail error'), findsNothing);
+    expect(find.text("Cloudflare transcripts couldn't be loaded. Try again."), findsNothing);
   });
 }
 
-Widget _app(CloudflareTranscriptProvider provider, Widget home) {
+Widget _app(CloudflareTranscriptProvider provider, Widget home, {Locale locale = const Locale('en')}) {
   return ChangeNotifierProvider<CloudflareTranscriptProvider>.value(
     value: provider,
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      locale: locale,
       home: home,
     ),
   );
+}
+
+const _localeCases = [
+  _LocaleCase(
+    name: 'English',
+    locale: Locale('en'),
+    loadError: "Cloudflare transcripts couldn't be loaded. Try again.",
+    retry: 'Retry',
+    metadata: 'Status: transcribed · 12 characters',
+    sessionSemantics: 'Transcript session session-1. Status: transcribed · 12 characters',
+  ),
+  _LocaleCase(
+    name: 'Japanese',
+    locale: Locale('ja'),
+    loadError: 'Cloudflare の文字起こしを読み込めませんでした。もう一度お試しください。',
+    retry: '再試行',
+    metadata: 'ステータス: transcribed · 12文字',
+    sessionSemantics: '文字起こしセッション session-1。ステータス: transcribed · 12文字',
+  ),
+];
+
+class _LocaleCase {
+  const _LocaleCase({
+    required this.name,
+    required this.locale,
+    required this.loadError,
+    required this.retry,
+    required this.metadata,
+    required this.sessionSemantics,
+  });
+
+  final String name;
+  final Locale locale;
+  final String loadError;
+  final String retry;
+  final String metadata;
+  final String sessionSemantics;
 }
 
 class _FakeApi implements CloudflareTranscriptApi {

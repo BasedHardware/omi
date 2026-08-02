@@ -6189,6 +6189,18 @@ abstract class AppLocalizations {
   /// **'No Cloudflare transcripts are available yet.'**
   String get cloudflareTranscriptListEmptyMessage;
 
+  /// User-facing error for a failed self-hosted Cloudflare transcript list or detail request
+  ///
+  /// In en, this message translates to:
+  /// **'Cloudflare transcripts couldn\'t be loaded. Try again.'**
+  String get cloudflareTranscriptLoadError;
+
+  /// Accessible summary for a self-hosted Cloudflare transcript session list item
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript session {sessionId}. {metadata}'**
+  String cloudflareTranscriptSessionSemantics(String sessionId, String metadata);
+
   /// Error when URL generation fails
   ///
   /// In en, this message translates to:

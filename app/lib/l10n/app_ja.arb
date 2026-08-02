@@ -969,6 +969,8 @@
     "noTranscriptAvailable": "文字起こしがありません",
     "noTranscriptMessage": "この会話には文字起こしがありません。",
     "cloudflareTranscriptListEmptyMessage": "Cloudflare の文字起こしはまだありません。",
+    "cloudflareTranscriptLoadError": "Cloudflare の文字起こしを読み込めませんでした。もう一度お試しください。",
+    "cloudflareTranscriptSessionSemantics": "文字起こしセッション {sessionId}。{metadata}",
     "conversationUrlCouldNotBeGenerated": "会話のURLを生成できませんでした。",
     "failedToGenerateConversationLink": "会話のリンク生成に失敗しました",
     "failedToGenerateShareLink": "共有リンクの生成に失敗しました",

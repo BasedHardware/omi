@@ -3719,6 +3719,22 @@
     "@cloudflareTranscriptListEmptyMessage": {
         "description": "Empty state message when the self-hosted Cloudflare transcript list has no sessions"
     },
+    "cloudflareTranscriptLoadError": "Cloudflare transcripts couldn't be loaded. Try again.",
+    "@cloudflareTranscriptLoadError": {
+        "description": "User-facing error for a failed self-hosted Cloudflare transcript list or detail request"
+    },
+    "cloudflareTranscriptSessionSemantics": "Transcript session {sessionId}. {metadata}",
+    "@cloudflareTranscriptSessionSemantics": {
+        "description": "Accessible summary for a self-hosted Cloudflare transcript session list item",
+        "placeholders": {
+            "sessionId": {
+                "type": "String"
+            },
+            "metadata": {
+                "type": "String"
+            }
+        }
+    },
     "conversationUrlCouldNotBeGenerated": "Conversation URL could not be generated.",
     "@conversationUrlCouldNotBeGenerated": {
         "description": "Error when URL generation fails"
