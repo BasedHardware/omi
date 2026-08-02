@@ -138,6 +138,15 @@ def test_multiple_verdict_objects_fail_closed():
 
 
 @pytest.mark.parametrize(
+    'output', ['{"decision":"auto","final_decision":"strict"}', 'prefix {"decision":"auto"} suffix']
+)
+def test_auto_requires_an_exact_schema_object(output):
+    verdict = parse_security_screen_verdict(output)
+    assert verdict is not None and verdict.decision is SecurityPosture.STRICT
+    assert verdict.reason == 'invalid security screen verdict'
+
+
+@pytest.mark.parametrize(
     'output',
     [
         '{"decision":"dangerous"}',
@@ -346,7 +355,7 @@ async def test_the_total_screen_budget_bounds_all_retries():
     screener = SecurityScreener(
         classifier, retry_delays_seconds=FAST_RETRIES, timeout_seconds=None, total_timeout_seconds=0.01
     )
-    outcome = await screener.screen(_tool_result('hello'))
+    outcome = await screener.screen(_tool_result('hello'), deadline=asyncio.get_running_loop().time() + 1)
     assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
     assert len(calls) == 1
 

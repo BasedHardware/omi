@@ -353,7 +353,13 @@ def parse_security_screen_verdict(output: Optional[str]) -> Optional[SecurityScr
     parsed = parsed_objects[0]
     decision = parsed.get('decision')
     if decision == 'auto':
-        return SecurityScreenVerdict.auto()
+        try:
+            exact = json.loads(output.strip())
+        except ValueError:
+            exact = None
+        if isinstance(exact, dict) and set(exact) == {'decision'}:
+            return SecurityScreenVerdict.auto()
+        return SecurityScreenVerdict.strict('invalid security screen verdict')
     if not isinstance(decision, str) or not decision or decision != 'strict':
         return SecurityScreenVerdict.strict('invalid security screen verdict')
     return SecurityScreenVerdict.strict(_sanitize_reason(parsed.get('reason')))
@@ -414,8 +420,9 @@ class SecurityScreener:
             return ScreenOutcome.screened(SecurityScreenVerdict.strict('input truncated'))
         token = cancel if cancel is not None else asyncio.Event()
         chunks = screen_labelled_chunks(sources)
-        if deadline is None and self._total_timeout_seconds is not None:
-            deadline = asyncio.get_running_loop().time() + self._total_timeout_seconds
+        if self._total_timeout_seconds is not None:
+            total_deadline = asyncio.get_running_loop().time() + self._total_timeout_seconds
+            deadline = total_deadline if deadline is None else min(deadline, total_deadline)
         authoritative = self._classify_chunks(self._classifier, chunks, token, deadline)
         if self._shadow is None:
             return await authoritative
