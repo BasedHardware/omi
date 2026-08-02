@@ -1,0 +1,80 @@
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindGlide.swift
+  s_1833483671ebc5::t_7e8e5d686b239e 1-80
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_1833483671ebc5::t_8a001b4d64d599 83-88
+  s_1833483671ebc5::t_2259cf51a4ee00 69-75
+  s_1833483671ebc5::t_d2ff7e5a230b56 89
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_1833483671ebc5::t_33ecb9b08886e3 396-399,402-404
+  s_1833483671ebc5::t_87fe662e5fee24 151-161,163-169,181-192
+  s_1833483671ebc5::t_998f547ed1a743 78,193-194,207,213,262
+desktop/context-for-claude/Sources/ContextApp/Rewind/FrameLoader.swift
+  s_1833483671ebc5::t_f4c32d07a50b7f 160,162-163,166,185,193
+  s_1833483671ebc5::t_bb3bfd1084b90d 23,30-34,39-41,44-54
+  s_1833483671ebc5::t_f215e329159914 240-321
+  s_1833483671ebc5::t_a409e965c5f307 80-89
+  s_1833483671ebc5::t_e9a928570bb545 121-127,130,133-135,143,154
+  s_1833483671ebc5::t_907c3bb04f465a 153
+  s_1833483671ebc5::t_b67b3f0d77c9af 66
+  s_1833483671ebc5::t_fe139c175f1250 144-148
+  s_1833483671ebc5::t_324b5e16ff9215 155
+  s_1833483671ebc5::t_e945dad40488eb 184,190-191,196
+  s_1833483671ebc5::t_55cf61f5d856f3 77-79
+  s_1833483671ebc5::t_358b47cc3dbe4f 167-174,176-183,189,195
+  s_1833483671ebc5::t_28bd1d9f3b8768 102-105,107,114-119
+  s_1833483671ebc5::t_6de6ab05751903 90-98
+  s_1833483671ebc5::t_31833bbd8e44d9 55
+  s_1833483671ebc5::t_806913eb287e8c 99
+  s_1833483671ebc5::t_21cbc606cb6d66 120
+  s_1833483671ebc5::t_424a0930144b54 322
+desktop/context-for-claude/Tests/ContextAppTests/RewindScrubTests.swift
+  s_1833483671ebc5::t_4066ae0a0a2753 598,606,609,612,615
+  s_1833483671ebc5::t_d785daa7b459d3 172-174
+  s_1833483671ebc5::t_c3204ae3ad3769 1-171,175-492,494-597,599-605,607-608,610-611,613-614,616,620-733
+  s_1833483671ebc5::t_15a2077fc35529 493
+  s_1833483671ebc5::t_9721be8e83bd86 617-619
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindScrub.swift
+  s_1833483671ebc5::t_7f07980a2d8094 1-186
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindModel.swift
+  s_1833483671ebc5::t_0c0e8f5d232117 116-135
+  s_1833483671ebc5::t_22c0358b326a8e 597
+  s_1833483671ebc5::t_6c97b66835652d 139-144
+  s_1833483671ebc5::t_259be6d14df334 634,636,638,640-643,645-646,648-654,656-659
+  s_1833483671ebc5::t_4b576e18033130 259-265
+  s_1833483671ebc5::t_a221f5bc670e70 504-510
+  s_1833483671ebc5::t_2a6235c935fb72 38-51
+  s_1833483671ebc5::t_a4328ba59e017d 425,542-556,558-586
+  s_1833483671ebc5::t_af7ea8cd68b3e4 517
+  s_1833483671ebc5::t_6dc42e3b0cbb3f 386-387,389-392,396,400
+  s_1833483671ebc5::t_18dc5ae1f669dd 280,283-290,292-299,305-309,317-385,388,393-395,397-399,401-424
+  s_1833483671ebc5::t_61d694cef57077 440
+  s_1833483671ebc5::t_8aeec08072a5a9 608-614,616,618-619,622-633,635,637,647,655,664-668
+  s_1833483671ebc5::t_7e3aeb23eaa819 198-205,210
+  s_1833483671ebc5::t_4f1644ec61bd66 3,9-19
+  s_1833483671ebc5::t_db9611a24fef98 169
+  s_1833483671ebc5::t_ec2d845e3cb381 62-67,76,79-86
+  s_1833483671ebc5::t_71643840dbc55c 20
+  s_1833483671ebc5::t_63676e57f3f568 52
+  s_1833483671ebc5::t_6ff7676d453ed4 87
+  s_1833483671ebc5::t_212893ded584a8 426
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindTrack.swift
+  s_1833483671ebc5::t_35d464415a7fe4 58-60
+  s_1833483671ebc5::t_9f04e50a2c9f2e 325-330,338-350,354-363,368-386
+  s_1833483671ebc5::t_b8ac9685c9df56 564,572,582
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a619751aaca491ecd39047a5872d2b24a407bc28",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
