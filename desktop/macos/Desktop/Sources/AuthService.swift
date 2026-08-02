@@ -2465,7 +2465,7 @@ class AuthService {
 
   // MARK: - Sign Out
 
-  func signOut() async throws {
+  func signOut(acceptedAccountDeletion: Bool = false) async throws {
     let sessionAttempt = beginSessionAttempt()
     let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
     guard
@@ -2478,6 +2478,13 @@ class AuthService {
           } else {
             log("AuthService: Firebase SDK unavailable; signing out the REST-backed session")
           }
+        },
+        prepareLocalStorageTransition: { previousOwner, _ in
+          await RewindIndexer.shared.suspendForOwnerTransition()
+          try await RewindStorage.shared.resetForOwnerTransition()
+          try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
+            ownerID: previousOwner,
+            accepted: acceptedAccountDeletion)
         })
     else {
       log("AuthService: stale sign-out completion ignored")

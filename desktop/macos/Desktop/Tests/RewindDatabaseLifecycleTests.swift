@@ -5,6 +5,77 @@ import XCTest
 
 final class RewindDatabaseLifecycleTests: XCTestCase {
 
+  func testAcceptedAccountDeletionRemovesOwnerAndLegacyMigrationSources() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rewind-account-delete-\(UUID().uuidString)", isDirectory: true)
+    let profileRoot = root.appendingPathComponent("profile", isDirectory: true)
+    let legacyRoot = root.appendingPathComponent("legacy", isDirectory: true)
+    let ownerID = "deleted-owner"
+    let ownerRoot =
+      profileRoot
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(ownerID, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try FileManager.default.createDirectory(at: ownerRoot, withIntermediateDirectories: true)
+    try Data("owner-db".utf8).write(to: ownerRoot.appendingPathComponent("omi.db"))
+    try FileManager.default.createDirectory(at: legacyRoot, withIntermediateDirectories: true)
+    for artifact in ["omi.db", "omi.db-wal", "omi.db-shm", ".omi_running"] {
+      try Data(artifact.utf8).write(to: legacyRoot.appendingPathComponent(artifact))
+    }
+    for directory in ["Screenshots", "Videos", "backups"] {
+      let url = legacyRoot.appendingPathComponent(directory, isDirectory: true)
+      try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+      try Data("deleted-owner".utf8).write(to: url.appendingPathComponent("sentinel"))
+    }
+
+    try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
+      ownerID: ownerID,
+      accepted: true,
+      profileRoot: profileRoot,
+      legacyRoot: legacyRoot,
+      includeLegacyStorage: true)
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: ownerRoot.path))
+    for artifact in [
+      "omi.db", "omi.db-wal", "omi.db-shm", ".omi_running",
+      "Screenshots", "Videos", "backups",
+    ] {
+      XCTAssertFalse(
+        FileManager.default.fileExists(atPath: legacyRoot.appendingPathComponent(artifact).path),
+        "a fresh UID must not be able to migrate \(artifact) from the deleted owner")
+    }
+  }
+
+  func testFailedDeletionRequestPreservesOwnerAndLegacyData() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rewind-account-delete-failed-\(UUID().uuidString)", isDirectory: true)
+    let profileRoot = root.appendingPathComponent("profile", isDirectory: true)
+    let legacyRoot = root.appendingPathComponent("legacy", isDirectory: true)
+    let ownerRoot =
+      profileRoot
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent("retained-owner", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try FileManager.default.createDirectory(at: ownerRoot, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: legacyRoot, withIntermediateDirectories: true)
+    let ownerDatabase = ownerRoot.appendingPathComponent("omi.db")
+    let legacyDatabase = legacyRoot.appendingPathComponent("omi.db")
+    try Data("owner-db".utf8).write(to: ownerDatabase)
+    try Data("legacy-db".utf8).write(to: legacyDatabase)
+
+    try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
+      ownerID: "retained-owner",
+      accepted: false,
+      profileRoot: profileRoot,
+      legacyRoot: legacyRoot,
+      includeLegacyStorage: true)
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: ownerDatabase.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: legacyDatabase.path))
+  }
+
   func testCloseClearsRunningFlag() async throws {
     let testUserId = "rewind-db-lifecycle-\(UUID().uuidString)"
     let applicationSupportDirectory = try XCTUnwrap(

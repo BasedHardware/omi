@@ -122,7 +122,7 @@ extension SettingsContentView {
           ProactiveAssistantsPlugin.shared.stopMonitoring()
         }
         do {
-          try await AuthService.shared.signOut()
+          try await AuthService.shared.signOut(acceptedAccountDeletion: true)
           isDeletingAccount = false
         } catch {
           deleteAccountError = "Your account was deleted, but Omi couldn't sign you out. Quit and reopen Omi."

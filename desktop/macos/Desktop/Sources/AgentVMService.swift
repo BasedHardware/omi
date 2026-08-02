@@ -7,78 +7,94 @@ actor AgentVMService {
   static let shared = AgentVMService()
 
   private var isRunning = false
+  private var lifecycleGeneration: UInt64 = 0
+  private var pipelineTask: Task<Void, Never>?
+
+  /// Revoke every suspended VM operation before an effective-owner transition
+  /// publishes the next account. Late status, upload, and token-send results
+  /// remain harmless because each continuation revalidates this generation.
+  func cancelForOwnerTransition() {
+    lifecycleGeneration &+= 1
+    pipelineTask?.cancel()
+    pipelineTask = nil
+    isRunning = false
+    log("AgentVMService: Cancelled owner-bound lifecycle work")
+  }
 
   /// Check backend for existing VM — if none exists, run the full pipeline.
   /// Call this on every app launch for signed-in users.
   func ensureProvisioned() {
-    guard !isRunning else {
-      log("AgentVMService: Pipeline already running, skipping")
-      return
-    }
-    isRunning = true
-
-    Task {
-      defer { isRunning = false }
-
-      // Check backend first
-      do {
-        let status = try await APIClient.shared.getAgentStatus()
-        if let status = status, status.status == "ready", let ip = status.ip {
-          log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
-          // Only upload if the VM doesn't have a database yet
-          if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-            _ = await uploadDatabase(vmIP: ip, authToken: status.authToken)
-          } else {
-            log("AgentVMService: VM already has database, skipping upload")
-          }
-          await startIncrementalSync(vmIP: ip, authToken: status.authToken)
-          return
-        }
-        if let status = status,
-          status.status == "provisioning" || status.status == "stopped"
-        {
-          log("AgentVMService: VM is \(status.status), polling until ready...")
-          if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
-            let ip = result.ip
-          {
-            log("AgentVMService: VM became ready — ip=\(ip)")
-            if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
-              _ = await uploadDatabase(vmIP: ip, authToken: result.authToken)
-            }
-            await startIncrementalSync(vmIP: ip, authToken: result.authToken)
-          }
-          return
-        }
-        // status is nil or error — fall through to provision
-      } catch {
-        log("AgentVMService: Status check failed — \(error.localizedDescription), will provision")
-      }
-
-      await runPipeline()
-    }
+    startOwnerBoundPipeline(checkExisting: true)
   }
 
   /// Kick off the full VM setup pipeline: provision → poll status → upload DB.
   /// Safe to call multiple times — only one pipeline runs at a time.
   func startPipeline() {
+    startOwnerBoundPipeline(checkExisting: false)
+  }
+
+  private func startOwnerBoundPipeline(checkExisting: Bool) {
     guard !isRunning else {
       log("AgentVMService: Pipeline already running, skipping")
       return
     }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+      log("AgentVMService: No effective owner; provisioning not started")
+      return
+    }
     isRunning = true
+    let generation = lifecycleGeneration
 
-    Task {
-      defer { isRunning = false }
-      await runPipeline()
+    pipelineTask = Task {
+      defer {
+        if lifecycleGeneration == generation {
+          isRunning = false
+          pipelineTask = nil
+        }
+      }
+      if checkExisting {
+        await ensureExistingOrProvision(ownerID: ownerID, generation: generation)
+      } else {
+        await runPipeline(ownerID: ownerID, generation: generation)
+      }
     }
   }
 
-  private func runPipeline() async {
+  private func ensureExistingOrProvision(ownerID: String, generation: UInt64) async {
+    do {
+      let status = try await APIClient.shared.getAgentStatus()
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
+      if let status, status.status == "ready", let ip = status.ip {
+        await prepareReadyVM(status, ip: ip, ownerID: ownerID, generation: generation)
+        return
+      }
+      if let status, status.status == "provisioning" || status.status == "stopped" {
+        if let result = await pollUntilReady(
+          maxAttempts: 30,
+          intervalSeconds: 5,
+          ownerID: ownerID,
+          generation: generation),
+          let ip = result.ip
+        {
+          await prepareReadyVM(result, ip: ip, ownerID: ownerID, generation: generation)
+        }
+        return
+      }
+    } catch {
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
+      log("AgentVMService: Status check failed — \(error.localizedDescription), will provision")
+    }
+    await runPipeline(ownerID: ownerID, generation: generation)
+  }
+
+  private func runPipeline(ownerID: String, generation: UInt64) async {
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
     // Step 1: Provision (idempotent — returns existing VM if already provisioned)
     log("AgentVMService: Starting provisioning...")
     let provisionResult: APIClient.AgentProvisionResponse
     do {
       provisionResult = try await APIClient.shared.provisionAgentVM()
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
       log(
         "AgentVMService: Provision response — vmName=\(provisionResult.vmName) status=\(provisionResult.status) ip=\(provisionResult.ip ?? "none")"
       )
@@ -93,7 +109,11 @@ actor AgentVMService {
 
     if vmIP == nil || provisionResult.agentStatus == "provisioning" {
       log("AgentVMService: Waiting for VM to be ready...")
-      let pollResult = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5)
+      let pollResult = await pollUntilReady(
+        maxAttempts: 30,
+        intervalSeconds: 5,
+        ownerID: ownerID,
+        generation: generation)
       if let result = pollResult {
         vmIP = result.ip
         authToken = result.authToken
@@ -110,17 +130,56 @@ actor AgentVMService {
     }
 
     // Step 3: Check if DB exists and upload it
-    _ = await uploadDatabase(vmIP: ip, authToken: authToken)
+    let status = APIClient.AgentStatusResponse(
+      vmName: provisionResult.vmName,
+      zone: "",
+      ip: ip,
+      status: "ready",
+      authToken: authToken,
+      createdAt: "",
+      lastQueryAt: nil)
+    await prepareReadyVM(status, ip: ip, ownerID: ownerID, generation: generation)
+  }
 
-    // Step 4: Start incremental sync
-    await startIncrementalSync(vmIP: ip, authToken: authToken)
+  private func prepareReadyVM(
+    _ status: APIClient.AgentStatusResponse,
+    ip: String,
+    ownerID: String,
+    generation: UInt64
+  ) async {
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
+    if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
+      guard
+        await uploadDatabase(
+          vmIP: ip,
+          authToken: status.authToken,
+          ownerID: ownerID,
+          generation: generation)
+      else {
+        log("AgentVMService: VM database is not ready; incremental sync remains stopped")
+        return
+      }
+    }
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
+    await startIncrementalSync(
+      vmIP: ip,
+      authToken: status.authToken,
+      ownerID: ownerID,
+      generation: generation)
   }
 
   /// Poll GET /v2/agent/status until status is "ready" and IP is available.
-  private func pollUntilReady(maxAttempts: Int, intervalSeconds: UInt64) async -> APIClient.AgentStatusResponse? {
+  private func pollUntilReady(
+    maxAttempts: Int,
+    intervalSeconds: UInt64,
+    ownerID: String,
+    generation: UInt64
+  ) async -> APIClient.AgentStatusResponse? {
     for attempt in 1...maxAttempts {
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return nil }
       do {
         let status: APIClient.AgentStatusResponse? = try await APIClient.shared.getAgentStatus()
+        guard isCurrent(ownerID: ownerID, generation: generation) else { return nil }
         if let status = status, status.status == "ready", status.ip != nil {
           return status
         }
@@ -132,9 +191,34 @@ actor AgentVMService {
       } catch {
         log("AgentVMService: Poll error — \(error.localizedDescription)")
       }
-      try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
+      do {
+        try await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
+      } catch {
+        return nil
+      }
     }
     return nil
+  }
+
+  private func isCurrent(ownerID: String, generation: UInt64) -> Bool {
+    Self.lifecycleWorkIsCurrent(
+      ownerID: ownerID,
+      generation: generation,
+      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId(),
+      currentGeneration: lifecycleGeneration,
+      isCancelled: Task.isCancelled)
+  }
+
+  static func lifecycleWorkIsCurrent(
+    ownerID: String,
+    generation: UInt64,
+    currentOwnerID: String?,
+    currentGeneration: UInt64,
+    isCancelled: Bool
+  ) -> Bool {
+    !isCancelled
+      && currentGeneration == generation
+      && currentOwnerID == ownerID
   }
 
   /// Check if the VM needs a database upload by hitting its /health endpoint.
@@ -160,8 +244,14 @@ actor AgentVMService {
   /// Re-upload the database to a VM that lost its data (e.g. after a restart).
   /// Called by AgentSyncService when it detects databaseReady: false on the VM.
   func reuploadDatabase(vmIP: String, authToken: String) async -> Bool {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
+    let generation = lifecycleGeneration
     log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
-    return await uploadDatabase(vmIP: vmIP, authToken: authToken)
+    return await uploadDatabase(
+      vmIP: vmIP,
+      authToken: authToken,
+      ownerID: ownerID,
+      generation: generation)
   }
 
   /// Compression ratio as a whole-number percent. Guards against a zero
@@ -175,15 +265,25 @@ actor AgentVMService {
 
   /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
   /// Pauses AgentSync during upload to prevent competing for memory and network.
-  private func uploadDatabase(vmIP: String, authToken: String) async -> Bool {
+  private func uploadDatabase(
+    vmIP: String,
+    authToken: String,
+    ownerID: String,
+    generation: UInt64
+  ) async -> Bool {
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
     await AgentSyncService.shared.pause()
-    defer { Task { await AgentSyncService.shared.resume() } }
+    defer {
+      Task {
+        guard self.isCurrent(ownerID: ownerID, generation: generation) else { return }
+        await AgentSyncService.shared.resume()
+      }
+    }
     // Find the local database path
     let dbPath = await MainActor.run {
-      let userId = RewindDatabase.currentUserId ?? "anonymous"
       return DesktopLocalProfile.applicationSupportURL()
         .appendingPathComponent("users", isDirectory: true)
-        .appendingPathComponent(userId, isDirectory: true)
+        .appendingPathComponent(ownerID, isDirectory: true)
         .appendingPathComponent("omi.db")
     }
 
@@ -242,6 +342,10 @@ actor AgentVMService {
     }
 
     log("AgentVMService: Uploading compressed database to \(vmIP)...")
+    guard isCurrent(ownerID: ownerID, generation: generation) else {
+      try? FileManager.default.removeItem(at: tempGzPath)
+      return false
+    }
 
     // Send token both as query param (backward compat) and header (preferred)
     guard let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)") else {
@@ -260,6 +364,7 @@ actor AgentVMService {
       // Upload from file — streams from disk, doesn't load into memory
       let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempGzPath)
       try? FileManager.default.removeItem(at: tempGzPath)
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
 
       guard let httpResponse = response as? HTTPURLResponse else {
         log("AgentVMService: Upload failed — invalid response")
@@ -288,16 +393,37 @@ actor AgentVMService {
   }
 
   /// Start incremental sync after VM is confirmed ready.
-  private func startIncrementalSync(vmIP: String, authToken: String) async {
+  private func startIncrementalSync(
+    vmIP: String,
+    authToken: String,
+    ownerID: String,
+    generation: UInt64
+  ) async {
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
     await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+    guard isCurrent(ownerID: ownerID, generation: generation) else {
+      await AgentSyncService.shared.stop(flushPendingChanges: false)
+      return
+    }
     // Send Firebase token so the VM can call backend tools
-    await sendFirebaseToken(vmIP: vmIP, authToken: authToken)
+    await sendFirebaseToken(
+      vmIP: vmIP,
+      authToken: authToken,
+      ownerID: ownerID,
+      generation: generation)
   }
 
   /// Send the user's Firebase ID token to the VM so it can call Python backend tools.
-  private func sendFirebaseToken(vmIP: String, authToken: String) async {
+  private func sendFirebaseToken(
+    vmIP: String,
+    authToken: String,
+    ownerID: String,
+    generation: UInt64
+  ) async {
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
     do {
       let idToken = try await AuthService.shared.getIdToken()
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
       // Send token both as query param (backward compat) and header (preferred)
       guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
       var request = URLRequest(url: url)
@@ -310,6 +436,7 @@ actor AgentVMService {
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
       let (data, response) = try await URLSession.shared.data(for: request)
+      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
       guard let httpResponse = response as? HTTPURLResponse else { return }
 
       if httpResponse.statusCode == 200 {
