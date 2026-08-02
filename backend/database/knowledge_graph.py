@@ -178,10 +178,17 @@ def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Opti
     return _typed_doc(doc)
 
 
-def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
+def upsert_knowledge_node(
+    uid: str,
+    node_data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    resolve_absent_id_by_label: bool = True,
+) -> Dict[str, Any]:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    now = datetime.now(timezone.utc)
 
     node_id = node_data.get('id')
     if not node_id:
@@ -196,7 +203,7 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
     node_ref = nodes_ref.document(node_id)
     existing = node_ref.get()
 
-    if not existing.exists:
+    if not existing.exists and resolve_absent_id_by_label:
         existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node_by_label:
             node_id = existing_node_by_label['id']
@@ -216,13 +223,13 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
 
         node_data['memory_ids'] = merged_memory_ids
         node_data['aliases'] = merged_aliases
-        node_data['updated_at'] = datetime.now(timezone.utc)
-        node_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
+        node_data['updated_at'] = node_data.get('updated_at') or now
+        node_data['created_at'] = existing_data.get('created_at', node_data.get('created_at') or now)
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
     else:
-        node_data['created_at'] = datetime.now(timezone.utc)
-        node_data['updated_at'] = datetime.now(timezone.utc)
+        node_data['created_at'] = node_data.get('created_at') or now
+        node_data['updated_at'] = node_data.get('updated_at') or now
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
@@ -271,6 +278,7 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
+    now = datetime.now(timezone.utc)
 
     edge_id = edge_data.get('id')
     if not edge_id:
@@ -288,9 +296,9 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
         merged_memory_ids = list(existing_memory_ids | new_memory_ids)
 
         edge_data['memory_ids'] = merged_memory_ids
-        edge_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
+        edge_data['created_at'] = existing_data.get('created_at', edge_data.get('created_at') or now)
     else:
-        edge_data['created_at'] = datetime.now(timezone.utc)
+        edge_data['created_at'] = edge_data.get('created_at') or now
 
     edge_ref.set(edge_data)
     return edge_data
@@ -888,7 +896,7 @@ def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Any], *, db_client: Any
         if node_data is None:
             skipped += 1
             continue
-        upsert_knowledge_node(uid, node_data, db_client=db_client)
+        upsert_knowledge_node(uid, node_data, db_client=db_client, resolve_absent_id_by_label=False)
         merged += 1
     eviction = enforce_knowledge_graph_caps(uid, db_client=db_client)
     return {"table": "local_kg_nodes", "merged": merged, "skipped": skipped, **eviction}

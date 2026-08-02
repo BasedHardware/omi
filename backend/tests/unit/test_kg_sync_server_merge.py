@@ -140,6 +140,8 @@ def test_local_kg_node_row_maps_and_merges_aliases(monkeypatch):
     assert stored["label"] == "Omi"
     assert stored["node_type"] == "org"
     assert stored["aliases"] == ["Based Hardware"]
+    assert stored["created_at"] == datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+    assert stored["updated_at"] == datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc)
 
     updated = {
         **row,
@@ -257,6 +259,7 @@ def test_sync_route_delegates_to_merge(monkeypatch):
 
     monkeypatch.setattr(kg_router.kg_db, "merge_synced_local_kg", fake_merge)
     monkeypatch.setattr(kg_router, "firestore_db", object())
+    monkeypatch.setattr(kg_router, "_require_legacy_graph_mutation", lambda _uid: None)
 
     rows = [{"nodeId": "n1", "label": "Test"}]
     response = kg_router.sync_local_knowledge_graph(
@@ -279,3 +282,78 @@ def test_invalid_local_kg_rows_are_skipped():
     assert result["merged"] == 0
     assert result["skipped"] == 3
     assert db.docs == {}
+
+
+def test_merge_preserves_stable_node_id_despite_label_collision():
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/existing-omi": _node_doc(
+                "existing-omi",
+                label="Omi",
+                updated_at=BASE,
+            )
+        }
+    )
+    row = {
+        "nodeId": "local-omi",
+        "label": "Omi",
+        "nodeType": "org",
+        "aliasesJson": "[]",
+        "createdAt": "2026-07-01T12:00:00Z",
+        "updatedAt": "2026-07-02T12:00:00Z",
+    }
+    kg_db.merge_synced_local_kg_nodes(UID, [row], db_client=db)
+
+    assert f"users/{UID}/knowledge_nodes/local-omi" in db.docs
+    assert db.docs[f"users/{UID}/knowledge_nodes/local-omi"]["id"] == "local-omi"
+    assert f"users/{UID}/knowledge_nodes/existing-omi" in db.docs
+
+    edge_row = {
+        "edgeId": "edge-local",
+        "sourceNodeId": "local-omi",
+        "targetNodeId": "existing-omi",
+        "label": "related_to",
+        "createdAt": "2026-07-01T12:00:00Z",
+    }
+    result = kg_db.merge_synced_local_kg_edges(UID, [edge_row], db_client=db)
+    assert result["merged"] == 1
+    assert result["edges_evicted"] == 0
+    assert f"users/{UID}/knowledge_edges/edge-local" in db.docs
+
+
+def test_merge_preserves_synced_timestamps_for_eviction():
+    db = _FakeDb()
+    old_ts = "2026-01-01T00:00:00Z"
+    new_ts = "2026-07-01T12:00:00Z"
+    keep_rows = [
+        {
+            "nodeId": f"keep-{index:03d}",
+            "label": f"keep-{index:03d}",
+            "nodeType": "concept",
+            "aliasesJson": "[]",
+            "createdAt": new_ts,
+            "updatedAt": new_ts,
+        }
+        for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_NODES)
+    ]
+    kg_db.merge_synced_local_kg_nodes(UID, keep_rows, db_client=db)
+    kg_db.merge_synced_local_kg_nodes(
+        UID,
+        [
+            {
+                "nodeId": "stale-local",
+                "label": "Stale",
+                "nodeType": "concept",
+                "aliasesJson": "[]",
+                "createdAt": old_ts,
+                "updatedAt": old_ts,
+            }
+        ],
+        db_client=db,
+    )
+
+    assert f"users/{UID}/knowledge_nodes/stale-local" not in db.docs
+    assert f"users/{UID}/knowledge_nodes/keep-000" in db.docs
+    keep = db.docs[f"users/{UID}/knowledge_nodes/keep-000"]
+    assert keep["updated_at"] == datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+    assert keep["created_at"] == datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
