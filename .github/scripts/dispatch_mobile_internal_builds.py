@@ -66,18 +66,31 @@ def _api_get(url: str, token: str) -> dict[str, Any]:
         raise DispatchError(f"Codemagic API read failed: {error}") from error
 
 
-def last_built_sha(app_id: str, workflow_id: str, token: str) -> Optional[str]:
-    """Newest commit Codemagic has already built for this workflow, if any."""
-    payload = _api_get(f"{BUILDS_API}?appId={app_id}&workflowId={workflow_id}", token)
-    builds = payload.get("builds") or []
-    for build in builds:
-        for key in ("commit", "commitId", "commitHash"):
-            value = build.get(key)
-            if isinstance(value, dict):
-                value = value.get("hash") or value.get("sha")
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+def build_sha(build: dict[str, Any]) -> Optional[str]:
+    for key in ("commit", "commitId", "commitHash"):
+        value = build.get(key)
+        if isinstance(value, dict):
+            value = value.get("hash") or value.get("sha")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     return None
+
+
+def newest_built_sha(builds: Iterable[dict[str, Any]]) -> Optional[str]:
+    """Commit of the most recently created build, by createdAt rather than list position.
+
+    The API's ordering is not part of any contract we rely on elsewhere, and reading the wrong
+    build here would compare against an old commit and dispatch on every scheduled run.
+    """
+    candidates = [(str(b.get("createdAt") or ""), sha) for b in builds if (sha := build_sha(b))]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def last_built_sha(app_id: str, workflow_id: str, token: str) -> Optional[str]:
+    payload = _api_get(f"{BUILDS_API}?appId={app_id}&workflowId={workflow_id}", token)
+    return newest_built_sha(payload.get("builds") or [])
 
 
 def app_commits_since(sha: Optional[str]) -> list[str]:

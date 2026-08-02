@@ -83,6 +83,26 @@ class TestActorParsing(unittest.TestCase):
         self.assertEqual(mod.normalized_actors(" , "), set())
 
 
+class TestNewestBuiltSha(unittest.TestCase):
+    def test_picks_the_newest_build_regardless_of_list_order(self):
+        builds = [
+            {"createdAt": "2026-08-01T09:00:00Z", "commit": "old"},
+            {"createdAt": "2026-08-02T09:00:00Z", "commit": "new"},
+        ]
+        self.assertEqual(mod.newest_built_sha(builds), "new")
+        self.assertEqual(mod.newest_built_sha(list(reversed(builds))), "new")
+
+    def test_reads_a_nested_commit_object(self):
+        self.assertEqual(mod.newest_built_sha([{"createdAt": "x", "commit": {"hash": "abc"}}]), "abc")
+
+    def test_ignores_builds_with_no_commit(self):
+        builds = [{"createdAt": "2026-08-03T09:00:00Z"}, {"createdAt": "2026-08-01T09:00:00Z", "commit": "only"}]
+        self.assertEqual(mod.newest_built_sha(builds), "only")
+
+    def test_no_builds_means_no_baseline(self):
+        self.assertIsNone(mod.newest_built_sha([]))
+
+
 class TestPendingCommits(unittest.TestCase):
     def test_no_known_baseline_counts_as_pending(self):
         # First ever build, or a pruned SHA: never silently stop building.
