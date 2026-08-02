@@ -1,4 +1,5 @@
 import AppKit
+import ContextCore
 import CoreText
 import SwiftUI
 
@@ -50,7 +51,9 @@ enum TerminationOrigin {
     /// synchronous with it, so a flag set afterwards is a flag set too late.
     static func userAskedToQuit() {
         wasRequestedLocally = true
-        ContextLog.info("Quit requested by the user", "shell")
+        // `milestone`, not `info`: "did the app come back, and if not why not" is answered from the
+        // log days later, and `info` is gone within minutes. See `ContextLog`.
+        ContextLog.milestone("Quit requested by the user", "shell")
     }
 
     /// The Mac is logging out, restarting or shutting down.
@@ -61,7 +64,7 @@ enum TerminationOrigin {
     /// ours to undo.
     static func systemIsPoweringOff() {
         wasRequestedLocally = true
-        ContextLog.info("Power off in progress; this process will not reopen itself", "shell")
+        ContextLog.milestone("Power off in progress; this process will not reopen itself", "shell")
     }
 
     /// Puts the flag back to how a fresh process finds it.
@@ -72,6 +75,72 @@ enum TerminationOrigin {
     /// one assertion here that has to be trusted is the one that says the app does *not* come back.
     static func resetForTesting() {
         wasRequestedLocally = false
+    }
+}
+
+/// **How many times this install is allowed to bring itself back, and how recently.**
+///
+/// The revival predicate used to be unable to loop by construction: its third clause was "a Screen
+/// Recording grant is waiting on a relaunch", and a process that launches *with* the grant reports
+/// false, so one grant bought exactly one revival. That clause is gone — it was answering the wrong
+/// question and it cost the user their app (see `ContextAppDelegate.shouldReviveAfterTermination`)
+/// — and with it went the proof that the chain terminates.
+///
+/// So the ceiling is explicit now rather than emergent. An app that respawns itself forever is the
+/// one failure worse than an app that needs reopening, and "it cannot happen because of how this
+/// unrelated permission flag works" is not a property anybody can maintain.
+///
+/// The window matters as much as the count. A user who grants two permissions in a row legitimately
+/// gets quit twice inside a minute; a bug that respawns on a loop does it hundreds of times. Three
+/// inside ten minutes separates those without a clock deciding anything the user did not.
+///
+/// Deliberately not `@MainActor`: `UserDefaults` is thread-safe and the predicate that consults the
+/// allowance is a pure function anything may call.
+struct RevivalBudget {
+
+    /// Namespaced with the app's other `context.*` defaults.
+    static let key = "context.revival.recentAt"
+
+    /// How far back a revival still counts against the next one.
+    static let window: TimeInterval = 10 * 60
+
+    /// How many revivals that window may contain before the app stays quit.
+    static let allowance = 3
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// The revivals still inside the window, oldest first.
+    func recent(now: Double = ContextTime.now) -> [Double] {
+        Self.inWindow(defaults.array(forKey: Self.key) as? [Double] ?? [], now: now)
+    }
+
+    /// Spends one, **now**, and writes it where the successor process will find it.
+    ///
+    /// `synchronize()` is deprecated and used on purpose: the only caller is
+    /// `applicationWillTerminate`, and the successor is launched by a helper that starts the moment
+    /// this pid leaves the process table. The ordinary periodic flush is not fast enough to be
+    /// certain the replacement reads a budget that includes this revival, and a budget the successor
+    /// cannot see is not a ceiling at all.
+    func record(now: Double = ContextTime.now) {
+        var kept = recent(now: now)
+        kept.append(now)
+        // Bounded: never store more than the window's worth plus the one that just happened.
+        defaults.set(Array(kept.suffix(Self.allowance + 1)), forKey: Self.key)
+        defaults.synchronize()
+    }
+
+    /// Pure, so the arithmetic can be asserted without a process ending.
+    ///
+    /// `abs` rather than a one-sided comparison: a clock that moved backwards would otherwise leave
+    /// stamps in the future that never expire and never count, which is a ceiling that silently
+    /// stops being one. Counting them errs towards staying quit, and staying quit is the safe
+    /// direction for every clause of this decision.
+    static func inWindow(_ stamps: [Double], now: Double) -> [Double] {
+        stamps.filter { abs(now - $0) < window }
     }
 }
 
@@ -198,27 +267,52 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// - Revive too eagerly and the app cannot be quit. That is the worse failure, so every clause
     ///   below is a reason to stay dead and the default is to stay dead.
     ///
-    /// **It cannot loop.** The replacement process starts *with* the Screen Recording grant, so
-    /// `Permissions.screenGrantedAtLaunch` is true, which clears `screenPendingRelaunch`, which makes
-    /// `screenNeedsRelaunch` false — the third argument is false in the process this one starts, so
-    /// one revival is the most any grant can produce. And if the grant was revoked rather than given,
-    /// `CGPreflightScreenCaptureAccess()` is false and `screenNeedsRelaunch` is false immediately.
+    /// **This shipped once already, gated on the wrong permission, and the user lost their app
+    /// again.** The third clause used to be "a Screen Recording grant is waiting on a relaunch",
+    /// on the reasoning that Screen Recording is the only grant that needs a new process. It is not
+    /// the only grant that makes macOS *quit* one. From the live trace of the second failure:
+    ///
+    /// ```text
+    /// 14:07:49.825  SecurityPrivacyExtension  kTCCServiceAccessibility  com.omi.context-for-claude  full
+    /// 14:07:49.828  SecurityPrivacyExtension  kTCCServiceScreenCapture  com.omi.context-for-claude  none
+    /// 14:07:51.267  SecurityPrivacyExtension  AESendMessage(aevt,quit target='kpid'[pid=13102 …
+    /// 14:07:51.280  Context for Claude        [AppKit:Application] Handling Quit AppleEvent
+    /// 14:07:51.325  launchservicesd           QUITTING: pid=13102
+    /// ```
+    ///
+    /// …and the next launch of this bundle is at **14:08:16**, twenty-five seconds later, which is
+    /// the user reopening it by hand. The alert they pressed "Quit & Reopen" on was the
+    /// **Accessibility** one. Screen Recording was `none` — never granted — so the old third clause
+    /// was false, the helper was never spawned, and the app stayed dead in exactly the way the fix
+    /// was supposed to have ended.
+    ///
+    /// So the gate no longer names a permission. It cannot: macOS raises that alert for any TCC
+    /// service whose change a running process cannot pick up, the app has four of them on one card,
+    /// and a predicate that has to enumerate which of macOS's alerts it believes in will keep being
+    /// wrong in the same direction. What is actually true at this moment is smaller and knowable:
+    /// **somebody other than the user ended a run that had not finished.**
     ///
     /// - Parameters:
     ///   - requestedLocally: the process is ending because something in this app asked it to — the
-    ///     menu bar's Quit, or a power-off we were told about. Never resurrect one of those.
-    ///   - onboardingInProgress: there is a card to come back to. A user who was not mid-setup has
+    ///     menu bar's Quit, or a power-off we were told about. Never resurrect one of those. This is
+    ///     the clause that keeps the app quittable and it is not negotiable against any of the rest.
+    ///   - onboardingInProgress: there is a card to come back to. A user who has finished setup has
     ///     nothing to lose by staying quit, and reopening on them would be the app refusing to leave.
-    ///   - screenGrantPendingRelaunch: the Screen Recording grant is real but unusable until this
-    ///     process is replaced — which is the only reason macOS ends us here in the first place.
+    ///     It also bounds the blast radius of the widened gate: outside the one flow that macOS ends
+    ///     on purpose, nothing here reopens anything.
+    ///   - revivalsAlreadySpent: how many times this install has already brought itself back inside
+    ///     `RevivalBudget.window`. The old shape could not loop by accident of how a permission flag
+    ///     worked; this one says so out loud, because an app that respawns forever is worse than an
+    ///     app that needs reopening and that has to be guaranteed by the predicate rather than by a
+    ///     neighbouring subsystem.
     static func shouldReviveAfterTermination(
         requestedLocally: Bool,
         onboardingInProgress: Bool,
-        screenGrantPendingRelaunch: Bool
+        revivalsAlreadySpent: Int
     ) -> Bool {
         guard !requestedLocally else { return false }
         guard onboardingInProgress else { return false }
-        return screenGrantPendingRelaunch
+        return revivalsAlreadySpent < RevivalBudget.allowance
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -247,16 +341,43 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// all we may do is arrange for something that outlives us.
     @MainActor
     private func reviveIfTheSystemEndedThisRun() {
-        guard
-            Self.shouldReviveAfterTermination(
-                requestedLocally: TerminationOrigin.wasRequestedLocally,
-                onboardingInProgress: OnboardingResume().step != nil,
-                screenGrantPendingRelaunch: Permissions.screenNeedsRelaunch)
-        else { return }
+        let requestedLocally = TerminationOrigin.wasRequestedLocally
+        let onboardingInProgress = OnboardingResume().step != nil
+        let budget = RevivalBudget()
+        let spent = budget.recent().count
+        let revive = Self.shouldReviveAfterTermination(
+            requestedLocally: requestedLocally,
+            onboardingInProgress: onboardingInProgress,
+            revivalsAlreadySpent: spent)
 
-        ContextLog.info(
-            "Terminated mid-onboarding with a Screen Recording grant waiting on a relaunch; reopening",
+        // **Every input and the answer, at a level that is still readable tomorrow.**
+        //
+        // The first version of this fix logged only the yes branch, and at `info` — which unified
+        // logging keeps in memory and throws away within minutes. When it failed for the user the
+        // second time there was nothing to read: `log show` over the whole window returned the
+        // app's errors and not one line about the decision that had just been made. Working out
+        // that Screen Recording had been `none` all along took a system-wide trace of
+        // `SecurityPrivacyExtension`. That is the diagnosis this line exists to hand over instead.
+        //
+        // `screenNeedsRelaunch` is reported and no longer consulted. It is included precisely
+        // because it is the thing that was silently false: seeing it next to the answer is what
+        // makes the next report readable in one query. Reading it also still writes the pending
+        // flag the successor process wants, which is why it is called rather than guessed at.
+        ContextLog.milestone(
+            "Termination — requestedLocally=\(requestedLocally) "
+                + "onboardingInProgress=\(onboardingInProgress) "
+                + "revivalsSpent=\(spent)/\(RevivalBudget.allowance) "
+                + "screenPendingRelaunch=\(Permissions.screenNeedsRelaunch) "
+                + "→ \(revive ? "reopening this bundle" : "staying quit")",
             "shell")
+
+        guard revive else { return }
+
+        // Spent before the helper is asked for, and flushed synchronously. A successor that reads a
+        // budget without this revival in it is a successor with a fresh allowance, which is the
+        // fork bomb the ceiling exists to prevent.
+        budget.record()
+
         guard Permissions.spawnRelaunchHelper() else {
             // The process is going away either way — there is no staying up from inside
             // `applicationWillTerminate`. Record it: the user is about to find the app gone with no

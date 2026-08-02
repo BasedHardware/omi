@@ -4,14 +4,13 @@ import XCTest
 
 /// **macOS's own "Quit & Reopen" quits this app and never reopens it.**
 ///
-/// Reported verbatim: *"when I clicked quit and reopen in system settings after granting this
-/// permission the app did not reopen itself."* That is not our button. Switching on Screen &
-/// System Audio Recording for a running app puts up macOS's alert — `QUIT_APP` in
-/// `SecurityPrivacyExtension.appex`, rendered "Quit & Reopen" — and pressing it sends a Quit Apple
-/// Event and then does nothing else at all.
+/// Reported verbatim, three times: *"Also quit and reopen does not reopen automatically. THIS NEEDS
+/// TO WORK."* That is not our button. Switching a TCC service on for a running app puts up macOS's
+/// alert — `QUIT_APP` in `SecurityPrivacyExtension.appex`, rendered "Quit & Reopen" — and pressing
+/// it sends a Quit Apple Event and then does nothing else at all.
 ///
-/// Measured on macOS 26.5.2 (25F84) from the live trace of the real incident, `log show` around the
-/// press:
+/// Measured on macOS 26.5.2 (25F84) from the live trace of the first incident, `log show` around
+/// the press:
 ///
 /// ```text
 /// 11:30:32.358  SecurityPrivacyExtension  (AppKit) trackMouse send action on mouseUp
@@ -57,28 +56,63 @@ final class TerminationRevivalTests: XCTestCase {
     // MARK: - The bug
 
     /// The reported failure, as the predicate sees it.
-    func testASystemQuitMidOnboardingWithAPendingScreenGrantComesBack() {
+    @MainActor
+    func testASystemQuitMidOnboardingComesBack() {
         XCTAssertTrue(
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: false,
                 onboardingInProgress: true,
-                screenGrantPendingRelaunch: true),
+                revivalsAlreadySpent: 0),
             """
-            This is "Quit & Reopen" pressed on macOS's own alert: the user granted Screen Recording, \
-            macOS ended the process to make the grant take effect, and macOS issued no launch. \
+            This is "Quit & Reopen" pressed on macOS's own alert: the user answered a permission, \
+            macOS ended the process to make the answer take effect, and macOS issued no launch. \
             Nothing else will reopen an LSUIElement app, so this has to.
+            """)
+    }
+
+    /// **The regression.** The first fix shipped with a third clause — "a Screen Recording grant is
+    /// waiting on a relaunch" — and the user lost their app again, because the "Quit & Reopen" they
+    /// actually pressed was macOS's **Accessibility** alert. From the live trace of that failure:
+    ///
+    /// ```text
+    /// 14:07:49.825  SecurityPrivacyExtension  kTCCServiceAccessibility  com.omi.context-for-claude  full
+    /// 14:07:49.828  SecurityPrivacyExtension  kTCCServiceScreenCapture  com.omi.context-for-claude  none
+    /// 14:07:51.267  SecurityPrivacyExtension  AESendMessage(aevt,quit target='kpid'[pid=13102 …
+    /// 14:07:51.280  Context for Claude        [AppKit:Application] Handling Quit AppleEvent
+    /// 14:07:51.325  launchservicesd           QUITTING: pid=13102
+    /// ```
+    ///
+    /// Screen Recording was `none` — never granted, `context.permission.screen.pendingRelaunch = 0`
+    /// in the user's defaults afterwards — so the clause was false and no helper was spawned. The
+    /// next launch of the bundle is twenty-five seconds later, which is the user reopening it by
+    /// hand.
+    ///
+    /// The permissions card lists four capabilities and macOS raises that alert for more than one of
+    /// them, so the predicate must not name a permission at all.
+    @MainActor
+    func testAnAccessibilityQuitAndReopenComesBackToo() {
+        XCTAssertTrue(
+            ContextAppDelegate.shouldReviveAfterTermination(
+                requestedLocally: false,
+                onboardingInProgress: true,
+                revivalsAlreadySpent: 0),
+            """
+            Accessibility was just granted and Screen Recording never was. The app is still \
+            mid-onboarding and macOS still ended it, so it still has to come back — the reason \
+            macOS chose to quit us is not something this decision may depend on.
             """)
     }
 
     // MARK: - The half that must say no
 
     /// The failure that would be worse than the bug.
+    @MainActor
     func testAQuitTheUserPressedIsNotUndone() {
         XCTAssertFalse(
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: true,
                 onboardingInProgress: true,
-                screenGrantPendingRelaunch: true),
+                revivalsAlreadySpent: 0),
             """
             Every other condition for reviving holds, and it still must not: the user pressed Quit \
             in the menu bar. An app that comes back from its own Quit cannot be quit at all — there \
@@ -99,7 +133,7 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: TerminationOrigin.wasRequestedLocally,
                 onboardingInProgress: true,
-                screenGrantPendingRelaunch: true),
+                revivalsAlreadySpent: 0),
             "the same inputs that revive an unasked-for termination must not revive this one")
     }
 
@@ -115,28 +149,23 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: TerminationOrigin.wasRequestedLocally,
                 onboardingInProgress: true,
-                screenGrantPendingRelaunch: true),
+                revivalsAlreadySpent: 0),
             "a Mac that is shutting down is not asking for the app back")
     }
 
     /// Outside onboarding there is nothing to come back to, and an app that reappears after being
     /// quit is the app refusing to leave.
+    ///
+    /// This is also what bounds the widened gate. Dropping the permission clause made the predicate
+    /// "somebody other than the user ended us", and that sentence on its own would reopen the app
+    /// after an Activity Monitor quit at any point in its life.
+    @MainActor
     func testAFinishedUserIsLeftAlone() {
         XCTAssertFalse(
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: false,
                 onboardingInProgress: false,
-                screenGrantPendingRelaunch: true))
-    }
-
-    /// And with no grant waiting on a relaunch there is no reason macOS would have ended us for
-    /// this, so a termination arriving here belongs to something else.
-    func testNoPendingScreenGrantIsNoReasonToComeBack() {
-        XCTAssertFalse(
-            ContextAppDelegate.shouldReviveAfterTermination(
-                requestedLocally: false,
-                onboardingInProgress: true,
-                screenGrantPendingRelaunch: false))
+                revivalsAlreadySpent: 0))
     }
 
     // MARK: - It cannot loop
@@ -144,48 +173,92 @@ final class TerminationRevivalTests: XCTestCase {
     /// **The fork-bomb proof.**
     ///
     /// A process that revives itself on a condition it can satisfy again is a fork bomb, and this one
-    /// would be an unkillable menu-bar app respawning forever. It terminates because the successor's
-    /// third input is false by construction: the replacement launches *with* the Screen Recording
-    /// grant, so `Permissions.screenGrantedAtLaunch` is true, which clears
-    /// `context.permission.screen.pendingRelaunch`, which is what `screenNeedsRelaunch` returns.
+    /// would be an unkillable menu-bar app respawning forever. The old predicate terminated by
+    /// accident of a neighbouring subsystem: the successor launched *with* the Screen Recording
+    /// grant, which cleared `screenPendingRelaunch`, which made the third argument false. That
+    /// argument is gone, so the ceiling is now the predicate's own.
     ///
-    /// The generation rule below is that fact, and the loop drives the real predicate. If a future
-    /// change made the predicate depend on something the successor *can* re-satisfy, this runs
-    /// forever and the ceiling turns it into a failure rather than a hung suite.
-    func testARevivedProcessCannotReviveAgain() {
-        /// One process's answers. A generation only ever ends by being terminated by macOS, which is
-        /// the worst case for looping — the user is never given a chance to press Quit.
-        struct Generation {
-            var onboardingInProgress: Bool
-            var screenGrantPendingRelaunch: Bool
-        }
-
-        // Generation 0: launched before the grant existed, mid-onboarding, user has just granted
-        // Screen Recording in System Settings and pressed "Quit & Reopen".
-        var generation = Generation(onboardingInProgress: true, screenGrantPendingRelaunch: true)
+    /// The loop below drives the real predicate with the worst case for looping — every generation
+    /// ends by being terminated by macOS mid-onboarding, so the user is never given a chance to
+    /// press Quit and nothing else ever turns false. If a future change removed the ceiling this
+    /// runs to its bound and fails rather than hanging.
+    @MainActor
+    func testTheChainOfRevivalsTerminates() {
+        var spent = 0
         var revivals = 0
 
         for _ in 0..<50 {
             guard
                 ContextAppDelegate.shouldReviveAfterTermination(
                     requestedLocally: false,
-                    onboardingInProgress: generation.onboardingInProgress,
-                    screenGrantPendingRelaunch: generation.screenGrantPendingRelaunch)
+                    onboardingInProgress: true,
+                    revivalsAlreadySpent: spent)
             else { break }
 
             revivals += 1
-            // The successor. Onboarding is deliberately still in progress — the resume point is the
-            // whole reason the app comes back — so the *only* thing that stops the chain is the
-            // grant no longer pending, which is what a process that launched with it reports.
-            generation = Generation(onboardingInProgress: true, screenGrantPendingRelaunch: false)
+            // The successor inherits the spend, which is the whole point of persisting it.
+            spent += 1
         }
 
         XCTAssertEqual(
-            revivals, 1,
+            revivals, RevivalBudget.allowance,
             """
-            Exactly one revival per grant. More than one is a fork bomb; zero is the bug. The chain \
-            ends because a process that started with the grant reports screenNeedsRelaunch == false.
+            The chain has to end, and it has to end at the stated allowance rather than wherever an \
+            unrelated permission flag happens to fall over.
             """)
+    }
+
+    /// The successor only inherits the ceiling if the spend actually reaches it, so the budget's
+    /// own arithmetic is asserted rather than assumed.
+    @MainActor
+    func testTheBudgetForgetsRevivalsOlderThanItsWindow() {
+        let now: Double = 1_000_000
+        let stamps = [
+            now - RevivalBudget.window - 1,  // yesterday's onboarding, or last week's
+            now - RevivalBudget.window + 1,  // just inside
+            now - 5,
+        ]
+
+        XCTAssertEqual(
+            RevivalBudget.inWindow(stamps, now: now).count, 2,
+            """
+            A revival that happened outside the window is not evidence of a loop — it is a user who \
+            came back to setup later, and holding it against them would leave the app dead for the \
+            same reason the bug did.
+            """)
+    }
+
+    /// A clock that moved backwards must not be able to hide a revival from the ceiling.
+    @MainActor
+    func testAStampFromTheFutureStillCountsAgainstTheBudget() {
+        let now: Double = 1_000_000
+
+        XCTAssertEqual(
+            RevivalBudget.inWindow([now + 30], now: now).count, 1,
+            """
+            Ignoring stamps ahead of the clock would make a ceiling that silently stops being one \
+            the moment time moves. Counting them errs towards staying quit, which is the safe \
+            direction for every clause of this decision.
+            """)
+    }
+
+    /// End to end on the real storage: a spend has to be visible to the process that reads it next,
+    /// because the reader is a different process every time.
+    @MainActor
+    func testASpentRevivalIsVisibleToTheNextProcess() throws {
+        let suite = "context.revival.test.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let now: Double = 2_000_000
+        XCTAssertEqual(RevivalBudget(defaults: defaults).recent(now: now).count, 0)
+
+        RevivalBudget(defaults: defaults).record(now: now)
+
+        // A *fresh* value reading the same storage, which is what the successor process is.
+        XCTAssertEqual(
+            RevivalBudget(defaults: defaults).recent(now: now + 1).count, 1,
+            "a budget the successor cannot see is not a ceiling at all")
     }
 
     // MARK: - One relauncher, not two
@@ -240,6 +313,50 @@ final class TerminationRevivalTests: XCTestCase {
             applicationWillTerminate synchronously. Marked afterwards, the user's own Quit reads as \
             a termination the app did not ask for and the app comes straight back.
             """)
+    }
+
+    // MARK: - Leaving a trace
+
+    /// **Static checker, not behavioural coverage.**
+    ///
+    /// The decision has to be readable from `log show` after the fact, which means two things at
+    /// once and both of them failed last time. It has to log **whichever way it goes** — the first
+    /// version only logged the yes branch, so the failure produced silence — and it has to log at a
+    /// level unified logging keeps on disk. `ContextLog.info` is `OS_LOG_TYPE_INFO`, which lives in
+    /// a memory ring buffer: measured on this Mac, the oldest readable `INFO` line was four minutes
+    /// old while `DEFAULT` lines from thirty-four minutes back were still there.
+    ///
+    /// Emitting the line means ending a process, so the guard is on the source and labelled as such.
+    func testTheRevivalDecisionLeavesAPersistedTrace() throws {
+        let source = try appDelegateSource()
+        let decision = try XCTUnwrap(
+            source.range(of: "shouldReviveAfterTermination("),
+            "expected the delegate to still ask the predicate")
+        let tail = String(source[decision.upperBound...])
+
+        let logged = try XCTUnwrap(
+            tail.range(of: "ContextLog.milestone("),
+            """
+            The decision must be logged at a level that persists. ContextLog.info is thrown away \
+            within minutes, which is why the second failure had no trace to read at all.
+            """)
+        let bail = try XCTUnwrap(
+            tail.range(of: "guard revive else { return }"),
+            "expected the delegate to still stop when the answer is no")
+
+        XCTAssertTrue(
+            logged.lowerBound < bail.lowerBound,
+            """
+            Logged *before* the early return, so a decision not to revive is as readable as a \
+            decision to revive. Only the yes branch was recorded last time, and the failure the \
+            user reported was a no.
+            """)
+
+        for input in ["requestedLocally=", "onboardingInProgress=", "revivalsSpent="] {
+            XCTAssertTrue(
+                tail.contains(input),
+                "the line has to carry \(input) or it cannot say why the answer was what it was")
+        }
     }
 
     // MARK: Helpers

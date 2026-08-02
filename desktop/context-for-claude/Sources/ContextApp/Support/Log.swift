@@ -9,10 +9,52 @@ import OSLog
 /// behind `CONTEXT_DEBUG=1`.
 ///
 /// Callers own what they pass: never put captured audio, transcript text, or OCR into a message.
+///
+/// # Reading it back
+///
+/// ```sh
+/// log show --last 30m --predicate 'subsystem == "com.omi.context-for-claude"'
+/// ```
+///
+/// **Not `process == "Context for Claude"`.** That matches, but it also drags in every framework
+/// this process links — CoreAudio, CFNetwork, boringssl — and buries the app's own lines in
+/// thousands of them. The subsystem is the app's, and only the app's.
+///
+/// # Which level survives long enough to debug with
+///
+/// This is not a style question, it is the difference between a diagnosable failure and a guess.
+/// Unified logging treats the levels differently and only some of them reach the disk:
+///
+/// | Level              | `os_log` type      | Where it goes                                 |
+/// |--------------------|--------------------|-----------------------------------------------|
+/// | `.debug`           | `DEBUG`            | dropped unless the subsystem is opted in       |
+/// | `info`             | `INFO`             | **memory ring buffer only** — evicted in minutes |
+/// | `milestone`        | `DEFAULT`          | persisted                                      |
+/// | `error`            | `ERROR`            | persisted                                      |
+///
+/// Measured on this Mac on 2026-08-02: a query run at 14:14 could still read `DEFAULT` lines from
+/// 13:40, and the *oldest* `INFO` line it could see anywhere was from 14:10 — four minutes back.
+/// The app wrote every lifecycle decision it makes through `info`, so by the time anyone asked what
+/// had happened, the answer had already been thrown away. That is why `milestone` exists: it is for
+/// the handful of lines whose absence turns a bug report into an archaeology exercise — process
+/// lifecycle, and any decision the app makes *on the user's behalf* that it cannot ask about later.
+///
+/// It is deliberately not `error`. A quit the user pressed is not a failure, and a log that shouts
+/// about ordinary events is a log people stop reading.
 enum ContextLog {
     static func info(_ message: String, _ category: String = "app") {
         logger(for: category).info("\(message, privacy: .public)")
         mirror(level: "info", category: category, message: message)
+    }
+
+    /// An event that has to still be there tomorrow. See the level table above — `info` will not be.
+    ///
+    /// Use it sparingly and for facts rather than progress: who ended this process, what the app
+    /// decided to do about it, and on which inputs. Everything else stays `info`.
+    static func milestone(_ message: String, _ category: String = "app") {
+        // `.notice` is Swift's spelling of `OS_LOG_TYPE_DEFAULT`, which is the persisted level.
+        logger(for: category).notice("\(message, privacy: .public)")
+        mirror(level: "milestone", category: category, message: message)
     }
 
     static func error(_ message: String, _ category: String = "app") {
