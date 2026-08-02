@@ -293,14 +293,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("~/.cache/omi-swift-format", job)
         self.assertIn("~/.cache/omi-swiftlint", job)
 
-    def test_cache_saves_completed_build_state_after_a_test_failure(self):
-        """A retry should reuse SwiftPM's validated incremental build state."""
+    def test_cache_keeps_dependencies_but_not_pr_scoped_build_products(self):
+        """A retry retains dependency downloads without uploading Desktop/.build."""
         job = self.jobs["desktop-swift-verify"]
         self.assertIn("id: swiftpm-cache", job)
         self.assertIn("uses: actions/cache/restore@v6", job)
         self.assertIn("uses: actions/cache/save@v6", job)
         self.assertIn("always()", job)
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
+        self.assertIn("~/Library/Caches/org.swift.swiftpm", job)
+        self.assertNotIn("desktop/macos/Desktop/.build", job)
 
     # --- changed-file gate assertions --------------------------------------
 
