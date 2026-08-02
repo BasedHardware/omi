@@ -174,6 +174,35 @@ def test_accepts_image_url_message_content():
     assert validated.messages[0]['content'][1]['type'] == 'image_url'
 
 
+def test_accepts_assistant_tool_call_history_without_content():
+    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:chat-agent']
+    request = {
+        'model': 'omi:auto:chat-agent',
+        'messages': [
+            {
+                'role': 'assistant',
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'type': 'function',
+                        'function': {'name': 'weather', 'arguments': '{"city":"NYC"}'},
+                    }
+                ],
+            },
+            {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+            {'role': 'assistant', 'content': None},
+        ],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+    }
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages[0]['content'] == ''
+    assert validated.messages[0]['tool_calls'][0]['id'] == 'call_1'
+    assert validated.messages[1]['content'] == 'sunny'
+    assert validated.messages[2]['content'] == ''
+
+
 def test_rejects_unsupported_message_content_parts():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(

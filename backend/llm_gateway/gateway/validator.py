@@ -81,8 +81,14 @@ def _validate_messages(value: object) -> list[Mapping[str, Any]]:
         role = typed_message.get('role')
         if not isinstance(role, str) or not role:
             raise GatewayInvalidRequestError('message role is required', param=f'{param}.role')
-        if 'content' not in typed_message:
-            raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
+        content = typed_message.get('content')
+        if 'content' not in typed_message or content is None:
+            if role == 'assistant' and isinstance(typed_message.get('tool_calls'), list):
+                typed_message = {**dict(typed_message), 'content': ''}
+            elif 'content' in typed_message and content is None:
+                typed_message = {**dict(typed_message), 'content': ''}
+            else:
+                raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
         _validate_text_content(typed_message.get('content'), param=f'{param}.content')
         validated.append(typed_message)
     return validated

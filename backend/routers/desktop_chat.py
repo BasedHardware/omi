@@ -146,8 +146,11 @@ def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
         if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
             raise ValueError('messages must contain role objects')
         updated = dict(message)
-        if message['role'] == 'user':
+        role = message['role']
+        if role == 'user':
             updated['content'] = _gateway_user_content(message.get('content', ''))
+        elif 'content' not in updated or updated.get('content') is None:
+            updated['content'] = ''
         translated.append(updated)
     return {**dict(body), 'model': CHAT_AGENT_AUTO_LANE_ID, 'messages': translated}
 
@@ -324,8 +327,10 @@ def _openai_usage_as_anthropic(usage: object) -> SimpleNamespace:
         if isinstance(details, Mapping) and isinstance(details.get('cached_tokens'), int)
         else 0
     )
+    prompt_tokens = int(usage.get('prompt_tokens', 0) or 0)
+    cached_tokens = min(max(cached_tokens, 0), max(prompt_tokens, 0))
     return SimpleNamespace(
-        input_tokens=int(usage.get('prompt_tokens', 0) or 0),
+        input_tokens=max(prompt_tokens - cached_tokens, 0),
         output_tokens=int(usage.get('completion_tokens', 0) or 0),
         cache_read_input_tokens=cached_tokens,
         cache_creation_input_tokens=0,
@@ -456,8 +461,35 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
     yield 'data: [DONE]\n\n'
 
 
+def _sse_json_payloads(frame_buffer: bytearray, chunk: bytes) -> list[dict[str, object]]:
+    frame_buffer.extend(chunk)
+    payloads: list[dict[str, object]] = []
+    while True:
+        separator = frame_buffer.find(b'\n\n')
+        if separator < 0:
+            break
+        raw_frame = bytes(frame_buffer[:separator]).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+        del frame_buffer[: separator + 2]
+        data_lines: list[str] = []
+        for raw_line in raw_frame.split(b'\n'):
+            if raw_line.startswith(b'data:'):
+                data_lines.append(raw_line.removeprefix(b'data:').lstrip().decode('utf-8', errors='replace'))
+        data = '\n'.join(data_lines).strip()
+        if not data or data == '[DONE]':
+            continue
+        try:
+            payload = json.loads(data)
+        except ValueError:
+            continue
+        if isinstance(payload, dict):
+            payloads.append(payload)
+    return payloads
+
+
 async def _stream_gateway(gateway_payload: dict[str, object], uid: str) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, 'chat_agent')
+    frame_buffer = bytearray()
+    usage_recorded = False
     try:
         async with get_llm_gateway_client().stream(
             'POST',
@@ -472,8 +504,14 @@ async def _stream_gateway(gateway_payload: dict[str, object], uid: str) -> Async
                 yield b'data: [DONE]\n\n'
                 return
             async for chunk in response.aiter_bytes():
-                if chunk:
-                    yield chunk
+                if not chunk:
+                    continue
+                for payload in _sse_json_payloads(frame_buffer, chunk):
+                    usage = payload.get('usage')
+                    if not usage_recorded and isinstance(usage, Mapping):
+                        await _record_usage(uid, _openai_usage_as_anthropic(usage))
+                        usage_recorded = True
+                yield chunk
     except Exception:
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
         yield b'data: [DONE]\n\n'
@@ -531,6 +569,8 @@ async def chat_completions(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_features_through_gateway()
+        if gateway_mode and (get_byok_key('openai') or get_byok_key('anthropic')):
+            gateway_mode = False
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
         if gateway_mode:

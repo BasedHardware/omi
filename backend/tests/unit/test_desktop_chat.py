@@ -172,6 +172,47 @@ def test_gateway_body_preserves_validated_image_url():
     assert body['messages'][0]['content'][1]['type'] == 'image_url'
 
 
+def test_gateway_body_normalizes_openai_tool_history_content():
+    body = desktop_chat._gateway_body(
+        {
+            'model': 'client-model',
+            'messages': [
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'weather', 'arguments': '{"city":"NYC"}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'assistant', 'content': None, 'tool_calls': []},
+            ],
+        }
+    )
+    assert body['messages'][0]['content'] == ''
+    assert body['messages'][0]['tool_calls'][0]['id'] == 'call_1'
+    assert body['messages'][1]['content'] == 'sunny'
+    assert body['messages'][2]['content'] == ''
+
+
+def test_openai_usage_as_anthropic_does_not_double_count_cached_tokens():
+    usage = desktop_chat._openai_usage_as_anthropic(
+        {
+            'prompt_tokens': 100,
+            'completion_tokens': 10,
+            'total_tokens': 110,
+            'prompt_tokens_details': {'cached_tokens': 40},
+        }
+    )
+    assert usage.input_tokens == 60
+    assert usage.output_tokens == 10
+    assert usage.cache_read_input_tokens == 40
+    assert usage.input_tokens + usage.cache_read_input_tokens == 100
+
+
 @pytest.mark.asyncio
 async def test_stream_gateway_emits_sse_error_on_http_failure(monkeypatch):
     class StreamResponse:
@@ -198,6 +239,96 @@ async def test_stream_gateway_emits_sse_error_on_http_failure(monkeypatch):
     events = [chunk async for chunk in desktop_chat._stream_gateway({'model': 'x', 'messages': []}, 'user-1')]
     assert b'Upstream provider error' in events[0]
     assert events[-1] == b'data: [DONE]\n\n'
+
+
+@pytest.mark.asyncio
+async def test_stream_gateway_records_usage_from_sse(monkeypatch):
+    class StreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def aiter_bytes(self):
+            yield b'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"hi"},"finish_reason":null}]}\n\n'
+            yield (
+                b'data: {"id":"chatcmpl-1","choices":[],'
+                b'"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11,'
+                b'"prompt_tokens_details":{"cached_tokens":3}}}\n\n'
+            )
+            yield b'data: [DONE]\n\n'
+
+    class GatewayClient:
+        def stream(self, *_args, **_kwargs):
+            return StreamResponse()
+
+    recorded = []
+
+    async def record_usage(uid, usage):
+        recorded.append((uid, usage))
+
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {})
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+
+    events = [chunk async for chunk in desktop_chat._stream_gateway({'model': 'x', 'messages': []}, 'user-1')]
+    assert any(b'"content":"hi"' in chunk for chunk in events)
+    assert recorded and recorded[0][0] == 'user-1'
+    assert recorded[0][1].input_tokens == 6
+    assert recorded[0][1].cache_read_input_tokens == 3
+    assert recorded[0][1].output_tokens == 2
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda provider: 'sk-test' if provider == 'anthropic' else None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+
+    class Messages:
+        async def create(self, **payload):
+            assert payload['model'] == 'claude-sonnet-4-6'
+            return SimpleNamespace(
+                id='msg_byok',
+                content=[SimpleNamespace(type='text', text='legacy')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
+    gateway_calls = []
+
+    class GatewayClient:
+        async def post(self, *args, **kwargs):
+            gateway_calls.append((args, kwargs))
+            raise AssertionError('BYOK must not use managed gateway lane')
+
+    monkeypatch.setattr(desktop_chat, 'anthropic_client', SimpleNamespace(messages=Messages()))
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'hello'}],
+            'max_tokens': 16,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+
+    assert gateway_calls == []
+    assert b'"content":"legacy"' in response.body
 
 
 @pytest.mark.asyncio
