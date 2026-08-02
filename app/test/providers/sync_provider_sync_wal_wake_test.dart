@@ -170,4 +170,33 @@ void main() {
     await first;
     provider.dispose();
   });
+
+  test('an upload cooldown does not block pulling audio off the device', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    // syncWal dispatches the whole transfer, including the device-download
+    // phases, which consume no upload quota. Refusing it here strands audio on
+    // a device with finite storage; the upload phases carry their own guard.
+    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+    addTearDown(SyncRateLimiter.instance.clear);
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal]);
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (_) async {},
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(SyncRateLimiter.instance.isLimited, isTrue);
+    expect(syncs.syncWalCalls, 1, reason: 'device recovery must stay available during an upload cooldown');
+    provider.dispose();
+  });
 }

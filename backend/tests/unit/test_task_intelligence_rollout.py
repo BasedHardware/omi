@@ -1,5 +1,6 @@
 import pytest
 
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 from models.task_intelligence import TaskWorkflowMode
 from utils.task_intelligence import rollout as rollout_module
 from utils.task_intelligence.rollout import (
@@ -76,6 +77,20 @@ def test_noncanonical_dev_fixture_cannot_bypass_the_code_owned_cohort(monkeypatc
 
     assert decision.memory_cohort_eligible is False
     assert decision.intelligence_product_enabled is False
+
+
+def test_deploy_smoke_fixture_uses_the_same_static_membership_predicate():
+    """The dev deploy gate must be entitled through the cohort, not a bypass."""
+
+    from config.canonical_memory_cohort import DEV_WHAT_MATTERS_NOW_SMOKE_UID, is_canonical_memory_user
+
+    assert WHAT_MATTERS_NOW_SMOKE_UID == DEV_WHAT_MATTERS_NOW_SMOKE_UID
+    assert is_canonical_memory_user(WHAT_MATTERS_NOW_SMOKE_UID) is True
+
+    decision = resolve_task_intelligence_for_user(uid=WHAT_MATTERS_NOW_SMOKE_UID, workflow_mode='read')
+
+    assert decision.memory_cohort_eligible is True
+    assert decision.intelligence_product_enabled is True
 
 
 def test_local_chat_first_harness_uses_the_same_static_membership_predicate():
