@@ -1,0 +1,36 @@
+desktop/context-for-claude/ARCHITECTURE.md
+  s_1833483671ebc5::t_4c4cd24c33803a 114-116
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_1833483671ebc5::t_aefba3e96cb7d8 138
+  s_1833483671ebc5::t_b2b3ff440f08aa 84
+  s_1833483671ebc5::t_19053fc70777fe 83
+  s_1833483671ebc5::t_f0aa013bd9f3aa 68
+  s_1833483671ebc5::t_57b7c13783b123 82
+  s_1833483671ebc5::t_4360fcc8d8f585 209-213
+  s_1833483671ebc5::t_f07d2d28bac8e7 86
+  s_1833483671ebc5::t_e67d832bb7f369 80
+  s_1833483671ebc5::t_35bedb793e88e4 31
+desktop/context-for-claude/docs/first-run-experience.md
+  s_1833483671ebc5::t_508adc80622976 191-193
+  s_1833483671ebc5::t_4df3de7f80c18b 214-218
+  s_1833483671ebc5::t_b6a92568cfb15a 229-239
+  s_1833483671ebc5::t_60164441b9b406 250-256,259-261
+  s_1833483671ebc5::t_359a245f726fb6 125-129
+  s_1833483671ebc5::t_c95ba6917c5fbe 202-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "433a740016a7a7afdd14e2fa125e75d96de9569c",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
