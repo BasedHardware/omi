@@ -178,7 +178,11 @@ human_size() {
 
 smoke_packaged_runtime() {
   local app="$1"
-  local node="$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  # SwiftPM emits either a versioned or a flat resource bundle depending on the
+  # toolchain, so resolve node at whichever layout this build produced.
+  local resource_bundle="$app/Contents/Resources/Omi Computer_Omi Computer.bundle"
+  local node="$resource_bundle/Contents/Resources/node"
+  [[ -e "$node" ]] || node="$resource_bundle/node"
   local pi_dir="$app/Contents/Resources/pi-mono-extension"
 
   "$node" --version >/dev/null

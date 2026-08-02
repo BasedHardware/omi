@@ -476,7 +476,11 @@ sign_app_bundle() {
             substep "Signing libwebp"
             codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
-        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+        # SwiftPM emits either a versioned or a flat resource bundle depending on
+        # the toolchain, so resolve node at whichever layout this build produced.
+        local resource_bundle="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle"
+        local node_bin="$resource_bundle/Contents/Resources/node"
+        [ -f "$node_bin" ] || node_bin="$resource_bundle/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
             codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
