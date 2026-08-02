@@ -141,22 +141,26 @@ def main():
     logger.info(f"\nFound {len(all_user_usage)} users with recent usage. Fetching their emails...")
     uids_with_usage = [uid for uid, usage in all_user_usage]
     user_emails = {}
+
     # Resolve emails through the auth boundary (database.auth), which is backend-neutral to the
-    # storage port; identifiers are looked up one at a time.
-    for i in range(0, len(uids_with_usage), 100):
-        chunk = uids_with_usage[i : i + 100]
-        for uid in chunk:
-            try:
-                user = auth_db.get_user_from_uid(uid)
-                if user:
-                    user_emails[uid] = user.get('email') or 'N/A'
-                else:
-                    logger.warning(f"Warning: User with UID {uid} not found in Firebase Auth.")
-                    user_emails[uid] = 'Not Found'
-            except Exception as e:
-                logger.error(f"Error fetching user {uid}: {e}")
-                if uid not in user_emails:
-                    user_emails[uid] = "Error fetching email"
+    # storage port. The neutral AuthProvider port exposes only a single-uid ``get_user_profile``
+    # (no batch verb — and the OIDC adapter could not batch anyway), so instead of resolving one
+    # uid at a time on a single thread we fan the lookups out with bounded concurrency, mirroring
+    # the usage-calculation step above.
+    def _resolve_email(uid: str) -> tuple[str, str]:
+        try:
+            user = auth_db.get_user_from_uid(uid)
+            if user:
+                return uid, (user.get('email') or 'N/A')
+            logger.warning(f"Warning: User with UID {uid} not found in the auth provider.")
+            return uid, 'Not Found'
+        except Exception as e:
+            logger.error(f"Error fetching user {uid}: {e}")
+            return uid, 'Error fetching email'
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        for uid, email in executor.map(_resolve_email, uids_with_usage):
+            user_emails[uid] = email
 
     # Write results to CSV
     try:

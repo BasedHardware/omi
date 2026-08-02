@@ -109,20 +109,25 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 
 def mark_all_advice_read(uid: str) -> int:
+    """Mark every unread advice as read, one bounded page at a time.
+
+    Fetching the whole ``is_read == False`` set before the first commit is unbounded memory for a
+    large backlog. Each committed page leaves the unread set (its docs become ``is_read == True``),
+    so re-running the same bounded query returns the next page until it drains — bounded memory
+    regardless of backlog size.
+    """
     store = _store()
     col = _advice_col(uid)
-    unread = store.query(col, filters=[('is_read', '==', False)])
-    batch = store.batch()
     total = 0
-    batch_count = 0
-    for doc in unread:
-        batch.update(doc.path, {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
-        total += 1
-        batch_count += 1
-        if batch_count >= BATCH_LIMIT:
-            batch.commit()
-            batch = store.batch()
-            batch_count = 0
-    if batch_count > 0:
+    while True:
+        page = store.query(col, filters=[('is_read', '==', False)], limit=BATCH_LIMIT)
+        if not page:
+            break
+        batch = store.batch()
+        for doc in page:
+            batch.update(doc.path, {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
         batch.commit()
+        total += len(page)
+        if len(page) < BATCH_LIMIT:
+            break
     return total

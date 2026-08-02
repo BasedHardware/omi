@@ -944,6 +944,22 @@ class _ScriptedScoreStore:
             rows = self.overall
         return [SimpleNamespace(id=row.get('id', 'doc-1'), to_dict=(lambda row=row: dict(row))) for row in rows]
 
+    def count(self, collection, *, filters=None):
+        # Overall score now counts via ``store.count`` instead of materializing the collection.
+        # Mirror ``query``'s window routing, then apply the equality filters (completed/deleted).
+        filters = list(filters or [])
+        self.filters.extend(filters)
+        fields = {field for field, _op, _value in filters}
+        if 'due_at' in fields:
+            rows = self.daily
+        elif 'created_at' in fields:
+            rows = self.weekly
+        else:
+            rows = self.overall
+        return sum(
+            1 for row in rows if all(row.get(f) == v for f, _op, v in filters if f not in ('due_at', 'created_at'))
+        )
+
 
 class TestDailyScoreWireCompat:
     """Verify daily-score returns Swift DailyScore-compatible fields."""

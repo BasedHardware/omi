@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import hashlib
 import logging
 import uuid
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
 from database.store import Filter, get_document_store
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from database.firestore_transaction_retry import map_store_transaction_contention
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +20,24 @@ def _store():
 action_items_collection = 'action_items'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+# Per-key idempotency reservations (finding: concurrent same-key creates could duplicate). One doc
+# per idempotency_key, storing the winning action_item_id, read+written inside the create
+# transaction so racing creates serialize on it. Purged with the account (users/{uid} is deleted
+# recursively).
+ACTION_ITEM_IDEMPOTENCY_COLLECTION = 'action_item_idempotency'
 
 
 def _action_items_path(uid: str) -> str:
     return f'users/{uid}/{action_items_collection}'
+
+
+def _idempotency_reservation_path(uid: str, idempotency_key: str) -> str:
+    """Deterministic reservation-doc path for an idempotency key.
+
+    The key is hashed so an arbitrary caller-supplied key is always a valid document id.
+    """
+    reservation_id = hashlib.sha256(idempotency_key.encode('utf-8')).hexdigest()
+    return f'users/{uid}/{ACTION_ITEM_IDEMPOTENCY_COLLECTION}/{reservation_id}'
 
 
 def _action_item_path(uid: str, action_item_id: str) -> str:
@@ -235,10 +251,13 @@ def create_action_item(
         raise ValueError('document_id must not be empty')
     doc_id = document_id if document_id is not None else str(uuid.uuid4())
     doc_path = f'{action_items_path}/{doc_id}'
+    reservation_path = _idempotency_reservation_path(uid, idempotency_key) if idempotency_key else None
 
     # Idempotency lookup is a collection query, which the neutral transaction handle cannot express
-    # (point reads only). Resolve it before the write transaction; the deterministic ``document_id``
-    # path remains the strong crash-retry guard, checked transactionally below.
+    # (point reads only). This pre-transaction query is a fast path: it collapses a *sequential*
+    # retry (the original doc is already committed) and finds pre-existing keyed docs that predate
+    # the reservation mechanism. It cannot observe a concurrent, not-yet-committed sibling create —
+    # so it is NOT the concurrency guard; the transaction-visible reservation below is.
     if idempotency_key:
         control_snapshot = _store().get(control_path)
         account_generation = int(_typed_doc(control_snapshot).get('account_generation', 0))
@@ -259,6 +278,28 @@ def create_action_item(
         control_snapshot = write_transaction.get(control_path)
         control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
+        # Authoritative duplicate guard under concurrency. Two racing same-key creates both miss the
+        # pre-transaction query, enter here, and contend on ``reservation_path``: the loser's commit
+        # aborts on the reservation write conflict, retries, and returns the winner's id. The stored
+        # target is re-validated so a completed/soft-deleted/prior-generation item still allows a
+        # fresh create (parity with the pre-transaction query's ``completed==False`` + not-deleted
+        # + generation semantics).
+        if reservation_path is not None:
+            reservation_snapshot = write_transaction.get(reservation_path)
+            if reservation_snapshot.exists:
+                reserved_id = _typed_doc(reservation_snapshot).get('action_item_id')
+                if reserved_id:
+                    reserved_target = write_transaction.get(f'{action_items_path}/{reserved_id}')
+                    if reserved_target.exists:
+                        target = _typed_doc(reserved_target)
+                        target_generation = int(target.get('account_generation', 0))
+                        generation_matches = (
+                            target_generation == account_generation
+                            if account_generation > 0
+                            else target_generation == 0
+                        )
+                        if generation_matches and not target.get('deleted') and not target.get('completed'):
+                            return reserved_id
         if document_id is not None:
             existing_document = write_transaction.get(doc_path)
             if existing_document.exists:
@@ -277,9 +318,24 @@ def create_action_item(
         payload = dict(action_item_data)
         payload['account_generation'] = account_generation
         write_transaction.set(doc_path, payload)
+        if reservation_path is not None:
+            write_transaction.set(
+                reservation_path,
+                {
+                    'action_item_id': doc_id,
+                    'account_generation': account_generation,
+                    'updated_at': datetime.now(timezone.utc),
+                },
+            )
         return doc_id
 
-    return cast(str, _store().run_transaction(create_in_generation))
+    return cast(
+        str,
+        map_store_transaction_contention(
+            lambda: _store().run_transaction(create_in_generation),
+            operation_name='action_item_create',
+        ),
+    )
 
 
 def create_action_items_batch(
@@ -347,7 +403,13 @@ def create_action_items_batch(
             write_transaction.set(doc_path, {**item, 'account_generation': account_generation})
         return doc_ids
 
-    return cast(List[str], _store().run_transaction(create_batch_in_generation))
+    return cast(
+        List[str],
+        map_store_transaction_contention(
+            lambda: _store().run_transaction(create_batch_in_generation),
+            operation_name='action_item_create_batch',
+        ),
+    )
 
 
 # *****************************
@@ -724,7 +786,12 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             write_transaction.update(action_item_path, {**update_data, 'updated_at': now})
             return True
 
-        return bool(_store().run_transaction(update_linked))
+        return bool(
+            map_store_transaction_contention(
+                lambda: _store().run_transaction(update_linked),
+                operation_name='action_item_update',
+            )
+        )
 
     # Check if exists
     if not _store().exists(action_item_path):
@@ -742,9 +809,10 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> BatchMutationResult:
     """
 
-    Missing IDs are returned explicitly. Each document update is applied
-    independently, guarded by an existence check, so a concurrent delete cannot
-    make the store reject the whole mutation after an earlier pre-read succeeded.
+    Missing IDs are returned explicitly. Each document's existence gate and write share one
+    transaction, so a concurrent delete between the two is normalized to ``missing_ids`` (the
+    documented contract) instead of escaping as a raw provider not-found error — a plain
+    ``exists()``-then-``update()`` pre-read left a TOCTOU window that could fail the reorder request.
     """
     result = BatchMutationResult()
     if not items:
@@ -766,11 +834,17 @@ def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> B
             result.noop_ids.append(item.id)
             continue
 
-        if not store.exists(doc_path):
+        def _update_if_exists(tx: Any, _path: str = doc_path, _data: Dict[str, Any] = update_data) -> bool:
+            snapshot = tx.get(_path)
+            if not snapshot.exists:
+                return False
+            tx.update(_path, _data)
+            return True
+
+        if store.run_transaction(_update_if_exists):
+            result.updated_ids.append(item.id)
+        else:
             result.missing_ids.append(item.id)
-            continue
-        store.update(doc_path, update_data)
-        result.updated_ids.append(item.id)
 
     return result
 
@@ -977,10 +1051,10 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
     """
     Batch update action items during reminders sync.
 
-    Missing IDs are returned explicitly; each document update is applied
-    independently, guarded by an existence check, so a concurrent delete cannot
-    fail the whole request after a pre-read. Callers should use only updated_ids
-    for downstream vector/cache work.
+    Missing IDs are returned explicitly; each document's existence gate and write share one
+    transaction, so a concurrent delete between the two is normalized to ``missing_ids`` instead of
+    escaping as a raw provider not-found error. Callers should use only updated_ids for downstream
+    vector/cache work.
     """
     result = BatchMutationResult()
     if not updates:
@@ -997,11 +1071,18 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
-        if not store.exists(doc_path):
+
+        def _update_if_exists(tx: Any, _path: str = doc_path, _data: Dict[str, Any] = update_data) -> bool:
+            snapshot = tx.get(_path)
+            if not snapshot.exists:
+                return False
+            tx.update(_path, _data)
+            return True
+
+        if store.run_transaction(_update_if_exists):
+            result.updated_ids.append(entry['id'])
+        else:
             result.missing_ids.append(entry['id'])
-            continue
-        store.update(doc_path, update_data)
-        result.updated_ids.append(entry['id'])
 
     return result
 
@@ -1103,15 +1184,21 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
         if data.get('completed'):
             weekly_completed += 1
 
-    # Overall: all non-deleted tasks
-    overall_completed = overall_total = 0
-    for doc in store.query(action_items_path):
-        data = _typed_doc(doc)
-        if data.get('deleted'):
-            continue
-        overall_total += 1
-        if data.get('completed'):
-            overall_completed += 1
+    # Overall: all non-deleted tasks. Use count() aggregation instead of materializing the whole
+    # collection (unbounded memory/latency for large accounts). Soft-deleted items are excluded by
+    # subtracting the deleted subset, mirroring get_action_items_count_by_conversation — deleted
+    # items are rare, so a filtered-aggregation composite index is avoided. The counts come from
+    # separate (non-atomic) aggregations, so completed is clamped to total for internal consistency.
+    overall_total = max(
+        0,
+        store.count(action_items_path) - store.count(action_items_path, filters=[('deleted', '==', True)]),
+    )
+    overall_completed = max(
+        0,
+        store.count(action_items_path, filters=[('completed', '==', True)])
+        - store.count(action_items_path, filters=[('completed', '==', True), ('deleted', '==', True)]),
+    )
+    overall_completed = min(overall_completed, overall_total)
 
     daily: Dict[str, Any] = {
         'score': _score(daily_completed, daily_total),

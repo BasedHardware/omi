@@ -586,7 +586,9 @@ async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
-        uids = x_sync_registry.list_sync_user_ids()
+        # Offload the synchronous store read to db_executor like every other storage call in this
+        # coroutine — running it inline blocks the event loop for the duration of the query.
+        uids = await run_blocking(db_executor, x_sync_registry.list_sync_user_ids)
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}

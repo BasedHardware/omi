@@ -20,7 +20,10 @@ and the router-layer key derivation.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from database import action_items as action_items_db  # noqa: E402
+from database.firestore_transaction_retry import FirestoreAborted, FirestoreContentionExhausted  # noqa: E402
 from routers import action_items as action_items_router  # noqa: E402
 from tests.store_fakes import FakeDocumentStore, _FakeTransaction
 
@@ -172,6 +175,111 @@ def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch
     assert store.fn_calls == 2
     assert len(docs) == 1
     assert result in docs
+
+
+def test_concurrent_same_key_creates_do_not_duplicate_when_query_is_blind(monkeypatch):
+    """The pre-transaction idempotency query cannot observe a concurrent, not-yet-committed sibling
+    create — modeled here by a query that always misses. The transaction-visible reservation must
+    still collapse two same-key creates to a single document. Without the reservation each call
+    allocates its own uuid and the collection ends with two duplicates.
+    """
+
+    class _QueryBlindStore(FakeDocumentStore):
+        def query(self, collection, *, filters=None, **kwargs):  # noqa: D401 - test double
+            return []
+
+    store = _QueryBlindStore()
+    _bind(monkeypatch, store)
+
+    first = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    second = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert first == second, 'the reservation must return the winner id to the racing sibling'
+    assert len(_action_item_docs(store)) == 1, 'the transactional reservation must prevent a duplicate'
+
+
+def test_reservation_falls_through_when_reserved_target_completed(monkeypatch):
+    """A reservation pointing at a now-completed task must not block a fresh create (parity with the
+    query's ``completed == False`` semantic): the user completed it and is re-adding it."""
+
+    class _QueryBlindStore(FakeDocumentStore):
+        def query(self, collection, *, filters=None, **kwargs):
+            return []
+
+    store = _QueryBlindStore()
+    _bind(monkeypatch, store)
+
+    first = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    # The reserved task is completed out-of-band.
+    store._docs[f'users/{_UID}/action_items/{first}']['completed'] = True
+
+    second = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert second != first, 'a completed reserved target must not short-circuit a new create'
+    assert len(_action_item_docs(store)) == 2
+
+
+def test_create_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    """When the store transaction exhausts contention (raw ``Aborted`` escapes ``run_transaction``),
+    create_action_item must surface ``FirestoreContentionExhausted`` so the route maps it to 503 —
+    not leak a raw provider error as an unmapped 500."""
+
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.create_action_item(
+            _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        )
+
+
+def test_batch_create_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.create_action_items_batch(_UID, [{'description': 'Buy milk', 'completed': False}])
+
+
+def test_linked_update_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    # goal_id routes update_action_item through its transactional (contention-mapped) path.
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.update_action_item(_UID, 'task-1', {'goal_id': 'goal-1'})
+
+
+def test_create_does_not_convert_non_contention_errors(monkeypatch):
+    """Only genuine contention becomes FirestoreContentionExhausted; unrelated failures propagate."""
+
+    class _BrokenStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise RuntimeError('unrelated failure')
+
+    _bind(monkeypatch, _BrokenStore())
+
+    with pytest.raises(RuntimeError, match='unrelated failure'):
+        action_items_db.create_action_item(
+            _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        )
 
 
 # ---------------------------------------------------------------------------
