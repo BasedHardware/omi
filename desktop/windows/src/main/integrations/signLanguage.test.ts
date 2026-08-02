@@ -4,6 +4,7 @@ import { translateToGlosses, defaultSignOpts, clearNegativeCache } from './signL
 import { isSignLanguageEnabled, setSignLanguageEnabled } from '../ipc/integrations'
 
 vi.mock('axios')
+vi.mock('electron', () => ({ app: { getPath: (): string => '/tmp' } }))
 
 const mockedAxiosGet = vi.mocked(axios.get)
 
@@ -68,7 +69,8 @@ describe('translateToGlosses', () => {
     })
 
     const callArg = mockedAxiosGet.mock.calls[0][0] as string
-    const urlPrefix = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose?text='
+    const urlPrefix =
+      'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose?text='
     const encodedText = encodeURIComponent(longText.slice(0, 256))
     const expectedMaxLen = urlPrefix.length + encodedText.length + '&spoken=en&signed=ase'.length
     expect(callArg.length).toBeLessThanOrEqual(expectedMaxLen)

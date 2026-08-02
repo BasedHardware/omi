@@ -36,7 +36,8 @@ const h = vi.hoisted(() => {
 
     simulateSegments(text: string): void {
       const payload = JSON.stringify([{ text }])
-      for (const listener of this.listeners.get('message') ?? []) listener(Buffer.from(payload), false)
+      for (const listener of this.listeners.get('message') ?? [])
+        listener(Buffer.from(payload), false)
     }
   }
 
@@ -55,8 +56,10 @@ const h = vi.hoisted(() => {
 vi.mock('ws', () => ({ default: h.FakeWebSocket }))
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: (channel: string, handler: (...args: unknown[]) => unknown) => h.ipcHandlers.set(channel, handler),
-    on: (channel: string, handler: (...args: unknown[]) => unknown) => h.ipcHandlers.set(channel, handler)
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) =>
+      h.ipcHandlers.set(channel, handler),
+    on: (channel: string, handler: (...args: unknown[]) => unknown) =>
+      h.ipcHandlers.set(channel, handler)
   },
   webContents: {
     fromId: () => ({ isDestroyed: () => false, send: (...args: unknown[]) => h.sent.push(args) })
@@ -67,7 +70,13 @@ vi.mock('../integrations/signLanguage', () => ({
   translateToGlosses: h.translateToGlosses
 }))
 vi.mock('./integrations', () => ({ isSignLanguageEnabled: h.isSignLanguageEnabled }))
-vi.mock('../agentKernel/byokStore', () => ({ ByokKeyStore: class { getAllKeys(): Record<string, never> { return {} } } }))
+vi.mock('../agentKernel/byokStore', () => ({
+  ByokKeyStore: class {
+    getAllKeys(): Record<string, never> {
+      return {}
+    }
+  }
+}))
 vi.mock('../auth/omiAuth', () => ({ decodeUidFromIdToken: vi.fn(() => null) }))
 
 import { registerOmiListenHandlers } from './omiListen'
@@ -84,14 +93,20 @@ describe('omi-listen sign-language translation buffering', () => {
   })
 
   it('buffers segments during an in-flight translation and serializes the next request', async () => {
-    let resolveFirst: ((value: { originalText: string; poseUrl: string; glosses: [] }) => void) | undefined
+    let resolveFirst:
+      | ((value: { originalText: string; poseUrl: string; glosses: [] }) => void)
+      | undefined
     h.translateToGlosses.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveFirst = resolve
         })
     )
-    h.translateToGlosses.mockResolvedValue({ originalText: 'pending', poseUrl: 'data:', glosses: [] })
+    h.translateToGlosses.mockResolvedValue({
+      originalText: 'pending',
+      poseUrl: 'data:',
+      glosses: []
+    })
 
     const start = h.ipcHandlers.get('omi-listen:start')!
     const stop = h.ipcHandlers.get('omi-listen:stop')!
@@ -105,13 +120,10 @@ describe('omi-listen sign-language translation buffering', () => {
     ws.simulateSegments('second segment that stays pending until the first translation completes')
 
     expect(h.translateToGlosses).toHaveBeenCalledTimes(1)
-    expect(h.translateToGlosses).toHaveBeenNthCalledWith(
-      1,
-      'first',
-      'en',
-      'ase',
-      { baseUrl: null, posesDir: undefined }
-    )
+    expect(h.translateToGlosses).toHaveBeenNthCalledWith(1, 'first', 'en', 'ase', {
+      baseUrl: null,
+      posesDir: undefined
+    })
 
     resolveFirst!({ originalText: 'first', poseUrl: 'data:', glosses: [] })
     await new Promise((resolve) => setTimeout(resolve, 0))

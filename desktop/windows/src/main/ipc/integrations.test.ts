@@ -11,7 +11,8 @@ const h = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: (channel: string, handler: (...args: unknown[]) => unknown) => h.ipcHandlers.set(channel, handler)
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) =>
+      h.ipcHandlers.set(channel, handler)
   }
 }))
 
@@ -49,7 +50,11 @@ vi.mock('../integrations/gmailSession', () => ({
   gmailSessionDisconnect: vi.fn()
 }))
 
-import { isSignLanguageEnabled, registerIntegrationsHandlers, setSignLanguageEnabled } from './integrations'
+import {
+  isSignLanguageEnabled,
+  registerIntegrationsHandlers,
+  setSignLanguageEnabled
+} from './integrations'
 
 describe('integrations:signLanguage:translate IPC', () => {
   beforeEach(() => {
@@ -85,6 +90,9 @@ describe('integrations:signLanguage:translate IPC', () => {
     const result = await handler({}, { text: 'hello' })
 
     expect(result).toBe(expected)
-    expect(h.translateToGlosses).toHaveBeenCalledWith('hello', 'en', 'ase', { baseUrl: null, posesDir: undefined })
+    expect(h.translateToGlosses).toHaveBeenCalledWith('hello', 'en', 'ase', {
+      baseUrl: null,
+      posesDir: undefined
+    })
   })
 })
