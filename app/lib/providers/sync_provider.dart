@@ -96,7 +96,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
-      } else if (w.status == WalStatus.corrupted) {
+      } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -199,10 +199,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int get waitingWalsCount => _countWhere((s) => s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.syncing);
 
   /// Recordings that need the user's attention: a sync failed (auto-retries
-  /// exhausted) or the file is unreadable. Surfaced explicitly so a failure is
-  /// never mistaken for a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount =>
-      _countWhere((s) => s == WalSyncDisplayState.failed || s == WalSyncDisplayState.corrupted);
+  /// exhausted), the file is unreadable, or the server permanently refused it
+  /// for being too old. Surfaced explicitly so a failure is never mistaken for
+  /// a recording that simply hasn't synced yet.
+  int get needsAttentionWalsCount => _countWhere((s) =>
+      s == WalSyncDisplayState.failed ||
+      s == WalSyncDisplayState.corrupted ||
+      s == WalSyncDisplayState.outsideRecoveryWindow);
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -213,7 +216,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         case WalDisplayFilter.all:
           return true;
         case WalDisplayFilter.pending:
-          return w.status != WalStatus.corrupted && w.syncDisplayState != WalSyncDisplayState.synced;
+          return w.status != WalStatus.corrupted &&
+              w.status != WalStatus.outsideRecoveryWindow &&
+              w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
       }

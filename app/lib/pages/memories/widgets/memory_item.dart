@@ -196,20 +196,6 @@ class MemoryItem extends StatelessWidget {
     );
   }
 
-  DateTime _getConversationDate(DateTime createdAt) {
-    return DateTime(createdAt.year, createdAt.month, createdAt.day);
-  }
-
-  void _ensureConversationInGroup(ConversationProvider conversationProvider, dynamic conversation) {
-    final date = _getConversationDate(conversation.createdAt);
-    conversationProvider.groupedConversations.putIfAbsent(date, () => []);
-
-    final conversations = conversationProvider.groupedConversations[date]!;
-    if (!conversations.any((c) => c.id == conversation.id)) {
-      conversations.insert(0, conversation);
-    }
-  }
-
   Future<void> _navigateToConversation(BuildContext context) async {
     if (memory.conversationId == null) return;
 
@@ -228,9 +214,10 @@ class MemoryItem extends StatelessWidget {
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
 
-      _ensureConversationInGroup(conversationProvider, conversation);
-
-      final conversationDate = _getConversationDate(conversation.createdAt);
+      // One derivation for both the group insert and the selected day, in local
+      // time — inserting under the UTC day and selecting another key opened the
+      // detail page on a day nothing was grouped under (#10980).
+      final conversationDate = conversationProvider.ensureConversationInGroup(conversation);
       detailProvider.updateConversation(conversation.id, conversationDate);
 
       Navigator.of(

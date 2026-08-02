@@ -9610,4 +9610,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => '해당 마이크에 연결할 수 없습니다. iPhone 설정에서 연결되어 있는지 확인하세요.';
+
+  @override
+  String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
 }

@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Чакае сінхранізацыі",
     "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
     "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
+    "syncStatusTooOld": "Занадта старое для сінхранізацыі — Omi не можа яго прыняць",
     "syncStatusFileUnavailable": "Файл недаступны",
     "syncStatusUploaded": "Запампавана · апрацоўка ў Omi",
     "noRecordingsYet": "Запісаў пакуль няма",

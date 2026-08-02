@@ -1548,6 +1548,7 @@ class TestConversationListRedaction:
                 offset=0,
                 statuses='completed',
                 include_discarded=False,
+                sources=None,
                 start_date=None,
                 end_date=None,
                 folder_id=None,

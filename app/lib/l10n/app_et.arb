@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Ootab sünkroonimist",
     "syncStatusRetrying": "Töötlemine ebaõnnestus — proovin uuesti",
     "syncStatusFailed": "Ebaõnnestus — puuduta Proovi uuesti",
+    "syncStatusTooOld": "Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta",
     "syncStatusFileUnavailable": "Fail pole saadaval",
     "syncStatusUploaded": "Üles laaditud · töödeldakse Omis",
     "noRecordingsYet": "Salvestisi veel pole",

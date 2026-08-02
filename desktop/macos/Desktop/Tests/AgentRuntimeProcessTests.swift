@@ -258,7 +258,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
       ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -272,7 +272,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let wrongProtocol = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
   }
@@ -479,7 +479,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
     let startRange = try XCTUnwrap(
       bridgeSource.range(
-        of: "private func start(\n    authorizationSnapshot:"))
+        of: "func start(\n    authorizationSnapshot:"))
     let restartRange = try XCTUnwrap(
       bridgeSource.range(
         of: "\n  func restart() async throws",
@@ -657,7 +657,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(
       candidates.contains(
-        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"))
     XCTAssertTrue(
       candidates.contains(
         "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))

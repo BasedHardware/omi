@@ -2994,6 +2994,7 @@
     "syncStatusWaiting": "同期を待機中",
     "syncStatusRetrying": "処理できませんでした — 再試行中",
     "syncStatusFailed": "失敗 — 「再試行」をタップ",
+    "syncStatusTooOld": "古すぎて同期できません — Omi は受け付けられません",
     "syncStatusFileUnavailable": "ファイルを利用できません",
     "syncStatusUploaded": "アップロード済み · Omi で処理中",
     "noRecordingsYet": "まだ録音がありません",

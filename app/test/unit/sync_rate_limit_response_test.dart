@@ -37,4 +37,33 @@ void main() {
       expect(syncRateLimitKindForResponse(html), SyncRateLimitKind.backendCapacity);
     });
   });
+
+  group('isSyncRecoveryWindowExceededResponse', () {
+    test('recognizes the backend lookback rejection on both sync routes', () {
+      final v2 = http.Response(
+        '{"code":"backfill_lookback_exceeded","detail":"Recording is older than the automatic recovery window; '
+        'local audio was not consumed","lane":"backfill"}',
+        422,
+      );
+      final v1 = http.Response(
+        '{"code":"backfill_lookback_exceeded","detail":"Recording is older than the automatic recovery window; '
+        'local audio was not consumed"}',
+        422,
+      );
+
+      expect(isSyncRecoveryWindowExceededResponse(v2), isTrue);
+      expect(isSyncRecoveryWindowExceededResponse(v1), isTrue);
+    });
+
+    test('does not widen to other 422s, other statuses, or unparseable bodies', () {
+      expect(isSyncRecoveryWindowExceededResponse(http.Response('{"code":"validation_error"}', 422)), isFalse);
+      expect(isSyncRecoveryWindowExceededResponse(http.Response('<html>Unprocessable</html>', 422)), isFalse);
+      expect(isSyncRecoveryWindowExceededResponse(http.Response('', 422)), isFalse);
+      expect(
+        isSyncRecoveryWindowExceededResponse(http.Response('{"code":"backfill_lookback_exceeded"}', 400)),
+        isFalse,
+        reason: 'only the 422 contract is terminal; a 400 stays the generic unprocessable-audio path',
+      );
+    });
+  });
 }

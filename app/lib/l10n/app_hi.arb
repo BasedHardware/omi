@@ -2994,6 +2994,7 @@
     "syncStatusWaiting": "सिंक होने की प्रतीक्षा",
     "syncStatusRetrying": "प्रोसेस नहीं हो सका — फिर कोशिश हो रही है",
     "syncStatusFailed": "विफल — Retry दबाएँ",
+    "syncStatusTooOld": "सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता",
     "syncStatusFileUnavailable": "फ़ाइल उपलब्ध नहीं",
     "syncStatusUploaded": "अपलोड हो गया · Omi पर प्रोसेस हो रहा है",
     "noRecordingsYet": "अभी तक कोई रिकॉर्डिंग नहीं",

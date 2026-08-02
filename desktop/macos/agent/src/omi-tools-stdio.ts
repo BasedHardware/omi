@@ -154,7 +154,16 @@ async function requestSwiftTool(
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
 const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
-const projectionContext = { onboarding: isOnboarding, screenContext: hasScreenContext, executionRole } as const;
+const chatFirstUi = process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat";
+const controlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+const projectionContext = {
+  onboarding: isOnboarding,
+  screenContext: hasScreenContext,
+  executionRole,
+  surfaceKind: process.env.OMI_SURFACE_KIND,
+  chatFirstUi,
+  controlGeneration: Number.isSafeInteger(controlGeneration) && controlGeneration >= 0 ? controlGeneration : null,
+} as const;
 
 // Tool order is owned by the canonical manifest projection.
 const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", projectionContext);
@@ -345,6 +354,18 @@ async function handleJsonRpc(
                 text: content,
               }],
             },
+          });
+        }
+      } else if (toolName === "search_chat_history") {
+        // This remains a relay request, not a child-process SQLite read. The
+        // parent kernel rechecks the run capability then scopes the search to
+        // the caller's current main-Chat journal generation.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (isAgentControlToolName(toolName)) {

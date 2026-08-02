@@ -9840,4 +9840,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Δεν ήταν δυνατή η σύνδεση σε αυτό το μικρόφωνο. Βεβαιωθείτε ότι είναι συνδεδεμένο στις Ρυθμίσεις του iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';
 }

@@ -679,6 +679,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.syncStatusFailed);
       case WalSyncDisplayState.corrupted:
         return (Colors.redAccent, FontAwesomeIcons.triangleExclamation, context.l10n.syncStatusFileUnavailable);
+      case WalSyncDisplayState.outsideRecoveryWindow:
+        return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
     }
   }
 

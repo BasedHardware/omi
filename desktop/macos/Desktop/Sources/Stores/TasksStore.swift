@@ -36,6 +36,29 @@ class TasksStore: ObservableObject {
     let rollbackLocal: () async throws -> Void
   }
 
+  /// Legacy surfaces deliberately preserve a local edit while offline; the
+  /// cohort-only inline task controls roll a rejected mutation back instead.
+  enum TaskUpdateRemoteFailureBehavior: Equatable, Sendable {
+    case preserveLocalEdit
+    case rollbackForChatFirst
+  }
+
+  enum TaskUpdateOutcome: Equatable, Sendable {
+    case updated
+    case preservedLocalAfterRemoteFailure
+    case rolledBackAfterRemoteFailure
+    case rollbackFailed
+    case localWriteFailed
+    case ownerChanged
+  }
+
+  struct TaskUpdateOperationOverrides {
+    let updateLocal: (_ ownerID: String) async throws -> TaskActionItem
+    let updateRemote: (_ ownerID: String) async throws -> TaskActionItem
+    let syncRemote: (_ task: TaskActionItem, _ ownerID: String) async throws -> Void
+    let rollbackLocal: () async throws -> Void
+  }
+
   /// Controllable seams for owner-bound reads and writes. Production callers
   /// use the defaults; tests suspend individual operations to prove that an
   /// owner change fences every later cache/UI/defaults publication.
@@ -60,8 +83,9 @@ class TasksStore: ObservableObject {
     var loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var refreshDashboard: ((_ ownerID: String) async -> Void)?
-    var migrateAI: ((_ ownerID: String) async throws -> Void)?
-    var migrateConversation: ((_ ownerID: String) async throws -> Void)?
+    var restoreLegacyConversationItems:
+      ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)?
+    var legacyRecoveryMarkersInvalidated: ((_ ownerID: String) -> Void)?
     var backfillRelevance: ((_ ownerID: String) async throws -> Int)?
 
     init(
@@ -82,8 +106,9 @@ class TasksStore: ObservableObject {
       loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       refreshDashboard: ((_ ownerID: String) async -> Void)? = nil,
-      migrateAI: ((_ ownerID: String) async throws -> Void)? = nil,
-      migrateConversation: ((_ ownerID: String) async throws -> Void)? = nil,
+      restoreLegacyConversationItems:
+        ((_ ownerID: String, _ cursor: String?) async throws -> LegacyConversationRecoveryPage)? = nil,
+      legacyRecoveryMarkersInvalidated: ((_ ownerID: String) -> Void)? = nil,
       backfillRelevance: ((_ ownerID: String) async throws -> Int)? = nil
     ) {
       self.fetchPage = fetchPage
@@ -99,8 +124,8 @@ class TasksStore: ObservableObject {
       self.loadCompleted = loadCompleted
       self.loadDeleted = loadDeleted
       self.refreshDashboard = refreshDashboard
-      self.migrateAI = migrateAI
-      self.migrateConversation = migrateConversation
+      self.restoreLegacyConversationItems = restoreLegacyConversationItems
+      self.legacyRecoveryMarkersInvalidated = legacyRecoveryMarkersInvalidated
       self.backfillRelevance = backfillRelevance
     }
   }
@@ -161,7 +186,6 @@ class TasksStore: ObservableObject {
       task.cancel()
     }
     startupMaintenanceTasks.removeAll()
-    activeMigrationLease = nil
     activeRetryLease = nil
     incompleteTasks = []
     completedTasks = []
@@ -223,7 +247,6 @@ class TasksStore: ObservableObject {
   private var cancellables = Set<AnyCancellable>()
   private var ownerOperationGeneration: UInt64 = 0
   private var startupMaintenanceTasks: [Task<Void, Never>] = []
-  private var activeMigrationLease: OwnerOperationLease?
   private var activeRetryLease: OwnerOperationLease?
 
   /// Timestamp of last full reconciliation (paginated API check for absent tasks)
@@ -364,11 +387,7 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: authorizationSnapshot
       )
     else { return }
-    await DashboardTaskRefreshService.refresh(
-      store: self,
-      expectedOwnerID: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot
-    )
+    await refreshDashboard(lease: lease, operations: .init())
   }
 
   var todoCount: Int {
@@ -489,7 +508,7 @@ class TasksStore: ObservableObject {
       // (completed/deleted on mobile). Safe: only deletes synced records.
       // An empty page is reconciled only after the IDs endpoint confirms the
       // account truly has zero incomplete tasks (degraded-backend guard).
-      if response.items.count < apiLimit {
+      if response.items.count < apiLimit, legacyConversationRecoveryCompleted(for: lease) {
         if response.items.isEmpty {
           if !incompleteTasks.isEmpty {
             _ = await reconcileConfirmedEmptyCloud(lease: lease, operations: operations)
@@ -507,6 +526,8 @@ class TasksStore: ObservableObject {
             log("TasksStore: Reconciled: hard-deleted \(reconciled) absent tasks during auto-refresh")
           }
         }
+      } else if response.items.count < apiLimit {
+        log("TasksStore: Auto-refresh skipped destructive reconciliation until legacy task recovery succeeds")
       }
 
       // Reload from local cache (respects local changes like completions/deletions).
@@ -667,6 +688,10 @@ class TasksStore: ObservableObject {
 
     // Throttle: skip if last reconciliation was < 5 minutes ago
     if let last = lastReconciliationDate, Date().timeIntervalSince(last) < 300 {
+      return
+    }
+    guard legacyConversationRecoveryCompleted(for: lease) else {
+      log("TasksStore: Full reconciliation skipped until legacy task recovery succeeds")
       return
     }
 
@@ -830,7 +855,16 @@ class TasksStore: ObservableObject {
   func loadTasksIfNeeded(expectedOwnerID: String? = nil) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
     if !hasLoadedIncomplete {
-      await loadIncompleteTasks(expectedOwnerID: lease.ownerID)
+      // This must finish before the initial ID census. An older backend returns
+      // 404 for the recovery endpoint, in which case reconciling an empty
+      // action-items response would otherwise hard-delete the only local copy
+      // of migrated tasks.
+      let recoveryCompleted = await restoreLegacyConversationItemsIfNeeded(lease: lease, operations: .init())
+      guard isCurrent(lease) else { return }
+      await loadIncompleteTasks(
+        expectedOwnerID: lease.ownerID,
+        allowInitialReconciliation: recoveryCompleted
+      )
       guard isCurrent(lease) else { return }
       await loadDashboardTasks(
         expectedOwnerID: lease.ownerID,
@@ -849,7 +883,12 @@ class TasksStore: ObservableObject {
   /// Legacy method - loads incomplete tasks
   func loadTasks(expectedOwnerID: String? = nil) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    await loadIncompleteTasks(expectedOwnerID: lease.ownerID)
+    let recoveryCompleted = await restoreLegacyConversationItemsIfNeeded(lease: lease, operations: .init())
+    guard isCurrent(lease) else { return }
+    await loadIncompleteTasks(
+      expectedOwnerID: lease.ownerID,
+      allowInitialReconciliation: recoveryCompleted
+    )
     guard isCurrent(lease) else { return }
     await loadDashboardTasks(
       expectedOwnerID: lease.ownerID,
@@ -886,11 +925,14 @@ class TasksStore: ObservableObject {
       if let fullSyncAndRetry {
         await fullSyncAndRetry(lease.ownerID)
       } else {
+        let recoveryCompleted = await self.restoreLegacyConversationItemsIfNeeded(lease: lease, operations: operations)
+        guard self.isCurrent(lease) else { return }
+        // `performFullSyncIfNeeded` marks every cache row absent from a
+        // nonempty cloud response as staged. Do not let that destructive
+        // reconciliation run while a pre-deploy backend still rejects legacy
+        // recovery: those cache rows may be the last remaining copy.
+        guard recoveryCompleted else { return }
         await self.performFullSyncIfNeeded(lease: lease, operations: operations)
-        guard self.isCurrent(lease) else { return }
-        await self.migrateAITasksToStagedIfNeeded(lease: lease, operations: operations)
-        guard self.isCurrent(lease) else { return }
-        await self.migrateConversationItemsToStagedIfNeeded(lease: lease, operations: operations)
         guard self.isCurrent(lease) else { return }
         await self.retryUnsyncedItems(
           expectedOwnerID: lease.ownerID,
@@ -1263,6 +1305,17 @@ class TasksStore: ObservableObject {
     operations: OwnerBoundOperations
   ) async {
     guard isCurrent(lease) else { return }
+    guard legacyConversationRecoveryCompleted(for: lease) else {
+      // DashboardTaskRefreshService reconciles remote absence by hard-deleting
+      // local rows. Before the marker-scoped recovery succeeds, a 404 from an
+      // older backend leaves those local rows as the only safe copy.
+      log("TasksStore: Dashboard server reconciliation skipped until legacy task recovery succeeds")
+      await loadDashboardTasks(
+        expectedOwnerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      return
+    }
     if let refreshDashboard = operations.refreshDashboard {
       await refreshDashboard(lease.ownerID)
     } else {
@@ -1293,6 +1346,7 @@ class TasksStore: ObservableObject {
   /// Step 1: Show cached data instantly. Step 2: Sync API to cache, reload from cache.
   func loadIncompleteTasks(
     expectedOwnerID: String? = nil,
+    allowInitialReconciliation: Bool = true,
     operations: OwnerBoundOperations = OwnerBoundOperations()
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
@@ -1392,7 +1446,10 @@ class TasksStore: ObservableObject {
     // Force reconciliation on initial load to clean up tasks deleted on other devices.
     // This bypasses the 5-minute throttle since the first load should always reconcile.
     // Awaited inline (not in a detached Task) so loadDashboardTasks() sees clean data.
-    if lastReconciliationDate == nil {
+    if allowInitialReconciliation,
+      legacyConversationRecoveryCompleted(for: lease),
+      lastReconciliationDate == nil
+    {
       await forceReconcileOnLoad(lease: lease, operations: operations)
     }
   }
@@ -1667,7 +1724,7 @@ class TasksStore: ObservableObject {
   ) async {
     guard isCurrent(lease) else { return }
     let userId = lease.ownerID
-    let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
+    let syncKey = ScopedDefaultsKey.tasksFullSyncCompleted(ownerID: userId)
 
     guard !UserDefaults.standard.bool(forKey: syncKey) else {
       log("TasksStore: Full sync already completed for user \(userId)")
@@ -1825,101 +1882,114 @@ class TasksStore: ObservableObject {
     }
   }
 
-  /// One-time migration: tell backend to move excess AI tasks to staged_tasks subcollection.
-  /// The SQLite migration handles local data; this handles Firestore.
-  /// Sets the flag optimistically before the request to avoid retry loops on timeout.
-  private func migrateAITasksToStagedIfNeeded(
+  /// Restore the exact rows a retired desktop migration moved out of the
+  /// action-items collection. The recovery endpoint is idempotent and restores
+  /// only rows explicitly marked `conversation_migration`; it never touches
+  /// ordinary staged work.
+  private func restoreLegacyConversationItemsIfNeeded(
     lease: OwnerOperationLease,
     operations: OwnerBoundOperations
-  ) async {
-    guard isCurrent(lease) else { return }
+  ) async -> Bool {
+    guard isCurrent(lease) else { return false }
     let userId = lease.ownerID
-    let migrationKey = "stagedTasksMigrationCompleted_v4_\(userId)"
+    let recoveryKey = Self.legacyConversationRecoveryKey(for: userId)
 
-    guard !UserDefaults.standard.bool(forKey: migrationKey) else {
-      log("TasksStore: Staged tasks migration already completed for user \(userId)")
-      return
-    }
+    guard !UserDefaults.standard.bool(forKey: recoveryKey) else { return true }
 
-    // Owner+generation scoped: another account never inherits this guard,
-    // and owner invalidation clears it synchronously.
-    guard activeMigrationLease == nil else {
-      log("TasksStore: Staged tasks migration already in progress, skipping")
-      return
-    }
-    activeMigrationLease = lease
-    defer {
-      if activeMigrationLease == lease { activeMigrationLease = nil }
-    }
-
-    // Set flag optimistically — the migration is idempotent and safe to skip on re-run.
-    // This prevents infinite retry loops when the backend succeeds but the client times out.
-    guard isCurrent(lease) else { return }
-    UserDefaults.standard.set(true, forKey: migrationKey)
-
-    log("TasksStore: Starting staged tasks backend migration for user \(userId)")
+    log("TasksStore: Checking for conversation tasks moved by the retired migration")
 
     do {
-      if let migrateAI = operations.migrateAI {
-        try await migrateAI(lease.ownerID)
-      } else {
-        try await APIClient.shared.migrateStagedTasks(
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
+      var cursor: String?
+      var seenCursors = Set<String>()
+      var restored = 0
+      var skippedExisting = 0
+
+      while true {
+        let page: LegacyConversationRecoveryPage
+        if let restoreLegacyConversationItems = operations.restoreLegacyConversationItems {
+          page = try await restoreLegacyConversationItems(lease.ownerID, cursor)
+        } else {
+          page = try await APIClient.shared.restoreLegacyConversationItems(
+            cursor: cursor,
+            expectedOwnerId: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot
+          )
+        }
+        guard isCurrent(lease) else { return false }
+        restored += page.restored
+        skippedExisting += page.skippedExisting
+
+        guard page.hasMore else {
+          guard page.nextCursor == nil else { throw URLError(.badServerResponse) }
+          break
+        }
+        guard
+          let nextCursor = page.nextCursor,
+          nextCursor != cursor,
+          seenCursors.insert(nextCursor).inserted
+        else {
+          // A bounded page without a new cursor cannot safely prove the sweep
+          // complete. Leave the marker unset and retry on a later launch.
+          throw URLError(.badServerResponse)
+        }
+        cursor = nextCursor
+      }
+
+      // Every completed recovery sweep invalidates the startup sync, including
+      // identity collisions. A skipped row has a current server action item
+      // that the cache still needs to fetch, just like a newly restored row.
+      UserDefaults.standard.set(false, forKey: .tasksFullSyncCompleted(ownerID: userId))
+      operations.legacyRecoveryMarkersInvalidated?(userId)
+      UserDefaults.standard.set(true, forKey: recoveryKey)
+      if restored > 0 || skippedExisting > 0 {
+        log(
+          "TasksStore: Legacy conversation-task recovery completed: restored=\(restored), "
+            + "alreadyCurrent=\(skippedExisting)"
         )
       }
-      if isCurrent(lease) {
-        log("TasksStore: Staged tasks backend migration completed")
-      }
+      return true
     } catch {
       if isCurrent(lease) {
-        log(
-          "TasksStore: Staged tasks backend migration fired (may complete in background): \(error.localizedDescription)"
+        // Do not mark the recovery complete on failure: a later launch may be
+        // the first one after the backend recovery route is deployed.
+        logError("TasksStore: Legacy conversation-task recovery failed", error: error)
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "task_reconcile",
+          from: "legacy_recovery",
+          to: "cache_only",
+          reason: "other",
+          outcome: .degraded
         )
       }
+      return false
     }
   }
 
-  /// One-time migration of conversation-extracted action items (no source field) to staged_tasks.
-  /// These were created by the old save_action_items path that bypassed the staging pipeline.
-  private func migrateConversationItemsToStagedIfNeeded(
-    lease: OwnerOperationLease,
-    operations: OwnerBoundOperations
-  ) async {
-    guard isCurrent(lease) else { return }
-    let userId = lease.ownerID
-    let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
+  private static func legacyConversationRecoveryKey(for ownerID: String) -> ScopedDefaultsKey {
+    .restoreLegacyConversationItemsCompleted(ownerID: ownerID)
+  }
 
-    guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+  /// Until the marker-scoped server recovery succeeds, no path may treat an
+  /// empty action-items response as authority to remove cached tasks.
+  private func legacyConversationRecoveryCompleted(for lease: OwnerOperationLease) -> Bool {
+    UserDefaults.standard.bool(forKey: Self.legacyConversationRecoveryKey(for: lease.ownerID))
+  }
 
-    guard isCurrent(lease) else { return }
-    UserDefaults.standard.set(true, forKey: migrationKey)
-    log("TasksStore: Starting conversation items migration for user \(userId)")
-
-    do {
-      if let migrateConversation = operations.migrateConversation {
-        try await migrateConversation(lease.ownerID)
-      } else {
-        try await APIClient.shared.migrateConversationItemsToStaged(
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-      }
-      guard isCurrent(lease) else { return }
-      log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
-
-      // Reset full sync flag so it re-runs and marks migrated items as staged locally
-      let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
-      UserDefaults.standard.set(false, forKey: syncKey)
-
-      // Run full sync now to clean up local SQLite
-      await performFullSyncIfNeeded(lease: lease, operations: operations)
-    } catch {
-      if isCurrent(lease) {
-        log(
-          "TasksStore: Conversation items migration fired (may complete in background): \(error.localizedDescription)")
-      }
-    }
+  /// The dashboard's exact-ID reconciliation can hard-delete a local row for
+  /// a server 404. Keep that destructive authority behind the same recovery
+  /// boundary as the full Tasks list so no independent dashboard caller can
+  /// erase a migrated cache row while a pre-deploy backend rejects recovery.
+  func canReconcileDashboardServerState(
+    expectedOwnerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return false }
+    return legacyConversationRecoveryCompleted(for: lease)
   }
 
   /// Retry syncing locally-created tasks that failed to push to the backend.
@@ -2251,6 +2321,71 @@ class TasksStore: ObservableObject {
   ) -> LocalMutationAuthorization {
     LocalMutationAuthorization {
       RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    }
+  }
+
+  /// Hydrates a canonical goal-detail task through the owner-fenced store
+  /// before a goal page attempts any mutation.
+  func resolveCanonicalTask(
+    id: String,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    operations: OwnerBoundOperations = OwnerBoundOperations()
+  ) async -> TaskActionItem? {
+    let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedID.isEmpty,
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return nil }
+
+    if let existing = tasks.first(where: { $0.id == normalizedID && $0.deleted != true }) {
+      return existing
+    }
+    do {
+      let remoteTask: TaskActionItem?
+      if let fetchTaskDetail = operations.fetchTaskDetail {
+        remoteTask = try await fetchTaskDetail(normalizedID, lease.ownerID)
+      } else {
+        remoteTask = try await APIClient.shared.getActionItem(
+          id: normalizedID,
+          expectedOwnerId: lease.ownerID,
+          authorizationSnapshot: lease.authorizationSnapshot
+        )
+      }
+      guard isCurrent(lease),
+        let remoteTask,
+        remoteTask.id == normalizedID,
+        remoteTask.deleted != true
+      else { return nil }
+      try await syncPage([remoteTask], lease: lease, operations: operations)
+      guard isCurrent(lease),
+        let hydratedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: normalizedID),
+        hydratedTask.deleted != true
+      else { return nil }
+      publishHydratedCanonicalTask(hydratedTask)
+      await refreshDashboard(lease: lease, operations: operations)
+      guard isCurrent(lease) else { return nil }
+      return hydratedTask
+    } catch {
+      guard isCurrent(lease) else { return nil }
+      self.error = "This task is no longer available."
+      logError("TasksStore: Failed to hydrate canonical task", error: error)
+      return nil
+    }
+  }
+
+  private func publishHydratedCanonicalTask(_ task: TaskActionItem) {
+    incompleteTasks.removeAll { $0.id == task.id }
+    completedTasks.removeAll { $0.id == task.id }
+    deletedTasks.removeAll { $0.id == task.id }
+    if task.deleted == true {
+      deletedTasks.insert(task, at: 0)
+    } else if task.completed {
+      completedTasks.insert(task, at: 0)
+    } else {
+      incompleteTasks.insert(task, at: 0)
     }
   }
 
@@ -2860,6 +2995,7 @@ class TasksStore: ObservableObject {
     log("TasksStore: Restored local-only task via undo (unsynced, id: \(task.id))")
   }
 
+  @discardableResult
   func updateTask(
     _ task: TaskActionItem,
     description: String? = nil,
@@ -2867,93 +3003,160 @@ class TasksStore: ObservableObject {
     clearDueAt: Bool = false,
     priority: String? = nil,
     recurrenceRule: String? = nil,
-    expectedOwnerID: String? = nil
-  ) async {
-    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    // Track manual edits: if description is changed, mark as manually edited
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    remoteFailureBehavior: TaskUpdateRemoteFailureBehavior = .preserveLocalEdit,
+    beforeLocalMutation: (() async -> Void)? = nil,
+    operationOverrides: TaskUpdateOperationOverrides? = nil
+  ) async -> TaskUpdateOutcome {
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return .ownerChanged }
+    if let beforeLocalMutation { await beforeLocalMutation() }
+    guard isCurrent(lease) else { return .ownerChanged }
+
     var metadata: [String: Any]? = nil
     if description != nil {
       metadata = ["manually_edited": true]
-      // Preserve existing tags in metadata
-      if !task.tags.isEmpty {
-        metadata?["tags"] = task.tags
-      }
+      if !task.tags.isEmpty { metadata?["tags"] = task.tags }
     }
 
-    // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
-    var localUpdateSucceeded = true
     do {
-      try await ActionItemStorage.shared.updateActionItemFields(
-        backendId: task.id,
-        description: description,
-        dueAt: dueAt,
-        clearDueAt: clearDueAt,
-        priority: priority,
-        metadataBox: ActionItemMetadataBox(metadata),
-        recurrenceRule: recurrenceRule,
-        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-      )
+      let updatedTask: TaskActionItem?
+      if let operationOverrides {
+        updatedTask = try await operationOverrides.updateLocal(lease.ownerID)
+      } else {
+        try await ActionItemStorage.shared.updateActionItemFields(
+          backendId: task.id,
+          description: description,
+          dueAt: dueAt,
+          clearDueAt: clearDueAt,
+          priority: priority,
+          metadataBox: ActionItemMetadataBox(metadata),
+          recurrenceRule: recurrenceRule,
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+        updatedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id)
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      if let updatedTask {
+        replaceTaskInMemory(updatedTask, originalTask: task)
+      } else if remoteFailureBehavior == .rollbackForChatFirst {
+        error = "Could not verify the task update locally."
+        return .localWriteFailed
+      }
     } catch {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return .ownerChanged }
       logError("TasksStore: Failed to update task locally", error: error)
       self.error = error.localizedDescription
-      localUpdateSucceeded = false
+      if remoteFailureBehavior == .rollbackForChatFirst { return .localWriteFailed }
     }
 
-    // 2. Read back from SQLite and update in-memory arrays immediately
-    if localUpdateSucceeded,
-      let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id)
-    {
-      guard isCurrent(lease) else { return }
-      if task.completed {
-        if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
-          completedTasks[index] = updatedTask
-        }
-      } else {
-        if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
-          incompleteTasks[index] = updatedTask
-        }
-      }
-    }
-
-    // 3. Call API in background. Unsynced local-only tasks have no backend
-    // row; the pending create-sync pushes current row state instead.
-    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+    // Unsynced local-only tasks have no backend row; the pending create-sync
+    // pushes their current state instead of sending an invalid remote update.
+    if operationOverrides == nil, ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
       log("TasksStore: Skipped backend update for unsynced local task \(task.id)")
-      return
+      return .updated
     }
     do {
-      let apiResult = try await APIClient.shared.updateActionItem(
-        id: task.id,
-        description: description,
-        dueAt: dueAt,
-        clearDueAt: clearDueAt,
-        priority: priority,
-        metadataBox: ActionItemMetadataBox(metadata),
-        recurrenceRule: recurrenceRule,
-        expectedOwnerId: lease.ownerID,
+      let apiResult: TaskActionItem
+      if let operationOverrides {
+        apiResult = try await operationOverrides.updateRemote(lease.ownerID)
+      } else {
+        apiResult = try await APIClient.shared.updateActionItem(
+          id: task.id,
+          description: description,
+          dueAt: dueAt,
+          clearDueAt: clearDueAt,
+          priority: priority,
+          metadataBox: ActionItemMetadataBox(metadata),
+          recurrenceRule: recurrenceRule,
+          expectedOwnerId: lease.ownerID,
+          authorizationSnapshot: lease.authorizationSnapshot
+        )
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      if let operationOverrides {
+        try await operationOverrides.syncRemote(apiResult, lease.ownerID)
+      } else {
+        try await ActionItemStorage.shared.syncTaskActionItems(
+          [apiResult],
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      replaceTaskInMemory(apiResult, originalTask: task)
+      return .updated
+    } catch {
+      guard isCurrent(lease) else { return .ownerChanged }
+      if remoteFailureBehavior == .preserveLocalEdit {
+        self.error = error.localizedDescription
+        logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
+        return .preservedLocalAfterRemoteFailure
+      }
+      let rolledBack = await rollbackTaskUpdateAfterBackendFailure(
+        task: task,
+        backendError: error,
+        expectedOwnerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot,
+        rollbackStorage: operationOverrides?.rollbackLocal
+      )
+      if rolledBack { return .rolledBackAfterRemoteFailure }
+      return isCurrent(lease) ? .rollbackFailed : .ownerChanged
+    }
+  }
+
+  @discardableResult
+  func rollbackTaskUpdateAfterBackendFailure(
+    task: TaskActionItem,
+    backendError: Error,
+    expectedOwnerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    rollbackStorage: (() async throws -> Void)? = nil
+  ) async -> Bool {
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return false }
+    do {
+      if let rollbackStorage {
+        try await rollbackStorage()
+      } else {
+        try await ActionItemStorage.shared.syncTaskActionItems(
+          [task],
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+      }
+      guard isCurrent(lease) else { return false }
+      replaceTaskInMemory(task, originalTask: task)
+      await loadDashboardTasks(
+        expectedOwnerID: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease) else { return }
-      // Sync API result to store server-side timestamps
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [apiResult],
-        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-      )
-      guard isCurrent(lease) else { return }
-      // Keep in-memory arrays aligned with server echo immediately.
-      if task.completed {
-        if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
-          completedTasks[index] = apiResult
-        }
-      } else if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
-        incompleteTasks[index] = apiResult
-      }
+      guard isCurrent(lease) else { return false }
+      error = backendError.localizedDescription
+      logError("TasksStore: Failed to update task on backend, reverted Chat-first edit", error: backendError)
+      return true
     } catch {
-      guard isCurrent(lease) else { return }
-      // Local change persists; next successful sync will reconcile
+      guard isCurrent(lease) else { return false }
       self.error = error.localizedDescription
-      logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
+      logError("TasksStore: Failed to roll back Chat-first task update", error: error)
+      return false
+    }
+  }
+
+  private func replaceTaskInMemory(_ updatedTask: TaskActionItem, originalTask: TaskActionItem) {
+    if originalTask.completed {
+      if let index = completedTasks.firstIndex(where: { $0.id == originalTask.id }) {
+        completedTasks[index] = updatedTask
+      }
+    } else if let index = incompleteTasks.firstIndex(where: { $0.id == originalTask.id }) {
+      incompleteTasks[index] = updatedTask
     }
   }
 

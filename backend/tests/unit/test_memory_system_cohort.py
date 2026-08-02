@@ -28,6 +28,8 @@ class _FirestoreFake:
 @pytest.fixture(autouse=True)
 def _empty_cohort(monkeypatch):
     clear_canonical_cohort(monkeypatch)
+    monkeypatch.delenv("OMI_ENV_STAGE", raising=False)
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
 
@@ -80,9 +82,25 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
         assert resolve_memory_system("uid-memory-dogfood", db_client=_Db(db_docs)) == MemorySystem.LEGACY
 
 
+class TestLocalFixtureCanonicalCohort:
+    def test_local_harness_canonical_users_keep_seeded_fixture_on_canonical_path(self, monkeypatch):
+        monkeypatch.setenv("OMI_ENV_STAGE", "local")
+        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "alice-auth-uid, bob-auth-uid")
+
+        assert resolve_memory_system("alice-auth-uid", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
+        assert resolve_memory_system("bob-auth-uid", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
+
+    def test_fixture_environment_cannot_enroll_a_production_account(self, monkeypatch):
+        monkeypatch.setenv("OMI_ENV_STAGE", "prod")
+        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "fixture-auth-uid")
+
+        assert resolve_memory_system("fixture-auth-uid", db_client=_FirestoreFake()) == MemorySystem.LEGACY
+
+
 _EXPECTED_CANONICAL_COHORT_UIDS = frozenset(
     {
         "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com
+        "omi-local-emulator-chat-first-enabled-v1",  # local emulator fixture user
         # Next dogfood (re-enable with CANONICAL_MEMORY_USERS):
         # "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com
     }

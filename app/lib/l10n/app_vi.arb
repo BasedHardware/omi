@@ -2998,6 +2998,7 @@
     "syncStatusWaiting": "Đang chờ đồng bộ",
     "syncStatusRetrying": "Không xử lý được — đang thử lại",
     "syncStatusFailed": "Thất bại — nhấn Thử lại",
+    "syncStatusTooOld": "Quá cũ để đồng bộ — Omi không thể chấp nhận",
     "syncStatusFileUnavailable": "Tệp không khả dụng",
     "syncStatusUploaded": "Đã tải lên · đang xử lý trên Omi",
     "noRecordingsYet": "Chưa có bản ghi nào",

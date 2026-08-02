@@ -179,6 +179,7 @@ enum ScreenContextToolTelemetry {
     "get_work_context",
     "capture_screen",
     "get_screenshot",
+    "show_rewind_evidence",
     "search_screen_history",
     "semantic_search",
   ]
@@ -338,7 +339,7 @@ enum ScreenContextToolTelemetry {
       )
     }
 
-    if toolName == "get_screenshot" || toolName == "capture_screen" {
+    if toolName == "get_screenshot" || toolName == "capture_screen" || toolName == "show_rewind_evidence" {
       let failureRaw = (json["error"] as? String) ?? (json["code"] as? String)
       return ScreenContextToolFacts(
         requested: true,

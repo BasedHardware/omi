@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
     "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
     "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusTooOld": "সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না",
     "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
     "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
     "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",

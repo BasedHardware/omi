@@ -58,4 +58,13 @@ final class ChatPromptsTests: XCTestCase {
     XCTAssertGreaterThan(gateRange.lowerBound, step4Range.lowerBound)
     XCTAssertLessThan(gateRange.lowerBound, step5Range.lowerBound)
   }
+
+  @MainActor
+  func testPreferredResponseLanguageCreatesAnExplicitKernelDirective() {
+    XCTAssertEqual(
+      ChatProvider.responseLanguageInstruction(languageCodes: ["es-MX"]),
+      "Reply in Spanish (es-MX) unless the user asks for another language."
+    )
+    XCTAssertNil(ChatProvider.responseLanguageInstruction(languageCodes: []))
+  }
 }

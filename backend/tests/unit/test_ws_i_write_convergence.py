@@ -787,6 +787,57 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     association_mock.assert_not_called()
 
 
+def test_v3_get_routes_canonical_device_scope_to_memory_service(monkeypatch):
+    memories_router = _load_memories_router(monkeypatch)
+
+    canonical_memories = [
+        MemoryDB(
+            id="mem-1",
+            uid="uid-canonical",
+            content="hello",
+            category=MemoryCategory.interesting,
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+    ]
+    legacy_get = MagicMock(return_value=[])
+    service_read = MagicMock(return_value=canonical_memories)
+
+    monkeypatch.setattr(
+        memories_router,
+        "canonical_read_enabled",
+        lambda uid, **_: uid == "uid-canonical",
+    )
+    monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
+    monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
+
+    runtime = memories_router.V3GetRuntime(enabled=True, source_decision="memory_read")
+    result = memories_router.get_memories(
+        response=MagicMock(),
+        limit=10,
+        offset=0,
+        cursor=None,
+        device_scope="explicit",
+        client_device_id="device-1",
+        uid="uid-canonical",
+        memory_runtime=runtime,
+        x_app_platform=None,
+        x_device_id_hash=None,
+    )
+
+    assert result == canonical_memories
+    from utils.client_device import DeviceScopeRequest
+
+    service_read.assert_called_once_with(
+        "uid-canonical",
+        limit=5000,
+        offset=0,
+        device_scope_request=DeviceScopeRequest(device_scope="explicit", client_device_id="device-1"),
+        include_pending_processing=True,
+    )
+    legacy_get.assert_not_called()
+
+
 def test_canonical_conversation_reprocess_identical_retry_is_idempotent(monkeypatch):
     pc = _load_process_conversation(monkeypatch)
     uid = "uid-canonical-reprocess"
@@ -960,8 +1011,8 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
         limit=10,
         offset=0,
         cursor=None,
-        device_scope="all",
-        client_device_id=None,
+        device_scope="explicit",
+        client_device_id="device-1",
         uid="uid-canonical",
         memory_runtime=runtime,
         x_app_platform=None,
@@ -973,9 +1024,9 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
 
     service_read.assert_called_once_with(
         "uid-canonical",
-        limit=10,
+        limit=5000,
         offset=0,
-        device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
+        device_scope_request=DeviceScopeRequest(device_scope="explicit", client_device_id="device-1"),
         include_pending_processing=True,
     )
     legacy_get.assert_not_called()

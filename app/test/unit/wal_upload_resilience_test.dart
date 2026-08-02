@@ -63,6 +63,9 @@ void main() {
   late LocalWalSyncImpl sync;
   late _MockListener listener;
   late Directory tempDir;
+  // What the injected uploader throws. Defaults to a generic failure; groups
+  // that exercise a specific server rejection override it in their own setUp.
+  late Object uploadFailure;
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -81,12 +84,13 @@ void main() {
     await WalFileManager.init();
     listener = _MockListener();
     SyncRateLimiter.instance.clear();
+    uploadFailure = StateError('deterministic test upload failure');
     sync = LocalWalSyncImpl(
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
-          throw StateError('deterministic test upload failure');
+          throw uploadFailure;
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
       ),
@@ -350,6 +354,123 @@ void main() {
         false,
         reason: 'isSyncing cleared confirms syncAll processed this WAL, '
             'despite retryCount=50 — no cap is enforced',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Recording older than the server's automatic-recovery window (#10975).
+  //
+  // `/v2/sync-local-files` answers 422 `backfill_lookback_exceeded` for a
+  // capture older than SYNC_BACKFILL_MAX_AGE_SECONDS. No retry can ever make
+  // that succeed, so it must leave the retry pool with an explicit state
+  // instead of re-uploading the same bytes on every sync pass forever.
+  // -------------------------------------------------------------------------
+
+  group('recording older than the automatic-recovery window', () {
+    setUp(() {
+      uploadFailure = const SyncRecoveryWindowExceededException();
+    });
+
+    Future<File> writeAudio(String filename) async {
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes([0xAA, 0xBB]);
+      return file;
+    }
+
+    test('a batch upload rejection is terminal and is never retried', () async {
+      const filename = 'too_old_8000.bin';
+      final file = await writeAudio(filename);
+      final wal = _makeWal(timerStart: 8000, filePath: filename);
+      sync.testWals = [wal];
+
+      await sync.syncAll();
+
+      final refused = sync.testWals.first;
+      expect(refused.status, WalStatus.outsideRecoveryWindow);
+      expect(
+        refused.syncDisplayState,
+        WalSyncDisplayState.outsideRecoveryWindow,
+        reason: 'the row must say why, not read as an unexplained failure',
+      );
+      expect(refused.isSyncing, isFalse);
+      expect(refused.retryCount, 0, reason: 'a rejection that can never succeed must not spend the retry budget');
+      expect(await sync.getMissingWals(), isEmpty, reason: 'it must leave the retry pool');
+      expect(await sync.syncAll(), isNull, reason: 'a second sync pass must not re-upload it');
+      expect(file.existsSync(), isTrue, reason: 'the local audio is intact — only the sync attempt is terminal');
+    });
+
+    test('a manual single-recording sync is terminal too', () async {
+      const filename = 'too_old_9000.bin';
+      await writeAudio(filename);
+      final wal = _makeWal(timerStart: 9000, filePath: filename);
+      sync.testWals = [wal];
+
+      await sync.syncWal(wal: wal);
+
+      expect(sync.testWals.first.status, WalStatus.outsideRecoveryWindow);
+      expect(sync.testWals.first.isSyncing, isFalse);
+    });
+
+    test('a mixed-age batch retires only what the rejection proves is too old', () async {
+      // The backend measures the lookback from the OLDEST capture in the
+      // upload, so a rejected batch says nothing about its newer members.
+      // Retiring the whole batch would strand recordings the server accepts.
+      for (final t in [8100, 8200, 8300]) {
+        await writeAudio('mixed_$t.bin');
+      }
+      final oldest = _makeWal(timerStart: 8100, filePath: 'mixed_8100.bin');
+      final middle = _makeWal(timerStart: 8200, filePath: 'mixed_8200.bin');
+      final newest = _makeWal(timerStart: 8300, filePath: 'mixed_8300.bin');
+      sync.testWals = [oldest, middle, newest];
+
+      await sync.syncAll();
+
+      expect(oldest.status, WalStatus.outsideRecoveryWindow, reason: 'the rejection proves this one is outside');
+      expect(middle.status, WalStatus.miss, reason: 'nothing proves this one is outside — it must stay retryable');
+      expect(newest.status, WalStatus.miss);
+      // The survivors were flagged in-flight before the batch was rejected. If
+      // that flag is left behind they render as "Syncing…" forever and drop out
+      // of the deletable-pending set, so a rejection two recordings away silently
+      // strands them.
+      for (final survivor in [middle, newest]) {
+        expect(survivor.isSyncing, isFalse, reason: 'a rejected batch must not leave its survivors stuck in-flight');
+        expect(survivor.syncDisplayState, isNot(WalSyncDisplayState.syncing));
+      }
+    });
+
+    test('recordings outside this batch but at least as old also retire, in the same pass', () async {
+      // Otherwise a long backlog costs one doomed batch upload per recording.
+      // `outsideBatch` is held out of the batch by its conversation grouping,
+      // but it is older than a capture the server just proved is out of range,
+      // so it can only be out of range too.
+      for (final t in [8000, 8100, 8400]) {
+        await writeAudio('tail_$t.bin');
+      }
+      final outsideBatch = _makeWal(timerStart: 8000, filePath: 'tail_8000.bin')..conversationId = 'other-conversation';
+      final oldestInBatch = _makeWal(timerStart: 8100, filePath: 'tail_8100.bin');
+      final newest = _makeWal(timerStart: 8400, filePath: 'tail_8400.bin');
+      sync.testWals = [outsideBatch, oldestInBatch, newest];
+
+      await sync.syncAll();
+
+      expect(oldestInBatch.status, WalStatus.outsideRecoveryWindow);
+      expect(outsideBatch.status, WalStatus.outsideRecoveryWindow, reason: 'older than a proven-rejected capture');
+      expect(newest.status, WalStatus.miss, reason: 'newer than the proven bound — still the server\'s call');
+    });
+
+    test('a generic upload failure stays retryable', () async {
+      uploadFailure = StateError('transient server error');
+      const filename = 'transient_8400.bin';
+      await writeAudio(filename);
+      sync.testWals = [_makeWal(timerStart: 8400, filePath: filename)];
+
+      await sync.syncAll();
+
+      expect(
+        sync.testWals.first.status,
+        WalStatus.miss,
+        reason: 'only the bounded lookback code is terminal — everything else keeps retrying',
       );
     });
   });

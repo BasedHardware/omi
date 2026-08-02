@@ -38,6 +38,9 @@ export interface McpServerBuildContext {
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
   executionRole?: "coordinator" | "leaf";
+  /** Server-authoritative projection admitted into this exact run snapshot. */
+  chatFirstUi?: boolean;
+  chatFirstControlGeneration?: number | null;
 }
 
 export type McpServerBuilder = (
@@ -466,6 +469,12 @@ export class JsonlTransport {
         sessionId,
         adapterId: profile.adapterId,
         executionRole,
+        surfaceKind,
+        screenContext: snapshot.sourceOutcomes.some(
+          (source) => source.source === "screen" && source.outcome === "available",
+        ),
+        chatFirstUi: snapshot.capabilities.chatFirstUi === true,
+        chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(profile.adapterId),

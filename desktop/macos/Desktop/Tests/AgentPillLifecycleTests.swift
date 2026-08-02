@@ -374,8 +374,9 @@ import XCTest
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    // The bar's typed follow-up composer was retired (#10181): its "Continue
-    // in Omi" affordance routes to the main chat instead of spawning.
+    // The bar's typed follow-up composer was retired: its Continue in Omi
+    // affordance routes to the main chat instead of spawning.
+    XCTAssertTrue(source.contains("Continue in Omi"))
     XCTAssertTrue(source.contains("openMainAppChat()"))
   }
 
@@ -810,9 +811,10 @@ import XCTest
     let viewSource = try floatingControlBarViewSource()
 
     XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    // Typed steering from the pill was retired (#10181): the composer's only
-    // affordance opens the main chat, so no second send path can exist.
+    // Typed steering from the pill was retired: the composer's only affordance
+    // opens the main chat, so no second send path can exist.
     XCTAssertFalse(viewSource.contains("manager.continueAgent(from:"))
+    XCTAssertTrue(viewSource.contains("Continue in Omi"))
     XCTAssertTrue(viewSource.contains("openMainAppChat()"))
   }
 
@@ -898,8 +900,8 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving moved with the retired typed follow-up (#10181): the window's
-    // query paths own it now; the view must not archive on its own.
+    // Archiving moved with the retired typed follow-up: the window's query
+    // paths own it now; the view must not archive on its own.
     XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using:"))
     XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))

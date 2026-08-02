@@ -30,7 +30,7 @@ def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
 
 def set_task_workflow_control(uid: str, control: TaskWorkflowControl) -> None:
     ref = _control_ref(uid)
-    ref.set(control.model_dump(mode='json'))
+    ref.set(control.persisted_payload())
 
 
 def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> bool:
@@ -38,15 +38,17 @@ def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> b
 
     if not is_development_smoke_fixture(uid, stage=stage):
         return False
-    expected_payload = _SMOKE_FIXTURE_CONTROL.model_dump(mode='json')
+    expected_payload = _SMOKE_FIXTURE_CONTROL.persisted_payload()
     ref = _control_ref(uid)
     try:
         # Firestore's create operation is an atomic exists=false compare-and-create.
         ref.create(expected_payload)
     except (AlreadyExists, Conflict):
         snapshot = ref.get()
-        if snapshot.exists and snapshot.to_dict() == expected_payload:
-            return False
+        if snapshot.exists:
+            existing = parse_snapshot_or_none(TaskWorkflowControl, snapshot)
+            if existing is not None and existing.persisted_payload() == expected_payload:
+                return False
         raise DevelopmentSmokeFixtureConflictError(
             'development smoke fixture control already exists with differing state'
         ) from None

@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Wacht op synchronisatie",
     "syncStatusRetrying": "Verwerken mislukt — opnieuw proberen",
     "syncStatusFailed": "Mislukt — tik op Opnieuw",
+    "syncStatusTooOld": "Te oud om te synchroniseren — Omi kan deze niet accepteren",
     "syncStatusFileUnavailable": "Bestand niet beschikbaar",
     "syncStatusUploaded": "Geüpload · wordt verwerkt op Omi",
     "noRecordingsYet": "Nog geen opnames",

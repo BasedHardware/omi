@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "รอการซิงค์",
     "syncStatusRetrying": "ประมวลผลไม่สำเร็จ — กำลังลองใหม่",
     "syncStatusFailed": "ล้มเหลว — แตะ ลองใหม่",
+    "syncStatusTooOld": "เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้",
     "syncStatusFileUnavailable": "ไม่พบไฟล์",
     "syncStatusUploaded": "อัปโหลดแล้ว · กำลังประมวลผลบน Omi",
     "noRecordingsYet": "ยังไม่มีการบันทึก",

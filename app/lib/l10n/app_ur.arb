@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "سنک ہونے کا منتظر",
     "syncStatusRetrying": "پروسیس نہیں ہو سکا — دوبارہ کوشش",
     "syncStatusFailed": "ناکام — Retry دبائیں",
+    "syncStatusTooOld": "ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا",
     "syncStatusFileUnavailable": "فائل دستیاب نہیں",
     "syncStatusUploaded": "اپ لوڈ ہو گیا · Omi پر پروسیسنگ جاری",
     "noRecordingsYet": "ابھی تک کوئی ریکارڈنگ نہیں",
