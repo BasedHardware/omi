@@ -108,6 +108,9 @@ enum OmiKeyResolver {
 /// "Omi history could not be reached: <reason>." — the model is told what broke, never nothing.
 public enum OmiBackendError: Error, Sendable, Equatable {
     case notConfigured
+    /// The user turned Airgap Mode on, so no request was sent. Not a failure of the account or of
+    /// the network — a refusal by this process, and the one failure the user can undo in a click.
+    case airgapped
     case unauthorized
     case forbidden
     case notFound
@@ -124,6 +127,11 @@ public enum OmiBackendError: Error, Sendable, Equatable {
             no Omi MCP API key is configured, so this process has no way to authenticate to the \
             account
             """
+        case .airgapped:
+            // Every tool that renders a backend failure — the footers, the "nothing found" prose,
+            // `status`, `transcript` — gets the airgap explanation for free by carrying it here,
+            // rather than each of them growing its own branch that could drift or be forgotten.
+            return MCPNetworkEgress.suppressedReadClause
         case .unauthorized:
             return "the Omi MCP API key was rejected (HTTP 401) — it has expired or been revoked"
         case .forbidden:
@@ -367,11 +375,19 @@ public final class OmiBackend: @unchecked Sendable {
     private let session: URLSession
     private let cache = ResponseCache()
     private let seen = SeenRange()
+    /// Reads Airgap Mode. A closure rather than a stored `Bool` because the answer has to be taken
+    /// afresh at each attempt — see the gate in `get` — and injectable so a test can drive both
+    /// answers, and count the reads, without a network or a configuration file.
+    private let isAirgapped: @Sendable () -> Bool
 
     /// Deliberately not public: the credential never leaves this module, and no caller outside it
     /// can hand one in or read one back out.
-    init(credential: (key: String, source: OmiKeySource)? = OmiKeyResolver.resolve()) {
+    init(
+        credential: (key: String, source: OmiKeySource)? = OmiKeyResolver.resolve(),
+        isAirgapped: @escaping @Sendable () -> Bool = { MCPNetworkEgress.isAirgapped() }
+    ) {
         self.credential = credential
+        self.isAirgapped = isAirgapped
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Self.requestTimeout
         configuration.timeoutIntervalForResource = Self.requestTimeout
@@ -594,6 +610,26 @@ public final class OmiBackend: @unchecked Sendable {
             case let .success(data): return decode(type, data, path: path)
             case let .failure(error): return .unavailable(error)
             }
+        }
+
+        // Airgap Mode, asked *here*: after the cache, immediately before the only path in this
+        // process that opens a socket. Every remote read in this target funnels through this
+        // function, so this one line is the whole enforcement surface.
+        //
+        // Here rather than at construction because this binary is spawned per Claude session and
+        // outlives the click: the switch can go on while Claude is still open, and a value read at
+        // startup would keep this process talking to `api.omi.me` for the rest of the session.
+        //
+        // After the cache lookup because serving a response already fetched costs no network, and
+        // refusing it would degrade the answer for no privacy gained.
+        //
+        // **The refusal is deliberately never stored in the cache.** The flag is live in both
+        // directions: a cached refusal would keep answering "airgapped" after the user turned the
+        // switch back off, for as long as its TTL — and the terminal-failure branch below would pin
+        // it for the life of the process. Returning before either is what makes the switch reversible.
+        if isAirgapped() {
+            MCPNetworkEgress.recordSuppression()
+            return .unavailable(.airgapped)
         }
 
         var request = URLRequest(url: url)

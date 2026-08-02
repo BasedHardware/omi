@@ -15,6 +15,12 @@ import GRDB
 ///
 /// The endpoint is the **Rust** desktop backend, not the Python API that `OmiAPI` is pointed at, so
 /// the request is built here and only the auth/telemetry header set is borrowed from `OmiAPI`.
+///
+/// **Airgap Mode stops this outright.** This is the single most consequential client in the app for
+/// that switch — the payload is the OCR'd contents of the user's screen — so the flag is read at the
+/// top of every drain *and* again before every request, and nothing is read from disk while it is on.
+/// No data is lost by stopping: the cursor only advances on a 2xx, so the whole backlog is still
+/// owed and goes up when Airgap Mode is turned off.
 @MainActor
 final class ScreenActivityUploader: ObservableObject {
     static let shared = ScreenActivityUploader()
@@ -70,7 +76,24 @@ final class ScreenActivityUploader: ObservableObject {
     private var consecutiveFailures = 0
     private var isTrialExpired = false
     private var didLogSignedOut = false
+    private var didLogAirgap = false
     private var hadPendingWork = false
+
+    /// Whether the loop is down *because of Airgap Mode*, as opposed to down for one of the other
+    /// reasons that also leave `loop == nil` while `wantsPeriodicSync` is true.
+    ///
+    /// This exists because `ExclusionEngine.mutate` calls **every** observer on **every** change, so
+    /// the airgap observer below fires when the user ticks any checkbox in Settings › Exclusions. Its
+    /// resume branch used to key on `loop == nil` alone, which is not "airgap was on" — after a trial
+    /// expiry the loop nils itself and `wantsPeriodicSync` stays true, so excluding an app would log
+    /// "Airgap Mode off — resuming screen sync" about a switch that was never on and spend another
+    /// authenticated round trip re-learning that the trial is over. `ListenSocket.observeAirgap` never
+    /// had this bug because it gates its resume on `state == .airgapped`; this flag is that state.
+    private var isSuspendedByAirgap = false
+
+    /// Registered the first time `start()` is called, so turning Airgap Mode off resumes syncing
+    /// without a relaunch — which is what the Settings row now promises.
+    private var airgapObserver: UUID?
 
     /// A read-only handle. WAL means it never blocks the capture writer, and nothing here writes:
     /// the cursor lives in `UserDefaults`, so a failed upload leaves the database untouched.
@@ -79,23 +102,75 @@ final class ScreenActivityUploader: ObservableObject {
     /// The highest local row id the server has acknowledged. Everything above it is still owed.
     private var lastSyncedId: Int64
 
-    private lazy var clientDeviceId: String = Self.resolveClientDeviceId()
+    private lazy var clientDeviceId: String = Self.resolveClientDeviceId(in: defaults)
     private lazy var deviceName: String? = {
         let name = Host.current().localizedName ?? ""
         return name.isEmpty ? nil : name
     }()
 
-    private init() {
-        lastSyncedId = Int64(UserDefaults.standard.integer(forKey: Self.cursorKey))
+    // MARK: - Dependencies
+
+    // Everything this class needs from outside itself, as replaceable closures with the production
+    // wiring as their defaults. The airgap guard is why: "this drain sent nothing" is only provable
+    // against a transport that can record having been called, and a guard nobody can prove is a
+    // guard that quietly stops working. See `AirgapEgressTests`.
+
+    private let isAirgapped: @MainActor () -> Bool
+    private let isSignedIn: @MainActor () -> Bool
+    private let openStore: @Sendable () throws -> ContextStore
+    private let authHeaders: (Bool) async throws -> [String: String]
+    private let transport: @MainActor (URLRequest) async throws -> (Data, URLResponse)
+    private let defaults: UserDefaults
+    /// The engine whose changes are watched. Injected so a test drives a throwaway configuration file
+    /// rather than the developer's own — and so registering an observer in a test cannot leave one on
+    /// the process-wide singleton.
+    private let exclusions: ExclusionEngine
+
+    init(
+        isAirgapped: @escaping @MainActor () -> Bool = { NetworkEgress.isSuppressed(.screenActivitySync) },
+        isSignedIn: @escaping @MainActor () -> Bool = { OmiAuth.shared.isSignedIn },
+        openStore: @escaping @Sendable () throws -> ContextStore = { try ContextStore(readOnly: true) },
+        authHeaders: @escaping (Bool) async throws -> [String: String] = {
+            try await OmiAPI.shared.headers(forceRefresh: $0)
+        },
+        // Defaulted through nil rather than as a default expression: `urlSession` is `private`, and a
+        // default argument on an internal initializer may not name a private declaration.
+        transport: (@MainActor (URLRequest) async throws -> (Data, URLResponse))? = nil,
+        defaults: UserDefaults = .standard,
+        exclusions: ExclusionEngine = .shared
+    ) {
+        self.isAirgapped = isAirgapped
+        self.isSignedIn = isSignedIn
+        self.openStore = openStore
+        self.authHeaders = authHeaders
+        self.transport = transport ?? Self.defaultTransport
+        self.defaults = defaults
+        self.exclusions = exclusions
+        lastSyncedId = Int64(defaults.integer(forKey: Self.cursorKey))
+    }
+
+    private static func defaultTransport(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await urlSession.data(for: request)
     }
 
     // MARK: - Lifecycle
 
     /// Begins the periodic drain. Safe to call when already running.
+    ///
+    /// Under Airgap Mode no loop is started at all — a timer whose every tick would refuse itself is
+    /// just a battery cost — but the observer *is* registered, so the sync resumes the moment the
+    /// switch goes off.
     func start() {
         wantsPeriodicSync = true
+        observeAirgap()
+        guard !isAirgapped() else {
+            noteSuppressedByAirgap()
+            return
+        }
         guard loop == nil else { return }
         isTrialExpired = false
+        didLogAirgap = false
+        isSuspendedByAirgap = false
         ContextLog.info("Screen sync started (cursor=\(lastSyncedId))", Self.category)
 
         loop = Task { [weak self] in
@@ -121,34 +196,166 @@ final class ScreenActivityUploader: ObservableObject {
 
     func stop() {
         wantsPeriodicSync = false
+        // Removed ahead of the guard below, and not left registered the way it used to be. `start()`
+        // re-registers, so keeping it buys nothing, and the engine holds the handler for the process
+        // lifetime: every instance that ever started and stopped left a dead observer behind it.
+        // Harmless for the singleton, not harmless now that `init` is internal — a suite that
+        // constructs uploaders would grow `ExclusionEngine.shared`'s observer list test by test.
+        // `ListenSocket.stop()` has always done this; this is the same removal.
+        if let airgapObserver { exclusions.removeObserver(airgapObserver) }
+        airgapObserver = nil
+        isSuspendedByAirgap = false
         guard loop != nil else { return }
         loop?.cancel()
         loop = nil
         ContextLog.info("Screen sync stopped (cursor=\(lastSyncedId))", Self.category)
     }
 
+    /// The other end of the observer's lifetime. `stop()` covers the app; this covers an instance
+    /// that is simply released — a test's, or any future non-singleton — because the engine's
+    /// observer table would otherwise hold a handler for an uploader that no longer exists.
+    /// The handler captures `self` weakly, so this is reachable.
+    deinit {
+        if let airgapObserver { exclusions.removeObserver(airgapObserver) }
+    }
+
     /// Drains now, outside the schedule. An explicit request also clears a paywall stop — a person
     /// who just upgraded should not have to relaunch, and one request is not the retry loop we
     /// refuse to run.
+    ///
+    /// Airgap Mode is *not* cleared here, and a manual sync does not override it: the paywall is
+    /// someone else's decision about this account, but Airgap Mode is this user's own decision about
+    /// this Mac, and a button that quietly overrode it would be the same broken promise again.
     func syncNow() async {
         isTrialExpired = false
         await drain()
-        if !isTrialExpired, wantsPeriodicSync, loop == nil { start() }
+        if !isTrialExpired, wantsPeriodicSync, loop == nil, !isAirgapped() { start() }
+    }
+
+    // MARK: - Airgap
+
+    /// What an exclusion change means for the sync loop right now.
+    enum AirgapTransition: Equatable {
+        /// Nothing to do. Most changes land here — the user excluded an app, and this loop's state
+        /// is already the state it should be in.
+        case ignore
+        /// Airgap Mode came on while the loop was running.
+        case suspend
+        /// Airgap Mode went off, and this loop is down *because* of it.
+        case resume
+    }
+
+    /// The observer's whole decision, as a method rather than as three conditions inline.
+    ///
+    /// Split out because it is the thing that was wrong and the thing that has to stay right:
+    /// `ExclusionEngine.mutate` fires every observer on every change, so this is called when the user
+    /// ticks any checkbox in Settings › Exclusions, and it has to answer `.ignore` for all of them.
+    /// The old inline version discriminated on `loop == nil` alone, which is true of *any* stopped
+    /// loop — so a trial-expired stop read as an airgap one and every checkbox restarted a loop the
+    /// paywall had deliberately stopped, cleared `isTrialExpired`, and spent another authenticated
+    /// round trip. Asking `isSuspendedByAirgap` is what makes "resume" mean what it says.
+    func airgapTransition(airgapMode: Bool) -> AirgapTransition {
+        guard wantsPeriodicSync else { return .ignore }
+        if airgapMode { return loop == nil ? .ignore : .suspend }
+        return isSuspendedByAirgap ? .resume : .ignore
+    }
+
+    /// Airgap Mode is a live switch, not a launch-time one. Turning it on stops the loop before its
+    /// next tick; turning it off starts the drain again and the backlog goes up from the cursor.
+    private func observeAirgap() {
+        guard airgapObserver == nil else { return }
+        // The engine calls observers on whichever thread made the change, so hop before touching
+        // any of this class's state.
+        airgapObserver = exclusions.addObserver { [weak self] set in
+            let airgapMode = set.airgapMode
+            Task { @MainActor in
+                guard let self else { return }
+                switch self.airgapTransition(airgapMode: airgapMode) {
+                case .ignore:
+                    break
+                case .suspend:
+                    self.suspendForAirgap()
+                case .resume:
+                    ContextLog.info("Airgap Mode off — resuming screen sync", Self.category)
+                    self.start()
+                }
+            }
+        }
+    }
+
+    private func suspendForAirgap() {
+        guard loop != nil else { return }
+        loop?.cancel()
+        loop = nil
+        noteSuppressedByAirgap()
+    }
+
+    /// Records a suppression, and deliberately does **not** touch `lastSyncedAt`.
+    ///
+    /// Stamping it would make every reader believe the account is up to date while a backlog of
+    /// screen frames sits on this Mac — the failure mode that looks exactly like success. `lastError`
+    /// carries the honest sentence instead, and it names the setting so the state is undoable.
+    private func noteSuppressedByAirgap() {
+        lastError = NetworkEgress.explanation(.screenActivitySync)
+        // Every route into this method — `start()`, `drain()`, `suspendForAirgap()` — means the same
+        // thing: not syncing, and Airgap Mode is why. That is the one condition the observer's resume
+        // branch may act on. `suspendForAirgap()` deliberately returns before reaching here when the
+        // loop was already down, so a trial-expired stop is never mistaken for an airgap one.
+        isSuspendedByAirgap = true
+        guard !didLogAirgap else { return }
+        didLogAirgap = true
+        ContextLog.info(
+            "Airgap Mode on — screen frames stay on this Mac (cursor=\(lastSyncedId))", Self.category)
+        // Degraded, never dropped: the cursor has not moved, so every frame is still owed and still
+        // on disk. Nothing here reaches the network — see `NetworkEgress`.
+        NetworkEgress.recordSuppression(.screenActivitySync, outcome: .degraded)
     }
 
     // MARK: - Drain
 
-    private func drain() async {
-        guard !isDraining else { return }
+    /// What one drain actually did.
+    ///
+    /// Returned rather than only logged because the airgap guard has to be provable: a `Void`
+    /// function that "does nothing" is indistinguishable from one that silently sent.
+    enum DrainOutcome: Equatable {
+        /// Airgap Mode is on. Nothing was read, nothing was sent, the cursor did not move.
+        case suppressedByAirgap
+        case signedOut
+        case alreadyDraining
+        /// Nothing has been captured on this Mac yet, or the local database went away.
+        case nothingToRead(String)
+        /// Everything owed has been accepted.
+        case caughtUp
+        /// A batch went up and more is still owed; the next tick continues from the cursor.
+        case moreToSend
+        case cancelled
+        /// A permanent stop with a user-meaningful reason (an expired trial, a lost session).
+        case halted(String)
+        case failed(String)
+    }
+
+    @discardableResult
+    func drain() async -> DrainOutcome {
+        // Airgap Mode first, and before a single row is read. The payload here is the OCR'd contents
+        // of the user's screen; the cheapest way to keep a promise about a payload is never to build
+        // one. This also means a suppressed drain touches no database and no Keychain.
+        guard !isAirgapped() else {
+            noteSuppressedByAirgap()
+            return .suppressedByAirgap
+        }
+        didLogAirgap = false
+        isSuspendedByAirgap = false
+
+        guard !isDraining else { return .alreadyDraining }
 
         // Signed out is not an error state. Frames keep accumulating locally and go up whole after
         // sign-in, because the cursor has not moved.
-        guard OmiAuth.shared.isSignedIn else {
+        guard isSignedIn() else {
             if !didLogSignedOut {
                 didLogSignedOut = true
                 ContextLog.info("Signed out — screen frames stay local until sign-in", Self.category)
             }
-            return
+            return .signedOut
         }
         didLogSignedOut = false
 
@@ -157,18 +364,19 @@ final class ScreenActivityUploader: ObservableObject {
 
         var isDrained = false
         for _ in 0..<Self.maxBatchesPerTick {
-            if Task.isCancelled { return }
+            if Task.isCancelled { return .cancelled }
 
             let rows: [PendingRow]
             do {
                 rows = try await loadPending()
             } catch ContextStoreError.notInitialized {
-                return  // nothing has been captured yet
+                return .nothingToRead("nothing has been captured yet")
             } catch {
                 // Reopen next tick: the file may have been replaced or deleted underneath us.
                 store = nil
-                noteFailure("Could not read local frames: \(error.localizedDescription)")
-                return
+                let message = "Could not read local frames: \(error.localizedDescription)"
+                noteFailure(message)
+                return .nothingToRead(message)
             }
 
             guard let first = rows.first, let last = rows.last else {
@@ -192,6 +400,12 @@ final class ScreenActivityUploader: ObservableObject {
                     "Uploaded \(rows.count) frames (ids \(first.id)–\(last.id), accepted=\(synced), cursor=\(lastSyncedId))",
                     Self.category)
 
+            case .suppressedByAirgap:
+                // Airgap Mode was turned on mid-drain. Stop before the next request rather than
+                // finishing the batches this tick had already planned.
+                noteSuppressedByAirgap()
+                return .suppressedByAirgap
+
             case .paywalled(let message):
                 isTrialExpired = true
                 lastError = message
@@ -203,7 +417,7 @@ final class ScreenActivityUploader: ObservableObject {
                     to: "halted",
                     reason: "desktop-trial-expired",
                     outcome: .degraded)
-                return
+                return .halted(message)
 
             case .signedOut:
                 ContextTelemetry.recordFallback(
@@ -212,7 +426,7 @@ final class ScreenActivityUploader: ObservableObject {
                     to: "halted",
                     reason: "firebase-session-lost",
                     outcome: .degraded)
-                return
+                return .signedOut
 
             case .failed(let message):
                 noteFailure("\(message) (\(rows.count) frames, ids \(first.id)–\(last.id))")
@@ -222,7 +436,7 @@ final class ScreenActivityUploader: ObservableObject {
                     to: "retry-with-backoff",
                     reason: "backend-or-network-error",
                     outcome: .retried)
-                return
+                return .failed(message)
             }
 
             // A short batch means the table is drained; wait for the next tick.
@@ -234,7 +448,9 @@ final class ScreenActivityUploader: ObservableObject {
 
         // Falling out with a full batch every time means the backlog outlasted this tick's budget.
         // The next tick picks it up from the cursor, so say nothing rather than claim "up to date".
-        if isDrained { noteCaughtUp() }
+        guard isDrained else { return .moreToSend }
+        noteCaughtUp()
+        return .caughtUp
     }
 
     /// A drain that ended with nothing owed. Recorded as a successful sync so the UI can say
@@ -264,7 +480,7 @@ final class ScreenActivityUploader: ObservableObject {
     private func advanceCursor(to id: Int64) {
         guard id > lastSyncedId else { return }
         lastSyncedId = id
-        UserDefaults.standard.set(Int(id), forKey: Self.cursorKey)
+        defaults.set(Int(id), forKey: Self.cursorKey)
     }
 
     /// 60 s while healthy, doubling per consecutive failure to a 300 s ceiling.
@@ -288,6 +504,7 @@ final class ScreenActivityUploader: ObservableObject {
         let existing = store
         let cursor = lastSyncedId
         let limit = Self.batchSize
+        let open = openStore
 
         // Off the main actor: a batch of frames carries up to a hundred pages of OCR text, and the
         // menu bar must not stall behind SQLite while that is decoded.
@@ -297,7 +514,7 @@ final class ScreenActivityUploader: ObservableObject {
             if let existing {
                 store = existing
             } else {
-                store = try ContextStore(readOnly: true)
+                store = try open()
             }
             let batch = try Self.fetch(store, after: cursor, limit: limit)
             return (store, batch)
@@ -349,6 +566,7 @@ final class ScreenActivityUploader: ObservableObject {
 
     private enum SendOutcome {
         case accepted(synced: Int)
+        case suppressedByAirgap
         case paywalled(String)
         case signedOut
         case failed(String)
@@ -364,11 +582,18 @@ final class ScreenActivityUploader: ObservableObject {
 
         var forceRefresh = false
         for attempt in 0..<2 {
+            // Re-read per request, not once per drain. A drain runs up to twenty batches and each
+            // one is a round trip, so a switch flipped in the middle has to stop the *next* request
+            // rather than the next tick — which is what makes "takes effect immediately" true.
+            guard !isAirgapped() else { return .suppressedByAirgap }
+
             let headers: [String: String]
             do {
-                headers = try await OmiAPI.shared.headers(forceRefresh: forceRefresh)
+                headers = try await authHeaders(forceRefresh)
             } catch OmiAPIError.notSignedIn {
                 return .signedOut
+            } catch OmiAPIError.airgapMode {
+                return .suppressedByAirgap
             } catch {
                 return .failed("Could not build auth headers: \(error.localizedDescription)")
             }
@@ -385,7 +610,7 @@ final class ScreenActivityUploader: ObservableObject {
             request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
 
             do {
-                let (data, response) = try await Self.urlSession.data(for: request)
+                let (data, response) = try await transport(request)
                 guard let http = response as? HTTPURLResponse else {
                     return .failed("Malformed response from screen-activity sync")
                 }
@@ -494,8 +719,7 @@ final class ScreenActivityUploader: ObservableObject {
     /// The install id lives in `UserDefaults` rather than the Keychain: it identifies a capture
     /// source, not the user, and a Keychain read here would risk a password prompt on launch for
     /// something no security decision depends on.
-    private static func resolveClientDeviceId() -> String {
-        let defaults = UserDefaults.standard
+    private static func resolveClientDeviceId(in defaults: UserDefaults) -> String {
         let installId: String
         if let existing = defaults.string(forKey: installIdKey), !existing.isEmpty {
             installId = existing

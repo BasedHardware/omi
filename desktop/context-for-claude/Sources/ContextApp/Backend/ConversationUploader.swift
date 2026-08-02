@@ -52,6 +52,9 @@ final class ConversationUploader: ObservableObject {
     private let database = UploadDatabase()
     private var isDraining = false
     private var didRestoreState = false
+    /// Said once per airgapped stretch. The ticker drains every `tickInterval`, and a line per tick
+    /// would turn a deliberate setting into a log flood.
+    private var didLogAirgap = false
     private var wake: Task<Void, Never>?
     private var ticker: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
@@ -112,6 +115,24 @@ final class ConversationUploader: ObservableObject {
         await restoreStateOnce()
         await reconcile()
         await refreshPendingCount()
+
+        // Airgap Mode: the queue is durable across launches, so the honest answer is to leave every
+        // entry exactly where it is rather than to dequeue, fail, or skip. Nothing is marked failed
+        // either — `lastError` is what the menu bar renders as an upload problem, and a user's own
+        // setting is not a problem the app should report as one. `pendingCount` keeps telling the
+        // true story ("N conversations waiting to upload") and the Settings row explains why.
+        guard !NetworkEgress.isSuppressed(.conversationUpload) else {
+            if !didLogAirgap {
+                didLogAirgap = true
+                ContextLog.info(
+                    "Airgap Mode on; \(pendingCount) session(s) stay queued on this Mac", Self.category)
+                NetworkEgress.recordSuppression(.conversationUpload, outcome: .degraded)
+            }
+            // No wake is scheduled: the entries are already due and a timer for "try again in zero
+            // seconds" is a spin. The periodic ticker picks the queue up once the switch goes off.
+            return
+        }
+        didLogAirgap = false
 
         guard OmiAuth.shared.isSignedIn else {
             if pendingCount > 0 {

@@ -28,6 +28,45 @@ final class MCPServerTests: XCTestCase {
         XCTAssertNotNil(result["capabilities"]?["tools"], "a server with no tools capability is ignored")
     }
 
+    /// The instructions ride on `initialize` and nowhere else, so a client that never reads them is
+    /// a client the tool descriptions have to carry alone. Asserted as *present and non-trivial* on
+    /// the wire rather than word for word: pinning the prose would make every future edit to it a
+    /// test failure, and the thing worth protecting is that it is sent at all.
+    func testInitializeCarriesTheServerInstructions() throws {
+        let server = MCPServer(store: nil)
+
+        let response = try XCTUnwrap(server.handle(line: request(id: 8, method: "initialize")))
+        let instructions = try XCTUnwrap(try parse(response)["result"]?["instructions"]?.stringValue)
+
+        XCTAssertGreaterThan(instructions.count, 200, "an empty or stub instruction block steers nothing")
+        XCTAssertEqual(instructions, MCPServer.instructions)
+    }
+
+    /// **The regression.** Asked the tutorial's own suggested question, Claude replied "I don't have
+    /// access to what you were reading before this conversation started. I can only see messages
+    /// within our current chat" — and offered pasting the text, the browser history, and
+    /// `conversation_search` as the alternatives. The root cause was that no server was running, but
+    /// the instructions were also silent on the one thing worth forbidding outright, so a model with
+    /// the tools in hand had nothing telling it that answer is wrong.
+    ///
+    /// A keyword check, and named as such: it proves the guidance is still addressed to this failure,
+    /// not that any model obeys it. Nothing here can make a model call a tool.
+    func testTheInstructionsForbidClaimingNoAccessToTheUsersOwnHistory() {
+        let instructions = MCPServer.instructions.lowercased()
+
+        XCTAssertTrue(
+            instructions.contains("never tell this user you have no access"),
+            "the exact answer that broke the product has to be named as wrong")
+        for alternative in ["paste", "browser history", "past conversations"] {
+            XCTAssertTrue(
+                instructions.contains(alternative),
+                "the deflection Claude offered instead of a tool call is unaddressed: \(alternative)")
+        }
+        XCTAssertTrue(
+            instructions.contains("a few minutes ago"),
+            "the tutorial's own suggested question has to be one the instructions claim")
+    }
+
     func testNotificationsAreNeverAnswered() {
         let server = MCPServer(store: nil)
 

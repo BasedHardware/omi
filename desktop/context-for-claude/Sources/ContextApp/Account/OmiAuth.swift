@@ -12,6 +12,13 @@ enum OmiAuthError: LocalizedError {
     case missingAPIKey
     case cancelled
     case stateMismatch
+    /// Airgap Mode is on, so no sign-in or token refresh was attempted.
+    ///
+    /// Surfaced rather than swallowed on purpose. Both sign-in surfaces already render whatever this
+    /// throws — the menu bar through `OmiAuth.lastSignInError`, onboarding through its own `catch` —
+    /// so a person who presses "Continue with Google" under Airgap Mode is told which switch stopped
+    /// it and where to turn it off, instead of watching a button do nothing.
+    case airgapMode
     case badResponse(String)
     case http(Int, String)
 
@@ -21,6 +28,8 @@ enum OmiAuthError: LocalizedError {
             return "This build of Context for Claude has no Firebase API key, so it cannot finish signing in."
         case .cancelled:
             return "Sign-in didn't finish."
+        case .airgapMode:
+            return NetworkEgress.explanation(.signIn)
         case .stateMismatch:
             return "That sign-in response didn't match this request, so Context for Claude ignored it. Try again."
         case .badResponse(let detail):
@@ -141,11 +150,34 @@ final class OmiAuth: ObservableObject {
         }
     }
 
+    /// Signs in, unless Airgap Mode says otherwise.
+    ///
+    /// **Airgap Mode blocks sign-in outright, and that is the deliberate choice.** Signing in is
+    /// three requests to two hosts — `api.omi.me` twice and Google's identity toolkit once — and it
+    /// ships an authorization code for the user's account to both. Permitting "just sign-in" would
+    /// hand the network the one credential that matters while claiming the app is airgapped, and it
+    /// would buy the user nothing: every account feature behind that session (screen sync,
+    /// conversation upload, cloud transcription, MCP key provisioning) is suppressed too, so the
+    /// result would be a live session that can do nothing. Meanwhile everything this app is actually
+    /// for — capture, OCR, local transcription, local search, the local MCP tools — works signed out.
+    ///
+    /// The user is told, not stonewalled: this throws before the browser opens, and both sign-in
+    /// surfaces already render the thrown sentence.
     func signIn(provider: OmiAuthProvider) async throws {
         guard !isSigningIn else {
             ContextLog.info("Sign-in already in progress; ignoring duplicate request", "auth")
             throw OmiAuthError.cancelled
         }
+
+        // Before `isSigningIn` is set and before a browser opens. Opening a tab and then refusing the
+        // code it comes back with would be a worse lie than refusing the press.
+        guard !NetworkEgress.isSuppressed(.signIn) else {
+            ContextLog.info("Sign-in refused: Airgap Mode is on", "auth")
+            NetworkEgress.recordSuppression(.signIn, outcome: .bypassed)
+            lastSignInError = NetworkEgress.explanation(.signIn)
+            throw OmiAuthError.airgapMode
+        }
+
         isSigningIn = true
         // A new attempt clears the last one's verdict: a stale error under a live "waiting for your
         // browser…" line is the app contradicting itself.
@@ -270,6 +302,16 @@ final class OmiAuth: ObservableObject {
     }
 
     private func performRefresh(refreshToken: String) async throws -> String {
+        // Throwing here leaves the stored session **completely untouched**, which is the whole point:
+        // an airgapped Mac must not be signed out for the crime of not being allowed to refresh. The
+        // refresh token is long-lived, so turning Airgap Mode off resumes the same account with no
+        // browser round trip. Nothing below this line runs, so the token never leaves the Keychain.
+        guard !NetworkEgress.isSuppressed(.tokenRefresh) else {
+            ContextLog.info("Token refresh skipped: Airgap Mode is on", "auth")
+            NetworkEgress.recordSuppression(.tokenRefresh, outcome: .degraded)
+            throw OmiAuthError.airgapMode
+        }
+
         let apiKey = try Self.firebaseAPIKey()
         guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
             throw OmiAuthError.badResponse("Context for Claude couldn't build the token refresh URL.")

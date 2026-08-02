@@ -100,9 +100,12 @@ actor Transcriber {
     /// They live in `~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v2-coreml/`
     /// (`-v3-` for the multilingual model). Onboarding asks this before deciding whether it has to
     /// show a download step at all.
-    static var isModelReady: Bool {
-        let version = modelVersion
-        return AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: version), version: version)
+    static var isModelReady: Bool { isModelOnDisk(modelVersion) }
+
+    /// The same question for an explicit version, which is what the airgap gate needs: the decision
+    /// is "may these particular weights be fetched", and the answer turns on whether they are here.
+    static func isModelOnDisk(_ version: AsrModelVersion) -> Bool {
+        AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: version), version: version)
     }
 
     /// Downloads and compiles the model, reporting progress in 0...1.
@@ -115,6 +118,8 @@ actor Transcriber {
     /// It loads as well as downloads, deliberately. Compiling the `.mlmodelc` files the first time
     /// is itself slow, and paying that here warms the compile cache; the loaded models are dropped
     /// because the second load from a warm cache is cheap.
+    ///
+    /// Throws under Airgap Mode with nothing on disk — see ``SpeechModelAccess``.
     static func prepareModels(progress: (@Sendable (Double) -> Void)? = nil) async throws {
         let version = modelVersion
         if isModelReady {
@@ -123,16 +128,51 @@ actor Transcriber {
         }
 
         let started = Date()
-        // FluidAudio reports a real fraction plus a phase (listing / downloading / compiling); only
-        // the fraction is surfaced, because a progress bar that also changes its label mid-download
-        // reads as an error to most people.
-        _ = try await AsrModels.downloadAndLoad(
-            version: version,
-            progressHandler: { update in progress?(update.fractionCompleted) }
-        )
+        _ = try await obtainModels(version: version, progress: progress)
         progress?(1)
         ContextLog.info(
             "Parakeet \(version) downloaded in \(String(format: "%.0f", Date().timeIntervalSince(started)))s", "stt")
+    }
+
+    /// The **only** call in this app that may put the Parakeet weights on disk.
+    ///
+    /// Both paths that need the model funnel through here — onboarding's warm-up above and
+    /// ``ModelPool``, which is where the first `start()` lands — so Airgap Mode is asked once,
+    /// in one place, rather than being re-derived at two call sites that can drift apart.
+    ///
+    /// `fileprivate` so `ModelPool`, below, can reach it and nothing outside this file can.
+    fileprivate static func obtainModels(
+        version: AsrModelVersion, progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> AsrModels {
+        // Read once and used for both decisions below. Two reads could straddle a flip of the switch
+        // and leave FluidAudio's offline flag disagreeing with the branch we then took.
+        let airgapMode = NetworkEgress.isSuppressed(.speechModelDownload)
+
+        // FluidAudio has its own offline switch, and ours is pushed into it on every call rather
+        // than once at launch. It is not the guard — ``SpeechModelAccess`` is — it is what closes
+        // the path the guard cannot see: `AsrModels.load` reaches `ModelHub.loadModels`, which on a
+        // load failure purges the cache and re-downloads the whole repo unprompted. A load we
+        // deliberately allowed because the weights were on disk could otherwise turn into the exact
+        // 600 MB fetch we just refused, on a machine whose user asked for silence.
+        ModelHub.offlineMode = airgapMode
+
+        // FluidAudio reports a real fraction plus a phase (listing / downloading / compiling); only
+        // the fraction is surfaced, because a progress bar that also changes its label mid-download
+        // reads as an error to most people.
+        let report: ProgressHandler = { update in progress?(update.fractionCompleted) }
+
+        return try await SpeechModelAccess.obtain(
+            airgapMode: airgapMode,
+            isOnDisk: { isModelOnDisk(version) },
+            loadFromDisk: {
+                try await AsrModels.load(
+                    from: AsrModels.defaultCacheDirectory(for: version),
+                    version: version,
+                    progressHandler: report)
+            },
+            fetch: {
+                try await AsrModels.downloadAndLoad(version: version, progressHandler: report)
+            })
     }
 
     // MARK: - State
@@ -624,6 +664,97 @@ private final class MusicTally: NSObject, SNResultsObserving {
 }
 
 
+// MARK: - Airgap
+
+/// Whether the ~600 MB Parakeet weights may be fetched, and what to do when they may not.
+///
+/// This is the largest single thing this app ever pulls over the network, it goes to a third party
+/// (HuggingFace) rather than to the user's own account, and it used to be the one remote client with
+/// no entry in `NetworkEgress.Client` — so Airgap Mode did not cover it. `exclusions.json` outlives
+/// an app reinstall, which is the case that made it matter: a user who had turned the switch on,
+/// reinstalled, and launched would have watched 600 MB leave the machine on first run with no
+/// suppression, no record, and nothing on screen to connect it to a setting they had set.
+///
+/// The rule has three outcomes rather than two, and the middle one is the point:
+///
+/// - Weights **already on disk** load regardless of the switch. Loading a local file is not egress,
+///   and on-device transcription is what Airgap Mode exists to protect — a version of it that broke
+///   the offline transcriber would be enforcing the opposite of its promise.
+/// - Weights **missing with the switch off** are fetched, as before.
+/// - Weights **missing with the switch on** are refused, loudly. There is no third option: the model
+///   cannot be conjured, so transcription is simply off until the user turns the switch off, and
+///   saying that is better than a progress bar that never moves.
+///
+/// Generic over the model type so the rule can be driven end to end in a test. CoreML weights are
+/// precisely the thing a hermetic test cannot have, and a guard nobody can execute is a guard that
+/// quietly stops working — see `AirgapEgressTests`.
+enum SpeechModelAccess {
+
+    /// What the weights are allowed to cost right now.
+    enum Decision: Equatable {
+        /// Not on this Mac, and nothing forbids fetching them.
+        case fetch
+        /// Already here. Local work, so Airgap Mode has no say.
+        case loadWhatIsAlreadyHere
+        /// Airgap Mode is on and there is nothing on disk to fall back to.
+        case refuse
+    }
+
+    /// The decision, as a pure function of the two facts it turns on — so all four combinations are
+    /// drivable without a network, a disk, or a 600 MB download.
+    ///
+    /// `isOnDisk` is read first deliberately: Airgap Mode only ever governs the *fetch*, so a
+    /// present model short-circuits the question entirely.
+    static func decide(airgapMode: Bool, isOnDisk: Bool) -> Decision {
+        if isOnDisk { return .loadWhatIsAlreadyHere }
+        return airgapMode ? .refuse : .fetch
+    }
+
+    /// Applies ``decide(airgapMode:isOnDisk:)``, and records the refusal where every other Airgap
+    /// suppression in this app is recorded.
+    static func obtain<Model>(
+        airgapMode: Bool,
+        isOnDisk: () -> Bool,
+        loadFromDisk: () async throws -> Model,
+        fetch: () async throws -> Model
+    ) async throws -> Model {
+        switch decide(airgapMode: airgapMode, isOnDisk: isOnDisk()) {
+        case .loadWhatIsAlreadyHere:
+            return try await loadFromDisk()
+        case .fetch:
+            return try await fetch()
+        case .refuse:
+            // Degraded rather than dropped: nothing of the user's is destroyed and nothing is
+            // queued to be lost — the weights are still there to fetch the moment the switch goes
+            // off. What *is* gone is the transcript of whatever is said while it stays on, and the
+            // app cannot defer that: there is no model to decode it with, now or later, so holding
+            // the audio would only trade an honest gap for an unbounded buffer.
+            NetworkEgress.recordSuppression(.speechModelDownload, outcome: .degraded)
+            ContextLog.error(
+                "Airgap Mode on and the speech model is not on this Mac — nothing will be "
+                    + "transcribed until it is turned off", "stt")
+            throw SpeechModelError.airgapped
+        }
+    }
+}
+
+/// Why the speech model could not be obtained.
+///
+/// A `LocalizedError` because the sentence is the whole of the fix: `Engine.startAudio` turns a
+/// throw from `Transcriber.start()` into the paused reason shown against that capture source, so
+/// this text is what the user actually reads when transcription does not come up. It is
+/// `NetworkEgress.explanation` verbatim rather than a second wording of it — one refusal, one
+/// sentence, wherever it surfaces.
+enum SpeechModelError: LocalizedError {
+    case airgapped
+
+    var errorDescription: String? {
+        switch self {
+        case .airgapped: return NetworkEgress.explanation(.speechModelDownload)
+        }
+    }
+}
+
 // MARK: - Model pool
 
 /// One download-and-compile of the Parakeet weights, shared by every transcriber.
@@ -640,7 +771,15 @@ private actor ModelPool {
         if let models = loaded[version] { return models }
         if let task = inFlight[version] { return try await task.value }
 
-        let task = Task { try await AsrModels.downloadAndLoad(version: version) }
+        // Through `Transcriber.obtainModels`, not `AsrModels.downloadAndLoad` — this was the second
+        // of the two unguarded entry points, and the one a real user hits: onboarding's warm-up is
+        // skippable, but every first `Transcriber.start()` arrives here.
+        //
+        // Only a *success* is cached, so a refusal is re-decided on the next start rather than
+        // remembered. That is what lets transcription come up on its own the moment Airgap Mode goes
+        // off, and it costs nothing to re-ask: a refused decision is one `FileManager` existence
+        // check and never touches the network.
+        let task = Task { try await Transcriber.obtainModels(version: version) }
         inFlight[version] = task
         defer { inFlight[version] = nil }
         let models = try await task.value

@@ -45,6 +45,7 @@ final class MCPKeyProvisioner {
 
     private var didLogSignedOut = false
     private var didLogReuse = false
+    private var didLogAirgap = false
 
     private init() {}
 
@@ -98,6 +99,31 @@ final class MCPKeyProvisioner {
         }
 
         guard !isBlockedForThisLaunch else { return }
+
+        // Minting a key is three calls to `api.omi.me` — list, create, revoke-superseded — so Airgap
+        // Mode stops it. Nothing is queued and nothing is lost: `ensureKey()` runs again on the next
+        // launch and on every sign-in change, so turning Airgap Mode off provisions the key then.
+        //
+        // Placed *after* the reuse check, and that is a real limitation worth naming rather than
+        // papering over. A key already on disk is left alone, because deleting it would be both
+        // destructive and ineffective: `OmiKeyResolver` in `ContextMCPKit` falls back to any other
+        // Omi key it can find in `~/.claude.json`, so removing ours would not stop the MCP binary
+        // reaching the backend — it would only make it borrow someone else's credential. That binary
+        // is a separate process with its own `URLSession` (`ContextMCPKit/OmiBackend.swift`) and it
+        // does not read Airgap Mode today; it links `ContextCore`, so the same
+        // `ExclusionEngine.shared.current.airgapMode` this file consults is available to it, and
+        // that is where that hole has to be closed.
+        guard !NetworkEgress.isSuppressed(.mcpKeyProvisioning) else {
+            if !didLogAirgap {
+                didLogAirgap = true
+                ContextLog.info(
+                    "Airgap Mode on; not provisioning an Omi MCP key. Account-backed MCP tools stay unavailable.",
+                    Self.category)
+                NetworkEgress.recordSuppression(.mcpKeyProvisioning, outcome: .degraded)
+            }
+            return
+        }
+        didLogAirgap = false
 
         guard OmiAuth.shared.isSignedIn else {
             // Routine, not a failure: the app runs before anyone signs in, and signing in calls back
@@ -161,6 +187,12 @@ final class MCPKeyProvisioner {
     /// verb and this is its only caller, so the request is built here from the same header set —
     /// the pattern `ScreenActivityUploader` already uses for the endpoint it owns.
     private static func retire(_ keyId: String) async {
+        // This request is built here rather than through `OmiAPI`, so it does not inherit `OmiAPI`'s
+        // airgap guard and needs its own. Unreachable under Airgap Mode today — `provision()` stops
+        // before the mint that produces a superseded id — but "unreachable" is a property of today's
+        // call graph, and this is a DELETE to a remote host.
+        guard !NetworkEgress.isSuppressed(.mcpKeyProvisioning) else { return }
+
         // Stricter than `.urlPathAllowed`, which would let a "/" in an id walk off the endpoint.
         let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         guard let escaped = keyId.addingPercentEncoding(withAllowedCharacters: unreserved), !escaped.isEmpty else {

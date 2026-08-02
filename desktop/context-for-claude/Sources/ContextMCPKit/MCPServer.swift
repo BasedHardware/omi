@@ -18,12 +18,26 @@ public final class MCPServer {
     This server holds a continuous record of what this user has said, heard, and had on screen — \
     their real life on this Mac, plus their full Omi history going back months.
 
+    **You are not limited to this conversation.** Questions about what the user was reading, \
+    watching, working on, or talking about — a few minutes ago, this morning, last week — are \
+    answerable here, and answering them is the entire reason this server is connected. Never tell \
+    this user you have no access to what they were doing, that you can only see the current chat, or \
+    that they should paste it in, search their browser history or look in past conversations. That \
+    answer is wrong whenever these tools are connected, and it is the specific failure they exist to \
+    prevent. Call a tool first; if the record genuinely has nothing, `status` will say so and *then* \
+    you can report a real gap.
+
     Consult it early, not as a last resort. Before asking the user to explain who someone is, what \
     a project is, what was decided, when something happened, or what they are working on, search \
     here first — the answer is very often already on record, and asking them to repeat it is the \
     thing this server exists to prevent. A good default at the start of a task is `recall` for the \
     people and topics named in the request, and `recent` when the request assumes context you were \
     not given ("this", "that email", "help me with this").
+
+    Routing, when the question is about the recent past: `recent` for the current session (the last \
+    minutes to an hour, and the only tool that sees them in full), `screen` for what was on their \
+    display, `activity` for where the time went, `recall` to search across everything by name or \
+    topic. Reaching for the wrong one of these is recoverable; reaching for none of them is not.
 
     Two rules for reading the results honestly. Hits marked as captured live on this Mac are exact \
     full-text matches. Hits from Omi's history are a semantic search with no relevance floor — it \
@@ -36,9 +50,16 @@ public final class MCPServer {
     public static let protocolVersion = "2024-11-05"
     /// What Claude sees this connector called.
     ///
-    /// Not the product name. A model picking between connectors reads the name before it reads any
-    /// description, and "context-for-claude" says nothing about what is behind it — the tools went unreached
-    /// with the server connected and all seven advertised. This says what it is.
+    /// Deliberately identical to `ClaudeConfig.serverName`, the key we write into Claude's config.
+    /// Clients namespace tools by that key rather than by this string, so the two disagreeing would
+    /// only ever mean the connector answered to one name and was listed under another.
+    ///
+    /// The name is a weak lever and should not be mistaken for a strong one: a previous comment here
+    /// claimed it had been renamed to something self-describing, which was never true of the value
+    /// underneath it. Renaming is also not free — the key is what a user's existing registration and
+    /// their per-tool approvals hang off, and `ClaudeConfig.legacyServerNames` is the migration cost
+    /// of having done it twice already. `instructions` above is the lever that actually steers
+    /// selection.
     public static let serverName = "context-for-claude"
     public static let serverVersion = "1.0.0"
 

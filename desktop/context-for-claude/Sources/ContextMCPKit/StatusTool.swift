@@ -114,7 +114,7 @@ extension Tools {
     static func renderOmiStatus() -> String {
         let backend = OmiBackend.shared
         guard let source = backend.keySourceLabel else {
-            return """
+            var out = """
             **The Omi account — history**
 
             Not configured: no Omi MCP API key was found in the \(OmiKeyResolver.environmentVariable) \
@@ -123,6 +123,13 @@ extension Tools {
             answers from this Mac's local capture only. That is a missing connection, not an empty \
             life — do not tell the user their history is empty.
             """
+            // `status` is the tool a reader is sent to when something seems wrong, so it is the last
+            // place that may leave a live switch unmentioned. With a key present the airgap reports
+            // itself through `history()`'s failure below; with no key there is no request to fail,
+            // and the reader would otherwise be told to go and sign in — which the same switch
+            // blocks.
+            if let blocked = MCPNetworkEgress.signInBlockedNote { out += "\n\n" + blocked }
+            return out
         }
 
         var out: [String] = ["**The Omi account — history**", ""]

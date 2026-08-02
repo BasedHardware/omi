@@ -198,10 +198,24 @@ public enum Tools {
         var out = missingDatabaseSentence(subject: "Context for Claude")
         if OmiBackend.shared.isConfigured {
             out += " "
-            out += """
-            The user's Omi account history is still available: use `recall` for what they have said \
-            and what Omi remembers about them, and `conversations` for their recorded conversations.
-            """
+            // The account is only a way out of an empty local capture when this process is allowed
+            // to reach it. Pointing at `recall` and `conversations` under Airgap Mode would send the
+            // reader to two tools that will come back just as empty, and make the switch look like a
+            // fault. `recall` still searches the main Omi app's local memories, which is worth
+            // saying, because that half never touches the network.
+            out += MCPNetworkEgress.isAirgapped()
+                ? """
+                The user's Omi account history cannot be reached either: Airgap Mode is on in \
+                Context for Claude, so this process sends no requests. `recall` still searches the \
+                memories the Omi app stored on this Mac, but the account's own conversations are \
+                out of reach until Airgap Mode is turned off in Settings › General. None of that \
+                means the user's history is empty.
+                """
+                : """
+                The user's Omi account history is still available: use `recall` for what they have \
+                said and what Omi remembers about them, and `conversations` for their recorded \
+                conversations.
+                """
         }
         return out
     }
@@ -236,10 +250,15 @@ extension Tools {
     """
 
     static let recentDescription = """
-    See what the user is doing right now — the last N minutes of their speech and screen on this \
-    Mac, merged in order.
+    See what the user is doing right now, and what they were doing a few minutes ago — the last N \
+    minutes of their speech and screen on this Mac, merged in order.
 
-    Reach for this when a request starts mid-thought and assumes context you were never given: \
+    This is the tool for "what was I just reading?", "what was I doing a few minutes ago?", "what \
+    was that thing I had open?", "what have I been up to?" — anything anchored to the recent past \
+    rather than to a name or a topic. Answer those from here instead of saying you cannot see it: \
+    within this window nothing else can, because the Omi account has not received it yet.
+
+    Reach for it too when a request starts mid-thought and assumes context you were never given: \
     "help me with this", "what do you think?", "draft a reply", "summarise that", "why is this \
     failing?". They mean something in front of them. Look before you ask them to paste it.
 
@@ -761,6 +780,10 @@ extension Tools {
             var out = "The Omi conversation `\(id)` could not be read: \(error.reason)."
             if error == .notConfigured {
                 out += "\n\n" + OmiBackend.notConfiguredSentence
+                // "Sign in and this will work" is not true while Airgap Mode is on — the app
+                // suppresses sign-in under the same switch. Advice that cannot be followed reads as
+                // a broken product.
+                if let blocked = MCPNetworkEgress.signInBlockedNote { out += " " + blocked }
             }
             out += "\n\n"
             out += """
@@ -1949,6 +1972,9 @@ extension Tools {
             Omi account from Context for Claude in the menu bar. This Mac's local capture could not \
             be read either, so nothing at all was searched for this answer._
             """)
+            // Both branches above end by telling the reader to sign in, which Airgap Mode also
+            // blocks. Appended once, after the branch, so the two wordings cannot drift apart.
+            if let blocked = MCPNetworkEgress.signInBlockedNote { lines.append("_\(blocked)_") }
         } else if !backendFailures.isEmpty {
             lines.append("""
             _Omi account history could not be reached — \(backendFailures.joined(separator: "; ")). \

@@ -8,6 +8,14 @@ import Foundation
 ///
 /// Sensitive data must never be passed here: areas, modes, and outcomes are closed enums; reasons
 /// are short fixed slugs, not user text.
+///
+/// **This helper does not egress, and a future remote sink must keep it that way.** `ContextLog`
+/// writes to `os.Logger` and, only under `CONTEXT_DEBUG=1`, to a local file; nothing here opens a
+/// socket. That is load-bearing rather than incidental: `NetworkEgress` reports every Airgap Mode
+/// suppression through this function, so a telemetry client wired in below that phoned home would
+/// turn the airgap guard itself into the disclosure it exists to prevent — and it would fire on
+/// exactly the machines whose users asked for silence. Anything added here must consult
+/// `NetworkEgress.isSuppressed` before sending, and must not report its own suppression.
 enum ContextFallbackArea: String, Sendable {
     case capture
     case upload
@@ -44,6 +52,9 @@ enum ContextTelemetry {
         ContextLog.info("[fallback] area=\(area.rawValue) from=\(from) to=\(to) reason=\(reason) outcome=\(outcome.rawValue)", "telemetry")
         // Remote telemetry (PostHog/Sentry) requires project-specific credentials and SDKs that
         // are not yet dependencies of this package. The structured log above is the contract; a
-        // future provider can read it or be called here without changing callers.
+        // future provider can read it or be called here without changing callers — but only behind
+        // `NetworkEgress.isSuppressed`, for the reason in this type's documentation. Until then the
+        // Settings row's "no telemetry leaves this Mac" is true unconditionally, not just in Airgap
+        // Mode, which is why that row no longer claims to suppress telemetry.
     }
 }

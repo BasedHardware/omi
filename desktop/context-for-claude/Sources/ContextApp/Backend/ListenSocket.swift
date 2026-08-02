@@ -85,6 +85,10 @@ final class ListenSocket: ObservableObject {
         case failed(String)
         /// The account's trial is over. A permanent stop — never a retry loop.
         case paywalled
+        /// Airgap Mode is on, so no audio is being sent anywhere. Reversible: turning the switch off
+        /// reconnects. Distinct from `.idle` because the reason is a setting the user can undo, and
+        /// distinct from `.failed` because nothing failed.
+        case airgapped
     }
 
     /// Fired for every batch the server sends, on the main actor, in arrival order.
@@ -170,6 +174,9 @@ final class ListenSocket: ObservableObject {
     private let inboundChunks: AsyncStream<Data>
     private var pump: Task<Void, Never>?
     private var signIn: AnyCancellable?
+    /// Registered by `start()`. Airgap Mode has to close a live socket, not just refuse the next
+    /// one — a switch that leaves the microphone streaming until relaunch is not an airgap.
+    private var airgapObserver: UUID?
 
     /// Nonisolated because `shared` is: a main-actor initializer would have to be reached from the
     /// main actor before any capture thread could touch the singleton, which is precisely the
@@ -210,6 +217,7 @@ final class ListenSocket: ObservableObject {
         serverConversationId = nil
         conversationStartedAt = nil
         observeSignIn()
+        observeAirgap()
         await connect(forceTokenRefresh: false)
     }
 
@@ -231,6 +239,10 @@ final class ListenSocket: ObservableObject {
         wantsConnection = false
         isPaywalled = false
         signIn = nil
+        // Removed rather than left guarded: `start()` re-registers, and a stopped socket that keeps
+        // accumulating engine observers across a day of start/stop cycles is a leak.
+        if let airgapObserver { ExclusionEngine.shared.removeObserver(airgapObserver) }
+        airgapObserver = nil
         reconnectTask?.cancel()
         reconnectTask = nil
         closeConnection(normally: true)
@@ -247,6 +259,15 @@ final class ListenSocket: ObservableObject {
 
     private func connect(forceTokenRefresh: Bool) async {
         guard wantsConnection, !isPaywalled else { return }
+
+        // Ahead of the sign-in check: the payload on this socket is the user's microphone and system
+        // audio, so the strongest constraint has to be the first one read. Nothing is buffered for
+        // later either — see `reportAirgapped`.
+        guard !NetworkEgress.isSuppressed(.listenSocket) else {
+            reportAirgapped()
+            return
+        }
+
         guard OmiAuth.shared.isSignedIn else {
             reportSignedOut()
             return
@@ -538,6 +559,12 @@ final class ListenSocket: ObservableObject {
             state = .idle
             return
         }
+        // A reconnect is another connection, so it answers to the same switch. Without this a socket
+        // dropped a moment before the toggle would come back on its own timer.
+        guard !NetworkEgress.isSuppressed(.listenSocket) else {
+            reportAirgapped()
+            return
+        }
         guard OmiAuth.shared.isSignedIn else {
             reportSignedOut()
             return
@@ -585,6 +612,31 @@ final class ListenSocket: ObservableObject {
         ContextLog.info("Signed out — not connecting", Self.logCategory)
     }
 
+    /// Closes the socket because Airgap Mode is on, and **throws the buffered audio away**.
+    ///
+    /// The buffer exists to survive a network blip, and holding a minute of the user's microphone
+    /// for a socket that is not coming is the opposite of what the switch promises. Nothing is lost
+    /// that the app was keeping: the local transcriber runs underneath the cloud one for exactly
+    /// this reason (see `TranscriptOwnership`), so speech still becomes a transcript on this Mac —
+    /// what is given up is the backend's diarization and speech-profile attribution, which is a
+    /// quality loss, not a data loss. Hence `.degraded`.
+    private func reportAirgapped() {
+        let wasConnected = task != nil || state == .connecting
+        closeConnection(normally: true)
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        discardBuffer(reason: "Airgap Mode is on")
+        reconnectAttempt = 0
+        guard state != .airgapped else { return }
+        state = .airgapped
+        ContextLog.info(
+            wasConnected
+                ? "Airgap Mode on — closed the cloud transcription socket; transcribing locally"
+                : "Airgap Mode on — not connecting for cloud transcription; transcribing locally",
+            Self.logCategory)
+        NetworkEgress.recordSuppression(.listenSocket, outcome: .degraded)
+    }
+
     /// Tears down the current socket and invalidates its session.
     ///
     /// `URLSession` holds its delegate until it is invalidated, so skipping this leaks a session, a
@@ -628,9 +680,10 @@ final class ListenSocket: ObservableObject {
             // them apart.
             guard wantsConnection else { return }
             enqueue(pcm)
-        case .idle, .paywalled:
+        case .idle, .paywalled, .airgapped:
             // Nothing is coming. Dropping here is the point: a socket that will not open must not
-            // grow a buffer for the rest of the day.
+            // grow a buffer for the rest of the day — and under `.airgapped` a buffer would be a
+            // pile of the user's audio kept for an upload they have forbidden.
             return
         }
     }
@@ -722,6 +775,33 @@ final class ListenSocket: ObservableObject {
                     }
                 }
             }
+    }
+
+    // MARK: - Airgap
+
+    /// Turning Airgap Mode on has to close a *live* socket, not merely refuse the next one — a
+    /// switch that leaves the microphone streaming until the next relaunch keeps no promise at all.
+    /// Turning it off reconnects, under a fresh conversation id, because the server has long since
+    /// finalized the one that was open.
+    private func observeAirgap() {
+        guard airgapObserver == nil else { return }
+        // The engine calls observers on whichever thread made the change.
+        airgapObserver = ExclusionEngine.shared.addObserver { [weak self] set in
+            Task { @MainActor in
+                guard let self, self.wantsConnection, !self.isPaywalled else { return }
+                if set.airgapMode {
+                    self.reportAirgapped()
+                } else if self.state == .airgapped {
+                    ContextLog.info("Airgap Mode off — reconnecting for cloud transcription", Self.logCategory)
+                    // A new conversation, deliberately: the old id belongs to a conversation the
+                    // server closed on its own silence timeout while this socket was down.
+                    self.clientConversationId = UUID().uuidString.lowercased()
+                    self.serverConversationId = nil
+                    self.conversationStartedAt = nil
+                    await self.connect(forceTokenRefresh: false)
+                }
+            }
+        }
     }
 
     // MARK: - Wire format

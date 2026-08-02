@@ -4,11 +4,17 @@ import IOKit
 
 /// Everything that can go wrong between here and `api.omi.me`.
 ///
-/// Four cases, because callers only ever act on four things: send the user to sign in, show what the
-/// server said, report that we cannot read the server's answer, or try again later. Deliberately
-/// carries no token, no request body, and no response body.
+/// Five cases, because callers only ever act on five things: send the user to sign in, tell them
+/// Airgap Mode is why nothing happened, show what the server said, report that we cannot read the
+/// server's answer, or try again later. Deliberately carries no token, no request body, and no
+/// response body.
 enum OmiAPIError: LocalizedError {
     case notSignedIn
+    /// Airgap Mode is on, so the request was never made. Not a failure — a setting.
+    ///
+    /// Distinct from `.transport` on purpose: a caller with a durable queue must *keep* the work and
+    /// retry later, and one that treated this as a hard error would drop it.
+    case airgapMode
     /// Status code plus a short server-supplied detail — never the whole body.
     case http(Int, String)
     case decoding(String)
@@ -18,6 +24,8 @@ enum OmiAPIError: LocalizedError {
         switch self {
         case .notSignedIn:
             return "Sign in to Omi first — I have nothing to authenticate with."
+        case .airgapMode:
+            return NetworkEgress.explanation(.omiAPI)
         case .http(let status, let detail):
             return detail.isEmpty ? "The Omi backend returned HTTP \(status)." : detail
         case .decoding(let detail):
@@ -177,6 +185,12 @@ final class OmiAPI: @unchecked Sendable {
         guard await auth.isSignedIn else { throw OmiAPIError.notSignedIn }
         do {
             return try await auth.authHeader(forceRefresh: forceRefresh)
+        } catch OmiAuthError.airgapMode {
+            // Building a header can itself need the network — a stale ID token is refreshed against
+            // `securetoken.googleapis.com`. Carried across as `.airgapMode` rather than folded into
+            // `.transport` below, because a queue that reads "transport" retries with backoff while
+            // one that reads "airgap" simply waits for the switch.
+            throw OmiAPIError.airgapMode
         } catch {
             // Two very different failures land here: the account went away, and the refresh call
             // itself failed. Asking auth again is what separates "sign in" from "try later" — and
@@ -240,6 +254,19 @@ final class OmiAPI: @unchecked Sendable {
     private func perform(
         _ request: URLRequest, method: String, path: String
     ) async throws -> (HTTPURLResponse, Data) {
+        // The one line in this file that touches the network, so this is the one place Airgap Mode
+        // has to be honoured. Gating each verb instead would mean every verb added later — and the
+        // retry loop above, which comes back through here — needs its own copy of this check.
+        //
+        // It throws rather than returning a synthetic status: a fabricated 503 would be indexed by
+        // `isTransient` and retried three times, spending eight seconds proving that the switch is
+        // still on. It also throws *before* the request, so no URL, body, or header ever exists.
+        guard !NetworkEgress.isSuppressed(.omiAPI) else {
+            ContextLog.info("\(method) \(path) suppressed: Airgap Mode is on", Self.logCategory)
+            NetworkEgress.recordSuppression(.omiAPI, outcome: .degraded)
+            throw OmiAPIError.airgapMode
+        }
+
         do {
             let (data, urlResponse) = try await session.data(for: request)
             guard let response = urlResponse as? HTTPURLResponse else {
