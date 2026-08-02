@@ -6,11 +6,8 @@ import {
   probeCliConnector,
   cliConnected,
   buildSetupCard,
-  buildSetupText,
   upsertHermesConfig,
-  appendSoulNote,
-  disconnectCli,
-  buildCliEnvironment
+  appendSoulNote
 } from './cliConnectors'
 import { mcpServerUrl } from '../../shared/mcpExports'
 
@@ -48,19 +45,6 @@ describe('probeCliConnector (presence gating, no shell)', () => {
   })
 })
 
-describe('buildCliEnvironment', () => {
-  it('does not forward an unrelated parent secret', () => {
-    const previous = process.env.CLI_CONNECTOR_TEST_SECRET
-    process.env.CLI_CONNECTOR_TEST_SECRET = 'secret'
-    try {
-      expect(buildCliEnvironment()).not.toHaveProperty('CLI_CONNECTOR_TEST_SECRET')
-    } finally {
-      if (previous === undefined) delete process.env.CLI_CONNECTOR_TEST_SECRET
-      else process.env.CLI_CONNECTOR_TEST_SECRET = previous
-    }
-  })
-})
-
 describe('cliConnected (config re-scan vs current key)', () => {
   it('codex: matches only within [mcp_servers.omi-memory] with the current bearer', () => {
     mkdirSync(join(home, '.codex'), { recursive: true })
@@ -94,13 +78,11 @@ describe('cliConnected (config re-scan vs current key)', () => {
 })
 
 describe('buildSetupCard', () => {
-  it('keeps setup metadata separate from credential-bearing setup text', () => {
+  it('embeds the url + key in each tool’s copy text', () => {
     for (const id of ['codex', 'openclaw', 'hermes'] as const) {
-      const card = buildSetupCard(id)
-      const text = buildSetupText(id, API, KEY)
-      expect(card).not.toHaveProperty('copyText')
-      expect(text).toContain(URL)
-      expect(text).toContain(`Bearer ${KEY}`)
+      const card = buildSetupCard(id, API, KEY)
+      expect(card.copyText).toContain(URL)
+      expect(card.copyText).toContain(`Bearer ${KEY}`)
       expect(card.steps.length).toBeGreaterThan(0)
     }
   })
@@ -129,23 +111,6 @@ describe('upsertHermesConfig', () => {
     expect(text.match(/omi-memory:/g)?.length).toBe(1)
     expect(text).toContain('Bearer new-key')
     expect(text).not.toContain('Bearer old-key')
-  })
-})
-
-describe('disconnectCli', () => {
-  it('removes the Hermes Omi entry without touching sibling config', async () => {
-    const p = join(home, '.hermes', 'config.yaml')
-    mkdirSync(join(home, '.hermes'), { recursive: true })
-    writeFileSync(p, 'model: sonnet\nmcp_servers:\n  other:\n    command: keep\n', 'utf8')
-    upsertHermesConfig(p, URL, KEY)
-
-    await disconnectCli('hermes', home)
-
-    const text = readFileSync(p, 'utf8')
-    expect(text).toContain('model: sonnet')
-    expect(text).toContain('  other:')
-    expect(text).not.toContain('omi-memory')
-    expect(text).not.toContain(KEY)
   })
 })
 

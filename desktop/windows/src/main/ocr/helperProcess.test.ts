@@ -79,41 +79,4 @@ describe('helperProcess.dispose (C7 — no orphaned OCR helper on quit)', () => 
 
     expect(spawnMock).toHaveBeenCalledTimes(2)
   })
-
-  it('backs off before respawning after an unexpected exit', async () => {
-    vi.useFakeTimers()
-    const first = makeFakeChild()
-    spawnMock.mockReturnValueOnce(first).mockReturnValueOnce(makeFakeChild())
-    const { helperProcess } = await import('./helperProcess')
-
-    try {
-      const pending = helperProcess.windowInfo()
-      expect(spawnMock).toHaveBeenCalledTimes(1)
-
-      first.emit('exit', 1)
-      await expect(pending).rejects.toThrow('helper exited')
-      await expect(helperProcess.windowInfo()).rejects.toThrow('helper not available')
-      expect(spawnMock).toHaveBeenCalledTimes(1)
-
-      vi.advanceTimersByTime(500)
-      void helperProcess.windowInfo().catch(() => {})
-      expect(spawnMock).toHaveBeenCalledTimes(2)
-    } finally {
-      helperProcess.dispose()
-      vi.useRealTimers()
-    }
-  })
-
-  it('ignores a late exit after dispose()', async () => {
-    const first = makeFakeChild()
-    spawnMock.mockReturnValueOnce(first).mockReturnValueOnce(makeFakeChild())
-    const { helperProcess } = await import('./helperProcess')
-
-    void helperProcess.windowInfo().catch(() => {})
-    helperProcess.dispose()
-    first.emit('exit', 0)
-    void helperProcess.windowInfo().catch(() => {})
-
-    expect(spawnMock).toHaveBeenCalledTimes(2)
-  })
 })

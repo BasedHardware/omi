@@ -26,28 +26,6 @@ import { atomicWriteFileSync } from './atomicWrite'
 const execFileAsync = promisify(execFile)
 const CLI_TIMEOUT_MS = 20_000
 const SOUL_MARKER = 'omi-memory-bank'
-const CLI_ENV_ALLOWLIST = [
-  'PATH',
-  'Path',
-  'PATHEXT',
-  'USERPROFILE',
-  'HOMEDRIVE',
-  'HOMEPATH',
-  'HOME',
-  'APPDATA',
-  'LOCALAPPDATA',
-  'ProgramData',
-  'ProgramFiles',
-  'ComSpec',
-  'SystemRoot',
-  'SystemDrive',
-  'WINDIR',
-  'TEMP',
-  'TMP',
-  'USERNAME',
-  'LANG',
-  'TZ'
-] as const
 
 export type CliConnectorId = 'codex' | 'openclaw' | 'hermes'
 
@@ -66,20 +44,12 @@ async function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promis
   try {
     const { stdout } = await execFileAsync(cmd, args, {
       timeout: CLI_TIMEOUT_MS,
-      env: env ?? buildCliEnvironment()
+      env: env ?? process.env
     })
     return stdout
   } catch (e) {
     throw new Error(sanitize((e as Error).message))
   }
-}
-
-export function buildCliEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {}
-  for (const key of CLI_ENV_ALLOWLIST) {
-    if (process.env[key] !== undefined) env[key] = process.env[key]
-  }
-  return { ...env, ...extra }
 }
 
 // --- detection --------------------------------------------------------------
@@ -150,42 +120,28 @@ export function cliConnected(
 
 // --- setup cards (manual fallback) ------------------------------------------
 
-export function buildSetupCard(id: CliConnectorId): McpSetupCard {
-  switch (id) {
-    case 'codex':
-      return {
-        copyTitle: 'Copy config',
-        steps: ['Use Copy config to copy the block into ~/.codex/config.toml', 'Restart Codex']
-      }
-    case 'openclaw':
-      return {
-        copyTitle: 'Copy command',
-        steps: [
-          'Use Copy command to copy the commands',
-          'Reload OpenClaw so open sessions rebuild their tools'
-        ]
-      }
-    case 'hermes':
-      return {
-        copyTitle: 'Copy config',
-        steps: [
-          'Use Copy config to copy the block under mcp_servers: in ~/.hermes/config.yaml',
-          'Restart Hermes'
-        ]
-      }
-  }
-}
-
-export function buildSetupText(id: CliConnectorId, apiBase: string, key: string): string {
+export function buildSetupCard(id: CliConnectorId, apiBase: string, key: string): McpSetupCard {
   const url = mcpServerUrl(apiBase)
   const bearer = `Authorization: Bearer ${key}`
   switch (id) {
     case 'codex':
-      return `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`
+      return {
+        copyTitle: 'Copy config',
+        copyText: `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
+        steps: ['Add the block below to ~/.codex/config.toml', 'Restart Codex']
+      }
     case 'openclaw':
-      return `openclaw mcp set ${MCP_SERVER_KEY} '${openclawServerJson(url, key)}'\nopenclaw mcp reload`
+      return {
+        copyTitle: 'Copy command',
+        copyText: `openclaw mcp set ${MCP_SERVER_KEY} '${openclawServerJson(url, key)}'\nopenclaw mcp reload`,
+        steps: ['Run the commands below', 'Reload OpenClaw so open sessions rebuild their tools']
+      }
     case 'hermes':
-      return `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`
+      return {
+        copyTitle: 'Copy config',
+        copyText: `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
+        steps: ['Add the block below under mcp_servers: in ~/.hermes/config.yaml', 'Restart Hermes']
+      }
   }
 }
 
@@ -213,7 +169,10 @@ export async function connectCli(
       await run(
         'codex',
         ['mcp', 'add', MCP_SERVER_KEY, '--', 'npx', '-y', 'mcp-remote', url, '--header', bearer],
-        buildCliEnvironment({ CODEX_HOME: join(home, '.codex') })
+        {
+          ...process.env,
+          CODEX_HOME: join(home, '.codex')
+        }
       )
       return
     case 'openclaw':
@@ -228,36 +187,14 @@ export async function connectCli(
   }
 }
 
-export async function disconnectCli(id: CliConnectorId, home = homedir()): Promise<void> {
+export async function disconnectCli(id: CliConnectorId): Promise<void> {
   try {
     if (id === 'codex') await run('codex', ['mcp', 'remove', MCP_SERVER_KEY])
     else if (id === 'openclaw') await run('openclaw', ['mcp', 'remove', MCP_SERVER_KEY])
     // Hermes has no remove CLI; leaving the YAML entry is harmless (best-effort).
-    else removeHermesConfig(join(home, '.hermes', 'config.yaml'))
   } catch {
     /* already gone / tool absent */
   }
-}
-
-function removeHermesConfig(path: string): void {
-  if (!existsSync(path)) return
-  const text = readFileSync(path, 'utf8')
-  const lines = text.split('\n')
-  const topIdx = lines.findIndex((line) => /^mcp_servers:\s*$/.test(line))
-  if (topIdx < 0) return
-  const startIdx = lines.findIndex(
-    (line, index) => index > topIdx && line === `  ${MCP_SERVER_KEY}:`
-  )
-  if (startIdx < 0) return
-  let endIdx = startIdx + 1
-  while (
-    endIdx < lines.length &&
-    (lines[endIdx].startsWith('    ') || lines[endIdx].trim() === '')
-  ) {
-    endIdx++
-  }
-  lines.splice(startIdx, endIdx - startIdx)
-  atomicWriteFileSync(path, lines.join('\n'))
 }
 
 // --- helpers: SOUL.md note + Hermes YAML upsert (pure, testable) -------------

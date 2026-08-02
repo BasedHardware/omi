@@ -66,29 +66,6 @@ import type {
   ToolDef
 } from './interface'
 
-const PI_ENV_ALLOWLIST = [
-  'PATH',
-  'Path',
-  'PATHEXT',
-  'USERPROFILE',
-  'HOMEDRIVE',
-  'HOMEPATH',
-  'HOME',
-  'APPDATA',
-  'LOCALAPPDATA',
-  'ProgramData',
-  'ProgramFiles',
-  'ComSpec',
-  'SystemRoot',
-  'SystemDrive',
-  'WINDIR',
-  'TEMP',
-  'TMP',
-  'USERNAME',
-  'LANG',
-  'TZ'
-] as const
-
 // === Harness-config types (trimmed from Windows interface.ts) ================
 // Re-declared locally so the pi-mono port stays self-contained — it does not widen
 // the shared adapter contract. These mirror the macOS interface.ts definitions the
@@ -533,9 +510,8 @@ export class PiMonoAdapter {
     // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
     // accidentally read it as a credential. pi-mono talks to api.omi.me with
     // OMI_API_KEY only.
-    const env: Record<string, string> = {}
-    for (const key of PI_ENV_ALLOWLIST) {
-      if (process.env[key] !== undefined) env[key] = process.env[key]!
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>)
     }
     delete env.ANTHROPIC_API_KEY
 

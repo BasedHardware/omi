@@ -662,41 +662,33 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
   })
 
   it('runs the child as plain Node and scrubs credentials in the env', async () => {
-    const previous = process.env.PI_MONO_TEST_SECRET
-    process.env.PI_MONO_TEST_SECRET = 'secret'
     const adapter = new PiMonoAdapter(
       { authToken: 'firebase-id-token-xyz', omiApiBaseUrl: 'https://api.example/v2' },
       { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
     )
-    try {
-      await adapter.start()
+    await adapter.start()
 
-      const [, , options] = vi.mocked(spawn).mock.calls[0] as [
-        string,
-        string[],
-        { env: Record<string, string> }
-      ]
-      expect(options.env.ELECTRON_RUN_AS_NODE).toBe('1')
-      // Raw token, NOT "Bearer <token>" (pi prepends the scheme itself).
-      expect(options.env.OMI_API_KEY).toBe('firebase-id-token-xyz')
-      expect(options.env.OMI_API_BASE_URL).toBe('https://api.example/v2')
-      expect(options.env.OMI_ADAPTER_ID).toBe('pi-mono')
-      expect(options.env.OMI_EXECUTION_ROLE).toBe('coordinator')
-      // Serviceable product-tool projection rides the (role-static) spawn env and
-      // includes the reference serviceable executor so the extension can filter its
-      // advertisement to it. The per-turn pipe/token do NOT ride the env.
-      expect(options.env.OMI_SERVICEABLE_PRODUCT_TOOLS).toContain('capture_screen')
-      expect(options.env.OMI_BRIDGE_PIPE).toBeUndefined()
-      expect(options.env.OMI_BRIDGE_TOKEN).toBeUndefined()
-      // Upstream provider secret must never reach the extension.
-      expect(options.env.ANTHROPIC_API_KEY).toBeUndefined()
-      expect(options.env.PI_MONO_TEST_SECRET).toBeUndefined()
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.ELECTRON_RUN_AS_NODE).toBe('1')
+    // Raw token, NOT "Bearer <token>" (pi prepends the scheme itself).
+    expect(options.env.OMI_API_KEY).toBe('firebase-id-token-xyz')
+    expect(options.env.OMI_API_BASE_URL).toBe('https://api.example/v2')
+    expect(options.env.OMI_ADAPTER_ID).toBe('pi-mono')
+    expect(options.env.OMI_EXECUTION_ROLE).toBe('coordinator')
+    // Serviceable product-tool projection rides the (role-static) spawn env and
+    // includes the reference serviceable executor so the extension can filter its
+    // advertisement to it. The per-turn pipe/token do NOT ride the env.
+    expect(options.env.OMI_SERVICEABLE_PRODUCT_TOOLS).toContain('capture_screen')
+    expect(options.env.OMI_BRIDGE_PIPE).toBeUndefined()
+    expect(options.env.OMI_BRIDGE_TOKEN).toBeUndefined()
+    // Upstream provider secret must never reach the extension.
+    expect(options.env.ANTHROPIC_API_KEY).toBeUndefined()
 
-      await adapter.stop()
-    } finally {
-      if (previous === undefined) delete process.env.PI_MONO_TEST_SECRET
-      else process.env.PI_MONO_TEST_SECRET = previous
-    }
+    await adapter.stop()
   })
 
   it('refuses to start without an auth token', async () => {

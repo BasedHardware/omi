@@ -1357,7 +1357,6 @@ export type OmiBridgeApi = {
   ) => Promise<McpConnectResult>
   /** Remove the connector's MCP config entry. */
   mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string) => Promise<McpExportsSnapshot>
-  mcpCopySetup: (connectorId: McpConnectorId, ownerUserId: string) => Promise<void>
   /** Rotate the hosted key and rewrite any already-connected configs. */
   mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Fires when any connector's status changed. Returns an unsubscribe fn. */

@@ -22,7 +22,6 @@ class HelperProcess {
   private child: ChildProcessWithoutNullStreams | null = null
   private readonly queue: Pending[] = []
   private backoff = 500
-  private restartAt = 0
   private starting = false
   // Set once the helper binary is confirmed missing (spawn ENOENT). Without this,
   // every OCR/window request re-spawns the missing exe, failing forever — flooding
@@ -30,7 +29,7 @@ class HelperProcess {
   private unavailable = false
 
   private ensureStarted(): void {
-    if (this.child || this.starting || this.unavailable || Date.now() < this.restartAt) return
+    if (this.child || this.starting || this.unavailable) return
     this.starting = true
     const exe = resolveHelperPath()
     // The Linux helper is a Node script. Run it with Electron's OWN bundled Node
@@ -61,7 +60,7 @@ class HelperProcess {
     child.stderr.on('data', (c: Buffer) => console.log('[win-ocr-helper]', c.toString().trim()))
     child.on('exit', (code) => {
       console.warn(`[win-ocr-helper] exited code=${code}`)
-      this.handleExit(child)
+      this.handleExit()
     })
     child.on('error', (e) => {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -76,7 +75,7 @@ class HelperProcess {
       } else {
         console.error('[win-ocr-helper] spawn error:', e.message)
       }
-      this.handleExit(child)
+      this.handleExit()
     })
     // Successful start — reset backoff after a short grace period.
     setTimeout(() => {
@@ -84,8 +83,7 @@ class HelperProcess {
     }, 2000)
   }
 
-  private handleExit(expectedChild?: ChildProcessWithoutNullStreams): void {
-    if (expectedChild && this.child !== expectedChild) return
+  private handleExit(): void {
     this.child = null
     // Fail every in-flight request; the helper restarts lazily on next request.
     while (this.queue.length) {
@@ -93,20 +91,18 @@ class HelperProcess {
       clearTimeout(p.timer)
       p.reject(new Error('helper exited'))
     }
-    this.restartAt = Date.now() + this.backoff
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS)
   }
 
   private recycle(): void {
-    const child = this.child
-    if (child) {
+    if (this.child) {
       try {
-        child.kill()
+        this.child.kill()
       } catch {
         /* already dead */
       }
     }
-    this.handleExit(child ?? undefined)
+    this.handleExit()
   }
 
   private request(opcode: number, payload: Buffer): Promise<string> {
@@ -143,7 +139,6 @@ class HelperProcess {
 
   dispose(): void {
     this.recycle()
-    this.restartAt = 0
   }
 }
 

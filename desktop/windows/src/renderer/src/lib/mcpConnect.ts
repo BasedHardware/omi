@@ -43,12 +43,6 @@ export async function disconnectMcp(id: McpConnectorId): Promise<McpExportsSnaps
   return window.omi.mcpDisconnect(id, uid)
 }
 
-export async function copyMcpSetup(id: McpConnectorId): Promise<void> {
-  const uid = auth.currentUser?.uid
-  if (!uid) throw new Error('Not signed in')
-  return window.omi.mcpCopySetup(id, uid)
-}
-
 /** Rotate the hosted key and rewrite any already-connected configs. */
 export async function rotateMcpKey(): Promise<McpExportsSnapshot | null> {
   const c = await creds()
