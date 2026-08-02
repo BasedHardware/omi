@@ -20,10 +20,14 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
-from google.api_core.exceptions import AlreadyExists as _FirestoreAlreadyExists, Conflict as _FirestoreConflict
+from google.api_core.exceptions import (
+    AlreadyExists as _FirestoreAlreadyExists,
+    Conflict as _FirestoreConflict,
+    NotFound as _FirestoreNotFound,
+)
 
 from ..._client import db as _boundary_db, delete_collection_recursive, run_transactional
-from ..errors import AlreadyExists
+from ..errors import AlreadyExists, NotFound
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -147,7 +151,10 @@ class _FirestoreTransaction:
         self._transaction.set(self._client.document(path), _translate(data), merge=merge)
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._transaction.update(self._client.document(path), _translate(data))
+        try:
+            self._transaction.update(self._client.document(path), _translate(data))
+        except _FirestoreNotFound as exc:
+            raise NotFound(path) from exc
 
     def delete(self, path: str) -> None:
         self._transaction.delete(self._client.document(path))
@@ -174,7 +181,10 @@ class FirestoreDocumentStore:
         self._client.document(path).set(_translate(data), merge=merge)
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._client.document(path).update(_translate(data))
+        try:
+            self._client.document(path).update(_translate(data))
+        except _FirestoreNotFound as exc:
+            raise NotFound(path) from exc
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         try:

@@ -35,7 +35,9 @@ def get_object_store() -> ObjectStore:
     if _instance is None:
         with _lock:
             if _instance is None:
-                _instance = _build(os.getenv("OBJECT_STORE_BACKEND", "gcs").strip().lower())
+                # ``or "gcs"`` (not getenv's default arg) so an empty/whitespace value falls back to
+                # the documented GCS default too, matching the store and vector factories (ADR-0032).
+                _instance = _build((os.getenv("OBJECT_STORE_BACKEND") or "gcs").strip().lower() or "gcs")
     return _instance
 
 

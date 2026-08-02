@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from pymongo import ASCENDING, DESCENDING, DeleteOne, MongoClient, ReplaceOne, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
-from ..errors import AlreadyExists
+from ..errors import AlreadyExists, NotFound
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -192,7 +192,12 @@ class MongoDocumentStore:
         collection_name, _, _ = _doc_meta(path)
         update = _build_update_ops(data)
         update.setdefault("$set", {})["_updated_at"] = _now()
-        self._db[collection_name].update_one({"_id": path}, update, session=session)
+        # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
+        # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
+        # into the neutral NotFound to preserve parity across backends.
+        result = self._db[collection_name].update_one({"_id": path}, update, session=session)
+        if result.matched_count == 0:
+            raise NotFound(path)
 
     def _delete(self, path: str, *, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)

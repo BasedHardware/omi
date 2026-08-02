@@ -45,7 +45,8 @@ class TestSetUserSpeakerEmbedding:
         """Should write the embedding and a timestamp to the user document."""
         import database.users as users_mod
 
-        store = _store_bound()
+        # A user always has a user doc in production; update() requires it (raises NotFound otherwise).
+        store = _store_bound(data={})
         with patch.object(users_mod, '_store', lambda: store):
             embedding = [0.1, 0.2, 0.3, 0.4, 0.5]
             result = users_mod.set_user_speaker_embedding('uid-123', embedding)
@@ -59,7 +60,7 @@ class TestSetUserSpeakerEmbedding:
         """Should handle 512-dim embeddings (production size)."""
         import database.users as users_mod
 
-        store = _store_bound()
+        store = _store_bound(data={}, uid='uid-456')
         with patch.object(users_mod, '_store', lambda: store):
             embedding = list(np.random.randn(512).astype(float))
             result = users_mod.set_user_speaker_embedding('uid-456', embedding)

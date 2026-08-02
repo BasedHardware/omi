@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, cast
 
-from database.store import Filter, get_document_store
+from database.store import Filter, ensure_id_segment, get_document_store
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,9 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
         chunk = rows[i : i + 500]
         batch = store.batch()
         for row in chunk:
-            doc_id = str(row.get('storageId') or row['id'])
+            # storageId / id are client-provided; a '/' would split the composed path into extra
+            # segments (wrong Mongo collection/key; Firestore rejects the odd-segment path).
+            doc_id = ensure_id_segment(str(row.get('storageId') or row['id']))
             doc_data = {
                 'timestamp': row['timestamp'],
                 'appName': row.get('appName', ''),

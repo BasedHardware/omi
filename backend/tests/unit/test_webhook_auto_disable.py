@@ -425,6 +425,9 @@ class TestDisableAppInFirestore:
         from tests.store_fakes import FakeDocumentStore
 
         store = FakeDocumentStore()
+        # The app's plugins_data doc exists in production (update requires it — a missing doc raises
+        # NotFound on every backend, which disable_app_in_firestore catches and logs as a failure).
+        store.set("plugins_data/app-1", {"name": "App One"})
         with patch.object(webhook_health, "_store", lambda: store):
             webhook_health.disable_app_in_firestore("app-1", "HTTP 500", 72)
 

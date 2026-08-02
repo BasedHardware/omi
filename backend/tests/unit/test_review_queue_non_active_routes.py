@@ -60,7 +60,11 @@ def test_review_queue_reject_persists_non_active_route_store_outcome(review_queu
         captured.append(outcome)
         return outcome
 
-    monkeypatch.setattr(review_queue, "_store", lambda: FakeDocumentStore())
+    # The review-queue doc exists in production (resolve_review_conflict returns not_found
+    # otherwise), so seed it: update() requires an existing doc on every backend.
+    store = FakeDocumentStore()
+    store.set("users/u1/memory_review_queue/review_1", _item())
+    monkeypatch.setattr(review_queue, "_store", lambda: store)
     monkeypatch.setattr(review_queue, "get_review_conflict", lambda uid, review_id: _item())
     monkeypatch.setattr(
         review_queue,
@@ -92,7 +96,9 @@ def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(rev
     captured = []
     append_mock = MagicMock(return_value=None)
 
-    monkeypatch.setattr(review_queue, "_store", lambda: FakeDocumentStore())
+    store = FakeDocumentStore()
+    store.set("users/u1/memory_review_queue/review_1", _item(veracity=0.1))
+    monkeypatch.setattr(review_queue, "_store", lambda: store)
     monkeypatch.setattr(review_queue, "get_review_conflict", lambda uid, review_id: _item(veracity=0.1))
     monkeypatch.setattr(review_queue, "append_resolution_commit", append_mock)
     monkeypatch.setattr(

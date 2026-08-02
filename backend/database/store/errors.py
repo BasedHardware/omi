@@ -21,4 +21,14 @@ class AlreadyExists(StoreError):
     """
 
 
-__all__ = ["StoreError", "AlreadyExists"]
+class NotFound(StoreError):
+    """An ``update`` addressed a path that has no document.
+
+    ``update`` requires the target to exist (unlike ``set``, which upserts). Firestore raises
+    ``google.api_core.exceptions.NotFound``; Mongo reports ``matched_count == 0``. Both map here so
+    the domain can branch on "updated a document that was concurrently deleted / never created"
+    identically on every backend, instead of one backend raising and another silently no-op'ing.
+    """
+
+
+__all__ = ["StoreError", "AlreadyExists", "NotFound"]

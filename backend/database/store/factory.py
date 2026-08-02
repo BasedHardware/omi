@@ -27,10 +27,15 @@ def _build_store() -> DocumentStore:
 
         return FirestoreDocumentStore()
     if backend == "mongo":
+        uri = os.environ.get("MONGO_URI")
+        if not uri:
+            # Without this guard PyMongo silently falls back to its localhost:27017 default, so a
+            # misconfigured deployment would appear to "work" against the wrong (or no) database.
+            raise ValueError("STORAGE_BACKEND=mongo requires MONGO_URI to be set")
         from .adapters.mongo import MongoDocumentStore
 
         return MongoDocumentStore(
-            uri=os.environ.get("MONGO_URI"),
+            uri=uri,
             db_name=os.environ.get("MONGO_DB", "omi"),
         )
     raise ValueError(f"Unknown STORAGE_BACKEND={backend!r} (expected 'firestore' or 'mongo')")

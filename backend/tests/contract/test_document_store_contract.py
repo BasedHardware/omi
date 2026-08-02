@@ -20,7 +20,7 @@ from datetime import datetime
 
 import pytest
 
-from database.store.errors import AlreadyExists
+from database.store.errors import AlreadyExists, NotFound
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -114,6 +114,14 @@ def test_update_delete_sentinel_removes_field(store, uid):
     store.set(f"users/{uid}", {"a": 1, "b": 2})
     store.update(f"users/{uid}", {"b": DELETE})
     assert store.get(f"users/{uid}").to_dict() == {"a": 1}
+
+
+def test_update_missing_raises_not_found(store, uid):
+    # update() requires an existing document (unlike set(), which upserts). Every backend must raise
+    # the neutral NotFound rather than silently no-op — otherwise a caller that updates a
+    # concurrently-deleted doc "succeeds" on one backend and fails on another.
+    with pytest.raises(NotFound):
+        store.update(f"users/{uid}", {"a": 1})
 
 
 def test_update_increment_sentinel(store, uid):

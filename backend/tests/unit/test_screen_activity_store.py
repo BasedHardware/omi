@@ -47,6 +47,14 @@ class TestUpsert:
         assert screen_activity_db.upsert_screen_activity('u1', rows) == 750
         assert len([p for p in store._docs if p.startswith('users/u1/screen_activity/')]) == 750
 
+    def test_client_id_with_slash_is_rejected_not_written_to_wrong_path(self, store):
+        # A '/' in the client-provided id would split the composed path into extra segments (wrong
+        # Mongo collection/key; Firestore rejects the odd-segment path). It must be refused, and
+        # nothing partial must land — not silently written under a mis-parsed path.
+        with pytest.raises(ValueError):
+            screen_activity_db.upsert_screen_activity('u1', [_row('dev/../ice', '2026-01-01 10:00:00.000')])
+        assert store._docs == {}
+
 
 class TestGet:
     def test_returns_rows_with_id_ordered_by_timestamp(self, store):

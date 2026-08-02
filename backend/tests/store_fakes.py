@@ -17,7 +17,7 @@ import itertools
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from database.store.errors import AlreadyExists
+from database.store.errors import AlreadyExists, NotFound
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -163,7 +163,11 @@ class FakeDocumentStore:
         self._stamp(path)
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._docs.setdefault(path, {})
+        # ``update`` requires an existing document — it does NOT upsert (that is ``set``). The
+        # Firestore reference adapter raises NotFound on a missing doc and the Mongo adapter matches
+        # via matched_count==0, so the fake raises here too to stay representative of both backends.
+        if path not in self._docs:
+            raise NotFound(path)
         _apply(self._docs[path], copy.deepcopy(data))
         self._stamp(path)
 

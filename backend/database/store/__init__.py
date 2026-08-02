@@ -14,6 +14,7 @@ Public surface:
 from .records import StoredDocument
 from .ports import DocumentStore, Transaction, WriteBatch, Filter
 from .factory import get_document_store, reset_document_store
+from .keys import ensure_id_segment
 from . import errors, sentinels
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "Filter",
     "get_document_store",
     "reset_document_store",
+    "ensure_id_segment",
     "errors",
     "sentinels",
 ]

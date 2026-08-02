@@ -101,6 +101,9 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
         'status': 'pending',
     }
     fake = FakeDocumentStore()
+    # The review-queue doc exists when resolve runs (get_review_conflict read it); seed it so the
+    # projection update() targets an existing doc — update requires one on every backend.
+    fake.set('users/uid-1/memory_review_queue/review1', item)
     merges = []
     corrections = []
     marked_short_term = []
@@ -204,6 +207,8 @@ def test_review_queue_reject_uses_projection_writer(monkeypatch):
         'status': 'pending',
     }
     fake = FakeDocumentStore()
+    # The review-queue doc exists when resolve runs; seed it so the projection update() has a target.
+    fake.set('users/uid-1/memory_review_queue/review1', item)
     projection_updates = []
     marked_short_term = []
 
