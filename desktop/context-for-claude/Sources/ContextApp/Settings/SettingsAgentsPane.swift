@@ -2,43 +2,47 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// Agents: where a query goes, how Claude is opened, whether Claude can reach this app at all, and
-/// which agent surfaces are genuinely on this Mac.
+/// Agents: how Claude is opened, whether Claude can reach this app at all, and which agent surfaces
+/// are genuinely on this Mac.
 ///
 /// The reference's third row is a toggle that installs a `coast` CLI into `~/.local/bin`. We ship no
 /// CLI — `docs/rewind-and-settings.md` says outright that our equivalent is the MCP registration — so
 /// the row is `ClaudeRegistrar`, which is the machinery that actually gives an agent access to this
 /// data. That is a real toggle with a real effect on disk (`~/.claude.json`, Claude Desktop's
 /// `claude_desktop_config.json`) rather than a second, invented one.
+///
+/// The reference's *first* row, "Route to Agent", is absent for the opposite reason: nothing read the
+/// preference it wrote, and its subtitle advertised a ⌘↵ chord `SearchBarView` does not implement,
+/// routing to a path this product deliberately removed. See `SettingsPreferences`.
 struct SettingsAgentsPane: View {
     @ObservedObject var store: SettingsStore
 
-    @State private var registration = ClaudeRegistrar.status()
+    /// Nil until the probe below has answered.
+    ///
+    /// It used to be `= ClaudeRegistrar.status()`, which opens and JSON-parses `~/.claude.json` and
+    /// Claude Desktop's config **synchronously in `View.init`** — and SwiftUI re-inits a view body's
+    /// struct freely, so two file reads rode along with every unrelated state change on this pane.
+    /// It is a disk probe like the other two here, so it belongs where they are.
+    @State private var registration: (claudeCode: Bool, claudeDesktop: Bool)?
     @State private var registrationMessage: String?
+    /// Bumped by each attempt so the expiry below restarts rather than clearing a newer message.
+    @State private var registrationMessageAttempt = 0
     @State private var isRegistering = false
     @State private var survey: [(surface: AgentSurface, presence: AgentPresence)] = []
     /// What each Claude target would really do *on this Mac*, from `ClaudeRouter`'s own probe. Nil
     /// until it has answered, which is one frame — see `targetSubtitle` for what stands in.
     @State private var targetDetail: String?
 
+    /// How long the result of a connect/disconnect stays under the section.
+    ///
+    /// It is feedback about something the user just did, not a description of the row, so it has to
+    /// expire: without this it replaced the standing explanation of what the toggle writes for as
+    /// long as the pane stayed open, and a sentence in the past tense reads as the present one.
+    private static let registrationMessageLifetime: Duration = .seconds(12)
+
     var body: some View {
         SettingsPaneScroll {
             SettingsSection(title: "Routing") {
-                SettingsRow(
-                    icon: "arrow.turn.down.right",
-                    title: "Route to Agent",
-                    subtitle: "With ⌘↵ you can send your query directly to your agents."
-                ) {
-                    Picker("", selection: $store.agentRoute) {
-                        ForEach(AgentRoute.allCases) { Text($0.title).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
-                    .controlSize(.small)
-                }
-
-                SettingsRowDivider()
-
                 SettingsRow(
                     icon: "macwindow",
                     title: "Claude target",
@@ -64,13 +68,16 @@ struct SettingsAgentsPane: View {
                     title: "Claude Connection",
                     subtitle: connectionSubtitle
                 ) {
-                    if isRegistering {
+                    // The spinner also covers "not read yet": a switch drawn off while the config
+                    // is still being parsed states a connection status we do not have, and the user
+                    // would see it flip under their hand a moment later.
+                    if isRegistering || registration == nil {
                         ProgressView().controlSize(.small)
                     } else {
                         Toggle(
                             "",
                             isOn: Binding(
-                                get: { registration.claudeCode || registration.claudeDesktop },
+                                get: { registration?.claudeCode == true || registration?.claudeDesktop == true },
                                 set: { setRegistered($0) })
                         )
                         .labelsHidden()
@@ -82,9 +89,14 @@ struct SettingsAgentsPane: View {
 
             // The tip line, then the illustrative mock beneath it.
             VStack(alignment: .leading, spacing: 8) {
+                // Names only the two surfaces `ClaudeRegistrar` actually writes. It used to say
+                // "Claude Code, Codex or Cursor": nothing in this package writes a Codex or a Cursor
+                // MCP config and we ship no CLI, so two thirds of that sentence described work the
+                // user would have had to do by hand without being told.
                 Text(
-                    "You can also use Context for Claude directly out of Claude Code, Codex or Cursor "
-                        + "by mentioning it in your prompt."
+                    "Once connected, you can use Context for Claude directly inside Claude Code and "
+                        + "Claude Desktop by mentioning it in your prompt. Those are the two surfaces "
+                        + "this app registers itself with."
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(Ink.secondary)
@@ -114,13 +126,24 @@ struct SettingsAgentsPane: View {
             }
         }
         .task {
-            // Off the main actor: `survey` stats a handful of paths and asks LaunchServices, and
-            // neither belongs on a pane's first render. The target probe is the same kind of work —
-            // one LaunchServices question and a walk of the `claude` candidates — so it goes here
-            // rather than into `body`, which would re-run it on every keystroke elsewhere in the pane.
+            // Every probe on this pane touches the disk or LaunchServices, and none of them belongs
+            // in `body` or in a `@State` initialiser — SwiftUI runs both far more often than once,
+            // so a probe placed there is a file read per unrelated state change. Here they run once
+            // per appearance instead. The registrar's two JSON parses go off the main actor as well,
+            // because they are the only ones that open and decode a file.
             survey = AgentDetector.live.survey()
-            registration = ClaudeRegistrar.status()
             targetDetail = ClaudeRouter.targetSubtitle(surface: ClaudeHandoff.surface)
+            registration = await Task.detached(priority: .userInitiated) {
+                ClaudeRegistrar.status()
+            }.value
+        }
+        // The result of the last connect/disconnect, expired rather than pinned. `.task(id:)`
+        // restarts on each attempt, so a newer message is never cleared by an older sleep.
+        .task(id: registrationMessageAttempt) {
+            guard registrationMessage != nil else { return }
+            try? await Task.sleep(for: Self.registrationMessageLifetime)
+            guard !Task.isCancelled else { return }
+            registrationMessage = nil
         }
     }
 
@@ -140,7 +163,10 @@ struct SettingsAgentsPane: View {
     }
 
     private var connectionSubtitle: String {
-        switch (registration.claudeCode, registration.claudeDesktop) {
+        guard let registration else { return "Checking whether Claude is connected…" }
+        // Explicit `return`: the guard above makes this a multi-statement body, and a switch
+        // expression only returns implicitly when it is the single expression in the getter.
+        return switch (registration.claudeCode, registration.claudeDesktop) {
         case (true, true): "Connected to Claude Code and Claude Desktop."
         case (true, false): "Connected to Claude Code."
         case (false, true): "Connected to Claude Desktop."
@@ -148,13 +174,43 @@ struct SettingsAgentsPane: View {
         }
     }
 
+    /// Connect or disconnect, off the main actor, in the same shape as the probe in `.task` above.
+    ///
+    /// **The spinner is why this is async.** `isRegistering = true` … `register()` … `status()` …
+    /// `isRegistering = false` ran as one straight-line main-actor job with no suspension point in
+    /// it, so SwiftUI never got a chance to draw a frame between the first assignment and the last:
+    /// the spinner this method exists to show was mathematically unreachable. What it hid is two
+    /// files read, JSON-decoded and rewritten — `~/.claude.json`, which is Claude Code's own state
+    /// store and grows with the user's history rather than with anything we write, and Claude
+    /// Desktop's config — so the window froze under the click for however long that took on that
+    /// Mac. No size is asserted here because it is not ours to predict; the defect is that the work
+    /// is synchronous on the actor that has to draw, which is true at any size. The same commit
+    /// already moved the identical `status()` call off the main actor at `.task` and gave the reason
+    /// there; a second call site doing it the other way is the inconsistency, not a second opinion.
+    ///
+    /// `Task { … }` then `Task.detached` inside it, matching `SettingsStoragePane.measure()`: the
+    /// outer task's `await` is the suspension point that lets the spinner render, and the detached
+    /// one is what keeps the file work off the main actor. Both `@State` writes happen after the
+    /// awaits, back on the actor the outer task started on.
     private func setRegistered(_ enabled: Bool) {
         Sound.effect(.click)
         isRegistering = true
-        let result = enabled ? ClaudeRegistrar.register() : ClaudeRegistrar.unregister()
-        registrationMessage = result.message
-        registration = ClaudeRegistrar.status()
-        isRegistering = false
+        // Cleared first: the previous outcome must not sit under a spinner describing the attempt
+        // that is running now.
+        registrationMessage = nil
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                enabled ? ClaudeRegistrar.register() : ClaudeRegistrar.unregister()
+            }.value
+            registrationMessage = result.message
+            registrationMessageAttempt += 1
+            // Re-read rather than trusting `result`: the registrar reports what it *did*, and the row
+            // states what is *on disk*. A write that half-succeeded must show the disk's answer.
+            registration = await Task.detached(priority: .userInitiated) {
+                ClaudeRegistrar.status()
+            }.value
+            isRegistering = false
+        }
     }
 }
 
@@ -176,7 +232,7 @@ struct AgentPresencePill: View {
                 .frame(width: 6, height: 6)
             Text(presence.label)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(presence.isInstalled ? Ink.primary : Ink.tertiary)
+                .foregroundStyle(presence.isInstalled ? Ink.primary : Ink.secondary)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
@@ -189,7 +245,7 @@ struct AgentPresencePill: View {
         case .application, .executable: Ink.listeningGreen
         // Configured but no binary found: real evidence, weaker than a green dot should imply.
         case .configured: Ink.accent
-        case .absent: Ink.tertiary
+        case .absent: Ink.secondary
         }
     }
 }
@@ -205,14 +261,14 @@ struct AgentPromptMock: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                 Text("What was I working on before lunch yesterday?")
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.primary)
                 Spacer(minLength: 0)
                 Text("Example")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .background(Capsule().fill(Ink.wash))

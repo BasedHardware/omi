@@ -9,11 +9,15 @@ import SwiftUI
 /// **The usage figure is measured** (`I27`). `StorageMeasurement` walks the real support directory and
 /// adds up allocated sizes. Nothing on this pane multiplies a frame count by an average.
 ///
-/// **`Limit` deletes user data permanently** (`I30`), and `Compress` re-encodes it lossily, so neither
-/// is reachable by one click on a radio button. Selecting either parks the choice in
-/// `StorageSelection.pending` and opens a confirmation that states exactly what will happen; the radio
-/// group shows the parked option as selected so the user can see what they are being asked about, and
-/// cancelling puts it back. Only `confirm()` commits.
+/// **`Limit` deletes user data permanently** (`I30`), so it is not reachable by one click on a radio
+/// button. Selecting it parks the choice in `StorageSelection.pending` and opens a confirmation that
+/// states exactly what will happen; the radio group shows the parked option as selected so the user can
+/// see what they are being asked about, and cancelling puts it back. Only `confirm()` commits.
+///
+/// **And the confirmation states both bounds.** Limit is not only a size cap: the sweep prunes
+/// everything older than `StorageLimit.retentionDays` as well, whatever the threshold says. Copy that
+/// mentioned only the threshold made a 200 GB setting on an 8 GB disk look like "nothing will be
+/// deleted" while a month-old screenshot was deleted anyway.
 struct SettingsStoragePane: View {
     @ObservedObject var store: SettingsStore
 
@@ -64,7 +68,9 @@ struct SettingsStoragePane: View {
                     SettingsRow(
                         icon: "gauge.with.dots.needle.33percent",
                         title: "Threshold",
-                        subtitle: "Recordings are deleted oldest-first once the frames on disk pass this."
+                        subtitle: "Recordings are deleted oldest-first once the frames on disk pass this. "
+                            + "Recordings older than \(StorageLimit.retentionDays) days are deleted even "
+                            + "when the folder is well under it."
                     ) {
                         StorageThresholdStepper(bytes: $store.storageLimitBytes)
                     }
@@ -105,9 +111,7 @@ struct SettingsStoragePane: View {
         // committed destructive strategy without this sheet having been answered.
         .confirmationDialog(
             confirmationTitle,
-            isPresented: Binding(
-                get: { store.storage.isAwaitingConfirmation },
-                set: { presented in if !presented { store.cancelStorageChange() } }),
+            isPresented: confirmationPresentation,
             titleVisibility: .visible
         ) {
             Button(confirmationAction, role: .destructive) {
@@ -118,6 +122,26 @@ struct SettingsStoragePane: View {
         } message: {
             Text(confirmationMessage)
         }
+    }
+
+    /// The confirmation's presentation binding.
+    ///
+    /// **The setter deliberately does nothing.** It used to call `cancelStorageChange()` on every
+    /// dismissal, which made the whole dialog ordering-dependent: SwiftUI is free to write
+    /// `isPresented = false` *before* it runs the tapped button's action, and when it did, `cancel()`
+    /// had already nulled the `pending` that `confirmStorage()` promotes — so `confirm()` returned
+    /// `.unchanged` and the user's deliberate second click silently did nothing at all.
+    ///
+    /// Cancelling is now only ever the explicit Cancel button, which is also what ⎋ and a click
+    /// outside trigger (SwiftUI routes both to the `.cancel`-role action). If some future dismissal
+    /// path reached neither button, `pending` survives and the dialog re-presents — the user is asked
+    /// again rather than having a destructive strategy committed or silently dropped, which is the
+    /// safe direction to be wrong in.
+    ///
+    /// Exposed rather than inlined so `SettingsTests` can drive both orderings; a binding built
+    /// inside `body` is not reachable from a test, which is why the bug was invisible to one.
+    var confirmationPresentation: Binding<Bool> {
+        Binding(get: { store.storage.isAwaitingConfirmation }, set: { _ in })
     }
 
     // MARK: - Measuring
@@ -150,31 +174,39 @@ struct SettingsStoragePane: View {
         store.storage.isAwaitingConfirmation ? store.storage.highlighted : nil
     }
 
-    private var confirmationTitle: String {
-        switch pending {
-        case .limit: "Delete recordings once \(StorageLimit.format(store.storageLimitBytes)) is reached?"
-        case .compress: "Compress older recordings?"
-        default: ""
-        }
-    }
-
-    private var confirmationMessage: String {
+    // The three confirmation strings are internal rather than private so `SettingsTests` can assert
+    // what the sheet actually says. They are the only disclosure the user gets before agreeing to
+    // permanent deletion, and copy nothing reads is copy nothing can hold to its claims.
+    var confirmationTitle: String {
         switch pending {
         case .limit:
-            "Screenshots will be deleted oldest-first whenever the frames folder passes "
-                + "\(StorageLimit.format(store.storageLimitBytes)). Deleted recordings cannot be recovered. "
-                + "Transcripts are never deleted by this."
-        case .compress:
-            "Older screenshots will be re-encoded at a lower quality to reclaim space. "
-                + "The original detail cannot be recovered."
+            "Delete recordings past \(StorageLimit.format(store.storageLimitBytes)) "
+                + "or \(StorageLimit.retentionDays) days old?"
         default: ""
         }
     }
 
-    private var confirmationAction: String {
+    /// Both bounds, and the age one stated as independent of the threshold.
+    ///
+    /// The sweep runs `enforceRetention(olderThanDays:toFitBytes:)`, which prunes by age *and* by
+    /// size. A user who reads only the threshold sentence and picks 200 GB with 8 GB on disk
+    /// reasonably concludes nothing will be deleted; a month later their oldest screenshots are gone.
+    /// That is permanent deletion of their data and the dialog has to say it before they agree.
+    var confirmationMessage: String {
+        switch pending {
+        case .limit:
+            "Two things start happening. Screenshots are deleted oldest-first whenever the frames "
+                + "folder passes \(StorageLimit.format(store.storageLimitBytes)), and screenshots older "
+                + "than \(StorageLimit.retentionDays) days are deleted whatever the threshold says — "
+                + "raising it does not keep them. Deleted recordings cannot be recovered. Transcripts "
+                + "are never deleted by this."
+        default: ""
+        }
+    }
+
+    var confirmationAction: String {
         switch pending {
         case .limit: "Turn on storage limit"
-        case .compress: "Turn on compression"
         default: "Continue"
         }
     }

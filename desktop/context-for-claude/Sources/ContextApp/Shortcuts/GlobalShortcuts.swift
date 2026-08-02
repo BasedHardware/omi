@@ -655,34 +655,29 @@ extension GlobalShortcuts.Recorded {
         guard event.type == .keyDown else { return nil }
         let modifiers = ShortcutModifiers(event.modifierFlags)
         guard !modifiers.subtracting(.shift).isEmpty else { return nil }
-        let reserved: Set<UInt16> = [UInt16(kVK_Escape), UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter)]
-        guard !reserved.contains(event.keyCode) else { return nil }
+        guard !unrecordableKeyCodes.contains(event.keyCode) else { return nil }
         return GlobalShortcuts.Recorded(
             keyCode: event.keyCode, modifiers: modifiers, label: label(for: event))
     }
 
+    /// Escape and Return mean something specific in every app on the machine, so no modifier makes
+    /// them free to take. Named here rather than inlined because the Settings recorder reaches this
+    /// layer with a bare key code and has to refuse exactly the same keys — two lists would drift
+    /// into a chord one path accepts and the other cannot register.
+    static let unrecordableKeyCodes: Set<UInt16> = [
+        UInt16(kVK_Escape), UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter),
+    ]
+
     /// What the key prints, upper-cased, or a name for the keys that print nothing legible.
+    ///
+    /// The event is the better source than the key code: `charactersIgnoringModifiers` is what *this*
+    /// keypress produced on this layout, with no lookup to get wrong. `ShortcutKeyLabel` is the same
+    /// answer for callers who only hold a code.
     private static func label(for event: NSEvent) -> String {
-        if let named = namedKeys[event.keyCode] { return named }
+        if let named = ShortcutKeyLabel.namedKeys[event.keyCode] { return named }
         let characters = event.charactersIgnoringModifiers ?? ""
         let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "Key \(event.keyCode)" }
+        if trimmed.isEmpty { return ShortcutKeyLabel.label(for: event.keyCode) }
         return trimmed.uppercased()
     }
-
-    /// Only the keys whose printed form is blank or misleading. Everything else comes from the event.
-    private static let namedKeys: [UInt16: String] = [
-        UInt16(kVK_Space): "Space",
-        UInt16(kVK_Tab): "⇥",
-        UInt16(kVK_Delete): "⌫",
-        UInt16(kVK_ForwardDelete): "⌦",
-        UInt16(kVK_LeftArrow): "←",
-        UInt16(kVK_RightArrow): "→",
-        UInt16(kVK_UpArrow): "↑",
-        UInt16(kVK_DownArrow): "↓",
-        UInt16(kVK_Home): "↖",
-        UInt16(kVK_End): "↘",
-        UInt16(kVK_PageUp): "⇞",
-        UInt16(kVK_PageDown): "⇟",
-    ]
 }

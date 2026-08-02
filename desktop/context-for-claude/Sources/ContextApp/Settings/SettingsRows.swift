@@ -100,7 +100,7 @@ struct SettingsKeyHint: View {
     var body: some View {
         Text(text)
             .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundStyle(Ink.tertiary)
+            .foregroundStyle(Ink.secondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(
@@ -217,7 +217,7 @@ struct SettingsRadioRow: View {
             HStack(spacing: 11) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? Ink.accent : Ink.tertiary)
+                    .foregroundStyle(isSelected ? Ink.accent : Ink.secondary)
                 SettingsIconTile(symbol: symbol, tint: isDestructive ? Ink.errorRed : Ink.primary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -243,13 +243,20 @@ struct SettingsRadioRow: View {
 
 /// A checkbox row for the Exclusions lists: an icon or favicon, a name, and a box that is disabled
 /// (and shown checked) for a locked default.
+///
+/// **The disclosure chevron is drawn by supplying its action, never by a flag.** It used to be
+/// `disclosure: Bool`, and a `true` painted a chevron this view had no handler for — the row body had
+/// a `.contentShape` and no gesture, so the only thing that expanded a category was a separate button
+/// wrapped around the icon tile by the caller. The affordance and the behaviour were in different
+/// files and only one of them was where the user aimed. Making the action the thing that draws it puts
+/// that beyond a future caller's reach: there is no longer a way to spell "chevron, no handler".
 struct SettingsCheckRow<Leading: View>: View {
     let title: String
     var subtitle: String?
     let isChecked: Bool
     let isEnabled: Bool
-    /// Set for a category row, which discloses its members.
-    var disclosure: Bool = false
+    /// Non-nil for a row that discloses members. Runs when the labels or the chevron are clicked.
+    var onDisclosure: (() -> Void)?
     var isExpanded: Bool = false
     let toggle: () -> Void
     @ViewBuilder var leading: () -> Leading
@@ -261,7 +268,7 @@ struct SettingsCheckRow<Leading: View>: View {
             Button(action: toggle) {
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 14))
-                    .foregroundStyle(isChecked ? Ink.accent : Ink.tertiary)
+                    .foregroundStyle(isChecked ? Ink.accent : Ink.secondary)
             }
             .buttonStyle(.plain)
             .disabled(!isEnabled)
@@ -269,25 +276,23 @@ struct SettingsCheckRow<Leading: View>: View {
 
             leading()
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Ink.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Ink.secondary)
-                        .lineLimit(1)
+            // The labels and the chevron are one target when the row discloses anything, and plain
+            // text otherwise. Kept out of the checkbox's button so clicking the name never toggles
+            // an exclusion by accident — expanding and excluding are different decisions.
+            if let onDisclosure {
+                Button(action: onDisclosure) {
+                    HStack(spacing: 11) {
+                        labels
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Ink.secondary)
+                    }
+                    .contentShape(Rectangle())
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if disclosure {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Ink.tertiary)
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(isExpanded ? "Collapse \(title)" : "Expand \(title)"))
+            } else {
+                labels
             }
         }
         .padding(.vertical, 6)
@@ -297,21 +302,41 @@ struct SettingsCheckRow<Leading: View>: View {
         .background(isHovering && isEnabled ? Ink.rowFillHover : Color.clear)
         .onHover { isHovering = $0 }
         .contentShape(Rectangle())
+        // Unchanged from before the chevron got a handler: the buttons merge into one element whose
+        // actions stay reachable, and the disclosure button's own label is what names its action.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isChecked ? "Excluded" : "Recorded"))
         .accessibilityHint(Text(isEnabled ? "" : "Excluded by default and not removable"))
+    }
+
+    private var labels: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Ink.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ink.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 extension SettingsCheckRow where Leading == EmptyView {
     init(
         title: String, subtitle: String? = nil, isChecked: Bool, isEnabled: Bool,
-        disclosure: Bool = false, isExpanded: Bool = false, toggle: @escaping () -> Void
+        onDisclosure: (() -> Void)? = nil, isExpanded: Bool = false, toggle: @escaping () -> Void
     ) {
         self.init(
             title: title, subtitle: subtitle, isChecked: isChecked, isEnabled: isEnabled,
-            disclosure: disclosure, isExpanded: isExpanded, toggle: toggle, leading: { EmptyView() })
+            onDisclosure: onDisclosure, isExpanded: isExpanded, toggle: toggle,
+            leading: { EmptyView() })
     }
 }
 
@@ -335,6 +360,14 @@ struct SettingsAppIcon: View {
 /// suppresses the *request* rather than hiding an image that was already downloaded. The URL is handed
 /// out by the engine and never assembled here, so there is no shape of this view that could reach a
 /// third-party favicon service — a service would learn every domain the user chose to hide.
+///
+/// It also names itself to `NetworkEgress` as `.faviconFetch`, and that is not redundancy for its own
+/// sake. This is a real `URLSession` reaching a host the app has no other business with, and it is the
+/// single client that discloses the user's *own exclusion list* — asking a site for its icon tells
+/// that site it was excluded. `NetworkEgress.Client` is the audited list of everything that leaves
+/// this Mac, and `AirgapEgressTests` proves the guard over `Client.allCases`; a remote client outside
+/// that enumeration is one nobody can check. The two answers agree by construction — both read
+/// `ExclusionEngine`'s flag — so this costs a comparison and buys the entry in the list.
 struct SettingsFavicon: View {
     let host: String
     var size: CGFloat = 16
@@ -364,7 +397,7 @@ struct SettingsFavicon: View {
                             if isSuppressed {
                                 Image(systemName: "wifi.slash")
                                     .font(.system(size: size * 0.5))
-                                    .foregroundStyle(Ink.tertiary)
+                                    .foregroundStyle(Ink.secondary)
                             } else {
                                 Text(initial)
                                     .font(.system(size: size * 0.55, weight: .semibold))
@@ -386,9 +419,22 @@ struct SettingsFavicon: View {
     private func load() async {
         switch ExclusionEngine.shared.faviconFetch(for: host) {
         case .suppressed(let reason):
-            isSuppressed = reason == .airgapMode
             image = nil
+            guard reason == .airgapMode else {
+                // Not a host we could build a URL for. Nothing was suppressed and nothing is owed.
+                isSuppressed = false
+                return
+            }
+            noteSuppressed()
         case .allowed(let url):
+            // Asked again, after the engine and immediately before the request. The engine answered
+            // at one instant and this is the next; Airgap Mode is a live switch, and the one thing a
+            // late flip must not do is let a request out that the user has already forbidden.
+            guard !NetworkEgress.isSuppressed(.faviconFetch) else {
+                image = nil
+                noteSuppressed()
+                return
+            }
             isSuppressed = false
             guard let (data, response) = try? await Self.faviconSession.data(from: url),
                 (response as? HTTPURLResponse)?.statusCode == 200,
@@ -396,6 +442,20 @@ struct SettingsFavicon: View {
             else { return }
             image = decoded
         }
+    }
+
+    /// Degraded, never dropped: nothing of the user's is lost or queued — the row simply draws its
+    /// monogram, and the icon appears if they ever turn the switch off. The record exists so a
+    /// suppression here is visible in the same place as every other one, rather than being the one
+    /// refusal the app makes silently.
+    ///
+    /// Recorded on the transition only. `.task(id:)` re-runs whenever SwiftUI rebuilds this row, and
+    /// a pane of excluded domains under Airgap Mode would otherwise write one record per row per
+    /// scroll — a log that reports the same standing fact a hundred times is a log nobody reads.
+    private func noteSuppressed() {
+        guard !isSuppressed else { return }
+        isSuppressed = true
+        NetworkEgress.recordSuppression(.faviconFetch, outcome: .degraded)
     }
 }
 

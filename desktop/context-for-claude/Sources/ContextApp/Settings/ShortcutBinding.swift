@@ -33,47 +33,65 @@ struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
     /// the reference shows and `⌘⇧⌘⇧` is not a thing anyone writes.
     var displayString: String {
         let flags = modifiers
+        let key = keyCode.flatMap(Self.keyName) ?? ""
+
+        guard tapCount > 1 else {
+            // An ordinary chord prints the way macOS prints one, which is also what
+            // `ShortcutChord.display` gives the menu bar and the conflict scanner for the same
+            // shortcut: two spellings of one keystroke on two surfaces is a bug the user reads as
+            // "these are different shortcuts".
+            var out = ""
+            for (flag, symbol) in Self.systemOrder where flags.contains(flag) { out += symbol }
+            return out + key
+        }
+
         var primary = ""
         var rest = ""
         // Primary is the outermost modifier present, which is the one a user taps.
-        for (flag, symbol) in Self.symbolOrder where flags.contains(flag) {
+        for (flag, symbol) in Self.tapOrder where flags.contains(flag) {
             if primary.isEmpty {
                 primary = symbol
             } else {
                 rest += symbol
             }
         }
-        guard !primary.isEmpty else { return keyCode.flatMap(Self.keyName) ?? "" }
-        let tapped = String(repeating: primary, count: tapCount)
-        let key = keyCode.flatMap(Self.keyName) ?? ""
-        return tapped + rest + key
+        guard !primary.isEmpty else { return key }
+        return String(repeating: primary, count: tapCount) + rest + key
     }
+
+    /// Apple's order: ⌃⌥⇧⌘, which is the order every macOS menu prints them in.
+    private static let systemOrder: [(NSEvent.ModifierFlags, String)] = [
+        (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
+    ]
 
     /// `⌘` before `⇧` here, unlike AppKit's print order, because the primary modifier is picked off
     /// the front of this list and `⌘` is the one the app's own defaults tap.
-    private static let symbolOrder: [(NSEvent.ModifierFlags, String)] = [
+    private static let tapOrder: [(NSEvent.ModifierFlags, String)] = [
         (.command, "⌘"), (.option, "⌥"), (.control, "⌃"), (.shift, "⇧"),
     ]
 
-    /// Only the keys a recorder can plausibly capture and print without a keyboard-layout lookup.
-    /// Anything else prints as its code, which is ugly and true rather than pretty and wrong.
+    /// The label the key carries on this Mac's layout.
+    ///
+    /// `↵` is spelled here rather than in `ShortcutKeyLabel` because Return is not recordable —
+    /// nothing can bind it — but the default table below can still be asked to print one.
     private static func keyName(_ code: UInt16) -> String {
         switch code {
         case 36: "↵"
-        case 48: "⇥"
-        case 49: "Space"
         case 53: "⎋"
-        case 51: "⌫"
-        case 123: "←"
-        case 124: "→"
-        case 125: "↓"
-        case 126: "↑"
-        default:
-            // `UCKeyTranslate` is the correct answer and needs the current layout, which the
-            // shortcut layer owns. Until then a code is printed as a code.
-            "Key \(code)"
+        // Everything else goes to the shortcut layer, which asks the current keyboard layout. A table
+        // of key codes here would print `K` for a Dvorak user's `T`.
+        default: ShortcutKeyLabel.label(for: code)
         }
     }
+
+    /// Chords macOS will never hand an app, so a recorder that accepted one would produce a shortcut
+    /// that silently never fires. Shared by the live provider and the in-memory stand-in: two lists
+    /// would mean the stub proving a refusal the real recorder does not make.
+    static let reservedByMacOS: [SettingsShortcutChord] = [
+        SettingsShortcutChord(keyCode: 12, modifierFlags: .command),  // ⌘Q
+        SettingsShortcutChord(keyCode: 48, modifierFlags: .command),  // ⌘Tab
+        SettingsShortcutChord(keyCode: 49, modifierFlags: .command),  // ⌘Space
+    ]
 }
 
 // MARK: - The slots
@@ -128,6 +146,26 @@ struct SettingsShortcutConflict: Equatable, Identifiable, Sendable {
     /// One-click switch, e.g. `Switch Codex to ⌥⌥`. Nil when nothing can be done automatically, in
     /// which case the row states the clash and offers no button.
     let remedyTitle: String?
+    /// Where the claim came from and what to change, from whoever detected the clash.
+    ///
+    /// Optional, and appended rather than baked into `subtitle`, because "Codex's keymap says so" and
+    /// "this is what Codex falls back to" are not the same strength of claim — a row that cannot say
+    /// which one it rests on is asking the user to take its word for it.
+    let detail: String?
+
+    init(
+        action: ShortcutAction,
+        owner: String,
+        chord: SettingsShortcutChord,
+        remedyTitle: String?,
+        detail: String? = nil
+    ) {
+        self.action = action
+        self.owner = owner
+        self.chord = chord
+        self.remedyTitle = remedyTitle
+        self.detail = detail
+    }
 
     var id: String { "\(action.rawValue)/\(owner)" }
 
@@ -135,7 +173,9 @@ struct SettingsShortcutConflict: Equatable, Identifiable, Sendable {
     var title: String { "\(owner) also uses \(chord.displayString)" }
 
     var subtitle: String {
-        "Context for Claude and \(owner) both use \(chord.displayString)."
+        let claim = "Context for Claude and \(owner) both use \(chord.displayString)."
+        guard let detail, !detail.isEmpty else { return claim }
+        return "\(claim) \(detail)"
     }
 }
 
@@ -177,22 +217,20 @@ protocol ShortcutBindingProvider: AnyObject {
     func removeObserver(_ id: UUID)
 }
 
-/// The stand-in until the real layer lands.
+/// The in-memory stand-in: a test double, and the value the window holds before launch swaps in the
+/// real one.
 ///
 /// It registers **nothing** with the system, and says so: a stub that pretended to install a global
 /// hotkey would make the pane look finished while `⌘⌘` did nothing, which is the failure mode `J7`
-/// names. It does keep real state, so the recorder, the cleared state and the rejection path are all
-/// exercised by the pane and by `SettingsTests` exactly as they will be against the real provider.
+/// names. The real provider is `LiveShortcutBindings`, assigned to `SettingsWindow.shortcutProvider`
+/// in `ContextApp` beside `GlobalShortcuts.shared.start(…)` — this one keeps real state so the
+/// recorder, the cleared state and the rejection path stay exercisable without a hot key.
+///
+/// It seeds both slots with the default chord, which the live provider deliberately does not: for
+/// this class that is the fixture the pane's tests want, but from the store a virgin install has no
+/// recorded binding at all and must report nil so the "✕ clear" button stays hidden.
 @MainActor
 final class InMemoryShortcutBindings: ShortcutBindingProvider {
-
-    /// Chords macOS will never hand an app, so a recorder that accepted them would produce a
-    /// shortcut that silently never fires.
-    static let reservedChords: [SettingsShortcutChord] = [
-        SettingsShortcutChord(keyCode: 12, modifierFlags: .command),  // ⌘Q
-        SettingsShortcutChord(keyCode: 48, modifierFlags: .command),  // ⌘Tab
-        SettingsShortcutChord(keyCode: 49, modifierFlags: .command),  // ⌘Space
-    ]
 
     private var chords: [ShortcutAction: SettingsShortcutChord]
     private var declaredConflicts: [SettingsShortcutConflict]
@@ -213,7 +251,7 @@ final class InMemoryShortcutBindings: ShortcutBindingProvider {
     func conflicts() -> [SettingsShortcutConflict] { declaredConflicts }
 
     func record(_ chord: SettingsShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult {
-        if Self.reservedChords.contains(chord) {
+        if SettingsShortcutChord.reservedByMacOS.contains(chord) {
             return .rejected("macOS reserves \(chord.displayString).")
         }
         if let other = ShortcutAction.allCases.first(where: { $0 != action && chords[$0] == chord }) {

@@ -17,6 +17,17 @@ struct SettingsGeneralPane: View {
     let shortcuts: ShortcutBindingProvider
     @ObservedObject var exclusions: ExclusionsObserver
 
+    /// The Airgap row's subtitle, lifted out of `body` for the same reason `SettingsStoragePane`
+    /// lifts its three confirmation strings out: it is the whole of the promise this switch makes,
+    /// and a promise no test can read is a promise nothing holds to its claims. See the row below
+    /// for why each clause is worded as it is.
+    static let airgapSubtitle =
+        "Stops this app from reaching the network: no screen or conversation uploads, no cloud "
+        + "transcription, no favicon requests, and no signing in. Capture, transcription, and search "
+        + "keep working on this Mac, and anything waiting to upload stays queued until you turn this "
+        + "off. It does not restrict Claude: the MCP tools still read what was captured here, so "
+        + "whatever you ask Claude about still reaches Anthropic."
+
     /// Bumped whenever the provider says something changed, which is what re-reads the recorders.
     @State private var shortcutGeneration = 0
     @State private var recording: ShortcutAction?
@@ -96,11 +107,32 @@ struct SettingsGeneralPane: View {
 
                 SettingsRowDivider()
 
+                // The subtitle is the promise, so it names exactly what stops and what that costs.
+                // It used to advertise "telemetry, update checks, and remote favicon requests" —
+                // update checks do not exist in this build, telemetry never leaves this Mac in the
+                // first place (`Support/Telemetry.swift`), and meanwhile the app went on uploading
+                // the contents of the user's screen every sixty seconds. Every clause below is now
+                // enforced in code by `Backend/NetworkEgress.swift`, and all of it is immediate:
+                // there is nothing left here that waits for a relaunch.
+                //
+                // **It no longer opens with "Stops all network access", because that was false.**
+                // What the switch is enforced against is this app's own remote clients — the seven
+                // cases of `NetworkEgress.Client` — plus the single remote client living inside the
+                // MCP server, `OmiBackend`, which `ContextMCPKit/Airgap.swift` suppresses in that
+                // separate process. What it is *not* enforced against, deliberately, is that same
+                // server's local tools: `recall`, `screen`, `activity` and the rest read this Mac's
+                // own capture database, and `Airgap.swift` states the reason — suppressing them
+                // "costs a tool its account half and never its answer". So a user with the switch
+                // on who asks Claude what they were working on gets an answer assembled from OCR'd
+                // screen text, and Claude carries that text to Anthropic as part of the conversation
+                // the user opened. That is the product behaving as designed. A subtitle that claimed
+                // no network access while it happened was the defect, so the last sentence says it
+                // outright instead of leaving the user to infer it — the switch bounds what *this
+                // app* sends on its own initiative, not what Claude sends when asked.
                 SettingsRow(
                     icon: "airplane",
                     title: "Airgap Mode",
-                    subtitle: "Suppresses telemetry, update checks, and remote favicon requests. "
-                        + "Favicons stop immediately; the rest takes effect after relaunch."
+                    subtitle: Self.airgapSubtitle
                 ) {
                     Toggle(
                         "",
@@ -225,7 +257,7 @@ struct ShortcutRecorderField: View {
             Button(action: beginRecording) {
                 Text(label)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(isCleared ? Ink.tertiary : Ink.primary)
+                    .foregroundStyle(isCleared ? Ink.secondary : Ink.primary)
                     .frame(minWidth: 62)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -243,7 +275,7 @@ struct ShortcutRecorderField: View {
             Button(action: clear) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 11))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
             }
             .buttonStyle(.plain)
             .opacity(isCleared ? 0 : 1)

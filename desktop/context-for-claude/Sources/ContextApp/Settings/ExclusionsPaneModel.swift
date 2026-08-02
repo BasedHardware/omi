@@ -116,14 +116,72 @@ struct ExclusionsPaneModel: Equatable {
     /// Copy for `I39`.
     ///
     /// Written against what `PrivateBrowsing` can actually prove. The reference says "Works across all
-    /// supported browsers", which for us would be an overclaim in two directions at once: Safari marks
-    /// a private window nowhere in its title so it cannot be detected at all, and the markers
-    /// (`Incognito`, `InPrivate`, `Private Browsing`) are the English strings, so a localised Chrome
-    /// is invisible too. Naming the browsers it does work for is both more useful and true.
+    /// supported browsers", which for us would be an overclaim in two directions at once: some
+    /// browsers mark a private window nowhere in the title so they cannot be detected at all, and the
+    /// markers (`Incognito`, `InPrivate`, `Private Browsing`) are the English strings, so a localised
+    /// Chrome is invisible too. Naming the browsers it does work for is both more useful and true.
     static let privateTabsTitle = "Exclude Private Tabs"
-    static let privateTabsSubtitle =
-        "Skips Chrome, Edge, Brave, Arc and Firefox private windows, recognised from the window title. "
-        + "Safari private windows cannot be detected, and the check only recognises English titles."
+
+    /// The browsers whose private windows this genuinely catches: they append an English marker from
+    /// ``PrivateBrowsing/titleMarkers`` to the window title.
+    static let privateBrowsingDetectableBrowsers = ["Chrome", "Edge", "Brave", "Firefox"]
+
+    /// The browsers whose private windows this cannot catch, because their window titles carry no
+    /// browser chrome for a marker to appear in.
+    ///
+    /// **Arc is here on measurement, not assumption.** It was listed as detectable, and it never was:
+    /// across 925 Arc frames in the real database on this machine the window title is the bare page
+    /// title — `Context for Claude`, `Anthropic`, `LinkedIn`, `(9) Home / X` — with no browser name,
+    /// no window state and therefore no marker any string in `titleMarkers` could ever match. The one
+    /// row that matched `Arc` at all matched inside the word "Archit". `OpenExternally` reached the
+    /// same conclusion about the same titles from the other direction. Safari is here for the reason
+    /// `PrivateBrowsing` already documents.
+    static let privateBrowsingUndetectableBrowsers = ["Arc", "Safari"]
+
+    static var privateTabsSubtitle: String {
+        "Skips \(sentenceList(privateBrowsingDetectableBrowsers)) private windows, recognised from the "
+            + "window title. \(sentenceList(privateBrowsingUndetectableBrowsers)) private windows cannot "
+            + "be detected — their titles carry no marker to recognise — and the check only recognises "
+            + "English titles."
+    }
+
+    /// What this pane does and does not cover, stated where the user is choosing.
+    ///
+    /// An exclusion suppresses the *screen* side of capture and only that: `ScreenWatcher` is the one
+    /// caller of `ExclusionEngine.admit`/`revalidate`, and everything behind that ticket — the
+    /// screenshot, its OCR, the window title and the accessibility text — is dropped together. No
+    /// audio path consults the engine at all (`MicCapture` and `SystemAudioCapture` never ask it), so
+    /// a user who excludes their therapy portal and keeps talking is still being transcribed. A
+    /// privacy pane that leaves that to be inferred is the kind of omission the exclusion is being
+    /// made to prevent. The one control that does stop audio is named, so the note is actionable
+    /// rather than only a caveat.
+    ///
+    /// **Apps and sites are not refused at the same point, and the note says so.** It used to claim
+    /// that for both "its window title, on-screen text and accessibility text are never read", which
+    /// is true of an app and cannot be true of a site. An app is judged from the bundle identifier
+    /// alone, by the `exclusionReason` call `ScreenWatcher` makes *before* it resolves a window — so
+    /// nothing about it is ever read. A site has no identity until something is read: `ScreenWatcher`
+    /// scrubs the window title and walks the accessibility tree for the page address, and only then
+    /// asks `admit`. In the ordinary case that is enough and the frame is refused before any
+    /// screenshot is taken. In the fallback case — no address readable, which `websiteReason` tier 3
+    /// exists for — the screenshot is captured, OCR'd and the accessibility text collected first, and
+    /// `revalidate` refuses on that evidence at the write barrier; `discard` then unlinks the image
+    /// that was already written. Nothing excluded is stored either way, which is the promise worth
+    /// making, and it is a smaller promise than "never read".
+    static let scopeNote =
+        "Exclusions cover screen capture. An excluded app is refused before anything about it is "
+        + "read — no screenshot, no window title, no text. An excluded site has to be recognised "
+        + "before it can be refused, so the window title and page address are read first; when "
+        + "neither identifies the site, the screenshot and its text are read too, then deleted "
+        + "instead of stored. Audio is not covered: microphone and system-audio transcription keep "
+        + "running for an excluded app. Pause from the menu bar to stop everything."
+
+    /// `A, B and C` — Oxford-less, which is how the rest of this pane's copy reads.
+    private static func sentenceList(_ items: [String]) -> String {
+        guard let last = items.last else { return "" }
+        guard items.count > 1 else { return last }
+        return items.dropLast().joined(separator: ", ") + " and " + last
+    }
 
     // MARK: - Derivation
 

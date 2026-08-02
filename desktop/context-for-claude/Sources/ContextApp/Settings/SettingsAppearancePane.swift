@@ -2,15 +2,19 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// Appearance: theme, accent, dock icon — then the Timeline section with a live preview above the four
+/// Appearance: theme, dock icon — then the Timeline section with a live preview above the four
 /// control toggles.
 ///
 /// **System is the default and means "follow the system".** Phase 0 of `docs/first-run-experience.md`
 /// deleted a forced `NSApp.appearance = .aqua` precisely because pinning the process rendered a light
 /// popover inside a dark system menu. This pane does not undo that: `System` installs no appearance at
-/// all, and Light/Dark are explicit overrides of it. The accent dropdown's default likewise means
-/// `NSColor.controlAccentColor` — the user's own accent — and named colours are opt-in. Purple is not
-/// offered (`INV-UI-1`); see `AccentChoice`.
+/// all, and Light/Dark are explicit overrides of it.
+///
+/// **There is no accent row.** It only ever reached `.tint()` on this one window, so it recoloured the
+/// switches on this pane and nothing else — every structural accent in the app reads `Ink.accent` — and
+/// its default resolved to the machine's `controlAccentColor`, which paints the window purple on a Mac
+/// set to Purple. That is `INV-UI-1` (`docs/product/invariants/brand-ui.md`) violated by the default
+/// value of a control that did nothing, so the control is gone rather than narrowed.
 struct SettingsAppearancePane: View {
     @ObservedObject var store: SettingsStore
 
@@ -33,27 +37,6 @@ struct SettingsAppearancePane: View {
                     }
                 }
                 .padding(12)
-
-                SettingsRowDivider()
-
-                SettingsRow(
-                    icon: "paintpalette",
-                    title: "Accent Color",
-                    subtitle: "Primary UI highlight color"
-                ) {
-                    Picker("", selection: $store.accent) {
-                        ForEach(AccentChoice.allCases) { choice in
-                            HStack(spacing: 6) {
-                                Circle().fill(choice.color).frame(width: 9, height: 9)
-                                Text(choice.title)
-                            }
-                            .tag(choice)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
-                    .controlSize(.small)
-                }
 
                 SettingsRowDivider()
 
@@ -314,7 +297,7 @@ struct TimelinePreview: View {
             // to load, and the one thing this tile must not do is look broken.
             Text("Preview")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Ink.tertiary)
+                .foregroundStyle(Ink.secondary)
 
             if controls.segmentNavigation {
                 HStack {
@@ -352,7 +335,7 @@ struct TimelinePreview: View {
             Image(systemName: "calendar").font(.system(size: 8, weight: .medium))
             Text("Jul 29, 2026 at 10:21 PM").font(.system(size: 9, weight: .medium))
             Image(systemName: "chevron.down").font(.system(size: 6, weight: .bold))
-                .foregroundStyle(Ink.tertiary)
+                .foregroundStyle(Ink.secondary)
         }
         .foregroundStyle(Ink.primary)
         .padding(.horizontal, 7)

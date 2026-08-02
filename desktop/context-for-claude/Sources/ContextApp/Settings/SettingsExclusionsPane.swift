@@ -70,6 +70,16 @@ struct SettingsExclusionsPane: View {
         VStack(spacing: 10) {
             controlsBar
 
+            // What an exclusion does and does not stop. Above the list rather than in a section
+            // footnote because it qualifies every row on both tabs, and because a user reads it
+            // before choosing rather than after.
+            Text(ExclusionsPaneModel.scopeNote)
+                .font(.system(size: 11))
+                .foregroundStyle(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SettingsMetrics.paneHorizontalPadding)
+
             if case .failedClosed(let cause) = model.health {
                 healthBanner(cause)
             }
@@ -141,7 +151,7 @@ struct SettingsExclusionsPane: View {
             HStack(spacing: 5) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 10))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                 TextField(tab.searchPlaceholder, text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
@@ -152,7 +162,7 @@ struct SettingsExclusionsPane: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 10))
-                            .foregroundStyle(Ink.tertiary)
+                            .foregroundStyle(Ink.secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -234,19 +244,17 @@ struct SettingsExclusionsPane: View {
                     subtitle: category.subtitle,
                     isChecked: isExcluded,
                     isEnabled: true,
-                    disclosure: memberCount > 0,
+                    // The whole label area and the chevron expand the category now. The only
+                    // affordance used to be the icon tile — the chevron the user aims at was drawn
+                    // by `SettingsCheckRow` and had no gesture at all — so the row looked expandable
+                    // everywhere and was expandable in one 26 pt square nothing pointed at.
+                    onDisclosure: memberCount > 0 ? { toggleExpansion(id) } : nil,
                     isExpanded: expandedCategories.contains(id)
                 ) {
                     Sound.effect(.click)
                     ExclusionEngine.shared.setCategory(category, excluded: !isExcluded)
                 } leading: {
-                    Button {
-                        toggleExpansion(id)
-                    } label: {
-                        SettingsIconTile(symbol: category.kind == .apps ? "key.horizontal" : "building.columns")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(memberCount == 0)
+                    SettingsIconTile(symbol: category.kind == .apps ? "key.horizontal" : "building.columns")
                 }
 
                 if expandedCategories.contains(id) {

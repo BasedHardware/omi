@@ -34,7 +34,19 @@ struct SettingsCapturePane: View {
                 SettingsRow(
                     icon: "moon.zzz",
                     title: "Pause on Inactivity",
-                    subtitle: "Automatically suspends recording when no keyboard or mouse activity is detected."
+                    // "Suspends recording" was too broad: the idle check lives in `ScreenWatcher`, so
+                    // it stops screenshots and nothing else — microphone and system-audio
+                    // transcription keep running while the machine is idle, which is a room the user
+                    // has walked away from still being recorded. Say which half stops.
+                    //
+                    // The threshold is named because "inactivity" alone is not a decision anyone can
+                    // make: five minutes is short enough that a video watched hands-off stops being
+                    // captured, and a user cannot weigh that against an unquantified word. Read from
+                    // `CaptureActivity.idleThreshold` rather than typed as "five" so the sentence
+                    // cannot outlive the constant it describes.
+                    subtitle: "Stops taking screenshots after \(Self.idleMinutes) minutes with no "
+                        + "keyboard or mouse activity, until you touch the machine again. "
+                        + "Audio transcription is not affected."
                 ) {
                     Toggle(
                         "",
@@ -86,6 +98,10 @@ struct SettingsCapturePane: View {
             }
         }
     }
+
+    /// `CaptureActivity.idleThreshold` in whole minutes, for the row above. Whole minutes because the
+    /// constant is 300s exactly and a fractional figure in a settings row would be noise.
+    private static var idleMinutes: Int { Int(CaptureActivity.idleThreshold / 60) }
 
     /// A four-step ladder rather than four unrelated glyphs, so the tiles read as one scale.
     private func symbol(for quality: CaptureQuality) -> String {

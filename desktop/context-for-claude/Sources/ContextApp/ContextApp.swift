@@ -98,6 +98,14 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            // …and "both rebindable" is only true because of this line. Settings' two recorders talk
+            // to a `ShortcutBindingProvider`, and the one the window falls back to keeps its chords
+            // in a dictionary that registers nothing — recording against it reports success and
+            // changes no shortcut. Assigned here rather than inside `SettingsWindow` so it sits
+            // beside `start(…)`: the same singleton that was just armed is the one the recorder
+            // writes through, which is what makes a rebind take effect without a relaunch.
+            SettingsWindow.shortcutProvider = LiveShortcutBindings()
+
             if !UserDefaults.standard.bool(forKey: Self.onboardedKey) {
                 OnboardingWindow.present()
             }

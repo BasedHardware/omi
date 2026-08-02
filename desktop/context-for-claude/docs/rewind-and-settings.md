@@ -76,9 +76,36 @@ a control on the right (toggle, dropdown, button, shortcut recorder, or radio).
 | Open Search Shortcut | Record a keyboard shortcut. Clear it to use ⌘⌘⇧. | shortcut recorder, showing `⌘⌘⇧` |
 | Codex also uses ⌘⌘ | Coast and Codex both use ⌘⌘. | accent button: `Switch Codex to ⌥⌥` |
 | Launch on Login | Whether the app automatically starts when you sign in to your computer. | toggle, on |
-| Airgap Mode | Suppresses telemetry, update checks, and remote favicon requests. Takes effect after relaunch. | toggle, off |
+| Airgap Mode | *(Coast's own copy: "Suppresses telemetry, update checks, and remote favicon requests. Takes effect after relaunch.")* | toggle, off |
 | Updates | Version 1.0 (131000) | button: `Update Now` |
 | Automatic Updates | Check for new versions automatically. | toggle, on |
+
+**Do not ship Coast's Airgap copy.** It was transcribed from their screenshot and describes *their*
+app; taken as our requirement it produced a switch that suppressed favicon requests and nothing else
+while the app went on POSTing OCR'd screen text every sixty seconds. Two of its three clauses are
+wrong for us either way: this package has no updater to check, and our telemetry
+(`Sources/ContextApp/Support/Telemetry.swift`) never leaves the Mac, so there is nothing for the
+switch to suppress. "Takes effect after relaunch" is wrong in any app for a privacy control.
+
+Ours means **this app stops reaching the network.** Screen-activity sync, conversation upload,
+cloud transcription, MCP key provisioning, favicon fetches, *and* sign-in all stop, immediately and
+without a relaunch, enforced in one place (`Sources/ContextApp/Backend/NetworkEgress.swift`) that
+every remote client asks, plus the app's sibling process — `Sources/ContextMCPKit/Airgap.swift`
+suppresses `OmiBackend`, the MCP server's one remote client. Nothing is discarded to achieve it —
+captures keep accumulating locally and queued uploads stay queued — and nothing that works offline
+stops working: capture, OCR, local transcription, search, and the local MCP tools are unaffected.
+Sign-in is refused rather than excepted, and says so on screen, because a session obtained under
+Airgap Mode could not be used for anything. Guard tests:
+`Tests/ContextAppTests/AirgapEgressTests.swift`, `Tests/ContextMCPKitTests/AirgapTests.swift`.
+
+**Do not write "stops all network access" on screen.** That is what the row said until the honesty
+pass, and it is false in a way a user cannot discover. "The local MCP tools are unaffected" above is
+the enforcement decision — `Airgap.swift` argues it, and it is right — but it has a consequence the
+subtitle owes the user: with the switch on, asking Claude what you were working on returns OCR'd
+screen text through `recall`/`screen`/`activity`, and Claude carries that text to Anthropic as part
+of the conversation. The switch bounds what *this app* sends unprompted; it does not bound what
+Claude sends when asked. The shipped subtitle now says so in its last clause, and
+`SettingsTests.testTheAirgapSubtitleClaimsOnlyWhatIsEnforced` holds it there.
 
 The conflict row appears **only when a real conflict is detected** — it is a live check against other
 installed agent tools' hotkeys, not a static row. Rewrite the copy for our app, keeping the shape.
@@ -140,6 +167,25 @@ named colors are opt-in. Never offer purple (`INV-UI-1`).
 
 Footnote under the tiles: "Higher quality preserves more detail but uses more disk space."
 
+**Pause on Inactivity ships off, not on.** The reference's default is `on`, and taking it would have
+been a silent behaviour change rather than a default: the preference had no reader anywhere in the
+package until `ScreenWatcher.tick` gained one, so no install has a stored value and every existing
+user would have fallen through to it — losing screen capture five minutes after their last keystroke
+(`CaptureActivity.idleThreshold`) on the strength of a switch they never touched. It is invisible on
+top of that: the idle branch calls `noteSkip`, which logs, and never reaches `Engine.pausedReason`,
+so the menu bar goes on reading *Listening* while nothing is captured. **Flipping the default back to
+`on` is gated on making that paused state visible in the menu bar** — until then `off` is the only
+default that does not change an existing user's capture without them asking. Guard:
+`SettingsTests.testPauseOnInactivityIsOffUntilTheUserAsksForIt`.
+
+**Capture Quality tiles state their consequence, not only their cost.** "Higher quality … uses more
+disk space" is a disk remark; on this app it is also a *retention* one, because `Limit` deletes
+oldest-first once the frames folder passes the threshold (`Engine.scheduleRetentionSweep`). So the
+same threshold holds materially less history at Best Quality than at Default, and the Best Quality
+subtitle says so. No byte figure or multiplier is quoted anywhere in this copy: the measured table in
+`ScreenWatcher` was taken at one downscale, and reusing it at another would be a fabricated
+measurement.
+
 ### Storage
 - A large header showing real measured usage — reference reads `709.7 MB` with `no storage limits set`
   beside it. Must be measured from our own data directory, never estimated.
@@ -179,6 +225,16 @@ Exclusions are a **privacy control**, so correctness matters more here than anyw
 - An exclusion must take effect immediately, not at next relaunch, and must apply to frames already
   queued but not yet written.
 - Favicon fetching for the website list is a network request per domain — it must be suppressed by
-  Airgap Mode, which is exactly what that setting promises.
+  Airgap Mode, which is exactly what that setting promises. It is not the *only* thing that setting
+  promises: see the General pane above. A favicon-only airgap was the shipped bug, not the spec.
+- **An excluded app and an excluded site are not refused at the same point, and the scope note has to
+  say which.** An app is judged from its bundle identifier before `ScreenWatcher` resolves a window,
+  so nothing about it is read. A site has no identity until something is read: the window title is
+  scrubbed and the accessibility tree walked for a page address before `admit` is asked, and in
+  `websiteReason`'s third tier — no address readable at all — the screenshot is captured and OCR'd
+  first, with `revalidate` refusing at the write barrier and `discard` unlinking the image already on
+  disk. The promise worth making is *nothing excluded is stored*, which is smaller than "never read".
+  Copy that claimed the larger one shipped; guard:
+  `SettingsTests.testExclusionsScopeNoteDoesNotClaimAnExcludedSiteIsNeverRead`.
 - There is existing redaction/policy machinery at `Sources/ContextCore/Redaction.swift` and
   `Sources/ContextCore/Policy.swift`. Exclusions belong there, behind tests, not as a UI-layer filter.

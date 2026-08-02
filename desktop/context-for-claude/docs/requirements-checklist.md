@@ -87,7 +87,7 @@ distrust.
 | G9 | Coach mark: "Find specific moments — click Search All" | DONE — anchored under the pill's real accessibility frame (pill (182,171) 118×25 → card x=31, y=211, arrow up), and the step advances because the real pill was pressed |
 | G10 | A popup appears after clicking Search All | PARTIAL — the popup is the tutorial's own query card, not `SearchBarWindow`. Deliberate: that bar routes the question to Claude, which is the later proof beat, while G12 needs a memory row and a timestamp this app can show. Moving G10/G11 onto the real bar would move G12's gate to `QueryStamp` |
 | G11 | Coach mark: type a query and press Enter | DONE — real field, submits on Return, runs `Queries.recall` against the real store; an empty result keeps the step and says so |
-| G12 | Result appears, then "Found it! Tap the memory to jump back to that exact moment" | DONE, merged into G11's card — typing and finding are one continuous idea, and the mark's line changes from "Type a word you saw." to "There it is." *because* there was a real hit. `search` no longer advances the step itself: the gate is `!results.isEmpty` and the Continue button is the only thing that reads it, so the check that says "something was really found" is the one the button runs. A second search that finds nothing takes the line back off the card (`testAFailedSecondSearchWithdrawsTheFoundItLine`) |
+| G12 | Result appears, then "Found it! Tap the memory to jump back to that exact moment" | DONE, merged into G11's card — typing and finding are one continuous idea, and the mark's line changes from "Type something you just looked at." to "There it is." *because* there was a real hit. `search` no longer advances the step itself: the gate is `!results.isEmpty` and the Continue button is the only thing that reads it, so the check that says "something was really found" is the one the button runs. A second search that finds nothing takes the line back off the card (`testAFailedSecondSearchWithdrawsTheFoundItLine`) |
 | G13 | "You are all set" completion card | DONE — the sentence comes from `TutorialOutcome`, an enum with exactly one route to `.caught` (the gate's own condition). A waived frame beat closes on an admission, and a *waived screen grant* now closes on `.cannotSee` — the flag the old code set and never read. `testTheSuccessSentenceIsReachableOnlyFromARealFrameCount` drives every other route and asserts none of them reaches the success sentence |
 | G14 | "One more thing — you can always find it up here in the menu bar" | DONE — the `menuBar` step calls `MenuBarSpotlight.show()`, and teardown hides it |
 | G15 | Shortcut-conflict notification with a one-click remedy | PARTIAL — `ShortcutConflicts.scan` reads other tools' real config files and the row renders only on evidence. On THIS machine the reference's "Codex also uses ⌘⌘" is FALSE (those Codex commands ship with no default binding and no keymap file exists), so no row appears — correct, but unexercised against a real conflict. The one-click write is deliberately NOT implemented: Codex rewrites keybindings.json wholesale from an in-memory keymap, so writing it under a running Codex leaves the old chord live and the button would report success while the conflict persisted |
@@ -134,9 +134,9 @@ title, a grey subtitle, and a right-hand control.
 ### I-Agents
 | # | Requirement | Status |
 |---|---|---|
-| I8 | Route to Agent dropdown | MISSING |
+| I8 | Route to Agent dropdown | DROPPED (J7) — it shipped and did nothing. `context.settings.agentRoute` had zero readers: no code anywhere branched on it. Its subtitle advertised "With ⌘↵ you can send your query directly to your agents", and there is no ⌘↵ — `SearchBarView` handles `insertNewline:` and `cancelOperation:` only — routing to the path divergence 3 below deliberately removed. Row, `AgentRoute`, the key, the default and the published property are all gone; a stored value decodes to nothing and is ignored. The real routing decision is I9 |
 | I9 | Claude target dropdown: Claude app (prompt pre-filled) or the `claude` CLI in Terminal | DONE — `ClaudeRouter`, chosen in `SettingsStore.claudeTarget` and read by `ClaudeHandoff`. **This is no longer the search bar's setting**: the bar answers in-app from this app's own indexes and never routes to Claude. What the dropdown steers is the tutorial's guided hand-off — `Claude App` opens `claude://claude.ai/new?q=` (a *new chat*, prompt pre-filled and not sent; the `code/new` variant was verified by watching text land in the Code composer unsent), `Terminal` runs the `claude` CLI with the question in whichever app owns `.command` files. Pre-fill is genuinely supported, not a fallback; the clipboard branch happens only when nothing claims the scheme. The preference has exactly one home and one consumer — no `ClaudeRouter.preferredTarget` — and the row's subtitle is `ClaudeRouter.targetSubtitle`, so it describes what *this* Mac would really do for each option. `ClaudeHandoffTests.testTheHandoffRoutesToTheTargetChosenInSettings` pins both values of the dropdown |
-| I10 | Tip line about mentioning the app inside Claude Code/Codex/Cursor | MISSING |
+| I10 | Tip line about mentioning the app inside Claude Code/Codex/Cursor | DONE, narrowed — it now names **Claude Code and Claude Desktop only**. `ClaudeRegistrar` writes those two configs (`~/.claude.json`, `claude_desktop_config.json`) and nothing in this package writes a Codex or Cursor MCP entry, nor do we ship a CLI (I12), so naming them made two thirds of the sentence work the user would have had to do by hand without being told. Codex and Cursor remain in the I13 survey, which reports what is *installed* and claims nothing about integration |
 | I11 | An illustrative mock of an agent prompt box | MISSING |
 | I12 | CLI toggle installing a command to `~/.local/bin` | MISSING — decide whether we ship a CLI at all; our equivalent is the MCP registration |
 | I13 | Detected agent list (Claude, Codex, Cursor) with a green "Installed" pill | MISSING — detection must be real, with a not-installed state |
@@ -145,7 +145,7 @@ title, a grey subtitle, and a right-hand control.
 | # | Requirement | Status |
 |---|---|---|
 | I14 | Appearance: System / Light / Dark preview tiles, selected one ringed | MISSING |
-| I15 | Accent Colour dropdown with a colour dot | MISSING — default must mean `controlAccentColor`; NEVER offer purple (INV-UI-1) |
+| I15 | Accent Colour dropdown with a colour dot | DROPPED (J7, INV-UI-1) — **the requirement itself was wrong**, and it took shipping it to see why. Its only consumer was `.tint(store.accentColor)` on the Settings window, so picking a colour recoloured that window's switches and nothing else: every structural accent in the app reads `Ink.accent`, a fixed `systemBlue` chosen precisely so no machine can make it purple. And the requirement's own instruction — "default must mean `controlAccentColor`" — is the violation: on a Mac whose system accent is Purple, the *default* value of a control nobody touched painted the Settings window purple, which is exactly what `Ink.accent` refuses to do. A control that cannot do what it says and can only break the brand rule is deleted, not narrowed. `AccentChoice`, `Key.accent`, the published property and `accentColor` are gone; `Ink.accent` is the one accent, guarded by `InkAccentTests` over `BrandColourGuard` |
 | I16 | Show Dock Icon toggle | MISSING |
 | I17 | Timeline section with a LIVE preview reflecting the toggles below it | MISSING |
 | I18 | Open externally toggle + `↵` hint | MISSING |
@@ -166,9 +166,9 @@ title, a grey subtitle, and a right-hand control.
 | # | Requirement | Status |
 |---|---|---|
 | I27 | Large header with REAL measured usage and "no storage limits set" | MISSING |
-| I28 | Storage management radio group: Off / Compress / Limit | MISSING |
-| I29 | Off is the default: "Keep all your data. Forever." | MISSING |
-| I30 | Limit deletes oldest recordings — needs a threshold control AND an explicit confirmation; never reachable by one stray click | MISSING |
+| I28 | Storage management radio group: Off / Compress / Limit | PARTIAL by decision (J7) — **Off / Limit only. `Compress` is dropped.** It shipped with a red destructive confirmation warning that "the original detail cannot be recovered", and then did nothing whatsoever: the retention sweep tests `strategy == .limit`, and no re-encoder exists anywhere in this package. A destructive-role warning in front of a no-op is worse than a missing feature — it teaches the user that this app's warnings are noise, and the next one really does delete. Building the re-encoder is a capture-pipeline change, not a Settings one; if it is ever built the case comes back with it. A persisted `"compress"` decodes to nil in both readers and falls back to `off`, so no migration was needed |
+| I29 | Off is the default: "Keep all your data. Forever." | DONE — and it is the only strategy that destroys nothing |
+| I30 | Limit deletes oldest recordings — needs a threshold control AND an explicit confirmation; never reachable by one stray click | DONE, with two corrections the requirement did not anticipate. **(a) Limit is two bounds, not one.** `ContextStore.enforceRetention` prunes by age *and* by bytes, and `Engine.ensureStorage` starts the sweep with 30 days, so turning Limit on deletes everything older than a month even at a 200 GB threshold on an 8 GB disk. For a release, no string the user could read said so — undisclosed permanent deletion of their data. The radio row, the header caption, the threshold row and the confirmation now all state it, from one constant (`StorageLimit.retentionDays`), pinned by `testEveryStringDescribingLimitDisclosesTheAgePrune`. **(b) The confirmation was ordering-dependent.** Its `isPresented` setter called `cancelStorageChange()` on every dismissal, and SwiftUI may write that binding before running the tapped button's action — which nulled the `pending` that `confirmStorage()` promotes, so the deliberate second click silently did nothing. Cancelling is now only the explicit Cancel button; `testConfirmingSurvivesEitherOrderOfBindingWriteAndButtonAction` drives both orderings through the pane's real binding |
 
 ### I-Exclusions
 | # | Requirement | Status |
@@ -181,7 +181,7 @@ title, a grey subtitle, and a right-hand control.
 | I36 | Apps: All Applications, alphabetical, with icons | MISSING |
 | I37 | Websites: "Search or add domain" | MISSING (engine DONE) |
 | I38 | Websites: Banks category | MISSING (engine DONE) |
-| I39 | Websites: Exclude Private Tabs toggle | PARTIAL — Chromium/Edge/Firefox detected from title; **Safari cannot be detected at all**, so the copy must not overclaim |
+| I39 | Websites: Exclude Private Tabs toggle | PARTIAL — Chrome/Edge/Brave/Firefox detected from title; **Safari and Arc cannot be detected at all**, so the copy must not overclaim. Arc was listed as covered and never was: measured across 925 Arc frames in the real database, all 13 distinct window titles are the bare page title (`Anthropic`, `LinkedIn`, `(9) Home / X`) with no browser chrome, so no `PrivateBrowsing.titleMarkers` entry can ever match. The one row matching "Arc" matched inside "Archit". `OpenExternally` documents the same titles from the other direction. The sentence is now built from two named lists so a browser cannot be moved between them in prose alone |
 | I40 | Websites: Recently Recorded domains with favicons | MISSING — favicons are network requests and must obey Airgap Mode |
 
 ## J. Cross-cutting
@@ -213,5 +213,15 @@ These are decisions, not omissions. An audit should confirm each is still the ri
    first-run hand-off (I9) — and for the Settings row that steers it.
 4. **No second email capture** (E7); the Omi account already identifies the user.
 5. **Update controls omitted unless a real updater exists** (I7).
-6. **Safari private windows are not excludable** from the window title alone (I39); the seam exists
-   for AX to fill.
+6. **Safari *and Arc* private windows are not excludable** from the window title alone (I39); the
+   seam exists for AX to fill. Arc's titles carry no browser chrome at all — measured, not assumed.
+7. **Three reference controls are deleted rather than implemented** (I8 Route to Agent, I15 Accent
+   Colour, the Compress case of I28). Each had shipped as a control the user could operate that
+   changed nothing, and Compress said so behind a red destructive warning. J7 rules out controls that
+   cannot work, and it applies to controls that already exist as much as to ones not yet written: a
+   dropdown nobody reads is the same fabrication as a fake screenshot, just harder to notice.
+8. **Exclusions cover screen capture only.** `ScreenWatcher` is the sole caller of
+   `ExclusionEngine.admit`/`revalidate`; no audio source consults the engine. Excluding an app
+   suppresses its screenshots, OCR, window title and accessibility text and leaves microphone and
+   system-audio transcription running. The pane says so above the list — on a privacy surface, an
+   unstated boundary is the failure — and names Pause, which is what does stop audio.

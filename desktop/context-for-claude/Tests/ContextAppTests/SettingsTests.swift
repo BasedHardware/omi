@@ -8,9 +8,16 @@ import XCTest
 ///
 /// Nothing here asserts visual fidelity — that is what the screenshots in the PR are for. What is
 /// asserted is the set of properties a rendering bug cannot hide: that the destructive storage strategy
-/// cannot be reached without a second deliberate action, that the accent palette contains no purple,
-/// that a locked exclusion is undrawable as removable, and that "System" appearance means *no override*
-/// rather than a snapshot of whatever the system happened to be.
+/// cannot be reached without a second deliberate action *and cannot be lost to one either*, that every
+/// string describing that strategy discloses both of the bounds it enforces, that a locked exclusion is
+/// undrawable as removable, and that "System" appearance means *no override* rather than a snapshot of
+/// whatever the system happened to be.
+///
+/// The accent-palette tests that used to sit here are gone with the palette: the Appearance pane's
+/// accent dropdown reached nothing but `.tint()` on its own window and its default resolved to the
+/// machine's `controlAccentColor`, which is purple on a Mac set to purple. `INV-UI-1` is now carried
+/// entirely by `Ink.accent`, whose guard is `InkAccentTests` over the shared `BrandColourGuard`
+/// predicate — including that predicate's own regression test for `systemIndigo` and `systemPink`.
 final class SettingsTests: XCTestCase {
 
     /// A store with its own defaults suite and no reach into `NSApp`, so nothing here can leave a
@@ -52,74 +59,42 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(second.appearance, .dark)
     }
 
-    // MARK: - Accent (I15, INV-UI-1)
+    // MARK: - The brand-colour guard (INV-UI-1)
 
-    /// `INV-UI-1`: never purple, anywhere.
+    /// `BrandColour`'s own regression test: the colours the hue band it replaced let through.
     ///
-    /// Asserted on the resolved sRGB *pixel* rather than on the case names, because a future
-    /// maintainer renaming a case does not change what it paints — and through `BrandColour` rather
-    /// than through a band of hue degrees.
-    ///
-    /// The band this replaces was `hue >= 250 && hue <= 345`. It looked like a guard and was not one:
-    /// `systemIndigo` renders at 233.8° and slips under the lower bound, `systemPink` at 348.0° and
-    /// slips over the upper one, so the two colours nearest to being wrongly added were exactly the
-    /// two it could not see. It passed only because `AccentChoice` happens to ship neither — the same
-    /// failure the timeline palette shipped a violet through, with different constants.
-    /// `testTheAccentGuardRejectsTheColoursTheOldBandAdmitted` pins that both are now rejected.
-    ///
-    /// `.system` is excluded from the sweep and that is deliberate: it resolves to
-    /// `NSColor.controlAccentColor`, which is the accent the *user* chose in System Settings. If they
-    /// picked purple for their own Mac that is their decision, and overriding it would be the same
-    /// brand imposition Phase 0 removed. INV-UI-1 governs the colours this app ships, which is
-    /// `AccentChoice.named`.
-    func testAccentPaletteOffersNoPurple() {
-        XCTAssertFalse(AccentChoice.named.isEmpty)
-        for choice in AccentChoice.named {
-            guard let nsColor = choice.nsColor else {
-                XCTFail("\(choice.title) has no colour of its own")
-                continue
-            }
-            // A near-grey has no meaningful hue; Graphite is the one such choice, and `BrandColour`
-            // skips it on the same 0.15 saturation threshold this used to apply here by hand.
-            assertReadsOnBrand(nsColor, choice.title)
-        }
-    }
-
-    /// The accent guard's own regression test: the colours the band it replaced let through.
-    ///
-    /// A brand guard and a blind brand guard are indistinguishable while the list is clean, which is
-    /// how the band survived. This is the difference between them.
-    func testTheAccentGuardRejectsTheColoursTheOldBandAdmitted() {
+    /// **Kept although the accent palette it was written beside is gone.** The band was
+    /// `hue >= 250 && hue <= 345`, and it was blind in both directions: `systemIndigo` renders at
+    /// 233.8° and slips under the lower bound, `systemPink` at 348.0° and slips over the upper one.
+    /// A brand guard and a blind brand guard are indistinguishable while nothing tries either colour,
+    /// which is how the band survived a whole release — so this is the only test in the suite that
+    /// tells them apart, and deleting it with the palette would leave `BrandColour` unguarded against
+    /// exactly the two failures it was built for. It never referenced the palette: every value below
+    /// is a system colour.
+    func testTheBrandGuardRejectsTheColoursTheOldHueBandAdmitted() {
         // Both of these satisfied `hue >= 250 && hue <= 345` — indigo below it, pink above it.
         assertReadsOffBrand(.systemIndigo, "systemIndigo (233.8°)")
         assertReadsOffBrand(.systemPink, "systemPink (348.0°)")
         // The one the old band did catch, so the rebase is not a trade.
         assertReadsOffBrand(.systemPurple, "systemPurple (292.7°)")
 
-        // And everything the pane actually offers must stay offerable — including `systemRed`, which
-        // renders at 359.0° and is a degree inside the wedge's red edge. That is what
-        // `BrandColour.redEdgeTolerance` exists for, and this is the test that would fail if the
-        // tolerance were removed or the rule made symmetric.
-        let offered: [(String, NSColor)] = [
-            ("Azure", .systemBlue), ("Teal", .systemTeal), ("Green", .systemGreen),
-            ("Yellow", .systemYellow), ("Orange", .systemOrange), ("Red", .systemRed),
-            ("Graphite", .systemGray),
+        // And the far side: the warm colours the product does draw have to stay passable, including
+        // `systemRed`, which renders at 359.0° and is a degree inside the wedge's red edge. That is
+        // what `BrandColour.redEdgeTolerance` exists for, and this is the assertion that would fail
+        // if the tolerance were removed or the rule made symmetric.
+        let onBrand: [(String, NSColor)] = [
+            ("systemBlue", .systemBlue), ("systemTeal", .systemTeal), ("systemGreen", .systemGreen),
+            ("systemYellow", .systemYellow), ("systemOrange", .systemOrange), ("systemRed", .systemRed),
+            ("systemGray", .systemGray),
         ]
-        for (title, colour) in offered { assertReadsOnBrand(colour, title) }
+        for (title, colour) in onBrand { assertReadsOnBrand(colour, title) }
     }
 
-    /// The default accent must be the user's own, so that picking nothing changes nothing.
-    func testSystemAccentIsTheUsersOwn() {
-        XCTAssertNil(AccentChoice.system.nsColor, "System must not name a colour of its own")
-        XCTAssertFalse(AccentChoice.named.contains(.system))
-        for name in AccentChoice.allCases.map(\.title) {
-            let lower = name.lowercased()
-            XCTAssertFalse(lower.contains("purple"), "\(name) names a forbidden hue")
-            XCTAssertFalse(lower.contains("violet"), "\(name) names a forbidden hue")
-            XCTAssertFalse(lower.contains("magenta"), "\(name) names a forbidden hue")
-            XCTAssertFalse(lower.contains("pink"), "\(name) names a forbidden hue")
-        }
-    }
+    // No test here re-asserts that Settings does not read the machine's accent: deleting
+    // `AccentChoice` moves `Sources/ContextApp` to the end state `InkAccentTests` already sweeps for.
+    // Its `testNoUISourceReadsTheMachinesAccent` flags any file reading `controlAccentColor` outside
+    // `declaredAccentIntake`, and that allowlist's own documentation names an empty list as the goal.
+    // A second checker here would be the duplicate that guard was written to make unnecessary.
 
     // MARK: - Timeline controls (I17–I22)
 
@@ -180,15 +155,19 @@ final class SettingsTests: XCTestCase {
 
     // MARK: - Capture (I25)
 
-    func testCaptureQualitySubtitleDescribesTheSelectionAndDefaultMatchesCapture() {
+    /// The tiles are one scale, and each one's copy states its own number.
+    ///
+    /// **This deliberately no longer pins `standard.longestSide == 1600`.** That assertion was
+    /// written when capture hard-coded `ScreenPipeline.maxPixelSize` and `frameQuality`, and it
+    /// guarded the tile's copy against drifting from those constants. Both are gone: capture now
+    /// reads `quality.longestSide` and `quality.compressionQuality` from this same enum, so the
+    /// assertion had become the enum compared with itself — a literal restated in two files, which
+    /// fails only when someone edits both and passes whenever the product is wrong. The behavioural
+    /// guard that replaced it is `CapturePacingTests`, which encodes a synthetic screen through
+    /// `FrameImage` at every tile and asserts the stored pixels and the stored byte ordering. What is
+    /// left here is what this file is for: properties of the *copy*.
+    func testCaptureQualityTilesAreOneScaleAndEachStatesItsOwnResolution() {
         XCTAssertEqual(CaptureQuality.default, .standard)
-        // The `Default` tile must describe what capture actually does today, or the pane is claiming a
-        // setting that is not the setting. The two numbers are `ScreenPipeline.maxPixelSize` (1600) and
-        // `ScreenPipeline.frameQuality` (0.20) in `Sources/ContextApp/Capture/ScreenWatcher.swift`,
-        // pinned as literals here because that type is `private` to that file and cannot be imported.
-        // If capture retunes either, this fails and the tile's copy has to follow it.
-        XCTAssertEqual(CaptureQuality.standard.longestSide, 1600)
-        XCTAssertEqual(CaptureQuality.standard.compressionQuality, 0.20, accuracy: 0.0001)
 
         // Monotonic in both knobs, so the four tiles are one scale rather than four opinions.
         let ordered: [CaptureQuality] = [.best, .standard, .compact, .smallest]
@@ -202,6 +181,49 @@ final class SettingsTests: XCTestCase {
                 quality.subtitle.contains("\(quality.longestSide) px"),
                 "\(quality.title)'s subtitle must state the resolution it actually stores")
         }
+    }
+
+    /// The tile that costs history has to say so.
+    ///
+    /// `Best Quality` is ~2.25× the pixels of `Default` at nearly twice the encoder quality, and the
+    /// retention sweep deletes oldest-first the moment the frames folder passes the user's threshold
+    /// (`Engine.scheduleRetentionSweep` → `enforceRetention(olderThanDays:toFitBytes:)`). So picking
+    /// this tile shortens how much history a given Storage limit holds — a consequence "largest
+    /// files" does not convey, and the same omission the Storage strings were fixed for.
+    ///
+    /// A copy assertion, and it is a static tripwire rather than behavioural coverage: it proves the
+    /// sentence exists, not that the sweep obeys it. The sweep's own bounds are asserted in
+    /// `testEveryStringDescribingLimitDisclosesTheAgePrune` and in `ContextCoreTests`.
+    func testBestQualityDisclosesThatItShortensHistoryUnderAStorageLimit() {
+        let best = CaptureQuality.best.subtitle
+        XCTAssertTrue(
+            best.localizedCaseInsensitiveContains("limit"),
+            "Best Quality must name the setting its cost lands on: \(best)")
+        XCTAssertTrue(
+            best.localizedCaseInsensitiveContains("fewer days"),
+            "…and say what is lost, not only that files are larger: \(best)")
+    }
+
+    /// Pause on Inactivity must not change an existing user's capture on their behalf.
+    ///
+    /// `ScreenWatcher.tick` is the first reader this preference has ever had, so no install has a
+    /// stored value and every one of them lands on this default. Defaulting it on would stop screen
+    /// capture five minutes after the last keystroke for every user who never opened this pane —
+    /// and invisibly, because the idle branch only logs and never reaches `Engine.pausedReason`, so
+    /// the menu bar goes on reading *Listening*. This asserts the default that keeps their capture
+    /// exactly as it is today.
+    @MainActor
+    func testPauseOnInactivityIsOffUntilTheUserAsksForIt() {
+        XCTAssertFalse(
+            makeStore().pausesOnInactivity,
+            "a preference with no prior reader must not switch capture off for existing users")
+
+        // …and it is a real preference, not a constant: turning it on survives a relaunch.
+        let suite = "context.settings.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        SettingsStore(defaults: defaults, appliesToRunningApp: false).pausesOnInactivity = true
+        XCTAssertTrue(SettingsStore(defaults: defaults, appliesToRunningApp: false).pausesOnInactivity)
     }
 
     // MARK: - Storage (I27–I30)
@@ -238,15 +260,129 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(selection.isAwaitingConfirmation)
     }
 
-    /// Compress re-encodes lossily, so it is destructive too and gets the same gate.
+    /// Every strategy that destroys data is gated, and there is at least one — a vacuous sweep passes.
+    ///
+    /// The group used to have a third option, `Compress`, whose red destructive confirmation warned
+    /// that "the original detail cannot be recovered" and which then did nothing at all: the retention
+    /// sweep tests `strategy == .limit` and no re-encoder exists in this package. It is deleted rather
+    /// than implemented, because a destructive-role warning in front of a no-op trains the user to
+    /// dismiss the next one, and the next one really does delete.
     func testEveryDataDestroyingStrategyIsGated() {
-        for strategy in StorageStrategy.allCases where strategy.destroysExistingData {
+        let destructive = StorageStrategy.allCases.filter(\.destroysExistingData)
+        XCTAssertEqual(destructive, [.limit], "Limit is the one strategy that touches what is on disk")
+        for strategy in destructive {
             var selection = StorageSelection()
             XCTAssertEqual(
                 selection.select(strategy), .awaitingConfirmation,
                 "\(strategy.title) destroys data and must not commit on one click")
         }
         XCTAssertFalse(StorageStrategy.off.destroysExistingData)
+    }
+
+    /// A persisted `"compress"` from a build that offered it must not survive as anything.
+    ///
+    /// Both readers decode the raw value — `SettingsStore.init` here and `EngineStore`'s sweep — and
+    /// both fall back to `off` on a value they do not know, so the retired case degrades to "delete
+    /// nothing". That is why the deletion needed no migration, and this is the assertion that says so.
+    @MainActor
+    func testARetiredStrategyOnDiskFallsBackToOff() {
+        let suite = "context.settings.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        defaults.set("compress", forKey: "context.settings.storageStrategy")
+
+        XCTAssertNil(StorageStrategy(rawValue: "compress"))
+        let store = SettingsStore(defaults: defaults, appliesToRunningApp: false)
+        XCTAssertEqual(store.storage.strategy, .off)
+    }
+
+    /// **The age prune is disclosed wherever Limit is described.**
+    ///
+    /// `Limit` is two bounds, not one: `ContextStore.enforceRetention` prunes by age *and* by bytes,
+    /// and `Engine.ensureStorage` starts the sweep with 30 days. For a whole release no string the
+    /// user could read mentioned age at all, so setting a 200 GB threshold with 8 GB on disk read as
+    /// "nothing will be deleted" while everything older than a month was deleted anyway — permanent,
+    /// undisclosed loss of their data. Every surface that describes the strategy has to say it, which
+    /// is why all four are asserted here rather than only the confirmation.
+    @MainActor
+    func testEveryStringDescribingLimitDisclosesTheAgePrune() {
+        let store = makeStore()
+        let pane = SettingsStoragePane(store: store)
+        let days = "\(StorageLimit.retentionDays) days"
+
+        // While the choice is parked, the pane is drawing the confirmation about it.
+        store.selectStorage(.limit)
+        XCTAssertTrue(pane.confirmationPresentation.wrappedValue)
+        // Captured while pending, because both are empty once the choice is committed.
+        let confirmationBody = pane.confirmationMessage
+        var surfaces: [(String, String)] = [
+            ("the radio row", StorageStrategy.limit.subtitle),
+            ("the confirmation title", pane.confirmationTitle),
+            ("the confirmation body", confirmationBody),
+        ]
+
+        // And once it is in force the header caption is the line the user reads without opening
+        // anything, so it has to carry the same disclosure.
+        store.confirmStorage()
+        surfaces.append(("the header caption", store.storageLimitSummary))
+
+        for (surface, copy) in surfaces {
+            XCTAssertTrue(
+                copy.contains(days),
+                "\(surface) does not disclose that recordings older than \(days) are deleted: \(copy)")
+        }
+
+        // The body also has to say the threshold does not hold them, or a user reads two rules and
+        // assumes the larger one wins.
+        XCTAssertTrue(
+            confirmationBody.localizedCaseInsensitiveContains("whatever the threshold"),
+            "the confirmation must say a bigger threshold does not keep older recordings")
+        // Off promises the opposite and must keep promising it.
+        XCTAssertEqual(StorageStrategy.off.subtitle, "Keep all your data. Forever.")
+    }
+
+    /// `I30`'s other half: the confirmed choice must survive whichever order SwiftUI uses.
+    ///
+    /// The bug this pins: the dialog's `isPresented` setter called `cancelStorageChange()` on every
+    /// dismissal. SwiftUI is free to write that binding *before* it runs the tapped button's action,
+    /// and when it did, `cancel()` had already nulled the `pending` that `confirmStorage()` promotes —
+    /// so the user's deliberate second click returned `.unchanged` and silently did nothing. Both
+    /// orderings are driven here through the pane's real binding, because a binding built inside
+    /// `body` is unreachable from a test, which is why this was invisible to one.
+    @MainActor
+    func testConfirmingSurvivesEitherOrderOfBindingWriteAndButtonAction() {
+        // Ordering A: SwiftUI writes `isPresented = false` first, then runs the action.
+        let first = makeStore()
+        let firstPane = SettingsStoragePane(store: first)
+        first.selectStorage(.limit)
+        XCTAssertTrue(firstPane.confirmationPresentation.wrappedValue)
+        firstPane.confirmationPresentation.wrappedValue = false
+        first.confirmStorage()
+        XCTAssertEqual(first.storage.strategy, .limit, "the dismissal must not eat the pending choice")
+        XCTAssertFalse(firstPane.confirmationPresentation.wrappedValue)
+
+        // Ordering B: the action runs first, then the dismissal is written.
+        let second = makeStore()
+        let secondPane = SettingsStoragePane(store: second)
+        second.selectStorage(.limit)
+        second.confirmStorage()
+        secondPane.confirmationPresentation.wrappedValue = false
+        XCTAssertEqual(second.storage.strategy, .limit)
+        XCTAssertFalse(secondPane.confirmationPresentation.wrappedValue)
+    }
+
+    /// Cancelling is still one deliberate click, and it still puts the old strategy back.
+    @MainActor
+    func testTheCancelButtonIsWhatCancels() {
+        let store = makeStore()
+        let pane = SettingsStoragePane(store: store)
+        store.selectStorage(.limit)
+        XCTAssertEqual(store.storage.highlighted, .limit)
+
+        store.cancelStorageChange()
+        XCTAssertEqual(store.storage.strategy, .off)
+        XCTAssertEqual(store.storage.highlighted, .off)
+        XCTAssertFalse(pane.confirmationPresentation.wrappedValue, "the dialog closes with the pending")
     }
 
     @MainActor
@@ -473,17 +609,98 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(fromCategory?.isRemovable, false, "and they are not individually removable")
     }
 
-    /// `I39`: the copy must not overclaim. Safari genuinely cannot be detected, and the markers are
-    /// English-only, so the row has to say both.
+    /// `I39`: the copy must not overclaim. Some browsers genuinely cannot be detected, and the
+    /// markers are English-only, so the row has to say both.
     func testPrivateTabsCopyDoesNotOverclaim() {
         let copy = ExclusionsPaneModel.privateTabsSubtitle
-        XCTAssertTrue(
-            copy.contains("Safari"), "the one browser this cannot cover has to be named")
+        for browser in ExclusionsPaneModel.privateBrowsingUndetectableBrowsers {
+            XCTAssertTrue(copy.contains(browser), "a browser this cannot cover has to be named")
+        }
         XCTAssertTrue(copy.localizedCaseInsensitiveContains("cannot be detected"))
         XCTAssertTrue(copy.localizedCaseInsensitiveContains("English"))
         XCTAssertFalse(
             copy.localizedCaseInsensitiveContains("all supported browsers"),
             "the reference's blanket claim is false for us")
+    }
+
+    /// The bug this pins: **Arc was advertised as covered and never was.**
+    ///
+    /// The row said it skips "Chrome, Edge, Brave, Arc and Firefox" private windows, recognised from
+    /// the window title. Arc's window title is the bare page title — measured across 925 Arc frames in
+    /// the real database on this machine, every one of the 13 distinct titles is a page name
+    /// (`Anthropic`, `LinkedIn`, `(9) Home / X`) with no browser chrome in it at all, so not one of
+    /// `PrivateBrowsing.titleMarkers` can ever match. `OpenExternally` documents the same titles from
+    /// the other direction. A privacy control that names a browser it cannot see is worse than one
+    /// that admits the gap, because the user stops checking.
+    ///
+    /// The two lists are what the sentence is built from, so a future edit cannot move a browser
+    /// between them in prose only.
+    func testPrivateTabsNamesArcAsUndetectableRatherThanCovered() {
+        let detectable = ExclusionsPaneModel.privateBrowsingDetectableBrowsers
+        let undetectable = ExclusionsPaneModel.privateBrowsingUndetectableBrowsers
+        XCTAssertFalse(detectable.contains("Arc"), "no title marker can match an Arc window title")
+        XCTAssertFalse(detectable.contains("Safari"))
+        XCTAssertEqual(undetectable, ["Arc", "Safari"])
+        XCTAssertTrue(Set(detectable).isDisjoint(with: undetectable))
+
+        // The claim survives only while the markers really are English title substrings — if
+        // `PrivateBrowsing` ever gains a real per-browser signal, the lists have to be revisited
+        // rather than left as prose.
+        XCTAssertEqual(
+            PrivateBrowsing.classify(bundleID: "company.thebrowser.Browser", title: "Anthropic"),
+            .unknown,
+            "a real Arc title carries no evidence either way, which is why Arc cannot be listed")
+        XCTAssertEqual(
+            PrivateBrowsing.classify(bundleID: "com.google.Chrome", title: "Anthropic - Incognito"),
+            .privateBrowsing,
+            "and Chrome is listed because its title does carry the marker")
+    }
+
+    /// The pane has to say what an exclusion does *not* stop.
+    ///
+    /// `ScreenWatcher` is the only caller of `ExclusionEngine.admit`/`revalidate`; no audio source
+    /// consults the engine at all. So excluding an app suppresses its screenshots, OCR, window title
+    /// and accessibility text, and leaves microphone and system-audio transcription running — which
+    /// nothing on this pane used to mention. On a privacy pane that omission is the failure.
+    func testExclusionsScopeNoteSaysScreenOnlyAndNamesWhatStopsAudio() {
+        let note = ExclusionsPaneModel.scopeNote
+        XCTAssertTrue(note.localizedCaseInsensitiveContains("screen capture"))
+        XCTAssertTrue(
+            note.localizedCaseInsensitiveContains("audio is not covered"),
+            "the pane must state plainly that audio is outside exclusions: \(note)")
+        XCTAssertTrue(
+            note.localizedCaseInsensitiveContains("pause"),
+            "and name the control that does stop audio, or the caveat is not actionable")
+    }
+
+    /// …and it must not claim an excluded *site* is never read, because recognising one requires
+    /// reading it.
+    ///
+    /// The two verdicts are taken at different points and the difference is the user's to know. An
+    /// app is refused by the `exclusionReason` call `ScreenWatcher` makes from the bundle identifier
+    /// alone, before it resolves a window — nothing about it is read. A site has no identity until
+    /// something is read: the window title is scrubbed and the accessibility tree walked for a page
+    /// address before `admit` is asked, and in `websiteReason`'s third tier — no address readable at
+    /// all — the screenshot is taken and OCR'd first, with `revalidate` refusing at the write barrier
+    /// and `discard` unlinking the image already on disk. Nothing excluded is *stored* either way,
+    /// and that is the promise the note is now allowed to make.
+    ///
+    /// A copy assertion, so a static tripwire: the behaviour it describes is covered by
+    /// `ContextCoreTests/ExclusionsTests`, not here.
+    func testExclusionsScopeNoteDoesNotClaimAnExcludedSiteIsNeverRead() {
+        let note = ExclusionsPaneModel.scopeNote
+        XCTAssertFalse(
+            note.localizedCaseInsensitiveContains("never read"),
+            "an excluded site's title, address and text are read in order to recognise it: \(note)")
+        XCTAssertTrue(
+            note.localizedCaseInsensitiveContains("app is refused before"),
+            "the note must still make the stronger promise for apps, where it is true: \(note)")
+        XCTAssertTrue(
+            note.localizedCaseInsensitiveContains("recognised"),
+            "and say why a site is read at all: \(note)")
+        XCTAssertTrue(
+            note.localizedCaseInsensitiveContains("deleted instead of stored"),
+            "and that what was read is discarded rather than kept: \(note)")
     }
 
     /// The Private Browsing switch is a setting, not a list entry, so a search for a domain must not
@@ -533,6 +750,42 @@ final class SettingsTests: XCTestCase {
         engine.setAirgapMode(true)
         XCTAssertEqual(engine.faviconFetch(for: "anthropic.com"), .suppressed(.airgapMode))
         XCTAssertFalse(engine.isFaviconFetchAllowed)
+    }
+
+    /// The Airgap row must not claim more than `NetworkEgress` enforces.
+    ///
+    /// It opened with "Stops all network access", and that was false in a way the user could not
+    /// discover: the switch is enforced against this app's seven `NetworkEgress.Client` cases and
+    /// against `OmiBackend` inside the MCP server, and against nothing else. The MCP server's local
+    /// tools are ungated on purpose — `ContextMCPKit/Airgap.swift` states the reason — so with the
+    /// switch on, asking Claude what you were working on returns OCR'd screen text and Claude carries
+    /// it to Anthropic. That is the product working; the sentence claiming otherwise was the defect.
+    ///
+    /// A copy assertion, so a static tripwire. The enforcement it describes is behavioural elsewhere:
+    /// `AirgapEgressTests` for this app's clients, `ContextMCPKitTests/AirgapTests` for the server's.
+    func testTheAirgapSubtitleClaimsOnlyWhatIsEnforced() {
+        let subtitle = SettingsGeneralPane.airgapSubtitle
+        XCTAssertFalse(
+            subtitle.localizedCaseInsensitiveContains("all network access"),
+            "the MCP tools still read local capture on request, so this is not all network access")
+        XCTAssertTrue(
+            subtitle.localizedCaseInsensitiveContains("this app"),
+            "the subject of the promise is this app, and the sentence has to say so: \(subtitle)")
+        XCTAssertTrue(
+            subtitle.localizedCaseInsensitiveContains("mcp"),
+            "and it has to name what is still reachable: \(subtitle)")
+        XCTAssertTrue(
+            subtitle.localizedCaseInsensitiveContains("anthropic"),
+            "and where that goes, which is the part a user cannot infer: \(subtitle)")
+
+        // The clauses that *are* enforced stay named, or the row understates instead. Each maps to a
+        // `NetworkEgress.Client` case: conversationUpload/screenActivitySync, listenSocket, the
+        // engine's favicon gate, and signIn.
+        for promise in ["uploads", "cloud transcription", "favicon", "signing in", "queued"] {
+            XCTAssertTrue(
+                subtitle.localizedCaseInsensitiveContains(promise),
+                "the subtitle dropped an enforced clause: \(promise)")
+        }
     }
 
     // MARK: - Agents (I9, I13)
