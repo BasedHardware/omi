@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -983,22 +984,58 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
     else:
         dispatcher_text = dispatcher.read_text(encoding="utf-8")
         dispatcher_script = ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
-        dispatcher_source = dispatcher_text
-        if dispatcher_script.exists():
-            dispatcher_source += "\n" + dispatcher_script.read_text(encoding="utf-8")
-        required_dispatcher = (
-            "  push:\n"
-            "    branches: [main]\n"
-            "    paths: ['app/**']\n"
-            "  schedule:\n"
-            "    - cron: '0 */3 * * *'\n"
-            "  workflow_dispatch:\n"
-        )
-        if required_dispatcher not in dispatcher_text or "cancel-in-progress: true" not in dispatcher_text:
-            errors.append("mobile internal build dispatcher must trigger on main app/** pushes and cancel stale runs")
-        for workflow_id in ("ios-internal-auto", "android-internal-auto"):
-            if workflow_id not in dispatcher_source:
-                errors.append(f"mobile internal build dispatcher is missing {workflow_id}")
+        try:
+            workflow = yaml.load(dispatcher_text, Loader=yaml.BaseLoader)
+        except yaml.YAMLError as exc:
+            errors.append(f"mobile internal build dispatcher is not valid YAML: {exc}")
+            workflow = None
+        if not isinstance(workflow, dict):
+            errors.append("mobile internal build dispatcher must be a YAML mapping")
+        else:
+            triggers = workflow.get("on")
+            if not isinstance(triggers, dict):
+                errors.append("mobile internal build dispatcher must declare push, schedule, and workflow_dispatch triggers")
+            else:
+                push = triggers.get("push")
+                if not isinstance(push, dict) or push.get("branches") != ["main"] or push.get("paths") != ["app/**"]:
+                    errors.append("mobile internal build dispatcher must trigger on main app/** pushes")
+                schedule = triggers.get("schedule")
+                if not isinstance(schedule, list) or schedule != [{"cron": "0 */3 * * *"}]:
+                    errors.append("mobile internal build dispatcher must retain its three-hour schedule")
+                if "workflow_dispatch" not in triggers:
+                    errors.append("mobile internal build dispatcher must retain workflow_dispatch")
+            concurrency = workflow.get("concurrency")
+            if not isinstance(concurrency, dict) or concurrency.get("group") != "mobile-internal-build":
+                errors.append("mobile internal build dispatcher must use the mobile-internal-build concurrency group")
+            elif concurrency.get("cancel-in-progress") != "false":
+                errors.append("mobile internal build dispatcher must not cancel an in-progress sequential dispatch")
+            jobs = workflow.get("jobs")
+            dispatch_job = jobs.get("dispatch") if isinstance(jobs, dict) else None
+            steps = dispatch_job.get("steps") if isinstance(dispatch_job, dict) else None
+            runs = [step.get("run", "") for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+            if not any("python3 .github/scripts/dispatch_mobile_internal_builds.py" in run for run in runs):
+                errors.append("mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py")
+
+        if not dispatcher_script.exists():
+            errors.append("mobile internal build dispatcher script is missing")
+        else:
+            try:
+                script_tree = ast.parse(dispatcher_script.read_text(encoding="utf-8"), filename=str(dispatcher_script))
+            except (OSError, SyntaxError) as exc:
+                errors.append(f"mobile internal build dispatcher script is not valid Python: {exc}")
+            else:
+                workflow_values = None
+                for node in script_tree.body:
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "MOBILE_WORKFLOWS" for target in node.targets
+                    ):
+                        try:
+                            workflow_values = ast.literal_eval(node.value)
+                        except (ValueError, TypeError):
+                            workflow_values = None
+                        break
+                if workflow_values != ("ios-internal-auto", "android-internal-auto"):
+                    errors.append("mobile internal build dispatcher script must declare both Codemagic mobile workflows")
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")

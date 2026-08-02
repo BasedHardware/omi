@@ -332,6 +332,9 @@ def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str
     dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
     dispatcher.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
     _mutate(dispatcher, old, new)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return GUARDS.check_mobile_codemagic_release_triggers()
@@ -414,13 +417,53 @@ def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lan
         ("    branches: [main]\n", "    branches: [release]\n"),
         ("    paths: ['app/**']\n", "    paths: ['desktop/**']\n"),
         ("    - cron: '0 */3 * * *'\n", "    - cron: '0 */4 * * *'\n"),
-        ("cancel-in-progress: true", "cancel-in-progress: false"),
+        ("cancel-in-progress: false", "cancel-in-progress: true"),
     ),
 )
 def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
     errors = _mobile_trigger_errors_after(tmp_path, monkeypatch, old, new)
 
-    assert any("mobile internal build dispatcher" in error for error in errors), errors
+    assert any(
+        "main app/** pushes" in error
+        or "three-hour schedule" in error
+        or "workflow_dispatch" in error
+        or "must not cancel" in error
+        for error in errors
+    ), errors
+
+
+def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher, "python3 .github/scripts/dispatch_mobile_internal_builds.py", "python3 .github/scripts/other_dispatcher.py")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert errors == ["mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py"], errors
+
+
+def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher_script, 'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")', 'MOBILE_WORKFLOWS = ("ios-internal-auto",)')
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert errors == ["mobile internal build dispatcher script must declare both Codemagic mobile workflows"], errors
 
 
 @pytest.mark.parametrize(
