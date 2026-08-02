@@ -7,7 +7,7 @@ exact same shapes without cross-importing each other (routers must never
 import from other routers).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from datetime import datetime, timezone
 
