@@ -86,6 +86,7 @@ offending tool result but does not currently gate the agent's subsequent tool ca
 | --- | --- | --- |
 | `OMI_SECURITY_POSTURE` | `auto` | `dangerous` disables screening; `auto` screens external content; `strict` skips the classifier because everything inbound is already distrusted. Unset or unparseable values fall back to `auto`. |
 | `OMI_SECURITY_SCREEN_TIMEOUT_SECONDS` | `8.0` | Per-classifier-call deadline. Non-positive or unparseable values fall back to the default. |
+| `OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS` | `15.0` | Total deadline for screening all content chunks, including retries and backoff. Non-positive or unparseable values fall back to the default. |
 
 ## Bounds
 
