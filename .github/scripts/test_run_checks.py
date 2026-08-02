@@ -568,6 +568,13 @@ esac
         for lane in ("local", "ci"):
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
+        for path in (
+            ".github/workflows/mobile_internal_build.yml",
+            ".github/scripts/dispatch_mobile_internal_builds.py",
+            ".github/scripts/test_dispatch_mobile_internal_builds.py",
+            "codemagic.yaml",
+        ):
+            self.assertIn(check, resolve_checks(manifest, [path], "ci"))
 
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:

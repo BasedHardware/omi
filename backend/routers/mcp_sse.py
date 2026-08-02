@@ -1461,7 +1461,10 @@ def _validate_authorize_request(
         raise ValueError("Invalid resource")
     if not mcp_oauth_db.validate_pkce_challenge(code_challenge, code_challenge_method):
         raise ValueError("PKCE S256 is required")
-    requested_scope = " ".join(item for item in (scope or "").split() if item not in mcp_oauth_db.RETIRED_SCOPES)
+    requested_tokens = (scope or "").split()
+    requested_scope = " ".join(item for item in requested_tokens if item not in mcp_oauth_db.RETIRED_SCOPES)
+    if scope and requested_tokens and not requested_scope:
+        raise ValueError("No supported scopes requested")
     scopes = mcp_oauth_db.normalize_scopes(requested_scope or None, client)
     return client, scopes
 

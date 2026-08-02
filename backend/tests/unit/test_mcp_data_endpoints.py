@@ -398,6 +398,32 @@ def test_authorize_request_filters_retired_scope_for_legacy_connector():
     normalize_scopes.assert_called_once_with('memories.read', client)
 
 
+def test_authorize_request_rejects_retired_only_scope_for_legacy_connector():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+    ):
+        with pytest.raises(ValueError, match='No supported scopes requested'):
+            sse._validate_authorize_request(
+                'code',
+                'omi-chatgpt-prod',
+                'https://chatgpt.com/connector_platform_oauth_redirect',
+                sse.MCP_RESOURCE_URL,
+                'screen_activity.read',
+                'a' * 64,
+                'S256',
+            )
+
+
 def test_authorize_request_rejects_legacy_omi_client_id():
     with patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=None):
         with pytest.raises(ValueError, match='Unknown OAuth client'):
