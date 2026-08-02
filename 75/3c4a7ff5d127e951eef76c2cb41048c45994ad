@@ -1,0 +1,96 @@
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_56918216f0e901::t_48dec356ce438f 19-24
+  s_56918216f0e901::t_0491ab72c534b3 332-339
+  s_56918216f0e901::t_67ec134ed1f0e1 232-235
+  s_56918216f0e901::t_764540b3ffe9c6 422-436
+  s_56918216f0e901::t_979a48ec285938 470,472-476,478-490,495-510,512-516
+  s_56918216f0e901::t_b1a0d002f3cbee 661-680,682,684-689,691-699,701
+  s_56918216f0e901::t_474f6f5755b183 887-915
+  s_56918216f0e901::t_809070a2f38bdd 299-304
+  s_56918216f0e901::t_dbd43f44ec4370 133-145,147-151
+  s_56918216f0e901::t_7616a3c50831d1 815-821
+  s_56918216f0e901::t_623f553a62d5c3 55-57,60
+  s_56918216f0e901::t_2f9aff0eca7bf3 491-494
+  s_56918216f0e901::t_4f4c96acd1d05a 970-983
+  s_56918216f0e901::t_99880457ab27ab 185-188
+  s_56918216f0e901::t_b2c72f6ee434b5 951,954-959
+desktop/context-for-claude/Sources/ContextApp/Tutorial/Tutorial.swift
+  s_56918216f0e901::t_c5fcac348de44d 31-35,37-47
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_56918216f0e901::t_a98ee3833e2585 27-40,53-55
+  s_56918216f0e901::t_2b3432154ad174 288-362
+  s_56918216f0e901::t_6dc07aa82e3fc7 155-158
+  s_56918216f0e901::t_55ab20bc775234 235-244,246
+  s_56918216f0e901::t_169f60b645fbeb 192-200
+  s_56918216f0e901::t_825cebab33d689 363
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_56918216f0e901::t_78bcee51a31739 32-65,76-77
+  s_56918216f0e901::t_f087f613bb7102 98-107,268
+  s_56918216f0e901::t_76fd1f411683a7 66-75
+  s_56918216f0e901::t_d168e7c368f683 146-155
+  s_56918216f0e901::t_e364225101ea38 183-223,228-233,242-267,269
+  s_56918216f0e901::t_34e01dc67f3a5e 270
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialOverlay.swift
+  s_56918216f0e901::t_86d8fe84e8bc57 195,197-198
+  s_56918216f0e901::t_f8bcc8d984d31a 196
+  s_56918216f0e901::t_b9985f0e61afe4 314-342
+  s_56918216f0e901::t_71b78a9ab93b52 343-345
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_56918216f0e901::t_13080aa8e9ea16 123-124
+  s_56918216f0e901::t_4801e54ffe56ca 178-182,184,190-269
+  s_56918216f0e901::t_7384b8fd84a21a 168-171
+  s_56918216f0e901::t_27a52eeecec58a 33-36,38-41
+  s_56918216f0e901::t_a44b85865f7c72 270
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_56918216f0e901::t_ce9a3dd19fd19d 432-436
+  s_56918216f0e901::t_d2ff12f7dca6d1 450-454
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialStep.swift
+  s_56918216f0e901::t_4a39d8f0e68fb8 103-106
+  s_56918216f0e901::t_20b87de8e281f5 86,89
+  s_56918216f0e901::t_9efcbde2ecda81 256-258
+  s_56918216f0e901::t_2530cac6cc1096 151-162
+  s_56918216f0e901::t_c58a18b83f0f30 215-229
+  s_56918216f0e901::t_db7085fef5e4c7 176-181,184
+  s_56918216f0e901::t_2581f7d8bfd4bf 33-34,36-37
+  s_56918216f0e901::t_1aa44ddebd49e2 239-241
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_56918216f0e901::t_e19908a73f8fd9 329-347,349
+  s_56918216f0e901::t_eedef5aaa99cfc 4-14
+  s_56918216f0e901::t_083d0b3a2d1d5f 187-207
+  s_56918216f0e901::t_68197d0c87cd23 100-103
+  s_56918216f0e901::t_3e8dbd21fbdebc 262-264,270,274-278
+  s_56918216f0e901::t_d49be1523dbbc0 186
+  s_56918216f0e901::t_ad12108b4d7be9 348
+  s_56918216f0e901::t_3be00ce178a208 350-351
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialTargets.swift
+  s_56918216f0e901::t_ac270a20e7131e 20-24
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_56918216f0e901::t_887ffb6f551d3b 228-240
+  s_56918216f0e901::t_bb9b4f8e575558 200-206
+  s_56918216f0e901::t_924d7cb7758f9c 287-290,293-294
+  s_56918216f0e901::t_57fc0343322e68 308
+  s_56918216f0e901::t_e43548d247beac 33-34
+  s_56918216f0e901::t_52e15240d981c6 334-351
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_56918216f0e901::t_bf7891594f1ca2 773-864
+desktop/context-for-claude/Tests/ContextAppTests/TutorialRenderHarness.swift
+  s_56918216f0e901::t_3b425e9192ff5f 15-21,30,40,52,54,68-72,74-76,78-92,94-98,101-102,104-109,112-113,115-120,123-124,126-130,134-138,142-146,282-283,285-288,293,296-323,325,327-333,347-351,353
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_56918216f0e901::t_70af31dbffea43 35-40,84-87,124-134,171-195,222-224,226-228,486-488,490-492,577-630,632,638,641,646,652,655,658,664,671,674-675,680-682,687-693,695,698-699,704,706,711-733,739-743,745-798,1223,1350-1353,1357,1375-1378,1859-1863,1866,1870,1872,1874-1897,1900,1902-1906,1908-1909,1911,1919-1941,1943-1961
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "753c4a7ff5d127e951eef76c2cb41048c45994ad",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
