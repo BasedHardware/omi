@@ -1,9 +1,8 @@
-#
 # Legacy backend routes missing route-policy manifest entries.
 # Remove keys from this file as routes get reviewed and added to the manifest.
 # This file is a ratchet for issue #8959. CI allows these pre-existing
-# added without a matching backend/route_policy_manifest.yaml entry.
 # missing entries while failing when a new registered backend route is
+# added without a matching backend/route_policy_manifest.yaml entry.
 backend-main:http:DELETE:/v1/action-items/{action_item_id}
 backend-main:http:DELETE:/v1/advice/{advice_id}
 backend-main:http:DELETE:/v1/announcements/{announcement_id}
