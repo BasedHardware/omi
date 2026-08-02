@@ -22,6 +22,8 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_provider.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcripts_page.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -346,6 +348,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
+                          if (!convoProvider.showDailySummaries)
+                            Consumer<CloudflareTranscriptProvider>(
+                              builder: (context, provider, _) {
+                                if (!provider.enabled) return const SizedBox.shrink();
+                                return IconButton(
+                                  key: const Key('cloudflare_transcripts_entry'),
+                                  tooltip: context.l10n.transcriptTab,
+                                  icon: const Icon(Icons.subject_outlined),
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(builder: (_) => const CloudflareTranscriptsPage()),
+                                  ),
+                                );
+                              },
+                            ),
                         ],
                       ),
                     ),

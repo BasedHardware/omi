@@ -272,3 +272,7 @@ htmlcov/
 
 # pnpm store
 .pnpm-store/
+.vibepro/*
+!.vibepro/config.json
+.vibepro-store/
+.worktrees/vibepro/

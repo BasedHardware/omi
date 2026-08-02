@@ -1,0 +1,89 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_api.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_configuration.dart';
+
+void main() {
+  const token = 'test-token-that-must-not-appear-in-errors';
+  const configuration = CloudflareTranscriptConfiguration(
+    workerUrl: 'https://worker.example.test/base/',
+    token: token,
+  );
+
+  test('lists every cursor page with bearer authorization', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.queryParameters['cursor'] == null) {
+        return http.Response('{"sessions":[{"id":"one","status":"ready"}],"next_cursor":"page-2"}', 200);
+      }
+      return http.Response('{"sessions":[{"id":"two","status":"ready"}]}', 200);
+    });
+    final api = CloudflareTranscriptHttpApi(configuration: configuration, client: client);
+
+    final sessions = await api.listSessions(limit: 20);
+
+    expect(sessions.map((session) => session.id), ['one', 'two']);
+    expect(requests.map((request) => request.url.toString()), [
+      'https://worker.example.test/base/v1/transcript-sessions?limit=20',
+      'https://worker.example.test/base/v1/transcript-sessions?limit=20&cursor=page-2',
+    ]);
+    expect(requests.first.headers['authorization'], 'Bearer $token');
+  });
+
+  test('sorts transcript chunks by sequence', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient(
+        (_) async => http.Response(
+          '{"session":{"id":"session/one","status":"ready"},"chunks":['
+          '{"sequence":2,"text":"second"},{"sequence":1,"text":"first"}]}',
+          200,
+        ),
+      ),
+    );
+
+    final transcript = await api.getTranscript('session/one');
+
+    expect(transcript.fullText, 'first\nsecond');
+  });
+
+  test('refuses non-loopback HTTP Worker URLs', () {
+    const configuration = CloudflareTranscriptConfiguration(workerUrl: 'http://worker.example.test', token: token);
+
+    expect(() => configuration.baseUri, throwsA(isA<CloudflareTranscriptConfigurationException>()));
+  });
+
+  test('refuses credentials and query values embedded in the Worker URL', () {
+    const configuration = CloudflareTranscriptConfiguration(
+      workerUrl: 'https://credential@worker.example.test/?token=not-allowed',
+      token: token,
+    );
+
+    expect(() => configuration.baseUri, throwsA(isA<CloudflareTranscriptConfigurationException>()));
+  });
+
+  test('Worker failures and timeouts do not expose the bearer token', () async {
+    final failingApi = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('not relevant', 401)),
+    );
+    final timeoutApi = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) => Completer<http.Response>().future),
+      timeout: Duration.zero,
+    );
+
+    await expectLater(
+      failingApi.listSessions(),
+      throwsA(predicate((Object error) => !error.toString().contains(token))),
+    );
+    await expectLater(
+      timeoutApi.listSessions(),
+      throwsA(predicate((Object error) => !error.toString().contains(token))),
+    );
+  });
+}
