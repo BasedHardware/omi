@@ -543,12 +543,33 @@ enum MemoryBankConnector {
   private static func ensureOpenClawSoulNote(workspace: URL) throws -> Bool {
     let url = workspace.appendingPathComponent("SOUL.md")
     var soul = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    if soul.contains(marker) { return false }
+    let updatedSoul = upsertSoulBlock(openClawSoulBlock(), in: soul)
+    if !updatedSoul.changed { return false }
+    soul = updatedSoul.content
     if !soul.isEmpty && !soul.hasSuffix("\n") { soul += "\n" }
-    soul += "\n" + openClawSoulBlock() + "\n"
     let isSymlink = (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil
     try soul.write(to: url, atomically: !isSymlink, encoding: .utf8)
     return true
+  }
+
+  private static func upsertSoulBlock(_ block: String, in soul: String) -> (content: String, changed: Bool) {
+    let startMarker = "<!-- \(marker) -->"
+    let endMarker = "<!-- /\(marker) -->"
+    let normalizedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let start = soul.range(of: startMarker),
+      let end = soul.range(of: endMarker, range: start.upperBound..<soul.endIndex)
+    {
+      let blockEnd = end.upperBound
+      let existingBlock = String(soul[start.lowerBound..<blockEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard existingBlock != normalizedBlock else { return (soul, false) }
+      var updated = soul
+      updated.replaceSubrange(start.lowerBound..<blockEnd, with: normalizedBlock)
+      return (updated, true)
+    }
+    var updated = soul
+    if !updated.isEmpty && !updated.hasSuffix("\n") { updated += "\n" }
+    updated += "\n" + normalizedBlock + "\n"
+    return (updated, true)
   }
 
   private static func displayPath(for url: URL) -> String {
@@ -640,9 +661,10 @@ enum MemoryBankConnector {
     let fm = FileManager.default
     let url = hermesDir.appendingPathComponent("SOUL.md")
     var soul = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    if soul.contains(marker) { return false }
+    let updatedSoul = upsertSoulBlock(hermesSoulBlock(), in: soul)
+    if !updatedSoul.changed { return false }
+    soul = updatedSoul.content
     if !soul.isEmpty && !soul.hasSuffix("\n") { soul += "\n" }
-    soul += "\n" + hermesSoulBlock() + "\n"
     let isSymlink = (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil
     try soul.write(to: url, atomically: !isSymlink, encoding: .utf8)
     return true

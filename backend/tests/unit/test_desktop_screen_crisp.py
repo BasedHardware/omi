@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
-import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from routers import desktop_screen_crisp
