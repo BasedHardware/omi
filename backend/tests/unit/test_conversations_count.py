@@ -1,9 +1,11 @@
 """Tests for get_conversations_count logic and /v1/conversations/count endpoint.
 
-The DB function is tested inline against a module-local MagicMock ``mock_db``; the
-test never imports ``database.*`` (it only reads production source via ``open()`` for
-the parity assertions), so no import-time stubbing is required. The inline copy is
-kept hermetic and fast; ``test_source_matches_implementation`` guards against drift.
+The DB function is exercised through the neutral document-store port: a ``_CountCaptureStore``
+(a ``FakeDocumentStore`` whose ``count()`` returns a scripted value and records the neutral
+filters it saw) is injected at the ``_store`` seam (ADR-0002/ADR-0028). This drives the real
+``database.conversations.get_conversations_count`` — no inline copy to drift, so no source-scrape
+tripwire. The router-level tests still read production source via ``open()`` for registration
+parity assertions.
 """
 
 import os
@@ -61,6 +63,20 @@ class TestConversationsCount:
             ('status', 'in', ['processing', 'completed']),
         ]
 
+    def test_count_composes_sources_and_statuses(self, monkeypatch):
+        store = self._seed(monkeypatch, 3)
+
+        result = conversations_db.get_conversations_count(
+            'uid1', statuses=['processing', 'completed'], sources=['omi']
+        )
+
+        assert result == 3
+        assert self._filters(store) == [
+            ('discarded', '==', False),
+            ('source', '==', 'omi'),
+            ('status', 'in', ['processing', 'completed']),
+        ]
+
     def test_count_include_discarded_skips_filter(self, monkeypatch):
         store = self._seed(monkeypatch, 55)
 
@@ -87,7 +103,7 @@ class TestConversationsCount:
 
         result = conversations_db.get_conversations_count('uid1', include_discarded=True, statuses=['processing'])
         assert result == 20
-        assert self._filters(store) == [('status', 'in', ['processing'])]
+        assert self._filters(store) == [('status', '==', 'processing')]
 
     def test_count_applies_list_filter_parity(self, monkeypatch):
         store = self._seed(monkeypatch, 3)
@@ -104,7 +120,7 @@ class TestConversationsCount:
         assert result == 3
         assert self._filters(store) == [
             ('discarded', '==', False),
-            ('status', 'in', ['completed']),
+            ('status', '==', 'completed'),
             ('folder_id', '==', 'folder-a'),
             ('starred', '==', False),
             ('created_at', '>=', '2026-06-01T00:00:00Z'),
@@ -200,11 +216,11 @@ class TestConversationsCountRouteSource:
             source = f.read()
         assert 'sources=source_list' in source
 
-    def test_route_rejects_statuses_combined_with_sources(self):
+    def test_route_does_not_reject_statuses_combined_with_sources(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
         with open(source_path, encoding='utf-8') as f:
             source = f.read()
-        assert 'statuses and sources filters cannot be combined' in source
+        assert 'statuses and sources filters cannot be combined' not in source
 
     def test_route_echoes_sources_when_filtered(self):
         # Clients rely on the echo to distinguish a filtered count from an

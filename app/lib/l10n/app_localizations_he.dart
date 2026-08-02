@@ -9699,4 +9699,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => 'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
 }

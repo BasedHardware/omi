@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
+from config.canonical_memory_cohort import is_canonical_memory_user
 from database.read_boundary import MalformedDocError, parse_snapshot_strict, parse_snapshots
 from database.store import get_document_store
 from database.store.sentinels import Increment
@@ -13,7 +14,7 @@ from models.workstream_association import (
     RecurrenceInboxStatus,
     RecurrenceOutcomeKind,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 RECURRENCE_INBOX_COLLECTION = 'task_recurrence_inbox'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -46,7 +47,9 @@ def _control_path(uid: str) -> str:
     return f'users/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
 
 
-def _validate_generation(snapshot: Any, account_generation: int) -> None:
+def _validate_generation(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise RecurrenceGenerationMismatchError('canonical task intelligence is not enabled')
     if not snapshot.exists:
         control = TaskWorkflowControl()
     else:
@@ -56,8 +59,6 @@ def _validate_generation(snapshot: Any, account_generation: int) -> None:
             raise RecurrenceGenerationMismatchError('task workflow control is malformed') from error
     if control.account_generation != account_generation:
         raise RecurrenceGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise RecurrenceGenerationMismatchError('task workflow mode changed')
 
 
 def _from_snapshot(snapshot: Any) -> RecurrenceInboxReceipt:
@@ -84,7 +85,7 @@ def enqueue_recurrence_signal(
     now = datetime.now(timezone.utc)
 
     def apply(tx):
-        _validate_generation(tx.get(control_path), account_generation)
+        _validate_generation(tx.get(control_path), uid=uid, account_generation=account_generation)
         snapshot = tx.get(receipt_path)
         if snapshot.exists:
             stored = _from_snapshot(snapshot)
@@ -135,7 +136,7 @@ def complete_recurrence_receipt(
     control_path = _control_path(uid)
 
     def apply(tx):
-        _validate_generation(tx.get(control_path), account_generation)
+        _validate_generation(tx.get(control_path), uid=uid, account_generation=account_generation)
         snapshot = tx.get(receipt_path)
         if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:
             raise RecurrenceGenerationMismatchError('recurrence receipt generation mismatch')
@@ -164,7 +165,7 @@ def retry_recurrence_receipt(
     control_path = _control_path(uid)
 
     def apply(tx):
-        _validate_generation(tx.get(control_path), account_generation)
+        _validate_generation(tx.get(control_path), uid=uid, account_generation=account_generation)
         snapshot = tx.get(receipt_path)
         if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:
             raise RecurrenceGenerationMismatchError('recurrence receipt generation mismatch')

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 import database.task_intelligence_control as task_control_db
@@ -30,15 +32,25 @@ def test_fixture_setup_create_only_writes_the_minimal_control_document(monkeypat
     store = _install_store(monkeypatch)
 
     assert task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
-    assert store.get(_CONTROL_PATH).to_dict() == expected.model_dump(mode='json')
+    assert store.get(_CONTROL_PATH).to_dict() == expected.persisted_payload()
 
 
 def test_fixture_setup_is_idempotent_when_expected_control_already_exists(monkeypatch):
-    expected = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='json')
+    expected = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).persisted_payload()
     store = _install_store(monkeypatch, seed=expected)
 
     assert not task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
     assert store.get(_CONTROL_PATH).to_dict() == expected
+
+
+def test_fixture_setup_treats_a_legacy_control_without_the_ui_flag_as_the_default_off_state(monkeypatch):
+    seeded = {'workflow_mode': 'read', 'account_generation': 0}
+    store = _install_store(monkeypatch, seed=seeded)
+
+    assert not task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
+    assert store.get(_CONTROL_PATH).to_dict() == TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.read, account_generation=0
+    ).persisted_payload()
 
 
 def test_fixture_setup_preserves_differing_existing_control_and_fails_smoke(monkeypatch):
@@ -50,6 +62,18 @@ def test_fixture_setup_preserves_differing_existing_control_and_fails_smoke(monk
 
     # The pre-existing (differing) document is preserved untouched, never overwritten.
     assert store.get(_CONTROL_PATH).to_dict() == differing_control
+
+
+def test_fixture_setup_treats_malformed_existing_control_as_differing_without_overwrite(monkeypatch):
+    malformed_control = {'workflow_mode': 'read', 'account_generation': 0, 'unexpected_legacy_field': True}
+    store = _install_store(monkeypatch, seed=malformed_control)
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(task_control_db.DevelopmentSmokeFixtureConflictError, match='differing state'):
+            task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
+
+    fallback.assert_called_once()
+    assert store.get(_CONTROL_PATH).to_dict() == malformed_control
 
 
 def test_fixture_setup_fails_closed_without_a_development_runtime(monkeypatch):

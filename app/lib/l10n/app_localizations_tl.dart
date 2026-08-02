@@ -9864,4 +9864,7 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
 }

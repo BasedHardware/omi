@@ -9796,4 +9796,7 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
+
+  @override
+  String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
 }

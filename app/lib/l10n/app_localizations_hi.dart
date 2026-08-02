@@ -9753,4 +9753,7 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'उस माइक्रोफ़ोन से कनेक्ट नहीं हो सके। सुनिश्चित करें कि वह iPhone सेटिंग्स में कनेक्ट है।';
+
+  @override
+  String get syncStatusTooOld => 'सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता';
 }

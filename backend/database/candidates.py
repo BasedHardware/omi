@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
 
+from config.canonical_memory_cohort import is_canonical_memory_user
+
 import database.action_items as action_items_db
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from database.store import Filter, get_document_store
@@ -19,7 +21,7 @@ from models.candidate import (
     CandidateStatus,
     CandidateSubjectKind,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -132,14 +134,14 @@ def _task_control_path(uid: str) -> str:
     return f'users/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
 
 
-def _validate_write_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise CandidateConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise CandidateConflictError('Candidate writes are not enabled')
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
@@ -397,7 +399,7 @@ def create_candidate(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
 
         alias_snapshot = write_transaction.get(alias_path)
         if alias_snapshot.exists:
@@ -636,7 +638,7 @@ def resolve_task_candidate(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -779,15 +781,7 @@ def claim_candidate_integration_dispatch(
                 },
             )
             return None
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_path,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': claim_time,
-                },
-            )
+        if not is_canonical_memory_user(uid):
             return None
         if payload.get('status') in {'completed', 'suppressed'}:
             return None
@@ -842,16 +836,6 @@ def complete_candidate_integration_dispatch(
                 },
             )
             return False
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_path,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': completion_time,
-                },
-            )
-            return False
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
         write_transaction.update(
@@ -901,7 +885,7 @@ def resolve_candidate_without_mutation(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -958,7 +942,7 @@ def reconcile_migrated_candidate(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1024,7 +1008,7 @@ def claim_candidate_for_legacy_promotion(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = write_transaction.get(candidate_path)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1096,7 +1080,7 @@ def begin_candidate_legacy_promotion(
 
     def apply(write_transaction):
         control_snapshot = write_transaction.get(_task_control_path(uid))
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = write_transaction.get(candidate_path)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)

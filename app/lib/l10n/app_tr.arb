@@ -3028,6 +3028,7 @@
     "syncStatusWaiting": "Eşitleme bekleniyor",
     "syncStatusRetrying": "İşlenemedi — yeniden deneniyor",
     "syncStatusFailed": "Başarısız — Yeniden Dene'ye dokunun",
+    "syncStatusTooOld": "Eşitlemek için çok eski — Omi bunu kabul edemez",
     "syncStatusFileUnavailable": "Dosya kullanılamıyor",
     "syncStatusUploaded": "Yüklendi · Omi'de işleniyor",
     "noRecordingsYet": "Henüz kayıt yok",

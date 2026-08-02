@@ -9820,4 +9820,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
 }

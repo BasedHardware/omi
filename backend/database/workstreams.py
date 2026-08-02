@@ -12,13 +12,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
+from config.canonical_memory_cohort import is_canonical_memory_user
+
 import database.goals as goals_db
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from database.store import get_document_store
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
 from models.goal import GoalResponse, GoalStatus
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 from models.workstream import (
     ArtifactDescriptor,
     ArtifactDescriptorCreate,
@@ -194,7 +196,7 @@ def _begin_mutation(
     request_payload: Any,
 ) -> tuple[str, Optional[dict[str, Any]], str]:
     control_snapshot = tx.get(_control_path(uid))
-    _validate_control(control_snapshot, account_generation=account_generation)
+    _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
     receipt_path = _mutation_receipt_path(
         uid,
         operation=operation,
@@ -230,14 +232,14 @@ def _finish_mutation(
     )
 
 
-def _validate_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise WorkstreamConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise WorkstreamGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise WorkstreamConflictError('canonical workflow writes are disabled')
 
 
 def _assert_workstream_generation(snapshot: Any, *, account_generation: int) -> None:
@@ -487,7 +489,7 @@ def append_workstream_event(
 
     def apply(tx):
         control_snapshot = tx.get(_control_path(uid))
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         workstream_snapshot = tx.get(workstream_path)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
@@ -851,7 +853,7 @@ def resolve_workstream_candidate(
 
     def apply(tx):
         control_snapshot = tx.get(_control_path(uid))
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = tx.get(candidate_path)
         if not candidate_snapshot.exists:
             raise WorkstreamNotFoundError(candidate.candidate_id)
@@ -977,7 +979,7 @@ def resolve_work_intent(
 
     def apply(tx):
         control_snapshot = tx.get(_control_path(uid))
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = tx.get(receipt_path)
         if receipt_snapshot.exists:
             stored = _snapshot_dict(receipt_snapshot)
@@ -1166,7 +1168,7 @@ def import_task_goal_links(
 
     def reserve(tx):
         control_snapshot = tx.get(_control_path(uid))
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = tx.get(receipt_path)
         if receipt_snapshot.exists:
             receipt = _snapshot_dict(receipt_snapshot)
@@ -1195,7 +1197,7 @@ def import_task_goal_links(
 
         def apply(tx, index=index, link=link, task_path=task_path, goal_path=goal_path):
             control_snapshot = tx.get(_control_path(uid))
-            _validate_control(control_snapshot, account_generation=account_generation)
+            _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
             receipt_snapshot = tx.get(receipt_path)
             if not receipt_snapshot.exists:
                 raise WorkstreamConflictError('migration receipt disappeared')
@@ -1264,7 +1266,7 @@ def import_task_goal_links(
 
     def complete(tx):
         control_snapshot = tx.get(_control_path(uid))
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = tx.get(receipt_path)
         if not receipt_snapshot.exists:
             raise WorkstreamConflictError('migration receipt disappeared')

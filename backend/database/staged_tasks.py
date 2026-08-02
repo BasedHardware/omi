@@ -367,10 +367,13 @@ def restore_legacy_conversation_items(
     """Restore rows moved by the retired desktop conversation migration.
 
     Only active ``conversation_migration`` staged rows qualify. Each row is
-    restored with create-if-absent + delete, so an existing action item is never
-    overwritten: a concurrent create wins and the staged row is preserved for
-    manual inspection. Results are ordered by document id and cursor-paginated so
-    the client can finish a large recovery across requests.
+    restored inside a transaction with create-if-absent + delete, so an existing
+    action item is never overwritten (a concurrent create wins and the staged row
+    is preserved) and a staged row updated between the marker query and the delete
+    is not silently dropped — the transaction re-reads it and the store's
+    optimistic-concurrency retry aborts a stale delete. Results are ordered by
+    document id and cursor-paginated so the client can finish a large recovery
+    across requests.
     """
     if limit < 1:
         raise ValueError('limit must be positive')
@@ -399,27 +402,43 @@ def restore_legacy_conversation_items(
     restored = 0
     skipped_existing = 0
     for doc in page:
-        staged_row = doc.to_dict() or {}
-        # Belt-and-suspenders vs the filtered query: never restore an ordinary
-        # staged row even if a permissive fake or future refactor widens it.
-        if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
-            continue
+        staged_path = f'{staged_col}/{doc.id}'
+        action_path = f'{action_items_col}/{doc.id}'
 
-        action_item = dict(staged_row)
-        # ``id`` is document identity and ``source`` is the recovery marker, not
-        # original action-item data.
-        action_item.pop('id', None)
-        action_item.pop('source', None)
+        def _restore_one(tx, _staged_path=staged_path, _action_path=action_path):
+            # Re-read the staged row *inside* the transaction rather than trusting
+            # the page snapshot: a concurrent write (e.g. a score update) between
+            # the marker query and this delete is observed here, and the store's
+            # optimistic-concurrency retry aborts the delete if the row changed
+            # under us — so a mutated row is never silently dropped.
+            current = tx.get(_staged_path)
+            if not current.exists:
+                return False
+            row = current.to_dict() or {}
+            # Belt-and-suspenders vs the filtered query: never restore an ordinary
+            # staged row even if a permissive fake or future refactor widens it.
+            if row.get('source') != 'conversation_migration' or row.get('completed'):
+                return False
+
+            action_item = dict(row)
+            # ``id`` is document identity and ``source`` is the recovery marker, not
+            # original action-item data.
+            action_item.pop('id', None)
+            action_item.pop('source', None)
+
+            # create-if-absent: a current action item with this identity wins the
+            # race; ``errors.AlreadyExists`` propagates and the staged row is kept.
+            tx.create(_action_path, action_item)
+            tx.delete(_staged_path)
+            return True
 
         try:
-            # create-if-absent: a current action item with this identity wins the
-            # race; the staged row is preserved rather than deleted.
-            store.create(f'{action_items_col}/{doc.id}', action_item)
+            did_restore = store.run_transaction(_restore_one)
         except errors.AlreadyExists:
             skipped_existing += 1
             continue
-        store.delete(f'{staged_col}/{doc.id}')
-        restored += 1
+        if did_restore:
+            restored += 1
 
     return {
         'restored': restored,

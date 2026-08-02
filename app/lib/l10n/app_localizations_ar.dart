@@ -9714,4 +9714,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => 'تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'قديم جدًا للمزامنة — لا يمكن لـ Omi قبوله';
 }

@@ -162,6 +162,19 @@ void main() {
     expect(provider.hasTranscripts, true);
   });
 
+  test('active capture identity survives deletion of the first segment', () {
+    final provider = CaptureProvider();
+    provider.testSessionStartSeconds = 12345;
+    provider.segments = [_segment('first', 'one'), _segment('second', 'two')];
+
+    final captureIdentity = provider.activeCaptureSessionId;
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['first']));
+
+    expect(captureIdentity, 'live-12345');
+    expect(provider.activeCaptureSessionId, captureIdentity);
+    expect(provider.segments.single.id, 'second');
+  });
+
   group('metricsNotifyEnabled', () {
     test('defaults to not notifying on metrics update', () {
       final provider = CaptureProvider();

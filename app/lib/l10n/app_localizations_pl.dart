@@ -9801,4 +9801,7 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Nie udało się połączyć z tym mikrofonem. Upewnij się, że jest połączony w Ustawieniach iPhone\'a.';
+
+  @override
+  String get syncStatusTooOld => 'Zbyt stare, aby zsynchronizować — Omi nie może tego przyjąć';
 }

@@ -9720,4 +9720,7 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'เชื่อมต่อกับไมโครโฟนนั้นไม่ได้ ตรวจสอบว่าเชื่อมต่ออยู่ในการตั้งค่า iPhone';
+
+  @override
+  String get syncStatusTooOld => 'เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้';
 }

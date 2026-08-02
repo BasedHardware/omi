@@ -9794,4 +9794,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не вдалося підключитися до цього мікрофона. Переконайтеся, що його підключено в параметрах iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Занадто старий для синхронізації — Omi не може його прийняти';
 }

@@ -9801,4 +9801,7 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Kan geen verbinding maken met die microfoon. Controleer of deze verbonden is in de iPhone-instellingen.';
+
+  @override
+  String get syncStatusTooOld => 'Te oud om te synchroniseren — Omi kan deze niet accepteren';
 }

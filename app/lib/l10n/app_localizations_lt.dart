@@ -9791,4 +9791,7 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose.';
+
+  @override
+  String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
 }

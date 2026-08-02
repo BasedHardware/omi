@@ -583,9 +583,17 @@ def get_conversations_count(
     if not include_discarded:
         filters.append(('discarded', '==', False))
     if sources:
-        filters.append(('source', 'in', sources))
+        # Firestore allows only one disjunctive `in` filter per query, so a
+        # singleton source composes as equality, not a degenerate `in`.
+        if len(sources) == 1:
+            filters.append(('source', '==', sources[0]))
+        else:
+            filters.append(('source', 'in', sources))
     if statuses:
-        filters.append(('status', 'in', statuses))
+        if len(statuses) == 1:
+            filters.append(('status', '==', statuses[0]))
+        else:
+            filters.append(('status', 'in', statuses))
     if categories:
         filters.append(('structured.category', 'in', categories))
     if folder_id:
@@ -606,6 +614,7 @@ def get_conversations_without_photos(
     offset: int = 0,
     include_discarded: bool = False,
     statuses: List[str] = [],
+    sources: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
@@ -619,8 +628,18 @@ def get_conversations_without_photos(
     filters: List[Filter] = []
     if not include_discarded:
         filters.append(('discarded', '==', False))
+    if sources:
+        # Keep the paginated list semantically identical to the count query:
+        # a singleton source composes as equality (Firestore allows one `in`).
+        if len(sources) == 1:
+            filters.append(('source', '==', sources[0]))
+        else:
+            filters.append(('source', 'in', sources))
     if len(statuses) > 0:
-        filters.append(('status', 'in', statuses))
+        if len(statuses) == 1:
+            filters.append(('status', '==', statuses[0]))
+        else:
+            filters.append(('status', 'in', statuses))
     if categories:
         filters.append(('structured.category', 'in', categories))
     if folder_id:

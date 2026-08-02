@@ -9770,4 +9770,7 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone\'i seadetes ühendatud.';
+
+  @override
+  String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
 }

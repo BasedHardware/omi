@@ -18,7 +18,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTab => '对话';
 
   @override
-  String get transcriptTab => '转录';
+  String get transcriptTab => '文字记录';
 
   @override
   String get actionItemsTab => '行动项';
@@ -196,7 +196,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingsToSync => '待同步录音';
 
   @override
-  String get allCaughtUp => '已全部同步';
+  String get allCaughtUp => '已全部完成';
 
   @override
   String get sync => '同步';
@@ -1834,7 +1834,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whatsYourName => '您叫什么名字？';
 
   @override
-  String get speakTranscribeSummarize => '说话。转录。摘要。';
+  String get speakTranscribeSummarize => '开口说，自动转写，智能总结。';
 
   @override
   String get signInWithApple => '通过 Apple 登录';
@@ -1852,10 +1852,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get termsOfUse => '使用条款';
 
   @override
-  String get omiYourAiCompanion => 'Omi – 您的 AI 伴侣';
+  String get omiYourAiCompanion => 'Omi – 您的 AI 助手';
 
   @override
-  String get captureEveryMoment => '捕捉每一个瞬间。获得 AI 摘要。';
+  String get captureEveryMoment => '记录每个瞬间，AI 为您生成摘要。';
 
   @override
   String get appleWatchSetup => 'Apple Watch 设置';
@@ -2088,16 +2088,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editMemory => '✏️ 编辑记忆';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => '设为基准记忆';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => '取消基准记忆';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => '基准记忆';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => '始终包含在上下文中';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';
@@ -2267,10 +2267,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionItemsCopiedToClipboard => '行动项已复制到剪贴板';
 
   @override
-  String get summarize => '总结';
+  String get summarize => '生成摘要';
 
   @override
-  String get generateSummary => '生成总结';
+  String get generateSummary => '生成摘要';
 
   @override
   String get conversationNotFoundOrDeleted => '未找到对话或已被删除';
@@ -5258,7 +5258,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wrappedTopPhrasesLabel => '常说的话';
 
   @override
-  String get wrappedLetsHitRewind => '让我们回顾你的';
+  String get wrappedLetsHitRewind => '让我们回顾一下你的';
 
   @override
   String get wrappedGenerateMyWrapped => '生成我的年度回顾';
@@ -5495,7 +5495,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recognizingOthers => '识别他人 👀';
 
   @override
-  String get keepGoingGreat => '继续，你做得很棒';
+  String get keepGoingGreat => '加油，继续保持！';
 
   @override
   String get somethingWentWrongTryAgain => '出错了！请稍后重试。';
@@ -5556,11 +5556,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String summaryGeneratedFor(String date) {
-    return '已为 $date 生成总结';
+    return '已为 $date 生成摘要';
   }
 
   @override
-  String get failedToGenerateSummary => '生成总结失败。请确保当天有对话记录。';
+  String get failedToGenerateSummary => '生成摘要失败。请确保当天有对话记录。';
 
   @override
   String get recap => '回顾';
@@ -9594,4 +9594,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
+
+  @override
+  String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
 }

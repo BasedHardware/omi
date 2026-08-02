@@ -31,7 +31,7 @@ def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
 
 
 def set_task_workflow_control(uid: str, control: TaskWorkflowControl) -> None:
-    _store().set(_control_path(uid), control.model_dump(mode='json'))
+    _store().set(_control_path(uid), control.persisted_payload())
 
 
 def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> bool:
@@ -39,15 +39,17 @@ def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> b
 
     if not is_development_smoke_fixture(uid, stage=stage):
         return False
-    expected_payload = _SMOKE_FIXTURE_CONTROL.model_dump(mode='json')
+    expected_payload = _SMOKE_FIXTURE_CONTROL.persisted_payload()
     path = _control_path(uid)
     try:
         # ``create`` is an atomic exists=false compare-and-create at the storage port.
         _store().create(path, expected_payload)
     except AlreadyExists:
         snapshot = _store().get(path)
-        if snapshot.exists and snapshot.to_dict() == expected_payload:
-            return False
+        if snapshot.exists:
+            existing = parse_snapshot_or_none(TaskWorkflowControl, snapshot)
+            if existing is not None and existing.persisted_payload() == expected_payload:
+                return False
         raise DevelopmentSmokeFixtureConflictError(
             'development smoke fixture control already exists with differing state'
         ) from None

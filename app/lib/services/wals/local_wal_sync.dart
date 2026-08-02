@@ -607,7 +607,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals = _wals.where((w) => w.status == WalStatus.corrupted).toList();
+    final corruptedWals =
+        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -843,6 +844,24 @@ class LocalWalSyncImpl implements LocalWalSync {
         await _saveWalsToFile();
         listener.onWalUpdated();
         continue;
+      } on SyncRecoveryWindowExceededException {
+        // Clear the in-flight flag on the whole batch first: the members the
+        // rejection does NOT prove too old stay `miss` and must not be left
+        // rendering as an upload that never finishes.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        final retired = _retireOutsideRecoveryWindow(batchWals);
+        DebugLogManager.logEvent('local_upload_outside_recovery_window', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
+          'retiredWalIds': retired.map((w) => w.id).toList(),
+          'lane': batchLane.name,
+        });
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        continue;
       } catch (e) {
         print('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
@@ -985,6 +1004,20 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _saveWalsToFile();
       listener.onWalUpdated();
       return resp;
+    } on SyncRecoveryWindowExceededException {
+      // Terminal: older than the server's automatic-recovery window. A manual
+      // retry cannot succeed either, so stop presenting it as retryable work.
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      final retired = _retireOutsideRecoveryWindow([walToSync]);
+      DebugLogManager.logEvent('single_wal_outside_recovery_window', {
+        'walId': wal.id,
+        'retiredWalIds': retired.map((w) => w.id).toList(),
+      });
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
     } catch (e) {
       Logger.debug('Single WAL upload failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
@@ -999,6 +1032,29 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     progress?.onWalSyncedProgress(1.0);
     return resp;
+  }
+
+  /// Retires the recordings a `backfill_lookback_exceeded` rejection proves the
+  /// server will never accept, and only those.
+  ///
+  /// The backend decides the lookback from the OLDEST capture in the upload
+  /// (`classify_sync_lane` measures `now - oldest_capture_at`), so a rejection
+  /// only proves that one recording is outside the window — a batch mixes ages,
+  /// and retiring all of it would strand recordings the server would still take.
+  /// Everything captured no later than the proven-too-old one is necessarily
+  /// outside the window as well, so the whole tail retires in one pass instead
+  /// of costing another doomed upload per recording. The rest of the batch stays
+  /// `miss` and re-forms into a batch without the poison on the next drain.
+  List<Wal> _retireOutsideRecoveryWindow(List<Wal> rejectedBatch) {
+    if (rejectedBatch.isEmpty) return const [];
+    final provenTooOld = rejectedBatch.map((w) => w.timerStart).reduce(min);
+    final retired = _wals
+        .where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk && w.timerStart <= provenTooOld)
+        .toList();
+    for (final wal in retired) {
+      wal.markOutsideRecoveryWindow();
+    }
+    return retired;
   }
 
   Future<bool> _localFileExists(Wal wal) async {

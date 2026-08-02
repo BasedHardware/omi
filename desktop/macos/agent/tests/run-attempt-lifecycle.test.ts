@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
@@ -392,8 +392,14 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     for (const provider of ["openclaw", "hermes"] as const) {
       const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);
       const externalDirectory = mkdtempTracked(`omi-${provider}-reported-`);
-      const desktopDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-desktop-`);
-      const nonTemporaryDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-non-temp-`);
+      // Keep Desktop-like fixtures outside temporary roots: a linked worktree
+      // can itself be under /private/tmp, which would otherwise bypass the
+      // Desktop-specific delivery grammar.
+      const desktopDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-desktop-`);
+      // This must remain outside the temporary roots even when the test
+      // checkout itself lives under /private/tmp (as it does in isolated
+      // worktrees), otherwise it accidentally becomes a valid deliverable.
+      const nonTemporaryDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-non-temp-`);
       const reportedPath = join(externalDirectory, "dog_facts.html");
       const desktopPath = join(desktopDirectory, "cool_cat_facts.html");
       const nonTemporaryPath = join(nonTemporaryDirectory, "not_a_deliverable.html");

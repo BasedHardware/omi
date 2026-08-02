@@ -9784,4 +9784,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di Pengaturan iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya';
 }

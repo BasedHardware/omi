@@ -164,12 +164,14 @@ enum AgentClient {
     func resolveSurfaceSession(
       _ surface: AgentSurfaceReference,
       title: String? = nil,
-      creationProfile: AgentSessionCreationProfile? = nil
+      creationProfile: AgentSessionCreationProfile? = nil,
+      chatFirstCapability: ChatFirstCapabilityProjection? = nil
     ) async throws -> AgentSurfaceSession {
       try await bridge.resolveSurfaceSession(
         surface,
         title: title,
-        creationProfile: creationProfile
+        creationProfile: creationProfile,
+        chatFirstCapability: chatFirstCapability
       )
     }
 
@@ -236,6 +238,85 @@ enum AgentClient {
         surface: surface,
         ownerID: ownerID,
         turns: turns
+      )
+    }
+
+    func recordQuestionInteractionReply(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      questionID: String,
+      optionID: String,
+      controlGeneration: Int
+    ) async throws -> AgentRuntimeProcess.QuestionInteractionReply {
+      try await bridge.recordQuestionInteractionReply(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        questionID: questionID,
+        optionID: optionID,
+        controlGeneration: controlGeneration
+      )
+    }
+
+    func materializeChatFirstIntents(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int,
+      intentsJSON: String
+    ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
+      try await bridge.materializeChatFirstIntents(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration,
+        intentsJSON: intentsJSON
+      )
+    }
+
+    func listChatFirstMaterializationReceipts(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int
+    ) async throws -> ChatFirstPromptReceiptBatch {
+      try await bridge.listChatFirstMaterializationReceipts(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration
+      )
+    }
+
+    @discardableResult
+    func acknowledgeChatFirstMaterializationReceipts(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int,
+      receipts: ChatFirstPromptReceiptBatch
+    ) async throws -> Int {
+      try await bridge.acknowledgeChatFirstMaterializationReceipts(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration,
+        receipts: receipts
+      )
+    }
+
+    func invokeChatFirstFixtureTaskCard(
+      ownerID: String,
+      sessionID: String,
+      producingTurnID: String,
+      controlGeneration: Int
+    ) async throws -> AgentRuntimeProcess.ChatFirstHarnessExecutorReceipt {
+      try await bridge.invokeChatFirstFixtureTaskCard(
+        ownerID: ownerID,
+        sessionID: sessionID,
+        producingTurnID: producingTurnID,
+        controlGeneration: controlGeneration
       )
     }
 

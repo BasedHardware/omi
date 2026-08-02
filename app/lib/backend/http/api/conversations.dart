@@ -489,9 +489,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -504,6 +502,33 @@ class SyncRateLimitedException implements Exception {
 
   @override
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+}
+
+/// Thrown when the server permanently refuses a recording because its capture
+/// time is older than the automatic-recovery window (HTTP 422
+/// `backfill_lookback_exceeded`). No amount of retrying can make this upload
+/// succeed, so callers must stop re-offering the file instead of spending the
+/// recording's retry budget on it.
+class SyncRecoveryWindowExceededException implements Exception {
+  const SyncRecoveryWindowExceededException();
+
+  @override
+  String toString() => 'SyncRecoveryWindowExceededException()';
+}
+
+/// Classifies a sync 422 as the backend's terminal lookback rejection.
+///
+/// Keyed on the bounded `code` the sync routes emit, never on human-readable
+/// detail text: any other 422 stays a generic retryable failure.
+@visibleForTesting
+bool isSyncRecoveryWindowExceededResponse(http.Response response) {
+  if (response.statusCode != 422) return false;
+  try {
+    final body = jsonDecode(response.body);
+    return body is Map && body['code'] == 'backfill_lookback_exceeded';
+  } catch (_) {
+    return false;
+  }
 }
 
 /// A synchronous upload response that durably reached the server but did not
@@ -587,9 +612,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     final completed = SyncLocalFilesResponse.fromGenerated(
       wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
-    return UploadFilesResult.done(
-      requireCompleteSyncUpload(completed),
-    );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(
@@ -611,6 +634,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
     );
+  } else if (isSyncRecoveryWindowExceededResponse(response)) {
+    throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }

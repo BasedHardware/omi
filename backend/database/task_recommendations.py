@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
+from config.canonical_memory_cohort import is_canonical_memory_user
 from pydantic import ValidationError
 
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
@@ -23,7 +24,7 @@ from models.task_recommendation import (
     SnapshotReceipt,
     WhatMattersNowProjection,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -84,17 +85,17 @@ class RecommendationGenerationMismatchError(TaskRecommendationStoreError):
 
 def _validate_generation(
     snapshot: Any,
-    account_generation: int,
     *,
-    allowed_modes: set[TaskWorkflowMode] | None = None,
+    uid: str,
+    account_generation: int,
 ) -> None:
+    if not is_canonical_memory_user(uid):
+        raise RecommendationGenerationMismatchError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise RecommendationGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in (allowed_modes or {TaskWorkflowMode.read}):
-        raise RecommendationGenerationMismatchError('task intelligence mode changed')
 
 
 def _without_generation(payload: dict[str, Any]) -> dict[str, Any]:
@@ -176,7 +177,7 @@ def create_intervention(
     control_path = _control_path(uid)
 
     def apply(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         existing = transaction.get(ref_path)
         if not existing.exists:
             transaction.set(ref_path, payload)
@@ -211,7 +212,7 @@ def save_projection(
     control_path = _control_path(uid)
 
     def publish(transaction: Any) -> tuple[WhatMattersNowProjection, bool]:
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         current_snapshot = transaction.get(projection_path)
         if current_snapshot.exists:
             current = parse_snapshot_strict(
@@ -299,7 +300,7 @@ def get_projection(
     control_path = _control_path(uid)
 
     def read(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         return transaction.get(ref_path)
 
     snapshot = _store().run_transaction(read)
@@ -348,7 +349,7 @@ def get_decisions(
     control_path = _control_path(uid)
 
     def read(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         return transaction.get(ref_path)
 
     snapshot = _store().run_transaction(read)
@@ -398,7 +399,7 @@ def get_evaluation_projection(
     control_path = _control_path(uid)
 
     def read(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         return transaction.get(ref_path)
 
     snapshot = _store().run_transaction(read)
@@ -440,7 +441,7 @@ def create_feedback(
 
     def apply(transaction):
         nonlocal attribution_chain_id, dedupe_key, record, payload
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         if request.intervention_id is not None:
             intervention_path = _document_path(uid, INTERVENTIONS_COLLECTION, request.intervention_id)
             intervention_snapshot = transaction.get(intervention_path)
@@ -547,7 +548,7 @@ def link_feedback_completion_candidate(
     control_path = _control_path(uid)
 
     def apply(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         snapshot = transaction.get(ref_path)
         payload = _snapshot_dict(snapshot)
         if not snapshot.exists or payload.get('account_generation') != account_generation:
@@ -648,7 +649,7 @@ def create_outcome(
     control_path = _control_path(uid)
 
     def apply(transaction):
-        _validate_generation(transaction.get(control_path), account_generation)
+        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
         existing = transaction.get(ref_path)
         if not existing.exists:
             transaction.set(ref_path, payload)
@@ -686,8 +687,8 @@ def replace_context_snapshot(
     def apply(transaction):
         _validate_generation(
             transaction.get(control_path),
-            account_generation,
-            allowed_modes={TaskWorkflowMode.shadow, TaskWorkflowMode.write, TaskWorkflowMode.read},
+            uid=uid,
+            account_generation=account_generation,
         )
         prior_receipt = transaction.get(receipt_path)
         if prior_receipt.exists:
@@ -782,8 +783,8 @@ def replace_open_loop_snapshot(
     def apply(transaction):
         _validate_generation(
             transaction.get(control_path),
-            account_generation,
-            allowed_modes={TaskWorkflowMode.shadow, TaskWorkflowMode.write, TaskWorkflowMode.read},
+            uid=uid,
+            account_generation=account_generation,
         )
         prior_receipt = transaction.get(receipt_path)
         if prior_receipt.exists:

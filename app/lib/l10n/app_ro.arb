@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Așteaptă sincronizarea",
     "syncStatusRetrying": "Procesarea a eșuat — se reîncearcă",
     "syncStatusFailed": "A eșuat — atinge Reîncearcă",
+    "syncStatusTooOld": "Prea veche pentru sincronizare — Omi nu o poate accepta",
     "syncStatusFileUnavailable": "Fișierul nu este disponibil",
     "syncStatusUploaded": "Încărcat · se procesează pe Omi",
     "noRecordingsYet": "Încă nu există înregistrări",

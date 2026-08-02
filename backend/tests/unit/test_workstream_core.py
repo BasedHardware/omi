@@ -32,6 +32,7 @@ from models.workstream import (
     WorkstreamStatus,
     WorkstreamUpdate,
 )
+from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
 
 
 class FakeDB:
@@ -94,6 +95,7 @@ class _LockedRowsStore(FakeDocumentStore):
 
 @pytest.fixture
 def fake_db(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     database = FakeDB()
     # action_items, goals and workstreams are all on the storage port: back their store with one
     # shared rows dict + lock so every module reads and writes the same documents.
@@ -204,12 +206,14 @@ def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
     assert goals_db.get_goal_by_id('u1', 'g0')['status'] == 'background'
 
 
-def test_canonical_goal_mutations_are_mode_and_generation_fenced(fake_db):
+def test_canonical_goal_mutations_are_cohort_and_generation_fenced(fake_db, monkeypatch):
     create_goal(fake_db, 'g1')
-    seed_control(fake_db, mode='shadow')
+    clear_canonical_cohort(monkeypatch)
+    seed_control(fake_db)
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3)
 
+    set_canonical_cohort(monkeypatch, 'u1')
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3)
@@ -812,8 +816,9 @@ def test_concurrent_journal_appends_allocate_stable_unique_sequences(fake_db):
     assert workstreams_db.get_workstream('u1', 'w1').latest_event_sequence == 20
 
 
-def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_db):
-    seed_control(fake_db, mode='shadow')
+def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempotent(fake_db, monkeypatch):
+    clear_canonical_cohort(monkeypatch)
+    seed_control(fake_db)
     seed_workstream(fake_db)
     with pytest.raises(workstreams_db.WorkstreamConflictError):
         workstreams_db.update_workstream(
@@ -824,6 +829,7 @@ def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_
             account_generation=3,
         )
 
+    set_canonical_cohort(monkeypatch, 'u1')
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError):
         workstreams_db.update_workstream(

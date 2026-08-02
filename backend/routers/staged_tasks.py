@@ -24,10 +24,23 @@ from models.shared import StatusResponse
 from utils.other import endpoints as auth
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
+from utils.task_intelligence.rollout import effective_task_workflow_control, resolve_task_intelligence_for_user
 from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _effective_control(uid: str):
+    """Project raw workflow metadata through the sole canonical entitlement."""
+
+    control = task_control_db.get_task_workflow_control(uid)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    return effective_task_workflow_control(control, rollout)
 
 
 def _candidate_as_staged(candidate: CandidateRecord) -> dict:
@@ -351,7 +364,7 @@ def create_staged_task(
     request: CreateStagedTaskRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         digest = hashlib.sha256(request.description.strip().lower().encode('utf-8')).hexdigest()[:24]
         synthetic_row = {
@@ -400,7 +413,7 @@ def get_staged_tasks(
     offset: int = Query(0, ge=0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         candidates = _pending_staged_candidates(uid, account_generation=control.account_generation)
         return {
@@ -417,7 +430,7 @@ def get_staged_tasks(
 
 @router.delete('/v1/staged-tasks', tags=['staged-tasks'])
 def clear_staged_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         candidates = _pending_staged_candidates(uid, account_generation=control.account_generation)
         for candidate in candidates:
@@ -452,7 +465,7 @@ def delete_staged_task(
     task_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         candidate = candidates_db.get_candidate(uid, task_id)
         if (
@@ -493,7 +506,7 @@ def batch_update_staged_scores(
     request: BatchUpdateScoresRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if task_control_db.get_task_workflow_control(uid).workflow_mode == TaskWorkflowMode.read:
+    if _effective_control(uid).workflow_mode == TaskWorkflowMode.read:
         return {'status': 'ok'}
     staged_tasks_db.batch_update_staged_scores(uid, [s.model_dump() for s in request.scores])
     return {'status': 'ok'}
@@ -501,7 +514,7 @@ def batch_update_staged_scores(
 
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'], response_model=PromoteStagedTaskResponse)
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         return {'promoted': False, 'reason': 'Score-based promotion is disabled', 'promoted_task': None}
     claim_token: str | None = None
@@ -569,7 +582,7 @@ def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/staged-tasks/{task_id}/promote', tags=['staged-tasks'])
 def promote_staged_task_by_id(task_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    control = task_control_db.get_task_workflow_control(uid)
+    control = _effective_control(uid)
     if control.workflow_mode == TaskWorkflowMode.read:
         candidate = candidates_db.get_candidate(uid, task_id)
         if (

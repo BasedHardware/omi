@@ -688,8 +688,8 @@ actor AgentBridge {
 
   let harnessMode: String
 
-  private let clientId = UUID().uuidString
-  private let runtime: AgentRuntimeProcess
+  let clientId = UUID().uuidString
+  let runtime: AgentRuntimeProcess
   private var registered = false
   private var synchronizedRuntimeAuthorityEpoch: UInt64?
   private var synchronizedRuntimeAuthorityOwnerID: String?
@@ -731,7 +731,7 @@ actor AgentBridge {
     return snapshot
   }
 
-  private func resolveAuthorization(
+  func resolveAuthorization(
     _ supplied: RuntimeOwnerAuthorizationSnapshot?,
     expectedOwnerID: String? = nil
   ) throws -> RuntimeOwnerAuthorizationSnapshot {
@@ -790,7 +790,7 @@ actor AgentBridge {
     try await start(authorizationSnapshot: authorizationSnapshot, requiresCredentials: true)
   }
 
-  private func start(
+  func start(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     requiresCredentials: Bool = true
   ) async throws {
@@ -1170,26 +1170,6 @@ actor AgentBridge {
       modelProfile: modelProfile,
       workingDirectory: workingDirectory,
       expectedPreferenceGeneration: expectedPreferenceGeneration,
-      authorizationSnapshot: authorization
-    )
-  }
-
-  func resolveSurfaceSession(
-    _ surface: AgentSurfaceReference,
-    title: String? = nil,
-    creationProfile: AgentSessionCreationProfile? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws -> AgentSurfaceSession {
-    let authorization = try resolveAuthorization(authorizationSnapshot)
-    try await start(authorizationSnapshot: authorization)
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
-      throw BridgeError.authMissing
-    }
-    return try await runtime.resolveSurfaceSession(
-      clientId: clientId,
-      surface: surface,
-      title: title,
-      creationProfile: creationProfile,
       authorizationSnapshot: authorization
     )
   }

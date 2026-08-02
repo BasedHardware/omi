@@ -11558,5 +11558,6 @@
     "rayBanMetaMicPickerConnectError": "Could not connect to that microphone. Make sure it is connected in iPhone Settings.",
     "@rayBanMetaMicPickerConnectError": {
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
-    }
+    },
+    "syncStatusTooOld": "Too old to sync — Omi can't accept it"
 }

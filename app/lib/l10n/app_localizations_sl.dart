@@ -9802,4 +9802,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah iPhona.';
+
+  @override
+  String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
 }

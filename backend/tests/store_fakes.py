@@ -113,6 +113,9 @@ class _FakeTransaction:
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._store.update(path, data)
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        self._store.create(path, data)
+
     def delete(self, path: str) -> None:
         self._store.delete(path)
 
@@ -215,7 +218,16 @@ class FakeDocumentStore:
     def _matching_rows(self, collection: str, filters: Optional[Iterable]) -> List[tuple]:
         rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0] == collection]
         for field, op, value in filters or ():
-            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+            if "." in field:
+                # Nested (dotted) field path, e.g. ``subject.kind`` — resolve like the real
+                # adapters so domain queries filtering on embedded fields are emulated.
+                rows = [
+                    (p, d)
+                    for p, d in rows
+                    if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)
+                ]
+            else:
+                rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
         return rows
 
     def count(self, collection: str, *, filters: Optional[Iterable] = None) -> int:

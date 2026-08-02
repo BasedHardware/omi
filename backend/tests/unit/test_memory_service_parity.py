@@ -190,19 +190,25 @@ class TestResolveMemorySystem:
 
 
 class TestMemoryServiceParity:
-    def test_canonical_write_decision_malformed_rollout_fails_closed_for_code_cohort(self, monkeypatch):
+    def test_canonical_write_decision_ignores_malformed_legacy_rollout_env_for_code_cohort(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
         from utils.memory.canonical_activation import canonical_write_decision
+        from database import document_store
+        from tests.store_fakes import FakeDocumentStore
 
         set_canonical_cohort(monkeypatch, "uid-canonical")
         monkeypatch.setenv("MEMORY_MODE", "not-a-valid-mode")
+        # Port equivalent of MERGE_HEAD's empty ``_FirestoreFake()`` db_client: an empty document
+        # store makes the control-doc read cleanly *absent* (missing) rather than a transport error,
+        # so an enrolled user with no persisted control doc fails closed as ``missing_control_doc``.
+        monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing={}))
 
         decision = canonical_write_decision("uid-canonical")
 
         assert decision.enabled is False
         assert decision.memory_system == MemorySystem.CANONICAL
         assert decision.fail_closed is True
-        assert decision.reason == "invalid_rollout_config"
+        assert decision.reason == "missing_control_doc"
 
     def test_read_matches_direct_legacy_helper(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
@@ -449,6 +455,11 @@ class TestMemoryServiceParity:
     @pytest.mark.parametrize("canonical_enabled", [False, True])
     def test_memory_service_forwards_read_clock_to_selected_backend(self, monkeypatch, canonical_enabled):
         service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(
+            service_mod,
+            "resolve_memory_system",
+            lambda *args, **kwargs: MemorySystem.CANONICAL if canonical_enabled else MemorySystem.LEGACY,
+        )
         monkeypatch.setattr(service_mod, "canonical_read_enabled", lambda *args, **kwargs: canonical_enabled)
         service = service_mod.MemoryService()
         service._legacy.read = MagicMock(return_value=[])

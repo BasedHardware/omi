@@ -9774,4 +9774,7 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'K tomuto mikrofonu se nepodařilo připojit. Ověřte, že je připojený v Nastavení iPhonu.';
+
+  @override
+  String get syncStatusTooOld => 'Příliš staré na synchronizaci — Omi ho nemůže přijmout';
 }

@@ -18224,6 +18224,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
   String get rayBanMetaMicPickerConnectError;
+
+  /// No description provided for @syncStatusTooOld.
+  ///
+  /// In en, this message translates to:
+  /// **'Too old to sync — Omi can\'t accept it'**
+  String get syncStatusTooOld;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
