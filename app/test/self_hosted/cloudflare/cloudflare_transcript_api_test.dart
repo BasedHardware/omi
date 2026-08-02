@@ -12,6 +12,10 @@ void main() {
     workerUrl: 'https://worker.example.test/base/',
     token: token,
   );
+  Matcher isNonSecretApiException() => predicate(
+    (Object error) => error is CloudflareTranscriptApiException && !error.message.contains(token),
+    'a non-secret CloudflareTranscriptApiException',
+  );
 
   test('lists every cursor page with bearer authorization', () async {
     final requests = <http.Request>[];
@@ -71,6 +75,33 @@ void main() {
     await expectLater(api.listSessions(), throwsA(isA<CloudflareTranscriptApiException>()));
   });
 
+  test('rejects malformed JSON from the Worker list fixture without exposing the token', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{not-valid-json', 200)),
+    );
+
+    await expectLater(api.listSessions(), throwsA(isNonSecretApiException()));
+  });
+
+  test('rejects a Worker list fixture without top-level sessions', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{}', 200)),
+    );
+
+    await expectLater(api.listSessions(), throwsA(isNonSecretApiException()));
+  });
+
+  test('rejects a Worker list fixture with a repeated cursor', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{"sessions":[],"next_cursor":"again"}', 200)),
+    );
+
+    await expectLater(api.listSessions(), throwsA(isNonSecretApiException()));
+  });
+
   test('sorts transcript chunks by sequence', () async {
     final api = CloudflareTranscriptHttpApi(
       configuration: configuration,
@@ -108,6 +139,15 @@ void main() {
     );
 
     await expectLater(api.getTranscript('session-1'), throwsA(isA<CloudflareTranscriptApiException>()));
+  });
+
+  test('rejects a Worker detail fixture without top-level chunks', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('{"session":{"id":"session-1"}}', 200)),
+    );
+
+    await expectLater(api.getTranscript('session-1'), throwsA(isNonSecretApiException()));
   });
 
   test('refuses non-loopback HTTP Worker URLs', () {
