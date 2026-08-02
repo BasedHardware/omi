@@ -12600,6 +12600,66 @@
         "title": "LlmUsageResponse",
         "type": "object"
       },
+      "LocalKgSyncRequest": {
+        "properties": {
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          },
+          "table": {
+            "enum": [
+              "local_kg_nodes",
+              "local_kg_edges"
+            ],
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "rows"
+        ],
+        "title": "LocalKgSyncRequest",
+        "type": "object"
+      },
+      "LocalKgSyncResponse": {
+        "properties": {
+          "edges_evicted": {
+            "title": "Edges Evicted",
+            "type": "integer"
+          },
+          "merged": {
+            "title": "Merged",
+            "type": "integer"
+          },
+          "nodes_evicted": {
+            "title": "Nodes Evicted",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "merged",
+          "skipped",
+          "nodes_evicted",
+          "edges_evicted"
+        ],
+        "title": "LocalKgSyncResponse",
+        "type": "object"
+      },
       "LocationContextConsentResponse": {
         "properties": {
           "disclosed_providers": {
@@ -40065,6 +40125,94 @@
           }
         ],
         "summary": "Rebuild Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
+    "/v1/knowledge-graph/sync": {
+      "post": {
+        "description": "Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection.",
+        "operationId": "sync_local_knowledge_graph_v1_knowledge_graph_sync_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalKgSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalKgSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Sync Local Knowledge Graph",
         "tags": [
           "knowledge_graph"
         ]
