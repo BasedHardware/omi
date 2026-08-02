@@ -1,0 +1,20 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionInvitations.swift
+  s_56918216f0e901::t_0d06c2c8f6612a 91
+  s_56918216f0e901::t_80e780aaafa442 31-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "7714c8ce8a34d5607bab61f34a43265c8d75b011",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
