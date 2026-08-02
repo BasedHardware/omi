@@ -6,8 +6,8 @@ void main() {
   final l10n = AppLocalizationsZh();
 
   test('Chinese onboarding copy uses natural product language', () {
-    expect(l10n.omiYourAiCompanion, 'Omi – 你的 AI 助手');
-    expect(l10n.captureEveryMoment, '记录每个瞬间，AI 为你生成摘要。');
+    expect(l10n.omiYourAiCompanion, 'Omi – 您的 AI 助手');
+    expect(l10n.captureEveryMoment, '记录每个瞬间，AI 为您生成摘要。');
     expect(l10n.speakTranscribeSummarize, '开口说，自动转写，智能总结。');
   });
 

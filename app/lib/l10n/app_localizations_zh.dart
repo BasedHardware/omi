@@ -1849,10 +1849,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get termsOfUse => '使用条款';
 
   @override
-  String get omiYourAiCompanion => 'Omi – 你的 AI 助手';
+  String get omiYourAiCompanion => 'Omi – 您的 AI 助手';
 
   @override
-  String get captureEveryMoment => '记录每个瞬间，AI 为你生成摘要。';
+  String get captureEveryMoment => '记录每个瞬间，AI 为您生成摘要。';
 
   @override
   String get appleWatchSetup => 'Apple Watch 设置';
