@@ -261,6 +261,36 @@ final onlyBase = _baseUrl;
     )
 
 
+def test_inventory_classifies_bounded_error_discriminator_as_non_rest_decode(tmp_path, monkeypatch):
+    api_dir = tmp_path / 'api'
+    schema_dir = tmp_path / 'schema'
+    api_dir.mkdir()
+    schema_dir.mkdir()
+    (api_dir / 'conversations.dart').write_text("""
+bool isSyncRecoveryWindowExceededResponse(Response response) {
+  final body = jsonDecode(response.body);
+  return body is Map && body['code'] == 'backfill_lookback_exceeded';
+}
+""")
+
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'MODEL_REST_DTO_FILES', ())
+    monkeypatch.setattr(inventory_app_client_schemas, 'LOCAL_NON_REST_SCHEMA_FILES', frozenset())
+    monkeypatch.setattr(
+        inventory_app_client_schemas,
+        'NON_REST_RESPONSE_DECODER_FUNCTIONS',
+        frozenset({(api_dir / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse')}),
+    )
+
+    sites = inventory_app_client_schemas.scan_dart_decode_sites()
+
+    assert [(site.kind, site.context) for site in sites] == [
+        ('jsonDecode', 'error_discriminator'),
+        ('field_access', 'error_discriminator'),
+    ]
+
+
 def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     result = subprocess.run(
         [

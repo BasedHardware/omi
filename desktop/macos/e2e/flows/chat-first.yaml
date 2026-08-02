@@ -1,0 +1,132 @@
+version: 2
+name: chat-first
+tier: 2
+description: "Cohort-gated mounted-shell route contract. It never fabricates Chat-first data or proves agent manifests."
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  # Every bridge.navigate step waits for the requested Chat-first route to
+  # mount through the split visibility policy before returning success.
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ChatFirst.swift
+  # S1 observes the shell only after its server-sampled capability projection admits it.
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstCapabilityProjection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+  - chat_first_cohort_named_bundle
+
+steps:
+  - id: S1
+    name: Navigate the enabled shell to its canonical Chat route
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: chat
+
+  - id: S2
+    name: Read mounted Chat-first runtime state without fixture content
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+
+  - id: S3
+    name: Assert stable sidebar accessibility order and VoiceOver labels
+    ax.expect:
+      identifiers_visible:
+        - chat-first-sidebar-chat
+        - chat-first-sidebar-conversations
+        - chat-first-sidebar-tasks
+        - chat-first-sidebar-goals
+        - chat-first-sidebar-memories
+      focus_order:
+        - chat-first-sidebar-chat
+        - chat-first-sidebar-conversations
+        - chat-first-sidebar-tasks
+        - chat-first-sidebar-goals
+        - chat-first-sidebar-memories
+      voiceover_labels:
+        chat-first-sidebar-chat: Chat
+        chat-first-sidebar-conversations: Conversations
+        chat-first-sidebar-tasks: Tasks
+        chat-first-sidebar-goals: Goals
+        chat-first-sidebar-memories: Memories
+
+  - id: S4
+    name: Activate Goals by its stable accessibility identifier
+    ax.activate:
+      identifier: chat-first-sidebar-goals
+
+  - id: S5
+    name: Navigate from Chat to canonical Goals
+    bridge.navigate:
+      target: goals
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: goals
+
+  - id: S6
+    name: Prove the mounted Goals surface is visible to the semantic runtime
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: goals
+      result.detail.route_visible: "true"
+
+  - id: S7
+    name: Navigate from Goals to the shared Tasks surface
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: tasks
+
+  - id: S8
+    name: Prove the mounted Tasks surface is visible to the semantic runtime
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: tasks
+      result.detail.route_visible: "true"
+
+  - id: S9
+    name: Navigate from Tasks to the Omi-device capture archive
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: conversations
+
+  - id: S10
+    name: Prove the mounted Conversations surface is visible to the semantic runtime
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: conversations
+      result.detail.route_visible: "true"
+
+  - id: S11
+    name: Return to the canonical Chat route
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: chat
+
+  - id: S12
+    name: Assert the bridge did not report a route failure
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"

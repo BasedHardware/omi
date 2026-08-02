@@ -184,8 +184,10 @@ public class ProactiveAssistantsPlugin: NSObject {
   private override init() {
     super.init()
 
-    // Load environment variables
-    loadEnvironment()
+    // Environment ownership is centralized so explicit launch overrides (for
+    // example a local Python backend) cannot be replaced by a later singleton
+    // initialization.
+    BundleEnvironment.loadIfNeeded()
 
     // Set up the coordinator event callback
     AssistantCoordinator.shared.setEventCallback { [weak self] type, data in
@@ -199,12 +201,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     setupTestNotificationListeners()
 
     log("ProactiveAssistantsPlugin initialized")
-  }
-
-  // MARK: - Environment Loading
-
-  private func loadEnvironment() {
-    BundleEnvironment.loadIfNeeded()
   }
 
   // MARK: - Assistant Management

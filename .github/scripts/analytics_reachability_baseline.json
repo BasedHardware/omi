@@ -60,7 +60,8 @@
     "macos": {
       "appDetailViewed": 3,
       "chatAppSelected": 2,
-      "chatMessageSent": 6,
+      "chatFirst": 35,
+      "chatMessageSent": 8,
       "floatingBarAskOmiOpened": 2,
       "floatingBarPTTEnded": 7,
       "floatingBarPTTStarted": 2,

@@ -41,6 +41,16 @@ STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
     }
 )
 
+# These helpers inspect a bounded error envelope to choose an application
+# control path; they do not decode an OpenAPI response DTO. Keep the allowlist
+# exact so normal REST response decoding remains covered by the migration gate.
+NON_REST_RESPONSE_DECODER_FUNCTIONS = frozenset(
+    {
+        (APP_API_DIR / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse'),
+    }
+)
+NON_REST_DECODE_CONTEXTS = frozenset({'stream_protocol', 'error_discriminator'})
+
 CLASS_RE = re.compile(r'^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 ENUM_RE = re.compile(r'^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 FROM_JSON_RE = re.compile(r'\b(?:factory|static)?\s*([A-Za-z_][A-Za-z0-9_]*)?\.?fromJson\s*\(')
@@ -202,7 +212,9 @@ class AppOperationManifestItem:
     def to_report(self) -> dict[str, Any]:
         stream_protocol_sites = [site for site in self.decode_sites if site.context == 'stream_protocol']
         raw_sites = [
-            site for site in self.decode_sites if not site.generated_backed and site.context != 'stream_protocol'
+            site
+            for site in self.decode_sites
+            if not site.generated_backed and site.context not in NON_REST_DECODE_CONTEXTS
         ]
         raw_response_sites = [site for site in raw_sites if site.context == 'response_decode']
         raw_request_sites = [site for site in raw_sites if site.context == 'request_encode']
@@ -315,6 +327,10 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
             is_stream_protocol = (
                 enclosing_function is not None and (path, enclosing_function.name) in STREAM_PROTOCOL_DECODER_FUNCTIONS
             )
+            is_error_discriminator = (
+                enclosing_function is not None
+                and (path, enclosing_function.name) in NON_REST_RESPONSE_DECODER_FUNCTIONS
+            )
             sites.append(
                 DartDecodeSite(
                     path=path,
@@ -322,7 +338,11 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
                     kind=decode_site_kind(line),
                     snippet=stripped[:220],
                     generated_backed=bool(WIRE_DECODE_RE.search(window) or _WIRE_BACKED_DECODE_RE.search(window)),
-                    context='stream_protocol' if is_stream_protocol else decode_site_context(line),
+                    context=(
+                        'stream_protocol'
+                        if is_stream_protocol
+                        else 'error_discriminator' if is_error_discriminator else decode_site_context(line)
+                    ),
                 )
             )
     return sites
