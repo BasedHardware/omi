@@ -12,7 +12,7 @@ and blocks network), so the module is imported normally and the db helpers are p
 
 import os
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault("ENCRYPTION_SECRET", "test-encryption-secret-for-ci-only-32chars!")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 
 from unittest.mock import patch

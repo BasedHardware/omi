@@ -49,7 +49,6 @@ jobs:
       run:
         working-directory: ${{ github.workspace }}
     env:
-      ENCRYPTION_SECRET: omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv
       FIRESTORE_EMULATOR_HOST: localhost:8787
       GOOGLE_CLOUD_PROJECT: omi-contract-tests
     steps:

@@ -14,7 +14,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
-    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+    'test-encryption-secret-for-ci-only-32chars!',
 )
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key

@@ -1,6 +1,6 @@
 {
   "uid": "contract-user-8547",
-  "encryption_secret": "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+  "encryption_secret": "test-encryption-secret-for-ci-only-32chars!",
   "segments": [
     {
       "id": "seg-1",
@@ -23,7 +23,7 @@
     }
   ],
   "standard_compressed_transcript_b64": "eJx1jssKgzAQRX9lyFpFLW6660IodCN2WYoEMj4wTSSTQEvx32uslJTS5dx77nAuTzYItgdG2MUZi4BZvFsfHFFKDa3RNxBIo9WTb2lCPqLxwLkqD6eybtI0KJr1W7oEAzWOVtIah0swoSGt3sB2xCvh15Ybuw1ReSJL8mKOINTLQ73akQWuBFQP22sF1GsnBfDOIP4TzX5Esy/RlkvCwMY7fIR2STFfX2ihWsE=",
-  "enhanced_encrypted_transcript": "AAECAwQFBgcICQoLJBF/bml9IYvujqZv4oTwjU2+neJ5kICizDxOyOkrqw9hfcTtX7vSERBe9oqyb9sdLuDeHrrsxhLEedJ5NIBquK1yQUSSg3hEFJCMDhPfr2xhbOL+CKsHh1gOFancnjkunmkXBkIKSJB4MFhKPot08PyY6P0S2MuCjbWYHeawG8+f+C7MuB8y8OcX8MtI0dzsNyhKatdkfhdCVxpPPzbyveA9Yg7q0NLdPPNpQvUyQ7O3KrYlpozxWEIj49TeWYxamKMiNgHSgsGaw7w8rs3YtT7Jge1XMksd87Kc/vEHLDN3yukqfiSn7wZ+JBrzy5XMUTiqX8XJroIKO2Tcgl/ELRrxeChSGqbl/F6wnLwO3m6RcuZt1915TgIcv/L/kiOAMYHjnBjUvYuu16ALtwu9OerNAmTsq7EM087bru4sxTxpujVj5BIRlpQDzhMUElB1d/FVYAfcqy93vgS5Z8ANN1U1tY5Q94asuFg=",
+  "enhanced_encrypted_transcript": "nnR96veuZi35qzCOEi3wGssWEhoR//wkjrVN+aGD+mkPUHDqSSt1gzjLeOaQDdtrycyf4HhuriltrP0UhNIPpWHSbg9a10STTJ3SOpd0MYT+BleIxT7th4Uzt9rzd4LjOwyAa6bWK51zGYOGlVb2fIyUZvxAodx3Dtvg8QsUX2m8PYQCFhe5Z0HyLu1GtzG3LbI8AIczGjyFqGdXFBLwmAZ1Zskd87qB1SeTRWrjzGpPV/T+u0G0/SzbCvG5pAzwM4zA+F+xdg9Gz7peVYjxRUeS395F3LDlzpsCCvdckdz5zp6UPUmUGQPSiEu2X18pf14XDum8Xub9pSHTiipMt7ISwInn6/nrJlT5TcJZnX+xpvAvgX9SFsIXL3hrOMriDweOm/LYuOcCzuEEsrdYccPMzYze9RqQyiZPtY2ui/oF9+rSYEX5sStkKUEcEeHEiH/V41zWbPDdajmCAZIqWVbUoAvaDkiqgLF644+dCGmRA/m7Hwk=",
   "query": {
     "limit": 7,
     "offset": 3,

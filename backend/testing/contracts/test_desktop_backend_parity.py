@@ -7,7 +7,7 @@ import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault("ENCRYPTION_SECRET", "test-encryption-secret-for-ci-only-32chars!")
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "omi-contract-tests")
 os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "localhost:8787")
 
