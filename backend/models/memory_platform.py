@@ -46,6 +46,13 @@ class MemoryPlatformCapability(BaseModel):
     zkr: ZkrCompatibility = ZkrCompatibility()
 
 
+class MemoryPlatformIngestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    memory_id: str
+    status: Literal["created"] = "created"
+
+
 MemoryPlatformContract = MemoryPlatformCapability
 
 
@@ -57,6 +64,7 @@ __all__ = [
     "MemoryItemsCollection",
     "MemoryPlatformCapability",
     "MemoryPlatformContract",
+    "MemoryPlatformIngestResponse",
     "MemorySurfaceNames",
     "McpSurfaceName",
     "RestSurfaceName",
