@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -12,8 +12,16 @@ import { MixpanelManager } from '@/lib/analytics/mixpanel';
 export function LoginClient() {
   const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const channel = searchParams.get('channel');
+  const code = searchParams.get('code');
+  const signedInDestination =
+    channel && code
+      ? `/settings?${new URLSearchParams({ channel, code }).toString()}`
+      : '/home';
 
   // Track page view
   useEffect(() => {
@@ -23,16 +31,16 @@ export function LoginClient() {
   // Redirect to home if already logged in
   useEffect(() => {
     if (!loading && user) {
-      router.push('/home');
+      router.push(signedInDestination);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, signedInDestination]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
     setError(null);
     try {
       await signInWithGoogle();
-      router.push('/home');
+      router.push(signedInDestination);
     } catch (err) {
       setError('Failed to sign in with Google. Please try again.');
       console.error(err);
@@ -46,7 +54,7 @@ export function LoginClient() {
     setError(null);
     try {
       await signInWithApple();
-      router.push('/home');
+      router.push(signedInDestination);
     } catch (err) {
       setError('Failed to sign in with Apple. Please try again.');
       console.error(err);
