@@ -320,8 +320,13 @@ LOCAL_KG_SYNC_TABLES = frozenset({"local_kg_nodes", "local_kg_edges"})
 
 
 async def promote_local_kg_to_backend(table: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if table not in LOCAL_KG_SYNC_TABLES or not runtime.firebase_token:
+    if table not in LOCAL_KG_SYNC_TABLES:
         return None
+    if not runtime.firebase_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Knowledge graph promotion unavailable: Firebase token not set",
+        )
     headers = {"Authorization": f"Bearer {runtime.firebase_token}"}
     payload = {"table": table, "rows": rows}
     try:

@@ -32,6 +32,14 @@ def _firestore_client(db_client: Any = None) -> Any:
     return db_client if db_client is not None else db
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+class MissingKnowledgeGraphEndpointsError(ValueError):
+    """Raised when synced edges reference node ids that are not in Firestore yet."""
+
+
 def delete_memory_graph_assertion(uid: str, memory_id: str, *, db_client: Any = None) -> None:
     """Delete one derived assertion after its authoritative memory is fenced."""
     if not uid.strip() or not memory_id.strip():
@@ -223,7 +231,19 @@ def upsert_knowledge_node(
 
         node_data['memory_ids'] = merged_memory_ids
         node_data['aliases'] = merged_aliases
-        node_data['updated_at'] = node_data.get('updated_at') or now
+        incoming_updated = node_data.get('updated_at')
+        existing_updated = existing_data.get('updated_at')
+        if incoming_updated is not None:
+            if (
+                isinstance(incoming_updated, datetime)
+                and isinstance(existing_updated, datetime)
+                and _as_utc(existing_updated) > _as_utc(incoming_updated)
+            ):
+                node_data['updated_at'] = existing_updated
+            else:
+                node_data['updated_at'] = incoming_updated
+        else:
+            node_data['updated_at'] = now
         node_data['created_at'] = existing_data.get('created_at', node_data.get('created_at') or now)
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
@@ -907,6 +927,7 @@ def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Any], *, db_client: Any
 def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any = None) -> Dict[str, Any]:
     merged = 0
     skipped = 0
+    missing_endpoints = 0
     for row in rows:
         if not isinstance(row, dict):
             skipped += 1
@@ -918,10 +939,14 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any
         source_id = cast(str, edge_data["source_id"])
         target_id = cast(str, edge_data["target_id"])
         if not _knowledge_graph_endpoint_ids_exist(uid, source_id, target_id, db_client=db_client):
-            skipped += 1
+            missing_endpoints += 1
             continue
         upsert_knowledge_edge(uid, edge_data, db_client=db_client)
         merged += 1
+    if missing_endpoints:
+        raise MissingKnowledgeGraphEndpointsError(
+            f"{missing_endpoints} local_kg edge(s) reference missing endpoint nodes"
+        )
     eviction = enforce_knowledge_graph_caps(uid, db_client=db_client)
     return {"table": "local_kg_edges", "merged": merged, "skipped": skipped, **eviction}
 

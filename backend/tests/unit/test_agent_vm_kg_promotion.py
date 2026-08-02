@@ -81,7 +81,7 @@ def test_sync_promotes_local_kg_nodes_to_backend(tmp_path, monkeypatch) -> None:
     assert captured["json"] == {"table": "local_kg_nodes", "rows": rows}
 
 
-def test_sync_omits_promotion_without_firebase_token(tmp_path) -> None:
+def test_sync_fails_without_firebase_token(tmp_path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
     connection.execute(
@@ -108,21 +108,21 @@ def test_sync_omits_promotion_without_firebase_token(tmp_path) -> None:
             },
         )
 
-    assert response.status_code == 200
-    assert response.json()["applied"] == 1
-    assert "promotion" not in response.json()
+    assert response.status_code == 503
+    assert "Firebase token not set" in response.json()["detail"]
 
 
-def test_promote_local_kg_skips_without_firebase_token(tmp_path) -> None:
+def test_promote_local_kg_fails_without_firebase_token(tmp_path) -> None:
     _, module = load_app(tmp_path)
     module.runtime.firebase_token = None
-    result = asyncio.run(
-        module.promote_local_kg_to_backend(
-            "local_kg_nodes",
-            [{"nodeId": "n1", "label": "Test"}],
+    with pytest.raises(module.HTTPException) as error:
+        asyncio.run(
+            module.promote_local_kg_to_backend(
+                "local_kg_nodes",
+                [{"nodeId": "n1", "label": "Test"}],
+            )
         )
-    )
-    assert result is None
+    assert error.value.status_code == 503
 
 
 def test_promote_local_kg_raises_on_backend_error(tmp_path, monkeypatch) -> None:

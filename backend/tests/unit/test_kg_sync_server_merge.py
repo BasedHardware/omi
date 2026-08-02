@@ -366,7 +366,7 @@ def test_merge_evicts_by_document_name_not_timestamp():
     assert keep["created_at"] == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
 
 
-def test_merge_skips_edges_when_endpoints_missing():
+def test_merge_fails_edges_when_endpoints_missing():
     db = _FakeDb(
         {
             f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="A", updated_at=BASE),
@@ -379,13 +379,46 @@ def test_merge_skips_edges_when_endpoints_missing():
         "label": "related_to",
         "createdAt": "2026-07-01T12:00:00Z",
     }
-    result = kg_db.merge_synced_local_kg_edges(UID, [row], db_client=db)
-
-    assert result == {
-        "table": "local_kg_edges",
-        "merged": 0,
-        "skipped": 1,
-        "nodes_evicted": 0,
-        "edges_evicted": 0,
-    }
+    with pytest.raises(kg_db.MissingKnowledgeGraphEndpointsError):
+        kg_db.merge_synced_local_kg_edges(UID, [row], db_client=db)
     assert f"users/{UID}/knowledge_edges/edge-missing-target" not in db.docs
+
+
+def test_sync_route_returns_422_when_edge_endpoints_missing(monkeypatch):
+    monkeypatch.setattr(kg_router, "_require_legacy_graph_mutation", lambda _uid: None)
+
+    def fake_merge(uid, table, rows, *, db_client=None):
+        raise kg_db.MissingKnowledgeGraphEndpointsError("1 local_kg edge(s) reference missing endpoint nodes")
+
+    monkeypatch.setattr(kg_router.kg_db, "merge_synced_local_kg", fake_merge)
+    with pytest.raises(kg_router.HTTPException) as error:
+        kg_router.sync_local_knowledge_graph(
+            payload=kg_router.LocalKgSyncRequest(
+                table="local_kg_edges",
+                rows=[{"edgeId": "e1", "sourceNodeId": "a", "targetNodeId": "b", "label": "related_to"}],
+            ),
+            uid=UID,
+        )
+    assert error.value.status_code == 422
+
+
+def test_merge_keeps_fresher_cloud_updated_at():
+    newer = BASE + timedelta(days=2)
+    older = BASE
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="Omi", updated_at=newer),
+        }
+    )
+    row = {
+        "nodeId": "node-a",
+        "label": "Omi",
+        "nodeType": "org",
+        "aliasesJson": '["Based Hardware"]',
+        "createdAt": "2026-07-01T12:00:00Z",
+        "updatedAt": older.isoformat().replace("+00:00", "Z"),
+    }
+    kg_db.merge_synced_local_kg_nodes(UID, [row], db_client=db)
+    stored = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
+    assert stored["updated_at"] == newer
+    assert sorted(stored["aliases"]) == ["Based Hardware"]
