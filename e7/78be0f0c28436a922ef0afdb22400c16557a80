@@ -1,0 +1,23 @@
+desktop/context-for-claude/Tests/ContextAppTests/TerminationRevivalTests.swift
+  s_56918216f0e901::t_305855b0505221 1-265
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_56918216f0e901::t_b8bcbfbfe5835d 403-413
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_56918216f0e901::t_2bacb221e4dd1e 285,308-318,341,343-351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "e778be0f0c28436a922ef0afdb22400c16557a80",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
