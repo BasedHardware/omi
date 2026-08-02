@@ -1258,6 +1258,47 @@ void pusher(void)
     }
 }
 
+static int restart_advertising(void)
+{
+    int err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+
+    if (err == -EALREADY) {
+        return 0;
+    }
+    if (err) {
+        LOG_ERR("Failed to start advertising (err %d)", err);
+        return err;
+    }
+
+    LOG_INF("Advertising restarted");
+    return 0;
+}
+
+int transport_clear_bonds(void)
+{
+    int err;
+
+    LOG_INF("Clearing all BLE bonds");
+
+    if (current_connection != NULL) {
+        err = bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        if (err && err != -ENOTCONN) {
+            LOG_WRN("Disconnect before unpair failed (err %d)", err);
+        }
+        k_sleep(K_MSEC(150));
+    }
+
+    err = bt_unpair(BT_ID_DEFAULT, NULL);
+    if (err && err != -ENOENT) {
+        LOG_ERR("bt_unpair failed (err %d)", err);
+        return err;
+    }
+
+    LOG_INF("BLE bonds cleared");
+
+    return restart_advertising();
+}
+
 int transport_off()
 {
     // Stop pusher thread when transport is turned off
