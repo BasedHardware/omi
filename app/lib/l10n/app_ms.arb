@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Sangat kecil",
     "cloudflareTranscriptListEmptyMessage": "Belum ada transkrip Cloudflare yang tersedia.",
     "cloudflareTranscriptLoadError": "Transkrip Cloudflare tidak dapat dimuatkan. Cuba lagi.",
-    "cloudflareTranscriptSessionSemantics": "Sesi transkrip {sessionId}. {metadata}",
-    "alwaysInContext": "Sentiasa dalam konteks",
-    "baselineMemory": "Memori asas",
-    "pinAsBaseline": "Sematkan sebagai asas",
-    "unpinAsBaseline": "Nyahsemat sebagai asas"
+    "cloudflareTranscriptSessionSemantics": "Sesi transkrip {sessionId}. {metadata}"
 }

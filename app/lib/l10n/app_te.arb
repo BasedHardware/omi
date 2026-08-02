@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "అతి చిన్నది",
     "cloudflareTranscriptListEmptyMessage": "ఇంకా Cloudflare ట్రాన్స్‌క్రిప్ట్‌లు అందుబాటులో లేవు.",
     "cloudflareTranscriptLoadError": "Cloudflare ట్రాన్స్‌క్రిప్ట్‌లను లోడ్ చేయలేకపోయాము. మళ్లీ ప్రయత్నించండి.",
-    "cloudflareTranscriptSessionSemantics": "ట్రాన్స్‌క్రిప్ట్ సెషన్ {sessionId}. {metadata}",
-    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో",
-    "baselineMemory": "ప్రాథమిక మెమరీ",
-    "pinAsBaseline": "ప్రాథమికంగా పిన్ చేయండి",
-    "unpinAsBaseline": "ప్రాథమికం నుంచి అన్‌పిన్ చేయండి"
+    "cloudflareTranscriptSessionSemantics": "ట్రాన్స్‌క్రిప్ట్ సెషన్ {sessionId}. {metadata}"
 }

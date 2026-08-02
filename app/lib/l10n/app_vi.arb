@@ -3200,9 +3200,5 @@
     "whisperModelSizeTiny": "Rất nhỏ",
     "cloudflareTranscriptListEmptyMessage": "Chưa có bản chép lời Cloudflare nào.",
     "cloudflareTranscriptLoadError": "Không thể tải bản chép lời Cloudflare. Hãy thử lại.",
-    "cloudflareTranscriptSessionSemantics": "Phiên bản chép lời {sessionId}. {metadata}",
-    "alwaysInContext": "Luôn trong ngữ cảnh",
-    "baselineMemory": "Bộ nhớ cơ sở",
-    "pinAsBaseline": "Ghim làm cơ sở",
-    "unpinAsBaseline": "Bỏ ghim làm cơ sở"
+    "cloudflareTranscriptSessionSemantics": "Phiên bản chép lời {sessionId}. {metadata}"
 }

@@ -3291,9 +3291,5 @@
     "whisperModelSizeTiny": "Apró",
     "cloudflareTranscriptListEmptyMessage": "Még nincsenek elérhető Cloudflare-átiratok.",
     "cloudflareTranscriptLoadError": "A Cloudflare-átiratokat nem sikerült betölteni. Próbálja újra.",
-    "cloudflareTranscriptSessionSemantics": "Átirat-munkamenet {sessionId}. {metadata}",
-    "alwaysInContext": "Mindig kontextusban",
-    "baselineMemory": "Alapmemória",
-    "pinAsBaseline": "Rögzítés alapként",
-    "unpinAsBaseline": "Alapkénti rögzítés feloldása"
+    "cloudflareTranscriptSessionSemantics": "Átirat-munkamenet {sessionId}. {metadata}"
 }

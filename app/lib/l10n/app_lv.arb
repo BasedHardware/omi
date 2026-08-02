@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Sīks",
     "cloudflareTranscriptListEmptyMessage": "Cloudflare transkripcijas vēl nav pieejamas.",
     "cloudflareTranscriptLoadError": "Neizdevās ielādēt Cloudflare transkripcijas. Mēģiniet vēlreiz.",
-    "cloudflareTranscriptSessionSemantics": "Transkripcijas sesija {sessionId}. {metadata}",
-    "alwaysInContext": "Vienmēr kontekstā",
-    "baselineMemory": "Pamata atmiņa",
-    "pinAsBaseline": "Piespraust kā pamatu",
-    "unpinAsBaseline": "Atspraust kā pamatu"
+    "cloudflareTranscriptSessionSemantics": "Transkripcijas sesija {sessionId}. {metadata}"
 }

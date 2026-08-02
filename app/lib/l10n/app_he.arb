@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "זעיר",
     "cloudflareTranscriptListEmptyMessage": "עדיין אין תמלילים זמינים מ-Cloudflare.",
     "cloudflareTranscriptLoadError": "לא ניתן היה לטעון את התמלילים מ-Cloudflare. נסו שוב.",
-    "cloudflareTranscriptSessionSemantics": "הפעלת תמלול {sessionId}. {metadata}",
-    "alwaysInContext": "תמיד בהקשר",
-    "baselineMemory": "זיכרון בסיס",
-    "pinAsBaseline": "הצמדה כבסיס",
-    "unpinAsBaseline": "ביטול הצמדה כבסיס"
+    "cloudflareTranscriptSessionSemantics": "הפעלת תמלול {sessionId}. {metadata}"
 }

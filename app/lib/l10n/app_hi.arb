@@ -3196,9 +3196,5 @@
     "whisperModelSizeTiny": "अति लघु",
     "cloudflareTranscriptListEmptyMessage": "अभी तक कोई Cloudflare ट्रांसक्रिप्ट उपलब्ध नहीं है।",
     "cloudflareTranscriptLoadError": "Cloudflare ट्रांसक्रिप्ट लोड नहीं हो सके। फिर से कोशिश करें।",
-    "cloudflareTranscriptSessionSemantics": "ट्रांसक्रिप्ट सत्र {sessionId}। {metadata}",
-    "alwaysInContext": "हमेशा संदर्भ में",
-    "baselineMemory": "आधार स्मृति",
-    "pinAsBaseline": "आधार के रूप में पिन करें",
-    "unpinAsBaseline": "आधार से अनपिन करें"
+    "cloudflareTranscriptSessionSemantics": "ट्रांसक्रिप्ट सत्र {sessionId}। {metadata}"
 }

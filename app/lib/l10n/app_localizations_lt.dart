@@ -2127,16 +2127,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get editMemory => '✏️ Redaguoti atminimą';
 
   @override
-  String get pinAsBaseline => 'Prisegti kaip pradinę';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Atsegti kaip pradinę';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Pradinė atmintis';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Visada kontekste';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Mėgstu valgyti ledus...';

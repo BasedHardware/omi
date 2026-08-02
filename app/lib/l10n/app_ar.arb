@@ -3171,9 +3171,5 @@
     "whisperModelSizeTiny": "صغير جدًا",
     "cloudflareTranscriptListEmptyMessage": "لا تتوفر أي نسخ نصية من Cloudflare بعد.",
     "cloudflareTranscriptLoadError": "تعذر تحميل النسخ النصية من Cloudflare. حاول مرة أخرى.",
-    "cloudflareTranscriptSessionSemantics": "جلسة النسخ النصي {sessionId}. {metadata}",
-    "alwaysInContext": "دائمًا في السياق",
-    "baselineMemory": "ذاكرة مرجعية",
-    "pinAsBaseline": "تثبيت كمرجع",
-    "unpinAsBaseline": "إلغاء التثبيت كمرجع"
+    "cloudflareTranscriptSessionSemantics": "جلسة النسخ النصي {sessionId}. {metadata}"
 }

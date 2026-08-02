@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "Sićušni",
     "cloudflareTranscriptListEmptyMessage": "Cloudflare prijepisi još nisu dostupni.",
     "cloudflareTranscriptLoadError": "Cloudflare prijepisi nisu se mogli učitati. Pokušajte ponovno.",
-    "cloudflareTranscriptSessionSemantics": "Sesija prijepisa {sessionId}. {metadata}",
-    "alwaysInContext": "Uvijek u kontekstu",
-    "baselineMemory": "Osnovna memorija",
-    "pinAsBaseline": "Prikvači kao osnovu",
-    "unpinAsBaseline": "Otkači kao osnovu"
+    "cloudflareTranscriptSessionSemantics": "Sesija prijepisa {sessionId}. {metadata}"
 }

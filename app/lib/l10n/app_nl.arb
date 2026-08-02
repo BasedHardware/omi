@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Heel klein",
     "cloudflareTranscriptListEmptyMessage": "Er zijn nog geen Cloudflare-transcripties beschikbaar.",
     "cloudflareTranscriptLoadError": "Cloudflare-transcripties konden niet worden geladen. Probeer het opnieuw.",
-    "cloudflareTranscriptSessionSemantics": "Transcriptiesessie {sessionId}. {metadata}",
-    "alwaysInContext": "Altijd in context",
-    "baselineMemory": "Basisgeheugen",
-    "pinAsBaseline": "Vastzetten als basis",
-    "unpinAsBaseline": "Losmaken als basis"
+    "cloudflareTranscriptSessionSemantics": "Transcriptiesessie {sessionId}. {metadata}"
 }

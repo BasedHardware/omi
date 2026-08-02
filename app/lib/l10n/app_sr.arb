@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "Најмањи",
     "cloudflareTranscriptListEmptyMessage": "Cloudflare транскрипти још нису доступни.",
     "cloudflareTranscriptLoadError": "Није могуће учитати Cloudflare транскрипте. Покушајте поново.",
-    "cloudflareTranscriptSessionSemantics": "Сесија транскрипта {sessionId}. {metadata}",
-    "alwaysInContext": "Увек у контексту",
-    "baselineMemory": "Основна меморија",
-    "pinAsBaseline": "Закачи као основну",
-    "unpinAsBaseline": "Откачи као основну"
+    "cloudflareTranscriptSessionSemantics": "Сесија транскрипта {sessionId}. {metadata}"
 }

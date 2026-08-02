@@ -3200,9 +3200,5 @@
     "whisperModelSizeTiny": "Veľmi malý",
     "cloudflareTranscriptListEmptyMessage": "Zatiaľ nie sú k dispozícii žiadne prepisy z Cloudflare.",
     "cloudflareTranscriptLoadError": "Prepisy z Cloudflare sa nepodarilo načítať. Skúste to znova.",
-    "cloudflareTranscriptSessionSemantics": "Relácia prepisu {sessionId}. {metadata}",
-    "alwaysInContext": "Vždy v kontexte",
-    "baselineMemory": "Základná pamäť",
-    "pinAsBaseline": "Pripnúť ako základnú",
-    "unpinAsBaseline": "Odopnúť ako základnú"
+    "cloudflareTranscriptSessionSemantics": "Relácia prepisu {sessionId}. {metadata}"
 }

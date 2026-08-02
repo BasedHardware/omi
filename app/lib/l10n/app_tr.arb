@@ -3230,9 +3230,5 @@
     "whisperModelSizeTiny": "Çok küçük",
     "cloudflareTranscriptListEmptyMessage": "Henüz kullanılabilir Cloudflare transkripti yok.",
     "cloudflareTranscriptLoadError": "Cloudflare transkriptleri yüklenemedi. Tekrar deneyin.",
-    "cloudflareTranscriptSessionSemantics": "Transkript oturumu {sessionId}. {metadata}",
-    "alwaysInContext": "Her zaman bağlamda",
-    "baselineMemory": "Temel bellek",
-    "pinAsBaseline": "Temel olarak sabitle",
-    "unpinAsBaseline": "Temel sabitlemesini kaldır"
+    "cloudflareTranscriptSessionSemantics": "Transkript oturumu {sessionId}. {metadata}"
 }

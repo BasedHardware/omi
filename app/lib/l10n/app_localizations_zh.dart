@@ -2085,16 +2085,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editMemory => '✏️ 编辑记忆';
 
   @override
-  String get pinAsBaseline => '固定为基线';
+  String get pinAsBaseline => '设为基准记忆';
 
   @override
-  String get unpinAsBaseline => '取消固定为基线';
+  String get unpinAsBaseline => '取消基准记忆';
 
   @override
-  String get baselineMemory => '基线记忆';
+  String get baselineMemory => '基准记忆';
 
   @override
-  String get alwaysInContext => '始终在上下文中';
+  String get alwaysInContext => '始终包含在上下文中';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';

@@ -3230,9 +3230,5 @@
     "whisperModelSizeTiny": "Bardzo mały",
     "cloudflareTranscriptListEmptyMessage": "Nie ma jeszcze dostępnych transkrypcji Cloudflare.",
     "cloudflareTranscriptLoadError": "Nie udało się wczytać transkrypcji Cloudflare. Spróbuj ponownie.",
-    "cloudflareTranscriptSessionSemantics": "Sesja transkrypcji {sessionId}. {metadata}",
-    "alwaysInContext": "Zawsze w kontekście",
-    "baselineMemory": "Pamięć bazowa",
-    "pinAsBaseline": "Przypnij jako bazową",
-    "unpinAsBaseline": "Odepnij jako bazową"
+    "cloudflareTranscriptSessionSemantics": "Sesja transkrypcji {sessionId}. {metadata}"
 }

@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "अतिशय लहान",
     "cloudflareTranscriptListEmptyMessage": "अजून कोणतेही Cloudflare लिप्यंतरण उपलब्ध नाही.",
     "cloudflareTranscriptLoadError": "Cloudflare लिप्यंतरण लोड करता आले नाही. पुन्हा प्रयत्न करा.",
-    "cloudflareTranscriptSessionSemantics": "लिप्यंतरण सत्र {sessionId}. {metadata}",
-    "alwaysInContext": "नेहमी संदर्भात",
-    "baselineMemory": "मूलभूत स्मृती",
-    "pinAsBaseline": "मूलभूत म्हणून पिन करा",
-    "unpinAsBaseline": "मूलभूतातून अनपिन करा"
+    "cloudflareTranscriptSessionSemantics": "लिप्यंतरण सत्र {sessionId}. {metadata}"
 }

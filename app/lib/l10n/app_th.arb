@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "เล็กมาก",
     "cloudflareTranscriptListEmptyMessage": "ยังไม่มีบทถอดเสียงจาก Cloudflare",
     "cloudflareTranscriptLoadError": "ไม่สามารถโหลดบทถอดเสียงจาก Cloudflare ได้ โปรดลองอีกครั้ง",
-    "cloudflareTranscriptSessionSemantics": "เซสชันบทถอดเสียง {sessionId} {metadata}",
-    "alwaysInContext": "อยู่ในบริบทเสมอ",
-    "baselineMemory": "หน่วยความจำพื้นฐาน",
-    "pinAsBaseline": "ปักหมุดเป็นข้อมูลพื้นฐาน",
-    "unpinAsBaseline": "เลิกปักหมุดข้อมูลพื้นฐาน"
+    "cloudflareTranscriptSessionSemantics": "เซสชันบทถอดเสียง {sessionId} {metadata}"
 }

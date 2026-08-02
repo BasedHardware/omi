@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Mycket liten",
     "cloudflareTranscriptListEmptyMessage": "Det finns inga Cloudflare-transkriptioner tillgängliga ännu.",
     "cloudflareTranscriptLoadError": "Cloudflare-transkriptioner kunde inte läsas in. Försök igen.",
-    "cloudflareTranscriptSessionSemantics": "Transkriptionssession {sessionId}. {metadata}",
-    "alwaysInContext": "Alltid i kontext",
-    "baselineMemory": "Basminne",
-    "pinAsBaseline": "Fäst som bas",
-    "unpinAsBaseline": "Lossa som bas"
+    "cloudflareTranscriptSessionSemantics": "Transkriptionssession {sessionId}. {metadata}"
 }

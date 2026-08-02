@@ -2144,16 +2144,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get editMemory => '✏️ Επεξεργασία μνήμης';
 
   @override
-  String get pinAsBaseline => 'Καρφίτσωμα ως βασική';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Ξεκαρφίτσωμα ως βασική';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Βασική μνήμη';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Πάντα στο πλαίσιο';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Μου αρέσει να τρώω παγωτό...';

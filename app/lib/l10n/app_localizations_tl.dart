@@ -2140,16 +2140,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get editMemory => '✏️ I-edit ang Alaala';
 
   @override
-  String get pinAsBaseline => 'I-pin bilang batayan';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Alisin ang pag-pin bilang batayan';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Pangunahing memorya';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Laging nasa konteksto';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';

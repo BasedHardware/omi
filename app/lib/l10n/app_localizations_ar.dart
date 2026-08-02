@@ -2111,16 +2111,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editMemory => '✏️ تعديل الذاكرة';
 
   @override
-  String get pinAsBaseline => 'تثبيت كمرجع';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'إلغاء التثبيت كمرجع';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'ذاكرة مرجعية';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'دائمًا في السياق';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'أحب تناول الآيس كريم...';

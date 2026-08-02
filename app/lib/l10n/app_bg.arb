@@ -3173,9 +3173,5 @@
     "whisperModelSizeTiny": "Много малък",
     "cloudflareTranscriptListEmptyMessage": "Все още няма налични транскрипции от Cloudflare.",
     "cloudflareTranscriptLoadError": "Транскрипциите от Cloudflare не можаха да бъдат заредени. Опитайте отново.",
-    "cloudflareTranscriptSessionSemantics": "Сесия за транскрипция {sessionId}. {metadata}",
-    "alwaysInContext": "Винаги в контекста",
-    "baselineMemory": "Базова памет",
-    "pinAsBaseline": "Закачи като базова",
-    "unpinAsBaseline": "Откачи като базова"
+    "cloudflareTranscriptSessionSemantics": "Сесия за транскрипция {sessionId}. {metadata}"
 }

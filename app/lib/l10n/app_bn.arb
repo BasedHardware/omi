@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "অতি ছোট",
     "cloudflareTranscriptListEmptyMessage": "এখনও কোনো Cloudflare ট্রান্সক্রিপ্ট নেই।",
     "cloudflareTranscriptLoadError": "Cloudflare ট্রান্সক্রিপ্ট লোড করা যায়নি। আবার চেষ্টা করুন।",
-    "cloudflareTranscriptSessionSemantics": "ট্রান্সক্রিপ্ট সেশন {sessionId}। {metadata}",
-    "alwaysInContext": "সবসময় প্রসঙ্গে",
-    "baselineMemory": "ভিত্তিমূলক মেমরি",
-    "pinAsBaseline": "ভিত্তি হিসেবে পিন করুন",
-    "unpinAsBaseline": "ভিত্তি থেকে আনপিন করুন"
+    "cloudflareTranscriptSessionSemantics": "ট্রান্সক্রিপ্ট সেশন {sessionId}। {metadata}"
 }

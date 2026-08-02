@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Pisike",
     "cloudflareTranscriptListEmptyMessage": "Cloudflare'i transkriptsioone pole veel saadaval.",
     "cloudflareTranscriptLoadError": "Cloudflare'i transkriptsioone ei saanud laadida. Proovige uuesti.",
-    "cloudflareTranscriptSessionSemantics": "Transkriptsiooni seanss {sessionId}. {metadata}",
-    "alwaysInContext": "Alati kontekstis",
-    "baselineMemory": "Alusmälu",
-    "pinAsBaseline": "Kinnita alusena",
-    "unpinAsBaseline": "Eemalda alusena"
+    "cloudflareTranscriptSessionSemantics": "Transkriptsiooni seanss {sessionId}. {metadata}"
 }

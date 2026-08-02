@@ -2110,16 +2110,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get editMemory => '✏️ Rediger hukommelse';
 
   @override
-  String get pinAsBaseline => 'Fastgør som grundlag';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Fjern fastgørelse som grundlag';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Grundhukommelse';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Altid i kontekst';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Indtast hukommelsesindhold';

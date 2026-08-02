@@ -2140,16 +2140,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get editMemory => '✏️ Edita memòria';
 
   @override
-  String get pinAsBaseline => 'Fixa com a referència';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Desfixa com a referència';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Memòria de referència';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Sempre en context';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'M\'agrada menjar gelat...';

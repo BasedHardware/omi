@@ -2130,16 +2130,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get editMemory => '✏️ Chỉnh sửa bộ nhớ';
 
   @override
-  String get pinAsBaseline => 'Ghim làm cơ sở';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Bỏ ghim làm cơ sở';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Bộ nhớ cơ sở';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Luôn trong ngữ cảnh';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Tôi thích ăn kem...';

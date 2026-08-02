@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Veldig liten",
     "cloudflareTranscriptListEmptyMessage": "Ingen Cloudflare-transkripsjoner er tilgjengelige ennå.",
     "cloudflareTranscriptLoadError": "Cloudflare-transkripsjoner kunne ikke lastes inn. Prøv igjen.",
-    "cloudflareTranscriptSessionSemantics": "Transkripsjonsøkt {sessionId}. {metadata}",
-    "alwaysInContext": "Alltid i kontekst",
-    "baselineMemory": "Grunnminne",
-    "pinAsBaseline": "Fest som grunnlag",
-    "unpinAsBaseline": "Løsne som grunnlag"
+    "cloudflareTranscriptSessionSemantics": "Transkripsjonsøkt {sessionId}. {metadata}"
 }

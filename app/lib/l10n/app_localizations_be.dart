@@ -2129,16 +2129,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get editMemory => '✏️ Редагаваць спамін';
 
   @override
-  String get pinAsBaseline => 'Замацаваць як базавую';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'Адмацаваць як базавую';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'Базавая памяць';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'Заўсёды ў кантэксце';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Мне нравіцца есці мароженае...';

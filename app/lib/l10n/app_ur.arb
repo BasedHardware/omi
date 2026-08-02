@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "بہت چھوٹا",
     "cloudflareTranscriptListEmptyMessage": "ابھی کوئی Cloudflare نقل دستیاب نہیں ہے۔",
     "cloudflareTranscriptLoadError": "Cloudflare نقلیں لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔",
-    "cloudflareTranscriptSessionSemantics": "نقل کا سیشن {sessionId}۔ {metadata}",
-    "alwaysInContext": "ہمیشہ سیاق میں",
-    "baselineMemory": "بنیادی میموری",
-    "pinAsBaseline": "بنیاد کے طور پر پن کریں",
-    "unpinAsBaseline": "بنیاد کے طور پر ان پن کریں"
+    "cloudflareTranscriptSessionSemantics": "نقل کا سیشن {sessionId}۔ {metadata}"
 }

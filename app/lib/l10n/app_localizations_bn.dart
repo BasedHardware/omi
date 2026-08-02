@@ -2126,16 +2126,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String get editMemory => '✏️ স্মৃতি সম্পাদনা করুন';
 
   @override
-  String get pinAsBaseline => 'ভিত্তি হিসেবে পিন করুন';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'ভিত্তি থেকে আনপিন করুন';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'ভিত্তিমূলক মেমরি';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'সবসময় প্রসঙ্গে';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'আমি আইসক্রিম খেতে পছন্দ করি...';

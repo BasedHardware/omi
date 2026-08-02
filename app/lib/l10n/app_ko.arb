@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "초소형",
     "cloudflareTranscriptListEmptyMessage": "아직 사용할 수 있는 Cloudflare 녹취록이 없습니다.",
     "cloudflareTranscriptLoadError": "Cloudflare 녹취록을 불러올 수 없습니다. 다시 시도해 주세요.",
-    "cloudflareTranscriptSessionSemantics": "녹취 세션 {sessionId}. {metadata}",
-    "alwaysInContext": "항상 컨텍스트에 포함",
-    "baselineMemory": "기준 메모리",
-    "pinAsBaseline": "기준으로 고정",
-    "unpinAsBaseline": "기준 고정 해제"
+    "cloudflareTranscriptSessionSemantics": "녹취 세션 {sessionId}. {metadata}"
 }

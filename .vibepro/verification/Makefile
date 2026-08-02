@@ -35,6 +35,7 @@ INTEGRATION_REQUIRED_PATHS := \
 	app/test/self_hosted/cloudflare/cloudflare_transcript_provider_test.dart \
 	app/test/self_hosted/cloudflare/cloudflare_transcripts_page_test.dart
 INTEGRATION_FORBIDDEN_DIFF_PATTERN := (^|/)(worker|workers|ios|android|firebase)(/|$$)|(^|/)(\.env|.*\.env|secrets?|credentials?)(\..*)?$$|\.entitlements$$
+INTEGRATION_MEMORIES_L10N_PATTERN := ^[+-][[:space:]]*"(alwaysInContext|baselineMemory|pinAsBaseline|unpinAsBaseline)":
 
 test:
 	cd $(REPO_ROOT)/app && $(FLUTTER) test \
@@ -93,6 +94,10 @@ integration:
 	for path in $(INTEGRATION_REQUIRED_PATHS); do \
 		test -f "$(REPO_ROOT)/$$path" || { echo "missing required integration surface: $$path" >&2; exit 1; }; \
 	done; \
+	if git -C "$(REPO_ROOT)" diff --unified=0 "$(INTEGRATION_DIFF)" -- app/lib/l10n | rg -n '$(INTEGRATION_MEMORIES_L10N_PATTERN)'; then \
+		echo "unscoped Memories l10n surface in Cloudflare diff" >&2; \
+		exit 1; \
+	fi; \
 	if git -C "$(REPO_ROOT)" diff --name-only "$(INTEGRATION_DIFF)" | rg -n '$(INTEGRATION_FORBIDDEN_DIFF_PATTERN)'; then \
 		echo "forbidden Worker, native, Firebase, entitlement, or secret surface in diff" >&2; \
 		exit 1; \

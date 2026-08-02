@@ -10770,9 +10770,5 @@
     "whisperModelSizeTiny": "Мініяцюрная",
     "cloudflareTranscriptListEmptyMessage": "Транскрыпцыі Cloudflare пакуль недаступныя.",
     "cloudflareTranscriptLoadError": "Не ўдалося загрузіць транскрыпцыі Cloudflare. Паспрабуйце яшчэ раз.",
-    "cloudflareTranscriptSessionSemantics": "Сеанс транскрыпцыі {sessionId}. {metadata}",
-    "alwaysInContext": "Заўсёды ў кантэксце",
-    "baselineMemory": "Базавая памяць",
-    "pinAsBaseline": "Замацаваць як базавую",
-    "unpinAsBaseline": "Адмацаваць як базавую"
+    "cloudflareTranscriptSessionSemantics": "Сеанс транскрыпцыі {sessionId}. {metadata}"
 }

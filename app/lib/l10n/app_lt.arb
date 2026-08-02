@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Mažytis",
     "cloudflareTranscriptListEmptyMessage": "Dar nėra pasiekiamų „Cloudflare“ transkripcijų.",
     "cloudflareTranscriptLoadError": "Nepavyko įkelti „Cloudflare“ transkripcijų. Bandykite dar kartą.",
-    "cloudflareTranscriptSessionSemantics": "Transkripcijos seansas {sessionId}. {metadata}",
-    "alwaysInContext": "Visada kontekste",
-    "baselineMemory": "Pradinė atmintis",
-    "pinAsBaseline": "Prisegti kaip pradinę",
-    "unpinAsBaseline": "Atsegti kaip pradinę"
+    "cloudflareTranscriptSessionSemantics": "Transkripcijos seansas {sessionId}. {metadata}"
 }

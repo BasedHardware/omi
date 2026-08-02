@@ -2116,16 +2116,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get editMemory => '✏️ แก้ไขความทรงจำ';
 
   @override
-  String get pinAsBaseline => 'ปักหมุดเป็นข้อมูลพื้นฐาน';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'เลิกปักหมุดข้อมูลพื้นฐาน';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'หน่วยความจำพื้นฐาน';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'อยู่ในบริบทเสมอ';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'ฉันชอบกินไอศกรีม...';

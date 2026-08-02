@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Foarte mic",
     "cloudflareTranscriptListEmptyMessage": "Încă nu sunt disponibile transcrieri Cloudflare.",
     "cloudflareTranscriptLoadError": "Transcrierile Cloudflare nu au putut fi încărcate. Încercați din nou.",
-    "cloudflareTranscriptSessionSemantics": "Sesiune de transcriere {sessionId}. {metadata}",
-    "alwaysInContext": "Întotdeauna în context",
-    "baselineMemory": "Memorie de bază",
-    "pinAsBaseline": "Fixează ca bază",
-    "unpinAsBaseline": "Anulează fixarea ca bază"
+    "cloudflareTranscriptSessionSemantics": "Sesiune de transcriere {sessionId}. {metadata}"
 }

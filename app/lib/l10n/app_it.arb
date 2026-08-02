@@ -3195,9 +3195,5 @@
     "whisperModelSizeTiny": "Minuscolo",
     "cloudflareTranscriptListEmptyMessage": "Non sono ancora disponibili trascrizioni Cloudflare.",
     "cloudflareTranscriptLoadError": "Non è stato possibile caricare le trascrizioni Cloudflare. Riprova.",
-    "cloudflareTranscriptSessionSemantics": "Sessione di trascrizione {sessionId}. {metadata}",
-    "alwaysInContext": "Sempre nel contesto",
-    "baselineMemory": "Memoria di base",
-    "pinAsBaseline": "Fissa come base",
-    "unpinAsBaseline": "Rimuovi dalla base"
+    "cloudflareTranscriptSessionSemantics": "Sessione di trascrizione {sessionId}. {metadata}"
 }

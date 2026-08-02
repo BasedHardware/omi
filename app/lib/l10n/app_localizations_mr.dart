@@ -2128,16 +2128,16 @@ class AppLocalizationsMr extends AppLocalizations {
   String get editMemory => '✏️ स्मृती संपादित करा';
 
   @override
-  String get pinAsBaseline => 'मूलभूत म्हणून पिन करा';
+  String get pinAsBaseline => 'Pin as Baseline';
 
   @override
-  String get unpinAsBaseline => 'मूलभूतातून अनपिन करा';
+  String get unpinAsBaseline => 'Unpin from Baseline';
 
   @override
-  String get baselineMemory => 'मूलभूत स्मृती';
+  String get baselineMemory => 'Baseline Memory';
 
   @override
-  String get alwaysInContext => 'नेहमी संदर्भात';
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'मला आयस्क्रीम खाण्यास आवडते...';
