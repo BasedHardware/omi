@@ -198,10 +198,82 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # On-prem OIDC issuer (ADR-0034/0038). Opt-in via the `auth` profile so the default baseline
+  # stays Firebase (ADR-0003). Keycloak is one OIDC provider; any compliant IdP works by pointing
+  # the backend's OIDC_ISSUER/OIDC_JWKS_URL and the app's OIDC_ISSUER at it.
+  #   docker compose --profile auth up -d
+  # TLS is mandatory for the deployed issuer (the mobile client refuses non-loopback http — see
+  # SELFHOST_NOTES §OIDC client). Provide a cert reachable at the hostname the DEVICE uses:
+  #   ./keycloak/certs/{kc.crt,kc.key}  (self-signed for testing, or your real cert)
+  # Realm is imported from the committed example (realm `omi` + public PKCE client `omi-app`).
+  # Issuer consistency (proven live): the token `iss` = KC_HOSTNAME; the backend must validate that
+  # same value. Set KC_HOSTNAME to the device-reachable https URL, and give the backend a
+  # backchannel JWKS URL it can reach on the internal net:
+  #   backend.env: OIDC_ISSUER=${KC_HOSTNAME}/realms/omi
+  #                OIDC_JWKS_URL=http://keycloak:8090/realms/omi/protocol/openid-connect/certs
+  # `--hostname-backchannel-dynamic=true` lets that internal http backchannel coexist with the
+  # fixed public https hostname.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    profiles: ["auth"]
+    command:
+      - start-dev
+      - --http-port=8090
+      - --proxy-headers=xforwarded
+      - --hostname=${KC_HOSTNAME:-https://localhost:8443}
+      - --hostname-backchannel-dynamic=true
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
+    # http-only behind kc-proxy; no published ports (the backend + the proxy reach it via
+    # `keycloak:8090` on the internal net). TLS is terminated by kc-proxy below.
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy in front of Keycloak (conf: keycloak/kc-proxy.conf). It publishes
+  # the public https issuer port; Keycloak stays http-only on the internal network. Point KC_HOSTNAME
+  # and the app/backend OIDC_ISSUER at this proxy's https URL.
+  kc-proxy:
+    image: nginx:stable-alpine
+    profiles: ["auth"]
+    depends_on: [keycloak]
+    # 8443 is the conventional https port; override KC_HTTPS_PORT if it collides on the host
+    # (then set KC_HOSTNAME to the same port, e.g. https://<ip>:8453).
+    ports:
+      - "${KC_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./keycloak/kc-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for the backend API (conf: api-proxy.conf). The mobile app sends
+  # the Bearer token to the API, so on-prem serves it over HTTPS (same posture as the OIDC issuer).
+  # Set the app's API_BASE_URL to https://<host>:${API_HTTPS_PORT}. Generate certs: ./gen-dev-certs.sh
+  api-proxy:
+    image: nginx:stable-alpine
+    profiles: ["auth"]
+    depends_on: [backend]
+    ports:
+      - "${API_HTTPS_PORT:-8444}:8443"
+    volumes:
+      - ./api-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
 networks:
   omi:
     driver: bridge
     internal: true
+  # Non-internal network for the TLS reverse proxies so their published ports have host ingress
+  # (the `omi` net is internal:true → no external routing). Proxies join both: `edge` for the
+  # device/host, `omi` to reach keycloak/backend by service name.
+  edge:
+    driver: bridge
 
 volumes:
   # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated

@@ -1,0 +1,51 @@
+{
+  "realm": "omi",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "clients": [
+    {
+      "clientId": "omi-app",
+      "name": "Omi mobile app (Auth Code + PKCE)",
+      "description": "Public client for the additive OIDC Flutter login (ADR-0038). System-browser Auth Code + PKCE; custom-scheme redirect.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["omiauth:/oidc-callback", "omiauth:/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "omiauth:/*"
+      }
+    },
+    {
+      "clientId": "omi-test",
+      "name": "Backend OIDC contract test (direct access)",
+      "description": "Public client with direct-access grants for tests/contract/test_auth_provider_contract.py (password grant -> token -> JWKS verify).",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "testuser",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testuser@example.com",
+      "firstName": "Test",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "testpass", "temporary": false }
+      ],
+      "realmRoles": ["offline_access"]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+# Android emulator image for on-prem app testing (OIDC live flow), pinned on budtmo/docker-android.
+# https://github.com/budtmo/docker-android — bundles the Android emulator + noVNC + Appium.
+#
+# API 30 / Android 11 / x86_64 / google_apis (matches the app's minSdk 29 baseline). We deliberately
+# DO NOT enable `-writable-system`: most real devices can't trust a system CA either, so the app's
+# debug build trusts a *user*-installed CA (app/android/app/src/debug/res/xml/network_security_config.xml),
+# and the browser (Chrome Custom Tab, for the OIDC authorize step) trusts the same user CA. This keeps
+# the test faithful to a real device posture.
+#
+# Build: docker build -t omi-emulator:onprem -f deploy/onprem/Dockerfile.emulator .
+# Run (KVM required; publishes noVNC on :6080 and adb on :5555):
+#   docker run -d --name omi-emu --privileged \
+#     -p 6080:6080 -p 5555:5555 --device /dev/kvm omi-emulator:onprem
+# Then, at runtime (not baked, so nothing device-specific ships in the image):
+#   1) install the self-signed CA as a USER cert (Settings > Security, or adb into
+#      /data/misc/user/0/cacerts-added with the openssl subject_hash_old name),
+#   2) `adb install -r app-dev-debug.apk`,
+#   3) drive `Sign in with SSO` -> Keycloak (https issuer) -> redirect -> verify.
+FROM budtmo/docker-android:emulator_11.0
+
+# Defaults for the on-prem OIDC test rig; override at `docker run` as needed.
+ENV EMULATOR_DEVICE="Samsung Galaxy S10" \
+    WEB_VNC=true \
+    EMULATOR_HEADLESS=false

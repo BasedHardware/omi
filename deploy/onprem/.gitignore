@@ -1,0 +1,3 @@
+# Operator-generated TLS material (never commit private keys) and local compose env.
+certs/
+.env

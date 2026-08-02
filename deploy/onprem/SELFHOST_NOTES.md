@@ -469,16 +469,22 @@ upstream; the OIDC path is a compile-time flavor.
 **App build config** (Envied compile-time, in `app/.dev.env` / `.prod.env`):
 ```
 AUTH_BACKEND=oidc
-OIDC_ISSUER=http://<lan-ip>:8090/realms/omi   # must be reachable from the DEVICE, not 127.0.0.1
+OIDC_ISSUER=https://<host>/realms/omi   # HTTPS required; must be reachable from the DEVICE
 OIDC_CLIENT_ID=omi-app
 OIDC_REDIRECT_SCHEME=omiauth
-API_BASE_URL=http://<lan-ip>:10151/
+API_BASE_URL=https://<host>/
 ```
+**TLS is mandatory for the deployed issuer.** A login flow carries the code, access token, and the
+long-lived `offline_access` refresh token; `OidcAuthService` **refuses any non-loopback `http://`
+issuer** (fail-closed) and passes `allowInsecureConnections: true` ONLY for
+`http://localhost`/`127.0.0.1`/`::1` in a **debug** build (local dev). **Put on-prem Keycloak behind
+an HTTPS reverse proxy** (or a self-signed cert trusted by the device). This is the intentional
+posture (option 1, 2026-08-02) — no cleartext escape hatch for LAN issuers.
+
 **Native redirect config** (must match `OIDC_REDIRECT_SCHEME`): Android
 `app/android/app/build.gradle` → `manifestPlaceholders += [appAuthRedirectScheme: 'omiauth']`; iOS
 `Info.plist` → `CFBundleURLTypes` with the same scheme. The client is `flutter_appauth` (Auth Code +
-PKCE via the system browser). When `OIDC_ISSUER` is `http://`, `OidcAuthService` auto-passes
-`allowInsecureConnections: true` (AppAuth refuses cleartext otherwise); `https://` stays strict.
+PKCE via the system browser).
 
 **Keycloak client for the mobile flow** (distinct from the direct-access contract client above — this
 one is **public + standard flow + PKCE**):
@@ -507,6 +513,39 @@ backend with the Keycloak Bearer, validated via JWKS: `GET /v3/speech-profile 20
 gated under `Env.useOidc` — the `idTokenChanges`/session-expired listeners are not attached, and
 `refreshIdToken()` refreshes via the OIDC provider (returning a transient failure, never `MissingUser`,
 so the 401-recovery paths never call `expireSession()` and wipe the token). See `docs/BACKLOG.md` D20.
+
+### Reproducible dev stack (compose) + full-E2E recipe (proven 2026-08-02)
+
+The whole OIDC stack is declarative — bring it down and back up deterministically:
+```bash
+cd deploy/onprem
+cp .env.dev.example .env                 # edit HOST_IP = the address the DEVICE reaches (not 127.0.0.1)
+HOST_IP=<your-ip> ./gen-dev-certs.sh     # self-signed CA + server cert (SAN=HOST_IP); gitignored
+# backend.env: AUTH_BACKEND=oidc + OIDC_ISSUER=${KC_HOSTNAME}/realms/omi
+#              + OIDC_JWKS_URL=http://keycloak:8090/realms/omi/protocol/openid-connect/certs + LOCAL_DEVELOPMENT=false
+docker compose --profile auth up -d --build     # keycloak(+kc-proxy https) + api-proxy(https) + backend + deps
+```
+`keycloak` runs http-only behind `kc-proxy` (TLS on `${KC_HTTPS_PORT}`, `--proxy-headers`); the API runs
+behind `api-proxy` (TLS on `${API_HTTPS_PORT}`). The realm (`keycloak/omi-realm.example.json`) imports
+`omi-app` (public PKCE, redirect `omiauth:/oidc-callback`) + `testuser`. **Issuer/JWKS split-horizon**
+(proven): the token `iss` = the public `KC_HOSTNAME`, so `OIDC_ISSUER` must equal that; the backend
+fetches keys over the **internal http** backchannel, so it needs no CA.
+
+App build (Envied is compile-time) — gotchas proven live:
+- **Env comes from the process environment, not `.env`** for this container build; pass values via `-e`
+  AND run `dart run build_runner clean` first, else stale generated `*_env.g.dart` keeps `firebase`:
+  `-e AUTH_BACKEND=oidc -e OIDC_ISSUER=https://<ip>:8443/realms/omi -e OIDC_CLIENT_ID=omi-app -e OIDC_REDIRECT_SCHEME=omiauth -e API_BASE_URL=https://<ip>:8444/`
+- Firebase config is gitignored but **required even under OIDC** (`Firebase.initializeApp` runs
+  unconditionally): provide `app/lib/firebase_options_{dev,prod}.dart` + `app/android/app/src/{dev,prod}/google-services.json`.
+- Build image: `deploy/onprem/Dockerfile.appbuild` (self-contained: JDK 21 + Android SDK 36 + NDK); emulator:
+  `deploy/onprem/Dockerfile.emulator` (budtmo). Build APK: `flutter build apk --debug --flavor dev`.
+- Device trust: install `certs/ca.crt` as a **user** CA (real devices rarely allow a system CA); the
+  debug `network_security_config.xml` trusts user CAs so both Chrome (authorize) and AppAuth (token) validate.
+- After changing the compiled env, **uninstall + reinstall** (`adb install -r` alone can keep the old build).
+
+Full E2E proven (2026-08-02, emulator): `Sign in with SSO` → Keycloak login (https, self-signed CA trusted)
+→ redirect → token exchange → **refresh token in Keychain/Keystore, not prefs** → force-stop/relaunch keeps
+the session → backend `saveToken {"status":"Ok"}`, `GET /v1/users/me/subscription 200`, `POST /v1/users/fcm-token 200`.
 
 ## Git notes
 
