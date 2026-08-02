@@ -2226,6 +2226,52 @@ class TestLegacyConversationRecovery:
         }
         batch.delete.assert_called_once()
 
+    def test_restore_legacy_conversation_items_skips_stale_row_and_continues(self):
+        """A staged-row precondition race preserves the row and does not abort the page."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        snapshots = []
+        for index in range(2):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-task-{index}'
+            snapshot.update_time = object()
+            snapshot.to_dict.return_value = {
+                'id': snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert batch.commit.call_count == 2
+        assert batch.create.call_count == 2
+        assert batch.delete.call_count == 2
+
     def test_restore_legacy_conversation_items_pages_by_document_id(self):
         """Recovery bounds each request and returns an exclusive continuation cursor."""
         snapshots = []

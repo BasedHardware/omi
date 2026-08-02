@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from google.api_core.exceptions import AlreadyExists, Conflict
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -419,10 +419,10 @@ def restore_legacy_conversation_items(
         batch.delete(staged_ref, option=delete_option)
         try:
             batch.commit()
-        except (AlreadyExists, Conflict):
-            # A current action item has the authoritative identity. Preserve it
-            # and preserve the staged row for manual inspection rather than
-            # deleting either record after a race.
+        except (AlreadyExists, Conflict, FailedPrecondition):
+            # An action-item collision or staged-row update won the race. The
+            # batch is atomic, so preserve both records for the next recovery
+            # pass or manual inspection rather than deleting either one.
             skipped_existing += 1
             continue
         restored += 1
