@@ -58,8 +58,6 @@ enum RewindWindow {
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false)
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.minSize = minimumSize
         window.isReleasedWhenClosed = false
@@ -68,21 +66,26 @@ enum RewindWindow {
         // every other window is something to fight rather than something to read.
         window.level = .normal
 
-        // Glass, and pinned light like every other surface in the app. On a titled window the pin has
-        // to be on the *window* rather than on the content view: pinning only the content leaves the
-        // title bar and the traffic lights in the system's appearance, which on a Dark machine is a
-        // dark bar sitting on a white sheet. `.fullSizeContentView` plus a transparent title bar
-        // means the glass runs edge to edge under it.
-        InkGlass.pin(window)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.titlebarSeparatorStyle = .none
+        // The window-side half of the glass, which for a titled window is four properties that have
+        // to agree: the light pin on the *window* (pinning only the content leaves the title bar and
+        // the traffic lights in the system's appearance — a dark bar on a white sheet), a transparent
+        // ground so the material blurs the desktop rather than a sheet AppKit painted, AppKit's own
+        // shadow kept because the frame is the panel's edge here, and a title bar the glass runs edge
+        // to edge underneath. All of it is `WindowGlass`, so this window and settings cannot drift.
+        WindowGlass.wear(window, as: .titled)
 
         // CRITICAL: Use a container view instead of making NSHostingView the contentView directly.
         // When NSHostingView IS the contentView of a borderless window, it tries to negotiate
         // window sizing through updateWindowContentSizeExtremaIfNecessary and updateAnimatedWindowSize,
         // causing re-entrant constraint updates that crash in _postWindowNeedsUpdateConstraints.
         // Wrapping in a container breaks that "I own this window" relationship.
+        //
+        // The hosting view is constrained to the glass *host* rather than handed to
+        // `InkGlassView.setContent`, which is the seam a floating panel uses: `setContent` is
+        // frame-and-autoresizing, and this window is resizable with a minimum size that only Auto
+        // Layout expresses. It is the same rectangle either way — `.fullBleed` is inset 0, so the
+        // panel fills its host exactly — and every part of the ground stays AppKit's, which is the
+        // property that matters. `RewindView` therefore paints no background of its own.
         //
         // sizingOptions: Remove .intrinsicContentSize so the hosting view can expand beyond
         // its SwiftUI ideal size. Keep .minSize and .maxSize for proper min/max constraints.

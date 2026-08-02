@@ -1,9 +1,22 @@
 import AppKit
 import ContextCore
+import QuartzCore
 import SwiftUI
 
 /// Everything the timeline window knows: which day is loaded, where the playhead sits, how wide the
 /// track's visible window is, and what has been decoded.
+///
+/// **The playhead is a time, not an index.** `playheadAt` is where the user actually put it, to the
+/// fraction of a second; `playhead` is only the capture nearest that position. It used to be the
+/// other way round — the index was the state and the time was read back off whichever frame it landed
+/// on — and three separate complaints all came from that one fact. There was no position *between*
+/// two captures for a dissolve to be a fraction of, so every step was a hard cut (`RewindScrub`); the
+/// handle on the track jumped in three-second quanta instead of following the pointer; and
+/// `travel(by:)` re-derived its base from the snapped frame each time, so any scroll delta smaller
+/// than half a capture interval rounded straight back to where it started and was lost. Zoomed in to
+/// the two-minute floor that is *every ordinary scroll event*, which is what "the scrolling does not
+/// feel smooth" looks like from the inside — and it is why a momentum tail, whose deltas decay
+/// towards zero by definition, could never do anything at all.
 ///
 /// The two zooms live here side by side and are deliberately separate fields, because the spec is
 /// explicit that they are different features and must not be conflated: `trackSpan` is how much
@@ -18,16 +31,24 @@ import SwiftUI
 @MainActor
 final class RewindModel: ObservableObject {
 
-    /// Frames decoded ahead of the playhead in each direction.
-    ///
-    /// Five either side is ~30 seconds of capture at the 3 s tick, which is comfortably more than a
-    /// drag covers between two frames being asked for, and eleven frames is a memory cost
-    /// `FrameLoader.memoryBudgetBytes` is sized for.
-    static let prefetchRadius = 5
-
     /// Frame-image zoom bounds. 1 is fit-to-window.
     static let minimumImageZoom: CGFloat = 1
     static let maximumImageZoom: CGFloat = 4
+
+    /// Assumed spacing between scroll events when the real one cannot be used — the 120 Hz a trackpad
+    /// delivers on this hardware.
+    private static let nominalEventInterval: Double = 1.0 / 120
+
+    /// A longer pause than this between two scroll events makes them two gestures rather than one
+    /// fast one, and the second must not inherit the first's speed.
+    private static let velocityGapLimit: Double = 0.2
+
+    /// How much of each new sample the smoothed velocity takes. One stray event must not define the
+    /// whole flick, and five events reach ~88% of the true rate, which is well inside one gesture.
+    private static let velocitySmoothing: Double = 0.35
+
+    /// The settle's tick rate, matching the 120 Hz the display and the trackpad both run at here.
+    private static let glideTickInterval: Double = 1.0 / 120
 
     private let store: ContextStore
     let loader = FrameLoader()
@@ -38,7 +59,12 @@ final class RewindModel: ObservableObject {
     @Published private(set) var frames: [RewindFrame] = []
     /// The day's shape, from `Queries.activity` — run-length-collapsed stretches of one app.
     @Published private(set) var blocks: [ActivityBlock] = []
-    /// Index into `frames`. Nil only when the day holds nothing showable.
+    /// **Where the playhead actually is**, in Unix epoch seconds, at whatever fraction of a second
+    /// the gesture put it. The track draws its handle here, and the dissolve is a function of it.
+    @Published private(set) var playheadAt: Double?
+
+    /// The capture nearest `playheadAt`, which is the frame the timestamp, the border colour, Live
+    /// Text and the segment chevrons all speak for. Derived, never set on its own.
     @Published private(set) var playhead: Int?
 
     /// The leftmost instant the track shows, and how many seconds of it are visible.
@@ -47,8 +73,17 @@ final class RewindModel: ObservableObject {
 
     @Published var imageZoom: CGFloat = 1
 
-    /// The decoded picture for the playhead frame, or nil while it is being decoded.
+    /// The decoded picture the stage draws underneath, or nil while it is being decoded.
     @Published private(set) var image: NSImage?
+
+    /// The next real capture, drawn over `image` at `blendWeight`, or nil when there is no dissolve.
+    ///
+    /// Both are genuine decoded captures. The weight comes straight from the playhead's position
+    /// between them rather than from an animation with a duration of its own — which is what makes a
+    /// fast scrub keep up with the pointer instead of trailing a fixed number of milliseconds behind
+    /// it. See `RewindScrub`.
+    @Published private(set) var blendImage: NSImage?
+    @Published private(set) var blendWeight: Double = 0
 
     /// Live Text state. `nil` means no pass has run on this frame — which is precisely what makes the
     /// control dim, per the spec.
@@ -78,9 +113,35 @@ final class RewindModel: ObservableObject {
     /// ordering that is correct for both.
     private var pendingFocus: Double?
 
+    /// How fast the playhead is being driven, in timeline-seconds per second of wall clock, smoothed
+    /// across the events of one gesture. Read once, when the fingers lift, to decide how far the
+    /// scrub coasts.
+    private var velocity: Double = 0
+    private var lastTravelAt: Double?
+
+    /// The direction of the last movement — +1 forward, −1 back, 0 at rest — which is what aims the
+    /// prefetch window at the captures the playhead is heading for rather than the ones behind it.
+    private(set) var scrubDirection = 0
+
+    /// The settle in progress, or nil when the playhead is not moving on its own.
+    private(set) var glide: RewindGlide?
+    private var glideStartedAt: Double = 0
+    private var glideTimer: Timer?
+
+    /// Monotonic time, in seconds. Injectable because everything the coast and the settle do is a
+    /// function of elapsed time, and a test that proved either by sleeping would be a test that fails
+    /// on a loaded machine.
+    var clock: () -> Double = { CACurrentMediaTime() }
+
     init(store: ContextStore, day: Date = Date()) {
         self.store = store
         self.day = Calendar.current.startOfDay(for: day)
+        // One subscription rather than a completion per request. A decode that lands does not tell
+        // the stage what to draw — the playhead may have moved while it ran, and with a dissolve the
+        // two pictures' roles can have swapped — so the only correct response to *any* arrival is to
+        // re-ask what the playhead needs now. `refreshImage` publishes nothing when the answer has
+        // not changed, so a decode the stage does not care about costs three comparisons.
+        loader.onDecode = { [weak self] in self?.refreshImage() }
     }
 
     // MARK: - Loading
@@ -105,7 +166,7 @@ final class RewindModel: ObservableObject {
         reload()
         if let pending = pendingFocus {
             pendingFocus = nil
-            scrub(to: pending)
+            park(at: pending)
         }
     }
 
@@ -134,10 +195,19 @@ final class RewindModel: ObservableObject {
             loadError = "Could not read this day: \(error.localizedDescription)"
         }
 
+        // A day change is the end of every gesture that was in flight over the old one: a settle
+        // still ticking towards yesterday's capture would land the playhead on an index that now
+        // means a different moment entirely.
+        endGlide()
+        velocity = 0
+        lastTravelAt = nil
+        scrubDirection = 0
+
         liveText = nil
         showsLiveText = false
         imageZoom = 1
         playhead = frames.isEmpty ? nil : frames.count - 1
+        playheadAt = frames.last?.capturedAt
         resetTrackWindow()
         refreshImage()
         // Last, and only here: this is the single place a day is actually read, so it is the single
@@ -186,11 +256,13 @@ final class RewindModel: ObservableObject {
 
     /// **Go to a moment**, wherever in the capture it is. The seam a search result travels through.
     ///
-    /// Distinct from `scrub(to:)` in exactly one way, and it is the way that matters: `scrub` moves
-    /// the playhead *within the loaded day* — it maps an instant onto the nearest frame in `frames`,
-    /// which for an instant belonging to another day is the first or the last frame of this one. So
-    /// a result from last Tuesday handed to `scrub` lands on midnight of whatever day is open, and
-    /// looks for all the world like the timeline ignoring the click. This loads the right day first.
+    /// Distinct from `park(at:)` and `scrub(to:)` in exactly one way, and it is the way that matters:
+    /// both of those move the playhead *within the loaded day* — they resolve an instant against
+    /// `frames`, which for an instant belonging to another day is the first or the last frame of this
+    /// one. So a result from last Tuesday handed to either lands on midnight of whatever day is open,
+    /// and looks for all the world like the timeline ignoring the click. This loads the right day
+    /// first, and then parks on a capture rather than between two, because a card names a moment and
+    /// there is no gesture here to settle one.
     ///
     /// Loading is a no-op when the day is already open (`load(day:)` guards on it), so activating two
     /// results from the same afternoon does not re-read the day between them.
@@ -205,30 +277,151 @@ final class RewindModel: ObservableObject {
             return
         }
         load(day: Self.day(containing: instant))
-        scrub(to: instant)
+        park(at: instant)
     }
 
-    /// Moves the playhead to the frame nearest `instant`. The scrub entry point.
+    /// Moves the playhead to **exactly** `instant`, wherever between two captures that falls. The
+    /// pointer's entry point: this is where the finger is, not where a capture is.
+    ///
+    /// Distinct from `park(at:)`, and the distinction is the reason both exist. A drag owns the
+    /// playhead continuously and ends with `endScrub()`, which settles it onto a real capture.
+    /// Anything arriving from *outside* the track — a search result, a segment chevron, a pinch —
+    /// names a moment rather than a position, has no gesture to end, and would otherwise leave the
+    /// stage holding a half-finished dissolve that nobody is driving.
     func scrub(to instant: Double) {
+        endGlide()
+        velocity = 0
+        lastTravelAt = nil
+        setPlayheadInstant(instant)
+    }
+
+    /// Moves the playhead onto the **capture** nearest `instant`, with no dissolve left showing.
+    func park(at instant: Double) {
         guard let index = frames.nearestIndex(to: instant) else { return }
         setPlayhead(index)
     }
 
     func setPlayhead(_ index: Int) {
-        guard frames.indices.contains(index), index != playhead else { return }
-        playhead = index
-        // A new frame invalidates the old boxes. Clearing rather than keeping them is the point: a
-        // stale highlight layer over a different screenshot is the fake-highlight failure by another
-        // route.
-        liveText = nil
-        refreshImage()
-        keepPlayheadVisible()
-        if showsLiveText { recognizeLiveText() }
+        guard frames.indices.contains(index) else { return }
+        endGlide()
+        velocity = 0
+        lastTravelAt = nil
+        setPlayheadInstant(frames[index].capturedAt)
     }
 
     func step(_ delta: Int) {
         guard let playhead else { return }
         setPlayhead(min(max(0, playhead + delta), frames.count - 1))
+    }
+
+    /// **The one place the playhead moves.** Everything above lands here.
+    ///
+    /// Clamped to the captured range rather than to the day: the track shows midnight to midnight,
+    /// but travelling into the empty hours before the first capture would move the handle over blank
+    /// track while the picture stayed frozen, which reads as the scroll having broken.
+    private func setPlayheadInstant(_ instant: Double) {
+        guard let first = frames.first?.capturedAt, let last = frames.last?.capturedAt else {
+            playheadAt = nil
+            playhead = nil
+            refreshImage()
+            return
+        }
+        let clamped = min(max(first, instant), last)
+        guard let index = frames.nearestIndex(to: clamped) else { return }
+        // Sub-frame moves are not no-ops any more — the dissolve is a function of the fraction — so
+        // the guard is on the position, not on the index.
+        guard clamped != playheadAt || index != playhead else { return }
+
+        if let previous = playheadAt, clamped != previous {
+            scrubDirection = clamped > previous ? 1 : -1
+        }
+        let frameChanged = index != playhead
+        playheadAt = clamped
+        playhead = index
+
+        if frameChanged {
+            // A new frame invalidates the old boxes. Clearing rather than keeping them is the point:
+            // a stale highlight layer over a different screenshot is the fake-highlight failure by
+            // another route.
+            liveText = nil
+        }
+        refreshImage()
+        keepPlayheadVisible()
+        if frameChanged, showsLiveText { recognizeLiveText() }
+    }
+
+    // MARK: - The end of a gesture
+
+    /// **The fingers left the track.** Coast the last of the flick's speed, then come to rest on a
+    /// real capture.
+    ///
+    /// Called for a released drag, for a scroll whose inertia has run out, and for every notch of a
+    /// wheel mouse — see `RewindTrackView.handleScroll`. Landing on a capture is not cosmetic: it is
+    /// what keeps the stage at rest a photograph rather than a permanent 50/50 composite of two
+    /// screens, which is the one thing a dissolve must never be allowed to become. See `RewindGlide`.
+    func endScrub() {
+        endGlide()
+        guard let at = playheadAt, !frames.isEmpty else { return }
+
+        let rest = RewindGlide.projectedRest(from: at, velocity: velocity)
+        velocity = 0
+        lastTravelAt = nil
+
+        guard let index = frames.nearestIndex(to: rest) else { return }
+        let target = frames[index].capturedAt
+        guard let glide = RewindGlide(from: at, to: target, visibleSpan: trackSpan) else {
+            // Already there, to within a rounding error. Animating nothing would still cost a timer.
+            setPlayheadInstant(target)
+            return
+        }
+        startGlide(glide)
+    }
+
+    var isSettling: Bool { glide != nil }
+
+    private func startGlide(_ glide: RewindGlide) {
+        endGlide()
+        self.glide = glide
+        glideStartedAt = clock()
+        let timer = Timer(timeInterval: Self.glideTickInterval, repeats: true) { [weak self] timer in
+            // The timer fires on the run loop that scheduled it, which is the main one.
+            MainActor.assumeIsolated {
+                guard let self else {
+                    // Self-cancelling rather than leaning on a `deinit` that cannot run while the
+                    // run loop holds a reference: a window torn down mid-settle must not leave a
+                    // timer firing for the life of the process.
+                    timer.invalidate()
+                    return
+                }
+                self.tickGlide()
+            }
+        }
+        // `.common` so the settle keeps running while the run loop is in a tracking mode — which it
+        // is for the whole of the mouse-up that starts it.
+        RunLoop.main.add(timer, forMode: .common)
+        glideTimer = timer
+    }
+
+    /// One step of the settle, and **the seam the tests drive**. Internal rather than private for
+    /// that reason: a timer-driven ease asserted by sleeping is a flaky test, and this is the
+    /// arithmetic the timer itself runs, called the same way.
+    func tickGlide() {
+        guard let glide else { return }
+        let elapsed = clock() - glideStartedAt
+        if glide.isFinished(atElapsed: elapsed) {
+            endGlide()
+            // Landed *exactly* on the capture rather than a rounding error short of it, so what is on
+            // the stage at rest is one real photograph at full weight and not a 99/1 composite.
+            setPlayheadInstant(glide.to)
+            return
+        }
+        setPlayheadInstant(glide.instant(atElapsed: elapsed))
+    }
+
+    private func endGlide() {
+        glideTimer?.invalidate()
+        glideTimer = nil
+        glide = nil
     }
 
     // MARK: - Segment navigation
@@ -244,7 +437,7 @@ final class RewindModel: ObservableObject {
             ? blocks.filter { $0.startedAt > at }.map(\.startedAt)
             : blocks.filter { $0.endedAt < at }.map(\.startedAt).reversed().map { $0 }
         guard let target = candidates.first else { return }
-        scrub(to: target)
+        park(at: target)
     }
 
     var hasPreviousSegment: Bool {
@@ -308,15 +501,20 @@ final class RewindModel: ObservableObject {
         trackStart = window.start
         trackSpan = window.span
 
-        if let at = currentFrame?.capturedAt, at < window.start || at > window.end {
-            scrub(to: target.anchor)
+        // Tested against the playhead's own position rather than its frame's, so that the one caller
+        // that centres the playhead here (`keepPlayheadVisible`) can never satisfy this and recurse:
+        // a window centred on `playheadAt` always contains `playheadAt`. Using the *frame's* instant
+        // left a sliver — up to half a capture interval — where the two disagreed, and a settle that
+        // crossed it would have been cancelled halfway by the pan meant to keep it in view.
+        if let at = playheadAt, at < window.start || at > window.end {
+            park(at: target.anchor)
         }
     }
 
     /// Halves or doubles the visible span, anchored on the playhead so the frame being looked at
     /// stays put. What the two magnifier buttons in the control cluster do.
     func zoomTrack(in zoomIn: Bool) {
-        let anchor = currentFrame?.capturedAt ?? (trackStart + trackSpan / 2)
+        let anchor = playheadAt ?? (trackStart + trackSpan / 2)
         // The anchor keeps the fractional position it already has, which is what makes repeated
         // presses feel like zooming on the frame rather than drifting away from it.
         setTrackWindow(
@@ -341,11 +539,51 @@ final class RewindModel: ObservableObject {
     /// like from the outside. Moving the playhead is also what the tutorial's card promises — you
     /// travel through your day — and it is visible, because the picture changes.
     ///
-    /// The visible window still follows: `setPlayhead` calls `keepPlayheadVisible()`, which pans it
-    /// when the playhead would leave, so a zoomed-in track scrolls as it always did.
+    /// The visible window still follows: every playhead move calls `keepPlayheadVisible()`, which
+    /// pans it when the playhead would leave, so a zoomed-in track scrolls as it always did.
+    ///
+    /// **It travels from where the playhead is, not from the frame it is nearest**, and that is the
+    /// second substantive fix. Re-deriving the base from the snapped frame each time meant a delta
+    /// smaller than half a capture interval rounded straight back to its own starting point: it did
+    /// not move the playhead a little, it moved it not at all, and nothing accumulated across events.
+    /// Zoomed in to the two-minute floor, one ordinary trackpad event is about a second of timeline
+    /// against a 1.5 s rounding threshold — so *scrolling did nothing whatsoever* at the zoom where
+    /// precision is the entire point, and a momentum tail, whose deltas decay towards zero, could
+    /// never do anything at any zoom. Seconds now land where they are aimed.
+    ///
+    /// How far a scroll travels is proportional to `trackSpan` (`RewindTrackView.handleScroll` does
+    /// the pixels-to-seconds conversion), so zooming in is what makes the control finer — and now
+    /// that fine deltas survive, that is finally true rather than merely intended.
     func travel(by seconds: Double) {
-        guard let at = currentFrame?.capturedAt else { return }
-        scrub(to: at + seconds)
+        guard let at = playheadAt else { return }
+        endGlide()
+        recordVelocity(seconds)
+        setPlayheadInstant(at + seconds)
+    }
+
+    /// Folds one scroll event into the smoothed speed the coast is computed from.
+    ///
+    /// The first event of a gesture has no elapsed time to divide by, so it has no measurable speed,
+    /// and zero is the honest answer rather than a guess scaled by an assumed frame rate. It costs
+    /// nothing: a flick is many events, and by the time the fingers lift the smoothing has seen all
+    /// of them. It is also what stops a single wheel-mouse notch — one event, no gesture — from
+    /// coasting somewhere the user did not ask for.
+    private func recordVelocity(_ seconds: Double) {
+        let now = clock()
+        let previous = lastTravelAt
+        lastTravelAt = now
+        guard let previous else {
+            velocity = 0
+            return
+        }
+        let gap = now - previous
+        // A longer pause than this is a new gesture; it must not inherit the old one's speed.
+        guard gap > 0, gap <= Self.velocityGapLimit else {
+            velocity = 0
+            return
+        }
+        let sample = seconds / max(gap, Self.nominalEventInterval)
+        velocity = velocity * (1 - Self.velocitySmoothing) + sample * Self.velocitySmoothing
     }
 
     /// Nudges the window so the playhead stays on screen after a jump.
@@ -356,7 +594,7 @@ final class RewindModel: ObservableObject {
     /// it asks for is centred on the playhead, and `setTrackWindow` only moves the playhead when the
     /// playhead is *outside* the window it produced.
     private func keepPlayheadVisible() {
-        guard let at = currentFrame?.capturedAt, at < trackStart || at > trackEnd else { return }
+        guard let at = playheadAt, at < trackStart || at > trackEnd else { return }
         setTrackWindow(RewindZoom.Target(span: trackSpan, anchor: at, fraction: 0.5))
     }
 
@@ -367,36 +605,67 @@ final class RewindModel: ObservableObject {
         imageZoom = min(Self.maximumImageZoom, max(Self.minimumImageZoom, imageZoom * factor))
     }
 
+    /// Where the playhead sits between two real captures, and how far the dissolve between them has
+    /// travelled. Nil only when the day holds nothing showable.
+    var currentBlend: RewindScrub.Blend? {
+        guard let playheadAt else { return nil }
+        return RewindScrub.blend(at: playheadAt, in: frames)
+    }
+
     private func refreshImage() {
-        guard let frame = currentFrame else {
+        guard let blend = currentBlend else {
             image = nil
+            blendImage = nil
+            blendWeight = 0
             return
         }
-        // Cached hit paints in the same turn of the run loop, so a scrub through already-decoded
-        // frames never shows a gap.
-        if let cached = loader.cached(frame) {
-            image = cached
-        } else if loader.hasFailed(frame) {
-            image = nil
+        let baseFrame = frames[blend.base]
+        let nextFrame = blend.next.map { frames[$0] }
+
+        // Both read through the cache, so both count as recently used: the two captures being
+        // dissolved are exactly the two that must survive eviction, and `FrameMemoryCache` orders by
+        // read. A cached hit paints in the same turn of the run loop, so a scrub through
+        // already-decoded frames never shows a gap.
+        let baseImage = loader.cached(baseFrame)
+        let nextImage = nextFrame.flatMap { loader.cached($0) }
+        let layers = RewindScrub.layers(
+            for: blend, baseIsDecoded: baseImage != nil, nextIsDecoded: nextImage != nil)
+
+        let drawnImage: NSImage?
+        if let drawn = layers.base {
+            drawnImage = drawn == blend.base ? baseImage : nextImage
+        } else if loader.hasFailed(baseFrame) {
+            drawnImage = nil
         } else {
-            // Deliberately *not* cleared to nil while decoding: holding the previous frame for the
-            // few milliseconds a decode takes reads as a smooth scrub, where blanking to empty and
-            // back reads as a flicker on every step.
-            let wanted = frame.id
-            loader.load(frame) { [weak self] decoded in
-                guard let self, self.currentFrame?.id == wanted else { return }
-                self.image = decoded
-            }
+            // The picture already on the stage stays there while the decode runs. Deliberately *not*
+            // cleared to nil: holding the previous frame for the few milliseconds a decode takes
+            // reads as a smooth scrub, where blanking to empty and back is a flicker on every step.
+            drawnImage = image
         }
+        let drawnOver = layers.over.flatMap { $0 == blend.base ? baseImage : nextImage }
+        let drawnWeight = drawnOver == nil ? 0 : layers.weight
+
+        // Assigned only when they actually differ. `refreshImage` runs on every pointer move *and*
+        // on every decode that lands anywhere in the prefetch window — several hundred a second
+        // during a fast scrub — and a `@Published` write is an invalidation whether or not it changed
+        // anything. Comparing three values is far cheaper than the render it saves.
+        if image !== drawnImage { image = drawnImage }
+        if blendImage !== drawnOver { blendImage = drawnOver }
+        if blendWeight != drawnWeight { blendWeight = drawnWeight }
+
+        // Uncapped, unlike the prefetch below: these two are what the stage is drawing *now*, and a
+        // speculative-decode limit must never be allowed to hold them up.
+        loader.load(baseFrame)
+        if let nextFrame { loader.load(nextFrame) }
         prefetchAroundPlayhead()
     }
 
     private func prefetchAroundPlayhead() {
-        guard let playhead else { return }
-        let low = max(0, playhead - Self.prefetchRadius)
-        let high = min(frames.count - 1, playhead + Self.prefetchRadius)
-        guard low <= high else { return }
-        loader.prefetch(Array(frames[low...high]))
+        guard let playhead,
+            let window = RewindScrub.prefetchWindow(
+                around: playhead, direction: scrubDirection, count: frames.count)
+        else { return }
+        loader.prefetch(Array(frames[window]))
     }
 
     /// True when the playhead frame's image could not be decoded — a file retention removed, or a

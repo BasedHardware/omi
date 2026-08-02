@@ -55,6 +55,9 @@ final class RewindTrackView: NSView {
     var onScrub: ((Double) -> Void)?
     /// Called with a signed number of seconds when the user scrolls. Positive is forward in time.
     var onTravel: ((Double) -> Void)?
+    /// Called when a scrub gesture is over — the pointer released, or the scroll and the inertia
+    /// behind it run out. The model settles the playhead onto a real capture; see `RewindModel.endScrub`.
+    var onScrubEnd: (() -> Void)?
     /// Called while the user pinches. The model turns it into a visible window.
     var onZoom: ((RewindZoom.Target) -> Void)?
 
@@ -233,6 +236,35 @@ final class RewindTrackView: NSView {
         }
     }
 
+    /// How an hour label is set.
+    ///
+    /// **A named seam rather than a literal built inside `draw`, because the colour on this line is
+    /// the one thing here a guard has to be able to read.** `InkGlassTests` measures it on the real
+    /// glass ground; a dictionary constructed inside the drawing loop would be invisible to any test
+    /// and would have to be re-derived by eye. Rebuilt per call on purpose: `NSColor(Ink.secondary)`
+    /// is a *dynamic* colour and resolving it at draw time is what lets it follow the appearance the
+    /// timeline's glass is pinned to.
+    ///
+    /// **`Ink.secondary`, and it is not a style preference — `NSColor.tertiaryLabelColor` was
+    /// illegible here.** This window is glass (`RewindWindow` hosts `RewindView` on `InkGlassView`),
+    /// so these 9 pt labels sit on the panel's ground and not on an opaque sheet. The system's third
+    /// label step is black at 0.259, which on the shipped ground measures **1.70:1 over a solid black
+    /// desktop** — roughly half of the 3.60:1 that got `Ink.tertiary` banned from glass outright, and
+    /// far under WCAG AA's 4.5:1 for text this size. It was invisible *before* the ground moved too
+    /// (1.81:1 on the three-rung ground), so this is an old defect the glass change deepened rather
+    /// than one it caused. `Ink.secondary` measures **4.54:1 over black and 7.47:1 over white**.
+    ///
+    /// Spelling it `NSColor(Ink.secondary)` rather than a raw AppKit colour is the point: the ladder
+    /// is the app's, `Ink` is where it is defined, and a call site that reaches past it for a system
+    /// label colour is exactly how a rung nobody measured got onto a glass surface. See
+    /// `Ink.tertiary` for the two-rung rule and `InkGlassTests` for both guards over it.
+    static var hourLabelAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: NSFont.systemFont(ofSize: 9, weight: .regular),
+            .foregroundColor: NSColor(Ink.secondary),
+        ]
+    }
+
     /// Hour marks, which are what make the time-linearity legible: evenly spaced ticks prove the axis
     /// is time, and a wide empty stretch between two segments is visibly a gap of a known length.
     private func drawHourTicks(in bar: NSRect) {
@@ -240,10 +272,7 @@ final class RewindTrackView: NSView {
         guard step > 0 else { return }
         let first = (trackStart / step).rounded(.up) * step
         var instant = first
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 9, weight: .regular),
-            .foregroundColor: NSColor.tertiaryLabelColor,
-        ]
+        let attributes = Self.hourLabelAttributes
         while instant <= trackStart + trackSpan {
             let tickX = x(for: instant)
             NSColor.separatorColor.setFill()
@@ -319,6 +348,12 @@ final class RewindTrackView: NSView {
         showTooltip(for: event)
     }
 
+    /// The drag is over. The playhead is wherever the pointer left it, which is very likely between
+    /// two captures, so the model settles it onto one.
+    override func mouseUp(with event: NSEvent) {
+        onScrubEnd?()
+    }
+
     private func scrub(to event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         onScrub?(instant(atX: point.x))
@@ -326,19 +361,55 @@ final class RewindTrackView: NSView {
 
     /// Scrolling travels through time, which is only meaningful because the axis is time rather than
     /// an array index.
+    override func scrollWheel(with event: NSEvent) {
+        handleScroll(
+            deltaX: event.scrollingDeltaX,
+            deltaY: event.scrollingDeltaY,
+            isContinuous: event.hasPreciseScrollingDeltas,
+            phase: event.phase,
+            momentumPhase: event.momentumPhase)
+    }
+
+    /// The scroll's arithmetic and its gesture lifecycle, split from `scrollWheel(with:)` for exactly
+    /// the reason `handleMagnification` is split from `magnify(with:)`: a scroll `NSEvent` cannot be
+    /// constructed outside the window server, so this is the seam a test can drive, and it is the
+    /// production path from the first line after the event is unpacked.
     ///
     /// Which way is "back" is the user's own natural-scrolling setting and this view does not try to
     /// second-guess it: the sign follows the platform, so the gesture reads the same here as it does
-    /// everywhere else on their Mac.
-    override func scrollWheel(with event: NSEvent) {
+    /// everywhere else on their Mac. How *far* it goes is the pixels travelled as a fraction of the
+    /// track, times the span the track is showing — which is what makes zooming in mean finer control
+    /// rather than merely a bigger picture.
+    func handleScroll(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        isContinuous: Bool,
+        phase: NSEvent.Phase,
+        momentumPhase: NSEvent.Phase
+    ) {
         guard bounds.width > 0 else { return }
-        let deltaX = event.scrollingDeltaX
-        let deltaY = event.scrollingDeltaY
         // Horizontal intent wins; a vertical wheel on a horizontal track still pans, because a mouse
         // with no horizontal wheel would otherwise be unable to move at all.
         let travel = abs(deltaX) >= abs(deltaY) ? -deltaX : -deltaY
-        let seconds = Double(travel / bounds.width) * trackSpan
-        onTravel?(seconds)
+        // A phase-only event carries no deltas. Passing its zero on would fold a standstill into the
+        // smoothed speed at the exact moment that speed is about to be read, cancelling the coast the
+        // flick had earned.
+        if travel != 0 {
+            onTravel?(Double(travel / bounds.width) * trackSpan)
+        }
+
+        // **When the gesture is over.** A trackpad says so twice — `.ended` when the fingers lift,
+        // and `momentumPhase.ended` when the inertia the system delivers afterwards runs out — and
+        // acting on both is correct rather than redundant: the first settle is overtaken a frame
+        // later by the momentum events, which cancel it, and the last one is the one that lands. A
+        // wheel mouse reports neither phase at all and every notch stands alone, so it settles on the
+        // spot.
+        let ended =
+            phase.contains(.ended) || phase.contains(.cancelled)
+            || momentumPhase.contains(.ended) || momentumPhase.contains(.cancelled)
+        if !isContinuous || ended {
+            onScrubEnd?()
+        }
     }
 
     /// A trackpad pinch zooms the track: how much *time* it spans, not how large anything is drawn.
@@ -516,6 +587,7 @@ struct RewindTrack: NSViewRepresentable {
     /// Defaulted, and therefore omissible, for the one call site that is not the timeline window:
     /// `TimelinePreview` in Settings draws this track over synthetic data with hit testing turned
     /// off, so it has no zoom to bound and no gesture to answer.
+    var onScrubEnd: () -> Void = {}
     var spanBounds: ClosedRange<Double> = RewindZoom.minimumSpan...RewindZoom.maximumSpan
     var onZoom: (RewindZoom.Target) -> Void = { _ in }
 
@@ -523,6 +595,7 @@ struct RewindTrack: NSViewRepresentable {
         let view = RewindTrackView()
         view.onScrub = onScrub
         view.onTravel = onTravel
+        view.onScrubEnd = onScrubEnd
         view.onZoom = onZoom
         return view
     }
@@ -532,6 +605,7 @@ struct RewindTrack: NSViewRepresentable {
         // model that is no longer the window's.
         view.onScrub = onScrub
         view.onTravel = onTravel
+        view.onScrubEnd = onScrubEnd
         view.onZoom = onZoom
         view.apply(
             blocks: blocks,

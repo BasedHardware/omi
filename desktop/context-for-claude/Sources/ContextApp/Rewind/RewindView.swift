@@ -75,7 +75,7 @@ struct RewindView: View {
                     .font(.system(size: 12, weight: .medium))
                 Text("/")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
@@ -148,18 +148,25 @@ struct RewindView: View {
         return ZStack {
             if let image = model.image {
                 GeometryReader { inner in
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .scaleEffect(model.imageZoom)
-                        .frame(width: inner.size.width, height: inner.size.height)
-                        .clipped()
-                        .overlay {
-                            if model.showsLiveText, let liveText = model.liveText, !liveText.isEmpty {
-                                LiveTextOverlay(result: liveText, containerSize: inner.size)
-                                    .scaleEffect(model.imageZoom)
-                            }
+                    ZStack {
+                        capture(image, in: inner.size)
+                        // **The dissolve.** The next real capture, faded in at the weight the
+                        // playhead's own position between the two implies — see `RewindScrub`. Both
+                        // layers are photographs; only the opacity is computed, and it is driven by
+                        // the playhead rather than by an animation with a duration of its own, which
+                        // is what keeps a fast scrub level with the pointer instead of trailing a
+                        // fixed number of milliseconds behind it.
+                        if let blended = model.blendImage {
+                            capture(blended, in: inner.size)
+                                .opacity(model.blendWeight)
                         }
+                    }
+                    .overlay {
+                        if model.showsLiveText, let liveText = model.liveText, !liveText.isEmpty {
+                            LiveTextOverlay(result: liveText, containerSize: inner.size)
+                                .scaleEffect(model.imageZoom)
+                        }
+                    }
                 }
             } else {
                 emptyStage
@@ -169,6 +176,20 @@ struct RewindView: View {
         .overlay(shape.strokeBorder(borderColor, lineWidth: 2))
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
+    }
+
+    /// One captured picture, drawn to fill the stage.
+    ///
+    /// Both dissolve layers go through this and nothing else, so they cannot be laid out even a point
+    /// apart. Two images that do not register make a crossfade read as a judder rather than as a
+    /// fade, and it is the kind of difference that is invisible in the source and obvious on screen.
+    private func capture(_ image: NSImage, in size: CGSize) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .scaleEffect(model.imageZoom)
+            .frame(width: size.width, height: size.height)
+            .clipped()
     }
 
     /// What the stage says when there is no picture — which has three distinct causes that must not
@@ -183,13 +204,13 @@ struct RewindView: View {
             } else if model.frames.isEmpty {
                 Image(systemName: "moon.zzz")
                     .font(.system(size: 22))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                 Text("Nothing was captured on this day.")
                     .inkStyle(InkType.statusLabel, color: Ink.secondary)
             } else if model.imageIsMissing {
                 Image(systemName: "photo.badge.exclamationmark")
                     .font(.system(size: 22))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                 // Retention deletes pictures and keeps the text. Saying so is better than a blank
                 // frame that reads as a bug.
                 Text("This frame's picture is no longer on disk.")
@@ -238,7 +259,7 @@ struct RewindView: View {
                     .font(.system(size: 12, weight: .medium))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
             }
             .foregroundStyle(Ink.primary)
             .padding(.horizontal, 11)
@@ -372,9 +393,15 @@ struct RewindView: View {
             frames: model.frames,
             trackStart: model.trackStart,
             trackSpan: model.trackSpan,
-            playheadAt: model.currentFrame?.capturedAt,
+            // The playhead's own position, not the capture it is nearest. Drawing the frame's
+            // instant made the handle jump in three-second quanta while the pointer moved smoothly
+            // under it — the same discreteness as the picture, one level down.
+            playheadAt: model.playheadAt,
             onScrub: { model.scrub(to: $0) },
             onTravel: { model.travel(by: $0) },
+            // Where a gesture comes to rest. Without it the playhead would be left parked between two
+            // captures, holding a half-finished dissolve of two different screens.
+            onScrubEnd: { model.endScrub() },
             spanBounds: model.trackSpanBounds,
             // A pinch over the track is the second way into the *same* zoom the two magnifier buttons
             // drive: it hands the model a `RewindZoom.Target` and the model's single mutation point
