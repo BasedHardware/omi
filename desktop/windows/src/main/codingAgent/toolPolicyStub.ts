@@ -40,10 +40,26 @@ export interface AcpPermissionRejection {
 export function resolveAcpPermission(input: {
   requestId?: number | string
   options: AcpPermissionOption[]
-}): AcpPermissionDecision {
-  const selected = input.options.find((option) => option.kind === 'allow_always') ??
-    input.options.find((option) => option.kind === 'allow_once') ??
-    input.options[0] ?? { kind: 'fallback', optionId: 'allow' }
+}): AcpPermissionDecision | AcpPermissionRejection {
+  const selected = input.options.find((option) => option.kind === 'allow_once') ??
+    input.options.find((option) => /deny|reject|disallow/i.test(option.kind))
+
+  if (!selected) {
+    return {
+      acpError: {
+        code: -32001,
+        message: 'First-party adapter permission requires explicit user approval'
+      },
+      auditEvent: {
+        type: 'approval.rejected',
+        policy: 'desktop_high_trust',
+        adapterId: 'acp',
+        requestId: input.requestId,
+        automatic: true,
+        reason: 'no_non_permanent_option'
+      }
+    }
+  }
 
   return {
     optionId: selected.optionId,

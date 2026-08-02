@@ -3,28 +3,26 @@ import { resolveAcpPermission, resolveExternalAcpPermission } from './toolPolicy
 
 describe('toolPolicyStub', () => {
   describe('resolveAcpPermission (Claude Code, trusted)', () => {
-    it('prefers allow_always, then allow_once, then the first option', () => {
-      expect(
-        resolveAcpPermission({
-          options: [
-            { kind: 'allow_once', optionId: 'once' },
-            { kind: 'allow_always', optionId: 'always' }
-          ]
-        }).optionId
-      ).toBe('always')
+    it('prefers allow_once, then an explicit deny', () => {
+      const oneShot = resolveAcpPermission({
+        options: [
+          { kind: 'allow_once', optionId: 'once' },
+          { kind: 'allow_always', optionId: 'always' }
+        ]
+      })
+      expect('acpResult' in oneShot && oneShot.optionId).toBe('once')
 
-      expect(
-        resolveAcpPermission({
-          options: [
-            { kind: 'reject', optionId: 'no' },
-            { kind: 'allow_once', optionId: 'once' }
-          ]
-        }).optionId
-      ).toBe('once')
+      const deny = resolveAcpPermission({
+        options: [
+          { kind: 'reject', optionId: 'no' },
+          { kind: 'allow_always', optionId: 'always' }
+        ]
+      })
+      expect('acpResult' in deny && deny.optionId).toBe('no')
 
-      expect(
-        resolveAcpPermission({ options: [{ kind: 'custom', optionId: 'first' }] }).optionId
-      ).toBe('first')
+      const permanentOnly = resolveAcpPermission({ options: [{ kind: 'allow_always', optionId: 'always' }] })
+      expect('acpError' in permanentOnly).toBe(true)
+      if ('acpError' in permanentOnly) expect(permanentOnly.acpError.code).toBe(-32001)
     })
 
     it('produces the ACP selected-outcome result shape', () => {

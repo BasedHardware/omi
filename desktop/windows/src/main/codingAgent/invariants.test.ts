@@ -180,15 +180,15 @@ describe('INV-AGENT (b): permission trust is decided by host identity, not the r
     return seen.find((m) => m.id === 42) as JsonRpcMessage | undefined
   }
 
-  it('a first-party (acp) request is auto-approved by host trust', async () => {
+  it('a first-party (acp) request cannot escalate through a permanent-only grant', async () => {
     const proc = createMockProcess()
     vi.mocked(spawn).mockReturnValue(proc as never)
     const adapter = new AcpRuntimeAdapter({ acpEntry: 'stub-entry.mjs' })
 
     const reply = await replayPermissionRequest(adapter, proc)
 
-    expect(reply?.result).toEqual({ outcome: { outcome: 'selected', optionId: 'always' } })
-    expect(reply?.error).toBeUndefined()
+    expect(reply?.error?.code).toBe(-32001)
+    expect(reply?.result).toBeUndefined()
     await adapter.stop()
   })
 
