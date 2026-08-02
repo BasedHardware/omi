@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Gaida sinhronizāciju",
     "syncStatusRetrying": "Neizdevās apstrādāt — mēģina vēlreiz",
     "syncStatusFailed": "Neizdevās — pieskarieties Mēģināt vēlreiz",
+    "syncStatusTooOld": "Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt",
     "syncStatusFileUnavailable": "Fails nav pieejams",
     "syncStatusUploaded": "Augšupielādēts · tiek apstrādāts Omi",
     "noRecordingsYet": "Vēl nav ierakstu",

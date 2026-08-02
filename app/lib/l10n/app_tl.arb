@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Naghihintay na mag-sync",
     "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
     "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusTooOld": "Masyadong luma para i-sync — hindi ito matatanggap ng Omi",
     "syncStatusFileUnavailable": "Hindi available ang file",
     "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
     "noRecordingsYet": "Wala pang mga recording",

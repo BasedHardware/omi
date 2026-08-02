@@ -171,4 +171,36 @@ void main() {
 
     expect(syncProvider.allWals, isEmpty);
   });
+
+  test('a recording refused for being older than the recovery window is terminal, not pending', () async {
+    // #10975: the server answers 422 `backfill_lookback_exceeded` for a capture
+    // past SYNC_BACKFILL_MAX_AGE_SECONDS. Retrying can never succeed, so the
+    // recording must leave the pending pool instead of being offered as work
+    // sync can still complete.
+    final tooOld = _wal(timerStart: 1000, filePath: 'too_old_audio.bin')..markOutsideRecoveryWindow();
+    final retryable = _wal(timerStart: 2000, filePath: 'retryable_audio.bin');
+    localSync.testWals = [tooOld, retryable];
+
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    // A persisted stale flag must not reclassify or lock a terminal row.
+    tooOld.isSyncing = true;
+
+    expect(syncProvider.pendingWals, [retryable]);
+    expect(syncProvider.pendingDeletableWals, [retryable]);
+    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.pending), [retryable]);
+    expect(syncProvider.corruptedWals, [tooOld], reason: 'it belongs with the terminal, non-retryable recordings');
+    expect(syncProvider.needsAttentionWalsCount, 1);
+    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), containsAll([tooOld, retryable]));
+
+    await syncProvider.deleteAllClearableWals();
+
+    expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
+  });
 }

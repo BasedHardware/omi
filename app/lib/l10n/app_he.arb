@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "ממתין לסנכרון",
     "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
     "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusTooOld": "ישן מדי לסנכרון — Omi לא יכול לקבל אותו",
     "syncStatusFileUnavailable": "הקובץ אינו זמין",
     "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
     "noRecordingsYet": "אין הקלטות עדיין",

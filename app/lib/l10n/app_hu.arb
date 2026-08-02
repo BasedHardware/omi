@@ -3089,6 +3089,7 @@
     "syncStatusWaiting": "Szinkronizálásra vár",
     "syncStatusRetrying": "A feldolgozás sikertelen — újrapróbálkozás",
     "syncStatusFailed": "Sikertelen — koppintson az Újra gombra",
+    "syncStatusTooOld": "Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni",
     "syncStatusFileUnavailable": "A fájl nem érhető el",
     "syncStatusUploaded": "Feltöltve · feldolgozás az Omin",
     "noRecordingsYet": "Még nincs felvétel",

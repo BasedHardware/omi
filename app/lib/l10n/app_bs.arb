@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Čeka sinkronizaciju",
     "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
     "syncStatusFailed": "Neuspjelo — dodirnite Ponovi",
+    "syncStatusTooOld": "Prestaro za sinkronizaciju — Omi ga ne može prihvatiti",
     "syncStatusFileUnavailable": "Datoteka nije dostupna",
     "syncStatusUploaded": "Otpremljeno · obrada na Omi",
     "noRecordingsYet": "Još nema snimaka",

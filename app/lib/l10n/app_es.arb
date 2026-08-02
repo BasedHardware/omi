@@ -2994,6 +2994,7 @@
     "syncStatusWaiting": "Esperando para sincronizar",
     "syncStatusRetrying": "No se pudo procesar — reintentando",
     "syncStatusFailed": "Falló — toca Reintentar",
+    "syncStatusTooOld": "Demasiado antigua para sincronizar — Omi no puede aceptarla",
     "syncStatusFileUnavailable": "Archivo no disponible",
     "syncStatusUploaded": "Subido · procesándose en Omi",
     "noRecordingsYet": "Aún no hay grabaciones",

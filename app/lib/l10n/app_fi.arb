@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Odottaa synkronointia",
     "syncStatusRetrying": "Käsittely epäonnistui — yritetään uudelleen",
     "syncStatusFailed": "Epäonnistui — napauta Yritä uudelleen",
+    "syncStatusTooOld": "Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä",
     "syncStatusFileUnavailable": "Tiedosto ei ole käytettävissä",
     "syncStatusUploaded": "Ladattu · käsitellään Omissa",
     "noRecordingsYet": "Ei vielä tallenteita",
