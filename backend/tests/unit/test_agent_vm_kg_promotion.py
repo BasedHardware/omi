@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "agent_vm"
-pytestmark = pytest.mark.integration
 
 
 def load_app(tmp_path: Path):
