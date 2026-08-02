@@ -83,24 +83,44 @@ class TestActorParsing(unittest.TestCase):
         self.assertEqual(mod.normalized_actors(" , "), set())
 
 
+def built(created, sha, status="finished"):
+    return {"createdAt": created, "commit": sha, "status": status}
+
+
 class TestNewestBuiltSha(unittest.TestCase):
     def test_picks_the_newest_build_regardless_of_list_order(self):
-        builds = [
-            {"createdAt": "2026-08-01T09:00:00Z", "commit": "old"},
-            {"createdAt": "2026-08-02T09:00:00Z", "commit": "new"},
-        ]
+        builds = [built("2026-08-01T09:00:00Z", "old"), built("2026-08-02T09:00:00Z", "new")]
         self.assertEqual(mod.newest_built_sha(builds), "new")
         self.assertEqual(mod.newest_built_sha(list(reversed(builds))), "new")
 
     def test_reads_a_nested_commit_object(self):
-        self.assertEqual(mod.newest_built_sha([{"createdAt": "x", "commit": {"hash": "abc"}}]), "abc")
+        self.assertEqual(
+            mod.newest_built_sha([{"createdAt": "x", "status": "finished", "commit": {"hash": "abc"}}]), "abc"
+        )
 
     def test_ignores_builds_with_no_commit(self):
-        builds = [{"createdAt": "2026-08-03T09:00:00Z"}, {"createdAt": "2026-08-01T09:00:00Z", "commit": "only"}]
+        builds = [{"createdAt": "2026-08-03T09:00:00Z", "status": "finished"}, built("2026-08-01T09:00:00Z", "only")]
         self.assertEqual(mod.newest_built_sha(builds), "only")
 
     def test_no_builds_means_no_baseline(self):
         self.assertIsNone(mod.newest_built_sha([]))
+
+    def test_a_failed_build_does_not_become_the_baseline(self):
+        # Otherwise a broken merge sits unbuilt until some later app commit happens along.
+        builds = [built("2026-08-01T09:00:00Z", "good"), built("2026-08-02T09:00:00Z", "broken", "failed")]
+        self.assertEqual(mod.newest_built_sha(builds), "good")
+
+    def test_cancelled_and_in_progress_builds_do_not_become_the_baseline(self):
+        for status in ("canceled", "cancelled", "timeout", "building", "queued", ""):
+            with self.subTest(status=status):
+                self.assertIsNone(mod.newest_built_sha([built("2026-08-02T09:00:00Z", "x", status)]))
+
+    def test_a_skipped_build_is_a_baseline(self):
+        # Codemagic looked and decided there was nothing to build; that commit is settled.
+        self.assertEqual(mod.newest_built_sha([built("2026-08-02T09:00:00Z", "x", "skipped")]), "x")
+
+    def test_status_matching_is_case_insensitive(self):
+        self.assertEqual(mod.newest_built_sha([built("2026-08-02T09:00:00Z", "x", "Finished")]), "x")
 
 
 class TestPendingCommits(unittest.TestCase):
@@ -110,6 +130,22 @@ class TestPendingCommits(unittest.TestCase):
 
     def test_an_unknown_sha_counts_as_pending(self):
         self.assertEqual(mod.app_commits_since("0" * 40), ["HEAD"])
+
+    def test_a_non_ancestor_baseline_counts_as_pending(self):
+        # A rewound or rewritten main leaves the baseline off this history: the range would read
+        # empty and skip a batch that is genuinely pending.
+        head = mod.subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        self.assertTrue(mod.is_ancestor(head))
+        orphan = mod.subprocess.run(
+            ["git", "commit-tree", head + "^{tree}", "-m", "orphan"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        self.assertFalse(mod.is_ancestor(orphan))
+        self.assertEqual(mod.app_commits_since(orphan), ["HEAD"])
 
 
 if __name__ == "__main__":
