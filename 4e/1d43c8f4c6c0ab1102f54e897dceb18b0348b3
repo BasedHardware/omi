@@ -1,0 +1,138 @@
+desktop/context-for-claude/Sources/ContextApp/Support/WindowGlass.swift
+  s_1833483671ebc5::t_e39b89c825b62d 1-15,27-31,35-62,64-65,67-72,74-101
+  s_1833483671ebc5::t_792c288dca581c 16-26
+  s_1833483671ebc5::t_8ccb1a26b66751 63,66
+  s_1833483671ebc5::t_9f335293001c06 73
+  s_1833483671ebc5::t_db3cb7d32ac483 32-34
+  s_1833483671ebc5::t_3ccde0c1816d71 102-104
+  s_19e1b933e6bbeb::t_7665f8f3b94810 105
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsView.swift
+  s_1833483671ebc5::t_b789ab4f2e3793 77-83
+desktop/context-for-claude/ARCHITECTURE.md
+  s_1833483671ebc5::t_1b3795aa718192 117
+desktop/context-for-claude/Sources/ContextApp/Onboarding/InkGlass.swift
+  s_1833483671ebc5::t_e5953f9515e29f 320-322
+  s_1833483671ebc5::t_5e8e2bf9b35517 40-42
+  s_1833483671ebc5::t_4dbe37eec9c3d7 112-113,115-126
+  s_1833483671ebc5::t_4dc6bf49e708d9 181-197
+  s_1833483671ebc5::t_68dd9b842abde5 445-448,452-455
+  s_1833483671ebc5::t_09ed5e9d9c6ea9 48-73
+  s_1833483671ebc5::t_e17e67ac30363c 100-101
+  s_1833483671ebc5::t_0a1606d3c0f78e 570-579
+  s_1833483671ebc5::t_eb85251d28df46 130
+  s_1833483671ebc5::t_38221d40cfdd77 128,131-135,137-140,142-146,148-155,157-162,165
+  s_1833483671ebc5::t_edadcc175cae0a 127
+  s_1833483671ebc5::t_478c056216d66a 463-465
+  s_1833483671ebc5::t_15812f2a0442a9 301-302
+  s_1833483671ebc5::t_31b68fd907b1a5 363-369
+  s_1833483671ebc5::t_274c2418c58cee 18-21,23-28,30-39,43-47
+  s_1833483671ebc5::t_9049b55b6c1869 426-429
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsWindow.swift
+  s_1833483671ebc5::t_d0d9e8cb52c48c 74-78,80-81
+  s_1833483671ebc5::t_77b7eca23c73a2 96-102
+  s_1833483671ebc5::t_16a94f1e2bda64 24-32
+desktop/context-for-claude/Tests/ContextAppTests/GlassRenderHarness.swift
+  s_1833483671ebc5::t_82a333ff082fa2 35-38,41-50,55,60-114,116-125,136-141,149-189,203-260
+  s_1833483671ebc5::t_5f76ffa5d1bbd3 1-12,24-34,39-40,115,126-135,142-148,190-202,261-262
+  s_1833483671ebc5::t_c6d74423629a90 13-23
+  s_1833483671ebc5::t_a719f9fc71f34a 51-54,56-59
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsView.swift
+  s_f4d8131d6ae22f::t_32e43f11fbae1c 308,526,530,532,563,662,731
+  s_1833483671ebc5::t_7b547112ca712a 292-298
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_1833483671ebc5::t_927b0b74f58bee 18-29
+  s_1833483671ebc5::t_7fb3cf13a64904 30-32
+  s_19e1b933e6bbeb::t_7e8ad151779b19 33-39
+desktop/context-for-claude/Tests/ContextAppTests/WindowGlassTests.swift
+  s_1833483671ebc5::t_29dce0fe3e6edd 1-24,28-31,34-180
+  s_1833483671ebc5::t_cf634a90053686 25-27,32-33
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_1833483671ebc5::t_f228c3ce0ce64d 157-160
+  s_f4d8131d6ae22f::t_8f8bda5ec4ce8d 163,301
+  s_1833483671ebc5::t_135276392b7646 295-298
+desktop/context-for-claude/Tests/ContextAppTests/InkAccentTests.swift
+  s_1833483671ebc5::t_4726f2fbe209c5 191-192
+  s_1833483671ebc5::t_f6f98e91b80d98 179
+  s_19e1b933e6bbeb::t_fa99d85069117a 209-227
+desktop/context-for-claude/Tests/ContextAppTests/InkGlassTests.swift
+  s_1833483671ebc5::t_b0ad7972ea9b3c 60-61,65-72,84-87,93,96
+  s_1833483671ebc5::t_d5fc0a39eba50e 209,346,363,381,468-474,478,480-481,483,526-533,560-563,566,572-621
+  s_1833483671ebc5::t_290fa850ece44b 164-175
+  s_1833483671ebc5::t_731bc1c0903112 106-118,120,122-124,126-129,133,135-139,141-145,147-151,153-163
+  s_1833483671ebc5::t_c7118a9fdde200 310-330
+  s_1833483671ebc5::t_164984bcfb2115 210-239,241-309,335,357
+  s_1833483671ebc5::t_93523105732289 187-190,197-200
+  s_1833483671ebc5::t_09b7bc351bcf1f 373-380
+  s_1833483671ebc5::t_8c70c13cfb9544 208,344,351,385,391,404,406-467
+  s_1833483671ebc5::t_202f45936a0efc 177
+  s_1833483671ebc5::t_efeb4f6b7ed4f3 121,146,152,176,178-186,191-196,201-207
+  s_1833483671ebc5::t_f8a3d40796bb5a 331-334
+  s_1833483671ebc5::t_91e4b6c4969cf8 336-338,341-343
+  s_1833483671ebc5::t_6fb5ef22bc5379 345
+  s_1833483671ebc5::t_ba91dec05207e3 347-350
+  s_1833483671ebc5::t_f0555ff1e4a467 352-356
+  s_1833483671ebc5::t_c6c6fed5e2f333 358-362
+  s_1833483671ebc5::t_2a37b10e2a0491 364-366,370-372
+  s_1833483671ebc5::t_355eb41df02edc 382-384
+  s_1833483671ebc5::t_7f05346fca9b18 386-390
+  s_1833483671ebc5::t_6f1068469f652d 392-394,401-403
+  s_1833483671ebc5::t_f26f2caab24a36 405
+  s_19e1b933e6bbeb::t_555df6a7e7a92b 339-340,367-369,395-400,748-821
+desktop/context-for-claude/docs/design-system.md
+  s_1833483671ebc5::t_81c0f6dc3ba5a5 23
+  s_1833483671ebc5::t_9815bbc967b36b 127-128,130
+  s_1833483671ebc5::t_d38b348716cc10 267-269
+  s_1833483671ebc5::t_613dda4eadc601 52-102
+  s_1833483671ebc5::t_e528b6a1b84d2c 196-201,203,205,217,225,228,265-266,273-278
+  s_1833483671ebc5::t_1fe1b0a7803b6f 206-216,218-222,227,229-231,234,236-241,245-264
+  s_1833483671ebc5::t_29559b73900717 103-105
+  s_1833483671ebc5::t_53c1c8c30f194f 131-133
+  s_1833483671ebc5::t_356033bf1c01cf 195
+  s_1833483671ebc5::t_9161c2de219115 223-224
+  s_1833483671ebc5::t_f7d3fe828f2090 226
+  s_1833483671ebc5::t_62165b2b43f875 270-272
+  s_19e1b933e6bbeb::t_9b50edf8233f63 106-111,134-139,163-170,282,284-288,450-454,467-470
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_1833483671ebc5::t_12b7e82c2399b4 69-73
+  s_1833483671ebc5::t_343061b1e4a6d2 789-791,794-796
+  s_1833483671ebc5::t_ea2bc1d4f26a6a 595-596
+  s_1833483671ebc5::t_2559f88eb31f5d 902-904,906
+  s_1833483671ebc5::t_aa2d2b61acaf28 78-79,84,86-91,93-95,97-102,104-111,113-118,120-122,124-129
+  s_1833483671ebc5::t_bda54f53bab2c8 856-859
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_1833483671ebc5::t_f74b1ffe9f9f82 71-85
+desktop/context-for-claude/Tests/ContextAppTests/SearchSurfaceTests.swift
+  s_1833483671ebc5::t_28103ed7f88fb8 1041-1046
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4e1d43c8f4c6c0ab1102f54e897dceb18b0348b3",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_19e1b933e6bbeb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ac0871723bf008db9",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_f4d8131d6ae22f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad0b026d4686ff8c9",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
