@@ -4,7 +4,9 @@ import XCTest
 
 final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
   override func tearDown() async throws {
-    ChatToolExecutor.onKnowledgeGraphUpdated = nil
+    await MainActor.run {
+      ChatToolExecutor.onKnowledgeGraphUpdated = nil
+    }
     await ScreenKnowledgeGraphExtractor.shared.reset()
     try await super.tearDown()
   }
@@ -195,8 +197,10 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       appName: "Notes",
       windowTitle: nil)
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractor.pendingCount, 0)
-    XCTAssertTrue(await marked.value.isEmpty)
+    let pendingCount = await extractor.pendingCount
+    let markedIDs = await marked.value
+    XCTAssertEqual(pendingCount, 0)
+    XCTAssertTrue(markedIDs.isEmpty)
 
     await shouldGate.set(false)
     await extractor.queueScreenshot(
@@ -208,7 +212,8 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     let ids = await marked.value
     XCTAssertTrue(ids.contains(8))
     XCTAssertTrue(ids.contains(99), "live resume must reschedule backfill for gated rows")
-    XCTAssertGreaterThanOrEqual(await extractCount.value, 2)
+    let extractionCount = await extractCount.value
+    XCTAssertGreaterThanOrEqual(extractionCount, 2)
   }
 
   func testStaleExpectedOwnerIsRejected() async {
@@ -227,7 +232,8 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       appName: "Mail",
       windowTitle: nil,
       expectedOwnerID: "owner-a")
-    XCTAssertEqual(await extractor.pendingCount, 1)
+    var pendingCount = await extractor.pendingCount
+    XCTAssertEqual(pendingCount, 1)
 
     await owner.set("owner-b")
     await extractor.queueScreenshot(
@@ -236,11 +242,13 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       appName: "Mail",
       windowTitle: nil,
       expectedOwnerID: "owner-a")
-    XCTAssertEqual(await extractor.pendingCount, 1, "stale capture owner must not enqueue")
+    pendingCount = await extractor.pendingCount
+    XCTAssertEqual(pendingCount, 1, "stale capture owner must not enqueue")
 
     await extractor.flushPendingExtractions()
+    let markedIDs = await marked.value
     XCTAssertTrue(
-      await marked.value.isEmpty,
+      markedIDs.isEmpty,
       "pending from previous owner must not mark after owner change without reset")
   }
 
@@ -264,19 +272,26 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
 
     await extractor.queueScreenshot(id: 1, ocrText: text, appName: "Docs", windowTitle: nil)
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractCount.value, 1)
-    XCTAssertTrue(await marked.value.isEmpty)
-    XCTAssertEqual(await extractor.pendingCount, 1, "failed mark must re-queue for retry")
+    var extractionCount = await extractCount.value
+    var markedIDs = await marked.value
+    var pendingCount = await extractor.pendingCount
+    XCTAssertEqual(extractionCount, 1)
+    XCTAssertTrue(markedIDs.isEmpty)
+    XCTAssertEqual(pendingCount, 1, "failed mark must re-queue for retry")
 
     await markShouldFail.set(false)
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await marked.value, [1])
+    markedIDs = await marked.value
+    extractionCount = await extractCount.value
+    XCTAssertEqual(markedIDs, [1])
     XCTAssertEqual(
-      await extractCount.value, 1, "mark-only retry must not re-call the extraction backend")
+      extractionCount, 1, "mark-only retry must not re-call the extraction backend")
 
     await extractor.queueScreenshot(id: 2, ocrText: text, appName: "Docs", windowTitle: nil)
-    XCTAssertEqual(await extractCount.value, 1, "hash dedup only after successful mark")
-    XCTAssertEqual(await marked.value, [1, 2])
+    extractionCount = await extractCount.value
+    markedIDs = await marked.value
+    XCTAssertEqual(extractionCount, 1, "hash dedup only after successful mark")
+    XCTAssertEqual(markedIDs, [1, 2])
   }
 
   func testMarkFailureAfterMergeDoesNotReextract() async {
@@ -306,15 +321,21 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
 
     await extractor.queueScreenshot(id: 3, ocrText: text, appName: "Docs", windowTitle: nil)
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractCount.value, 1)
-    XCTAssertEqual(await mergeCount.value, 1)
-    XCTAssertEqual(await extractor.pendingCount, 1)
+    var extractionCount = await extractCount.value
+    var mergedCount = await mergeCount.value
+    var pendingCount = await extractor.pendingCount
+    XCTAssertEqual(extractionCount, 1)
+    XCTAssertEqual(mergedCount, 1)
+    XCTAssertEqual(pendingCount, 1)
 
     await markShouldFail.set(false)
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractCount.value, 1, "successful merge must not re-extract on mark retry")
-    XCTAssertEqual(await mergeCount.value, 1, "successful merge must not re-merge on mark retry")
-    XCTAssertEqual(await marked.value, [3])
+    extractionCount = await extractCount.value
+    mergedCount = await mergeCount.value
+    let markedIDs = await marked.value
+    XCTAssertEqual(extractionCount, 1, "successful merge must not re-extract on mark retry")
+    XCTAssertEqual(mergedCount, 1, "successful merge must not re-merge on mark retry")
+    XCTAssertEqual(markedIDs, [3])
   }
 
   func testOwnerGuardAfterMergeRequeuesMarkOnlyRetry() async {
@@ -348,18 +369,26 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       windowTitle: nil,
       expectedOwnerID: "owner-a")
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractCount.value, 1)
-    XCTAssertEqual(await mergeCount.value, 1)
-    XCTAssertTrue(await marked.value.isEmpty)
+    var extractionCount = await extractCount.value
+    var mergedCount = await mergeCount.value
+    var markedIDs = await marked.value
+    var pendingCount = await extractor.pendingCount
+    XCTAssertEqual(extractionCount, 1)
+    XCTAssertEqual(mergedCount, 1)
+    XCTAssertTrue(markedIDs.isEmpty)
     XCTAssertEqual(
-      await extractor.pendingCount, 1, "owner guard after merge must re-queue for mark retry")
+      pendingCount, 1, "owner guard after merge must re-queue for mark retry")
 
     await owner.set("owner-a")
     await extractor.flushPendingExtractions()
-    XCTAssertEqual(await extractCount.value, 1, "re-queue after merge must not re-extract")
-    XCTAssertEqual(await mergeCount.value, 1, "re-queue after merge must not re-merge")
-    XCTAssertEqual(await marked.value, [4])
-    XCTAssertEqual(await extractor.pendingCount, 0)
+    extractionCount = await extractCount.value
+    mergedCount = await mergeCount.value
+    markedIDs = await marked.value
+    pendingCount = await extractor.pendingCount
+    XCTAssertEqual(extractionCount, 1, "re-queue after merge must not re-extract")
+    XCTAssertEqual(mergedCount, 1, "re-queue after merge must not re-merge")
+    XCTAssertEqual(markedIDs, [4])
+    XCTAssertEqual(pendingCount, 0)
   }
 
   func testBackfillAdvancesPastStalledFlushWindow() async {
@@ -389,7 +418,8 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     let calls = await fetchCalls.value
     XCTAssertGreaterThanOrEqual(
       calls, 2, "stalled flush must advance the DB cursor and continue backfill")
-    XCTAssertEqual(await remaining.value.count, 0, "entire pending backlog must be fetched")
+    let remainingCount = await remaining.value.count
+    XCTAssertEqual(remainingCount, 0, "entire pending backlog must be fetched")
   }
 
   func testResetAllowsBackfillToBeRescheduled() async {
@@ -403,14 +433,17 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       })
 
     await extractor.scheduleBackfillIfNeeded()
-    XCTAssertEqual(await fetchCalls.value, 1)
+    var calls = await fetchCalls.value
+    XCTAssertEqual(calls, 1)
 
     await extractor.scheduleBackfillIfNeeded()
-    XCTAssertEqual(await fetchCalls.value, 1, "second schedule is a no-op until reset")
+    calls = await fetchCalls.value
+    XCTAssertEqual(calls, 1, "second schedule is a no-op until reset")
 
     await extractor.reset()
     await extractor.scheduleBackfillIfNeeded()
-    XCTAssertEqual(await fetchCalls.value, 2, "reset must allow backfill to run again")
+    calls = await fetchCalls.value
+    XCTAssertEqual(calls, 2, "reset must allow backfill to run again")
   }
 
   func testOwnerRetargetReschedulesScreenKGBackfill() throws {
@@ -582,9 +615,12 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     await releaseMerge.open()
     await flush.value
 
-    XCTAssertEqual(await merges.value, 0, "retarget mid-merge must revoke the commit lease")
-    XCTAssertTrue(await marked.value.isEmpty)
-    XCTAssertEqual(await extractor.pendingCount, 0, "stale item must not re-queue after reset")
+    let mergeCount = await merges.value
+    let markedIDs = await marked.value
+    let pendingCount = await extractor.pendingCount
+    XCTAssertEqual(mergeCount, 0, "retarget mid-merge must revoke the commit lease")
+    XCTAssertTrue(markedIDs.isEmpty)
+    XCTAssertEqual(pendingCount, 0, "stale item must not re-queue after reset")
   }
 
   func testResetDuringBackfillDropsStaleRows() async {
@@ -621,9 +657,12 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     await releaseFetch.open()
     await backfill.value
 
-    XCTAssertEqual(await queued.value, 0, "stale backfill rows must not extract after reset")
-    XCTAssertTrue(await marked.value.isEmpty)
-    XCTAssertEqual(await extractor.pendingCount, 0)
+    let queuedCount = await queued.value
+    let markedIDs = await marked.value
+    let pendingCount = await extractor.pendingCount
+    XCTAssertEqual(queuedCount, 0, "stale backfill rows must not extract after reset")
+    XCTAssertTrue(markedIDs.isEmpty)
+    XCTAssertEqual(pendingCount, 0)
   }
 
   @MainActor
