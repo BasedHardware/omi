@@ -8,11 +8,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.schemas import Surface
 from llm_gateway.main import app
 from llm_gateway.routers import anthropic_messages
+from llm_gateway.routers.dependencies import get_gateway_config
 from utils.llm.gateway_client import feature_auto_lane_id
 
 CHAT_AGENT_LANE = feature_auto_lane_id('chat_agent')
+CHAT_AGENT_ROUTE = 'route.test.chat_agent.anthropic.001'
 
 
 class _FakeAsyncStreamContext:
@@ -83,6 +87,38 @@ def _auth_headers() -> dict[str, str]:
     }
 
 
+def _anthropic_gateway_config():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes['omi:auto:chat-structured']
+    artifact = config.route_artifacts[lane.active_route]
+    capabilities = lane.capabilities.model_copy(update={'streaming': True, 'tools': True})
+    anthropic_lane = lane.model_copy(
+        update={
+            'lane_id': CHAT_AGENT_LANE,
+            'surface': Surface.ANTHROPIC_MESSAGES,
+            'capabilities': capabilities,
+            'active_route': CHAT_AGENT_ROUTE,
+            'last_known_good': CHAT_AGENT_ROUTE,
+        }
+    )
+    anthropic_route = artifact.model_copy(
+        update={
+            'route_artifact_id': CHAT_AGENT_ROUTE,
+            'lane_id': CHAT_AGENT_LANE,
+            'surface': Surface.ANTHROPIC_MESSAGES,
+            'primary': artifact.primary.model_copy(update={'provider': 'anthropic', 'model': 'claude-sonnet-5'}),
+            'provider_options': {},
+            'capabilities': capabilities,
+        }
+    )
+    return config.model_copy(
+        update={
+            'lanes': {**config.lanes, CHAT_AGENT_LANE: anthropic_lane},
+            'route_artifacts': {**config.route_artifacts, CHAT_AGENT_ROUTE: anthropic_route},
+        }
+    )
+
+
 def _agentic_request(**overrides: Any) -> dict[str, Any]:
     body = {
         'model': CHAT_AGENT_LANE,
@@ -108,10 +144,12 @@ def _reset_anthropic_client(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     monkeypatch.setenv('ANTHROPIC_API_KEY', 'anthropic-test-key')
     anthropic_messages._anthropic_http_client = None
+    app.dependency_overrides[get_gateway_config] = _anthropic_gateway_config
     fake = _FakeAsyncClient()
     monkeypatch.setattr(anthropic_messages, '_get_anthropic_http_client', lambda: fake)
     yield fake
     anthropic_messages._anthropic_http_client = None
+    app.dependency_overrides.pop(get_gateway_config, None)
 
 
 def test_anthropic_messages_requires_service_auth():
