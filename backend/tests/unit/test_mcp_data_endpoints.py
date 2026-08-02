@@ -151,6 +151,7 @@ sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
 sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
+sys.modules['database.mcp_oauth'].RETIRED_SCOPES = {'screen_activity.read'}
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
@@ -365,6 +366,36 @@ def test_authorize_request_accepts_chatgpt_public_client():
 
     assert validated_client == client
     assert scopes == ['memories.read']
+
+
+def test_authorize_request_filters_retired_scope_for_legacy_connector():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.normalize_scopes', return_value=['memories.read']) as normalize_scopes,
+    ):
+        validated_client, scopes = sse._validate_authorize_request(
+            'code',
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            sse.MCP_RESOURCE_URL,
+            'memories.read screen_activity.read',
+            'a' * 64,
+            'S256',
+        )
+
+    assert validated_client == client
+    assert scopes == ['memories.read']
+    normalize_scopes.assert_called_once_with('memories.read', client)
 
 
 def test_authorize_request_rejects_legacy_omi_client_id():

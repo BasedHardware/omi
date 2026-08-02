@@ -508,6 +508,23 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertFalse(soul.contains("test-key"))
   }
 
+  func testOpenClawAndHermesUseDistinctSoulMarkers() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    let hermes = try writeHermesInstall()
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+    _ = try MemoryBankConnector.connect(.hermes, key: "test-key")
+
+    let openClawSoul = try String(contentsOf: workspace.appendingPathComponent("SOUL.md"), encoding: .utf8)
+    let hermesSoul = try String(contentsOf: hermes.appendingPathComponent("SOUL.md"), encoding: .utf8)
+    XCTAssertTrue(openClawSoul.contains("omi-memory-bank-openclaw"))
+    XCTAssertFalse(openClawSoul.contains("omi-memory-bank-hermes"))
+    XCTAssertTrue(hermesSoul.contains("omi-memory-bank-hermes"))
+    XCTAssertFalse(hermesSoul.contains("omi-memory-bank-openclaw"))
+  }
+
   func testHermesConnectReplacesStaleOmiMemoryEntry() throws {
     let hermes = try writeHermesInstall(
       config: """

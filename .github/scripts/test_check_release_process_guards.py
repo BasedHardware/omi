@@ -347,6 +347,23 @@ def test_mobile_codemagic_trigger_guard_rejects_legacy_github_dispatcher(tmp_pat
     assert any("must not be dispatched through GitHub Actions" in error for error in errors), errors
 
 
+def test_mobile_codemagic_trigger_guard_requires_dispatcher_script_invocation(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher, ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/other_dispatcher.py")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert any("must invoke dispatch_mobile_internal_builds.py" in error for error in errors), errors
+
+
 def _desktop_candidate_trigger_guard_root(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     codemagic = tmp_path / "codemagic.yaml"
     candidate = tmp_path / ".github/workflows/desktop_auto_release.yml"

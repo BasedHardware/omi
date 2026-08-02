@@ -981,9 +981,7 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
     else:
         dispatcher_text = dispatcher.read_text(encoding="utf-8")
         dispatcher_script = ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
-        dispatcher_source = dispatcher_text
-        if dispatcher_script.exists():
-            dispatcher_source += "\n" + dispatcher_script.read_text(encoding="utf-8")
+        dispatcher_source = dispatcher_script.read_text(encoding="utf-8") if dispatcher_script.exists() else ""
         required_dispatcher = (
             "  push:\n"
             "    branches: [main]\n"
@@ -996,6 +994,10 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(
                 "mobile internal build dispatcher must trigger on main app/** pushes and cancel stale runs"
             )
+        if not re.search(
+            r"(?m)^\s*python3\s+\.github/scripts/dispatch_mobile_internal_builds\.py(?:\s|$)", dispatcher_text
+        ):
+            errors.append("mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py")
         for workflow_id in ("ios-internal-auto", "android-internal-auto"):
             if workflow_id not in dispatcher_source:
                 errors.append(f"mobile internal build dispatcher is missing {workflow_id}")
