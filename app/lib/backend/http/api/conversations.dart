@@ -506,6 +506,33 @@ class SyncRateLimitedException implements Exception {
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
 }
 
+/// Thrown when the server permanently refuses a recording because its capture
+/// time is older than the automatic-recovery window (HTTP 422
+/// `backfill_lookback_exceeded`). No amount of retrying can make this upload
+/// succeed, so callers must stop re-offering the file instead of spending the
+/// recording's retry budget on it.
+class SyncRecoveryWindowExceededException implements Exception {
+  const SyncRecoveryWindowExceededException();
+
+  @override
+  String toString() => 'SyncRecoveryWindowExceededException()';
+}
+
+/// Classifies a sync 422 as the backend's terminal lookback rejection.
+///
+/// Keyed on the bounded `code` the sync routes emit, never on human-readable
+/// detail text: any other 422 stays a generic retryable failure.
+@visibleForTesting
+bool isSyncRecoveryWindowExceededResponse(http.Response response) {
+  if (response.statusCode != 422) return false;
+  try {
+    final body = jsonDecode(response.body);
+    return body is Map && body['code'] == 'backfill_lookback_exceeded';
+  } catch (_) {
+    return false;
+  }
+}
+
 /// A synchronous upload response that durably reached the server but did not
 /// transcribe every segment. Callers keep the local WAL and retry it; the
 /// backend deduplicates any segments that already succeeded.
@@ -611,6 +638,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
     );
+  } else if (isSyncRecoveryWindowExceededResponse(response)) {
+    throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }

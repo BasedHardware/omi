@@ -9841,4 +9841,7 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
+
+  @override
+  String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
 }

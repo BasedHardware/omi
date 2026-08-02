@@ -2960,6 +2960,7 @@
     "syncStatusWaiting": "في انتظار المزامنة",
     "syncStatusRetrying": "تعذّرت المعالجة — جارٍ إعادة المحاولة",
     "syncStatusFailed": "فشل — اضغط إعادة المحاولة",
+    "syncStatusTooOld": "قديم جدًا للمزامنة — لا يمكن لـ Omi قبوله",
     "syncStatusFileUnavailable": "الملف غير متوفر",
     "syncStatusUploaded": "تم الرفع · قيد المعالجة على Omi",
     "noRecordingsYet": "لا توجد تسجيلات بعد",

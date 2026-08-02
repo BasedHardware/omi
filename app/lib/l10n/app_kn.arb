@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ",
     "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
     "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
+    "syncStatusTooOld": "ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ",
     "syncStatusFileUnavailable": "ಫೈಲ್ ಲಭ್ಯವಿಲ್ಲ",
     "syncStatusUploaded": "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ · Omi ನಲ್ಲಿ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
     "noRecordingsYet": "ಇನ್ನೂ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",

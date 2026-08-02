@@ -2961,6 +2961,7 @@
     "syncStatusWaiting": "Wartet auf Synchronisierung",
     "syncStatusRetrying": "Verarbeitung fehlgeschlagen — wird wiederholt",
     "syncStatusFailed": "Fehlgeschlagen — auf Wiederholen tippen",
+    "syncStatusTooOld": "Zu alt für die Synchronisierung — Omi kann sie nicht annehmen",
     "syncStatusFileUnavailable": "Datei nicht verfügbar",
     "syncStatusUploaded": "Hochgeladen · wird auf Omi verarbeitet",
     "noRecordingsYet": "Noch keine Aufnahmen",
