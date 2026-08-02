@@ -8,7 +8,7 @@ import XCTest
 /// `onChange` `oldValue` (`oldId != nil`). Switching between two conversations
 /// through a transient empty timeline (A -> nil -> B) made `oldId` nil at the
 /// moment B arrived, so the reset was skipped and conversation B inherited A's
-/// stale `scrollMode` / `initialRestoreHandled` — opening at the wrong scroll
+/// stale `scrollMode` / initial-placement state — opening at the wrong scroll
 /// position. The pure transition below must still reset for B.
 final class ChatConversationSwitchTests: XCTestCase {
   func testInitialPopulationTracksWithoutReset() {

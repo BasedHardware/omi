@@ -66,9 +66,32 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
 
-    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn; a trailing debounce starves the active rail until scrolling stops.
-    XCTAssertTrue(scrollSource.contains("DispatchQueue.main.async(execute: workItem)"))
+    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
+    XCTAssertTrue(scrollSource.contains("inModes: [.common, .default, Self.eventTrackingRunLoopMode]"))
+    XCTAssertTrue(scrollSource.contains("private static let eventTrackingRunLoopMode"))
     XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
+  }
+
+  func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+
+    // omi-test-quality: source-inspection -- AppKit representables must recover
+    // when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
+    XCTAssertTrue(scrollSource.contains("context.coordinator.setupScrollObserver(for: nsView)"))
+    XCTAssertTrue(scrollSource.contains("observedClipView"))
+    XCTAssertTrue(scrollSource.contains("context.coordinator.install(for: nsView)"))
+    XCTAssertTrue(scrollSource.contains("installedScrollView"))
+  }
+
+  func testChatStartsAtBottomOnLaunchButPreservesExplicitReaderScroll() throws {
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+
+    // omi-test-quality: source-inspection -- the transcript's default placement
+    // is bottom-first, while user interaction is the only path that cancels it.
+    XCTAssertTrue(messagesSource.contains(".defaultScrollAnchor(.bottom)"))
+    XCTAssertTrue(messagesSource.contains("ChatInitialRestoreState.afterDisappear"))
+    XCTAssertTrue(messagesSource.contains("cancelPendingScrollsForUserInteraction()"))
+    XCTAssertTrue(messagesSource.contains("initialRestoreState = .completed"))
   }
 
   func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {

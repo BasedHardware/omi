@@ -24,6 +24,9 @@ final class ConversationDetailAutomationState: ObservableObject {
   func requestOpen(conversationId: String, showTranscript: Bool) {
     pendingOpenRequest = OpenRequest(conversationId: conversationId, showTranscript: showTranscript)
     pendingTranscriptConversationId = showTranscript ? conversationId : nil
+    if openConversationId == conversationId, showTranscript {
+      transcriptDrawerOpen = true
+    }
   }
 
   func takePendingOpenRequest() -> OpenRequest? {

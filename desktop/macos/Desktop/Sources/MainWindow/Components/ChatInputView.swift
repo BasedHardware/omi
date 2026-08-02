@@ -20,6 +20,9 @@ enum ChatComposerLayout {
   static let shellInset: CGFloat = OmiSpacing.sm
   /// Shared page margin for the regular chat composer.
   static let pageMargin: CGFloat = OmiSpacing.lg
+  /// Maximum width shared by the readable chat/composer lane and shell chrome.
+  /// Keep navigation and the Home chat column on the same vertical edges.
+  static let contentLaneMaxWidth: CGFloat = 900
   /// The transcript uses the same visible edge as the composer shell.
   static let transcriptEdgeInset: CGFloat = pageMargin
   /// The height over which transcript content fades into the composer.

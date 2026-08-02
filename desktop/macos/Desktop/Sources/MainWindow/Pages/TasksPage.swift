@@ -3210,6 +3210,7 @@ struct TasksPage: View {
   /// highlight the correct item without observing the full coordinator.
   @State private var activeChatTaskId: String? = nil
   @State private var showChatPanel = false
+  @State private var taskDetailTask: TaskActionItem?
   @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
   /// The window width before the chat panel was opened, so we can restore it exactly.
   /// Persisted so we can restore on app relaunch if the user quit with chat open.
@@ -3288,6 +3289,47 @@ struct TasksPage: View {
         )
         .frame(width: chatPanelWidth)
         .transition(.move(edge: .trailing))
+      } else if let taskDetailTask {
+        Rectangle()
+          .fill(OmiColors.border)
+          .frame(width: 1)
+          .frame(width: 9)
+
+        TaskDetailPanel(
+          task: taskDetailTask,
+          onDismiss: { closeTaskDetailPanel() },
+          onToggle: {
+            Task { await viewModel.toggleTask(taskDetailTask) }
+          },
+          onEdit: {
+            viewModel.editingTaskId = taskDetailTask.id
+            closeTaskDetailPanel()
+          },
+          onInvestigate: taskDetailTask.completed
+            ? nil
+            : {
+              investigateTask(taskDetailTask)
+            },
+          onOpenChat: chatProvider != nil && TaskAgentSettings.shared.isChatEnabled
+            ? {
+              closeTaskDetailPanel()
+              openChatForTask(taskDetailTask)
+            } : nil,
+          onIncrementIndent: viewModel.getIndentLevel(for: taskDetailTask.id) < 3
+            ? {
+              viewModel.incrementIndent(for: taskDetailTask.id)
+            } : nil,
+          onDecrementIndent: viewModel.getIndentLevel(for: taskDetailTask.id) > 0
+            ? {
+              viewModel.decrementIndent(for: taskDetailTask.id)
+            } : nil,
+          onDelete: {
+            closeTaskDetailPanel()
+            Task { await viewModel.deleteTaskWithUndo(taskDetailTask) }
+          }
+        )
+        .frame(width: 360)
+        .transition(.move(edge: .trailing).combined(with: .opacity))
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3336,10 +3378,13 @@ struct TasksPage: View {
     }
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
+      guard let taskDetailTask else { return }
+      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id }) ?? taskDetailTask
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
       if isOpen {
+        taskDetailTask = nil
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
@@ -3368,6 +3413,7 @@ struct TasksPage: View {
     log(
       "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
     )
+    taskDetailTask = nil
     if !showChatPanel {
       // First open: expand window and reveal the panel together
       adjustWindowWidth(expand: true)
@@ -3385,6 +3431,19 @@ struct TasksPage: View {
   /// Close the chat panel and shrink window
   private func closeChatPanel() {
     chatCoordinator.closeChat()
+  }
+
+  private func closeTaskDetailPanel() {
+    taskDetailTask = nil
+  }
+
+  private func openTaskDetailPanel(for task: TaskActionItem) {
+    guard !viewModel.isMultiSelectMode else { return }
+    if showChatPanel {
+      closeChatPanel()
+      showChatPanel = false
+    }
+    taskDetailTask = task
   }
 
   private func handleEscapeKey() -> Bool {
@@ -3582,6 +3641,10 @@ struct TasksPage: View {
 
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
+      Text("Tasks")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         if viewModel.isSearching || viewModel.isLoadingFiltered {
@@ -4045,7 +4108,9 @@ struct TasksPage: View {
                     ? { task in openChatForTask(task) } : nil,
                   onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
+                  onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
+                  isTaskDetailPanelActive: taskDetailTask != nil,
                   isChatActive: showChatPanel,
                   activeChatTaskId: activeChatTaskId,
                   chatCoordinator: chatCoordinator,
@@ -4130,7 +4195,9 @@ struct TasksPage: View {
                     ? { task in openChatForTask(task) } : nil,
                   onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
+                  onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
+                  isTaskDetailPanelActive: taskDetailTask != nil,
                   isChatActive: showChatPanel,
                   activeChatTaskId: activeChatTaskId,
                   chatCoordinator: chatCoordinator,
@@ -4155,11 +4222,6 @@ struct TasksPage: View {
                   .padding(.top, OmiSpacing.xxs)
                 }
               }
-              .onAppear {
-                Task {
-                  await viewModel.throttledLoadMoreIfNeeded(currentTask: task)
-                }
-              }
             }
           }
 
@@ -4174,45 +4236,19 @@ struct TasksPage: View {
             .padding(.vertical, OmiSpacing.md)
           }
 
-          // "Load more" button
-          if !viewModel.displayTasks.isEmpty && !viewModel.isLoadingMore {
-            if viewModel.isInFilteredMode && viewModel.hasMoreFilteredResults {
-              Button {
-                viewModel.loadMoreFiltered()
-              } label: {
-                HStack(spacing: OmiSpacing.xs) {
-                  Image(systemName: "arrow.down.circle")
-                  Text("Load more tasks")
-                }
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.lg)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(OmiChrome.elementRadius)
-              }
-              .buttonStyle(.plain)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, OmiSpacing.sm)
-            } else if !viewModel.isInFilteredMode && viewModel.hasMoreTasks {
-              Button {
+          // A true bottom sentinel replaces the obscured manual button and
+          // row-prefetch trigger. In the normal active view the store accepts
+          // only No Deadline pages; dated buckets are already complete.
+          if !viewModel.displayTasks.isEmpty && !viewModel.isLoadingMore && !viewModel.isActiveViewLoading
+            && (viewModel.isInFilteredMode ? viewModel.hasMoreFilteredResults : viewModel.hasMoreTasks)
+          {
+            Color.clear
+              .frame(height: 1)
+              .id("tasks-bottom-sentinel-\(viewModel.displayTasks.count)")
+              .accessibilityIdentifier("tasks-bottom-pagination-sentinel")
+              .onAppear {
                 Task { await viewModel.loadMoreTapped() }
-              } label: {
-                HStack(spacing: OmiSpacing.xs) {
-                  Image(systemName: "arrow.down.circle")
-                  Text("Load more tasks")
-                }
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.lg)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(OmiChrome.elementRadius)
               }
-              .buttonStyle(.plain)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, OmiSpacing.sm)
-            }
           }
         }
         .padding(.horizontal, OmiSpacing.lg)
@@ -4336,7 +4372,9 @@ struct TaskCategorySection: View {
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
+  var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
+  var isTaskDetailPanelActive: Bool = false
   var isChatActive: Bool = false
   var activeChatTaskId: String?
   var chatCoordinator: TaskChatCoordinator?
@@ -4478,7 +4516,9 @@ struct TaskCategorySection: View {
                 onOpenChat: onOpenChat,
                 onInvestigate: onInvestigate,
                 onSelect: onSelect,
+                onOpenDetails: onOpenDetails,
                 onHover: onHover,
+                isTaskDetailPanelActive: isTaskDetailPanelActive,
                 onDragStarted: onDragStarted,
                 onDragEnded: onDragEnded,
                 isBeingDragged: draggedTaskId == task.id,
@@ -4870,7 +4910,9 @@ struct TaskRow: View {
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
+  var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
+  var isTaskDetailPanelActive: Bool = false
   /// Called when the user begins dragging this row's handle — lets the
   /// parent ViewModel set `draggedTaskId` for visual feedback on other rows.
   /// Non-optional with no-op default: load-bearing for the dim effect, and a
@@ -4900,7 +4942,6 @@ struct TaskRow: View {
   @State private var checkmarkScale: CGFloat = 1.0
   @State private var rowOpacity: Double = 1.0
   @State private var rowOffset: CGFloat = 0
-  @State private var showTaskDetail = false
   @State private var isCopyingLink = false
   @State private var showShareCopiedToast = false
   @State private var shareToastDismissTask: Task<Void, Never>?
@@ -4973,6 +5014,8 @@ struct TaskRow: View {
           onSelect?(task)
           if isChatActive, !isActiveChatTask {
             onOpenChat?(task)
+          } else if !isMultiSelectMode {
+            onOpenDetails?(task)
           }
         }
     }
@@ -4991,12 +5034,6 @@ struct TaskRow: View {
           .padding(.trailing, OmiSpacing.md)
           .transition(.move(edge: .top).combined(with: .opacity))
       }
-    }
-    .sheet(isPresented: $showTaskDetail) {
-      TaskDetailView(
-        task: task,
-        onDismiss: { showTaskDetail = false }
-      )
     }
     .opacity(isBeingDragged ? 0.4 : 1.0)
     .omiAnimation(.easeInOut(duration: 0.12), value: isBeingDragged)
@@ -5349,8 +5386,6 @@ struct TaskRow: View {
               NewBadge()
             }
 
-            AutoAcceptedTaskWhyButton(task: task)
-
             // Explicit durable-work action. Merely viewing/selecting a
             // task never creates a thread.
             if let coordinator = chatCoordinator,
@@ -5394,8 +5429,6 @@ struct TaskRow: View {
               ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
             }
 
-            // Task detail button (hover for preview, click for full detail)
-            TaskDetailButton(task: task, showDetail: $showTaskDetail)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -5412,7 +5445,14 @@ struct TaskRow: View {
     }
     .overlay(alignment: .trailing) {
       // Hover actions overlaid on trailing edge (no layout shift)
-      if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
+      if TaskDetailPanelPresentationPolicy.showsHoverActions(
+        isRowHovering: isHovering,
+        isPriorityPickerPresented: showPriorityPicker,
+        isMultiSelectMode: isMultiSelectMode,
+        isDeletedTask: isDeletedTask,
+        isTextFieldFocused: isTextFieldFocused,
+        isDetailPanelPresented: isTaskDetailPanelActive
+      ) {
         HStack(spacing: OmiSpacing.xxs) {
           // Execute is an explicit work intent and stays in the same
           // durable task-backed thread as chat/investigate.
