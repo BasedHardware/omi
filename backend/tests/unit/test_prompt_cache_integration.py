@@ -146,6 +146,20 @@ langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
 
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # agentic.py now imports utils.retrieval.tools.web_tools directly, and web_tools.py
+    # decorates fetch_url_tool with @tool at import time. The agentic harness never
+    # invokes web tools, so the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+langchain_tools_mod = _stub_module("langchain_core.tools")
+langchain_tools_mod.tool = _passthrough_tool
+
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
 if not hasattr(llms_mod, "__path__"):
