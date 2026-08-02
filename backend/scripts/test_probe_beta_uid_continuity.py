@@ -147,6 +147,41 @@ class BetaUIDContinuityProbeTests(unittest.TestCase):
         self.assertEqual([request.method for request in requests], ["POST", "DELETE"])
         self.assertEqual(requests[-1].full_url, "https://api.omi.me/v3/memories/production-sentinel")
 
+    def test_probe_recovers_the_unique_production_sentinel_when_create_omits_its_id(self) -> None:
+        requests = []
+
+        def opener(request, *, timeout):
+            requests.append(request)
+            if request.method == "POST":
+                payload = json.loads(request.data)
+                return Response(
+                    {
+                        "uid": "omi-release-probe",
+                        "content": payload["content"],
+                        "tags": ["release-probe-beta-continuity"],
+                    }
+                )
+            if request.method == "GET":
+                self.assertEqual(request.full_url, "https://api.omi.me/v3/memories?limit=500")
+                return Response(
+                    [
+                        {
+                            "id": "recovered-production-sentinel",
+                            "uid": "omi-release-probe",
+                            "content": json.loads(requests[0].data)["content"],
+                            "tags": ["release-probe-beta-continuity"],
+                        }
+                    ]
+                )
+            if request.method == "DELETE":
+                return Response({"status": "ok"})
+            self.fail(f"unexpected request {request.method} {request.full_url}")
+
+        with self.assertRaisesRegex(PROBE.ContinuityProbeError, "production_sentinel"):
+            PROBE.probe(token(), opener=opener)
+        self.assertEqual([request.method for request in requests], ["POST", "GET", "DELETE"])
+        self.assertEqual(requests[-1].full_url, "https://api.omi.me/v3/memories/recovered-production-sentinel")
+
     def test_rejects_nonproduction_firebase_claims_before_network(self) -> None:
         with self.assertRaisesRegex(PROBE.ContinuityProbeError, "token_claims"):
             PROBE.probe(token(project="based-hardware-dev"), opener=lambda *_args, **_kwargs: self.fail("network"))

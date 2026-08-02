@@ -148,14 +148,22 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         probe = self._workflow_script("Prove production Firebase UID continuity on Beta development authorities")
         for fragment in (
             "umask 077",
-            "trap 'rm -f -- \"$signer_file\" \"$token_file\"' EXIT",
+            'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
+            'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
+            "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
             'rm -f -- "$signer_file"',
+            'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
+            "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
             "unset FIREBASE_PROBE_SIGNER_B64",
             "probe_beta_uid_continuity.py",
         ):
             self.assertIn(fragment, probe)
         self.assertLess(probe.index("firebase_release_probe_token.py"), probe.rindex('rm -f -- "$signer_file"'))
         self.assertLess(probe.rindex('rm -f -- "$signer_file"'), probe.index("probe_beta_uid_continuity.py"))
+        self.assertLess(
+            probe.index('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"'),
+            probe.index("probe_beta_uid_continuity.py"),
+        )
         self.assertLess(
             self.workflow.index("Prove production Firebase UID continuity on Beta development authorities"),
             self.workflow.index("Fetch candidate release inputs into this run only"),
@@ -178,6 +186,11 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
     def test_reusable_promotion_validates_retained_run_identity_before_artifact_selection(self) -> None:
         self.assertIn('[[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]', self.promotion)
         self.assertIn('[[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]', self.promotion)
+
+    def test_reusable_promotion_requires_uid_continuity_only_for_beta_artifact_topology(self) -> None:
+        # omi-test-quality: source-inspection -- static workflow condition gates immutable evidence topology.
+        self.assertIn('if jq -e \'.artifacts | has("Omi.Beta.zip") and has("omi-beta.dmg")\'', self.promotion)
+        self.assertIn("qualification evidence lacks production Firebase UID continuity proof", self.promotion)
 
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
         tree = ast.parse(self.release_guard)

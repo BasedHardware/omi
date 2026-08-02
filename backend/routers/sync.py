@@ -38,6 +38,7 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
 )
 from models.conversation_enums import ConversationSource
+from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
@@ -190,12 +191,6 @@ class SyncJobStartResponse(BaseModel):
     total_segments: int
     poll_after_ms: int
     lane: str = SyncLane.FRESH.value
-
-
-class SyncRecoveryWindowExceededResponse(BaseModel):
-    code: str
-    detail: str
-    lane: Optional[str] = None
 
 
 class SyncJobStatusResponse(BaseModel):
@@ -855,7 +850,7 @@ async def sync_local_files(
     "/v2/sync-local-files",
     status_code=202,
     response_model=SyncJobStartResponse,
-    responses={422: {'model': SyncRecoveryWindowExceededResponse, 'description': 'Automatic recovery window exceeded'}},
+    responses=SYNC_LOCAL_FILES_V2_RESPONSES,
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(

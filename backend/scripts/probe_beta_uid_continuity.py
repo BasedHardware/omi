@@ -160,13 +160,15 @@ def _prove_production_firestore_sentinel(token: str, *, opener: Callable[..., An
     )
     memory_id = created.get("id") if isinstance(created, dict) else None
     content = f"Omi release continuity probe {marker}"
-    if not isinstance(memory_id, str) or not memory_id:
-        raise ContinuityProbeError("production_sentinel")
     try:
         if (
-            created.get("uid") != PROBE_UID
-            or created.get("content") != content
-            or created.get("tags") != ["release-probe-beta-continuity"]
+            not isinstance(memory_id, str)
+            or not memory_id
+            or (
+                created.get("uid") != PROBE_UID
+                or created.get("content") != content
+                or created.get("tags") != ["release-probe-beta-continuity"]
+            )
         ):
             raise ContinuityProbeError("production_sentinel")
         observed = _authenticated_json(
@@ -184,12 +186,33 @@ def _prove_production_firestore_sentinel(token: str, *, opener: Callable[..., An
         ):
             raise ContinuityProbeError("production_sentinel")
     finally:
-        _authenticated_json(
-            f"{PRODUCTION_PYTHON_API_URL}v3/memories/{urllib.parse.quote(memory_id, safe='')}",
-            token,
-            method="DELETE",
-            opener=opener,
-        )
+        if not isinstance(memory_id, str) or not memory_id:
+            production_memories = _authenticated_json(
+                f"{PRODUCTION_PYTHON_API_URL}v3/memories?limit=500",
+                token,
+                opener=opener,
+            )
+            matching_ids = (
+                [
+                    memory.get("id")
+                    for memory in production_memories
+                    if isinstance(memory, dict)
+                    and isinstance(memory.get("id"), str)
+                    and memory.get("uid") == PROBE_UID
+                    and memory.get("content") == content
+                    and memory.get("tags") == ["release-probe-beta-continuity"]
+                ]
+                if isinstance(production_memories, list)
+                else []
+            )
+            memory_id = matching_ids[0] if len(matching_ids) == 1 else None
+        if isinstance(memory_id, str) and memory_id:
+            _authenticated_json(
+                f"{PRODUCTION_PYTHON_API_URL}v3/memories/{urllib.parse.quote(memory_id, safe='')}",
+                token,
+                method="DELETE",
+                opener=opener,
+            )
 
 
 def probe(token: str, *, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Any]:

@@ -168,12 +168,16 @@ jobs:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"
+          gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"
+          test -f "$gha_application_credentials_file"
+          test -f "$gha_credentials_file"
           signer_file="$QUALIFICATION_STAGE/firebase-probe-signer.json"
           token_file="$QUALIFICATION_STAGE/firebase-probe-token"
           test ! -e "$signer_file"
           test ! -e "$token_file"
           umask 077
-          trap 'rm -f -- "$signer_file" "$token_file"' EXIT
+          trap 'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file" "$signer_file" "$token_file"' EXIT
           printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
           chmod 600 "$signer_file"
           unset FIREBASE_PROBE_SIGNER_B64
@@ -183,6 +187,8 @@ jobs:
             --signer-credentials-file="$signer_file" \
             --token-output "$token_file"
           rm -f -- "$signer_file"
+          rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"
+          unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
           python3 backend/scripts/probe_beta_uid_continuity.py \
             --bearer-token-file "$token_file" \
             --evidence "$QUALIFICATION_STAGE/beta-uid-continuity.json"

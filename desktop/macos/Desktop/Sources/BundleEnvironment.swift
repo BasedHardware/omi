@@ -36,6 +36,7 @@ enum BundleEnvironment {
 
   static func normalizedKey(from assignmentKey: String) -> String? {
     var key = assignmentKey.trimmingCharacters(in: .whitespaces)
+    guard key != "export" else { return nil }
     if key.hasPrefix("export ") {
       key = String(key.dropFirst("export ".count)).trimmingCharacters(in: .whitespaces)
     }

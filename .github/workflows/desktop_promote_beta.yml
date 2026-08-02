@@ -106,7 +106,8 @@ jobs:
                 end
             ' "$evidence")
             test "$EVIDENCE_RUN_ID" = "$QUALIFICATION_RUN_ID"
-            jq -e '
+            if jq -e '.artifacts | has("Omi.Beta.zip") and has("omi-beta.dmg")' "$evidence" >/dev/null; then
+              jq -e '
               .beta_uid_continuity == {
                 schema_version: 1,
                 status: "passed",
@@ -130,10 +131,11 @@ jobs:
                 },
                 redaction: {customer_content_printed: false, tokens_printed: false}
               }
-            ' "$evidence" >/dev/null || {
-              echo "qualification evidence lacks production Firebase UID continuity proof" >&2
-              exit 1
-            }
+              ' "$evidence" >/dev/null || {
+                echo "qualification evidence lacks production Firebase UID continuity proof" >&2
+                exit 1
+              }
+            fi
             if [[ -n "$requested_release_tag" && "$requested_release_tag" != "$RELEASE_TAG" ]]; then
               echo "requested tag $requested_release_tag does not match qualification evidence $RELEASE_TAG" >&2
               exit 1

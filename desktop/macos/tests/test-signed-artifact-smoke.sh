@@ -250,6 +250,9 @@ make_signed_smoke_fixture "$renamed_beta_app" \
   'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
   https://api.omiapi.com/ \
   https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
+# Firebase Web API keys are public client configuration, required for desktop
+# sign-in, and bound by the signed GoogleService-Info.plist project check.
+printf 'FIREBASE_API_KEY=public-firebase-web-key\n' >> "$signed_beta_app/Contents/Resources/.env"
 dummy_dmg="$tmp_root/fixture.dmg"
 touch "$dummy_dmg"
 

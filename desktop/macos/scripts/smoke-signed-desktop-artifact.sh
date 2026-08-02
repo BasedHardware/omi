@@ -477,8 +477,8 @@ assert_backend_routing_config() {
       || fail "production-family artifact Firebase project must be based-hardware"
     ! grep -q '^OMI_AUTH_API_URL=' "$env_file" \
       || fail "production-family artifact must not bundle an OMI_AUTH_API_URL override"
-    ! grep -Eq '^(FIREBASE_API_KEY|FIREBASE_AUTH_EMULATOR_HOST|FIREBASE_PROJECT_ID|OMI_DESKTOP_LOCAL_PROFILE)=' "$env_file" \
-      || fail "production-family artifact must not bundle a Firebase or local-profile override"
+    ! grep -Eq '^(FIREBASE_AUTH_EMULATOR_HOST|FIREBASE_PROJECT_ID|OMI_DESKTOP_LOCAL_PROFILE)=' "$env_file" \
+      || fail "production-family artifact must not bundle a Firebase project, emulator, or local-profile override"
   fi
 
   pass "Backend routing config matches the declared external backend"

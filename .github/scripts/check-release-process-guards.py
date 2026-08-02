@@ -880,8 +880,12 @@ def check_desktop_qualification_runner() -> list[str]:
     probe = text[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
     for required_fragment in (
         "umask 077",
-        "trap 'rm -f -- \"$signer_file\" \"$token_file\"' EXIT",
+        'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
+        'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
+        "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
         'rm -f -- "$signer_file"',
+        'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
+        "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
         "unset FIREBASE_PROBE_SIGNER_B64",
     ):
         if required_fragment not in probe:
@@ -889,9 +893,10 @@ def check_desktop_qualification_runner() -> list[str]:
     if not (
         probe.find("firebase_release_probe_token.py")
         < probe.rfind('rm -f -- "$signer_file"')
+        < probe.rfind('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"')
         < probe.find("probe_beta_uid_continuity.py")
     ):
-        errors.append("desktop qualification runner must remove the Firebase probe signer after minting and before probing")
+        errors.append("desktop qualification runner must remove Firebase probe and GitHub auth credentials before probing")
     if "working-directory: qualification-controls" not in probe:
         errors.append("desktop qualification runner must run the Firebase probe from trusted main controls")
 
