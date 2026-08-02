@@ -802,6 +802,14 @@ actor RewindIndexer {
 
             try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
             totalProcessed += 1
+
+            let ocrText = ocrResult.fullText
+            let appName = screenshot.appName
+            let windowTitle = screenshot.windowTitle
+            Task(priority: .utility) {
+              await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+                id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+            }
           } catch RewindError.screenshotNotFound {
             // Screenshot/video file is permanently missing — clear skippedForBattery so we don't retry forever
             try? await RewindDatabase.shared.clearSkippedForBattery(id: id)

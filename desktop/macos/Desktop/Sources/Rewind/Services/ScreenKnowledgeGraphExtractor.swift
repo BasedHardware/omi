@@ -18,6 +18,8 @@ actor ScreenKnowledgeGraphExtractor {
   private let flushIntervalNanos: UInt64 = 60_000_000_000
   private let maxPendingItems = 20
   private let maxItemsPerFlush = 5
+  private let backfillBatchSize = 50
+  private let maxBackfillItemsPerLaunch = 5_000
 
   private var pendingItems: [PendingItem] = []
   private var flushTask: Task<Void, Never>?
@@ -25,6 +27,7 @@ actor ScreenKnowledgeGraphExtractor {
   private var recentHashes: Set<String> = []
   private let maxRecentHashes = 2_000
   private var backfillScheduled = false
+  private var pausedForProductGate = false
 
   typealias ExtractionBackend = @Sendable (ScreenKGExtractionInput) async throws -> String
   typealias KGMarkedWriter = @Sendable (_ ids: [Int64]) async throws -> Void
@@ -72,14 +75,16 @@ actor ScreenKnowledgeGraphExtractor {
     pendingItems = []
     recentHashes = []
     backfillScheduled = false
+    pausedForProductGate = false
   }
 
   /// Queue a newly captured screenshot for extraction.
   func queueScreenshot(id: Int64, ocrText: String, appName: String, windowTitle: String?) async {
+    guard !pausedForProductGate else { return }
     guard ocrText.count >= minTextLength else { return }
 
     let input = Self.makeInput(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
-    let hash = Self.contentHash(input)
+    let hash = Self.contentHash(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
 
     if recentHashes.contains(hash) {
       try? await markExtracted([id])
@@ -95,19 +100,21 @@ actor ScreenKnowledgeGraphExtractor {
     }
   }
 
-  /// One-shot backfill for screenshots captured before the extractor shipped.
-  func scheduleBackfillIfNeeded() {
+  /// Backfill screenshots captured before the extractor shipped (capped per launch).
+  func scheduleBackfillIfNeeded() async {
     guard !backfillScheduled else { return }
     backfillScheduled = true
-    Task(priority: .utility) {
-      await self.runBackfillBatch()
-    }
+    await runBackfillBatch()
   }
 
   func flushPendingExtractions() async {
     flushTask?.cancel()
     flushTask = nil
     guard !pendingItems.isEmpty else { return }
+    guard !pausedForProductGate else {
+      pendingItems.removeAll()
+      return
+    }
 
     let generation = ownerGeneration
     let batch = Array(pendingItems.prefix(maxItemsPerFlush))
@@ -117,10 +124,13 @@ actor ScreenKnowledgeGraphExtractor {
       guard generation == ownerGeneration else {
         return
       }
+      guard !pausedForProductGate else {
+        return
+      }
       await processItem(item, generation: generation)
     }
 
-    if !pendingItems.isEmpty {
+    if !pendingItems.isEmpty && !pausedForProductGate {
       startFlushTimerIfNeeded()
     }
   }
@@ -133,16 +143,21 @@ actor ScreenKnowledgeGraphExtractor {
     return ScreenKGExtractionInput(ocrText: truncated, appName: appName, windowTitle: windowTitle)
   }
 
-  static func contentHash(_ input: ScreenKGExtractionInput) -> String {
-    let key = "[\(input.appName)]\(input.windowTitle ?? "")\n\(input.ocrText)"
+  static func contentHash(ocrText: String, appName: String, windowTitle: String?) -> String {
+    let key = "[\(appName)]\(windowTitle ?? "")\n\(ocrText)"
     let digest = SHA256.hash(data: Data(key.utf8))
     return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+  }
+
+  static func contentHash(_ input: ScreenKGExtractionInput) -> String {
+    contentHash(ocrText: input.ocrText, appName: input.appName, windowTitle: input.windowTitle)
   }
 
   // MARK: - Private
 
   private func startFlushTimerIfNeeded() {
     guard flushTask == nil else { return }
+    guard !pausedForProductGate else { return }
     flushTask = Task {
       try? await Task.sleep(nanoseconds: flushIntervalNanos)
       guard !Task.isCancelled else { return }
@@ -151,14 +166,33 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   private func runBackfillBatch() async {
+    var processedThisLaunch = 0
+
     do {
-      let rows = try await fetchPending(50)
-      for row in rows {
-        await queueScreenshot(
-          id: row.id, ocrText: row.ocrText, appName: row.appName, windowTitle: row.windowTitle)
-      }
-      if !rows.isEmpty {
-        await flushPendingExtractions()
+      while processedThisLaunch < maxBackfillItemsPerLaunch {
+        if pausedForProductGate { break }
+
+        let rows = try await fetchPending(backfillBatchSize)
+        if rows.isEmpty { break }
+
+        for row in rows {
+          await queueScreenshot(
+            id: row.id, ocrText: row.ocrText, appName: row.appName, windowTitle: row.windowTitle)
+        }
+
+        while !pendingItems.isEmpty {
+          if pausedForProductGate { break }
+          let before = pendingItems.count
+          await flushPendingExtractions()
+          if pendingItems.count >= before { break }
+        }
+
+        if pausedForProductGate { break }
+
+        processedThisLaunch += rows.count
+        if processedThisLaunch < maxBackfillItemsPerLaunch {
+          try? await Task.sleep(nanoseconds: 200_000_000)
+        }
       }
     } catch {
       log("ScreenKnowledgeGraphExtractor: backfill fetch failed: \(error.localizedDescription)")
@@ -170,11 +204,17 @@ actor ScreenKnowledgeGraphExtractor {
       let jsonText = try await extractEntities(item.input)
       guard generation == ownerGeneration else { return }
 
-      if let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) {
-        let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed.nodes, edges: parsed.edges)
-        if !records.nodes.isEmpty || !records.edges.isEmpty {
-          try await mergeGraph(nodes: records.nodes, edges: records.edges)
-        }
+      guard let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) else {
+        log(
+          "ScreenKnowledgeGraphExtractor: invalid extraction JSON for screenshot \(item.id) — will retry"
+        )
+        pendingItems.append(item)
+        return
+      }
+
+      let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed.nodes, edges: parsed.edges)
+      if !records.nodes.isEmpty || !records.edges.isEmpty {
+        try await mergeGraph(nodes: records.nodes, edges: records.edges)
       }
 
       guard generation == ownerGeneration else { return }
@@ -188,8 +228,11 @@ actor ScreenKnowledgeGraphExtractor {
     } catch {
       guard generation == ownerGeneration else { return }
       if let geminiError = error as? GeminiClient.GeminiClientError, geminiError.isExpectedProductState {
-        log("ScreenKnowledgeGraphExtractor: skipping screenshot \(item.id) — \(error.localizedDescription)")
-        try? await markExtracted([item.id])
+        pausedForProductGate = true
+        pendingItems.removeAll()
+        log(
+          "ScreenKnowledgeGraphExtractor: pausing — expected product state for screenshot \(item.id): \(error.localizedDescription)"
+        )
         return
       }
       log("ScreenKnowledgeGraphExtractor: extraction failed for screenshot \(item.id): \(error.localizedDescription)")

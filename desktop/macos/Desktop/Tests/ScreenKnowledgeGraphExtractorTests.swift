@@ -43,6 +43,24 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertEqual(a, b)
   }
 
+  func testContentHashUsesFullOCRTextBeyondTruncation() {
+    let prefix = String(repeating: "A", count: 6_000)
+    let left = prefix + "unique-tail-alpha"
+    let right = prefix + "unique-tail-beta"
+    let leftHash = ScreenKnowledgeGraphExtractor.contentHash(
+      ocrText: left, appName: "Pages", windowTitle: "Doc")
+    let rightHash = ScreenKnowledgeGraphExtractor.contentHash(
+      ocrText: right, appName: "Pages", windowTitle: "Doc")
+    XCTAssertNotEqual(leftHash, rightHash)
+
+    // Truncated model inputs share a prefix, but dedup must not collapse them.
+    let leftInput = ScreenKnowledgeGraphExtractor.makeInput(
+      ocrText: left, appName: "Pages", windowTitle: "Doc")
+    let rightInput = ScreenKnowledgeGraphExtractor.makeInput(
+      ocrText: right, appName: "Pages", windowTitle: "Doc")
+    XCTAssertEqual(leftInput.ocrText, rightInput.ocrText)
+  }
+
   func testQueueSkipsShortOCR() async {
     await ScreenKnowledgeGraphExtractor.shared.reset()
     await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
@@ -113,6 +131,151 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     let ids = await marked.value
     XCTAssertEqual(ids, [1, 2])
   }
+
+  func testExpectedProductStateDoesNotMarkExtracted() async {
+    let marked = LockedBox<[Int64]>([])
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        throw GeminiClient.GeminiClientError.apiError("trial_expired")
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      })
+
+    await extractor.queueScreenshot(
+      id: 7,
+      ocrText: String(repeating: "gated entity payload ", count: 3),
+      appName: "Notes",
+      windowTitle: nil)
+    await extractor.flushPendingExtractions()
+
+    let ids = await marked.value
+    XCTAssertTrue(ids.isEmpty)
+    let pending = await extractor.pendingCount
+    XCTAssertEqual(pending, 0)
+  }
+
+  func testInvalidExtractionJSONDoesNotMarkExtracted() async {
+    let marked = LockedBox<[Int64]>([])
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        "not-json{{{broken"
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      })
+
+    await extractor.queueScreenshot(
+      id: 11,
+      ocrText: String(repeating: "parse failure payload ", count: 3),
+      appName: "Safari",
+      windowTitle: "Tab")
+    await extractor.flushPendingExtractions()
+
+    let ids = await marked.value
+    XCTAssertTrue(ids.isEmpty)
+    let pending = await extractor.pendingCount
+    XCTAssertEqual(pending, 1)
+  }
+
+  func testBackfillProcessesMultipleBatches() async {
+    let marked = LockedBox<[Int64]>([])
+    let fetchCalls = LockedBox(0)
+    let remaining = LockedBox(
+      (1...120).map { id -> (id: Int64, ocrText: String, appName: String, windowTitle: String?) in
+        (
+          id: Int64(id),
+          ocrText: String(repeating: "backfill entity \(id) ", count: 3),
+          appName: "App",
+          windowTitle: nil
+        )
+      })
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      fetchPendingForTesting: { limit in
+        await fetchCalls.increment()
+        return await remaining.takePrefix(limit)
+      })
+
+    await extractor.scheduleBackfillIfNeeded()
+
+    let calls = await fetchCalls.value
+    XCTAssertGreaterThanOrEqual(calls, 3)
+    let ids = await marked.value
+    XCTAssertEqual(ids.count, 120)
+  }
+
+  func testBatteryOCRBackfillQueuesScreenKGExtraction() throws {
+    // omi-test-quality: source-inspection -- static contract: battery OCR backfill must
+    // queue ScreenKnowledgeGraphExtractor after updateOCRResult; RewindIndexer has no
+    // injectable seam for hermetic OCR/storage, so behavioral coverage of that path
+    // cannot run in the Linux/macOS unit host without a full Rewind stack.
+    let source = try XCTUnwrap(
+      String(
+        contentsOfFile: RewindIndexerSourcePath.rewindIndexerSwift,
+        encoding: .utf8))
+    XCTAssertTrue(source.contains("func backfillUnindexedScreenshots"))
+    XCTAssertTrue(source.contains("updateOCRResult(id: id, ocrResult: ocrResult)"))
+    XCTAssertTrue(
+      source.contains("ScreenKnowledgeGraphExtractor.shared.queueScreenshot"),
+      "battery OCR backfill must queue KG extraction for newly indexed screenshots")
+
+    if let updateRange = source.range(of: "updateOCRResult(id: id, ocrResult: ocrResult)"),
+      let backfillRange = source.range(of: "func backfillUnindexedScreenshots")
+    {
+      let afterUpdate = source[updateRange.upperBound...]
+      let queueRange = afterUpdate.range(
+        of: "ScreenKnowledgeGraphExtractor.shared.queueScreenshot")
+      XCTAssertNotNil(queueRange, "queueScreenshot must follow updateOCRResult in OCR backfill")
+      XCTAssertTrue(backfillRange.lowerBound < updateRange.lowerBound)
+    } else {
+      XCTFail("expected updateOCRResult inside backfillUnindexedScreenshots")
+    }
+  }
+
+  func testDistinctLongCapturesAreNotCollapsedByTruncation() async {
+    let extractCount = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let prefix = String(repeating: "shared-prefix-content ", count: 300)  // > 6000 chars
+    let first = prefix + " FIRST-TAIL-ENTITY-ALPHA"
+    let second = prefix + " SECOND-TAIL-ENTITY-BETA"
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await extractCount.increment()
+        return "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      })
+
+    await extractor.queueScreenshot(id: 1, ocrText: first, appName: "Docs", windowTitle: "Long")
+    await extractor.flushPendingExtractions()
+    await extractor.queueScreenshot(id: 2, ocrText: second, appName: "Docs", windowTitle: "Long")
+    await extractor.flushPendingExtractions()
+
+    let count = await extractCount.value
+    XCTAssertEqual(count, 2)
+    let ids = await marked.value
+    XCTAssertEqual(ids, [1, 2])
+  }
+}
+
+private enum RewindIndexerSourcePath {
+  static var rewindIndexerSwift: String {
+    let thisFile = URL(fileURLWithPath: #filePath)
+    return thisFile
+      .deletingLastPathComponent()  // Tests/
+      .deletingLastPathComponent()  // Desktop/
+      .appendingPathComponent("Sources/Rewind/Services/RewindIndexer.swift")
+      .path
+  }
 }
 
 private actor LockedBox<T> {
@@ -128,5 +291,11 @@ private actor LockedBox<T> {
 
   func increment() where T == Int {
     value += 1
+  }
+
+  func takePrefix(_ limit: Int) -> T where T == [(id: Int64, ocrText: String, appName: String, windowTitle: String?)] {
+    let batch = Array(value.prefix(limit))
+    value.removeFirst(batch.count)
+    return batch
   }
 }
