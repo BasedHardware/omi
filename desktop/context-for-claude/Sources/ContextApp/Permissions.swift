@@ -282,7 +282,7 @@ enum Permissions {
         return defaults.bool(forKey: Key.screenPendingRelaunch)
     }
 
-    /// Quits this process and starts a fresh one, **in that order**.
+    /// **Arranges for this bundle to be reopened once this process is gone, and returns.**
     ///
     /// The order is the whole fix. This used to ask `NSWorkspace` to launch a second instance of our
     /// own bundle with `createsNewApplicationInstance`, pump the runloop until the launch callback
@@ -305,7 +305,17 @@ enum Permissions {
     /// `kill -0` is a liveness test, not a signal: it asks whether the pid still exists and delivers
     /// nothing. The 200-iteration ceiling is a leak guard — if this process somehow never dies, the
     /// helper gives up after ~20 s rather than sitting in the process table forever.
-    static func relaunchApp() -> Never {
+    ///
+    /// **This is deliberately separate from `relaunchApp()`.** Two paths need it and they differ in
+    /// exactly one respect: who ends the process. Our own "Restart to finish" button ends it itself
+    /// (`relaunchApp`); a termination macOS started ends it for us, and the delegate only gets to
+    /// leave a helper behind on the way out (`ContextAppDelegate.applicationWillTerminate`). The
+    /// shell script is the part that must not be written twice.
+    ///
+    /// - Returns: whether the helper is running. A caller about to `exit(0)` on the strength of it
+    ///   has to know; a caller already being terminated has nothing to decide.
+    @discardableResult
+    static func spawnRelaunchHelper() -> Bool {
         let url = Bundle.main.bundleURL
         // Single-quoted and escaped: the bundle name contains spaces ("Context for Claude.app") and
         // the install location is the user's to choose.
@@ -328,12 +338,21 @@ enum Permissions {
             ContextLog.info(
                 "Relaunch helper \(relauncher.processIdentifier) will reopen \(url.lastPathComponent)",
                 "permissions")
+            return true
         } catch {
+            ContextLog.error("Relaunch helper failed to spawn: \(error.localizedDescription)", "permissions")
+            return false
+        }
+    }
+
+    /// Quits this process and starts a fresh one, **in that order**. The button behind
+    /// "Restart to finish".
+    static func relaunchApp() -> Never {
+        guard spawnRelaunchHelper() else {
             // Nothing left to try, and exiting anyway would be the worst outcome: the user pressed a
             // button labelled "Restart to finish" and would be left with no app and no Dock icon to
             // reopen it from. Stay up instead — the card is still on screen and the menu bar still
             // offers Quit — rather than terminate into nothing.
-            ContextLog.error("Relaunch helper failed to spawn: \(error.localizedDescription)", "permissions")
             ContextTelemetry.recordFallback(
                 area: .settings, from: "relaunch", to: "stay-running",
                 reason: "helper-spawn-failed", outcome: .degraded)

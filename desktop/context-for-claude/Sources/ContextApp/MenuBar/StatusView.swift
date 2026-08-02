@@ -400,8 +400,17 @@ struct StatusView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            MenuCommand(title: "Quit", shortcut: "⌘Q") { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
+            // `TerminationOrigin` first, and it has to be first: `NSApp.terminate` runs
+            // `applicationWillTerminate` synchronously, and that is where the app decides whether to
+            // reopen itself after a termination it did not ask for. This is the app asking. Without
+            // the line, a Quit pressed during onboarding would be answered by the app coming
+            // straight back — an app that cannot be quit, which is worse than one that needs
+            // reopening.
+            MenuCommand(title: "Quit", shortcut: "⌘Q") {
+                TerminationOrigin.userAskedToQuit()
+                NSApp.terminate(nil)
+            }
+            .keyboardShortcut("q")
         }
     }
 
