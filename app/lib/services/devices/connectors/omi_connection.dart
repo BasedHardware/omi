@@ -8,6 +8,7 @@ import 'package:version/version.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/ble_packet_continuity.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
@@ -119,10 +120,24 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
+      final continuity = BlePacketContinuityTracker();
+      final anomalyLogLimiter = BlePacketAnomalyLogLimiter();
 
       Logger.debug('Subscribed to audioBytes stream from Omi Device');
       final subscription = stream.listen((value) {
-        if (value.isNotEmpty) onAudioBytesReceived(value);
+        final observation = continuity.observe(value);
+        if (observation.disposition != BlePacketDisposition.first &&
+            observation.disposition != BlePacketDisposition.contiguous) {
+          final coalescedEvents = anomalyLogLimiter.record(DateTime.now());
+          if (coalescedEvents != null) {
+            Logger.warning(
+              'Omi BLE audio continuity anomaly: type=${observation.disposition.name} '
+              'packetId=${observation.packetId} missing=${observation.missingPackets} '
+              'coalescedEvents=$coalescedEvents bytes=${value.length}',
+            );
+          }
+        }
+        if (observation.shouldForward) onAudioBytesReceived(value);
       });
 
       return subscription;

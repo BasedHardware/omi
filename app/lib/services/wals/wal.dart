@@ -121,6 +121,13 @@ class Wal {
 
   WalStorage? originalStorage;
 
+  /// Stable identity assigned by the durable source transport.
+  ///
+  /// Device-storage recovery uses the source sequence range here so a retry is
+  /// idempotent even when another recording has the same second-resolution
+  /// timestamp. Legacy WALs leave this null and retain their historical ID.
+  String? sourceId;
+
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
@@ -139,7 +146,7 @@ class Wal {
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
 
-  String get id => '${device}_$timerStart';
+  String get id => sourceId == null ? '${device}_$timerStart' : '${device}_$sourceId';
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
@@ -208,6 +215,7 @@ class Wal {
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
+    this.sourceId,
     this.conversationId,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -236,6 +244,7 @@ class Wal {
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      sourceId: json['source_id'],
       conversationId: json['conversation_id'],
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
@@ -262,6 +271,7 @@ class Wal {
       'total_frames': totalFrames,
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
+      'source_id': sourceId,
       'conversation_id': conversationId,
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -276,8 +286,13 @@ class Wal {
     return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
   }
 
-  getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  getFileNameByTimeStarts(int timestarts, {String? sourceId}) {
+    final sourceSuffix = sourceId == null ? '' : '_${sourceId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), "")}';
+    // Backend timestamp parsing treats the final underscore-delimited token as
+    // capture epoch seconds, so source identity must precede the timestamp.
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs$frameSize"
+        "$sourceSuffix"
+        "_$timestarts.bin";
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {

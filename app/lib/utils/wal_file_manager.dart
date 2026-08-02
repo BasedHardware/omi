@@ -16,6 +16,7 @@ class WalFileManager {
 
   static File? _walFile;
   static File? _walBackupFile;
+  static Future<void> _saveBarrier = Future.value();
 
   static Future<void> init() async {
     final directory = await getApplicationDocumentsDirectory();
@@ -29,14 +30,14 @@ class WalFileManager {
     }
 
     if (_walFile == null || !_walFile!.existsSync()) {
-      Logger.debug('WAL file does not exist, returning empty list');
-      return [];
+      Logger.debug('WAL file does not exist, trying backup');
+      return await _loadFromBackup();
     }
 
     final content = await _walFile!.readAsString();
     if (content.isEmpty) {
-      Logger.debug('WAL file is empty, returning empty list');
-      return [];
+      Logger.debug('WAL file is empty, trying backup');
+      return await _loadFromBackup();
     }
 
     dynamic jsonData;
@@ -47,15 +48,25 @@ class WalFileManager {
       return await _loadFromBackup();
     }
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
-      Logger.debug('Invalid WAL file format, returning empty list');
-      return [];
+      Logger.debug('Invalid WAL file format, trying backup');
+      return await _loadFromBackup();
     }
 
     final walsList = jsonData['wals'] as List;
     return Wal.fromJsonList(walsList);
   }
 
-  static Future<bool> saveWals(List<Wal> wals) async {
+  static Future<bool> saveWals(List<Wal> wals) {
+    // Capture the caller's state before yielding, then serialize rewrites so
+    // concurrent capture/upload callbacks cannot contend for the same temp
+    // file or let an older manifest finish after a newer one.
+    final snapshot = wals.map((wal) => wal.toJson()).toList(growable: false);
+    final operation = _saveBarrier.then((_) => _saveWalsAtomic(snapshot));
+    _saveBarrier = operation.then<void>((_) {}, onError: (error, stackTrace) {});
+    return operation;
+  }
+
+  static Future<bool> _saveWalsAtomic(List<Map<String, dynamic>> snapshot) async {
     if (_walFile == null) {
       await init();
     }
@@ -65,29 +76,43 @@ class WalFileManager {
       return false;
     }
 
-    await _createBackup();
-
     final jsonData = {
       'version': 1,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'wals': wals.map((wal) => wal.toJson()).toList(),
+      'wals': snapshot,
     };
 
     final jsonString = jsonEncode(jsonData);
-    await _walFile!.writeAsString(jsonString);
-
-    Logger.debug('Successfully saved ${wals.length} WALs to file');
-    return true;
-  }
-
-  static Future<void> _createBackup() async {
+    final temporaryFile = File('${_walFile!.path}.tmp');
+    final backupTemporaryFile = _walBackupFile == null ? null : File('${_walBackupFile!.path}.tmp');
     try {
-      if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
-        await _walFile!.copy(_walBackupFile!.path);
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      await temporaryFile.writeAsString(jsonString, flush: true);
+      // The temporary file lives beside the manifest, so rename is atomic on
+      // the Android/iOS filesystems. Readers see either the previous complete
+      // JSON document or the new complete document, never a partial rewrite.
+      await temporaryFile.rename(_walFile!.path);
+      if (backupTemporaryFile != null && _walBackupFile != null) {
+        if (await backupTemporaryFile.exists()) await backupTemporaryFile.delete();
+        await backupTemporaryFile.writeAsString(jsonString, flush: true);
+        await backupTemporaryFile.rename(_walBackupFile!.path);
       }
-    } on FileSystemException catch (e) {
-      Logger.debug('WalFileManager: Failed to create backup: $e');
+    } catch (_) {
+      if (await temporaryFile.exists()) {
+        try {
+          await temporaryFile.delete();
+        } catch (_) {}
+      }
+      if (backupTemporaryFile != null && await backupTemporaryFile.exists()) {
+        try {
+          await backupTemporaryFile.delete();
+        } catch (_) {}
+      }
+      rethrow;
     }
+
+    Logger.debug('Successfully saved ${snapshot.length} WALs to file');
+    return true;
   }
 
   /// Load WALs from backup file

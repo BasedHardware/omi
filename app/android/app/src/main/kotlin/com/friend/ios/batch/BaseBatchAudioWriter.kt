@@ -143,6 +143,25 @@ abstract class BaseBatchAudioWriter(
         }
     }
 
+    protected fun checkpointLocked(): Pair<Long, Long> = currentBytes to currentFrames
+
+    protected fun currentFilePathLocked(): String? = currentFile?.absolutePath
+
+    protected fun rollbackLocked(checkpoint: Pair<Long, Long>): Boolean {
+        val out = raf ?: return false
+        return try {
+            out.setLength(checkpoint.first)
+            out.seek(checkpoint.first)
+            currentBytes = checkpoint.first
+            currentFrames = checkpoint.second
+            out.fd.sync()
+            true
+        } catch (e: Exception) {
+            Log.w(tag, "rollback failed: ${e.message}")
+            false
+        }
+    }
+
     protected fun maybeFsyncLocked(nowMs: Long) {
         if (nowMs - lastFsyncMs >= FSYNC_INTERVAL_MS) {
             fsyncLocked()

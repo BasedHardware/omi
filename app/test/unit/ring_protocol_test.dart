@@ -79,6 +79,18 @@ void main() {
       expect(done.status, 0);
       expect(done.nextSeq, 12345);
       expect(done.isOk, isTrue);
+      expect(done.transferCrc32, isNull);
+    });
+
+    test('decodes optional transfer CRC32 extension', () {
+      final bd = ByteData(14)
+        ..setUint8(0, 0x04)
+        ..setUint8(1, 0)
+        ..setUint64(2, 12345, Endian.big)
+        ..setUint32(10, 0xCBF43926, Endian.big);
+      final done = RingProtocol.parseDoneNotification(bd.buffer.asUint8List())!;
+      expect(done.nextSeq, 12345);
+      expect(done.transferCrc32, 0xCBF43926);
     });
 
     test('non-zero status surfaces as isOk=false', () {
@@ -149,6 +161,148 @@ void main() {
     });
   });
 
+  group('RingProtocol.canAdvance', () {
+    test('allows deletion only after a complete durable transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects transport completion without application completion', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: false,
+          doneOk: false,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: false,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a completed transfer when durable flush failed', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: true,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a cancelled transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: true,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a CRC mismatch', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('RingTransferCrc32', () {
+    test('matches the standard IEEE CRC-32 golden vector across fragments', () {
+      final crc = RingTransferCrc32()
+        ..add('123'.codeUnits)
+        ..add('456'.codeUnits)
+        ..add('789'.codeUnits);
+
+      expect(crc.value, 0xCBF43926);
+    });
+  });
+
+  group('RingProtocol.receivedCompleteRange', () {
+    test('accepts an exact contiguous READ_BEGIN through DONE range', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a missing record even when DONE arrived', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 19,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects trailing partial record bytes', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 17,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects DONE watermark inconsistent with announced count', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 121,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('RingProtocol.readRecordTimestamp', () {
     test('reads 4-byte big-endian timestamp prefix', () {
       // 0x6824B5C0 = epoch 2026-05-13 21:47:12 UTC
@@ -207,21 +361,16 @@ void main() {
       expect(frames, isEmpty);
     });
 
-    test('drops a frame that would end exactly at the buffer boundary (firmware overflow guard)', () {
-      // [size=2][0xAA, 0xBB] — the frame would end exactly at audio.length.
-      // The firmware (transport.c:write_to_storage) never writes a frame ending
-      // exactly at the last byte: a size byte at the boundary with no room for
-      // its frame is an overflow artifact, and the bytes after it are stale from
-      // a previous write. The parser's >= guard drops it; parsing the stale
-      // region as opus otherwise yields OpusException -4 "corrupted stream".
+    test('drops a boundary-aligned frame for legacy record compatibility', () {
+      // Legacy 3.0.20 may leave a size marker followed by stale bytes when a
+      // frame would consume the complete payload.
       final frames = RingProtocol.parseAudioPayload([2, 0xAA, 0xBB]);
       expect(frames, isEmpty);
     });
 
-    test('drops the boundary-aligned last frame in tightly-packed input (440B exactly)', () {
-      // 40 frames of [size=10][10B] = 40 * 11 = 440 bytes — the 40th frame would
-      // end precisely at audio.length. The firmware never emits such a frame, so
-      // the >= boundary guard drops it: 39 frames survive, the last being #38.
+    test('drops the boundary-aligned last frame in tightly-packed legacy input', () {
+      // 40 frames of [size=10][10B] = 440 bytes. The final frame shape is
+      // indistinguishable from a legacy stale-tail artifact and is rejected.
       final audio = <int>[];
       for (int i = 0; i < 40; i++) {
         audio.add(10);
