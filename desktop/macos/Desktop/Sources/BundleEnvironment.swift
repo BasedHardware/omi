@@ -34,6 +34,14 @@ enum BundleEnvironment {
       && productionFirebaseOverrideKeys.contains(key)
   }
 
+  static func normalizedKey(from assignmentKey: String) -> String? {
+    var key = assignmentKey.trimmingCharacters(in: .whitespaces)
+    if key.hasPrefix("export ") {
+      key = String(key.dropFirst("export ".count)).trimmingCharacters(in: .whitespaces)
+    }
+    return key.isEmpty ? nil : key
+  }
+
   static func loadIfNeeded() {
     guard !didLoad else { return }
     didLoad = true
@@ -58,7 +66,7 @@ enum BundleEnvironment {
       for line in contents.components(separatedBy: .newlines) {
         let parts = line.split(separator: "=", maxSplits: 1)
         guard parts.count == 2 else { continue }
-        let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
+        guard let key = normalizedKey(from: String(parts[0])) else { continue }
         guard !key.hasPrefix("#") else { continue }
         let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
         if backendServedKeys.contains(key) {

@@ -489,9 +489,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -526,8 +524,10 @@ class SyncRecoveryWindowExceededException implements Exception {
 bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   if (response.statusCode != 422) return false;
   try {
-    final body = jsonDecode(response.body);
-    return body is Map && body['code'] == 'backfill_lookback_exceeded';
+    final body = wire.GeneratedSyncRecoveryWindowExceededResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'backfill_lookback_exceeded';
   } catch (_) {
     return false;
   }
@@ -614,9 +614,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     final completed = SyncLocalFilesResponse.fromGenerated(
       wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
-    return UploadFilesResult.done(
-      requireCompleteSyncUpload(completed),
-    );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(

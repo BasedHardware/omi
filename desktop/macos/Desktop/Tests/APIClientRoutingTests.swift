@@ -325,6 +325,12 @@ final class APIClientRoutingTests: XCTestCase {
     )
   }
 
+  func testBundleEnvironmentNormalizesExportAssignments() {
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: "export OMI_PYTHON_API_URL"), "OMI_PYTHON_API_URL")
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: " OMI_DESKTOP_API_URL "), "OMI_DESKTOP_API_URL")
+    XCTAssertNil(BundleEnvironment.normalizedKey(from: "export   "))
+  }
+
   func testStableProductionBundleKeepsProductionBackends() {
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(

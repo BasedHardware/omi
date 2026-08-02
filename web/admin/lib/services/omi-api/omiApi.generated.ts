@@ -3114,6 +3114,12 @@ export interface SyncLocalFilesResultResponse {
   updated_memories?: Array<string>;
 }
 
+export interface SyncRecoveryWindowExceededResponse {
+  code: string;
+  detail: string;
+  lane?: string | null;
+}
+
 export interface Targeting {
   app_version_max?: string | null;
   app_version_min?: string | null;
@@ -4181,6 +4187,7 @@ export interface OmiApiSchemas {
   "SyncJobStartResponse": SyncJobStartResponse;
   "SyncJobStatusResponse": SyncJobStatusResponse;
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
+  "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "Targeting": Targeting;
   "TaskAssistantSettings": TaskAssistantSettings;
   "TaskCancelCandidate": TaskCancelCandidate;
@@ -7951,7 +7958,7 @@ export interface OmiApiPaths {
       responses: {
         "202": SyncJobStartResponse;
         "401": void;
-        "422": HTTPValidationError;
+        "422": SyncRecoveryWindowExceededResponse;
       };
     };
   };

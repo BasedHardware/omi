@@ -160,15 +160,15 @@ def _prove_production_firestore_sentinel(token: str, *, opener: Callable[..., An
     )
     memory_id = created.get("id") if isinstance(created, dict) else None
     content = f"Omi release continuity probe {marker}"
-    if (
-        not isinstance(memory_id, str)
-        or not memory_id
-        or created.get("uid") != PROBE_UID
-        or created.get("content") != content
-        or created.get("tags") != ["release-probe-beta-continuity"]
-    ):
+    if not isinstance(memory_id, str) or not memory_id:
         raise ContinuityProbeError("production_sentinel")
     try:
+        if (
+            created.get("uid") != PROBE_UID
+            or created.get("content") != content
+            or created.get("tags") != ["release-probe-beta-continuity"]
+        ):
+            raise ContinuityProbeError("production_sentinel")
         observed = _authenticated_json(
             f"{PYTHON_API_URL}v3/memories?limit=500",
             token,

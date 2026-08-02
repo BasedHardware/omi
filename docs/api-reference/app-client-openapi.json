@@ -18739,6 +18739,35 @@
         "title": "SyncLocalFilesResultResponse",
         "type": "object"
       },
+      "SyncRecoveryWindowExceededResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lane"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "SyncRecoveryWindowExceededResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -54787,11 +54816,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/SyncRecoveryWindowExceededResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Automatic recovery window exceeded"
           }
         },
         "security": [

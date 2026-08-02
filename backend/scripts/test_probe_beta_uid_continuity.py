@@ -124,6 +124,29 @@ class BetaUIDContinuityProbeTests(unittest.TestCase):
         self.assertEqual(requests[-1].method, "DELETE")
         self.assertEqual(requests[-1].full_url, "https://api.omi.me/v3/memories/production-sentinel")
 
+    def test_probe_cleans_up_when_the_production_create_echo_is_invalid(self) -> None:
+        requests = []
+
+        def opener(request, *, timeout):
+            requests.append(request)
+            if request.method == "POST":
+                return Response(
+                    {
+                        "id": "production-sentinel",
+                        "uid": "unexpected-uid",
+                        "content": "unexpected content",
+                        "tags": [],
+                    }
+                )
+            if request.method == "DELETE":
+                return Response({"status": "ok"})
+            self.fail(f"unexpected request {request.method} {request.full_url}")
+
+        with self.assertRaisesRegex(PROBE.ContinuityProbeError, "production_sentinel"):
+            PROBE.probe(token(), opener=opener)
+        self.assertEqual([request.method for request in requests], ["POST", "DELETE"])
+        self.assertEqual(requests[-1].full_url, "https://api.omi.me/v3/memories/production-sentinel")
+
     def test_rejects_nonproduction_firebase_claims_before_network(self) -> None:
         with self.assertRaisesRegex(PROBE.ContinuityProbeError, "token_claims"):
             PROBE.probe(token(project="based-hardware-dev"), opener=lambda *_args, **_kwargs: self.fail("network"))

@@ -192,6 +192,12 @@ class SyncJobStartResponse(BaseModel):
     lane: str = SyncLane.FRESH.value
 
 
+class SyncRecoveryWindowExceededResponse(BaseModel):
+    code: str
+    detail: str
+    lane: Optional[str] = None
+
+
 class SyncJobStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -845,18 +851,12 @@ async def sync_local_files(
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
 
-# ---------------------------------------------------------------------------
-# v2 async sync-local-files
-# ---------------------------------------------------------------------------
-# v1 processes segments synchronously (80-180s for large payloads → 504).
-# v2 returns 202 immediately after saving raw files, then runs the full
-# pipeline (decode → VAD → fair-use → STT → LLM) in a background thread.
-# The app polls GET /v2/sync-local-files/{job_id} until the job reaches
-# a terminal status.
-# ---------------------------------------------------------------------------
-
-
-@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
+@router.post(  # v2 async sync-local-files
+    "/v2/sync-local-files",
+    status_code=202,
+    response_model=SyncJobStartResponse,
+    responses={422: {'model': SyncRecoveryWindowExceededResponse, 'description': 'Automatic recovery window exceeded'}},
+)
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
