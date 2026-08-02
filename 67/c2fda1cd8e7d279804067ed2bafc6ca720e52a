@@ -1,0 +1,32 @@
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_56918216f0e901::t_e838c9faa4cc3c 189,191-200
+  s_56918216f0e901::t_dd66dadb286bc9 50-69,71-90
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerIconTests.swift
+  s_56918216f0e901::t_54c1568f51b530 1-84
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_56918216f0e901::t_c0bba43337a201 11-19
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerTests.swift
+  s_56918216f0e901::t_d510f255959287 31-66,231
+  s_56918216f0e901::t_de3ad25f7271ce 224-230
+  s_56918216f0e901::t_3238255d02cbb9 232
+desktop/context-for-claude/CONTRACTS.md
+  s_56918216f0e901::t_d8cee28953bd5d 273-280
+desktop/context-for-claude/Sources/ContextMCPKit/ServerIcon.swift
+  s_56918216f0e901::t_95e8b1eef3db64 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "67c2fda1cd8e7d279804067ed2bafc6ca720e52a",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
