@@ -24,9 +24,6 @@ import { extname, join, normalize, sep } from 'node:path'
 import { derivePort, planPortSequence } from './portDerivation'
 import { showBestEffortNotification } from './notify'
 
-const PREFERRED_PORT = 5179
-const PORT_ATTEMPTS = 10
-
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

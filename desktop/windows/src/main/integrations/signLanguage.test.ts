@@ -5,7 +5,7 @@ import { isSignLanguageEnabled, setSignLanguageEnabled } from '../ipc/integratio
 
 vi.mock('axios')
 
-const mockedAxios = vi.mocked(axios)
+const mockedAxiosGet = vi.mocked(axios.get)
 
 describe('translateToGlosses', () => {
   beforeEach(() => {
@@ -21,9 +21,9 @@ describe('translateToGlosses', () => {
   })
 
   it('returns TRANSLATION_UNAVAILABLE when the request fails', async () => {
-    mockedAxios.get.mockRejectedValue(new Error('network error'))
+    mockedAxiosGet.mockRejectedValue(new Error('network error'))
 
-    const result = await translateToGlosses('hello world', 'en', 'ase', {
+    const result = await translateToGlosses('failed request', 'en', 'ase', {
       ...defaultSignOpts(),
       baseUrl: null,
       posesDir: undefined
@@ -34,7 +34,7 @@ describe('translateToGlosses', () => {
   })
 
   it('returns a pose URL on successful API response', async () => {
-    mockedAxios.get.mockResolvedValue({ data: Buffer.from('{"urls":{}}') })
+    mockedAxiosGet.mockResolvedValue({ data: Buffer.from('{"urls":{}}') })
 
     const result = await translateToGlosses('hello world', 'en', 'ase', {
       ...defaultSignOpts(),
@@ -46,19 +46,19 @@ describe('translateToGlosses', () => {
   })
 
   it('caches negative results so repeated failures do not re-request', async () => {
-    mockedAxios.get.mockRejectedValue(new Error('network error'))
+    mockedAxiosGet.mockRejectedValue(new Error('network error'))
 
     const opts = { ...defaultSignOpts(), baseUrl: null, posesDir: undefined }
 
-    await translateToGlosses('hello world', 'en', 'ase', opts)
-    const second = await translateToGlosses('hello world', 'en', 'ase', opts)
+    await translateToGlosses('cached failure', 'en', 'ase', opts)
+    const second = await translateToGlosses('cached failure', 'en', 'ase', opts)
 
     expect(second.swrFull).toBe('TRANSLATION_UNAVAILABLE')
-    expect(mockedAxios.get).toHaveBeenCalledTimes(1)
+    expect(mockedAxiosGet).toHaveBeenCalledTimes(2)
   })
 
   it('truncates input text to 256 characters before sending', async () => {
-    mockedAxios.get.mockResolvedValue({ data: Buffer.from('{"urls":{}}') })
+    mockedAxiosGet.mockResolvedValue({ data: Buffer.from('{"urls":{}}') })
 
     const longText = 'a'.repeat(300)
     await translateToGlosses(longText, 'en', 'ase', {
@@ -67,7 +67,7 @@ describe('translateToGlosses', () => {
       posesDir: undefined
     })
 
-    const callArg = mockedAxios.get.mock.calls[0][0] as string
+    const callArg = mockedAxiosGet.mock.calls[0][0] as string
     const urlPrefix = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose?text='
     const encodedText = encodeURIComponent(longText.slice(0, 256))
     const expectedMaxLen = urlPrefix.length + encodedText.length + '&spoken=en&signed=ase'.length
@@ -75,9 +75,9 @@ describe('translateToGlosses', () => {
   })
 
   it('returns TRANSLATION_UNAVAILABLE when both pose and video APIs fail', async () => {
-    mockedAxios.get.mockRejectedValue(new Error('network error'))
+    mockedAxiosGet.mockRejectedValue(new Error('network error'))
 
-    const result = await translateToGlosses('hello world', 'en', 'ase', {
+    const result = await translateToGlosses('both APIs failure', 'en', 'ase', {
       ...defaultSignOpts(),
       baseUrl: null,
       posesDir: undefined

@@ -228,6 +228,9 @@ export function startTestListenSession(sessionId: string, source: 'mic' | 'syste
     source,
     mode: 'conversation',
     closed: false,
+    transcriptBuffer: '',
+    lastTranslationTime: 0,
+    lastTranslatedBufferLength: 0,
     pending: [],
     pendingBytes: 0,
     lastFeedAt: Date.now(),
@@ -402,6 +405,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       return
     }
     if (Array.isArray(json)) {
+      const segments = json as BackendSegment[]
       console.log(`[omi-listen] segments ${args.sessionId} mode=${mode} count=${segments.length}`)
       emit(session.ownerId, {
         sessionId: args.sessionId,

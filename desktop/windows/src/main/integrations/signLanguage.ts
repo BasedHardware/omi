@@ -135,16 +135,29 @@ export async function translateToGlosses(
   const videoUrl = `${apiVideo}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`;
   
   const poseDir = path.join(app.getPath('temp'), 'omi-sign-poses')
-  const posePath = path.join(poseDir, `${cacheKey}.pose`)
+  const posePath = opts?.posesDir === undefined && opts !== undefined ? null : path.join(poseDir, `${cacheKey}.pose`)
 
   try {
     await fs.mkdir(poseDir, { recursive: true })
 
     try {
-      let poseBytes: Buffer;
-      try {
-        poseBytes = await fs.readFile(posePath)
-      } catch {
+      let poseBytes: Buffer
+      if (posePath) {
+        try {
+          poseBytes = await fs.readFile(posePath)
+        } catch {
+          const response = await fetchWithRetry(poseUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': '*/*',
+            }
+          })
+          poseBytes = Buffer.from(response.data)
+          await fs.writeFile(posePath, poseBytes)
+        }
+      } else {
         const response = await fetchWithRetry(poseUrl, {
           responseType: 'arraybuffer',
           timeout: 30000,
@@ -154,7 +167,6 @@ export async function translateToGlosses(
           }
         })
         poseBytes = Buffer.from(response.data)
-        await fs.writeFile(posePath, poseBytes)
       }
       
       const { url, assetType } = await makePoseUrl(poseBytes, cacheKey, opts?.posesDir, opts?.baseUrl)
@@ -226,5 +238,3 @@ export async function translateToGlosses(
 export function clearNegativeCache(): void {
   negativeCache.clear()
 }
-
-
