@@ -159,6 +159,18 @@ final class ClaudeConfigTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), first)
     }
 
+    func testWriteTightensExistingConfigPermissions() throws {
+        let url = root.appendingPathComponent("claude.json")
+        try Data(#"{"oauthAccount":{"token":"secret"}}"#.utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+
+        try ClaudeConfig.writeDocument(ClaudeConfig.merged(into: [:], mcpBinaryPath: binary), to: url)
+
+        let mode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(mode.intValue & 0o777, 0o600)
+    }
+
     func testWriteCreatesAMissingDirectory() throws {
         // Claude Desktop's config directory does not exist until Claude Desktop has run once.
         let url = root

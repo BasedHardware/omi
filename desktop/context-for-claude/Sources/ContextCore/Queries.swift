@@ -666,30 +666,51 @@ public enum Queries {
         // `MIN(score)` keeps whichever index matched it better rather than averaging a strong match
         // against a missing one, and the GROUP BY is what stops a frame both indexes matched from
         // arriving twice.
-        var sql = """
+        var dateFilter = ""
+        var dateArgs: [(any DatabaseValueConvertible)?] = []
+        if let since {
+            dateFilter += "\n      AND f.capturedAt >= ?"
+            dateArgs.append(since)
+        }
+        if let until {
+            dateFilter += "\n      AND f.capturedAt <= ?"
+            dateArgs.append(until)
+        }
+        let sql = """
+            WITH fts_hits AS (
+                SELECT frames_fts.rowid AS rid,
+                       bm25(frames_fts, \(frameOCRWeight), \(frameTitleWeight), \(frameAppWeight)) AS score
+                FROM frames_fts
+                JOIN frames f ON f.rowid = frames_fts.rowid
+                WHERE frames_fts MATCH ?\(dateFilter)
+                ORDER BY score ASC
+                LIMIT ?
+            ), ax_hits AS (
+                SELECT frames_ax_fts.rowid AS rid, bm25(frames_ax_fts) AS score
+                FROM frames_ax_fts
+                JOIN frames f ON f.rowid = frames_ax_fts.rowid
+                WHERE frames_ax_fts MATCH ?\(dateFilter)
+                ORDER BY score ASC
+                LIMIT ?
+            )
             SELECT f.capturedAt AS at, f.appName AS appName, f.windowTitle AS windowTitle,
                    f.ocrText AS ocrText, f.axText AS axText, MIN(m.score) AS bm25Score
             FROM (
-                SELECT rowid AS rid,
-                       bm25(frames_fts, \(frameOCRWeight), \(frameTitleWeight), \(frameAppWeight)) AS score
-                FROM frames_fts WHERE frames_fts MATCH ?
+                SELECT rid, score FROM fts_hits
                 UNION ALL
-                SELECT rowid AS rid, bm25(frames_ax_fts) AS score
-                FROM frames_ax_fts WHERE frames_ax_fts MATCH ?
+                SELECT rid, score FROM ax_hits
             ) m
             JOIN frames f ON f.rowid = m.rid
-            WHERE 1 = 1
+            GROUP BY f.rowid
+            ORDER BY bm25Score ASC, f.capturedAt DESC
+            LIMIT ?
             """
-        var args: [(any DatabaseValueConvertible)?] = [match, match]
-        if let since {
-            sql += "\n  AND f.capturedAt >= ?"
-            args.append(since)
-        }
-        if let until {
-            sql += "\n  AND f.capturedAt <= ?"
-            args.append(until)
-        }
-        sql += "\nGROUP BY f.rowid\nORDER BY bm25Score ASC, f.capturedAt DESC\nLIMIT ?"
+        var args: [(any DatabaseValueConvertible)?] = [match]
+        args.append(contentsOf: dateArgs)
+        args.append(limit)
+        args.append(match)
+        args.append(contentsOf: dateArgs)
+        args.append(limit)
         args.append(limit)
 
         let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))

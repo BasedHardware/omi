@@ -60,7 +60,9 @@ enum OmiKeyResolver {
 
     static func resolve() -> (key: String, source: OmiKeySource)? {
         guard !isRunningTests else { return nil }
+        #if DEBUG
         if let key = fromEnvironment() { return (key, .environment) }
+        #endif
         // The expected source.
         if let key = fromKeyFile() { return (key, .appSupportFile) }
         return nil

@@ -18,6 +18,7 @@ add_library(context_core STATIC
     src/moment_grouping.cpp
     src/recall_ranking.cpp
     src/session_policy.cpp
+    src/transcript_filter.cpp
 )
 
 target_include_directories(context_core PUBLIC

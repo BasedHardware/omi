@@ -164,28 +164,41 @@ public enum TranscriptFilter {
     /// with it, which is the right trade for text the model never meant to emit.
     private static func collapsingRepeatedRuns(_ words: [Substring]) -> [Substring]? {
         let keys = words.map(repetitionKey)
-        var kept: [Substring] = []
-        kept.reserveCapacity(words.count)
-        var repeatedWords = 0
-
-        var index = 0
-        while index < words.count {
-            var end = index + 1
-            while end < words.count, keys[end] == keys[index] { end += 1 }
-            let runLength = end - index
-
-            if runLength >= repeatRunThreshold {
-                repeatedWords += runLength
-                kept.append(words[index])
-            } else {
-                kept.append(contentsOf: words[index..<end])
-            }
-            index = end
+        var keyData = Data()
+        var keyRanges = [(offset: Int, length: Int)]()
+        keyRanges.reserveCapacity(keys.count)
+        for key in keys {
+            let offset = keyData.count
+            keyData.append(contentsOf: key.utf8)
+            keyRanges.append((offset: offset, length: key.utf8.count))
         }
 
-        guard repeatedWords > 0 else { return words }
-        guard repeatedWords * 2 < words.count else { return nil }
-        return kept
+        var keep = [UInt8](repeating: 0, count: words.count)
+        let result = keyData.withUnsafeBytes { raw -> Int32 in
+            let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self)
+            var spans = [ctx_byte_span]()
+            spans.reserveCapacity(keyRanges.count)
+            for range in keyRanges {
+                var span = ctx_byte_span()
+                span.bytes = range.length == 0 ? nil : base?.advanced(by: range.offset)
+                span.length = range.length
+                spans.append(span)
+            }
+
+            return spans.withUnsafeBufferPointer { spansPointer in
+                keep.withUnsafeMutableBufferPointer { keepPointer in
+                    ctx_transcript_collapse_repeated_runs(
+                        spansPointer.baseAddress,
+                        spans.count,
+                        repeatRunThreshold,
+                        keepPointer.baseAddress
+                    )
+                }
+            }
+        }
+
+        guard result == 1 else { return nil }
+        return words.indices.compactMap { keep[$0] == 1 ? words[$0] : nil }
     }
 
     /// Comparison key for "is this the same word again".
@@ -194,7 +207,7 @@ public enum TranscriptFilter {
     /// bad, and edge punctuation is ignored because the same artifact appears as both "and" and
     /// "and,".
     private static func repetitionKey(_ word: Substring) -> String {
-        word.lowercased().trimmingCharacters(in: edgeNoise)
+        word.lowercased().trimmingCharacters(in: edgeNoise).precomposedStringWithCanonicalMapping
     }
 }
 

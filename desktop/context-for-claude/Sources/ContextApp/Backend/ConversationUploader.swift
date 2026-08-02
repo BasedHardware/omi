@@ -369,8 +369,11 @@ final class ConversationUploader: ObservableObject {
     /// the engine never made the call. Bounded by a watermark set on first run, so installing this
     /// never decides to upload a month of history on its own.
     private func reconcile() async {
+        let ownerId = OmiAuth.shared.userId
         do {
-            let added = try await database.perform { try UploadQueue.reconcile($0) }
+            let added = try await database.perform {
+                try UploadQueue.reconcile($0, ownerId: ownerId)
+            }
             if added > 0 {
                 ContextLog.info("Queued \(added) closed session(s) found on disk", Self.category)
             }
@@ -380,7 +383,10 @@ final class ConversationUploader: ObservableObject {
     }
 
     private func refreshPendingCount() async {
-        guard let count = try? await database.perform({ try UploadQueue.pendingCount($0) }) else { return }
+        let ownerId = OmiAuth.shared.userId
+        guard let count = try? await database.perform({
+            try UploadQueue.pendingCount($0, ownerId: ownerId)
+        }) else { return }
         if pendingCount != count { pendingCount = count }
     }
 
@@ -411,9 +417,12 @@ final class ConversationUploader: ObservableObject {
     /// Sleeps until the earliest waiting entry is due, then drains again. Replaces any earlier
     /// wake-up, so a queue with ten backed-off entries still schedules exactly one timer.
     private func scheduleNextWake() async {
+        let ownerId = OmiAuth.shared.userId
         // `try?` on a throwing call returning `Double?` flattens to a single optional, so one
         // unwrap is both necessary and sufficient here.
-        guard let dueAt = try? await database.perform({ try UploadQueue.nextDueAt($0) }) else {
+        guard let dueAt = try? await database.perform({
+            try UploadQueue.nextDueAt($0, ownerId: ownerId)
+        }) else {
             return
         }
         let delay = dueAt - ContextTime.now

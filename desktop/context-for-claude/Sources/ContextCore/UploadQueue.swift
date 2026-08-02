@@ -307,22 +307,27 @@ public enum UploadQueue {
     }
 
     /// How much is still owed, due or not. This is the number the UI shows.
-    public static func pendingCount(_ store: ContextStore) throws -> Int {
+    public static func pendingCount(_ store: ContextStore, ownerId: String?) throws -> Int {
         try store.read { db in
             guard try db.tableExists("uploads") else { return 0 }
+            guard let ownerId, !ownerId.isEmpty else { return 0 }
             return try Int.fetchOne(
-                db, sql: "SELECT COUNT(*) FROM uploads WHERE state IN ('pending', 'failed')") ?? 0
+                db,
+                sql: "SELECT COUNT(*) FROM uploads WHERE state IN ('pending', 'failed') AND ownerId = ?",
+                arguments: [ownerId]) ?? 0
         }
     }
 
     /// When the earliest still-waiting entry becomes due, or nil when nothing is queued. Lets the
     /// uploader sleep exactly as long as it must instead of polling.
-    public static func nextDueAt(_ store: ContextStore) throws -> Double? {
+    public static func nextDueAt(_ store: ContextStore, ownerId: String?) throws -> Double? {
         try store.read { db in
             guard try db.tableExists("uploads") else { return nil }
+            guard let ownerId, !ownerId.isEmpty else { return nil }
             return try Double.fetchOne(
                 db,
-                sql: "SELECT MIN(nextAttemptAt) FROM uploads WHERE state IN ('pending', 'failed')")
+                sql: "SELECT MIN(nextAttemptAt) FROM uploads WHERE state IN ('pending', 'failed') AND ownerId = ?",
+                arguments: [ownerId])
         }
     }
 
@@ -386,8 +391,14 @@ public enum UploadQueue {
     /// build does not decide to upload a month of history the user never asked to sync. Returns how
     /// many sessions it added.
     @discardableResult
-    public static func reconcile(_ store: ContextStore, limit: Int = 100) throws -> Int {
+    public static func reconcile(_ store: ContextStore, ownerId: String?, limit: Int = 100) throws -> Int {
         let now = ContextTime.now
+        guard let ownerId, !ownerId.isEmpty else { return 0 }
+        try store.write { db in
+            try db.execute(
+                sql: "UPDATE uploads SET ownerId = ? WHERE ownerId IS NULL AND state IN ('pending', 'failed')",
+                arguments: [ownerId])
+        }
         guard let watermark = try timestamp(store, .reconcileWatermark) else {
             try setTimestamp(store, .reconcileWatermark, now)
             return 0
@@ -412,10 +423,10 @@ public enum UploadQueue {
                 try db.execute(
                     sql: """
                         INSERT OR IGNORE INTO uploads
-                          (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt)
-                        VALUES (?, 'pending', 0, 0, ?, ?, 0)
+                          (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt, ownerId)
+                        VALUES (?, 'pending', 0, 0, ?, ?, 0, ?)
                         """,
-                    arguments: [id, now, now])
+                    arguments: [id, now, now, ownerId])
                 highest = max(highest, endedAt)
             }
             // Only advance past what was actually examined: a full batch means there is more behind

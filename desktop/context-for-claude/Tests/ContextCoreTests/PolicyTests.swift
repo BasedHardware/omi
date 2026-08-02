@@ -82,6 +82,8 @@ final class PolicyTests: XCTestCase {
         XCTAssertEqual(
             TranscriptFilter.clean("we should ship it and and and and then review it"),
             "we should ship it and then review it")
+        XCTAssertEqual(TranscriptFilter.clean("a a a a\u{0000}"), "a a a a\u{0000}")
+        XCTAssertNil(TranscriptFilter.clean("é é é e\u{301}"))
     }
 
     func testSilenceGateSitsBetweenRoomToneAndQuietSpeech() {

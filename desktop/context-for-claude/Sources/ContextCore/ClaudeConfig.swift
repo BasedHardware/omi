@@ -236,6 +236,7 @@ public enum ClaudeConfig {
             try? fileManager.removeItem(at: tempURL)
             throw error
         }
+        ContextPaths.setPermissions(url, mode: 0o600)
 
         // The swap itself is a directory-metadata change, and until the directory is flushed it can
         // still be sitting in the volume cache when the power goes.

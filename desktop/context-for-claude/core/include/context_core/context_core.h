@@ -51,6 +51,16 @@ int ctx_should_open_new_session(int has_last_segment,
                                 double next_segment_started_at,
                                 double gap_seconds);
 
+typedef struct ctx_byte_span {
+    const uint8_t *bytes;
+    size_t length;
+} ctx_byte_span;
+
+int32_t ctx_transcript_collapse_repeated_runs(const ctx_byte_span *keys,
+                                              size_t key_count,
+                                              size_t repeat_run_threshold,
+                                              uint8_t *out_keep);
+
 /* ---------------------------------------------------------------------- audio */
 
 /**

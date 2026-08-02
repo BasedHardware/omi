@@ -66,6 +66,21 @@ void test_session_boundaries() {
     CHECK(ctx_should_open_new_session(1, 0.0, 2.0, 60.0) == 0);
 }
 
+void test_transcript_repeated_runs() {
+    const uint8_t key[] = {'a'};
+    const ctx_byte_span repeated[] = {{key, 1}, {key, 1}, {key, 1}, {key, 1}};
+    uint8_t keep[4] = {};
+    CHECK(ctx_transcript_collapse_repeated_runs(repeated, 4, 4, keep) == 0);
+    CHECK(keep[0] == 1 && keep[1] == 0 && keep[2] == 0 && keep[3] == 0);
+
+    const uint8_t first[] = {'a', 0};
+    const uint8_t second[] = {'a', 0, 'b'};
+    const ctx_byte_span distinct[] = {{first, 2}, {first, 2}, {first, 2}, {second, 3}};
+    uint8_t distinct_keep[4] = {};
+    CHECK(ctx_transcript_collapse_repeated_runs(distinct, 4, 4, distinct_keep) == 1);
+    CHECK(distinct_keep[0] == 1 && distinct_keep[1] == 1 && distinct_keep[2] == 1 && distinct_keep[3] == 1);
+}
+
 /* --------------------------------------------------------------------------- audio */
 
 void test_pcm_rms() {
@@ -454,6 +469,7 @@ void test_version_is_reported() {
 
 int main() {
     test_session_boundaries();
+    test_transcript_repeated_runs();
     test_pcm_rms();
     test_pcm_encode_little_endian_and_clamped();
     test_pcm_decode_basic();

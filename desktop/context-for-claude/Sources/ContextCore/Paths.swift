@@ -39,22 +39,30 @@ public enum ContextPaths {
     public static var omiDatabaseURL: URL? {
         let fm = FileManager.default
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        guard let userID = omiUserID else { return nil }
+        return omiDatabaseURL(for: userID, applicationSupportDirectory: base)
+    }
+
+    static func omiDatabaseURL(for userID: String, applicationSupportDirectory base: URL) -> URL? {
+        guard !userID.isEmpty, userID != ".", userID != "..",
+              !userID.contains("/"), !userID.contains("\\") else { return nil }
+        let fm = FileManager.default
         for rootName in ["Omi", "Omi Beta"] {
             let usersDir = base.appendingPathComponent(rootName, isDirectory: true)
                 .appendingPathComponent("users", isDirectory: true)
-            guard let candidates = try? fm.contentsOfDirectory(atPath: usersDir.path) else { continue }
-            let sorted = candidates.sorted { a, b in
-                if a == "anonymous" { return false }
-                if b == "anonymous" { return true }
-                return a < b
-            }
-            for userId in sorted {
-                let db = usersDir.appendingPathComponent(userId, isDirectory: true)
-                    .appendingPathComponent("omi.db")
-                if fm.fileExists(atPath: db.path) { return db }
-            }
+            let db = usersDir.appendingPathComponent(userID, isDirectory: true)
+                .appendingPathComponent("omi.db")
+            if fm.fileExists(atPath: db.path) { return db }
         }
         return nil
+    }
+
+    private static var omiUserID: String? {
+        let ownerURL = supportDirectory.appendingPathComponent("mcp-key.owner")
+        guard let data = try? Data(contentsOf: ownerURL),
+              let owner = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !owner.isEmpty else { return nil }
+        return owner
     }
 
     /// Where screen JPEGs live, one directory per day.
