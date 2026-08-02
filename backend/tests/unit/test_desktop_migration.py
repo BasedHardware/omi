@@ -2227,7 +2227,7 @@ class TestLegacyConversationRecovery:
         batch.delete.assert_called_once()
 
     def test_restore_legacy_conversation_items_skips_stale_row_and_continues(self):
-        """A staged-row precondition race preserves the row and does not abort the page."""
+        """A staged-row precondition race refreshes the row and retries the restore."""
         from google.api_core.exceptions import FailedPrecondition
 
         snapshots = []
@@ -2251,7 +2251,80 @@ class TestLegacyConversationRecovery:
         recovery_query.stream.return_value = snapshots
         staged_col.where.return_value = recovery_query
         batch = MagicMock()
-        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None]
+        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None, None]
+        refreshed_snapshot = MagicMock()
+        refreshed_snapshot.id = snapshots[0].id
+        refreshed_snapshot.update_time = object()
+        refreshed_snapshot.exists = True
+        refreshed_snapshot.to_dict.return_value = {
+            'id': refreshed_snapshot.id,
+            'description': 'Updated supplier call',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        staged_col.document.return_value.get.return_value = refreshed_snapshot
+
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert batch.commit.call_count == 3
+        assert batch.create.call_count == 3
+        assert batch.delete.call_count == 3
+        assert staged_col.document.return_value.get.call_count == 1
+
+    def test_restore_legacy_conversation_items_does_not_acknowledge_repeated_stale_rows(self):
+        """Repeated contention fails the sweep instead of marking the row recovered."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        refreshed_snapshots = []
+        for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES):
+            refreshed = MagicMock()
+            refreshed.id = staged_snapshot.id
+            refreshed.update_time = object()
+            refreshed.exists = True
+            refreshed.to_dict.return_value = {
+                'id': staged_snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            refreshed_snapshots.append(refreshed)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        staged_ref = staged_col.document.return_value
+        staged_ref.get.side_effect = refreshed_snapshots
+        batch = MagicMock()
+        batch.commit.side_effect = [
+            FailedPrecondition(f'staged row changed {index}')
+            for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1)
+        ]
 
         def col_side_effect(collection_name):
             return action_items_col if collection_name == 'action_items' else staged_col
@@ -2260,17 +2333,11 @@ class TestLegacyConversationRecovery:
         firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
         firestore_client.batch.return_value = batch
 
-        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+        with pytest.raises(FailedPrecondition):
+            staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
-        assert result == {
-            'restored': 1,
-            'skipped_existing': 1,
-            'has_more': False,
-            'next_cursor': None,
-        }
-        assert batch.commit.call_count == 2
-        assert batch.create.call_count == 2
-        assert batch.delete.call_count == 2
+        assert batch.commit.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1
+        assert staged_ref.get.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES
 
     def test_restore_legacy_conversation_items_pages_by_document_id(self):
         """Recovery bounds each request and returns an exclusive continuation cursor."""
