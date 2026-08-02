@@ -124,6 +124,11 @@ actor RewindIndexer {
       await OCREmbeddingService.shared.backfillIfNeeded()
     }
 
+    // Backfill screen→KG extraction for screenshots captured before this shipped
+    Task(priority: .background) {
+      await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded()
+    }
+
     // Reduce ocrDataJson float precision for existing rows (one-time migration)
     Task(priority: .background) {
       await RewindDatabase.shared.reduceOCRDataPrecisionIfNeeded()
@@ -341,6 +346,8 @@ actor RewindIndexer {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
         }
       }
 
@@ -431,6 +438,8 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
+            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
         }
       }
@@ -558,6 +567,8 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
+            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
         }
       }

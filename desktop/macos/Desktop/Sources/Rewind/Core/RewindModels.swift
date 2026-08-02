@@ -53,6 +53,9 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
   /// Stable per-installation capture identity used by the canonical memory system
   var clientDeviceId: String?
 
+  /// Whether entities/edges were extracted from this screenshot's OCR into local_kg_*
+  var kgExtracted: Bool
+
   static let databaseTableName = "screenshots"
 
   // MARK: - Storage Type
@@ -80,7 +83,8 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     adviceJson: String? = nil,
     skippedForBattery: Bool = false,
     deviceName: String? = nil,
-    clientDeviceId: String? = nil
+    clientDeviceId: String? = nil,
+    kgExtracted: Bool = false
   ) {
     self.id = id
     self.timestamp = timestamp
@@ -98,6 +102,7 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     self.skippedForBattery = skippedForBattery
     self.deviceName = deviceName
     self.clientDeviceId = clientDeviceId
+    self.kgExtracted = kgExtracted
   }
 
   // MARK: - Persistence Callbacks
