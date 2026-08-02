@@ -334,8 +334,15 @@ async def promote_local_kg_to_backend(table: str, rows: list[dict[str, Any]]) ->
             response.raise_for_status()
             body = response.json()
             return body if isinstance(body, dict) else None
-    except httpx.HTTPError:
-        return None
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 409:
+            return None
+        raise HTTPException(
+            status_code=502,
+            detail=f"Knowledge graph promotion failed: HTTP {exc.response.status_code}",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Knowledge graph promotion failed: {exc}") from exc
 
 
 async def execute_backend_tool(name: str, params: dict[str, Any]) -> str:

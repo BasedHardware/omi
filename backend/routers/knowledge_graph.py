@@ -154,5 +154,6 @@ def sync_local_knowledge_graph(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
+    _require_legacy_graph_mutation(uid)
     result = kg_db.merge_synced_local_kg(uid, payload.table, payload.rows, db_client=firestore_db)
     return LocalKgSyncResponse(**result)
