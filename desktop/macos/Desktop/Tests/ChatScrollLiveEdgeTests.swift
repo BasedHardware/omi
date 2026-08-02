@@ -17,4 +17,8 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
   func testExplicitJumpSettlesAfterTheNextLayoutTurn() {
     XCTAssertEqual(ChatScrollLiveEdge.explicitJumpSettlingDelay, 0.05)
   }
+
+  func testInitialRestoreSettlesAcrossMultipleLayoutTurns() {
+    XCTAssertEqual(ChatScrollLiveEdge.initialRestoreSettlingDelays, [0.05, 0.2, 0.5])
+  }
 }

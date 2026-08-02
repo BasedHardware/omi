@@ -52,6 +52,17 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
   }
 
+  func testPromptTimelineCannotMutateTranscriptScrollerDuringLayout() throws {
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+    let timelineSource = try sourceFile("MainWindow/Components/ChatPromptTimeline.swift")
+
+    // omi-test-quality: source-inspection -- static contract: the prompt rail must stay an observational overlay; changing NSScrollView chrome from its visibility callbacks can re-enter transcript layout.
+    XCTAssertFalse(messagesSource.contains("hidesNativeScrollIndicator"))
+    XCTAssertFalse(messagesSource.contains("ChatTimelineScrollerSuppressionHost"))
+    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.hidden)"))
+    XCTAssertFalse(timelineSource.contains("onVisibilityChange"))
+  }
+
   func testMainAndNotchChatShareTheTranscriptFade() throws {
     let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")

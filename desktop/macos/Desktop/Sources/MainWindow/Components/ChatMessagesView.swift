@@ -200,11 +200,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// does not observe the object; only the overlay subscribes, so scrolling does
   /// not re-evaluate every message row.
   @State private var transcriptGeometry = ChatTranscriptGeometry()
-  /// SwiftUI's own scroll-indicator policy. The AppKit suppressor remains a
-  /// backstop, but this prevents the framework from recreating the legacy
-  /// scroller during later scroll-view updates.
-  @State private var hidesNativeScrollIndicator = false
-
   var body: some View {
     ScrollViewReader { proxy in
       ZStack(alignment: .bottom) {
@@ -217,11 +212,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           trailingInset: timelineTrailingInset,
           onSelect: { markID in
             jumpToPrompt(markID, proxy: proxy)
-          },
-          onVisibilityChange: { isVisible in
-            if hidesNativeScrollIndicator != isVisible {
-              hidesNativeScrollIndicator = isVisible
-            }
           }
         )
       }
@@ -272,7 +262,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .id("bottom-anchor")
       }
     }
-    .scrollIndicators(hidesNativeScrollIndicator ? .hidden : .automatic)
+    // Keep the native indicator policy static and hidden. Changing
+    // NSScrollView's scroller visibility from the prompt-rail overlay changes
+    // the transcript width, which changes wrapping and geometry, which can
+    // re-enter SwiftUI's AttributeGraph layout pass indefinitely on long
+    // histories.
+    .scrollIndicators(.hidden)
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
@@ -428,7 +423,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       scrollToBottom(proxy: proxy)
     }
     initialRestoreWorkItem = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
+    if let firstDelay = delays.first {
+      DispatchQueue.main.asyncAfter(deadline: .now() + firstDelay, execute: work)
+      for delay in delays.dropFirst() {
+        scheduleInitialScroll(proxy: proxy, delay: delay)
+      }
+    }
   }
 
   // MARK: - Local Send / Turn Anchoring
@@ -622,15 +623,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .padding(.vertical, 48)
   }
 
-  // Both detectors share the same .background so their NSViews land
-  // inside NSScrollView.documentView — the superview walk in each
-  // coordinator then correctly finds the enclosing NSScrollView.
+  // Both detectors share the same .background so their NSViews land inside
+  // NSScrollView.documentView. Keep this instrumentation observational:
+  // changing the enclosing scroll view's chrome here feeds geometry back into
+  // the transcript layout and can starve the main thread.
   private var scrollDetectors: some View {
     ZStack {
-      // The custom prompt rail replaces the native vertical scroller only on
-      // wide transcripts where the rail is actually visible. Keep this host in
-      // the document view so it can reach the enclosing NSScrollView.
-      ChatTimelineScrollerSuppressionHost(isSuppressed: hidesNativeScrollIndicator)
       ScrollPositionDetector { position in
         transcriptGeometry.setContent(
           height: position.documentHeight,
