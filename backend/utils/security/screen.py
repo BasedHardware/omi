@@ -479,7 +479,7 @@ class SecurityScreener:
                     return verdict
             if attempt < len(self._retry_delays):
                 delay = self._retry_delays[attempt]
-                if remaining is not None:
+                if deadline is not None:
                     remaining = deadline - asyncio.get_running_loop().time()
                     delay = min(delay, remaining)
                     if delay <= 0:
