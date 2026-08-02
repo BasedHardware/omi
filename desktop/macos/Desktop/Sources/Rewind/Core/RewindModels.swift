@@ -53,6 +53,9 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
   /// Stable per-installation capture identity used by the canonical memory system
   var clientDeviceId: String?
 
+  /// Whether entities/edges were extracted from this screenshot's OCR into local_kg_*
+  var kgExtracted: Bool
+
   static let databaseTableName = "screenshots"
 
   // MARK: - Storage Type
@@ -80,7 +83,8 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     adviceJson: String? = nil,
     skippedForBattery: Bool = false,
     deviceName: String? = nil,
-    clientDeviceId: String? = nil
+    clientDeviceId: String? = nil,
+    kgExtracted: Bool = false
   ) {
     self.id = id
     self.timestamp = timestamp
@@ -98,6 +102,7 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     self.skippedForBattery = skippedForBattery
     self.deviceName = deviceName
     self.clientDeviceId = clientDeviceId
+    self.kgExtracted = kgExtracted
   }
 
   // MARK: - Persistence Callbacks
@@ -394,6 +399,18 @@ class RewindSettings: ObservableObject {
     }
   }
 
+  @Published var screenKnowledgeGraphExtractionEnabled: Bool {
+    didSet {
+      defaults.set(screenKnowledgeGraphExtractionEnabled, forKey: .screenKnowledgeGraphExtractionEnabled)
+    }
+  }
+
+  @Published var screenKnowledgeGraphCloudFallbackEnabled: Bool {
+    didSet {
+      defaults.set(screenKnowledgeGraphCloudFallbackEnabled, forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+    }
+  }
+
   @Published var captureInterval: Double {
     didSet {
       defaults.set(captureInterval, forKey: "rewindCaptureInterval")
@@ -418,6 +435,8 @@ class RewindSettings: ObservableObject {
   private init() {
     // Load settings with defaults
     self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
+    self.screenKnowledgeGraphExtractionEnabled = defaults.bool(forKey: .screenKnowledgeGraphExtractionEnabled)
+    self.screenKnowledgeGraphCloudFallbackEnabled = defaults.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
     self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
     self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 

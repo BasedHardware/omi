@@ -46,6 +46,11 @@ covers:
   - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/ScreenKnowledgeGraphExtractor.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/ScreenKGExtractionBackend.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/OnDeviceScreenKGExtractionBackend.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphRecordBuilder.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
   - desktop/macos/Desktop/Sources/Bluetooth/BtDevice.swift

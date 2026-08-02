@@ -2,6 +2,7 @@
 """Tests for the mobile internal build dispatch decision."""
 
 import importlib.util
+import os
 import pathlib
 import unittest
 
@@ -138,11 +139,21 @@ class TestPendingCommits(unittest.TestCase):
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
         ).stdout.strip()
         self.assertTrue(mod.is_ancestor(head))
+        git_env = os.environ.copy()
+        git_env.update(
+            {
+                "GIT_AUTHOR_EMAIL": "mobile-cadence-test@example.com",
+                "GIT_AUTHOR_NAME": "mobile-cadence-test",
+                "GIT_COMMITTER_EMAIL": "mobile-cadence-test@example.com",
+                "GIT_COMMITTER_NAME": "mobile-cadence-test",
+            }
+        )
         orphan = mod.subprocess.run(
             ["git", "commit-tree", head + "^{tree}", "-m", "orphan"],
             capture_output=True,
             text=True,
             check=True,
+            env=git_env,
         ).stdout.strip()
         self.assertFalse(mod.is_ancestor(orphan))
         self.assertEqual(mod.app_commits_since(orphan), ["HEAD"])
