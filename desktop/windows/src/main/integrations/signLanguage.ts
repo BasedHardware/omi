@@ -96,7 +96,7 @@ export async function translateToGlosses(
   opts?: { baseUrl?: string | null; posesDir?: string }
 ): Promise<TranslationResult> {
   let trimmedText = text.trim();
-  
+
   if (!trimmedText) {
     return {
       originalText: text,
@@ -108,12 +108,12 @@ export async function translateToGlosses(
   if (trimmedText.length > 256) {
     trimmedText = trimmedText.slice(0, 256);
   }
-  
+
   const cacheKey = crypto
     .createHash('sha1')
     .update(`${spokenLanguage}|${signedLanguage}|${trimmedText}`)
     .digest('hex')
-  
+
   const negativeKey = `${spokenLanguage}|${signedLanguage}|${trimmedText}`
   const now = Date.now()
   const negUntil = negativeCache.get(negativeKey)
@@ -130,10 +130,10 @@ export async function translateToGlosses(
 
   const apiPose = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose';
   const apiVideo = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_video';
-  
+
   const poseUrl = `${apiPose}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`;
   const videoUrl = `${apiVideo}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`;
-  
+
   const poseDir = path.join(app.getPath('temp'), 'omi-sign-poses')
   const posePath = opts?.posesDir === undefined && opts !== undefined ? null : path.join(poseDir, `${cacheKey}.pose`)
 
@@ -168,7 +168,7 @@ export async function translateToGlosses(
         })
         poseBytes = Buffer.from(response.data)
       }
-      
+
       const { url, assetType } = await makePoseUrl(poseBytes, cacheKey, opts?.posesDir, opts?.baseUrl)
       return {
         originalText: text,
@@ -178,9 +178,9 @@ export async function translateToGlosses(
       }
     } catch (poseError) {
       console.log('[sign-language] Pose API failed, trying video as last resort:', poseError);
-      
+
       try {
-        const videoResponse = await fetchWithRetry(videoUrl, { 
+        const videoResponse = await fetchWithRetry(videoUrl, {
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
@@ -203,7 +203,7 @@ export async function translateToGlosses(
         } else {
           videoUrl_out = `data:video/mp4;base64,${videoData.toString('base64')}`
         }
-        
+
         return {
           originalText: text,
           poseUrl: videoUrl_out,

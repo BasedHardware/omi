@@ -40,13 +40,13 @@ export function SignVideo({ videoUrl }: SignVideoProps): React.JSX.Element {
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-transparent">
-      <video 
+      <video
         ref={videoRef}
         key={resolvedUrl}
-        src={resolvedUrl} 
-        autoPlay 
-        loop 
-        muted 
+        src={resolvedUrl}
+        autoPlay
+        loop
+        muted
         playsInline
         className="w-full h-full object-contain"
         style={{ maxHeight: '100%', maxWidth: '100%' }}

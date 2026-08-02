@@ -14,7 +14,7 @@ export type Pose = {
   rForearm: JointRotation;
   rWrist: JointRotation;
   spine: JointRotation;
-  expression: string; 
+  expression: string;
   handShape: HandShape;
 };
 

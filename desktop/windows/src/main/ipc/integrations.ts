@@ -119,6 +119,15 @@ export function registerIntegrationsHandlers(): void {
           ? (payload as { signedLanguage?: string }).signedLanguage
           : 'ase'
       if (!text) throw new Error('No text provided for translation')
+      if (!isSignLanguageEnabled()) {
+        return {
+          originalText: text,
+          poseUrl: '',
+          assetType: 'pose',
+          swrFull: 'TRANSLATION_UNAVAILABLE',
+          glosses: []
+        }
+      }
       return translateToGlosses(
         text,
         spokenLanguage ?? 'en',

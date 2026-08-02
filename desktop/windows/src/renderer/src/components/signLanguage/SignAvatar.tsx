@@ -51,7 +51,7 @@ export function SignAvatar({ poseUrl }: SignAvatarProps): React.JSX.Element {
               resolved = await resolveOmiAsset(poseUrl);
             }
           }
-          
+
           setResolvedUrl(resolved);
           if (viewerRef.current && resolved) {
             viewerRef.current.setAttribute('src', resolved);
