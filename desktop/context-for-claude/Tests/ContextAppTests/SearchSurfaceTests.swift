@@ -283,7 +283,7 @@ final class SearchSurfaceTests: XCTestCase {
         let host = NSHostingView(
             rootView: SearchResultCard(
                 moment: SearchMoment(
-                    id: 1, title: "Docs", source: "arc.net", appName: "Arc", bundleId: nil,
+                    rowId: 1, title: "Docs", source: "arc.net", appName: "Arc", bundleId: nil,
                     capturedAt: 1_700_000_000, frame: nil),
                 loader: FrameLoader()))
         host.layoutSubtreeIfNeeded()
@@ -304,7 +304,7 @@ final class SearchSurfaceTests: XCTestCase {
         func height(of title: String) -> CGFloat {
             let card = SearchResultCard(
                 moment: SearchMoment(
-                    id: 1, title: title, source: "arc.net", appName: "Arc", bundleId: nil,
+                    rowId: 1, title: title, source: "arc.net", appName: "Arc", bundleId: nil,
                     capturedAt: 1_700_000_000, frame: nil),
                 loader: loader)
             let host = NSHostingView(rootView: card)
@@ -497,7 +497,7 @@ final class SearchSurfaceTests: XCTestCase {
         }
 
         let model = SearchResultsModel(store: store)
-        model.start("")
+        model.ask("")
 
         XCTAssertEqual(
             model.moments.count, 3,
@@ -512,7 +512,7 @@ final class SearchSurfaceTests: XCTestCase {
         // is what makes its sentence true wherever it appears.
         let bare = try ContextStore(url: root.appendingPathComponent("empty.db"))
         let fresh = SearchResultsModel(store: bare)
-        fresh.start("")
+        fresh.ask("")
         XCTAssertTrue(fresh.moments.isEmpty)
         XCTAssertNil(SearchCopy.countLabel(fresh.totalCount, intent: fresh.intent))
         XCTAssertEqual(SearchCopy.results(intent: fresh.intent), SearchCopy.nothingCapturedYet)
@@ -580,7 +580,7 @@ final class SearchSurfaceTests: XCTestCase {
     func testAMomentWithNoPictureStillDrawsACard() {
         let card = SearchResultCard(
             moment: SearchMoment(
-                id: 7, title: "Retention pruned this one", source: "Finder", appName: "Finder",
+                rowId: 7, title: "Retention pruned this one", source: "Finder", appName: "Finder",
                 bundleId: nil, capturedAt: 1_700_000_000, frame: nil),
             loader: FrameLoader())
         let host = NSHostingView(rootView: card)
@@ -631,6 +631,388 @@ final class SearchSurfaceTests: XCTestCase {
         // control, and this row's pills each toggle.
         XCTAssertFalse(SearchTimeFilter.chips.contains(.anytime))
         XCTAssertEqual(SearchTimeFilter.chips, [.today, .yesterday, .lastWeek, .pickADate])
+    }
+
+    // MARK: - The bar answers for itself
+
+    /// **Return searches; it does not hand the question to another application.**
+    ///
+    /// The bar used to be a delivery mechanism — whatever was typed went to `claude://code/new` on
+    /// Return and the panel below was only a filter over what had been captured. What a user gets
+    /// instead is stated in the two places they can actually read it (the placeholder on an untouched
+    /// bar, and the label the hint button and the field carry for VoiceOver and the tooltip), so this
+    /// asserts those rather than an internal flag.
+    func testTheBarSaysItSearchesThisMacRatherThanOfferingToSendTheQuestionAway() {
+        for sentence in [SearchMetrics.placeholder, SearchBarView.searchActionName] {
+            XCTAssertFalse(
+                sentence.lowercased().contains("claude"),
+                "\"\(sentence)\" still offers to hand the question to Claude")
+            XCTAssertFalse(
+                sentence.lowercased().contains("ask "),
+                "\"\(sentence)\" describes asking somebody else, not searching this Mac")
+        }
+        // …and it names both halves, because a user who has only seen this bar route to Claude has
+        // no reason to expect it to know what was said out loud.
+        XCTAssertTrue(SearchBarView.searchActionName.lowercased().contains("conversation"))
+        XCTAssertTrue(SearchBarView.searchActionName.lowercased().contains("screen"))
+    }
+
+    /// A **static tripwire**, not behavioural coverage: the behaviour is covered by
+    /// `testSearchingReadsBothTheScreensAndTheConversations` below, which runs the real read. This
+    /// catches the other way the rule breaks — the routing quietly coming back as a second action on
+    /// the bar, or as a "send this to Claude" button beside the results.
+    ///
+    /// `ClaudeRouter` itself is deliberately *not* asserted out of existence: the first-run tutorial
+    /// still routes its one suggested question into a real Claude chat, and Settings still offers the
+    /// target. What must not come back is the **search path** reaching for it.
+    func testNoFileOnTheSearchPathRoutesToClaude() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // ContextAppTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
+        for file in ["SearchBarView.swift", "SearchResultsModel.swift", "SearchResultsView.swift"] {
+            let source = try String(
+                contentsOf: root.appendingPathComponent("Sources/ContextApp/Search/\(file)"),
+                encoding: .utf8)
+            XCTAssertFalse(
+                source.contains("ClaudeRouter"),
+                "\(file) reaches for ClaudeRouter again — the search bar answers for itself")
+        }
+    }
+
+    // MARK: - Screens and conversations, ranked together
+
+    /// **Coverage first, recency second.**
+    ///
+    /// The rule has to be primary-relevance rather than pure time, and this is the case that shows
+    /// why: the spoken line that answers the question is twenty minutes older than three screen
+    /// frames that share one incidental word with it. Ordered by time it is fourth and below the
+    /// fold on a narrow panel; ordered by how much of the question it actually contains, it leads.
+    func testTheMergedOrderPutsWhatCoversTheQuestionAboveWhatIsMerelyRecent() {
+        let merged = SearchRanking.merge(
+            screens: [
+                Self.screenMoment(id: 1, title: "Invoice viewer", app: "Preview", at: 3_000),
+                Self.screenMoment(id: 2, title: "Invoice viewer", app: "Preview", at: 2_900),
+                Self.screenMoment(id: 3, title: "Invoice viewer", app: "Preview", at: 2_800),
+            ],
+            conversations: [
+                Self.spokenMoment(id: 10, text: "we should send Priya the invoice on Friday", at: 1_700)
+            ],
+            query: "priya invoice friday",
+            limit: 20)
+
+        XCTAssertEqual(
+            merged.first?.kind, .conversation,
+            "the line that contains three of the three words typed is below three screens that "
+                + "contain one — the merge is ordering on time, not on the question")
+        XCTAssertEqual(merged.count, 4, "nothing may be dropped by the merge, only ordered")
+        // …and inside the screens, which all cover the query equally, time decides.
+        XCTAssertEqual(merged.dropFirst().map(\.capturedAt), [3_000, 2_900, 2_800])
+    }
+
+    /// **With nothing typed, the order is pure recency** — the state the panel opens in.
+    ///
+    /// There is no question to cover, so coverage is 1 everywhere and must not silently become a
+    /// tie-break of its own. A browsing panel whose newest capture is not first is a panel that looks
+    /// stale on a machine that is capturing right now.
+    func testWithNothingTypedTheMergedOrderIsPureRecency() {
+        let merged = SearchRanking.merge(
+            screens: [
+                Self.screenMoment(id: 1, title: "Docs — arc.net", app: "Arc", at: 500),
+                Self.screenMoment(id: 2, title: "Docs — arc.net", app: "Arc", at: 300),
+            ],
+            conversations: [
+                Self.spokenMoment(id: 10, text: "morning", at: 400),
+                Self.spokenMoment(id: 11, text: "later", at: 200),
+            ],
+            query: "",
+            limit: 20)
+
+        XCTAssertEqual(merged.map(\.capturedAt), [500, 400, 300, 200])
+        XCTAssertEqual(merged.map(\.kind), [.screen, .conversation, .screen, .conversation])
+    }
+
+    /// **Neither half can crowd the other out of the page.**
+    ///
+    /// This is the whole reason a plain time merge is not enough. Screen capture writes a frame every
+    /// three seconds and speech writes a line a sentence, so on any real machine the newest sixty
+    /// rows are sixty screenshots — and the conversation the user was searching for is on a page they
+    /// will never scroll to. The cap is expressed in grid rows, so the claim is the visible one: a
+    /// reader who has not scrolled has seen both kinds.
+    func testNeitherHalfOfTheCaptureCanFillThePageWhileTheOtherHasAnswers() {
+        // Fifty screens, all newer than every spoken line, all equally relevant — the shape a real
+        // corpus has.
+        let screens = (0..<50).map {
+            Self.screenMoment(id: Int64($0), title: "Invoice — arc.net", app: "Arc", at: Double(10_000 - $0))
+        }
+        let conversations = (0..<5).map {
+            Self.spokenMoment(id: Int64(100 + $0), text: "the invoice went out", at: Double(500 - $0))
+        }
+        // 35 is five full runs of `maximumRun` screens with a spoken line after each, which is what
+        // the cap promises for this corpus — stated as arithmetic so a change to the cap fails here
+        // with the number rather than silently altering what the page contains.
+        let page = (SearchRanking.maximumRun + 1) * 5
+        let merged = SearchRanking.merge(
+            screens: screens, conversations: conversations, query: "invoice", limit: page)
+
+        XCTAssertEqual(merged.count, page)
+        let spoken = merged.filter { $0.kind == .conversation }
+        XCTAssertEqual(
+            spoken.count, 5,
+            "every spoken line was pushed off the page by newer screenshots — the run cap is not "
+                + "holding, which is the defect a pure time merge has on any real machine")
+
+        // …and the cap really is a cap: nowhere in the page is there a longer unbroken run of one
+        // kind than the rule allows, in either direction.
+        var run = 0
+        var previous: SearchMoment.Kind?
+        for moment in merged {
+            run = moment.kind == previous ? run + 1 : 1
+            previous = moment.kind
+            XCTAssertLessThanOrEqual(
+                run, SearchRanking.maximumRun,
+                "\(run) \(moment.kind.rawValue) cards in a row, past a cap of \(SearchRanking.maximumRun)")
+        }
+        // The cap is two grid rows: a reader who has not scrolled has seen both kinds.
+        XCTAssertEqual(SearchRanking.maximumRun, SearchLayout.resultColumns * 2)
+    }
+
+    /// …and the cap never invents work: with only one kind present it must not stall, drop rows, or
+    /// pad the page with anything.
+    func testTheRunCapDoesNothingWhenOnlyOneKindHasAnswers() {
+        let screens = (0..<20).map {
+            Self.screenMoment(id: Int64($0), title: "Docs", app: "Arc", at: Double(1_000 - $0))
+        }
+        let merged = SearchRanking.merge(
+            screens: screens, conversations: [], query: "docs", limit: 12)
+        XCTAssertEqual(merged.count, 12)
+        XCTAssertEqual(merged.map(\.capturedAt), (0..<12).map { Double(1_000 - $0) })
+
+        let spokenOnly = SearchRanking.merge(
+            screens: [], conversations: [Self.spokenMoment(id: 1, text: "hello", at: 5)],
+            query: "hello", limit: 12)
+        XCTAssertEqual(spokenOnly.map(\.kind), [.conversation])
+
+        XCTAssertTrue(SearchRanking.merge(screens: [], conversations: [], query: "x", limit: 5).isEmpty)
+        XCTAssertTrue(
+            SearchRanking.merge(
+                screens: screens, conversations: [], query: "docs", limit: 0
+            ).isEmpty,
+            "a zero page is empty, not the whole corpus")
+    }
+
+    /// **Coverage is never zero**, so a hit the index matched by a stem this ranking cannot see keeps
+    /// its place rather than sinking below everything.
+    ///
+    /// FTS is porter-stemmed and this tokenizer is not, so "decided" in the query genuinely does
+    /// match "decide" in the row while a literal comparison does not. Under-crediting is the
+    /// direction that costs a true match its place, which is exactly what `Queries.coverage` floors
+    /// for on the MCP side.
+    func testCoverageIsNeverZeroAndCreditsOnlyRealInflections() {
+        XCTAssertEqual(SearchRanking.coverage(of: "nothing in common", terms: ["invoice"]), 1)
+        XCTAssertEqual(SearchRanking.coverage(of: "anything", terms: []), 1, "no question, full credit")
+
+        // Whole words, in either order, case-folded.
+        XCTAssertEqual(
+            SearchRanking.coverage(of: "The INVOICE went out", terms: ["invoice", "friday"]), 0.5)
+        XCTAssertEqual(
+            SearchRanking.coverage(of: "invoice on friday", terms: ["invoice", "friday"]), 1)
+
+        // An inflection counts. Two terms, one of which only matches through the plural, so the
+        // answer distinguishes a real inflection credit from the floor above (which would be 0.5).
+        XCTAssertEqual(
+            SearchRanking.coverage(of: "the invoices went out on friday", terms: ["invoice", "friday"]),
+            1,
+            "\"invoices\" did not pay for \"invoice\" — the porter-stemmed index matched it and this "
+                + "ranking did not, which is how a true hit sinks")
+        // …and an incidental prefix does not, which is the rule that stopped a bookmark bar
+        // outranking a real match in `Queries`. One term does match here, so 0.5 is a real half
+        // rather than the never-zero floor.
+        XCTAssertEqual(
+            SearchRanking.coverage(of: "the package arrived on friday", terms: ["pack", "friday"]), 0.5,
+            "\"package\" was credited for \"pack\" — incidental prefixes are how ranking rots")
+    }
+
+    /// The words a query splits into, which is the denominator of every coverage number above.
+    func testTheRankingTokenizerSplitsTheWayAReaderWould() {
+        XCTAssertEqual(SearchRanking.words(in: "Invoice, on Friday!"), ["invoice", "on", "friday"])
+        XCTAssertEqual(
+            SearchRanking.words(in: "SCA-219"), ["sca", "219"],
+            "a hyphenated identifier is two words, as the index holds it")
+        XCTAssertEqual(
+            SearchRanking.words(in: "invoice invoice"), ["invoice"],
+            "typing a word twice must not make a row that contains it look twice as relevant")
+        XCTAssertTrue(SearchRanking.words(in: "   ").isEmpty)
+    }
+
+    // MARK: - What a conversation card looks like
+
+    /// **A conversation card is the same size as a screen card**, or the grid rows go ragged and
+    /// every height derived from `SearchLayout.cardHeight` is wrong for half the page.
+    @MainActor
+    func testAConversationCardIsTheSameShapeAsAScreenCard() {
+        func height(_ moment: SearchMoment) -> CGFloat {
+            let host = NSHostingView(rootView: SearchResultCard(moment: moment, loader: FrameLoader()))
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize.height
+        }
+
+        let screen = height(Self.moment(id: 1, title: "Docs — arc.net", app: "Arc"))
+        let short = height(Self.spokenMoment(id: 2, text: "yes", at: 1_700_000_000))
+        let long = height(
+            Self.spokenMoment(
+                id: 3,
+                text: String(repeating: "a sentence that runs on well past four lines of a card ", count: 6),
+                at: 1_700_000_000))
+
+        XCTAssertEqual(short, screen, accuracy: 1, "a spoken card is \(short) pt against a screen's \(screen)")
+        XCTAssertEqual(
+            long, short, accuracy: 0.5,
+            "a long line made its card \(long - short) pt taller — it is growing the well, not truncating in it")
+        XCTAssertEqual(long, SearchLayout.cardHeight(), accuracy: 6)
+    }
+
+    /// …and it says which side of the microphone it came from, without inventing a name for anybody.
+    func testASpokenCardSaysWhichSideOfTheMicrophoneItCameFrom() {
+        XCTAssertEqual(SearchSpeech.title(for: .mic), "You said")
+        XCTAssertEqual(
+            SearchSpeech.title(for: .system), "Heard",
+            "the system tap is everyone and everything else — naming a speaker would be a confident "
+                + "wrong answer for a video, a call, or a stranger")
+
+        let placed = SearchMoment(
+            line: ScreenSearchQueries.SpokenLine(
+                id: 1, sessionId: 7, startedAt: 1_700_000_000, source: .mic,
+                text: "we should send the invoice", appHint: "zoom.us"))
+        XCTAssertEqual(placed.source, "zoom.us")
+        XCTAssertEqual(placed.sessionId, 7)
+        XCTAssertEqual(placed.snippet, "we should send the invoice")
+        XCTAssertEqual(
+            placed.appName, "",
+            "a spoken line was not in a window, so it must never claim an app the facet row filters on")
+
+        let unplaced = SearchMoment(
+            line: ScreenSearchQueries.SpokenLine(
+                id: 2, sessionId: 8, startedAt: 1_700_000_000, source: .system, text: "sounds good"))
+        XCTAssertEqual(unplaced.source, SearchSpeech.unplacedSource)
+    }
+
+    /// A card's identity has to survive both halves being on the same page: the two tables number
+    /// their rows independently, so frame 41 and segment 41 both exist and would collide.
+    func testAScreenAndASpokenLineWithTheSameRowNumberAreDifferentCards() {
+        let screen = Self.moment(id: 41, title: "Docs", app: "Arc")
+        let spoken = Self.spokenMoment(id: 41, text: "docs", at: 1_700_000_041)
+        XCTAssertEqual(screen.rowId, spoken.rowId)
+        XCTAssertNotEqual(
+            screen.id, spoken.id,
+            "the list would reuse one card's state for the other's row")
+    }
+
+    // MARK: - Reading both halves for real
+
+    /// **The panel answers over what was said as well as what was seen.**
+    ///
+    /// Measured against a real `ContextStore` on disk, through both FTS indexes, because the claim is
+    /// about the read: the surface used to search `frames` and nothing else, so "what did we say
+    /// about the invoice" found the window somebody had it open in and never the sentence.
+    @MainActor
+    func testSearchingReadsBothTheScreensAndTheConversations() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("search-both-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+
+        let base: Double = 1_760_000_000
+        _ = try store.insertFrame(
+            Frame(
+                capturedAt: base, appName: "Preview", bundleId: nil,
+                windowTitle: "Invoice 2026-07 — now.hdfcbank.example.com",
+                ocrText: "amount due 412.00", imagePath: "/tmp/frame-invoice.heic"))
+        // A frame that matches nothing, so a passing test cannot be "everything came back".
+        _ = try store.insertFrame(
+            Frame(
+                capturedAt: base + 1, appName: "Finder", bundleId: nil, windowTitle: "Downloads",
+                ocrText: "screenshots", imagePath: "/tmp/frame-downloads.heic"))
+
+        let session = try store.openSession(at: base - 60, appHint: "zoom.us")
+        _ = try store.insertSegment(
+            Segment(
+                sessionId: session, startedAt: base - 50, endedAt: base - 47, source: .mic,
+                text: "I will send the invoice before Friday"))
+        _ = try store.insertSegment(
+            Segment(
+                sessionId: session, startedAt: base - 40, endedAt: base - 38, source: .system,
+                text: "the weather is fine"))
+
+        let model = SearchResultsModel(store: store)
+        model.ask("invoice")
+
+        XCTAssertNil(model.loadError)
+        let kinds = Set(model.moments.map(\.kind))
+        XCTAssertTrue(
+            kinds.contains(.conversation),
+            "the search found no spoken line — the panel is still screen-only")
+        XCTAssertTrue(kinds.contains(.screen))
+        XCTAssertEqual(
+            model.totalCount, 2,
+            "the count is one answer over both halves, not one half's count")
+
+        // The frame carries the text it matched on, so a card can say why it came back.
+        let screen = try XCTUnwrap(model.moments.first { $0.kind == .screen })
+        XCTAssertEqual(screen.snippet, "amount due 412.00")
+
+        // The spoken line carries its words and its conversation.
+        let spoken = try XCTUnwrap(model.moments.first { $0.kind == .conversation })
+        XCTAssertEqual(spoken.snippet, "I will send the invoice before Friday")
+        XCTAssertEqual(spoken.sessionId, session)
+        XCTAssertEqual(spoken.title, "You said")
+        XCTAssertEqual(spoken.source, "zoom.us")
+
+        // …and an empty bar still browses both halves rather than only one.
+        model.ask("")
+        XCTAssertEqual(model.totalCount, 4)
+        XCTAssertEqual(Set(model.moments.map(\.kind)), [.screen, .conversation])
+    }
+
+    /// **A site or app chip narrows to screens**, because both are claims about a window and a spoken
+    /// line was not in one.
+    ///
+    /// The alternative — keeping speech visible under a lit app chip — would mean a filter that says
+    /// "Preview" over a grid containing rows that were never in Preview, which is the same class of
+    /// untruth as the facet row offering an app none of the results belong to.
+    @MainActor
+    func testAnAppChipNarrowsToScreensBecauseSpeechWasNotInAWindow() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("search-facet-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+
+        let base: Double = 1_760_000_000
+        _ = try store.insertFrame(
+            Frame(
+                capturedAt: base, appName: "Preview", bundleId: nil, windowTitle: "Invoice",
+                ocrText: "invoice", imagePath: "/tmp/frame.heic"))
+        let session = try store.openSession(at: base, appHint: "zoom.us")
+        _ = try store.insertSegment(
+            Segment(
+                sessionId: session, startedAt: base, endedAt: base + 2, source: .mic,
+                text: "sending the invoice now"))
+
+        let model = SearchResultsModel(store: store)
+        model.ask("invoice")
+        XCTAssertEqual(Set(model.moments.map(\.kind)), [.screen, .conversation])
+        XCTAssertEqual(
+            model.apps.map(\.name), ["Preview"],
+            "the app row offered something no screen result belongs to")
+
+        model.select(app: "Preview")
+        XCTAssertEqual(model.moments.map(\.kind), [.screen])
+        XCTAssertEqual(model.totalCount, 1)
+
+        model.select(app: nil)
+        XCTAssertEqual(Set(model.moments.map(\.kind)), [.screen, .conversation])
     }
 
     // MARK: - Contrast
@@ -702,13 +1084,40 @@ final class SearchSurfaceTests: XCTestCase {
 
     private static func moment(id: Int64, title: String, app: String) -> SearchMoment {
         SearchMoment(
-            id: id,
+            rowId: id,
             title: title,
             source: SearchSource.source(appName: app, windowTitle: title),
             appName: app,
             bundleId: nil,
             capturedAt: 1_700_000_000 + Double(id),
             frame: nil)
+    }
+
+    /// A screen hit at a chosen instant. Separate from `moment` because every ranking claim is about
+    /// the order two hits end up in, which needs the time to be an argument rather than the row id.
+    private static func screenMoment(
+        id: Int64, title: String, app: String, at: Double, snippet: String? = nil
+    ) -> SearchMoment {
+        SearchMoment(
+            rowId: id,
+            title: title,
+            source: SearchSource.source(appName: app, windowTitle: title),
+            appName: app,
+            bundleId: nil,
+            capturedAt: at,
+            frame: nil,
+            kind: .screen,
+            snippet: snippet)
+    }
+
+    /// A spoken hit, built through the real conversion from a query row rather than by filling the
+    /// fields in by hand — so a test cannot assert an arrangement the app never produces.
+    private static func spokenMoment(
+        id: Int64, text: String, at: Double, source: SegmentSource = .mic, appHint: String? = nil
+    ) -> SearchMoment {
+        SearchMoment(
+            line: ScreenSearchQueries.SpokenLine(
+                id: id, sessionId: 1, startedAt: at, source: source, text: text, appHint: appHint))
     }
 }
 

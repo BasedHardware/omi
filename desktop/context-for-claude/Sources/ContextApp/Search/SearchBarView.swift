@@ -12,10 +12,18 @@ import SwiftUI
 /// type" and "this is a place you look" without a label — and it is the one thing a refactor here
 /// must not quietly undo by wrapping both in a single container.
 ///
-/// The bar keeps everything it promised before: the typed question routes to Claude on Return, and
-/// the one line of truth about where it went (including the honest "I put it on your clipboard
-/// instead") still appears — it takes the keyboard hint's place rather than a row of its own, so the
-/// bar stays a bar.
+/// **The bar answers for itself.** It used to be a delivery mechanism: whatever was typed went to
+/// Claude on Return, and the panel underneath was only a filter for what had been captured. That is
+/// a strange thing for a search bar to be — the app owns two full-text indexes over the user's own
+/// machine, and the fastest possible answer to "what was that invoice site" was a round trip through
+/// another application, a window switch, and a model call. Return now searches, the results are the
+/// app's own, and they cover **both** halves of what it captures: the screens it saw and the
+/// conversations it heard.
+///
+/// The one line under the field survives that change with a narrower job. It used to say where the
+/// question had gone; there is nowhere for it to go now, so it appears only when the read itself
+/// failed — which is the one state the panel's own empty copy cannot express, because "found
+/// nothing" and "could not look" license opposite conclusions.
 struct SearchBarView: View {
     /// A question to start from, handed over by the timeline's "Search All" pill.
     let initialQuery: String
@@ -23,6 +31,13 @@ struct SearchBarView: View {
     /// The surface's total height, whenever it changes. The window owns its own frame; this is how
     /// it learns the content grew a line.
     var onHeightChange: (CGFloat) -> Void = { _ in }
+    /// **Where a result goes.** Activating a card hands the moment out here; the window turns it into
+    /// `RewindWindow.present(store:at:)` and closes this surface.
+    ///
+    /// A closure rather than a call into `RewindWindow` from inside the view, for the reason every
+    /// other window operation in this app is one: a view that opens windows cannot be rendered in a
+    /// test or a preview without opening them.
+    var onOpenMoment: (SearchMoment) -> Void = { _ in }
 
     @State private var query: String
     @StateObject private var results: SearchResultsModel
@@ -31,11 +46,13 @@ struct SearchBarView: View {
         initialQuery: String = "",
         store: ContextStore? = nil,
         onDismiss: @escaping () -> Void,
-        onHeightChange: @escaping (CGFloat) -> Void = { _ in }
+        onHeightChange: @escaping (CGFloat) -> Void = { _ in },
+        onOpenMoment: @escaping (SearchMoment) -> Void = { _ in }
     ) {
         self.initialQuery = initialQuery
         self.onDismiss = onDismiss
         self.onHeightChange = onHeightChange
+        self.onOpenMoment = onOpenMoment
         _query = State(initialValue: initialQuery)
         _results = StateObject(wrappedValue: SearchResultsModel(store: store))
     }
@@ -49,59 +66,18 @@ struct SearchBarView: View {
         _results = StateObject(wrappedValue: results)
     }
 
-    @State private var target = ClaudeRouter.preferredTarget
-    @State private var outcome: Outcome?
-
-    private enum Outcome: Equatable {
-        case delivered(ClaudeRouter.Delivery)
-        case failed(String)
-
-        var sentence: String {
-            switch self {
-            case .delivered(let delivery):
-                let truncation = delivery.wasTruncated
-                    ? " I trimmed it to the \(ClaudeRouter.promptLimit) characters Claude accepts."
-                    : ""
-                return delivery.mechanism.note + truncation
-            case .failed(let sentence):
-                return sentence
-            }
-        }
-
-        var isFailure: Bool {
-            if case .failed = self { return true }
-            return false
-        }
-    }
-
-    /// The bar's half of the "Claude target" choice is Claude Code, deliberately and in both
-    /// directions: its other target runs the `claude` CLI, so the dropdown is one agent in two
-    /// places, and every sentence around it — the row detail, the "Run on Claude Code" hint, the
-    /// Settings subtitle — already says so. The tutorial wants an ordinary chat and asks for one;
-    /// this does not.
-    private static let surface = ClaudeRouter.Surface.code
-
-    private var availability: ClaudeRouter.Availability {
-        ClaudeRouter.availability(of: target, surface: Self.surface)
-    }
-
     /// The one line under the field, or nil when there is nothing to say and the keyboard hint has
     /// the space instead.
-    private var note: String? {
-        if let outcome { return outcome.sentence }
-        if !availability.isAvailable { return availability.detail }
-        return nil
-    }
-
-    private var noteColour: Color {
-        if outcome?.isFailure == true || !availability.isAvailable { return Ink.errorRed }
-        return Ink.secondary
-    }
+    ///
+    /// Only ever a failure now. A note that appears after every successful search would be a status
+    /// line reporting that the thing on screen is on screen, and it would resize the window a line
+    /// taller on every keystroke.
+    private var note: String? { results.loadError }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SearchLayout.panelGap) {
             SearchGlassPanel { promptBar }
-            SearchGlassPanel { SearchResultsView(model: results) }
+            SearchGlassPanel { SearchResultsView(model: results, onOpen: open) }
         }
         // The clear margin the shadows fall off into. Without it the window clips them and the
         // panels look stamped onto the desktop rather than floating over it.
@@ -115,15 +91,13 @@ struct SearchBarView: View {
             guard height > 0 else { return }
             onHeightChange(height)
         }
-        // `start`, not `search`: the bar opens empty, and `search` treats "still empty" as nothing to
+        // `ask`, not `search`: the bar opens empty, and `search` treats "still empty" as nothing to
         // do, so the panel used to open having never read anything at all.
-        .onAppear { results.start(query) }
+        .onAppear { results.ask(query) }
         .onChange(of: query) { text in
-            outcome = nil
             results.search(text)
         }
         .onReceive(NotificationCenter.default.publisher(for: SearchBarWindow.refocusNotification)) { note in
-            outcome = nil
             if let prefill = note.userInfo?[SearchBarWindow.prefillKey] as? String { query = prefill }
         }
     }
@@ -133,12 +107,19 @@ struct SearchBarView: View {
     private var promptBar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                SearchTargetGlyph(size: SearchLayout.glyphSize)
+                // The app's own mark, not the icon of whatever answers `claude://`. The glyph at the
+                // leading edge says who is about to answer, and the honest answer is now this app.
+                // Not a second magnifier either — the query chip already carries one, and two
+                // magnifiers 30 pt apart read as a rendering fault rather than as a search bar.
+                OmiMark(size: SearchLayout.glyphSize, color: Ink.primary)
+                    .frame(width: SearchLayout.glyphSize, height: SearchLayout.glyphSize)
+                    .accessibilityHidden(true)
                 SearchQueryField(
                     query: $query,
                     available: SearchLayout.queryFieldWidth,
                     onSubmit: submit,
-                    onCancel: onDismiss)
+                    onCancel: onDismiss,
+                    onMoveSelection: { results.moveSelection($0) })
                 Spacer(minLength: 12)
                 if note == nil { keyboardHint }
             }
@@ -146,7 +127,8 @@ struct SearchBarView: View {
 
             if let note {
                 Text(note)
-                    .inkStyle(.statusLabel, color: noteColour)
+                    // Always the failure colour, because a note is now always a failure.
+                    .inkStyle(.statusLabel, color: Ink.errorRed)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,80 +142,62 @@ struct SearchBarView: View {
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: note)
     }
 
-    /// `⌘ ↵  Run on Claude Code`, and it is also the control.
+    /// `↵  Search`, and it is also the control.
     ///
     /// The reference shows only the keycaps. A bar whose one action exists solely as a key press is
     /// unusable to anyone who cannot press it, so the hint is a button — same glyphs, same weight,
     /// with a target under them.
+    ///
+    /// It says `Search` and not `Search again` even though the panel is already showing an answer by
+    /// the time anyone can read it. "Again" would be accurate and useless: the hint's job on an
+    /// untouched bar is to say what this thing *is*, and a search bar whose keycap advertises a
+    /// refresh reads as a bar that has not searched yet.
     private var keyboardHint: some View {
         Button(action: submit) {
             HStack(spacing: 6) {
-                Text("⌘ ↵").inkStyle(.statusLabel, color: Ink.secondary)
-                Text("Run on \(destinationName)").inkStyle(.statusLabel, color: Ink.tertiary)
+                Text("↵").inkStyle(.statusLabel, color: Ink.secondary)
+                Text("Search").inkStyle(.statusLabel, color: Ink.tertiary)
             }
             .fixedSize()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Send to \(destinationName)")
-        .help("Send to \(destinationName)")
+        .accessibilityLabel(Self.searchActionName)
+        .help(Self.searchActionName)
     }
 
-    /// What the hint calls where the question is going.
+    /// What the action is called wherever it is named in words rather than in keycaps.
     ///
-    /// Not `Target.title`, which is the name of the *application* and is what the old target picker
-    /// needed. The prompt is delivered to `claude://code/new`, so the surface it lands on is Claude
-    /// Code — and a hint that names the app while the delivery note says "Opened a Claude Code tab"
-    /// is two answers to one question.
-    private var destinationName: String {
-        target == .claudeApp ? "Claude Code" : target.title
-    }
+    /// It names **both** halves on purpose. A user who has only ever seen this bar hand things to
+    /// Claude has no reason to expect it to know what was said out loud, and the accessibility label
+    /// is one of two places (the placeholder is the other) where that can be said in a sentence.
+    static let searchActionName = "Search this Mac's screens and conversations"
 
     // MARK: - Submit
 
     private func submit() {
         // The shared chrome cue; it honours the system UI-sound setting itself.
         Sound.effect(.click)
-        switch ClaudeRouter.route(query, to: target, surface: Self.surface) {
-        case .success(let delivery):
-            outcome = .delivered(delivery)
-            query = ""
-            // Left open, showing what happened. Closing instantly would take the one sentence that
-            // says whether the prompt was filled in or merely copied with it.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { onDismiss() }
-        case .failure(let error):
-            outcome = .failed(error.sentence)
+        // **Return means whichever thing the keyboard is currently on.** With a card selected it
+        // opens that moment — the selection exists for no other purpose, and a highlighted card that
+        // Return ignored would be a dead end the user walked into on purpose.
+        if let selected = results.selectedMoment {
+            open(selected)
+            return
         }
+        // Otherwise `ask`, not `search`: `search` de-duplicates identical text, and by the time
+        // Return is pressed the text is always identical — every keystroke already searched. Return
+        // means "ask again", and capture is live, so asking again is a real question with a possibly
+        // different answer. Nothing is cleared and nothing is dismissed: the results are the point,
+        // and a bar that emptied itself on Return would throw away the query that produced them.
+        results.ask(query)
     }
-}
 
-// MARK: - The glyph
-
-/// The small coloured mark at the bar's leading edge: the icon of whatever app actually answers
-/// `claude://` on this Mac, or the app's own mark when nothing does.
-///
-/// A real icon rather than a drawn glyph because it is the one place the bar says *where the
-/// question is going*, and an app's icon says that faster than its name. Resolved through
-/// LaunchServices, so a hit is never the wrong app — and a miss falls back to the Omi mark rather
-/// than to a generic document.
-struct SearchTargetGlyph: View {
-    var size: CGFloat = 22
-
-    @State private var icon: NSImage?
-
-    var body: some View {
-        Group {
-            if let icon {
-                Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
-            } else {
-                OmiMark(size: size, color: Ink.primary)
-            }
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-        .task {
-            guard let url = ClaudeRouter.Probe.live().handlerForClaudeScheme() else { return }
-            icon = NSWorkspace.shared.icon(forFile: url.path)
-        }
+    /// Hand a moment to whoever owns the windows.
+    ///
+    /// One function for both routes — the pointer's click and Return on a selection — so the two can
+    /// never diverge into "clicking works and the keyboard does something subtly different".
+    private func open(_ moment: SearchMoment) {
+        onOpenMoment(moment)
     }
 }
 
@@ -252,6 +216,8 @@ private struct SearchQueryField: View {
     let available: CGFloat
     let onSubmit: () -> Void
     let onCancel: () -> Void
+    /// ↓ and ↑, as a step through the results. See `SearchResultsModel.moveSelection`.
+    var onMoveSelection: (Int) -> Void = { _ in }
 
     private var isTyped: Bool { !query.isEmpty }
 
@@ -274,7 +240,9 @@ private struct SearchQueryField: View {
                         .foregroundStyle(SearchInk.queryChipGlyph)
                         .accessibilityHidden(true)
                 }
-                SearchField(text: $query, onSubmit: onSubmit, onCancel: onCancel)
+                SearchField(
+                    text: $query, onSubmit: onSubmit, onCancel: onCancel,
+                    onMoveSelection: onMoveSelection)
             }
             .padding(.leading, isTyped ? SearchMetrics.chipPaddingHorizontal : 0)
         }
@@ -299,6 +267,12 @@ private struct SearchField: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onCancel: () -> Void
+    /// ↓ and ↑ reach the results from here for the same reason Return and Escape do: the field holds
+    /// the first responder for the whole life of this surface, so a key press that never reaches the
+    /// field's delegate never happens at all. The cards cannot take focus themselves — the panel is
+    /// non-activating and full keyboard access is off by default — so this is not one way into the
+    /// results, it is the only one.
+    var onMoveSelection: (Int) -> Void = { _ in }
 
     func makeNSView(context: Context) -> FocusingTextField {
         // The same role the chip is measured with, resolved to the AppKit font it is made of. The
@@ -324,7 +298,7 @@ private struct SearchField: NSViewRepresentable {
         field.target = context.coordinator
         field.action = #selector(Coordinator.submitFromField(_:))
         field.usesSingleLineMode = true
-        field.setAccessibilityLabel("Ask Claude")
+        field.setAccessibilityLabel(SearchBarView.searchActionName)
         field.stringValue = text
         return field
     }
@@ -333,24 +307,33 @@ private struct SearchField: NSViewRepresentable {
         context.coordinator.text = $text
         context.coordinator.onSubmit = onSubmit
         context.coordinator.onCancel = onCancel
+        context.coordinator.onMoveSelection = onMoveSelection
         // Only when it really differs: assigning `stringValue` moves the insertion point to the end,
         // which would fight the user on every keystroke.
         if field.stringValue != text { field.stringValue = text }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit, onCancel: onCancel)
+        Coordinator(
+            text: $text, onSubmit: onSubmit, onCancel: onCancel, onMoveSelection: onMoveSelection)
     }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var text: Binding<String>
         var onSubmit: () -> Void
         var onCancel: () -> Void
+        var onMoveSelection: (Int) -> Void
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        init(
+            text: Binding<String>,
+            onSubmit: @escaping () -> Void,
+            onCancel: @escaping () -> Void,
+            onMoveSelection: @escaping (Int) -> Void = { _ in }
+        ) {
             self.text = text
             self.onSubmit = onSubmit
             self.onCancel = onCancel
+            self.onMoveSelection = onMoveSelection
         }
 
         @objc func submitFromField(_ sender: NSTextField) {
@@ -370,6 +353,15 @@ private struct SearchField: NSViewRepresentable {
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
                 onCancel()
+                return true
+            // Consumed (`true`) rather than passed on: a single-line field's own answer to ↓ is to
+            // move the insertion point to the end of the line, which is a no-op the user cannot see
+            // — so letting it through would look exactly like the key doing nothing.
+            case #selector(NSResponder.moveDown(_:)):
+                onMoveSelection(1)
+                return true
+            case #selector(NSResponder.moveUp(_:)):
+                onMoveSelection(-1)
                 return true
             default:
                 return false

@@ -104,7 +104,8 @@ final class SearchBarWindow {
                 // panel renders as its empty state rather than as an error.
                 store: Engine.shared.contextStore,
                 onDismiss: { dismiss() },
-                onHeightChange: { height in resize(to: height) }))
+                onHeightChange: { height in resize(to: height) },
+                onOpenMoment: { moment in open(moment) }))
         hosting.frame = root.bounds
         hosting.autoresizingMask = [.width, .height]
         root.addSubview(hosting)
@@ -133,6 +134,40 @@ final class SearchBarWindow {
         // The shared chrome cue, which already honours the system UI-sound setting on its own.
         Sound.effect(.swoosh)
         ContextLog.info("search bar presented (key: \(window.isKeyWindow))", "search")
+    }
+
+    /// **Activating a result: open the timeline there, then get out of the way.**
+    ///
+    /// The one place a found moment becomes a window operation. `capturedAt` is the instant for both
+    /// kinds of result — a screen hit carries its frame's capture time, a conversation hit carries
+    /// the moment the line was spoken — so a single call covers both and neither kind can drift into
+    /// a different meaning of "when".
+    ///
+    /// The order is load-bearing in both directions:
+    ///
+    /// - **Present first.** `RewindWindow.present(store:at:)` is what activates the app and takes key
+    ///   status; doing it after the panel closed would leave a moment on screen behind whatever the
+    ///   user was in.
+    /// - **Then dismiss.** A floating search panel sitting over the timeline is covering the exact
+    ///   thing the user just asked to see. It closes rather than hides, which is what this surface
+    ///   has always done — the next open rebuilds it, empty, ready for the next question.
+    ///
+    /// Declining when the store is not open yet is the same rule the menu bar and the global
+    /// shortcut already follow: a timeline over nothing is worse than no timeline.
+    private static func open(_ moment: SearchMoment) {
+        guard let store = Engine.shared.contextStore else {
+            ContextLog.error("cannot open a moment before the capture database is open", "search")
+            return
+        }
+        RewindWindow.present(
+            store: store,
+            at: moment.capturedAt,
+            // The same two handlers the menu bar and the global shortcut hand it, because the window
+            // this opens is the same window: one that could not reach Settings, or whose "Search All"
+            // pill did nothing, would be a second-class timeline reachable only from here.
+            onOpenSettings: { SettingsWindow.present() },
+            onSearch: { query in SearchBarWindow.present(prefill: query) })
+        dismiss()
     }
 
     /// `userInfo` key carrying a prefill through `refocusNotification`.

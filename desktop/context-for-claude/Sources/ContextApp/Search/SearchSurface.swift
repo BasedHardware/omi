@@ -28,7 +28,7 @@ import SwiftUI
 
 /// One floating panel of the app's **one** glass.
 ///
-/// Everything about what the panel is made of — the `.headerView` material, the 0.36 scrim, the 22 pt
+/// Everything about what the panel is made of — the `.headerView` material, the 0.10 scrim, the 22 pt
 /// corner, the broad ambient shadow, the light-appearance pin that makes the type on it dark — comes
 /// from `InkGlass`, which is the shared surface every window in this app now wears. Nothing about the
 /// material is decided here, and a second `NSVisualEffectView` configured in this file would be the
@@ -275,7 +275,13 @@ struct SearchHeightReader<Key: PreferenceKey>: View where Key.Value == CGFloat {
 /// The one place text is measured, so the chip and the text inside it cannot disagree.
 enum SearchMetrics {
 
-    static let placeholder = "Ask Claude Code…"
+    /// What the empty bar says it is for.
+    ///
+    /// It used to read "Ask Claude Code…", because the bar's one action was to hand the sentence to
+    /// Claude. It answers for itself now, over both halves of the capture, and the placeholder is the
+    /// only thing on an untouched surface that says what typing will do — so it names the two halves
+    /// rather than an app that is no longer involved.
+    static let placeholder = "Search what you've seen and heard…"
 
     /// The size the query is set at.
     ///
@@ -371,59 +377,173 @@ enum SearchInk {
     /// The neutral standing in for a thumbnail that has not decoded yet, or whose file retention
     /// already removed. Never a broken-image glyph and never an empty hole.
     static let thumbnailPlaceholder = Color(nsColor: .labelColor).opacity(0.06)
+
+    /// The well a spoken line is set on, where a screen card has its picture.
+    ///
+    /// **Neutral, not tinted, and that is the point.** A hue here would be a second colour meaning
+    /// on a surface that already spends its one hue on the query chip, and any hue picked to say
+    /// "speech" is a hue somebody has to learn. What separates the two kinds of card is the *shape*
+    /// of what is in the well — a photograph or a run of type — which needs no legend. A shade
+    /// darker than `thumbnailPlaceholder` so a card with words on it reads as filled rather than as
+    /// a picture that failed to load.
+    static let spokenWell = Color(nsColor: .labelColor).opacity(0.08)
 }
 
 // MARK: - What a result is
 
 /// One thing the search found, with everything a card draws and nothing it does not.
 ///
-/// Distinct from `RewindFrame` because a card shows a *source* — a domain when the window carried
-/// one, the app when it did not — and deriving that in the view would put a string-parsing decision
-/// inside a `body` where no test can reach it.
+/// **Two kinds of thing, one shape.** The surface answers over what was on screen *and* over what was
+/// said, and those are genuinely different rows in two different tables — but a person scrolling one
+/// page of results should not have to hold two mental models, and a merged ranking
+/// (`SearchRanking`) cannot order two unrelated types against each other. So both collapse to this,
+/// and `kind` is what the card switches its picture and its glyph on.
+///
+/// Distinct from `RewindFrame` and from `ScreenSearchQueries.SpokenLine` because a card shows a
+/// *source* — a domain when the window carried one, the app when it did not, and where a
+/// conversation was held when it is speech — and deriving that in the view would put a
+/// string-parsing decision inside a `body` where no test can reach it.
 struct SearchMoment: Identifiable, Equatable {
-    let id: Int64
-    /// The window title, or the app name when the capture had no title. Never empty.
+
+    /// Which half of the capture this came from.
+    enum Kind: String, Equatable, Sendable {
+        /// A screen frame: `frames.id`, and a picture when one survives on disk.
+        case screen
+        /// A transcript line: `segments.id`, and the words themselves.
+        case conversation
+    }
+
+    let kind: Kind
+    /// The row this came from — `frames.id` for a screen, `segments.id` for a spoken line.
+    ///
+    /// **Not the identity.** The two tables number their rows independently, so frame 41 and segment
+    /// 41 are both real and both can be on the same page; a list keyed on this alone would have
+    /// SwiftUI reuse one card's state for the other's row. `id` below is what the list uses.
+    let rowId: Int64
+    /// The window title, the app name when the capture had no title, or who spoke. Never empty.
     let title: String
-    /// The domain the title carried, or the app name.
+    /// The domain the title carried, the app that owned the window, or where the conversation was.
     let source: String
+    /// The app that owned the window. **Empty for a conversation**, deliberately: a spoken line was
+    /// not in a window, and the session's `appHint` is only where the conversation *started*. It
+    /// reads as a `source`, never as a claim that these words happened in that app — which is also
+    /// why speech never appears in the app facet row.
     let appName: String
     let bundleId: String?
     /// Unix epoch seconds.
     let capturedAt: Double
     /// The stored frame, when there is a picture on disk. Nil is an ordinary outcome — retention
-    /// unlinks files, and 8.7% of captured rows never had an image at all.
+    /// unlinks files, 8.7% of captured rows never had an image at all, and a conversation never has
+    /// one.
     let frame: RewindFrame?
+    /// The words behind the hit: the matched screen text, or the spoken line.
+    ///
+    /// It is what makes a result *answerable* rather than merely findable — a screenshot that matched
+    /// deep inside a page of OCR looks arbitrary without it, and a frame whose picture retention
+    /// already removed has nothing else to show at all.
+    let snippet: String?
+    /// The conversation a spoken line belongs to, for a future "open this conversation". Nil for a
+    /// screen.
+    let sessionId: Int64?
+
+    /// Unique across both kinds, which `rowId` is not.
+    var id: String { "\(kind.rawValue)-\(rowId)" }
+
+    /// The text the ranking scores this hit's relevance against.
+    ///
+    /// Kind-specific on purpose. A screen is findable by everything the window announced about
+    /// itself; a spoken line is only its words — folding its `title` ("You said") in would hand every
+    /// conversation on the machine a free match for the word "said".
+    var relevanceText: String {
+        switch kind {
+        case .screen:
+            return [title, appName, snippet].compactMap { $0 }.joined(separator: " ")
+        case .conversation:
+            return snippet ?? ""
+        }
+    }
 
     init(
-        id: Int64,
+        rowId: Int64,
         title: String,
         source: String,
         appName: String,
         bundleId: String?,
         capturedAt: Double,
-        frame: RewindFrame?
+        frame: RewindFrame?,
+        kind: Kind = .screen,
+        snippet: String? = nil,
+        sessionId: Int64? = nil
     ) {
-        self.id = id
+        self.kind = kind
+        self.rowId = rowId
         self.title = title
         self.source = source
         self.appName = appName
         self.bundleId = bundleId
         self.capturedAt = capturedAt
         self.frame = frame
+        self.snippet = snippet
+        self.sessionId = sessionId
     }
 
     /// The card shape for a captured frame, with the title and source already decided.
-    init(frame: RewindFrame) {
+    ///
+    /// - Parameter snippet: the frame's matched text, from `ScreenSearchQueries.frameText`. Nil is
+    ///   ordinary — a frame can genuinely have had no text on it.
+    init(frame: RewindFrame, snippet: String? = nil) {
         let title = SearchSource.title(appName: frame.appName, windowTitle: frame.windowTitle)
         self.init(
-            id: frame.id,
+            rowId: frame.id,
             title: title,
             source: SearchSource.source(appName: frame.appName, windowTitle: frame.windowTitle),
             appName: frame.appName,
             bundleId: frame.bundleId,
             capturedAt: frame.capturedAt,
-            frame: frame)
+            frame: frame,
+            kind: .screen,
+            snippet: snippet)
     }
+
+    /// The card shape for a spoken line.
+    ///
+    /// The title is *who*, not *what*: the words are the card's picture, so putting them in the title
+    /// as well would print the same sentence twice on a 230 pt card. What the title has to carry is
+    /// the one thing the words cannot say for themselves — whether this was the user or the room.
+    init(line: ScreenSearchQueries.SpokenLine) {
+        self.init(
+            rowId: line.id,
+            title: SearchSpeech.title(for: line.source),
+            source: line.appHint ?? SearchSpeech.unplacedSource,
+            appName: "",
+            bundleId: nil,
+            capturedAt: line.startedAt,
+            frame: nil,
+            kind: .conversation,
+            snippet: line.text,
+            sessionId: line.sessionId)
+    }
+}
+
+/// What a conversation card calls the thing it is showing.
+///
+/// Attribution here is only ever *which side of the microphone*, which is a fact this app observed
+/// itself and stays true forever. A name is a current property of the user's Omi account — see the
+/// attribution note in `Queries` — so nothing in this app's own UI may invent one from a row.
+enum SearchSpeech {
+
+    /// The card's headline for a spoken line.
+    ///
+    /// "Heard" and not "They said": the system tap is everyone else *and* everything else, so a line
+    /// it captured may have come from a person in the room, a person on a call, or a video. Claiming
+    /// a speaker would be a confident wrong answer in every case but the first; "Heard" is true in
+    /// all of them.
+    static func title(for source: SegmentSource) -> String {
+        source == .mic ? "You said" : "Heard"
+    }
+
+    /// The source line when the session recorded no app to place it in.
+    static let unplacedSource = "Conversation"
 }
 
 /// What a card calls the thing it is showing.
@@ -650,7 +770,7 @@ enum SearchCopy {
     /// section is bare and what will change it. It is deliberately *not* an invitation to type: on
     /// the machine that sees this sentence there is nothing to type at yet, and "try searching" over
     /// an empty database is the same false promise in a friendlier voice.
-    static let nothingCapturedYet = "Nothing captured yet — what you look at shows up here"
+    static let nothingCapturedYet = "Nothing captured yet — what you see and say shows up here"
 
     /// The results section's sentence for a given intent.
     static func results(intent: SearchIntent) -> String {

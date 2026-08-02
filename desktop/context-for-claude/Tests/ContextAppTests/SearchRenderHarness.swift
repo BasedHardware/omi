@@ -58,13 +58,17 @@ final class SearchRenderHarness: XCTestCase {
             ("05-typed-three", "invoice", Fixtures.few(3, thumbnails: thumbnails)),
             ("06-typed-one", "invoice", Fixtures.one(thumbnails: thumbnails)),
             ("07-missing-thumbnails", "retention", Fixtures.missingPictures()),
+            // Both halves of the capture on one page, which is the state the merge exists for: a
+            // conversation card and a screen card have to be legible as different things without a
+            // badge, and identical in size so the grid rows stay level.
+            ("10-typed-mixed", "invoice", Fixtures.mixed(thumbnails: thumbnails)),
         ]
 
         var written: [String] = []
         for (name, query, model) in cases {
             // The panel's copy follows the bar, in the harness exactly as in the app: the model is
             // told what was typed rather than inferring it from the fact that it has rows.
-            model.start(query)
+            model.ask(query)
             let path = try render(
                 name: "\(name)-lightsystem-midgrey", query: query, model: model,
                 desktop: Fixtures.desktopImage(.midGrey), appearance: .aqua, in: directory)
@@ -75,7 +79,7 @@ final class SearchRenderHarness: XCTestCase {
         // last row's title and source line must be untouched, with the fade falling on the spare
         // room under them instead.
         let scrolled = Fixtures.hundred(thumbnails: thumbnails)
-        scrolled.start("screenshot")
+        scrolled.ask("screenshot")
         written.append(
             try render(
                 name: "09-typed-hundred-scrolled-to-end-lightsystem-midgrey",
@@ -91,7 +95,7 @@ final class SearchRenderHarness: XCTestCase {
             (NSAppearance.Name.darkAqua, Fixtures.Desktop.white),
         ] {
             let model = Fixtures.twelve(thumbnails: thumbnails)
-            model.start("gpu benchmarks")
+            model.ask("gpu benchmarks")
             let path = try render(
                 name: "08-typed-twelve-\(appearance == .aqua ? "lightsystem" : "darksystem")-\(desktop)",
                 query: "gpu benchmarks",
@@ -494,7 +498,7 @@ enum Fixtures {
     ) -> SearchMoment {
         let at = Date().timeIntervalSince1970 - minutesAgo * 60
         return SearchMoment(
-            id: id,
+            rowId: id,
             title: title,
             source: SearchSource.source(appName: app, windowTitle: title),
             appName: app,
@@ -587,6 +591,47 @@ enum Fixtures {
     /// The state a Mac is in ten minutes after install: nothing captured, so every section is empty.
     static func freshInstall() -> SearchResultsModel {
         SearchResultsModel(moments: [], totalCount: 0, websites: [], apps: [])
+    }
+
+    /// Invented spoken lines, deliberately varied in length: one that fits the well in a line, one
+    /// that fills it, and one that has to truncate inside it.
+    static let lines: [(String, SegmentSource, String?, Double)] = [
+        ("I'll send the invoice over before Friday, the one from last month", .mic, "zoom.us", 22),
+        ("sounds good — can you cc finance on it as well", .system, "zoom.us", 24),
+        ("no, the other invoice, the one with the wrong billing address on it that we had to reissue "
+            + "after the address change went through and nobody told accounts", .system, nil, 130),
+        ("remind me to chase the invoice", .mic, "Slack", 900),
+    ]
+
+    static func spoken(id: Int64, index: Int) -> SearchMoment {
+        let entry = lines[index % lines.count]
+        return SearchMoment(
+            line: ScreenSearchQueries.SpokenLine(
+                id: id,
+                sessionId: Int64(index + 1),
+                startedAt: Date().timeIntervalSince1970 - entry.3 * 60,
+                source: entry.1,
+                text: entry.0,
+                appHint: entry.2))
+    }
+
+    /// Both halves on one page, merged by the real ranking rather than by the order they are listed
+    /// here — the harness must show what ships, not a hand-arranged page.
+    static func mixed(thumbnails: [String]) -> SearchResultsModel {
+        let screens = titles.prefix(8).enumerated().map { index, entry in
+            moment(
+                id: Int64(index + 1), title: entry.0, app: entry.1, minutesAgo: entry.2,
+                path: index % 4 == 3 ? nil : thumbnails[index % thumbnails.count])
+        }
+        let spokenLines = (0..<4).map { spoken(id: Int64(200 + $0), index: $0) }
+        let merged = SearchRanking.merge(
+            screens: Array(screens), conversations: spokenLines, query: "invoice",
+            limit: SearchResultsModel.pageSize)
+        return SearchResultsModel(
+            moments: merged,
+            totalCount: merged.count,
+            websites: SearchResultsModel.facetWebsites(Array(screens)),
+            apps: SearchResultsModel.facetApps(Array(screens)))
     }
 
     /// Every card's picture is gone. The worst case for the placeholder.

@@ -24,6 +24,13 @@ import SwiftUI
 
 struct SearchResultsView: View {
     @ObservedObject var model: SearchResultsModel
+    /// **What activating a result does.** Supplied by whoever owns the surface, because opening the
+    /// timeline is a window operation and this is a view — the same reasoning that keeps
+    /// `RewindView`'s `onSearch` a closure rather than a call into the shell.
+    ///
+    /// Defaulted to nothing so a preview or the render harness can draw the panel without a route to
+    /// a window; the cards are still buttons there, they just have nowhere to go.
+    var onOpen: (SearchMoment) -> Void = { _ in }
 
     /// The natural height of everything under the divider, measured rather than assumed. See
     /// `SearchPanelHeightKey` for why a constant here is wrong at both ends.
@@ -43,26 +50,41 @@ struct SearchResultsView: View {
             header
             Divider().overlay(Ink.separator)
                 .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
-            ScrollView(.vertical) {
-                SearchFilterContent(model: model)
-                    .background(SearchHeightReader(key: SearchPanelHeightKey.self))
-                    // Spare room under the last row, only when the body scrolls, so that a reader
-                    // who has scrolled all the way down has the fade falling on empty glass rather
-                    // than on the final card's source line. Applied *outside* the height reader on
-                    // purpose: the measurement stays the content's own natural height, so this inset
-                    // cannot feed back into the clamp that decided to add it.
-                    .padding(.bottom, fade)
+            // The reader is here for one job: a selection moved by the keyboard has to be *visible*.
+            // A page of 60 cards is several panels tall, so ↓ pressed enough times would otherwise
+            // move a highlight the user cannot see, and Return would open a moment they were never
+            // shown — which is worse than the keyboard not working at all.
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    SearchFilterContent(model: model, onOpen: onOpen)
+                        .background(SearchHeightReader(key: SearchPanelHeightKey.self))
+                        // Spare room under the last row, only when the body scrolls, so that a reader
+                        // who has scrolled all the way down has the fade falling on empty glass rather
+                        // than on the final card's source line. Applied *outside* the height reader on
+                        // purpose: the measurement stays the content's own natural height, so this inset
+                        // cannot feed back into the clamp that decided to add it.
+                        .padding(.bottom, fade)
+                }
+                // The platform affordance, restored the moment there is anything to scroll to. It was
+                // suppressed unconditionally before, which is right for a panel that contains
+                // everything and wrong for one that does not: on a Mac with "Show scroll bars: always"
+                // the surface was the only scrollable thing on screen with no scroller at all.
+                .scrollIndicators(scrolls ? .automatic : .never)
+                .frame(height: bodyHeight)
+                // …and the part that works at rest, before the user has touched anything: overlay
+                // scrollers are invisible until something moves, so the first impression of an
+                // overflowing panel is carried entirely by the bottom edge dissolving.
+                .mask(SearchScrollFade(fade: fade))
+                .onChange(of: model.selection) { _, selection in
+                    guard let selection else { return }
+                    // Centred, not `.top`: the card the keyboard is on should have the cards either
+                    // side of it in view, because "the next best answer" is only meaningful next to
+                    // the ones it beat.
+                    InkReduceMotion.perform(.easeOut(duration: InkMotion.settle)) {
+                        proxy.scrollTo(selection, anchor: .center)
+                    }
+                }
             }
-            // The platform affordance, restored the moment there is anything to scroll to. It was
-            // suppressed unconditionally before, which is right for a panel that contains
-            // everything and wrong for one that does not: on a Mac with "Show scroll bars: always"
-            // the surface was the only scrollable thing on screen with no scroller at all.
-            .scrollIndicators(scrolls ? .automatic : .never)
-            .frame(height: bodyHeight)
-            // …and the part that works at rest, before the user has touched anything: overlay
-            // scrollers are invisible until something moves, so the first impression of an
-            // overflowing panel is carried entirely by the bottom edge dissolving.
-            .mask(SearchScrollFade(fade: fade))
         }
         .frame(width: SearchLayout.panelWidth, alignment: .top)
         .onPreferenceChange(SearchPanelHeightKey.self) { contentHeight = $0 }
@@ -108,6 +130,8 @@ struct SearchResultsView: View {
 /// report the clamp back.
 struct SearchFilterContent: View {
     @ObservedObject var model: SearchResultsModel
+    /// Passed straight through to the cards. See `SearchResultsView.onOpen`.
+    var onOpen: (SearchMoment) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: InkLayout.rhythm[3]) {
@@ -205,7 +229,17 @@ struct SearchFilterContent: View {
             } else {
                 LazyVGrid(columns: SearchResultsView.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
                     ForEach(model.moments) { moment in
-                        SearchResultCard(moment: moment, loader: model.loader)
+                        SearchResultCard(
+                            moment: moment,
+                            loader: model.loader,
+                            isSelected: model.selection == moment.id
+                        ) {
+                            onOpen(moment)
+                        }
+                        // The anchor `scrollTo` travels to. The same id the selection is stored by,
+                        // so the two cannot drift: a card the keyboard can select is a card the
+                        // panel can scroll to, by construction.
+                        .id(moment.id)
                     }
                 }
             }
@@ -425,14 +459,56 @@ struct SearchAppTile: View {
 
 // MARK: - Result card
 
-/// One captured moment: a picture of the screen, its title, and where it came from.
+/// One thing the search found — a moment on screen, or a moment in a conversation.
+///
+/// **One shape, two contents.** Both kinds are the same size and carry the same three parts (a well,
+/// a title, a source line), so a grid row is never ragged and `SearchLayout.cardHeight` keeps
+/// describing every card in it. What differs is what is *in* the well and which glyph sits on the
+/// source line, and that is enough: a photograph and a run of type are not mistakable for each other
+/// at a glance, which is why this needs no badge, no legend and no second section.
+///
+/// **And it is a control.** A search result you cannot open is half a feature: the whole reason to
+/// find the moment somebody was looking at is to go and look at it. Pressing a card opens the
+/// timeline at that instant — `RewindWindow.present(store:at:)` — for both kinds, because both carry
+/// the one thing that operation needs, an instant. The same vocabulary as the chips and the app
+/// tiles beside it: a plain `Button`, a neutral wash on hover, `.help`, an accessibility label.
 struct SearchResultCard: View {
     let moment: SearchMoment
     let loader: FrameLoader
+    /// Whether the keyboard is on this card. Drawn as weight, never as hue — the rule
+    /// `SearchInk.chipFillSelected` is written against.
+    var isSelected: Bool = false
+    /// Open this moment. Defaulted to nothing so the card can be rendered somewhere with no window
+    /// behind it (previews, the render harness, a layout test) without a second code path.
+    var onOpen: () -> Void = {}
+
+    @State private var isHovering = false
 
     var body: some View {
+        Button(action: onOpen) {
+            content
+        }
+        .buttonStyle(SearchResultCardStyle(isHovering: isHovering, isSelected: isSelected))
+        .onHover { isHovering = $0 }
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
+        // The matched text, whole, for the two readers a 230 pt card cannot serve: somebody hovering
+        // to check *why* this frame came back, and somebody who cannot see the picture at all.
+        .help(moment.snippet ?? moment.title)
+        .accessibilityLabel(Text(readAloud))
+        // What pressing it does, said once. The label is already a sentence about *when* and *where*;
+        // the hint is the only place the card can say that it is a door.
+        .accessibilityHint(Text(Self.activationHint))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    /// What VoiceOver says the card does. "Timeline" is the word the menu bar already opens it by
+    /// ("Open Timeline"), so the hint names a thing the user has a way of having heard of — "Rewind"
+    /// is this directory's name, not the product's.
+    static let activationHint = "Opens the timeline at this moment"
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 7) {
-            SearchThumbnail(frame: moment.frame, loader: loader)
+            well
             Text(moment.title)
                 // One line, always. `.tail` and not the default middle truncation: the front of a
                 // window title is the part that says what it is.
@@ -440,7 +516,7 @@ struct SearchResultCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             HStack(spacing: 5) {
-                RewindAppIcon(appName: moment.appName, bundleId: moment.bundleId, size: 12)
+                sourceGlyph
                 Text(moment.source)
                     .inkStyle(.statusLabel, color: Ink.tertiary)
                     .lineLimit(1)
@@ -454,9 +530,144 @@ struct SearchResultCard: View {
             }
         }
         .frame(width: SearchLayout.cardWidth(), alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            Text("\(moment.title), \(moment.source), \(SearchTime.describe(moment.capturedAt))"))
+    }
+
+    /// The picture, or the words.
+    @ViewBuilder
+    private var well: some View {
+        switch moment.kind {
+        case .screen:
+            SearchThumbnail(frame: moment.frame, loader: loader, fallbackText: moment.snippet)
+        case .conversation:
+            SearchSpokenWell(line: moment.snippet ?? "")
+        }
+    }
+
+    /// What owned the window, or that this was speech at all.
+    @ViewBuilder
+    private var sourceGlyph: some View {
+        switch moment.kind {
+        case .screen:
+            RewindAppIcon(appName: moment.appName, bundleId: moment.bundleId, size: 12)
+        case .conversation:
+            // A waveform rather than an app icon: there is no app to name, and `RewindAppIcon` given
+            // an empty name would draw its monogram fallback — a coloured disc with a "?" in it,
+            // which is a confident picture of nothing.
+            Image(systemName: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Ink.tertiary)
+                .frame(width: 12, height: 12)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The card read aloud. The snippet is included for a conversation because the words *are* the
+    /// card, and left out for a screen because the title and source already name it — a whole page of
+    /// OCR read out after every card would make the grid unusable with VoiceOver.
+    private var readAloud: String {
+        let when = SearchTime.describe(moment.capturedAt)
+        switch moment.kind {
+        case .screen:
+            return "\(moment.title), \(moment.source), \(when)"
+        case .conversation:
+            return "\(moment.title): \(moment.snippet ?? ""), \(moment.source), \(when)"
+        }
+    }
+}
+
+/// How a result card answers the pointer: a wash behind it on hover, a stronger one with an edge
+/// when the keyboard is on it, and a dip in opacity while it is held.
+///
+/// **The affordance is drawn outside the card's own bounds, and that is deliberate.** A card is a
+/// picture, a title and a source line with no padding of its own — insetting them to make room for a
+/// highlight would change `SearchLayout.cardHeight`, which the panel's ceiling, its scroll fade and
+/// three tests are all stated in terms of. A `background` is layout-neutral, and the negative padding
+/// lets the wash spread into the gutter the grid already leaves between cards. So the card gains a
+/// hit state without the grid moving by a point.
+///
+/// Weight and never hue, exactly as `SearchInk.chipFillSelected` says: this surface spends its one
+/// colour on the query chip, and a second meaning-bearing hue is one more thing to learn (and one
+/// more chance to be off-brand — INV-UI-1).
+private struct SearchResultCardStyle: ButtonStyle {
+    let isHovering: Bool
+    let isSelected: Bool
+
+    /// A shade larger than the card's own corner, because the wash sits outside it: two concentric
+    /// rounded rectangles with the *same* radius read as a rendering seam rather than as one object.
+    private static let cornerRadius = SearchLayout.cardCornerRadius + 4
+    /// How far the wash spreads past the card. Half the grid's gutter, so two selected neighbours
+    /// could never touch.
+    private static let outset: CGFloat = SearchLayout.cardGutter / 2
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+        let fill: Color = {
+            if isSelected { return SearchInk.chipFillSelected }
+            return isHovering || configuration.isPressed ? SearchInk.chipFillHover : .clear
+        }()
+        return
+            configuration.label
+            // Pressed drops opacity rather than scaling: a card is a picture of something real, and
+            // a photograph that shrinks under the finger reads as a toy. The same reasoning
+            // `InkButtonStyle` gives for its pills.
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .background(
+                shape
+                    .fill(fill)
+                    .overlay(
+                        shape.strokeBorder(isSelected ? Ink.hairline : Color.clear, lineWidth: 1)
+                    )
+                    .padding(-Self.outset)
+            )
+            // The whole card is the target, including the air between the picture and the caption —
+            // a control with holes in it is a control that ignores half its clicks.
+            .contentShape(Rectangle())
+            .animation(
+                InkReduceMotion.animation(.easeOut(duration: InkMotion.press)),
+                value: configuration.isPressed)
+    }
+}
+
+/// A spoken line, where a screen card has its picture.
+///
+/// The words are set at reading size and given the whole well, because they are the answer rather
+/// than a caption on one: a conversation result whose line was truncated to the same single line the
+/// title gets would be a card that proves a match without showing it. Four lines is what fits the
+/// 4:3 well at this size, and the tail is cut rather than the middle — a sentence's opening is what
+/// says whether it is the one you meant.
+///
+/// Mirrors `SearchThumbnail`'s construction exactly (fill, aspect ratio, overlay, clip, edge) so both
+/// kinds of well are the same object at the same size, and neither can drift into being taller than
+/// the other.
+struct SearchSpokenWell: View {
+    let line: String
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: SearchLayout.cardCornerRadius, style: .continuous)
+    }
+
+    var body: some View {
+        shape
+            .fill(SearchInk.spokenWell)
+            .aspectRatio(SearchLayout.thumbnailAspect, contentMode: .fit)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Image(systemName: "quote.opening")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Ink.tertiary)
+                    Text(line)
+                        .inkStyle(.statusLabel, color: Ink.primary)
+                        .lineLimit(4)
+                        .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Ink.hairline.opacity(0.5), lineWidth: 1))
+            .accessibilityHidden(true)
     }
 }
 
@@ -468,6 +679,14 @@ struct SearchResultCard: View {
 struct SearchThumbnail: View {
     let frame: RewindFrame?
     let loader: FrameLoader
+    /// What the frame said, for the state where there is no picture to show it.
+    ///
+    /// Not a decoration on the normal path: it is only ever drawn when the picture is genuinely gone,
+    /// which is a real and common state — retention unlinks files after 30 days, and 8.7% of captured
+    /// rows never had an image at all. A card in that state used to be a grey well with a photo glyph
+    /// in it, which says "this failed"; the words the frame actually matched on say "this is what was
+    /// there", which is both true and the reason the card is in the results.
+    var fallbackText: String? = nil
 
     @State private var image: NSImage?
 
@@ -487,10 +706,21 @@ struct SearchThumbnail: View {
                         // bars, and a grid of those reads as broken images.
                         .aspectRatio(contentMode: .fill)
                         .clipped()
+                } else if let fallbackText, !fallbackText.isEmpty {
+                    // The no-picture state, when the frame still knows what was on it. The text is
+                    // the honest substitute for the picture — same well, same size, nothing invented.
+                    Text(fallbackText)
+                        .inkStyle(.statusLabel, color: Ink.secondary)
+                        .lineLimit(4)
+                        .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else {
-                    // The no-picture state, and it is a real state: retention unlinks files, and some
-                    // captures never had an image. A neutral well with a quiet glyph is honest;
-                    // nothing here is ever a broken-image icon.
+                    // …and the no-picture, no-text state, which is still a real one: a frame the
+                    // dedupe gate stored for its app/title transition alone. A neutral well with a
+                    // quiet glyph is honest; nothing here is ever a broken-image icon.
                     Image(systemName: "photo")
                         .font(.system(size: 18, weight: .light))
                         .foregroundStyle(Ink.tertiary)
