@@ -8,6 +8,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "ble_perm.h"
+
 LOG_MODULE_REGISTER(accel, CONFIG_LOG_DEFAULT_LEVEL);
 
 // Accelerometer data
@@ -31,11 +33,11 @@ static struct bt_gatt_attr accel_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&accel_uuid), // primary description
     BT_GATT_CHARACTERISTIC(&accel_uuid_x.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            accel_data_read_characteristic,
                            NULL,
-                           NULL),                                                          // data type
-    BT_GATT_CCC(accel_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), // scheduler
+                           NULL),                                     // data type
+    BT_GATT_CCC(accel_ccc_config_changed_handler, OMI_GATT_PERM_CCC), // scheduler
 };
 static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr);
 
