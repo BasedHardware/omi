@@ -22,8 +22,11 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       """
 
     let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(json)
-    XCTAssertNotNil(parsed)
-    let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed!.nodes, edges: parsed!.edges)
+    guard let parsed else {
+      XCTFail("expected parsed extraction JSON")
+      return
+    }
+    let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed.nodes, edges: parsed.edges)
     XCTAssertEqual(records.nodes.count, 1)
     XCTAssertEqual(records.nodes.first?.nodeId, "acme")
     XCTAssertEqual(records.edges.first?.sourceNodeId, "jane")
