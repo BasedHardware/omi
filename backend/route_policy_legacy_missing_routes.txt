@@ -159,7 +159,6 @@ backend-main:http:GET:/v1/mcp/memories/search
 backend-main:http:GET:/v1/mcp/oauth/grants
 backend-main:http:GET:/v1/mcp/people
 backend-main:http:GET:/v1/mcp/profile
-backend-main:http:GET:/v1/mcp/screen-activity
 backend-main:http:GET:/v1/mcp/sse
 backend-main:http:GET:/v1/mcp/sse/info
 backend-main:http:GET:/v1/oauth/authorize
