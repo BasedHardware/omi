@@ -19354,6 +19354,53 @@
         "title": "SyncLocalFilesResultResponse",
         "type": "object"
       },
+      "SyncRecoveryWindowExceededResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lane"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "SyncRecoveryWindowExceededResponse",
+        "type": "object"
+      },
+      "SyncRequestValidationErrorResponse": {
+        "description": "FastAPI's multipart/request validation shape for sync input failures.",
+        "properties": {
+          "detail": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -55744,11 +55791,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SyncRecoveryWindowExceededResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SyncRequestValidationErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Sync Local Files V2 V2 Sync Local Files Post"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Automatic recovery window exceeded or malformed request"
           }
         },
         "security": [

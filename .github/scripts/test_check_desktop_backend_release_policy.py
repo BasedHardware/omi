@@ -229,6 +229,46 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(self.qualification, mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
 
+    def test_rejects_beta_qualification_against_production_desktop_backend(self) -> None:
+        mutated = self.qualification.replace(
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+            "https://desktop-backend-hhibjajaja-uc.a.run.app",
+            1,
+        )
+        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
+        self.assertTrue(any("desktop_qualify_beta.yml" in error for error in errors), errors)
+
+    def test_rejects_beta_qualification_without_development_python_health(self) -> None:
+        mutated = self.qualification.replace(
+            "https://api.omiapi.com/v1/health",
+            "https://api.omi.me/v1/health",
+            1,
+        )
+        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
+        self.assertTrue(any("development Python" in error for error in errors), errors)
+
+    def test_rejects_beta_qualification_without_production_firebase_uid_continuity(self) -> None:
+        mutated = self.qualification.replace(
+            "Prove production Firebase UID continuity on Beta development authorities",
+            "UID continuity omitted",
+            1,
+        )
+        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
+        self.assertTrue(any("UID continuity" in error for error in errors), errors)
+
+    def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:
+        mutated = self.dev.replace(
+            "FIREBASE_AUTH_PROJECT_ID: based-hardware",
+            "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev",
+            1,
+        ).replace(
+            "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+            "FIREBASE_PROJECT_ID=based-hardware-dev",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+        self.assertTrue(any("production Firebase project" in error for error in errors), errors)
+
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
             dockerfile=self.dockerfile + "\nCOPY google-credentials.json /app/google-credentials.json\n",

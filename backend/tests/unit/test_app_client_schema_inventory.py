@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -320,6 +321,18 @@ def test_inventory_openapi_route_response_decode_migration_complete():
     assert voice_operation['raw_response_decode_site_count'] == 0
     assert voice_operation['stream_protocol_decode_site_count'] == 2
     assert {site['context'] for site in voice_operation['stream_protocol_decode_sites']} == {'stream_protocol'}
+
+
+def test_sync_upload_422_schema_preserves_fastapi_validation_and_terminal_recovery_shapes():
+    specification = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
+    schema = specification['paths']['/v2/sync-local-files']['post']['responses']['422']['content']['application/json'][
+        'schema'
+    ]
+    refs = {item['$ref'] for item in schema['anyOf']}
+    assert refs == {
+        '#/components/schemas/SyncRecoveryWindowExceededResponse',
+        '#/components/schemas/SyncRequestValidationErrorResponse',
+    }
 
 
 def test_inventory_route_raw_decode_gate_checks_total_decode_sites_for_targeted_routes():
