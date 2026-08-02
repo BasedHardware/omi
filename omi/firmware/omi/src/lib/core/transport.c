@@ -928,6 +928,7 @@ static void update_mtu(struct bt_conn *conn)
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
 static void log_local_ble_addresses(void)
 {
     bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
@@ -949,6 +950,7 @@ static void log_local_ble_addresses(void)
         printk("BLE_ADDR[%u]: %s\n", (unsigned int) i, addr);
     }
 }
+#endif
 
 static int ensure_local_ble_identity(void)
 {
@@ -1458,8 +1460,10 @@ int transport_start()
         LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
 
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
     log_local_ble_addresses();
+#endif
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();
