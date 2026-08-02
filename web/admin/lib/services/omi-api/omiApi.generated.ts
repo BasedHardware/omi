@@ -196,7 +196,6 @@ export type AnnouncementType = "changelog" | "feature" | "announcement";
 
 export interface App {
   approved?: boolean;
-  approved_manifest_hash?: string | null;
   author: string;
   capabilities: Array<string>;
   category: string;
@@ -255,7 +254,6 @@ export interface AppApiKeyResponse {
 
 export interface AppBaseModel {
   approved?: boolean;
-  approved_manifest_hash?: string | null;
   author: string;
   capabilities: Array<string>;
   category: string;
@@ -2053,6 +2051,19 @@ export interface LlmUsageResponse {
   top_features?: Array<LlmUsageFeatureResponse>;
 }
 
+export interface LocalKgSyncRequest {
+  rows: Array<Record<string, unknown>>;
+  table: "local_kg_nodes" | "local_kg_edges";
+}
+
+export interface LocalKgSyncResponse {
+  edges_evicted: number;
+  merged: number;
+  nodes_evicted: number;
+  skipped: number;
+  table: string;
+}
+
 export interface LocationContextConsentResponse {
   disclosed_providers?: Array<unknown>;
   enabled: boolean;
@@ -2706,6 +2717,14 @@ export interface ResponseMessage {
   session_id?: string | null;
   text: string;
   type: MessageType;
+}
+
+export interface RestoreLegacyConversationItemsResponse {
+  has_more?: boolean;
+  next_cursor?: string | null;
+  restored?: number;
+  skipped_existing?: number;
+  status?: string;
 }
 
 export interface ReviewAppRequest {
@@ -4027,6 +4046,8 @@ export interface OmiApiSchemas {
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
   "LlmUsageResponse": LlmUsageResponse;
+  "LocalKgSyncRequest": LocalKgSyncRequest;
+  "LocalKgSyncResponse": LocalKgSyncResponse;
   "LocationContextConsentResponse": LocationContextConsentResponse;
   "LocationContextConsentUpdate": LocationContextConsentUpdate;
   "McpAddServerResponse": McpAddServerResponse;
@@ -4118,6 +4139,7 @@ export interface OmiApiSchemas {
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
+  "RestoreLegacyConversationItemsResponse": RestoreLegacyConversationItemsResponse;
   "ReviewAppRequest": ReviewAppRequest;
   "ReviewResolutionRequest": ReviewResolutionRequest;
   "ReviewResolutionResponse": ReviewResolutionResponse;
@@ -4338,6 +4360,16 @@ export interface OmiApiPaths {
       operationId: "get_pending_sync_items_v1_action_items_pending_sync_get";
       responses: {
         "200": PendingSyncResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/restore-legacy-conversation-items": {
+    post: {
+      operationId: "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post";
+      responses: {
+        "200": RestoreLegacyConversationItemsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6228,6 +6260,16 @@ export interface OmiApiPaths {
       operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
       responses: {
         "200": RebuildResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/knowledge-graph/sync": {
+    post: {
+      operationId: "sync_local_knowledge_graph_v1_knowledge_graph_sync_post";
+      responses: {
+        "200": LocalKgSyncResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8330,6 +8372,28 @@ export async function get_pending_sync_items_v1_action_items_pending_sync_get(qu
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post(query: { limit?: number, cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RestoreLegacyConversationItemsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/restore-legacy-conversation-items`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -12017,6 +12081,27 @@ export async function rebuild_graph_v1_knowledge_graph_rebuild_post(header: { au
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function sync_local_knowledge_graph_v1_knowledge_graph_sync_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: LocalKgSyncRequest, init?: OmiApiClientInit): Promise<LocalKgSyncResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/knowledge-graph/sync`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15783,4 +15868,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 387 client methods generated.
+// Total: 389 client methods generated.
