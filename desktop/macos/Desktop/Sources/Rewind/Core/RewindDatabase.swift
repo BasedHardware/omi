@@ -2554,6 +2554,18 @@ actor RewindDatabase {
 
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
+    migrator.registerMigration("addScreenshotKgExtracted") { db in
+      try db.alter(table: "screenshots") { t in
+        t.add(column: "kgExtracted", .boolean).notNull().defaults(to: false)
+      }
+      try db.execute(
+        sql: """
+              CREATE INDEX idx_screenshots_pending_kg_extraction
+              ON screenshots(id)
+              WHERE kgExtracted = 0 AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
+          """)
+    }
+
     try migrator.migrate(queue)
   }
 
@@ -2877,6 +2889,49 @@ actor RewindDatabase {
   }
 
   // MARK: - Screenshot Embedding Methods
+
+  /// Screenshots with OCR that have not yet been processed by the screen→KG extractor.
+  func getScreenshotsPendingKGExtraction(limit: Int = 50, afterID: Int64 = 0) throws -> [(
+    id: Int64, ocrText: String, appName: String, windowTitle: String?
+  )] {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    return try dbQueue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+              SELECT id, ocrText, appName, windowTitle FROM screenshots
+              WHERE kgExtracted = 0 AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20 AND id > ?
+              ORDER BY id LIMIT ?
+          """, arguments: [afterID, limit]
+      ).compactMap { row in
+        guard let id: Int64 = row["id"],
+          let ocrText: String = row["ocrText"],
+          let appName: String = row["appName"]
+        else { return nil }
+        let windowTitle: String? = row["windowTitle"]
+        return (id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+      }
+    }
+  }
+
+  /// Mark screenshots as processed by the screen→KG extractor.
+  func markScreenshotsKGExtracted(ids: [Int64]) throws {
+    guard !ids.isEmpty else { return }
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    try dbQueue.write { db in
+      let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+      try db.execute(
+        sql: "UPDATE screenshots SET kgExtracted = 1 WHERE id IN (\(placeholders))",
+        arguments: StatementArguments(ids)
+      )
+    }
+  }
 
   /// Store embedding BLOB for a screenshot
   func updateScreenshotEmbedding(id: Int64, embedding: Data) throws {
