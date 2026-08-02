@@ -104,7 +104,7 @@ class DeviceConnectionFactory {
         device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
+        deviceName.contains('omi glass');
 
     switch (locator.kind) {
       case TransportKind.bluetooth:

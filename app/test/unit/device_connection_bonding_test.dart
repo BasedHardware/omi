@@ -52,5 +52,19 @@ void main() {
       expect(connection, isNotNull);
       expect((connection!.transport as NativeBleTransport).requiresBond, isFalse);
     });
+
+    test('Omi devices with unrelated glass substring still require bonding', () {
+      final device = BtDevice(
+        id: 'AA:BB:CC:DD:EE:FF',
+        name: 'Hourglass Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'AA:BB:CC:DD:EE:FF'),
+      );
+
+      final connection = DeviceConnectionFactory.create(device);
+      expect(connection, isNotNull);
+      expect((connection!.transport as NativeBleTransport).requiresBond, isTrue);
+    });
   });
 }
