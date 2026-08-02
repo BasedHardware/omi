@@ -866,6 +866,7 @@ extension AppState {
         self.stopAudioCapture()
         await mic?.finish()
         await sys?.finish()
+        await self.flushTranscriptPersistence()
         self.clearTranscriptionState(finalizationReason: .userStop, allowCloudForceProcess: false)
         self.silentMicFallbackInProgress = false
       }
@@ -1036,6 +1037,8 @@ extension AppState {
       transcriptionService?.stop()
       transcriptionService = nil
     }
+
+    await flushTranscriptPersistence()
 
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
