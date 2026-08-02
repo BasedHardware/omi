@@ -430,6 +430,14 @@ void main() {
       expect(oldest.status, WalStatus.outsideRecoveryWindow, reason: 'the rejection proves this one is outside');
       expect(middle.status, WalStatus.miss, reason: 'nothing proves this one is outside — it must stay retryable');
       expect(newest.status, WalStatus.miss);
+      // The survivors were flagged in-flight before the batch was rejected. If
+      // that flag is left behind they render as "Syncing…" forever and drop out
+      // of the deletable-pending set, so a rejection two recordings away silently
+      // strands them.
+      for (final survivor in [middle, newest]) {
+        expect(survivor.isSyncing, isFalse, reason: 'a rejected batch must not leave its survivors stuck in-flight');
+        expect(survivor.syncDisplayState, isNot(WalSyncDisplayState.syncing));
+      }
     });
 
     test('recordings outside this batch but at least as old also retire, in the same pass', () async {

@@ -845,6 +845,14 @@ class LocalWalSyncImpl implements LocalWalSync {
         listener.onWalUpdated();
         continue;
       } on SyncRecoveryWindowExceededException {
+        // Clear the in-flight flag on the whole batch first: the members the
+        // rejection does NOT prove too old stay `miss` and must not be left
+        // rendering as an upload that never finishes.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
         final retired = _retireOutsideRecoveryWindow(batchWals);
         DebugLogManager.logEvent('local_upload_outside_recovery_window', {
           'batchWalIds': batchWals.map((w) => w.id).toList(),
@@ -999,6 +1007,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     } on SyncRecoveryWindowExceededException {
       // Terminal: older than the server's automatic-recovery window. A manual
       // retry cannot succeed either, so stop presenting it as retryable work.
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
       final retired = _retireOutsideRecoveryWindow([walToSync]);
       DebugLogManager.logEvent('single_wal_outside_recovery_window', {
         'walId': wal.id,
