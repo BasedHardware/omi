@@ -272,39 +272,20 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
     assert response.is_error is False
 
 
-def test_execute_tool_supplies_fetch_url_allowlist_from_requested_url(loaded_route_modules):
-    _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
-    captured = {}
+def test_execute_tool_rejects_fetch_url_without_chat_turn_provenance(loaded_route_modules):
+    _tools_router, agent_tools, _agentic, _memories_service = loaded_route_modules
 
-    async def _fetch_url_coroutine(*, url: str):
-        captured['url'] = url
-        return f'Content from {url}'
-
-    class _AsyncFetchUrlTool:
-        name = 'fetch_url_tool'
-        description = ''
-        args_schema = None
-        coroutine = staticmethod(_fetch_url_coroutine)
-
-        def invoke(self, params, config=None):
-            raise AssertionError('async fetch_url_tool must use coroutine')
-
-    agentic.CORE_TOOLS[:] = [_AsyncFetchUrlTool()]
-    requested = 'https://example.com/article'
-
-    raw_response = asyncio.run(
-        agent_tools.execute_tool(
-            agent_tools.ExecuteToolRequest(tool_name='fetch_url_tool', params={'url': requested}),
-            uid='uid-route',
+    with pytest.raises(agent_tools.HTTPException) as error:
+        asyncio.run(
+            agent_tools.execute_tool(
+                agent_tools.ExecuteToolRequest(
+                    tool_name='fetch_url_tool', params={'url': 'https://example.com/article'}
+                ),
+                uid='uid-route',
+            )
         )
-    )
 
-    assert raw_response == {'result': f'Content from {requested}'}
-    agentic.agent_config_context.set.assert_called()
-    config = agentic.agent_config_context.set.call_args.args[0]
-    assert config['configurable']['user_id'] == 'uid-route'
-    assert config['configurable']['user_provided_urls'] == [requested]
-    assert captured['url'] == requested
+    assert error.value.status_code == 403
 
 
 def test_agent_execute_tool_route_has_response_model_and_preserves_bounded_memory_tool_output(loaded_route_modules):

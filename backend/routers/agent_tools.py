@@ -299,7 +299,10 @@ async def keepalive(uid: str = Depends(get_current_user_uid)):
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(f"http://{vm_ip}:8080/ping?token={auth_token}")
+            resp = await client.post(
+                f"http://{vm_ip}:8080/ping",
+                headers={"Authorization": f"Bearer {auth_token}"},
+            )
             if resp.status_code == 200:
                 return {"ok": True}
             logger.warning(f"[keepalive] VM ping returned {resp.status_code}")
@@ -337,6 +340,8 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     tools = []
 
     for t in CORE_TOOLS:
+        if t.name == "fetch_url_tool":
+            continue
         tools.append(_tool_schema(t))
 
     degraded = False
@@ -382,14 +387,16 @@ async def execute_tool(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
 ):
     """Execute a named tool and return its result."""
+    if body.tool_name == "fetch_url_tool":
+        raise HTTPException(
+            status_code=403,
+            detail="fetch_url_tool requires a user-authored URL in the current chat turn",
+        )
+
     # Set up agent_config_context so tools can resolve the UID
     configurable: dict[str, Any] = {
         "user_id": uid,
     }
-    if body.tool_name == "fetch_url_tool":
-        requested_url = body.params.get("url")
-        if isinstance(requested_url, str):
-            configurable["user_provided_urls"] = [requested_url]
     config = {
         "configurable": configurable,
     }

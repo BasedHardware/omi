@@ -288,6 +288,17 @@ def test_invalid_local_kg_rows_are_skipped():
     )
     assert result["merged"] == 0
     assert result["skipped"] == 3
+
+
+def test_oversized_local_kg_fields_are_skipped():
+    db = _FakeDb()
+    result = kg_db.merge_synced_local_kg_nodes(
+        UID,
+        [{"nodeId": "n1", "label": "x" * (kg_db.MAX_LOCAL_KG_LABEL_CHARS + 1)}],
+        db_client=db,
+    )
+    assert result["merged"] == 0
+    assert result["skipped"] == 1
     assert db.docs == {}
 
 

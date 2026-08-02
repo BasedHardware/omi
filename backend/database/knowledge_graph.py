@@ -26,6 +26,12 @@ MAX_KNOWLEDGE_GRAPH_EDGES = 1000
 MAX_KNOWLEDGE_GRAPH_ASSERTIONS = 500
 MAX_KNOWLEDGE_GRAPH_CITATION_FENCES = 500
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
+MAX_LOCAL_KG_SYNC_ROWS = 200
+MAX_LOCAL_KG_ID_CHARS = 128
+MAX_LOCAL_KG_LABEL_CHARS = 512
+MAX_LOCAL_KG_NODE_TYPE_CHARS = 64
+MAX_LOCAL_KG_ALIASES = 20
+MAX_LOCAL_KG_ALIAS_CHARS = 256
 
 
 def _firestore_client(db_client: Any = None) -> Any:
@@ -768,28 +774,50 @@ def _parse_sync_timestamp(value: Any) -> Optional[datetime]:
 
 def _parse_aliases_json(value: Any) -> List[str]:
     if isinstance(value, list):
-        return sorted({item.strip() for item in cast(List[Any], value) if isinstance(item, str) and item.strip()})
+        aliases = cast(List[Any], value)
+        return sorted(
+            {
+                item.strip()
+                for item in aliases
+                if isinstance(item, str) and 0 < len(item.strip()) <= MAX_LOCAL_KG_ALIAS_CHARS
+            }
+        )[:MAX_LOCAL_KG_ALIASES]
     if isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError:
             return []
         if isinstance(parsed, list):
-            return sorted({item.strip() for item in parsed if isinstance(item, str) and item.strip()})
+            return sorted(
+                {
+                    item.strip()
+                    for item in parsed
+                    if isinstance(item, str) and 0 < len(item.strip()) <= MAX_LOCAL_KG_ALIAS_CHARS
+                }
+            )[:MAX_LOCAL_KG_ALIASES]
     return []
+
+
+def _bounded_text(value: Any, maximum: int) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if 0 < len(normalized) <= maximum else None
 
 
 def _local_kg_node_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     node_id = row.get("nodeId") or row.get("node_id")
     label = row.get("label")
-    if not isinstance(node_id, str) or not node_id.strip() or not isinstance(label, str) or not label.strip():
+    node_id = _bounded_text(node_id, MAX_LOCAL_KG_ID_CHARS)
+    label = _bounded_text(label, MAX_LOCAL_KG_LABEL_CHARS)
+    if node_id is None or label is None:
         return None
     node_type = row.get("nodeType") or row.get("node_type") or "concept"
     aliases = _parse_aliases_json(row.get("aliasesJson") if "aliasesJson" in row else row.get("aliases_json"))
     node_data: Dict[str, Any] = {
-        "id": node_id.strip(),
-        "label": label.strip(),
-        "node_type": node_type if isinstance(node_type, str) and node_type.strip() else "concept",
+        "id": node_id,
+        "label": label,
+        "node_type": _bounded_text(node_type, MAX_LOCAL_KG_NODE_TYPE_CHARS) or "concept",
         "aliases": aliases,
         "memory_ids": [],
     }
@@ -807,22 +835,17 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     source_id = row.get("sourceNodeId") or row.get("source_node_id")
     target_id = row.get("targetNodeId") or row.get("target_node_id")
     label = row.get("label")
-    if (
-        not isinstance(edge_id, str)
-        or not edge_id.strip()
-        or not isinstance(source_id, str)
-        or not source_id.strip()
-        or not isinstance(target_id, str)
-        or not target_id.strip()
-        or not isinstance(label, str)
-        or not label.strip()
-    ):
+    edge_id = _bounded_text(edge_id, MAX_LOCAL_KG_ID_CHARS)
+    source_id = _bounded_text(source_id, MAX_LOCAL_KG_ID_CHARS)
+    target_id = _bounded_text(target_id, MAX_LOCAL_KG_ID_CHARS)
+    label = _bounded_text(label, MAX_LOCAL_KG_LABEL_CHARS)
+    if edge_id is None or source_id is None or target_id is None or label is None:
         return None
     edge_data: Dict[str, Any] = {
-        "id": edge_id.strip(),
-        "source_id": source_id.strip(),
-        "target_id": target_id.strip(),
-        "label": label.strip(),
+        "id": edge_id,
+        "source_id": source_id,
+        "target_id": target_id,
+        "label": label,
         "memory_ids": [],
     }
     created_at = _parse_sync_timestamp(row.get("createdAt") if "createdAt" in row else row.get("created_at"))

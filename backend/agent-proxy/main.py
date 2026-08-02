@@ -691,7 +691,7 @@ async def agent_ws(websocket: WebSocket):
             await _close_client(websocket, uid, 4003, "VM not healthy")
             return
 
-    vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
+    vm_uri = f"ws://{vm_ip}:8080/ws"
 
     # Get or create the default chat session so messages are linked properly
     chat_session = await run_blocking(db_executor, _get_or_create_chat_session, uid)
@@ -703,7 +703,12 @@ async def agent_ws(websocket: WebSocket):
         """User-blocking connect: retry transient failures with progress events."""
         for attempt in range(1, 4):
             try:
-                return await websockets.connect(vm_uri, ping_interval=600, ping_timeout=600)
+                return await websockets.connect(
+                    vm_uri,
+                    extra_headers={"Authorization": f"Bearer {vm_token}"},
+                    ping_interval=600,
+                    ping_timeout=600,
+                )
             except Exception as e:
                 if classify_error(e) != "transient" or attempt == 3:
                     raise
@@ -731,7 +736,8 @@ async def agent_ws(websocket: WebSocket):
                 try:
                     async with httpx.AsyncClient(timeout=10) as client:
                         response = await client.post(
-                            f"http://{vm_ip}:8080/auth?token={vm_token}",
+                            f"http://{vm_ip}:8080/auth",
+                            headers={"Authorization": f"Bearer {vm_token}"},
                             json={"firebaseToken": token},
                         )
                         response.raise_for_status()
@@ -873,7 +879,10 @@ async def agent_ws(websocket: WebSocket):
                     while True:
                         await asyncio.sleep(VM_KEEPALIVE_INTERVAL)
                         try:
-                            response = await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                            response = await client.post(
+                                f"http://{vm_ip}:8080/ping",
+                                headers={"Authorization": f"Bearer {vm_token}"},
+                            )
                             response.raise_for_status()
                             ping_failures = 0
                         except Exception:

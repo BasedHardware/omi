@@ -170,7 +170,7 @@ class TestRuntimeEnforcement:
                 self.status_code = 302
                 self.headers = {'location': 'https://other.example/malicious'}
 
-            async def aiter_bytes(self, chunk_size=8192):
+            async def aiter_raw(self, chunk_size=8192):
                 if False:
                     yield b''
 
@@ -214,7 +214,7 @@ class TestRuntimeEnforcement:
                 self.headers = headers or {}
                 self._body = body
 
-            async def aiter_bytes(self, chunk_size=8192):
+            async def aiter_raw(self, chunk_size=8192):
                 if self._body:
                     yield self._body
 

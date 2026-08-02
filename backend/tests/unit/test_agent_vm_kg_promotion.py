@@ -69,7 +69,9 @@ def test_sync_promotes_local_kg_nodes_to_backend(tmp_path, monkeypatch) -> None:
 
     rows = [{"nodeId": "node-1", "label": "Omi", "nodeType": "org", "aliasesJson": "[]"}]
     with TestClient(app) as client:
-        response = client.post("/sync?token=test-token", json={"table": "local_kg_nodes", "rows": rows})
+        response = client.post(
+            "/sync", headers={"Authorization": "Bearer test-token"}, json={"table": "local_kg_nodes", "rows": rows}
+        )
 
     assert response.status_code == 200
     body = response.json()
@@ -94,7 +96,8 @@ def test_sync_omits_promotion_without_firebase_token(tmp_path) -> None:
 
     with TestClient(app) as client:
         response = client.post(
-            "/sync?token=test-token",
+            "/sync",
+            headers={"Authorization": "Bearer test-token"},
             json={
                 "table": "local_kg_edges",
                 "rows": [
@@ -176,7 +179,8 @@ def test_sync_fails_when_local_kg_promotion_fails(tmp_path, monkeypatch) -> None
 
     with TestClient(app) as client:
         response = client.post(
-            "/sync?token=test-token",
+            "/sync",
+            headers={"Authorization": "Bearer test-token"},
             json={
                 "table": "local_kg_edges",
                 "rows": [

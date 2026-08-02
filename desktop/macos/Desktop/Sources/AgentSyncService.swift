@@ -530,7 +530,7 @@ actor AgentSyncService {
       let idToken = try await networkHooks.fetchIDToken()
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       // Send token both as query param (backward compat) and header (preferred)
-      guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+      guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -791,7 +791,7 @@ actor AgentSyncService {
     guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP), let authToken else { return .networkError }
 
     // Send token both as query param (backward compat) and header (preferred)
-    guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
+    guard let url = URL(string: "http://\(vmIP):8080/sync") else {
       log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
       return .httpError
     }

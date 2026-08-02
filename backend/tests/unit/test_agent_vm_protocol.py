@@ -72,8 +72,9 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/auth", json={"firebaseToken": "firebase"}).status_code == 401
         assert client.post("/ping").status_code == 401
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
-        assert client.post("/auth?token=test-token", json={}).status_code == 400
-        assert client.post("/ping?token=test-token").json() == {"status": "ok"}
+        assert client.post("/auth?token=test-token", json={}).status_code == 401
+        assert client.post("/ping?token=test-token").status_code == 401
+        assert client.post("/ping", headers={"Authorization": "Bearer test-token"}).json() == {"status": "ok"}
 
 
 def test_websocket_prewarm_query_and_stop_use_one_connection_session(tmp_path: Path, monkeypatch) -> None:
@@ -99,7 +100,7 @@ def test_websocket_prewarm_query_and_stop_use_one_connection_session(tmp_path: P
 
     monkeypatch.setattr(module, "AgentSession", Session)
     with TestClient(app) as client:
-        with client.websocket_connect("/ws?token=test-token") as websocket:
+        with client.websocket_connect("/ws", headers={"Authorization": "Bearer test-token"}) as websocket:
             assert websocket.receive_json() == {"type": "init", "sessionId": ""}
             websocket.send_json({"type": "prewarm"})
             assert websocket.receive_json() == {"type": "prewarm_ack", "success": True}
@@ -157,15 +158,16 @@ def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
 def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
     with TestClient(app) as client:
         response = client.post(
-            "/sync?token=test-token",
+            "/sync",
+            headers={"Authorization": "Bearer test-token"},
             json={
-                "table": "screenshots",
+                "table": "memories",
                 "rows": [
                     {"id": "one", "appName": "Safari"},
                     {"id": "two", "appName": "Terminal", "ocrText": "build passed"},
@@ -174,15 +176,41 @@ def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
             },
         )
         rows = [
-            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM screenshots ORDER BY id")
+            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM memories ORDER BY id")
         ]
 
     assert response.status_code == 200
-    assert response.json() == {"applied": 2, "table": "screenshots"}
+    assert response.json() == {"applied": 2, "table": "memories"}
     assert rows == [
         ("one", "Safari", None),
         ("two", "Terminal", "build passed"),
     ]
+
+
+def test_sync_rejects_oversized_requests_and_row_batches(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, appName TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+    with TestClient(app) as client:
+        too_many_rows = client.post(
+            "/sync",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "table": "memories",
+                "rows": [{"id": str(index), "appName": "Safari"} for index in range(module.MAX_SYNC_ROWS + 1)],
+            },
+        )
+        assert too_many_rows.status_code == 400
+
+        too_large = client.post(
+            "/sync",
+            headers={"Authorization": "Bearer test-token"},
+            content=b"x" * (module.MAX_SYNC_REQUEST_BYTES + 1),
+        )
+        assert too_large.status_code == 413
 
 
 def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_path: Path, monkeypatch) -> None:

@@ -28,6 +28,7 @@ class TestListToolsIsolation:
         assert "good_a" in names
         assert "good_b" in names
         assert "bad" not in names
+        assert "fetch_url_tool" not in names
         # Exactly one degraded event per request, not per tool.
         assert fallback.call_count == 1
         assert fallback.call_args.kwargs["outcome"] == "degraded"
@@ -38,7 +39,7 @@ class TestListToolsIsolation:
             patch.object(agent_tools, "record_fallback") as fallback,
         ):
             result = agent_tools.list_tools(uid="u1")
-        assert len(result["tools"]) == len(agent_tools.CORE_TOOLS)
+        assert len(result["tools"]) == len([tool for tool in agent_tools.CORE_TOOLS if tool.name != "fetch_url_tool"])
         assert fallback.call_count == 1
 
     def test_healthy_path_records_nothing(self):

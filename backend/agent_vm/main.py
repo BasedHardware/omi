@@ -44,6 +44,8 @@ MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 100
 COMPRESSION_RATIO_FLOOR_BYTES = 64 * 1024 * 1024
 DECOMPRESS_CHUNK_BYTES = 1024 * 1024
+MAX_SYNC_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_SYNC_ROWS = 200
 
 
 class Runtime:
@@ -80,7 +82,7 @@ class Runtime:
 
     def authorized(self, request: Request) -> bool:
         header = request.headers.get("authorization", "")
-        token = header[7:] if header.startswith("Bearer ") else request.query_params.get("token", "")
+        token = header[7:] if header.startswith("Bearer ") else ""
         return bool(self.auth_token) and token == self.auth_token
 
     def require_auth(self, request: Request) -> None:
@@ -764,8 +766,17 @@ async def sync(request: Request) -> dict[str, Any]:
     if runtime.db is None:
         raise HTTPException(status_code=503, detail="Database not loaded. Upload omi.db first.")
     try:
-        payload = await request.json()
-    except json.JSONDecodeError as exc:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+    if content_length > MAX_SYNC_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Sync request too large")
+    raw_body = await request.body()
+    if len(raw_body) > MAX_SYNC_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Sync request too large")
+    try:
+        payload = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
     table = payload.get("table") if isinstance(payload, dict) else None
     rows = payload.get("rows") if isinstance(payload, dict) else None
@@ -773,6 +784,7 @@ async def sync(request: Request) -> dict[str, Any]:
         not isinstance(table, str)
         or not isinstance(rows, list)
         or not rows
+        or len(rows) > MAX_SYNC_ROWS
         or not all(isinstance(row, dict) for row in rows)
     ):
         raise HTTPException(status_code=400, detail="Required: { table: string, rows: [{...}, ...] }")
@@ -792,9 +804,7 @@ async def sync(request: Request) -> dict[str, Any]:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    token = websocket.headers.get("authorization", "").removeprefix("Bearer ") or websocket.query_params.get(
-        "token", ""
-    )
+    token = websocket.headers.get("authorization", "").removeprefix("Bearer ")
     if not runtime.auth_token or token != runtime.auth_token:
         await websocket.close(code=1008)
         return

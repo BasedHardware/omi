@@ -89,7 +89,7 @@ class DeleteKnowledgeGraphResponse(BaseModel):
 
 class LocalKgSyncRequest(BaseModel):
     table: Literal["local_kg_nodes", "local_kg_edges"]
-    rows: List[Dict[str, Any]] = Field(min_length=1)
+    rows: List[Dict[str, Any]] = Field(min_length=1, max_length=kg_db.MAX_LOCAL_KG_SYNC_ROWS)
 
 
 class LocalKgSyncResponse(BaseModel):

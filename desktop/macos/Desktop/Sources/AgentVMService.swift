@@ -244,7 +244,7 @@ actor AgentVMService {
     log("AgentVMService: Uploading compressed database to \(vmIP)...")
 
     // Send token both as query param (backward compat) and header (preferred)
-    guard let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)") else {
+    guard let uploadURL = URL(string: "http://\(vmIP):8080/upload") else {
       log("AgentVMService: Invalid upload URL for IP \(vmIP)")
       try? FileManager.default.removeItem(at: tempGzPath)
       return false
@@ -299,7 +299,7 @@ actor AgentVMService {
     do {
       let idToken = try await AuthService.shared.getIdToken()
       // Send token both as query param (backward compat) and header (preferred)
-      guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+      guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
