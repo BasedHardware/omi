@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: mobile-internal-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
