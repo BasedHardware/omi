@@ -2130,16 +2130,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get editMemory => '✏️ Chỉnh sửa bộ nhớ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Ghim làm cơ sở';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Bỏ ghim làm cơ sở';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Bộ nhớ cơ sở';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Luôn trong ngữ cảnh';
 
   @override
   String get memoryContentHint => 'Tôi thích ăn kem...';
@@ -3201,14 +3201,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noTranscriptMessage => 'Cuộc trò chuyện này không có bản ghi.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Chưa có bản chép lời Cloudflare nào.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Không thể tải bản chép lời Cloudflare. Hãy thử lại.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Phiên bản chép lời $sessionId. $metadata';
   }
 
   @override

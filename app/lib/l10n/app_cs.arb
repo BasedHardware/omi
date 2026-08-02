@@ -3170,5 +3170,12 @@
     "whisperModelSizeLarge": "Velký",
     "whisperModelSizeMedium": "Střední",
     "whisperModelSizeSmall": "Malý",
-    "whisperModelSizeTiny": "Nejmenší"
+    "whisperModelSizeTiny": "Nejmenší",
+    "cloudflareTranscriptListEmptyMessage": "Zatím nejsou k dispozici žádné přepisy z Cloudflare.",
+    "cloudflareTranscriptLoadError": "Přepisy z Cloudflare se nepodařilo načíst. Zkuste to znovu.",
+    "cloudflareTranscriptSessionSemantics": "Relace přepisu {sessionId}. {metadata}",
+    "alwaysInContext": "Vždy v kontextu",
+    "baselineMemory": "Základní paměť",
+    "pinAsBaseline": "Připnout jako základní",
+    "unpinAsBaseline": "Odepnout jako základní"
 }

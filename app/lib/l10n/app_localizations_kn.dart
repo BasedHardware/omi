@@ -2132,16 +2132,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get editMemory => '✏️ ಸ್ಮೃತಿ ಸಂಪಾದಿಸಿ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'ಮೂಲವಾಗಿ ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ಮೂಲದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'ಮೂಲ ಸ್ಮರಣೆ';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿದೆ';
 
   @override
   String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
@@ -3208,14 +3208,14 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noTranscriptMessage => 'ಈ ಸಂವಾದವು ಪ್ರತಿಲೇಖನ ಹೊಂದಿಲ್ಲ.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'ಇನ್ನೂ ಯಾವುದೇ Cloudflare ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare ಲಿಪ್ಯಂತರಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'ಲಿಪ್ಯಂತರ ಸೆಷನ್ $sessionId. $metadata';
   }
 
   @override

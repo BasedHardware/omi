@@ -2128,16 +2128,16 @@ class AppLocalizationsMr extends AppLocalizations {
   String get editMemory => '✏️ स्मृती संपादित करा';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'मूलभूत म्हणून पिन करा';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'मूलभूतातून अनपिन करा';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'मूलभूत स्मृती';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'नेहमी संदर्भात';
 
   @override
   String get memoryContentHint => 'मला आयस्क्रीम खाण्यास आवडते...';
@@ -3205,14 +3205,14 @@ class AppLocalizationsMr extends AppLocalizations {
   String get noTranscriptMessage => 'या संभाषणाला ट्रान्सक्रिप्ट नाही।';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'अजून कोणतेही Cloudflare लिप्यंतरण उपलब्ध नाही.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare लिप्यंतरण लोड करता आले नाही. पुन्हा प्रयत्न करा.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'लिप्यंतरण सत्र $sessionId. $metadata';
   }
 
   @override

@@ -3192,5 +3192,12 @@
     "whisperModelSizeLarge": "Suuri",
     "whisperModelSizeMedium": "Keskikokoinen",
     "whisperModelSizeSmall": "Pieni",
-    "whisperModelSizeTiny": "Pikkuruinen"
+    "whisperModelSizeTiny": "Pikkuruinen",
+    "cloudflareTranscriptListEmptyMessage": "Cloudflare-litterointeja ei ole vielä saatavilla.",
+    "cloudflareTranscriptLoadError": "Cloudflare-litterointeja ei voitu ladata. Yritä uudelleen.",
+    "cloudflareTranscriptSessionSemantics": "Litterointisessio {sessionId}. {metadata}",
+    "alwaysInContext": "Aina kontekstissa",
+    "baselineMemory": "Perusmuisti",
+    "pinAsBaseline": "Kiinnitä perustaksi",
+    "unpinAsBaseline": "Poista kiinnitys perustasta"
 }

@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "Veliki",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
-    "whisperModelSizeTiny": "Sićušni"
+    "whisperModelSizeTiny": "Sićušni",
+    "cloudflareTranscriptListEmptyMessage": "Cloudflare transkripti još nisu dostupni.",
+    "cloudflareTranscriptLoadError": "Cloudflare transkripti se nisu mogli učitati. Pokušajte ponovo.",
+    "cloudflareTranscriptSessionSemantics": "Sesija transkripta {sessionId}. {metadata}",
+    "alwaysInContext": "Uvijek u kontekstu",
+    "baselineMemory": "Osnovna memorija",
+    "pinAsBaseline": "Prikvači kao osnovu",
+    "unpinAsBaseline": "Otkači kao osnovu"
 }

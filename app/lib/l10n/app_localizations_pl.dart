@@ -2130,16 +2130,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get editMemory => '✏️ Edytuj wspomnienie';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Przypnij jako bazową';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odepnij jako bazową';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pamięć bazowa';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Zawsze w kontekście';
 
   @override
   String get memoryContentHint => 'Lubię jeść lody...';
@@ -3202,14 +3202,14 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noTranscriptMessage => 'Ta rozmowa nie ma transkrypcji.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Nie ma jeszcze dostępnych transkrypcji Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Nie udało się wczytać transkrypcji Cloudflare. Spróbuj ponownie.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Sesja transkrypcji $sessionId. $metadata';
   }
 
   @override

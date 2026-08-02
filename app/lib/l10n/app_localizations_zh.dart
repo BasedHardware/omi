@@ -2085,16 +2085,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editMemory => '✏️ 编辑记忆';
 
   @override
-  String get pinAsBaseline => '设为基准记忆';
+  String get pinAsBaseline => '固定为基线';
 
   @override
-  String get unpinAsBaseline => '取消基准记忆';
+  String get unpinAsBaseline => '取消固定为基线';
 
   @override
-  String get baselineMemory => '基准记忆';
+  String get baselineMemory => '基线记忆';
 
   @override
-  String get alwaysInContext => '始终包含在上下文中';
+  String get alwaysInContext => '始终在上下文中';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';
@@ -3138,14 +3138,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noTranscriptMessage => '此对话没有文字记录。';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => '暂时没有可用的 Cloudflare 转录内容。';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => '无法加载 Cloudflare 转录内容。请重试。';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return '转录会话 $sessionId。$metadata';
   }
 
   @override

@@ -2132,16 +2132,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editMemory => '✏️ Upraviť pamäť';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripnúť ako základnú';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odopnúť ako základnú';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Základná pamäť';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vždy v kontexte';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';
@@ -3199,14 +3199,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noTranscriptMessage => 'Táto konverzácia nemá prepis.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Zatiaľ nie sú k dispozícii žiadne prepisy z Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Prepisy z Cloudflare sa nepodarilo načítať. Skúste to znova.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Relácia prepisu $sessionId. $metadata';
   }
 
   @override

@@ -2132,16 +2132,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get editMemory => '✏️ Rediģēt atmiņu';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Piespraust kā pamatu';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Atspraust kā pamatu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pamata atmiņa';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';
@@ -3202,14 +3202,14 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noTranscriptMessage => 'Šai sarunai nav transkripcijas.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Cloudflare transkripcijas vēl nav pieejamas.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Neizdevās ielādēt Cloudflare transkripcijas. Mēģiniet vēlreiz.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Transkripcijas sesija $sessionId. $metadata';
   }
 
   @override

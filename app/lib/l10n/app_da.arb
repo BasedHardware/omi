@@ -3210,5 +3210,12 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Mellem",
     "whisperModelSizeSmall": "Lille",
-    "whisperModelSizeTiny": "Meget lille"
+    "whisperModelSizeTiny": "Meget lille",
+    "cloudflareTranscriptListEmptyMessage": "Der er endnu ingen Cloudflare-transskriptioner tilgængelige.",
+    "cloudflareTranscriptLoadError": "Cloudflare-transskriptioner kunne ikke indlæses. Prøv igen.",
+    "cloudflareTranscriptSessionSemantics": "Transskriptionssession {sessionId}. {metadata}",
+    "alwaysInContext": "Altid i kontekst",
+    "baselineMemory": "Grundhukommelse",
+    "pinAsBaseline": "Fastgør som grundlag",
+    "unpinAsBaseline": "Fjern fastgørelse som grundlag"
 }

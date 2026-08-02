@@ -2131,16 +2131,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String get editMemory => '✏️ Редагувати пам\'ять';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Закріпити як базову';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Відкріпити як базову';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Базова пам’ять';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Завжди в контексті';
 
   @override
   String get memoryContentHint => 'Мені подобається їсти морозиво...';
@@ -3202,14 +3202,14 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noTranscriptMessage => 'Ця розмова не має розшифровки.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Транскрипції Cloudflare ще недоступні.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Не вдалося завантажити транскрипції Cloudflare. Спробуйте ще раз.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Сеанс транскрипції $sessionId. $metadata';
   }
 
   @override

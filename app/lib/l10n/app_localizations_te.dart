@@ -2136,16 +2136,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String get editMemory => '✏️ జ్ఞాపకం సవరించండి';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'ప్రాథమికంగా పిన్ చేయండి';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ప్రాథమికం నుంచి అన్‌పిన్ చేయండి';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'ప్రాథమిక మెమరీ';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'ఎల్లప్పుడూ సందర్భంలో';
 
   @override
   String get memoryContentHint => 'నేను ice cream తినడానికి ఇష్టపడతాను...';
@@ -3215,14 +3215,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get noTranscriptMessage => 'ఈ సంభాషణకు ట్రాన్‌స్క్రిప్ట్ లేదు.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'ఇంకా Cloudflare ట్రాన్స్‌క్రిప్ట్‌లు అందుబాటులో లేవు.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError =>
+      'Cloudflare ట్రాన్స్‌క్రిప్ట్‌లను లోడ్ చేయలేకపోయాము. మళ్లీ ప్రయత్నించండి.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'ట్రాన్స్‌క్రిప్ట్ సెషన్ $sessionId. $metadata';
   }
 
   @override

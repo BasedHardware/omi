@@ -2116,16 +2116,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get editMemory => '✏️ แก้ไขความทรงจำ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'ปักหมุดเป็นข้อมูลพื้นฐาน';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'เลิกปักหมุดข้อมูลพื้นฐาน';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'หน่วยความจำพื้นฐาน';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'อยู่ในบริบทเสมอ';
 
   @override
   String get memoryContentHint => 'ฉันชอบกินไอศกรีม...';
@@ -3179,14 +3179,14 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noTranscriptMessage => 'การสนทนานี้ไม่มีบันทึกคำพูด';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'ยังไม่มีบทถอดเสียงจาก Cloudflare';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'ไม่สามารถโหลดบทถอดเสียงจาก Cloudflare ได้ โปรดลองอีกครั้ง';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'เซสชันบทถอดเสียง $sessionId $metadata';
   }
 
   @override

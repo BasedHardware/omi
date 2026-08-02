@@ -2133,16 +2133,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get editMemory => '✏️ Hafızayı düzenle';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Temel olarak sabitle';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Temel sabitlemesini kaldır';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Temel bellek';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Her zaman bağlamda';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';
@@ -3203,14 +3203,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noTranscriptMessage => 'Bu sohbetin transkripti yok.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Henüz kullanılabilir Cloudflare transkripti yok.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare transkriptleri yüklenemedi. Tekrar deneyin.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Transkript oturumu $sessionId. $metadata';
   }
 
   @override

@@ -2110,16 +2110,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get editMemory => '✏️ עריכת זכרון';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'הצמדה כבסיס';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ביטול הצמדה כבסיס';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'זיכרון בסיס';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'תמיד בהקשר';
 
   @override
   String get memoryContentHint => 'אני אוהב לאכול גלידה...';
@@ -3177,14 +3177,14 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noTranscriptMessage => 'לשיחה זו אין תמלול.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'עדיין אין תמלילים זמינים מ-Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'לא ניתן היה לטעון את התמלילים מ-Cloudflare. נסו שוב.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'הפעלת תמלול $sessionId. $metadata';
   }
 
   @override

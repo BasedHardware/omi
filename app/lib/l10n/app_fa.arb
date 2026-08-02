@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "بزرگ",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "کوچک",
-    "whisperModelSizeTiny": "خیلی کوچک"
+    "whisperModelSizeTiny": "خیلی کوچک",
+    "cloudflareTranscriptListEmptyMessage": "هنوز هیچ رونوشت Cloudflare در دسترس نیست.",
+    "cloudflareTranscriptLoadError": "رونوشت‌های Cloudflare بارگیری نشدند. دوباره تلاش کنید.",
+    "cloudflareTranscriptSessionSemantics": "نشست رونوشت {sessionId}. {metadata}",
+    "alwaysInContext": "همیشه در زمینه",
+    "baselineMemory": "حافظه پایه",
+    "pinAsBaseline": "سنجاق کردن به‌عنوان پایه",
+    "unpinAsBaseline": "برداشتن از پایه"
 }

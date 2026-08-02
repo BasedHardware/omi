@@ -2129,16 +2129,16 @@ class AppLocalizationsHr extends AppLocalizations {
   String get editMemory => '✏️ Uredi Uspomenu';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Prikvači kao osnovu';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Otkači kao osnovu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Osnovna memorija';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Uvijek u kontekstu';
 
   @override
   String get memoryContentHint => 'Volim jesti sladoled...';
@@ -3207,14 +3207,14 @@ class AppLocalizationsHr extends AppLocalizations {
   String get noTranscriptMessage => 'Ovaj razgovor nema transkript.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Cloudflare prijepisi još nisu dostupni.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare prijepisi nisu se mogli učitati. Pokušajte ponovno.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Sesija prijepisa $sessionId. $metadata';
   }
 
   @override

@@ -2125,16 +2125,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get editMemory => '✏️ ویرایش خاطره';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'سنجاق کردن به‌عنوان پایه';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'برداشتن از پایه';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'حافظه پایه';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'همیشه در زمینه';
 
   @override
   String get memoryContentHint => 'من دوست دارم بستنی بخورم...';
@@ -3202,14 +3202,14 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noTranscriptMessage => 'این گفتگو رونوشت ندارد.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'هنوز هیچ رونوشت Cloudflare در دسترس نیست.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'رونوشت‌های Cloudflare بارگیری نشدند. دوباره تلاش کنید.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'نشست رونوشت $sessionId. $metadata';
   }
 
   @override

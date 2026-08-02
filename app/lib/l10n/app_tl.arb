@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "Malaki",
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
-    "whisperModelSizeTiny": "Napakaliit"
+    "whisperModelSizeTiny": "Napakaliit",
+    "cloudflareTranscriptListEmptyMessage": "Wala pang available na mga transcript ng Cloudflare.",
+    "cloudflareTranscriptLoadError": "Hindi ma-load ang mga transcript ng Cloudflare. Subukan muli.",
+    "cloudflareTranscriptSessionSemantics": "Sesyon ng transcript {sessionId}. {metadata}",
+    "alwaysInContext": "Laging nasa konteksto",
+    "baselineMemory": "Pangunahing memorya",
+    "pinAsBaseline": "I-pin bilang batayan",
+    "unpinAsBaseline": "Alisin ang pag-pin bilang batayan"
 }

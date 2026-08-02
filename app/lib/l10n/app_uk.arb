@@ -3192,5 +3192,12 @@
     "whisperModelSizeLarge": "Велика",
     "whisperModelSizeMedium": "Середня",
     "whisperModelSizeSmall": "Мала",
-    "whisperModelSizeTiny": "Крихітна"
+    "whisperModelSizeTiny": "Крихітна",
+    "cloudflareTranscriptListEmptyMessage": "Транскрипції Cloudflare ще недоступні.",
+    "cloudflareTranscriptLoadError": "Не вдалося завантажити транскрипції Cloudflare. Спробуйте ще раз.",
+    "cloudflareTranscriptSessionSemantics": "Сеанс транскрипції {sessionId}. {metadata}",
+    "alwaysInContext": "Завжди в контексті",
+    "baselineMemory": "Базова пам’ять",
+    "pinAsBaseline": "Закріпити як базову",
+    "unpinAsBaseline": "Відкріпити як базову"
 }

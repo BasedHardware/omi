@@ -2125,16 +2125,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get editMemory => '✏️ Rediger minne';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fest som grunnlag';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Løsne som grunnlag';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Grunnminne';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Alltid i kontekst';
 
   @override
   String get memoryContentHint => 'Jeg liker å spise iskrem...';
@@ -3195,14 +3195,14 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noTranscriptMessage => 'Denne samtalen har ikke en transkripsjon.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Ingen Cloudflare-transkripsjoner er tilgjengelige ennå.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare-transkripsjoner kunne ikke lastes inn. Prøv igjen.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Transkripsjonsøkt $sessionId. $metadata';
   }
 
   @override

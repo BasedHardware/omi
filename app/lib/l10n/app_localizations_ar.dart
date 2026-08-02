@@ -2111,16 +2111,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editMemory => '✏️ تعديل الذاكرة';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'تثبيت كمرجع';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'إلغاء التثبيت كمرجع';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'ذاكرة مرجعية';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'دائمًا في السياق';
 
   @override
   String get memoryContentHint => 'أحب تناول الآيس كريم...';
@@ -3171,14 +3171,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noTranscriptMessage => 'هذه المحادثة ليس لديها نسخ.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'لا تتوفر أي نسخ نصية من Cloudflare بعد.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'تعذر تحميل النسخ النصية من Cloudflare. حاول مرة أخرى.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'جلسة النسخ النصي $sessionId. $metadata';
   }
 
   @override

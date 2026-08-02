@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "Velik",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Majhen",
-    "whisperModelSizeTiny": "Najmanjši"
+    "whisperModelSizeTiny": "Najmanjši",
+    "cloudflareTranscriptListEmptyMessage": "Prepisov Cloudflare še ni na voljo.",
+    "cloudflareTranscriptLoadError": "Prepisov Cloudflare ni bilo mogoče naložiti. Poskusite znova.",
+    "cloudflareTranscriptSessionSemantics": "Seja prepisa {sessionId}. {metadata}",
+    "alwaysInContext": "Vedno v kontekstu",
+    "baselineMemory": "Osnovni pomnilnik",
+    "pinAsBaseline": "Pripni kot osnovo",
+    "unpinAsBaseline": "Odpni kot osnovo"
 }

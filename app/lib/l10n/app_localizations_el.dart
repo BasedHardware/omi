@@ -2144,16 +2144,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get editMemory => '✏️ Επεξεργασία μνήμης';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Καρφίτσωμα ως βασική';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Ξεκαρφίτσωμα ως βασική';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Βασική μνήμη';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Πάντα στο πλαίσιο';
 
   @override
   String get memoryContentHint => 'Μου αρέσει να τρώω παγωτό...';
@@ -3220,14 +3220,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noTranscriptMessage => 'Αυτή η συνομιλία δεν έχει μεταγραφή.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Δεν υπάρχουν ακόμη διαθέσιμες απομαγνητοφωνήσεις Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError =>
+      'Δεν ήταν δυνατή η φόρτωση των απομαγνητοφωνήσεων Cloudflare. Δοκιμάστε ξανά.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Συνεδρία απομαγνητοφώνησης $sessionId. $metadata';
   }
 
   @override

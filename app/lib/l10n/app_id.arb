@@ -3234,5 +3234,12 @@
     "whisperModelSizeLarge": "Besar",
     "whisperModelSizeMedium": "Sedang",
     "whisperModelSizeSmall": "Kecil",
-    "whisperModelSizeTiny": "Sangat kecil"
+    "whisperModelSizeTiny": "Sangat kecil",
+    "cloudflareTranscriptListEmptyMessage": "Belum ada transkrip Cloudflare yang tersedia.",
+    "cloudflareTranscriptLoadError": "Transkrip Cloudflare tidak dapat dimuat. Coba lagi.",
+    "cloudflareTranscriptSessionSemantics": "Sesi transkrip {sessionId}. {metadata}",
+    "alwaysInContext": "Selalu dalam konteks",
+    "baselineMemory": "Memori dasar",
+    "pinAsBaseline": "Sematkan sebagai dasar",
+    "unpinAsBaseline": "Lepas sematan sebagai dasar"
 }

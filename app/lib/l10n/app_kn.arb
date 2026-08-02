@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "ದೊಡ್ಡದು",
     "whisperModelSizeMedium": "ಮಧ್ಯಮ",
     "whisperModelSizeSmall": "ಚಿಕ್ಕದು",
-    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು"
+    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು",
+    "cloudflareTranscriptListEmptyMessage": "ಇನ್ನೂ ಯಾವುದೇ Cloudflare ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ.",
+    "cloudflareTranscriptLoadError": "Cloudflare ಲಿಪ್ಯಂತರಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "cloudflareTranscriptSessionSemantics": "ಲಿಪ್ಯಂತರ ಸೆಷನ್ {sessionId}. {metadata}",
+    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿದೆ",
+    "baselineMemory": "ಮೂಲ ಸ್ಮರಣೆ",
+    "pinAsBaseline": "ಮೂಲವಾಗಿ ಪಿನ್ ಮಾಡಿ",
+    "unpinAsBaseline": "ಮೂಲದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ"
 }

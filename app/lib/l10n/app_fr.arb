@@ -3227,5 +3227,12 @@
     "whisperModelSizeLarge": "Grand",
     "whisperModelSizeMedium": "Moyen",
     "whisperModelSizeSmall": "Petit",
-    "whisperModelSizeTiny": "Minuscule"
+    "whisperModelSizeTiny": "Minuscule",
+    "cloudflareTranscriptListEmptyMessage": "Aucune transcription Cloudflare n'est encore disponible.",
+    "cloudflareTranscriptLoadError": "Les transcriptions Cloudflare n'ont pas pu être chargées. Réessayez.",
+    "cloudflareTranscriptSessionSemantics": "Session de transcription {sessionId}. {metadata}",
+    "alwaysInContext": "Toujours dans le contexte",
+    "baselineMemory": "Mémoire de référence",
+    "pinAsBaseline": "Épingler comme référence",
+    "unpinAsBaseline": "Désépingler comme référence"
 }

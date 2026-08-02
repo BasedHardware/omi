@@ -2139,16 +2139,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get editMemory => '✏️ பதிவை திருத்தவும்';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'அடிப்படையாகப் பின் செய்யவும்';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'அடிப்படையிலிருந்து பின் நீக்கவும்';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'அடிப்படை நினைவகம்';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
@@ -3219,14 +3219,14 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noTranscriptMessage => 'இந்த உரையாடலுக்கு மொழிபெயர்ப்பு இல்லை.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'இன்னும் Cloudflare உரைநகல்கள் எதுவும் கிடைக்கவில்லை.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare உரைநகல்களை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'உரைநகல் அமர்வு $sessionId. $metadata';
   }
 
   @override

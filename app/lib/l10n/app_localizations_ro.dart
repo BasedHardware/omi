@@ -2137,16 +2137,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get editMemory => '✏️ Editează amintirea';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fixează ca bază';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Anulează fixarea ca bază';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Memorie de bază';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Întotdeauna în context';
 
   @override
   String get memoryContentHint => 'Îmi place să mănânc înghețată...';
@@ -3213,14 +3213,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noTranscriptMessage => 'Această conversație nu are transcriere.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Încă nu sunt disponibile transcrieri Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Transcrierile Cloudflare nu au putut fi încărcate. Încercați din nou.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Sesiune de transcriere $sessionId. $metadata';
   }
 
   @override

@@ -3192,5 +3192,12 @@
     "whisperModelSizeLarge": "Μεγάλο",
     "whisperModelSizeMedium": "Μεσαίο",
     "whisperModelSizeSmall": "Μικρό",
-    "whisperModelSizeTiny": "Μικροσκοπικό"
+    "whisperModelSizeTiny": "Μικροσκοπικό",
+    "cloudflareTranscriptListEmptyMessage": "Δεν υπάρχουν ακόμη διαθέσιμες απομαγνητοφωνήσεις Cloudflare.",
+    "cloudflareTranscriptLoadError": "Δεν ήταν δυνατή η φόρτωση των απομαγνητοφωνήσεων Cloudflare. Δοκιμάστε ξανά.",
+    "cloudflareTranscriptSessionSemantics": "Συνεδρία απομαγνητοφώνησης {sessionId}. {metadata}",
+    "alwaysInContext": "Πάντα στο πλαίσιο",
+    "baselineMemory": "Βασική μνήμη",
+    "pinAsBaseline": "Καρφίτσωμα ως βασική",
+    "unpinAsBaseline": "Ξεκαρφίτσωμα ως βασική"
 }

@@ -10767,5 +10767,12 @@
     "whisperModelSizeLarge": "Голем",
     "whisperModelSizeMedium": "Среден",
     "whisperModelSizeSmall": "Мал",
-    "whisperModelSizeTiny": "Многу мал"
+    "whisperModelSizeTiny": "Многу мал",
+    "cloudflareTranscriptListEmptyMessage": "Сè уште нема достапни транскрипти од Cloudflare.",
+    "cloudflareTranscriptLoadError": "Не можеа да се вчитаат транскриптите од Cloudflare. Обидете се повторно.",
+    "cloudflareTranscriptSessionSemantics": "Сесија за транскрипт {sessionId}. {metadata}",
+    "alwaysInContext": "Секогаш во контекст",
+    "baselineMemory": "Основна меморија",
+    "pinAsBaseline": "Закачи како основна",
+    "unpinAsBaseline": "Откачи како основна"
 }

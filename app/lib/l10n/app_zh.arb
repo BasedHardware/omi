@@ -651,10 +651,10 @@
     "allMemoriesPublicResult": "所有记忆现已公开",
     "newMemory": "✨ 新记忆",
     "editMemory": "✏️ 编辑记忆",
-    "pinAsBaseline": "设为基准记忆",
-    "unpinAsBaseline": "取消基准记忆",
-    "baselineMemory": "基准记忆",
-    "alwaysInContext": "始终包含在上下文中",
+    "pinAsBaseline": "固定为基线",
+    "unpinAsBaseline": "取消固定为基线",
+    "baselineMemory": "基线记忆",
+    "alwaysInContext": "始终在上下文中",
     "memoryContentHint": "我喜欢冰淇淋...",
     "failedToSaveMemory": "保存失败。",
     "saveMemory": "保存记忆",
@@ -3218,5 +3218,8 @@
     "whisperModelSizeLarge": "大型",
     "whisperModelSizeMedium": "中型",
     "whisperModelSizeSmall": "小型",
-    "whisperModelSizeTiny": "微型"
+    "whisperModelSizeTiny": "微型",
+    "cloudflareTranscriptListEmptyMessage": "暂时没有可用的 Cloudflare 转录内容。",
+    "cloudflareTranscriptLoadError": "无法加载 Cloudflare 转录内容。请重试。",
+    "cloudflareTranscriptSessionSemantics": "转录会话 {sessionId}。{metadata}"
 }

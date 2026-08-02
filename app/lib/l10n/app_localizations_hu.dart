@@ -2141,16 +2141,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get editMemory => '✏️ Emlékezet szerkesztése';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Rögzítés alapként';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Alapkénti rögzítés feloldása';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Alapmemória';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Mindig kontextusban';
 
   @override
   String get memoryContentHint => 'Szeretek fagyit enni...';
@@ -3215,14 +3215,14 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noTranscriptMessage => 'Ehhez a beszélgetéshez nincs átirat.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Még nincsenek elérhető Cloudflare-átiratok.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'A Cloudflare-átiratokat nem sikerült betölteni. Próbálja újra.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Átirat-munkamenet $sessionId. $metadata';
   }
 
   @override

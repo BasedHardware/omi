@@ -2125,16 +2125,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get editMemory => '✏️ Muokkaa muistia';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Kiinnitä perustaksi';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Poista kiinnitys perustasta';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Perusmuisti';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Aina kontekstissa';
 
   @override
   String get memoryContentHint => 'Pidän jäätelön syömisestä...';
@@ -3194,14 +3194,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noTranscriptMessage => 'Tällä keskustelulla ei ole litterointia.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Cloudflare-litterointeja ei ole vielä saatavilla.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare-litterointeja ei voitu ladata. Yritä uudelleen.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Litterointisessio $sessionId. $metadata';
   }
 
   @override

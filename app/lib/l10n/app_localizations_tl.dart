@@ -2140,16 +2140,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get editMemory => '✏️ I-edit ang Alaala';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'I-pin bilang batayan';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Alisin ang pag-pin bilang batayan';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pangunahing memorya';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Laging nasa konteksto';
 
   @override
   String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
@@ -3222,14 +3222,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noTranscriptMessage => 'Ang conversation na ito ay walang transcript.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => 'Wala pang available na mga transcript ng Cloudflare.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Hindi ma-load ang mga transcript ng Cloudflare. Subukan muli.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return 'Sesyon ng transcript $sessionId. $metadata';
   }
 
   @override

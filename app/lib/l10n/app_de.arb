@@ -3169,5 +3169,12 @@
     "whisperModelSizeLarge": "Groß",
     "whisperModelSizeMedium": "Mittel",
     "whisperModelSizeSmall": "Klein",
-    "whisperModelSizeTiny": "Winzig"
+    "whisperModelSizeTiny": "Winzig",
+    "cloudflareTranscriptListEmptyMessage": "Noch keine Cloudflare-Transkripte verfügbar.",
+    "cloudflareTranscriptLoadError": "Cloudflare-Transkripte konnten nicht geladen werden. Versuche es erneut.",
+    "cloudflareTranscriptSessionSemantics": "Transkriptsitzung {sessionId}. {metadata}",
+    "alwaysInContext": "Immer im Kontext",
+    "baselineMemory": "Basisgedächtnis",
+    "pinAsBaseline": "Als Basis anheften",
+    "unpinAsBaseline": "Als Basis lösen"
 }

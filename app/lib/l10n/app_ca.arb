@@ -3170,5 +3170,12 @@
     "whisperModelSizeLarge": "Gran",
     "whisperModelSizeMedium": "Mitjà",
     "whisperModelSizeSmall": "Petit",
-    "whisperModelSizeTiny": "Molt petit"
+    "whisperModelSizeTiny": "Molt petit",
+    "cloudflareTranscriptListEmptyMessage": "Encara no hi ha transcripcions de Cloudflare disponibles.",
+    "cloudflareTranscriptLoadError": "No s'han pogut carregar les transcripcions de Cloudflare. Torna-ho a provar.",
+    "cloudflareTranscriptSessionSemantics": "Sessió de transcripció {sessionId}. {metadata}",
+    "alwaysInContext": "Sempre en context",
+    "baselineMemory": "Memòria de referència",
+    "pinAsBaseline": "Fixa com a referència",
+    "unpinAsBaseline": "Desfixa com a referència"
 }

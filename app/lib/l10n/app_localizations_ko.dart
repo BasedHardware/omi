@@ -2089,16 +2089,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editMemory => '✏️ 메모리 편집';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => '기준으로 고정';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => '기준 고정 해제';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => '기준 메모리';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
@@ -3143,14 +3143,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noTranscriptMessage => '이 대화에는 텍스트가 없습니다.';
 
   @override
-  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+  String get cloudflareTranscriptListEmptyMessage => '아직 사용할 수 있는 Cloudflare 녹취록이 없습니다.';
 
   @override
-  String get cloudflareTranscriptLoadError => 'Cloudflare transcripts couldn\'t be loaded. Try again.';
+  String get cloudflareTranscriptLoadError => 'Cloudflare 녹취록을 불러올 수 없습니다. 다시 시도해 주세요.';
 
   @override
   String cloudflareTranscriptSessionSemantics(String sessionId, String metadata) {
-    return 'Transcript session $sessionId. $metadata';
+    return '녹취 세션 $sessionId. $metadata';
   }
 
   @override
