@@ -3,8 +3,8 @@
     "backend/routers/apps.py": 2482,
     "backend/routers/chat.py": 1645,
     "backend/routers/developer.py": 2282,
-    "backend/routers/mcp_sse.py": 1801,
-    "backend/routers/sync.py": 2058,
+    "backend/routers/mcp_sse.py": 1822,
+    "backend/routers/sync.py": 2086,
     "backend/routers/users.py": 2083,
     "backend/routers/payment.py": 1608
   },
@@ -12,8 +12,8 @@
     "backend/routers/apps.py": "App-authored manifest text is pinned by hash at approval and escaped before it reaches a prompt or a tool schema, so a post-approval manifest swap is detected.",
     "backend/routers/chat.py": "Transcription budget no longer silently skipped when a file's duration cannot be parsed; the charge decision belongs to the route that admits the upload.",
     "backend/routers/developer.py": "Developer memory create and batch routes must record their accepted write result at the authoritative API boundary; the shared dev-only allowlisted serializer/exporter lives in testing.parity_pack_v0.live_capture.",
-    "backend/routers/mcp_sse.py": "Token revocation now enforced on the MCP sign-in path, which previously let a revoked token mint a 365-day OAuth grant.",
-    "backend/routers/sync.py": "Per-request file-count cap on the two audio sync routes, rejected before any part is read.",
+    "backend/routers/mcp_sse.py": "Token revocation now enforced on the MCP sign-in path, which previously let a revoked token mint a 365-day OAuth grant. +21 for bounded OAuth metadata, authorization-code, and token lifecycle validation.",
+    "backend/routers/sync.py": "Per-request file-count cap on the two audio sync routes, rejected before any part is read. +28 for bounded sync admission and lifecycle-fenced worker cleanup.",
     "backend/routers/users.py": "Account-deletion outcome telemetry at the users router boundary for PostHog ownership repair.",
     "backend/routers/payment.py": "Refund/chargeback entitlement revocation plus an idempotency key that survives the customer id being written mid-flight."
   },
