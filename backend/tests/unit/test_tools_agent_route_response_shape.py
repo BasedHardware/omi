@@ -268,7 +268,7 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
     assert response.is_error is False
 
 
-def test_execute_tool_does_not_self_allowlist_fetch_url(loaded_route_modules):
+def test_execute_tool_does_not_advertise_fetch_url(loaded_route_modules):
     _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
     captured = {}
 
@@ -285,22 +285,23 @@ def test_execute_tool_does_not_self_allowlist_fetch_url(loaded_route_modules):
         def invoke(self, params, config=None):
             raise AssertionError('async fetch_url_tool must use coroutine')
 
-    agentic.CORE_TOOLS[:] = [_AsyncFetchUrlTool()]
-    requested = 'https://example.com/article'
+    original_tools = list(agentic.CORE_TOOLS)
+    try:
+        agentic.CORE_TOOLS[:] = [_AsyncFetchUrlTool()]
+        requested = 'https://example.com/article'
 
-    raw_response = asyncio.run(
-        agent_tools.execute_tool(
-            agent_tools.ExecuteToolRequest(tool_name='fetch_url_tool', params={'url': requested}),
-            uid='uid-route',
-        )
-    )
+        with pytest.raises(agent_tools.HTTPException) as error:
+            asyncio.run(
+                agent_tools.execute_tool(
+                    agent_tools.ExecuteToolRequest(tool_name='fetch_url_tool', params={'url': requested}),
+                    uid='uid-route',
+                )
+            )
 
-    assert raw_response == {'result': f'Content from {requested}'}
-    agentic.agent_config_context.set.assert_called()
-    config = agentic.agent_config_context.set.call_args.args[0]
-    assert config['configurable']['user_id'] == 'uid-route'
-    assert 'user_provided_urls' not in config['configurable']
-    assert captured['url'] == requested
+        assert error.value.status_code == 404
+        assert captured == {}
+    finally:
+        agentic.CORE_TOOLS[:] = original_tools
 
 
 def test_agent_execute_tool_route_has_response_model_and_preserves_bounded_memory_tool_output(loaded_route_modules):
