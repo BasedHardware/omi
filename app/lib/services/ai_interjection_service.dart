@@ -24,17 +24,20 @@ class AiInterjectionService {
   Timer? _cooldownTimer;
   bool _isQuerying = false;
   bool _isSpeaking = false;
+  bool _isInCooldown = false;
 
   static const _pauseDuration = Duration(seconds: 3);
   static const _interjectionCooldown = Duration(seconds: 30);
   static const _minTranscriptChars = 40;
+  static const _maxTranscriptChars = 500;
   bool get isConnected => _connected;
   bool get isActive => SharedPreferencesUtil().aiInterjectionEnabled;
   bool get isQuerying => _isQuerying;
+  bool get isInCooldown => _isInCooldown;
 
   void onTranscriptChanged(String fullTranscript) {
     if (!isActive) return;
-    if (_isQuerying || _isSpeaking) return;
+    if (_isQuerying || _isSpeaking || _isInCooldown) return;
 
     final recent = _getRecentText(fullTranscript);
     if (recent.length < _minTranscriptChars) return;
@@ -55,13 +58,21 @@ class AiInterjectionService {
       if (line.isEmpty) continue;
       recent.add(line);
       charCount += line.length;
-      if (charCount > 500) break;
+      if (charCount > _maxTranscriptChars) break;
     }
     return recent.reversed.join(' ');
   }
 
+  String _sanitizeTranscript(String transcript) {
+    return transcript
+        .replaceAll('\n', ' ')
+        .replaceAll('\r', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   void _onPauseDetected() {
-    if (!isActive || _isQuerying || _isSpeaking) return;
+    if (!isActive || _isQuerying || _isSpeaking || _isInCooldown) return;
 
     final text = _recentTranscript;
     if (text.length < _minTranscriptChars) return;
@@ -91,7 +102,10 @@ class AiInterjectionService {
       _isQuerying = false;
       _recentTranscript = '';
       _cooldownTimer?.cancel();
-      _cooldownTimer = Timer(_interjectionCooldown, () {});
+      _isInCooldown = true;
+      _cooldownTimer = Timer(_interjectionCooldown, () {
+        _isInCooldown = false;
+      });
     }
   }
 
@@ -137,15 +151,16 @@ class AiInterjectionService {
       },
     );
 
-    final prompt = '''
-You are an AI assistant integrated into a wearable device that hears the user's speech in real-time.
-Below is a transcript of what the user has been saying recently. They are monologuing - thinking out loud.
-Your job is to decide if you should interject with a thoughtful prompt, question, or insight.
-If the user's train of thought would benefit from your input, respond concisely (1-3 sentences).
-If they're just narrating mundane activities or if you have nothing valuable to add, respond with "". Only respond with actual text if you have something useful to say.
+    final sanitizedTranscript = _sanitizeTranscript(userText);
 
-Recent transcript:
-$userText''';
+    final prompt = '''{
+  "role": "system",
+  "content": "You are an AI assistant integrated into a wearable device that hears the user's speech in real-time. The user is monologuing - thinking out loud. Decide if you should interject with a thoughtful prompt, question, or insight. If the user's train of thought would benefit from your input, respond concisely (1-3 sentences). If they're just narrating mundane activities or if you have nothing valuable to add, respond with an empty string. Only respond with actual text if you have something useful to say."
+}
+{
+  "role": "user",
+  "content": "Recent transcript:\\n$sanitizedTranscript"
+}''';
 
     _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
     _resetResponseTimer();
@@ -213,6 +228,7 @@ $userText''';
     _channel = null;
     _isQuerying = false;
     _isSpeaking = false;
+    _isInCooldown = false;
     _recentTranscript = '';
   }
 }

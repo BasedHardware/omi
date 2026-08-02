@@ -1,0 +1,24 @@
+# EAS upload ignore — git repo root
+# The RN Android app lives in app/react-native. Everything else in this
+# monorepo (Flutter app, Swift SDK, web, hardware, docs, plugins) is huge
+# and must NOT be uploaded to EAS. EAS reads .easignore from the project
+# root (where eas.json lives) — keep these exclusions here too.
+**/node_modules/
+node_modules/
+web/
+omiGlass/
+sdks/
+omi/
+plugins/
+docs/
+desktop/
+hardware/
+# Build output / caches
+**/android/
+**/ios/
+**/.expo/
+**/dist/
+**/build/
+*.log
+.env
+.DS_Store
