@@ -42,10 +42,14 @@ extension RewindDatabase {
     if let legacyRoot {
       resolvedLegacyRoot = legacyRoot
     } else {
-      let appSupport = fileManager.urls(
-        for: .applicationSupportDirectory,
-        in: .userDomainMask
-      ).first!
+      guard
+        let appSupport = fileManager.urls(
+          for: .applicationSupportDirectory,
+          in: .userDomainMask
+        ).first
+      else {
+        throw RewindError.storageError("Application Support is unavailable for local-data deletion")
+      }
       resolvedLegacyRoot = appSupport.appendingPathComponent("Omi", isDirectory: true)
     }
     for artifact in [
