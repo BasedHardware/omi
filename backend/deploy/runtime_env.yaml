@@ -426,6 +426,30 @@ environments:
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            SENDBLUE_API_KEY_ID:
+              secret: SENDBLUE_API_KEY_ID
+              version: latest
+            SENDBLUE_API_KEY_SECRET:
+              secret: SENDBLUE_API_KEY_SECRET
+              version: latest
+            SENDBLUE_NUMBER:
+              secret: SENDBLUE_NUMBER
+              version: latest
+            SENDBLUE_WEBHOOK_SIGNING_SECRET:
+              secret: SENDBLUE_WEBHOOK_SIGNING_SECRET
+              version: latest
+            SENDBLUE_WEBHOOK_PATH_TOKEN:
+              secret: SENDBLUE_WEBHOOK_PATH_TOKEN
+              version: latest
+            TWILIO_SMS_NUMBER:
+              secret: TWILIO_SMS_NUMBER
+              version: latest
         backend-sync: &dev_backend_sync
           env:
             SYNC_LEDGER_FENCE_MODE:
@@ -1125,6 +1149,30 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            SENDBLUE_API_KEY_ID:
+              secret: SENDBLUE_API_KEY_ID
+              version: latest
+            SENDBLUE_API_KEY_SECRET:
+              secret: SENDBLUE_API_KEY_SECRET
+              version: latest
+            SENDBLUE_NUMBER:
+              secret: SENDBLUE_NUMBER
+              version: latest
+            SENDBLUE_WEBHOOK_SIGNING_SECRET:
+              secret: SENDBLUE_WEBHOOK_SIGNING_SECRET
+              version: latest
+            SENDBLUE_WEBHOOK_PATH_TOKEN:
+              secret: SENDBLUE_WEBHOOK_PATH_TOKEN
+              version: latest
+            TWILIO_SMS_NUMBER:
+              secret: TWILIO_SMS_NUMBER
               version: latest
         backend-sync: &prod_backend_sync
           env:

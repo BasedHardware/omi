@@ -450,6 +450,14 @@ _PLATFORM_CONTEXT_LINES = {
         "The user is using Omi on an Android phone — when giving instructions or troubleshooting, "
         "give Android-appropriate steps."
     ),
+    'telegram': (
+        'The user is messaging Omi through Telegram. Reply as a concise plain-text message: avoid markdown, '
+        'tables, code fences, and long lists; keep the answer under 4,096 characters.'
+    ),
+    'imessage': (
+        'The user is messaging Omi through iMessage. Reply as a concise plain-text message: avoid markdown, '
+        'tables, code fences, and long lists; keep the answer under 2,000 characters.'
+    ),
 }
 
 
