@@ -331,12 +331,21 @@ docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e PYTHONUTF8=1 \
   -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
   omi-onprem-backend-test bash -c '
-    ls tests/unit/test_*.py tests/unit/utils/test_*.py | \
+    ls tests/unit/test_*.py tests/unit/utils/test_*.py testing/e2e/test_*.py | \
     xargs -P 16 -I{} sh -c '\''out=$(/opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "{}" 2>&1 | tail -1);
       echo "$out" | grep -qiE "failed|error" && echo "FAIL | {} | $out" || echo "PASS | {} | $out"'\'' '
 ```
 
-With this harness the whole unit sweep is green except the two known residuals below. To gate a
+Include `testing/e2e/test_*.py` in the glob: port residuals (`db_client=`, changed signatures) survive
+in E2E suites that a `tests/unit`-only sweep never runs — two such residuals shipped past earlier
+audits before this was added (ADR-0040 rule 7).
+
+**De-flake before trusting a FAIL.** Docker-per-file startup contention makes a high `-P` produce
+false failures on a loaded box (observed: `-P 16` yielded ~90 false FAILs that all passed at `-P 3`).
+Re-run the FAIL set at low parallelism (`-P 3`) and diff against a pre-change baseline worktree before
+calling anything a regression.
+
+With this harness the whole unit+e2e sweep is green except the known residuals below. To gate a
 change, the FAIL set must equal that known-residual set; any other file failing is a regression to fix.
 
 ### Regression guard
