@@ -55,7 +55,7 @@ from utils.retrieval.tool_result_boundaries import (
     preserve_chat_memory_tool_result_boundary,
     wrap_untrusted_tool_result,
 )
-from utils.retrieval.fetch_url_allowlist import (
+from utils.retrieval.tools.web_tools import (
     extract_user_turn_urls,
     user_url_allowlist_block,
 )
