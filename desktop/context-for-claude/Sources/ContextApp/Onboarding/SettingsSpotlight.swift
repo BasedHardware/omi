@@ -181,11 +181,21 @@ enum SettingsWindowProbe {
 
     /// The largest ordinary window belonging to System Settings, in global CoreGraphics
     /// coordinates. `nil` when it is not running or has no window on screen.
+    nonisolated static func windowFrame(bundleID: String = systemSettingsBundleID) -> CGRect? {
+        window(bundleID: bundleID)?.frame
+    }
+
+    /// The same window, with the identifier the window server knows it by.
+    ///
+    /// Split out from `windowFrame` rather than duplicated because the two answers must be the same
+    /// window: `SettingsPaneReader` captures the pixels of `id` and then measures normalised text
+    /// boxes against `frame`, and a pass that photographed one window and did the arithmetic against
+    /// another would put a confident arrow a whole window's width away from the row.
     ///
     /// Largest rather than frontmost: System Settings puts sheets, popovers and its own tooltips in
     /// the same list, and the pane the user is looking at is the big one. Layer 0 excludes the
     /// menu-bar and floating layers outright.
-    nonisolated static func windowFrame(bundleID: String = systemSettingsBundleID) -> CGRect? {
+    nonisolated static func window(bundleID: String = systemSettingsBundleID) -> (id: CGWindowID, frame: CGRect)? {
         let pids = Set(
             NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
                 .map(\.processIdentifier))
@@ -195,18 +205,19 @@ enum SettingsWindowProbe {
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
         else { return nil }
 
-        var best: CGRect?
+        var best: (id: CGWindowID, frame: CGRect)?
         for window in listing {
             guard let pid = window[kCGWindowOwnerPID as String] as? pid_t, pids.contains(pid),
                 (window[kCGWindowLayer as String] as? Int) == 0,
+                let number = window[kCGWindowNumber as String] as? CGWindowID,
                 let raw = window[kCGWindowBounds as String] as? NSDictionary,
                 let bounds = CGRect(dictionaryRepresentation: raw)
             else { continue }
             // A collapsed or zero-size entry is a window the user cannot see; treating one as the
             // pane would put the boundary around a point.
             guard bounds.width > 200, bounds.height > 200 else { continue }
-            if best == nil || bounds.width * bounds.height > best!.width * best!.height {
-                best = bounds
+            if best == nil || bounds.width * bounds.height > best!.frame.width * best!.frame.height {
+                best = (number, bounds)
             }
         }
         return best

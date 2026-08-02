@@ -30,8 +30,8 @@ import SwiftUI
 //  second display. Every one of those degrades to `PermissionGuidance.instruction`: words, no
 //  boundary, no glow, no arrow, nothing aimed anywhere.
 //
-//  **The Accessibility step cannot be rescued by cleverness, and the measurement is written down
-//  here so nobody spends another afternoon looking.** Measured on macOS 26.5.2 (build 25F84), from a
+//  **The Accessibility step cannot be rescued by asking, and the measurement is written down here so
+//  nobody spends another afternoon looking.** Measured on macOS 26.5.2 (build 25F84), from a
 //  process with `AXIsProcessTrusted() == false`, against a live System Settings sitting on Privacy &
 //  Security ▸ Accessibility with our row plainly in the list:
 //
@@ -49,16 +49,29 @@ import SwiftUI
 //    and four offscreen 1920 × 30 strips. There is no sub-window whose bounds are the content pane,
 //    so the window server cannot narrow the rect either.
 //
-//  So during the Accessibility step the row is not merely hard to find: it is **structurally
-//  unreadable**, and every route to it is closed by the same check. Inferring where the list "ought
-//  to be" from the window rect would be the one thing the paragraph above forbids — a boundary drawn
-//  round a rect nobody measured, correct on the machine it was written on and wrong on the first
-//  resized window, wider sidebar or unfamiliar macOS. It is not done, and this is why.
+//  So during the Accessibility step the row is **structurally unreadable through the accessibility
+//  API**, and every route through that API is closed by the same check. Inferring where the list
+//  "ought to be" from the window rect would be the one thing the paragraph above forbids — a boundary
+//  drawn round a rect nobody measured, correct on the machine it was written on and wrong on the
+//  first resized window, wider sidebar or unfamiliar macOS. It is not done, and this is why.
 //
-//  What *is* done is the only honest thing left: the tier says so (`SettingsWindowFrame.Cause`),
-//  claims nothing about the pane's contents (it draws no dashes — see
-//  `SettingsSpotlightScene.dashedRegions`), and watches for the grant closely enough that the instant
-//  the user flips the switch the overlay stops degrading and rings the real row.
+//  **But "unreadable" was over-read, and that is the bug this file spent a release describing instead
+//  of fixing.** Every measurement above is a measurement of one gate. It says nothing about the other
+//  one: *this app is a screen recorder with OCR*, and Screen Recording lets us read the pixels of
+//  another application's window with no accessibility check anywhere in the path. The row is on
+//  screen with its name written on it. `SettingsRowSighting` is the second locator that follows from
+//  that — same job, same `SettingsSpotlightTarget` out, no `AXUIElement` in — and the instant it can
+//  see the pane, the Accessibility step stops being the one step that could never point at anything.
+//  It is a fallback and not a replacement: the walk reads the switch's own frame and its own state,
+//  where the sighting derives both, so the walk wins wherever it can answer.
+//
+//  It has a precondition of its own — Screen Recording, granted to a process that had it when it
+//  connected to the window server — and that is why `PermissionInvitations.listed` asks for the
+//  screen first. When the pixels are unavailable too, nothing changes from what this file already
+//  did: the tier says so (`SettingsWindowFrame.Cause`), claims nothing about the pane's contents (it
+//  draws no dashes — see `SettingsSpotlightScene.dashedRegions`), and watches for the grant closely
+//  enough that the instant the user flips the switch the overlay stops degrading and rings the real
+//  row.
 
 // MARK: - What the choreography is allowed to say
 
@@ -71,12 +84,14 @@ enum PermissionGuidance: Equatable, Sendable {
     /// System Settings is on screen and we know exactly where its window is, and nothing about what
     /// is inside it.
     ///
-    /// This is not a consolation prize, it is the **normal state of the Accessibility step**: reading
-    /// the row that grants Accessibility requires Accessibility. The old overlay spent that step
-    /// asking the Accessibility API 24 times in 9 seconds for an answer it was structurally forbidden
-    /// from getting, then printed a sentence in the middle of the screen. `CGWindowListCopyWindowInfo`
-    /// needs no grant at all, so the window rect is still something measured — it is what the scrim
-    /// opens a hole in, and what the sentence is placed beside.
+    /// This used to be the **normal state of the Accessibility step**, because reading the row that
+    /// grants Accessibility requires Accessibility and the old overlay spent that step asking the
+    /// Accessibility API 24 times in 9 seconds for an answer it was structurally forbidden from
+    /// getting. It is now the *floor* of that step rather than its ceiling: `SettingsRowSighting`
+    /// reads the row out of the pane's pixels instead, and this is what is left when even that cannot
+    /// — no Screen Recording grant yet, or a grant this process was not launched with.
+    /// `CGWindowListCopyWindowInfo` needs no grant at all, so the window rect is still something
+    /// measured — it is what the scrim opens a hole in, and what the sentence is placed beside.
     ///
     /// **It is not something to dash.** Knowing the window and nothing inside it is knowing that the
     /// answer is one of forty rows, and a dashed rectangle around forty rows says "somewhere in
@@ -815,9 +830,12 @@ enum PermissionChoreography {
 
         guard AXElement.isTrusted else {
             // The bootstrap case, and the one the user meets first: reading the Accessibility row
-            // requires Accessibility. `CGWindowListCopyWindowInfo` needs no grant and answers where
-            // the window is, so the boundary is still drawn around something real — just around the
-            // window rather than around a row we are not allowed to see.
+            // through the accessibility API requires Accessibility. Reading it off the screen does
+            // not, so that is tried before giving up — and only then does the boundary fall back to
+            // the window rather than the row.
+            if let sighted = liveSighting(for: capability, frame: frame, space: space, trusted: false) {
+                return sighted
+            }
             return framingOrWords(
                 for: capability, frame: frame, space: space, trusted: false, windows: 0)
         }
@@ -828,11 +846,61 @@ enum PermissionChoreography {
             space: space)
         if case .instruction = decision {
             // We could read the tree and still not find the row — a pane we have never seen, one
-            // that has not finished laying out, or a list we are simply not in. The window is real
-            // either way, so the boundary still goes around something measured.
+            // that has not finished laying out, or a list we are simply not in. The pixels are a
+            // second opinion on all three, and none of those failures affects them: the sighting
+            // does not care what shape the pane is, only that our name is drawn in it.
+            if let sighted = liveSighting(for: capability, frame: frame, space: space, trusted: true) {
+                return sighted
+            }
+            // The window is real either way, so the boundary still goes around something measured.
             return framingOrWords(for: capability, frame: frame, space: space, trusted: true, windows: windows.count)
         }
         log(decision, capability: capability, trusted: true, windows: windows.count)
+        return decision
+    }
+
+    /// **The pixel route**: the row, read out of the pane's own screenshot.
+    ///
+    /// Deliberately the last thing tried and never the first. The accessibility walk measures the
+    /// switch and reads its state off the switch; this derives both from one label and the window's
+    /// right edge, so it is strictly the weaker answer wherever the stronger one is available.
+    ///
+    /// It goes through exactly the same two gates a walked target does — `clamped` against the frame
+    /// the *window server* reported, then `vetted` against the displays — so a sighting cannot reach
+    /// the screen by a shorter path than a walk. The measurement is a different provider; the standard
+    /// for drawing an arrow is not.
+    ///
+    /// `SettingsPaneSightings` never blocks: this returns `nil` on the ticks before the first pass
+    /// lands, and the overlay shows the written instruction in the meantime, which is what it would
+    /// have shown anyway.
+    ///
+    /// **`labels` is a parameter for the same reason `windows` is one on `guidance(for:appName:…)`.**
+    /// Everything with a wrong answer available — the section ordinal, the clamp, the display vet — is
+    /// on this side of the seam and runs against a fixture with no System Settings, no window server
+    /// and no grant. Only the reading itself is live.
+    static func sighting(
+        for capability: Capability, appName: String = appDisplayName, labels: [RecognizedLabel],
+        frame: CGRect, space: ScreenSpace?
+    ) -> PermissionGuidance? {
+        guard !labels.isEmpty else { return nil }
+        let sighting = SettingsRowSighting(appName: appName)
+        guard case .sighted(let target) = sighting.locate(
+            in: labels, window: frame, preferring: sectionOccurrence(for: capability))
+        else { return nil }
+        guard let clamped = clamped(target, to: frame), let onScreen = vetted(clamped, space: space)
+        else { return nil }
+        return .pointing(onScreen)
+    }
+
+    /// The live half: take the most recent reading of the pane and hand it to the decision above.
+    private static func liveSighting(
+        for capability: Capability, frame: CGRect?, space: ScreenSpace, trusted: Bool
+    ) -> PermissionGuidance? {
+        guard let frame else { return nil }
+        let labels = SettingsPaneSightings.shared.labels(for: capability, of: frame)
+        guard let decision = sighting(for: capability, labels: labels, frame: frame, space: space)
+        else { return nil }
+        log(decision, capability: capability, trusted: trusted, windows: 0)
         return decision
     }
 
@@ -1113,6 +1181,11 @@ enum PermissionOverlay {
     ) {
         tracker?.cancel()
         confirming = false
+        // A new episode is a new pane, and System Settings changes pane without changing window — so
+        // the pixels read for the last capability describe rows that are no longer there. The reading
+        // is keyed by capability and would refuse them anyway; this is what keeps the refusal from
+        // depending on two consecutive episodes being about different capabilities.
+        SettingsPaneSightings.shared.forget()
         tracker = Task { @MainActor in
             var steadying = SpotlightHysteresis()
             // Snapshotted here, on the main actor, and handed to the solver. `NSScreen` is main-actor
@@ -1179,6 +1252,7 @@ enum PermissionOverlay {
         current = nil
         shownOn = nil
         confirming = false
+        SettingsPaneSightings.shared.forget()
         window?.orderOut(nil)
         window = nil
         host = nil

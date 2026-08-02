@@ -126,22 +126,43 @@ final class OnboardingResumeTests: XCTestCase {
             "clearing the resume point must not permanently suppress the intro; only finishing does")
     }
 
-    // MARK: - Why Accessibility is asked first
+    // MARK: - Why the screen is asked for first
 
-    /// Ordering is what buys precise guidance on the other three panes.
+    /// **The ordering is a cycle with exactly one way out, and this is the guard on which way.**
     ///
-    /// `PermissionChoreography` finds the real row by walking System Settings' accessibility tree,
-    /// and `AXUIElementCopyAttributeValue` against another process is hard-gated on this app being
-    /// AX-trusted. With Accessibility last, every earlier pane could only draw a boundary around the
-    /// whole window — reported for Screen Recording as *"the blue dotted line highlight the entire
-    /// settings window, not specifically the screen and system audio recording one"*.
+    /// `PermissionChoreography` has two locators and each needs the other's grant.
+    /// `SettingsRowLocator` walks System Settings' accessibility tree, and
+    /// `AXUIElementCopyAttributeValue` against another process is hard-gated on this app being
+    /// AX-trusted — so pointing at the **screen** row needs Accessibility already granted.
+    /// `SettingsRowSighting` reads the row out of a screenshot of the pane, which is gated on Screen
+    /// Recording — so pointing at the **Accessibility** row needs the screen already granted. One of
+    /// the two has to go first with no overlay of its own; there is no third arrangement.
+    ///
+    /// This asserted `.accessibility` for one release, on the reasoning that AX trust buys precise
+    /// guidance for the three panes after it. That reasoning was right about what it measured and
+    /// wrong about what it left out: Accessibility is the one capability that is **never required**,
+    /// so putting it first made an optional grant the precondition for all three required ones — skip
+    /// it and microphone, system audio and screen all fell back to a boundary round the whole window.
+    /// Reported from exactly that state: *"the blue dotted line highlight the entire settings window,
+    /// not specifically the screen and system audio recording one"*, and *"it does not give me an
+    /// option to drop something in this or highlighting only the area where the accessibility stuff is
+    /// there, highlights the entire settings window."*
+    ///
+    /// Screen-first breaks the coupling: once the pixels are readable every other pane is pointable
+    /// whether or not Accessibility is ever given — including Accessibility's own row, which under the
+    /// old order could never be pointed at by anything at all.
     @MainActor
-    func testAccessibilityIsAskedFirstBecauseEveryOtherPointDependsOnIt() {
+    func testTheScreenIsAskedForFirstBecauseTheOtherLocatorNeedsItsPixels() {
         let invitations = PermissionInvitations()
 
         XCTAssertEqual(
-            invitations.listed.first, .accessibility,
-            "AX trust is the precondition for locating any row in System Settings")
+            invitations.listed.first, .screen,
+            "the Accessibility row can only be located from a screenshot, and a screenshot needs the "
+                + "screen grant first")
+        guard let screen = invitations.listed.firstIndex(of: .screen),
+            let accessibility = invitations.listed.firstIndex(of: .accessibility)
+        else { return XCTFail("both capabilities must be listed") }
+        XCTAssertLessThan(screen, accessibility)
         XCTAssertEqual(
             Set(invitations.listed), Set(Capability.allCases),
             "reordering must not drop a capability off the card")
@@ -149,9 +170,10 @@ final class OnboardingResumeTests: XCTestCase {
 
     /// Ordering changed; the exit predicate did not. Accessibility stays *listed but not required* —
     /// macOS has no dialog for it, so gating the card on it would strand anyone unwilling to leave
-    /// the flow on a step with no button that could finish it.
+    /// the flow on a step with no button that could finish it. It is also the whole reason the order
+    /// above is what it is: an optional grant is the one people abandon when they cannot find the row.
     @MainActor
-    func testMovingAccessibilityFirstDidNotMakeItMandatory() {
+    func testReorderingDidNotMakeAnythingNewlyMandatory() {
         let invitations = PermissionInvitations()
 
         XCTAssertFalse(

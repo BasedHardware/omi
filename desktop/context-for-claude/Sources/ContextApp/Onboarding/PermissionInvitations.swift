@@ -29,26 +29,47 @@ final class PermissionInvitations: ObservableObject {
 
     /// Every capability the card lists, in the order it lists them.
     ///
-    /// **Accessibility is first, and the order is load-bearing.** It used to be last, on the
-    /// reasonable-sounding grounds that it is the only optional one. What that missed is that
-    /// Accessibility is also the *precondition for pointing at anything*: `PermissionChoreography`
-    /// locates the real row in System Settings by walking that application's accessibility tree, and
-    /// `AXUIElementCopyAttributeValue` against another process is hard-gated on this app being
-    /// AX-trusted. Untrusted, the locator gets an empty tree and degrades — correctly, but all the
-    /// way down to `CGWindowListCopyWindowInfo`, which knows only where the *window* is.
+    /// **The order is load-bearing, and the screen is first.** Not for its own sake — because it is
+    /// the only order in which the *Accessibility* row can be pointed at, and because it is the only
+    /// order in which the optional permission stops gating the precision of the required ones.
     ///
-    /// So with Accessibility last, every pane before it drew a boundary around the whole System
-    /// Settings window. Reported verbatim, twice — for Screen Recording: *"the blue dotted line
-    /// highlight the entire settings window, not specifically the screen and system audio recording
-    /// one"*, and for Accessibility itself: *"it does not give me an option to drop something in this
-    /// or highlighting only the area where the accessibility stuff is there, highlights the entire
-    /// settings window."*
+    /// The constraint is a cycle, and naming it is most of the argument. `PermissionChoreography` has
+    /// two locators. `SettingsRowLocator` walks System Settings' accessibility tree, which is
+    /// hard-gated on this app being AX-trusted — so **pointing at the screen row needs Accessibility
+    /// already granted**. `SettingsRowSighting` reads the row out of a screenshot of the pane, which
+    /// is gated on Screen Recording — so **pointing at the Accessibility row needs the screen already
+    /// granted**. Each of the two needs the other's grant. Exactly one of them has to go first with no
+    /// overlay of its own; there is no third arrangement, and an ordering that pretends otherwise is
+    /// an ordering that has not been checked.
     ///
-    /// Granting it first buys precise guidance for the three that follow, because AX trust applies to
-    /// the running process the moment the switch moves — no relaunch, unlike Screen Recording. Its own
-    /// step is still the bootstrap case and still gets the window frame; that one is structural and no
-    /// ordering can fix it. Three of four panes pointed at exactly is the whole of what ordering can
-    /// win, and it is the difference between "somewhere in that window" and "this row".
+    /// Accessibility used to be first, and by count that looked equal: one dark step either way. Two
+    /// things break the tie, and both point the same direction.
+    ///
+    /// - **The optional one is the one that must be findable.** Accessibility is listed and never
+    ///   required — a user who cannot find the row simply never grants it, and the app runs OCR-only
+    ///   for good. A required grant is one people push through; an optional one they cannot see is one
+    ///   they abandon.
+    /// - **Accessibility-first makes an optional grant a precondition for three required ones.** With
+    ///   it first and *skipped*, every pane after it — microphone, system audio, screen — fell back to
+    ///   a boundary round the whole System Settings window, because the walk was the only locator
+    ///   there was. Reported verbatim, twice, from exactly that state: *"the blue dotted line
+    ///   highlight the entire settings window, not specifically the screen and system audio recording
+    ///   one"*, and *"it does not give me an option to drop something in this or highlighting only the
+    ///   area where the accessibility stuff is there, highlights the entire settings window."*
+    ///   Screen-first removes the coupling outright: once the screen is granted the pixels are
+    ///   readable, so microphone and system audio are pointed at whether or not Accessibility is ever
+    ///   given.
+    ///
+    /// What it costs is the screen's own step, which now has neither locator and shows the boundary
+    /// and the sentence. That is the bootstrap the cycle guarantees somebody has to be, it is the one
+    /// step macOS itself opens with a dialog carrying an "Open System Settings" button, and it is the
+    /// one the finale re-opens and re-points at (`openScreenSettingsOnce`) by which time Accessibility
+    /// may well be granted.
+    ///
+    /// The screen grant only reaches a process that had it when it connected to the window server, so
+    /// the sighting starts working after the relaunch the card already asks for — and if the user
+    /// skips that relaunch, the Accessibility step degrades to precisely what it does today. The
+    /// ordering can lose nothing that was working; it can only add.
     let listed: [Capability]
 
     /// The ones without which the app does nothing, and therefore the only ones that hold the card
@@ -88,7 +109,7 @@ final class PermissionInvitations: ObservableObject {
     /// `PermissionGate` is main-actor isolated and so is any test double of `PermissionAsking`, and
     /// a bare `(Capability) -> …` could not call either.
     init(
-        listed: [Capability] = [.accessibility, .microphone, .systemAudio, .screen],
+        listed: [Capability] = [.screen, .accessibility, .microphone, .systemAudio],
         required: [Capability] = [.microphone, .systemAudio, .screen],
         granted: @escaping @MainActor (Capability) -> Bool = { Permissions.check($0) },
         openSettings: @escaping @MainActor (Capability) -> Void = { Permissions.openSettings(for: $0) },
