@@ -304,7 +304,9 @@ def _html_to_text(html: str) -> str:
     return '\n\n'.join(parts)
 
 
-async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]:
+async def _fetch_page(
+    url: str, headers: Dict[str, str], allowlist: Optional[Sequence[str]] = None
+) -> Tuple[int, str, str]:
     """
     Fetch *url* with SSRF guard, manual redirect following, and a body-size cap.
     Returns (status_code, content_type, body_text).
@@ -352,6 +354,8 @@ async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]
                 body_text = b''.join(chunks).decode('utf-8', errors='replace')
 
         if redirect_url is not None:
+            if not is_url_allowlisted(redirect_url, allowlist):
+                raise ValueError('Redirect target is not in the current-turn user allowlist')
             url = redirect_url
             continue
 
@@ -400,7 +404,7 @@ async def fetch_url_tool(url: str, config: RunnableConfig = None) -> str:  # typ
     }
 
     try:
-        status, content_type, body = await _fetch_page(url, headers)
+        status, content_type, body = await _fetch_page(url, headers, allowlist)
     except ValueError as e:
         logger.warning(f"fetch_url_tool blocked - {sanitize(str(e))}")
         return f'Error: {sanitize(str(e))}'

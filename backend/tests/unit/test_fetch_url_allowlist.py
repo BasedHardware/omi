@@ -127,3 +127,95 @@ class TestRuntimeEnforcement:
     def test_is_url_allowlisted_normalizes_trailing_punctuation(self):
         allowlist = ['https://example.com/page']
         assert is_url_allowlisted('https://example.com/page.', allowlist)
+
+    @pytest.mark.asyncio
+    async def test_rejects_redirect_to_non_allowlisted_url(self):
+        """Redirect targets must pass the same allowlist as the initial URL."""
+        allowed = 'https://trusted.example/short'
+        config = RunnableConfig(configurable={'user_provided_urls': [allowed]})
+
+        class _FakeResponse:
+            def __init__(self):
+                self.status_code = 302
+                self.headers = {'location': 'https://other.example/malicious'}
+
+            async def aiter_bytes(self, chunk_size=8192):
+                if False:
+                    yield b''
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeClient:
+            def __init__(self):
+                self.urls = []
+
+            def stream(self, method, url, **kwargs):
+                self.urls.append(url)
+                return _FakeResponse()
+
+        client = _FakeClient()
+        with (
+            patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
+            patch(
+                'utils.retrieval.tools.web_tools._hostname_is_public',
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
+            result = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
+
+        assert 'Redirect target is not in the current-turn user allowlist' in result
+        assert client.urls == [allowed]
+
+    @pytest.mark.asyncio
+    async def test_allows_redirect_to_allowlisted_url(self):
+        start = 'https://trusted.example/short'
+        target = 'https://trusted.example/full'
+        config = RunnableConfig(configurable={'user_provided_urls': [start, target]})
+
+        class _FakeResponse:
+            def __init__(self, status_code, headers=None, body=b''):
+                self.status_code = status_code
+                self.headers = headers or {}
+                self._body = body
+
+            async def aiter_bytes(self, chunk_size=8192):
+                if self._body:
+                    yield self._body
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeClient:
+            def __init__(self):
+                self.urls = []
+                self._responses = [
+                    _FakeResponse(302, headers={'location': target}),
+                    _FakeResponse(200, headers={'content-type': 'text/html'}, body=b'<p>Hello</p>'),
+                ]
+
+            def stream(self, method, url, **kwargs):
+                self.urls.append(url)
+                return self._responses.pop(0)
+
+        client = _FakeClient()
+        with (
+            patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
+            patch(
+                'utils.retrieval.tools.web_tools._hostname_is_public',
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
+            result = await fetch_url_tool.ainvoke({'url': start}, config=config)
+
+        assert client.urls == [start, target]
+        assert 'Content from' in result
+        assert 'Hello' in result
