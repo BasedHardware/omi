@@ -51,6 +51,7 @@ from utils.retrieval.tools import (
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.web_tools import (
+    MAX_USER_PROVIDED_URLS,
     extract_user_turn_urls,
     user_url_allowlist_block,
 )
@@ -460,14 +461,14 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return _prepend_block_to_latest_user_turn(anthropic_messages, datetime_block)
 
 
-def _inject_user_url_allowlist(anthropic_messages: list, urls: List[str]) -> list:
+def _inject_user_url_allowlist(anthropic_messages: list, urls: List[str], *, overflow: bool = False) -> list:
     """Attach the per-turn allowlist of user-typed URLs to the latest user turn.
 
     The allowlist varies every request, so like the datetime block it is kept out of the
     cache_control system prefix. When the user typed no URL nothing is injected at all, and
     the static system rule then forbids fetch_url_tool for the turn.
     """
-    return _prepend_block_to_latest_user_turn(anthropic_messages, user_url_allowlist_block(urls))
+    return _prepend_block_to_latest_user_turn(anthropic_messages, user_url_allowlist_block(urls, overflow=overflow))
 
 
 def _prepend_block_to_latest_user_turn(anthropic_messages: list, block: str) -> list:
@@ -902,14 +903,18 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
-    user_provided_urls = extract_user_turn_urls(messages)
+    all_user_urls = extract_user_turn_urls(messages)
+    url_allowlist_overflow = len(all_user_urls) > MAX_USER_PROVIDED_URLS
+    user_provided_urls = [] if url_allowlist_overflow else all_user_urls
 
     # Convert messages to Anthropic format. The current datetime is injected into the user
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
     # Scope the fetch_url_tool mandate to URLs the user typed in this turn. Anything else the
     # model sees this turn is retrieved data, which must not be able to direct an outbound fetch.
-    anthropic_messages = _inject_user_url_allowlist(anthropic_messages, user_provided_urls)
+    anthropic_messages = _inject_user_url_allowlist(
+        anthropic_messages, user_provided_urls, overflow=url_allowlist_overflow
+    )
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )

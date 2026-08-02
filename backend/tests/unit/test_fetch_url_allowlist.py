@@ -41,6 +41,14 @@ class TestUrlExtraction:
         urls = extract_urls_from_text('See https://example.com/page, thanks!')
         assert urls == ['https://example.com/page']
 
+    def test_preserves_balanced_parentheses(self):
+        urls = extract_urls_from_text('See https://en.wikipedia.org/wiki/Function_(mathematics).')
+        assert urls == ['https://en.wikipedia.org/wiki/Function_(mathematics)']
+
+    def test_returns_all_urls_for_overflow_detection(self):
+        text = ' '.join(f'https://example.com/{index}' for index in range(11))
+        assert len(extract_urls_from_text(text)) == 11
+
     def test_extract_user_turn_urls_ignores_assistant_messages(self):
         messages = [
             _message('Old https://old.example.com/page'),
@@ -119,15 +127,15 @@ class TestRuntimeEnforcement:
             new_callable=AsyncMock,
             return_value=(200, 'text/html', '<html><body><p>Hello</p></body></html>'),
         ) as mock_fetch:
-            result = await fetch_url_tool.ainvoke({'url': allowed + '.'}, config=config)
+            result = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
 
         assert mock_fetch.await_args.args[0] == allowed
         assert 'Content from' in result
         assert 'Hello' in result
 
-    def test_is_url_allowlisted_normalizes_trailing_punctuation(self):
+    def test_is_url_allowlisted_rejects_outbound_trailing_punctuation(self):
         allowlist = ['https://example.com/page']
-        assert is_url_allowlisted('https://example.com/page.', allowlist)
+        assert not is_url_allowlisted('https://example.com/page.', allowlist)
 
     def test_is_url_allowlisted_canonicalizes_host_and_default_port(self):
         allowlist = ['HTTPS://Example.COM:443/page']

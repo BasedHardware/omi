@@ -10,7 +10,7 @@ import re
 import logging
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -20,7 +20,7 @@ from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
-USER_URL_PATTERN = re.compile(r'https?://[^\s<>"\'`\)\]\}]+', re.IGNORECASE)
+USER_URL_PATTERN = re.compile(r'https?://[^\s<>"\'`]+', re.IGNORECASE)
 USER_URL_TRAILING_PUNCTUATION = '.,;:!?\'"'
 MAX_USER_PROVIDED_URLS = 10
 
@@ -31,11 +31,16 @@ URL_NOT_ALLOWLISTED_MESSAGE = (
 
 def normalize_user_url(url: str) -> str:
     """Normalize a URL for allowlist comparison."""
-    return (url or '').strip().rstrip(USER_URL_TRAILING_PUNCTUATION)
+    normalized = (url or '').strip().rstrip(USER_URL_TRAILING_PUNCTUATION)
+    while normalized.endswith(')') and normalized.count(')') > normalized.count('('):
+        normalized = normalized[:-1]
+    return normalized
 
 
-def _canonical_user_url(url: str) -> Optional[Tuple[str, str, str, str, str]]:
-    normalized = normalize_user_url(url)
+def _canonical_user_url(
+    url: str, *, strip_trailing_punctuation: bool = True
+) -> Optional[Tuple[str, str, str, str, str]]:
+    normalized = normalize_user_url(url) if strip_trailing_punctuation else (url or '').strip()
     if not normalized:
         return None
     parsed = urlparse(normalized)
@@ -58,8 +63,6 @@ def extract_urls_from_text(text: str) -> List[str]:
         url = normalize_user_url(match)
         if url and url not in urls:
             urls.append(url)
-        if len(urls) >= MAX_USER_PROVIDED_URLS:
-            break
     return urls
 
 
@@ -79,8 +82,14 @@ def extract_user_turn_urls(messages) -> List[str]:
     return extract_urls_from_text(latest_user_text)
 
 
-def user_url_allowlist_block(urls: Sequence[str]) -> str:
+def user_url_allowlist_block(urls: Sequence[str], *, overflow: bool = False) -> str:
     """Render the per-turn allowlist block injected into the latest user turn."""
+    if overflow:
+        return (
+            '<user_provided_urls>\n'
+            f'This message contains more than {MAX_USER_PROVIDED_URLS} URLs. Do not use fetch_url_tool for this turn.\n'
+            '</user_provided_urls>'
+        )
     if not urls:
         return ''
     listed = '\n'.join(urls)
@@ -97,7 +106,7 @@ def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
     """Return True when *url* matches an allowlist entry."""
     if not allowlist:
         return False
-    canonical = _canonical_user_url(url)
+    canonical = _canonical_user_url(url, strip_trailing_punctuation=False)
     if canonical is None:
         return False
     return any(_canonical_user_url(entry) == canonical for entry in allowlist)
@@ -420,14 +429,26 @@ async def fetch_url_tool(url: str, config: RunnableConfig = None) -> str:  # typ
     """
     logger.info(f"fetch_url_tool called - url: {sanitize(url)}")
 
-    normalized_url = normalize_user_url(url)
-    if urlparse(normalized_url).scheme.lower() not in {'http', 'https'}:
+    candidate_url = (url or '').strip()
+    parsed_url = urlparse(candidate_url)
+    if parsed_url.scheme.lower() not in {'http', 'https'}:
         return 'Error: URL must start with http:// or https://'
 
     allowlist = _user_provided_urls_from_config(config)
-    if not is_url_allowlisted(normalized_url, allowlist):
+    if not is_url_allowlisted(candidate_url, allowlist):
         logger.warning(f"fetch_url_tool blocked - URL not in user allowlist: {sanitize(url)}")
         return URL_NOT_ALLOWLISTED_MESSAGE
+
+    normalized_url = urlunparse(
+        (
+            parsed_url.scheme.lower(),
+            parsed_url.netloc,
+            parsed_url.path,
+            parsed_url.params,
+            parsed_url.query,
+            parsed_url.fragment,
+        )
+    )
 
     headers: Dict[str, str] = {
         'User-Agent': 'Mozilla/5.0 (compatible; Omi-AI-Bot/1.0)',
