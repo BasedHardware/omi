@@ -279,12 +279,13 @@ struct ChatPromptTimeline: View {
 /// whose column spans the whole width has no gutter, so it gets no rail and
 /// needs no flag saying so. That keeps the narrow panels — the task chat, the
 /// agent sheet — free of a rail jammed against their text, and hands one to any
-/// surface that later caps its column.
+/// surface that later caps its column. The rail is a visual overlay only; the
+/// native scroll indicator remains hidden so its width cannot participate in a
+/// transcript layout feedback loop.
 struct ChatPromptTimelineOverlay: View {
   @ObservedObject var geometry: ChatTranscriptGeometry
   var trailingInset: CGFloat = ChatComposerLayout.pageMargin
   let onSelect: (String) -> Void
-  var onVisibilityChange: ((Bool) -> Void)? = nil
 
   var body: some View {
     if geometry.showsPromptTimeline {
@@ -296,8 +297,6 @@ struct ChatPromptTimelineOverlay: View {
         trailingInset: trailingInset
       )
       .background { stepShortcuts }
-      .onAppear { onVisibilityChange?(true) }
-      .onDisappear { onVisibilityChange?(false) }
     }
   }
 

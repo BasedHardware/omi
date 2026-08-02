@@ -220,6 +220,9 @@ struct DashboardPage: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   var taskChatCoordinator: TaskChatCoordinator? = nil
+  /// Present only for the capability-gated main-window Home chat. Shared
+  /// Dashboard callers leave this nil and keep journaled rich blocks inert.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   /// The cohort shell reuses dashboard content under More, but Chat itself
   /// has one primary home. Legacy callers leave this nil and retain their
   /// inline Home chat exactly as before.
@@ -256,6 +259,7 @@ struct DashboardPage: View {
     AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
+  @State private var didReportChatFirstTranscriptPage = false
   @FocusState private var homeAskFieldFocused: Bool
 
   private var routesChatToPrimaryShell: Bool {
@@ -626,6 +630,7 @@ struct DashboardPage: View {
           FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
         },
         onOpenAgentRef: FloatingControlBarManager.shared.openAgentChatFromTimeline(ref:completion:),
+        chatFirstRichBlockContext: chatFirstRichBlockContext,
         contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )
@@ -1125,6 +1130,7 @@ struct DashboardPage: View {
           FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
         },
         horizontalContentPadding: 0,
+        chatFirstRichBlockContext: chatFirstRichBlockContext,
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
         contentColumnWidth: 760,
@@ -1132,6 +1138,14 @@ struct DashboardPage: View {
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .onAppear { reportChatFirstTranscriptPageIfReady() }
+      .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in
+        reportChatFirstTranscriptPageIfReady()
+      }
+      .onDisappear {
+        didReportChatFirstTranscriptPage = false
+        chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+      }
       // The composer already has its own visual boundary. Masking this viewport
       // fades the live edge and can cut off the first lines of an incoming reply.
       .padding(.bottom, OmiSpacing.xs)
@@ -1141,6 +1155,15 @@ struct DashboardPage: View {
     // the ambient canvas. The column matches the ask bar's width exactly so
     // message edges align with the bar's edges.
     .frame(width: width)
+  }
+
+  private func reportChatFirstTranscriptPageIfReady() {
+    guard !didReportChatFirstTranscriptPage,
+      chatFirstRichBlockContext != nil,
+      chatProvider.isMainChatJournalFirstPageReady
+    else { return }
+    didReportChatFirstTranscriptPage = true
+    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
   // MARK: Connect tray
@@ -2230,22 +2253,6 @@ struct DashboardPage: View {
 }
 
 // MARK: - Home Components
-
-enum HomePalette {
-  static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
-  static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
-  static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
-  static let tileHover = Color(red: 0.108, green: 0.110, blue: 0.122)
-  static let ink = Color(red: 0.97, green: 0.97, blue: 0.975)
-  static let secondary = Color(red: 0.72, green: 0.73, blue: 0.75)
-  static let muted = Color(red: 0.46, green: 0.47, blue: 0.50)
-  static let faint = Color(red: 0.34, green: 0.35, blue: 0.37)
-  static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
-  static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-  // Neutral cool-grey key light (INV-UI-1 brand accent rules).
-  static let stageGlow = Color(red: 0.72, green: 0.74, blue: 0.78)
-  static let glow = stageGlow
-}
 
 private enum HomeRowStatus {
   case connect
@@ -3940,44 +3947,6 @@ private struct HomeSectionHeader: View {
         .scaledFont(size: OmiType.caption)
         .foregroundStyle(OmiColors.textTertiary)
     }
-  }
-}
-
-enum HomeStatusState {
-  case active
-  case inactive
-  case blocked
-
-  var indicator: Color {
-    switch self {
-    case .active:
-      return HomePalette.green
-    case .inactive:
-      return HomePalette.faint
-    case .blocked:
-      return Color(red: 1.0, green: 0.24, blue: 0.30)
-    }
-  }
-
-  var text: String {
-    switch self {
-    case .active:
-      return "On"
-    case .inactive:
-      return "Off"
-    case .blocked:
-      return "Blocked"
-    }
-  }
-
-  var isActive: Bool {
-    if case .active = self { return true }
-    return false
-  }
-
-  var isBlocked: Bool {
-    if case .blocked = self { return true }
-    return false
   }
 }
 

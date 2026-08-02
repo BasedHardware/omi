@@ -1082,8 +1082,7 @@ struct DesktopHomeView: View {
   }
 
   private var usesChatFirstShell: Bool {
-    if case .chatFirst = chatFirstCapabilitySample.variant { return true }
-    return false
+    DesktopShellPresentationPolicy.usesChatFirst(useLegacyHomeDesign, chatFirstCapabilitySample.variant)
   }
 
   private func updateStoreActivityForCurrentShell() {
@@ -1337,7 +1336,7 @@ struct DesktopHomeView: View {
   /// expression. The runtime choice is already immutable for this app session;
   /// this is only an erased rendering boundary, not a second state owner.
   private var shellContent: AnyView {
-    if case .chatFirst(let capability) = chatFirstCapabilitySample.variant {
+    if case (true, .chatFirst(let capability)) = (usesChatFirstShell, chatFirstCapabilitySample.variant) {
       return AnyView(
         ChatFirstShell(
           navigation: chatFirstNavigation,
