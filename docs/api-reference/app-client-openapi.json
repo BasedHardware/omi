@@ -12845,6 +12845,7 @@
               "additionalProperties": true,
               "type": "object"
             },
+            "maxItems": 100,
             "minItems": 1,
             "title": "Rows",
             "type": "array"
