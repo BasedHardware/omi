@@ -47,15 +47,23 @@ final class RewindTrackView: NSView {
     var frames: [RewindFrame] = []
     var trackStart: Double = 0
     var trackSpan: Double = 1
+    /// The range `trackSpan` may move within, so a pinch stops where the buttons stop.
+    var spanBounds: ClosedRange<Double> = RewindZoom.minimumSpan...RewindZoom.maximumSpan
     var playheadAt: Double?
 
     /// Called with an instant when the user scrubs. The model turns it into a frame.
     var onScrub: ((Double) -> Void)?
     /// Called with a signed number of seconds when the user scrolls. Positive is forward in time.
     var onTravel: ((Double) -> Void)?
+    /// Called while the user pinches. The model turns it into a visible window.
+    var onZoom: ((RewindZoom.Target) -> Void)?
 
     private var tooltipWindow: NSWindow?
     private var trackingAreaAdded: NSTrackingArea?
+
+    /// The pinch in progress, or nil between gestures. See `RewindPinch` for why this is held across
+    /// events rather than recomputed from each one.
+    private var pinch: RewindPinch?
 
     override var isFlipped: Bool { true }
 
@@ -72,12 +80,14 @@ final class RewindTrackView: NSView {
         frames: [RewindFrame],
         trackStart: Double,
         trackSpan: Double,
-        playheadAt: Double?
+        playheadAt: Double?,
+        spanBounds: ClosedRange<Double> = RewindZoom.minimumSpan...RewindZoom.maximumSpan
     ) {
         self.blocks = blocks
         self.frames = frames
         self.trackStart = trackStart
         self.trackSpan = max(1, trackSpan)
+        self.spanBounds = spanBounds
         self.playheadAt = playheadAt
         needsDisplay = true
     }
@@ -331,6 +341,54 @@ final class RewindTrackView: NSView {
         onTravel?(seconds)
     }
 
+    /// A trackpad pinch zooms the track: how much *time* it spans, not how large anything is drawn.
+    ///
+    /// It is the same zoom the two magnifier buttons drive — the same bounds, the same anchoring rule,
+    /// the same single mutation point on the model — and it is deliberately reached through the same
+    /// `RewindZoom.Target`, so a pinch cannot leave the track in a state a button could not.
+    ///
+    /// AppKit delivers gesture events to the view under the pointer, exactly as it does scroll events,
+    /// which is what makes "pinch while you are over the timeline" the literal behaviour rather than
+    /// something this has to test for. It is not passed to `super`: forwarding a gesture we have acted
+    /// on would let an ancestor act on it a second time.
+    override func magnify(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        handleMagnification(Double(event.magnification), phase: event.phase, atX: point.x)
+    }
+
+    /// The pinch state machine, split from `magnify(with:)` because an `NSEvent` of a gesture type
+    /// cannot be constructed outside the window server — so this is the seam a test can drive, and it
+    /// is the production path from the first line after the event is unpacked.
+    func handleMagnification(_ delta: Double, phase: NSEvent.Phase, atX x: CGFloat) {
+        guard bounds.width > 0, trackSpan > 0 else { return }
+
+        if phase.contains(.ended) || phase.contains(.cancelled) {
+            // Dropped rather than wound down: the next gesture must start from whatever the track
+            // ended up showing, so two pinches in a row compose instead of the second replaying the
+            // first's accumulated magnification.
+            pinch = nil
+            return
+        }
+
+        // `.began` opens a gesture, and so does a `.changed` that arrives without one. The second case
+        // is defensive rather than expected: a gesture that began while the pointer was elsewhere, or
+        // over a view that has since gone away, would otherwise deliver events this drops on the floor
+        // and the pinch would appear dead until the user lifted their fingers and tried again.
+        if phase.contains(.began) || pinch == nil {
+            let fraction = min(max(0, Double(x / bounds.width)), 1)
+            pinch = RewindPinch(
+                anchor: trackStart + fraction * trackSpan,
+                fraction: fraction,
+                startSpan: trackSpan,
+                spanBounds: spanBounds)
+        }
+
+        guard var gesture = pinch else { return }
+        let target = gesture.advance(by: delta)
+        pinch = gesture
+        onZoom?(target)
+    }
+
     override func mouseMoved(with event: NSEvent) {
         showTooltip(for: event)
     }
@@ -405,6 +463,10 @@ final class RewindTrackView: NSView {
         // floating tooltip window would be orphaned on screen. Tear it down here.
         if newWindow == nil {
             hideTooltip()
+            // Same reasoning one step further: a gesture whose `.ended` will never arrive would
+            // otherwise still be open the next time this view is installed, and its first event would
+            // resume a pinch the user finished in another window.
+            pinch = nil
         }
     }
 
@@ -451,11 +513,17 @@ struct RewindTrack: NSViewRepresentable {
     let playheadAt: Double?
     let onScrub: (Double) -> Void
     let onTravel: (Double) -> Void
+    /// Defaulted, and therefore omissible, for the one call site that is not the timeline window:
+    /// `TimelinePreview` in Settings draws this track over synthetic data with hit testing turned
+    /// off, so it has no zoom to bound and no gesture to answer.
+    var spanBounds: ClosedRange<Double> = RewindZoom.minimumSpan...RewindZoom.maximumSpan
+    var onZoom: (RewindZoom.Target) -> Void = { _ in }
 
     func makeNSView(context: Context) -> RewindTrackView {
         let view = RewindTrackView()
         view.onScrub = onScrub
         view.onTravel = onTravel
+        view.onZoom = onZoom
         return view
     }
 
@@ -464,11 +532,13 @@ struct RewindTrack: NSViewRepresentable {
         // model that is no longer the window's.
         view.onScrub = onScrub
         view.onTravel = onTravel
+        view.onZoom = onZoom
         view.apply(
             blocks: blocks,
             frames: frames,
             trackStart: trackStart,
             trackSpan: trackSpan,
-            playheadAt: playheadAt)
+            playheadAt: playheadAt,
+            spanBounds: spanBounds)
     }
 }

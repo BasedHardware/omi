@@ -92,7 +92,7 @@ struct RewindView: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut("/", modifiers: [])
-        .help("Ask Claude about everything captured")
+        .help("Search everything captured")
     }
 
     private var gearButton: some View {
@@ -289,14 +289,17 @@ struct RewindView: View {
         HStack(spacing: 8) {
             openExternallyButton
             liveTextButton
+            // The tooltips name the pinch because the gesture is otherwise undiscoverable: nothing on
+            // screen says the track answers to fingers, and these two buttons are where somebody
+            // looking for the feature will hover first.
             circleButton(
                 systemName: "minus.magnifyingglass",
-                help: "Zoom the timeline out",
+                help: "Zoom the timeline out — or pinch in on the track",
                 enabled: model.canZoomTrackOut
             ) { model.zoomTrack(in: false) }
             circleButton(
                 systemName: "plus.magnifyingglass",
-                help: "Zoom the timeline in",
+                help: "Zoom the timeline in — or pinch out on the track",
                 enabled: model.canZoomTrackIn
             ) { model.zoomTrack(in: true) }
         }
@@ -371,7 +374,12 @@ struct RewindView: View {
             trackSpan: model.trackSpan,
             playheadAt: model.currentFrame?.capturedAt,
             onScrub: { model.scrub(to: $0) },
-            onTravel: { model.travel(by: $0) }
+            onTravel: { model.travel(by: $0) },
+            spanBounds: model.trackSpanBounds,
+            // A pinch over the track is the second way into the *same* zoom the two magnifier buttons
+            // drive: it hands the model a `RewindZoom.Target` and the model's single mutation point
+            // does the rest, so the gesture and the buttons cannot get out of step.
+            onZoom: { model.setTrackWindow($0) }
         )
         .frame(height: RewindTrackView.height)
         .padding(.horizontal, 18)

@@ -10,6 +10,11 @@ import SwiftUI
 /// *time* the track shows, and `imageZoom` is how large the *picture* is drawn. Conflating them is
 /// the easy mistake — both are called "zoom" and both have a plus and a minus — and it produces a
 /// control that appears to work while doing the wrong thing.
+///
+/// The track zoom has two drivers — the magnifier buttons and a trackpad pinch over the track — and
+/// exactly one mutation point, `setTrackWindow(_:)`. Neither driver owns any span arithmetic of its
+/// own, so they cannot end up disagreeing about the bounds or about what a zoom is anchored on; the
+/// arithmetic itself lives in `RewindZoom`, where it is testable without a window.
 @MainActor
 final class RewindModel: ObservableObject {
 
@@ -19,14 +24,6 @@ final class RewindModel: ObservableObject {
     /// drag covers between two frames being asked for, and eleven frames is a memory cost
     /// `FrameLoader.memoryBudgetBytes` is sized for.
     static let prefetchRadius = 5
-
-    /// The narrowest and widest the track may be zoomed, in seconds.
-    ///
-    /// Two minutes is about forty frames — below that the track is mostly one segment and the zoom
-    /// has nothing left to reveal. The ceiling is a full day, because the track is bounded by the day
-    /// that is loaded; going wider is what the date picker is for.
-    static let minimumTrackSpan: Double = 120
-    static let maximumTrackSpan: Double = 24 * 3600
 
     /// Frame-image zoom bounds. 1 is fit-to-window.
     static let minimumImageZoom: CGFloat = 1
@@ -46,7 +43,7 @@ final class RewindModel: ObservableObject {
 
     /// The leftmost instant the track shows, and how many seconds of it are visible.
     @Published private(set) var trackStart: Double = 0
-    @Published private(set) var trackSpan: Double = RewindModel.maximumTrackSpan
+    @Published private(set) var trackSpan: Double = RewindZoom.maximumSpan
 
     @Published var imageZoom: CGFloat = 1
 
@@ -65,6 +62,22 @@ final class RewindModel: ObservableObject {
     /// Set when a day could not be read at all, so the window can say so instead of looking empty.
     @Published private(set) var loadError: String?
 
+    /// True once a day has actually been read — i.e. `reload()` has run at least once.
+    ///
+    /// Not cosmetic: it is what tells `focus(on:)` whether the window is far enough along to be moved
+    /// somewhere, or whether the instant has to wait for the first read (see `pendingFocus`).
+    private(set) var hasLoaded = false
+
+    /// An instant the window was asked to open at *before* it had read anything.
+    ///
+    /// The two entry points arrive in opposite orders. A timeline that is already up can be moved
+    /// immediately; a timeline being opened *at* a moment is asked before its view exists, and
+    /// `loadInitial()` — which runs from `RewindView.onAppear`, after `present(…)` has returned —
+    /// picks the day itself. Scrubbing at request time would therefore be silently undone a moment
+    /// later by the opening read. Holding the instant until that read consumes it is the only
+    /// ordering that is correct for both.
+    private var pendingFocus: Double?
+
     init(store: ContextStore, day: Date = Date()) {
         self.store = store
         self.day = Calendar.current.startOfDay(for: day)
@@ -77,13 +90,23 @@ final class RewindModel: ObservableObject {
     /// Opening on "today" would show an empty window every morning before the first capture, and on a
     /// machine that has not run for a week it would show an empty window indefinitely. The newest day
     /// with data is the only opening state that is never empty when the database is not.
+    ///
+    /// Unless the window was opened *at* a moment, in which case that moment's day is the one to
+    /// read: a search result from last week that opened today's timeline would be the feature not
+    /// working at all.
     func loadInitial() {
         coverage = (try? RewindQueries.coverage(store)) ?? nil
-        if let newest = coverage?.upperBound {
+        if let pending = pendingFocus {
+            day = Self.day(containing: pending)
+        } else if let newest = coverage?.upperBound {
             day = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: newest))
         }
         AppIconCache.shared.setBundleIds((try? RewindQueries.bundleIdsByApp(store)) ?? [:])
         reload()
+        if let pending = pendingFocus {
+            pendingFocus = nil
+            scrub(to: pending)
+        }
     }
 
     /// Loads `day`, resets the track to span it, and parks the playhead on the newest frame.
@@ -117,6 +140,21 @@ final class RewindModel: ObservableObject {
         playhead = frames.isEmpty ? nil : frames.count - 1
         resetTrackWindow()
         refreshImage()
+        // Last, and only here: this is the single place a day is actually read, so it is the single
+        // place that can honestly say one has been.
+        hasLoaded = true
+    }
+
+    /// The local day an instant belongs to, as its midnight.
+    ///
+    /// **The one statement of the instant→day rule**, so the window, the model and the tests cannot
+    /// each hold their own. `nonisolated` with an injectable calendar because it is arithmetic, not
+    /// state: a test can ask what day 23:59 belongs to without a store, a window or a wall clock.
+    /// `Calendar` rather than dividing by 86,400 — a day is 23, 24 or 25 hours depending on what the
+    /// clocks did, and a result from the hour either side of a DST change would land on the wrong
+    /// day for exactly the users least able to explain why.
+    nonisolated static func day(containing instant: Double, calendar: Calendar = .current) -> Date {
+        calendar.startOfDay(for: Date(timeIntervalSince1970: instant))
     }
 
     /// The loaded day's local start and end instants.
@@ -144,6 +182,30 @@ final class RewindModel: ObservableObject {
     var currentBlock: ActivityBlock? {
         guard let at = currentFrame?.capturedAt else { return nil }
         return blocks.first { at >= $0.startedAt && at <= $0.endedAt }
+    }
+
+    /// **Go to a moment**, wherever in the capture it is. The seam a search result travels through.
+    ///
+    /// Distinct from `scrub(to:)` in exactly one way, and it is the way that matters: `scrub` moves
+    /// the playhead *within the loaded day* — it maps an instant onto the nearest frame in `frames`,
+    /// which for an instant belonging to another day is the first or the last frame of this one. So
+    /// a result from last Tuesday handed to `scrub` lands on midnight of whatever day is open, and
+    /// looks for all the world like the timeline ignoring the click. This loads the right day first.
+    ///
+    /// Loading is a no-op when the day is already open (`load(day:)` guards on it), so activating two
+    /// results from the same afternoon does not re-read the day between them.
+    ///
+    /// A day with speech but no frames is a real outcome and stays honest rather than being
+    /// corrected: the day loads, the playhead has nothing to sit on, and the stage says nothing was
+    /// captured. Jumping to the nearest *other* day's picture would be a confident wrong answer about
+    /// what the user asked to see.
+    func focus(on instant: Double) {
+        guard hasLoaded else {
+            pendingFocus = instant
+            return
+        }
+        load(day: Self.day(containing: instant))
+        scrub(to: instant)
     }
 
     /// Moves the playhead to the frame nearest `instant`. The scrub entry point.
@@ -200,34 +262,79 @@ final class RewindModel: ObservableObject {
     private func resetTrackWindow() {
         let bounds = dayBounds
         trackStart = bounds.start
-        trackSpan = min(Self.maximumTrackSpan, bounds.end - bounds.start)
+        trackSpan = min(RewindZoom.maximumSpan, bounds.end - bounds.start)
     }
 
     var trackEnd: Double { trackStart + trackSpan }
 
-    /// Halves or doubles the visible span, anchored on the playhead so the frame being looked at
-    /// stays put under the cursor.
-    func zoomTrack(in zoomIn: Bool) {
-        let anchor = currentFrame?.capturedAt ?? (trackStart + trackSpan / 2)
-        let factor: Double = zoomIn ? 0.5 : 2
-        let span = min(Self.maximumTrackSpan, max(Self.minimumTrackSpan, trackSpan * factor))
-        // The anchor keeps its fractional position in the window, which is what makes repeated
-        // zooming feel like it is zooming on the frame rather than drifting away from it.
-        let fraction = trackSpan > 0 ? (anchor - trackStart) / trackSpan : 0.5
-        trackSpan = span
-        trackStart = anchor - fraction * span
-        clampTrackWindow()
+    /// The window the track is currently showing, in the shape the zoom arithmetic speaks.
+    var trackWindow: RewindZoom.Window { RewindZoom.Window(start: trackStart, span: trackSpan) }
+
+    /// The range the track's span may move within, given the day that is loaded.
+    ///
+    /// Computed rather than constant because the ceiling is the day itself, and a day is 23, 24 or 25
+    /// hours depending on what the clocks did. Both ends are derived so the range is always
+    /// well-formed: a `ClosedRange` built with its bounds the wrong way round traps rather than
+    /// misbehaving, and the zoom bounds are exactly the place a degenerate day would produce one.
+    var trackSpanBounds: ClosedRange<Double> {
+        let bounds = dayBounds
+        let upper = max(1, min(RewindZoom.maximumSpan, bounds.end - bounds.start))
+        return min(RewindZoom.minimumSpan, upper)...upper
     }
 
-    var canZoomTrackIn: Bool { trackSpan > Self.minimumTrackSpan }
-    var canZoomTrackOut: Bool { trackSpan < min(Self.maximumTrackSpan, dayBounds.end - dayBounds.start) }
+    /// **The one place the visible window changes after a day is loaded.** Both zoom drivers land
+    /// here, which is what stops the buttons and a pinch from disagreeing: there is nowhere else for
+    /// them to disagree.
+    ///
+    /// The second half is what makes zoom compose with scrolling instead of fighting it. Scrolling the
+    /// track moves the *playhead* (see `travel(by:)`) and the window follows the playhead, so a zoom
+    /// that left the playhead outside the visible window would be undone by the very next scroll —
+    /// the track would snap back to wherever the picture was and the stretch the user had just zoomed
+    /// in on would vanish. Moving the playhead to the anchored moment instead makes the next scroll
+    /// continue from where the fingers were, and shows the frame from the stretch being looked at
+    /// rather than one from somewhere else in the day. It lands on the nearest capture to the anchor,
+    /// which is inside the new window whenever that window contains any capture at all — zoom into a
+    /// gap far enough and there is no frame in view to land on, and `keepPlayheadVisible` then pulls
+    /// the window back to the nearest real one.
+    ///
+    /// It never fires for the buttons: their anchor *is* the playhead, and an anchor always lands
+    /// inside the window this produces.
+    func setTrackWindow(_ target: RewindZoom.Target) {
+        let bounds = dayBounds
+        let window = RewindZoom.window(
+            for: target,
+            spanBounds: trackSpanBounds,
+            within: bounds.start...bounds.end)
+        trackStart = window.start
+        trackSpan = window.span
+
+        if let at = currentFrame?.capturedAt, at < window.start || at > window.end {
+            scrub(to: target.anchor)
+        }
+    }
+
+    /// Halves or doubles the visible span, anchored on the playhead so the frame being looked at
+    /// stays put. What the two magnifier buttons in the control cluster do.
+    func zoomTrack(in zoomIn: Bool) {
+        let anchor = currentFrame?.capturedAt ?? (trackStart + trackSpan / 2)
+        // The anchor keeps the fractional position it already has, which is what makes repeated
+        // presses feel like zooming on the frame rather than drifting away from it.
+        setTrackWindow(
+            RewindZoom.Target(
+                span: trackSpan * (zoomIn ? 0.5 : 2),
+                anchor: anchor,
+                fraction: RewindZoom.fraction(of: anchor, in: trackWindow)))
+    }
+
+    var canZoomTrackIn: Bool { trackSpan > trackSpanBounds.lowerBound }
+    var canZoomTrackOut: Bool { trackSpan < trackSpanBounds.upperBound }
 
     /// Travels through the day by `seconds`, which is what a scroll on the track means. Positive is
     /// forward in time.
     ///
     /// It moves the **playhead**, and that is the substantive fix. This used to pan the visible
-    /// window instead (`trackStart += seconds`, then `clampTrackWindow()`) — and at the zoom the
-    /// window opens on, that is arithmetically a no-op: `resetTrackWindow` sets `trackSpan` to the
+    /// window instead — `trackStart += seconds`, then clamp it back inside the day — and at the zoom
+    /// the window opens on, that is arithmetically a no-op: `resetTrackWindow` sets `trackSpan` to the
     /// whole loaded day, so the clamp's own bound `bounds.end - trackSpan` *is* `bounds.start` and
     /// `trackStart` cannot move by any number of seconds. Every scroll on a freshly opened timeline
     /// resolved to nothing at all, which is exactly what "the two finger dragging didn't work" looks
@@ -241,22 +348,16 @@ final class RewindModel: ObservableObject {
         scrub(to: at + seconds)
     }
 
-    /// Keeps the window inside the loaded day, so the track can never show a stretch of time the
-    /// loaded frames could not possibly cover.
-    private func clampTrackWindow() {
-        let bounds = dayBounds
-        let dayLength = bounds.end - bounds.start
-        trackSpan = min(trackSpan, dayLength)
-        trackStart = min(max(bounds.start, trackStart), bounds.end - trackSpan)
-    }
-
     /// Nudges the window so the playhead stays on screen after a jump.
+    ///
+    /// Expressed as a re-span to the span it already has, anchored on the playhead at the middle of
+    /// the track, so the day clamp is stated once — in `RewindZoom` — rather than once here and once
+    /// in the zoom. The recursion this looks like it might cause terminates immediately: the window
+    /// it asks for is centred on the playhead, and `setTrackWindow` only moves the playhead when the
+    /// playhead is *outside* the window it produced.
     private func keepPlayheadVisible() {
-        guard let at = currentFrame?.capturedAt else { return }
-        if at < trackStart || at > trackEnd {
-            trackStart = at - trackSpan / 2
-            clampTrackWindow()
-        }
+        guard let at = currentFrame?.capturedAt, at < trackStart || at > trackEnd else { return }
+        setTrackWindow(RewindZoom.Target(span: trackSpan, anchor: at, fraction: 0.5))
     }
 
     // MARK: - Frame image (the *image* zoom)

@@ -46,6 +46,12 @@ Omi desktop app, so a port means a real copy, not a dependency.
   at a glance.
 - Zoom controls zoom the **track**; `⌘ +` / `⌘ −` zoom the **frame image** instead. These are two
   different zooms and must not be conflated.
+- **A trackpad pinch over the track zooms it too**, and is the discoverable way in — the buttons are
+  easy to miss. Pinch out to zoom in (a shorter span across the same width, finer granularity); pinch
+  in to zoom out. The span clamps to 120 s at one end and the loaded day at the other.
+- Pinch and the buttons drive **one** zoom state (`RewindZoom` → `RewindModel.setTrackWindow`), so the
+  two can never disagree. They differ only in what they pin: a pinch holds the instant under the
+  pointer at the pointer's own fraction of the width, the buttons hold the playhead.
 - "Open externally" opens the webpage, file, or folder captured in that frame; its icon adapts to
   what the frame actually contains.
 - "Live Text" highlights selectable/copyable text detected in the frame, and dims when no text has
@@ -116,7 +122,7 @@ icons) that reflects the toggles below it in real time.
 |---|---|---|
 | Open externally | Opens the webpage, file, or folder captured in this frame. The icon adapts to the content. | hint `↵` + toggle, on |
 | Live Text | Highlights selectable and copyable text detected in the frame. Dims when no text has been detected yet. | toggle, on |
-| Zoom controls | Zooms the timeline track in and out. ⌘ + / − zooms the frame image instead. | hint `⌘ ⇧ + / −` + toggle, on |
+| Zoom controls | Zooms the timeline track in and out — or pinch on the track. ⌘ + / − zooms the frame image instead. | hint `⌘ ⇧ + / −` + toggle, on |
 | Segment navigation | Moves to the previous or next timeline segment. These chevrons sit on the left and right edges of the frame. | hint `⌥ ← / →` + toggle, on |
 
 Note the tension with Phase 0 of `first-run-experience.md`, which makes the app follow system

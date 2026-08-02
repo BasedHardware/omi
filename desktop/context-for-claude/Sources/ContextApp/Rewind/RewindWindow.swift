@@ -113,6 +113,51 @@ enum RewindWindow {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Opens the timeline **at a moment**, or moves an already-open one to it.
+    ///
+    /// The seam a search result travels through, and the reason it exists: `present(store:…)` opens
+    /// whatever day the model last had — today, on a first open — so a card for last Tuesday could
+    /// only ever open the wrong day. There was no way to say *when* from outside this file at all,
+    /// which is why the search surface's result cards shipped inert.
+    ///
+    /// Correct whether or not the window is already up, and that is the whole of its contract:
+    ///
+    /// - **Closed.** `present` builds the model and the window; the instant is held by the model
+    ///   (`pendingFocus`) and consumed by the opening read, so the day that opens *is* the moment's
+    ///   day rather than the newest one being replaced a frame later.
+    /// - **Open on another day.** The model loads that day and parks the playhead on the nearest
+    ///   capture to the instant.
+    /// - **Open on the same day.** No re-read; the playhead moves and the window comes forward.
+    ///
+    /// - Parameter instant: Unix epoch seconds — a `SearchMoment.capturedAt`, which is the frame's
+    ///   capture time for a screen hit and the line's start for a spoken one.
+    static func present(
+        store: ContextStore,
+        at instant: Double,
+        onOpenSettings: @escaping () -> Void = {},
+        onSearch: @escaping (String) -> Void = { _ in }
+    ) {
+        // Present first, then aim. The other order would ask a model that does not exist yet.
+        present(store: store, onOpenSettings: onOpenSettings, onSearch: onSearch)
+        focus(instant)
+    }
+
+    /// Moves an already-open timeline to `instant` and brings it forward.
+    ///
+    /// Returns false when there is no timeline to move — which is a state a caller may legitimately
+    /// want to know about rather than a failure, so it is reported rather than logged. Callers that
+    /// simply want the moment on screen should use `present(store:at:)`, which cannot fail this way.
+    @discardableResult
+    static func focus(_ instant: Double) -> Bool {
+        guard let model else { return false }
+        model.focus(on: instant)
+        // A timeline behind the surface that just handed it a moment is a timeline the user has to
+        // go looking for.
+        current?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
     /// Hides the window without discarding the loaded day.
     static func dismiss() {
         current?.orderOut(nil)
