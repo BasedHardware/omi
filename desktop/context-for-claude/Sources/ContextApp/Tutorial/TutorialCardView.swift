@@ -97,7 +97,7 @@ struct TutorialCardView: View {
                     // Only before the ask. Afterwards the mark's own line says it, and three things
                     // on this row wrapped the sentence under the buttons.
                     Text("I will notice the moment you do.")
-                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                        .inkStyle(InkType.statusLabel, color: Ink.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -117,7 +117,7 @@ struct TutorialCardView: View {
             HStack(spacing: 10) {
                 TutorialChordDemo(chord: model.timelineChord)
                 Text("opens it from anywhere.")
-                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                    .inkStyle(InkType.statusLabel, color: Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -233,7 +233,7 @@ struct TutorialCardView: View {
                 if model.step != .menuBar {
                     Button("Skip") { model.skip() }
                         .buttonStyle(.plain)
-                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                        .inkStyle(InkType.statusLabel, color: Ink.secondary)
                         .fixedSize()
                 }
             }
@@ -304,8 +304,13 @@ struct TutorialQueryField: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Ink.tertiary)
-            TextField("", text: $draft, prompt: Text("a word you saw"))
+                .foregroundStyle(Ink.secondary)
+            // Not "a word you saw". A word is a thing to recall; something you just looked at is a
+            // thing you already have — and recall is the one thing this beat must not ask for,
+            // because the store only holds the last few minutes and a half-remembered word finds
+            // nothing. Reported as: "dont say search a word off the screen, say search something you
+            // just looked at."
+            TextField("", text: $draft, prompt: Text("something you just looked at"))
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.primary)
@@ -336,7 +341,7 @@ struct TutorialMemoryRow: View {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: memory.kind == "screen" ? "rectangle.on.rectangle" : "waveform")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                     .frame(width: 12)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(memory.text)
@@ -345,7 +350,7 @@ struct TutorialMemoryRow: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Text([memory.app, memory.when].compactMap { $0 }.joined(separator: " · "))
-                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                        .inkStyle(InkType.statusLabel, color: Ink.secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -380,7 +385,7 @@ struct TutorialMomentPreview: View {
                             .strokeBorder(Ink.hairline, lineWidth: 1))
             }
             Text("\(moment.app) · \(ContextTimeLabel.short(moment.at))")
-                .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         .task(id: moment.imagePath) {
             let path = moment.imagePath

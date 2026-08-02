@@ -321,7 +321,7 @@ struct OnboardingView: View {
                         } icon: {
                             Image(systemName: claim.glyph)
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Ink.tertiary)
+                                .foregroundStyle(Ink.secondary)
                                 .frame(width: 16)
                         }
                         .labelStyle(.titleAndIcon)
@@ -366,7 +366,7 @@ struct OnboardingView: View {
                 VStack(spacing: 12) {
                     Text("Waiting for your browser…")
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.tertiary)
+                        .foregroundStyle(Ink.secondary)
 
                     InkButton("Cancel", kind: .secondary) { abandonedWait = true }
                 }
@@ -587,7 +587,7 @@ struct OnboardingView: View {
                 if let connectorMessage {
                     Text(connectorMessage)
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.tertiary)
+                        .foregroundStyle(Ink.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -733,7 +733,7 @@ struct OnboardingView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Ink.tertiary)
+                    .foregroundStyle(Ink.secondary)
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }

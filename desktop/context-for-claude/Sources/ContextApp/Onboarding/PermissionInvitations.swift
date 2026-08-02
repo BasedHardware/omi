@@ -122,24 +122,52 @@ final class PermissionInvitations: ObservableObject {
     /// True while an episode owns the screen — the rows must not be a second entrance to it.
     var isBusy: Bool { inFlight != nil }
 
-    /// Every terminal answer, merged. Each gate only ever answers for its own capability.
+    /// Every terminal answer, merged — **including the grants macOS was already holding before the
+    /// card appeared.**
+    ///
+    /// A capability is answered when the system grants it, or when the user postponed it. Each gate
+    /// only ever answers for its own capability, and a gate answers nothing until its row is clicked
+    /// — which is the whole of the defect this shape exists for. Installing over an existing install
+    /// arrives with every permission already given, so the card drew four rows reading "Granted"
+    /// above a Continue button that could never enable. Reported verbatim: "it knows i have granted
+    /// all these and still does not allow me to continue." The only way off the step was "I'll do
+    /// these later", which would have written *Later* over three permissions the user already gave.
+    ///
+    /// It is folded in **here** rather than into `canLeaveStep`, because `unanswered` — and through
+    /// it `deferRest` — asks the same question. Consulting the grant at the exit predicate alone
+    /// would light the button up and leave the card-wide skip still stamping a deferral over a live
+    /// grant, which is the same incoherence one layer down.
+    ///
+    /// Nothing is copied and nothing is seeded: the grant is read live through `granted`, the
+    /// deferral stays the gate's own record, and each fact keeps exactly one owner. A snapshot taken
+    /// when the step began would be a second copy of the grant state, wrong the moment a switch moved
+    /// under it. The reads cost the same TCC preflights the card already runs on its 1.5 s tick, and
+    /// a memo that can go stale is worse than repeating them.
+    ///
+    /// A live grant outranks a recorded deferral. Someone who postponed a row and then flipped the
+    /// switch by hand has answered twice, and the answer on the machine is the later one.
     var answers: [Capability: PermissionGate.Answer] {
         var merged: [Capability: PermissionGate.Answer] = [:]
         for (capability, gate) in gates {
-            merged[capability] = gate.answers[capability]
+            merged[capability] = granted(capability) ? .granted : gate.answers[capability]
         }
         return merged
     }
 
     /// **The single exit predicate**, unchanged in meaning: every required capability answered, and
-    /// every answer authored by the user — granted, or postponed by pressing a button that says so.
-    /// No timeout reaches this, and neither does a click.
+    /// every answer the user's — a grant they gave macOS, whenever they gave it, or a postponement
+    /// they pressed a button to make. No timeout reaches this, and neither does a click.
+    ///
+    /// What it never required, despite reading that way for one release, is an answer *authored in
+    /// this session*. The gate exists to keep a clock from answering for the user, not to make them
+    /// re-give a permission they are already looking at a checkmark beside.
     var canLeaveStep: Bool {
         required.allSatisfy { answers[$0] != nil }
     }
 
-    /// The required capabilities still without an answer. What "I'll do these later" would defer, and
-    /// the reason it can be offered as one button rather than four.
+    /// The required capabilities the system is not holding and the user has not postponed. What
+    /// "I'll do these later" would defer, and the reason it can be offered as one button rather than
+    /// four.
     var unanswered: [Capability] {
         required.filter { answers[$0] == nil }
     }

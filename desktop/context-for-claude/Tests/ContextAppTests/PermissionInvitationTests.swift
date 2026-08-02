@@ -173,6 +173,73 @@ final class PermissionInvitationTests: XCTestCase {
         board.cancel()
     }
 
+    // MARK: The legacy principal
+
+    /// **A card entered with everything already granted can be left without clicking anything.**
+    ///
+    /// The principal nothing here had: an install over an existing install. macOS is still holding
+    /// every grant from the previous copy, so the card draws four rows reading "Granted" — and the
+    /// exit predicate used to quantify over answers the *gates* had recorded, which are only ever
+    /// authored by a click. Nothing had been clicked, so nothing was answered, so Continue could
+    /// never enable. Reported verbatim: "it knows i have granted all these and still does not allow
+    /// me to continue."
+    ///
+    /// This fails against the shipped predicate — `required.allSatisfy { answers[$0] != nil }` over
+    /// gate-recorded answers only — because no gate has run and every entry is nil.
+    @MainActor
+    func testACardEnteredFullyGrantedCanBeLeftWithoutClickingAnything() async {
+        let asker = AskRecorder()
+        asker.alreadyGranted = [.microphone, .systemAudio, .screen]
+        let board = self.board(asker)
+
+        await settle()
+
+        XCTAssertTrue(
+            board.canLeaveStep,
+            "every required capability was granted before the card appeared and the only way off the "
+                + "step was still a button that says the user will do them later")
+        XCTAssertTrue(board.unanswered.isEmpty)
+        XCTAssertTrue(
+            asker.stayedQuiet,
+            "and it must not have been earned by asking: the card asked macOS for \(asker.asked)")
+        board.cancel()
+    }
+
+    /// The other half of the truth table, so the relaxation stays a relaxation and not a hole: a
+    /// capability the system is *not* holding and nobody has clicked still shuts the card.
+    @MainActor
+    func testAPartlyGrantedCardStillHoldsOnTheOneThatIsMissing() async {
+        let asker = AskRecorder()
+        asker.alreadyGranted = [.microphone, .systemAudio]
+        let board = self.board(asker)
+
+        await settle()
+
+        XCTAssertFalse(board.canLeaveStep, "screen recording was never granted and never answered")
+        XCTAssertEqual(board.unanswered, [.screen])
+        board.cancel()
+    }
+
+    /// "I'll do these later" must not answer *for* the user on something they already said yes to.
+    ///
+    /// The same fact drives both buttons, so fixing only the exit predicate would have left the
+    /// card-wide skip writing "Later" over three live grants — a worse lie than the disabled button,
+    /// because it is on record.
+    @MainActor
+    func testDeferringTheRestLeavesAGrantMadeBeforeTheCardAppeared() async {
+        let asker = AskRecorder()
+        asker.alreadyGranted = [.microphone, .systemAudio]
+        let board = self.board(asker)
+
+        board.deferRest()
+
+        XCTAssertEqual(board.answers[.microphone], .granted, "a pre-existing grant is not a skip")
+        XCTAssertEqual(board.answers[.systemAudio], .granted)
+        XCTAssertEqual(board.answers[.screen], .deferred, "and only the missing one is deferred")
+        XCTAssertTrue(board.canLeaveStep)
+        board.cancel()
+    }
+
     // MARK: Leaving the card
 
     /// **The exit predicate is unchanged**: every required capability answered, by the user. Only the

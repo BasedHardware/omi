@@ -548,7 +548,13 @@ final class TutorialTests: XCTestCase {
         XCTAssertNotNil(model.searchMessage)
         XCTAssertTrue(model.results.isEmpty)
         XCTAssertFalse(model.gateIsSatisfied)
-        XCTAssertEqual(model.speech.lead, "Type a word you saw.", "and the mark does not say it found one")
+        // The expected line is the user's own instruction for this beat, quoted in
+        // `TutorialModel.speech`: "dont say search a word off the screen, say search something you
+        // just looked at." What is under test is unchanged — an empty result leaves the mark on the
+        // asking line rather than the found-it one.
+        XCTAssertEqual(
+            model.speech.lead, "Type something you just looked at.",
+            "and the mark does not say it found one")
         XCTAssertFalse(model.advance(), "the found-it line is not reachable by pressing continue")
         XCTAssertFalse(model.step.gate.isWaivable, "and it cannot be waived either")
     }
@@ -585,7 +591,7 @@ final class TutorialTests: XCTestCase {
 
         world.searchResults = []
         model.search("nothing at all")
-        XCTAssertEqual(model.speech.lead, "Type a word you saw.")
+        XCTAssertEqual(model.speech.lead, "Type something you just looked at.")
         XCTAssertNil(model.chosenMemory, "and the moment it was showing goes with it")
         XCTAssertFalse(model.gateIsSatisfied)
         XCTAssertFalse(model.advance())

@@ -133,7 +133,7 @@ struct PermissionsCard: View {
             InkButton("I’ll do this later", kind: .secondary) { onPostpone(capability) }
             Text(Self.postponeConsequence(for: capability))
                 .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.tertiary)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 2)

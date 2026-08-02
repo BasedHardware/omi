@@ -437,7 +437,7 @@ final class TutorialModel: ObservableObject {
         let hits = environment.search(trimmed)
         results = hits
         guard !hits.isEmpty else {
-            searchMessage = "Nothing captured matches “\(trimmed)” yet. Try a word you actually saw."
+            searchMessage = "Nothing captured matches “\(trimmed)” yet. Try something you actually looked at."
             return
         }
         searchMessage = nil
@@ -592,8 +592,15 @@ final class TutorialModel: ObservableObject {
 
         case .query:
             guard !results.isEmpty else {
+                // The instruction points at what the user still has in mind, not at a word they have
+                // to dredge up. "A word you saw" reads as a memory test, and it is one they can fail
+                // honestly — the store holds minutes, so a word half-remembered from an hour ago
+                // finds nothing and the beat lands as the app being broken. What they just looked at
+                // is the one thing they cannot get wrong. Reported as: "dont say search a word off
+                // the screen, say search something you just looked at."
                 return TutorialSpeech(
-                    "Type a word you saw.", aside: "Anything off that screen, then press Return.")
+                    "Type something you just looked at.",
+                    aside: "Anything you remember seeing, then press Return.")
             }
             guard chosenMemory != nil else {
                 return TutorialSpeech("There it is.", aside: "Tap it to go back to that moment.")
