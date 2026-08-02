@@ -28,6 +28,7 @@ import {
   disconnectCli,
   cliConnected,
   buildSetupCard,
+  buildSetupText,
   type CliConnectorId
 } from '../mcp/cliConnectors'
 import type {
@@ -44,6 +45,7 @@ function isCliConnector(id: McpConnectorId): id is CliConnectorId {
 }
 
 let service: McpExportsService | null = null
+let copiedSetupText: string | null = null
 
 function getService(): McpExportsService {
   if (!service) service = new McpExportsService(new McpKeyStore())
@@ -98,6 +100,27 @@ function snapshot(ownerUserId: string): McpExportsSnapshot {
   }
 }
 
+function copySetup(connectorId: McpConnectorId, ownerUserId: string): void {
+  if (!isCliConnector(connectorId))
+    throw new Error('Manual setup is only available for CLI connectors')
+  const key = storedKey(ownerUserId)
+  if (!key) throw new Error('MCP setup is no longer available')
+  const text = buildSetupText(connectorId, apiBase(), key)
+  clipboard.writeText(text)
+  copiedSetupText = text
+}
+
+function clearCopiedSetup(): void {
+  const text = copiedSetupText
+  copiedSetupText = null
+  if (text === null) return
+  try {
+    if (clipboard.readText() === text) clipboard.clear()
+  } catch {
+    return
+  }
+}
+
 /**
  * Mint-or-reuse the hosted key, then write the connector's config. For a CLI
  * connector whose automation FAILS, return its manual setup card so the UI can
@@ -120,7 +143,7 @@ async function connect(
       broadcastChanged()
       return {
         snapshot: snapshot(ownerUserId),
-        setupCard: buildSetupCard(connectorId, base, record.key)
+        setupCard: buildSetupCard(connectorId)
       }
     }
   } else {
@@ -142,6 +165,7 @@ async function disconnect(
 
 /** Rotate the hosted key and rewrite any already-connected config connectors. */
 async function rotate(token: string, ownerUserId: string): Promise<McpExportsSnapshot> {
+  clearCopiedSetup()
   const base = apiBase()
   const oldKey = storedKey(ownerUserId)
   // Which connectors were pointing at the OLD key (rewrite only those).
@@ -190,6 +214,7 @@ export function registerMcpExportsHandlers(): void {
   // clear inside db.ts wipeUserData — the renderer teardown calls this too, so an
   // early wipeUserData failure can't leave the prior account's key on disk.
   ipcMain.handle('mcp:clearKey', () => {
+    clearCopiedSetup()
     removeClaudeMcpEntry()
     return Promise.all(CLI_IDS.map((id) => disconnectCli(id))).then(() => {
       new McpKeyStore().clearAll()
@@ -197,6 +222,9 @@ export function registerMcpExportsHandlers(): void {
     })
   })
   ipcMain.handle('mcp:cloudInfo', () => cloudInfo())
+  ipcMain.handle('mcp:copySetup', (_e, connectorId: McpConnectorId, ownerUserId: string) =>
+    copySetup(connectorId, ownerUserId)
+  )
   ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))
   ipcMain.handle('mcp:memoryPack', (_e, provider: MemoryPackProvider, memories: ExportMemory[]) =>
     openMemoryPack(provider, memories)

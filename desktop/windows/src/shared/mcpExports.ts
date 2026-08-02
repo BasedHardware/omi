@@ -1,8 +1,8 @@
 // Shared constants + types for the "Use omi memory anywhere" MCP memory-bank
 // exports. Pure, browser-safe module: no Node built-ins, no Electron, no I/O —
 // imported by BOTH the main process (config writers, mint client) and the
-// renderer (connector UI). All wire values live here so the config a tool reads
-// and the copy the UI shows can never drift apart.
+// renderer (connector UI). All wire values live here so connector instructions
+// stay consistent with the main-process config writers.
 //
 // Mirrors macOS's memory-export MCP flow: a hosted MCP key authenticates the
 // external tool against Omi's hosted MCP SSE endpoint, and each config-write
@@ -109,14 +109,12 @@ export interface McpExportsSnapshot {
 
 /**
  * A copy-command/config card — the MANUAL setup path a CLI connector shows when
- * its one-click automation fails (or as Mac's fallback). Carries the hosted key
- * inside `copyText`, so it is only ever sent to the app's own renderer.
+ * its one-click automation fails (or as Mac's fallback). The credential-bearing
+ * command is generated and copied by the main process, never returned here.
  */
 export interface McpSetupCard {
   /** e.g. "Copy command" / "Copy config". */
   copyTitle: string
-  /** The exact command or config block to run/paste (key embedded). */
-  copyText: string
   /** Short numbered steps shown under the copy block. */
   steps: string[]
 }

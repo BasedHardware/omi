@@ -446,6 +446,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('mcp:connect', connectorId, token, ownerUserId),
   mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string): Promise<McpExportsSnapshot> =>
     ipcRenderer.invoke('mcp:disconnect', connectorId, ownerUserId),
+  mcpCopySetup: (connectorId: McpConnectorId, ownerUserId: string): Promise<void> =>
+    ipcRenderer.invoke('mcp:copySetup', connectorId, ownerUserId),
   mcpRotateKey: (token: string, ownerUserId: string): Promise<McpExportsSnapshot> =>
     ipcRenderer.invoke('mcp:rotateKey', token, ownerUserId),
   onMcpChanged: (cb: () => void) => {

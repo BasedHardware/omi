@@ -150,28 +150,42 @@ export function cliConnected(
 
 // --- setup cards (manual fallback) ------------------------------------------
 
-export function buildSetupCard(id: CliConnectorId, apiBase: string, key: string): McpSetupCard {
-  const url = mcpServerUrl(apiBase)
-  const bearer = `Authorization: Bearer ${key}`
+export function buildSetupCard(id: CliConnectorId): McpSetupCard {
   switch (id) {
     case 'codex':
       return {
         copyTitle: 'Copy config',
-        copyText: `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
-        steps: ['Add the block below to ~/.codex/config.toml', 'Restart Codex']
+        steps: ['Use Copy config to copy the block into ~/.codex/config.toml', 'Restart Codex']
       }
     case 'openclaw':
       return {
         copyTitle: 'Copy command',
-        copyText: `openclaw mcp set ${MCP_SERVER_KEY} '${openclawServerJson(url, key)}'\nopenclaw mcp reload`,
-        steps: ['Run the commands below', 'Reload OpenClaw so open sessions rebuild their tools']
+        steps: [
+          'Use Copy command to copy the commands',
+          'Reload OpenClaw so open sessions rebuild their tools'
+        ]
       }
     case 'hermes':
       return {
         copyTitle: 'Copy config',
-        copyText: `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
-        steps: ['Add the block below under mcp_servers: in ~/.hermes/config.yaml', 'Restart Hermes']
+        steps: [
+          'Use Copy config to copy the block under mcp_servers: in ~/.hermes/config.yaml',
+          'Restart Hermes'
+        ]
       }
+  }
+}
+
+export function buildSetupText(id: CliConnectorId, apiBase: string, key: string): string {
+  const url = mcpServerUrl(apiBase)
+  const bearer = `Authorization: Bearer ${key}`
+  switch (id) {
+    case 'codex':
+      return `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`
+    case 'openclaw':
+      return `openclaw mcp set ${MCP_SERVER_KEY} '${openclawServerJson(url, key)}'\nopenclaw mcp reload`
+    case 'hermes':
+      return `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`
   }
 }
 

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
-import { connectMcp, disconnectMcp } from '../../../../lib/mcpConnect'
+import { connectMcp, copyMcpSetup, disconnectMcp } from '../../../../lib/mcpConnect'
 import type {
   McpConfigConnector,
+  McpConnectorId,
   McpConnectorStatus,
   McpSetupCard
 } from '../../../../../../shared/mcpExports'
@@ -36,15 +37,21 @@ function description(
   }
 }
 
-function SetupCardBlock({ card }: { card: McpSetupCard }): React.JSX.Element {
+function SetupCardBlock({
+  card,
+  connectorId
+}: {
+  card: McpSetupCard
+  connectorId: McpConnectorId
+}): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   const copy = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(card.copyText)
+      await copyMcpSetup(connectorId)
       setCopied(true)
       setTimeout(() => setCopied(false), 1400)
-    } catch {
-      /* clipboard denied — the block is still selectable */
+    } catch (e) {
+      toast('Could not copy setup', { tone: 'error', body: (e as Error).message })
     }
   }
   return (
@@ -57,14 +64,12 @@ function SetupCardBlock({ card }: { card: McpSetupCard }): React.JSX.Element {
           <li key={s}>{s}</li>
         ))}
       </ol>
-      <div className="flex items-start gap-2">
-        <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre rounded-md bg-white/[0.04] px-2 py-1.5 font-mono text-[11.5px] text-home-ink">
-          {card.copyText}
-        </pre>
+      <div className="flex items-center justify-end">
         <button
           type="button"
           onClick={copy}
-          aria-label={card.copyTitle}
+          aria-label={copied ? 'Copied' : card.copyTitle}
+          title={copied ? 'Copied' : card.copyTitle}
           className="focus-ring flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-home-muted transition-colors hover:bg-white/10 hover:text-home-ink"
         >
           {copied ? (
@@ -149,7 +154,7 @@ export function McpConfigConnectorRow({
       description={description(connector, status)}
       action={action}
     >
-      {card && <SetupCardBlock card={card} />}
+      {card && <SetupCardBlock card={card} connectorId={connector.id} />}
     </ConnectorRow>
   )
 }

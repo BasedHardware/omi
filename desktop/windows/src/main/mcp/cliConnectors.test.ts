@@ -6,6 +6,7 @@ import {
   probeCliConnector,
   cliConnected,
   buildSetupCard,
+  buildSetupText,
   upsertHermesConfig,
   appendSoulNote,
   disconnectCli,
@@ -93,11 +94,13 @@ describe('cliConnected (config re-scan vs current key)', () => {
 })
 
 describe('buildSetupCard', () => {
-  it('embeds the url + key in each tool’s copy text', () => {
+  it('keeps setup metadata separate from credential-bearing setup text', () => {
     for (const id of ['codex', 'openclaw', 'hermes'] as const) {
-      const card = buildSetupCard(id, API, KEY)
-      expect(card.copyText).toContain(URL)
-      expect(card.copyText).toContain(`Bearer ${KEY}`)
+      const card = buildSetupCard(id)
+      const text = buildSetupText(id, API, KEY)
+      expect(card).not.toHaveProperty('copyText')
+      expect(text).toContain(URL)
+      expect(text).toContain(`Bearer ${KEY}`)
       expect(card.steps.length).toBeGreaterThan(0)
     }
   })
