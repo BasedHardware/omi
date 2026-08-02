@@ -122,9 +122,11 @@ app's own UI sounds, whereas failing closed would silently disable the product's
 `/Applications` symlink is already there; nothing else is styled.
 
 - **`scripts/make-dmg-background.sh`** — ImageMagick (installed, 7.1.1-47) renders the background at
-  1x and 2x: mark + wordmark top-left, "Drag Context for Claude into Applications to install", and an
-  arrow between the two icon positions. Extract the icon art with `sips` from the `.icns` first
-  (ImageMagick reads `.icns` unreliably).
+  1x and 2x: wordmark top-left, "Drag Context for Claude into Applications to install", and an arrow
+  between the two icon positions. **No mark.** It shipped with the app's glyph lifted out of the
+  `.icns` at the top left, which put the mark on screen twice — Finder draws the real app icon in the
+  left-hand slot 130 pt below it, and that icon is the thing the window exists to have dragged. A
+  second, smaller copy of it is a decoy, not branding.
 - **`package-dmg.sh`** gains the standard styling dance, no new dependency (`create-dmg` is *not*
   installed and is not worth adding): `hdiutil create -format UDRW` → `hdiutil attach -readwrite
   -noverify -noautoopen` → drop `.background/background.png` + `.VolumeIcon.icns`, `SetFile -a C` the
@@ -186,8 +188,9 @@ are not rebuilt, only restyled onto the Phase 0 palette.
 arrow are System Settings' own UI on 26.x — no app can draw inside that window. So we guide and
 highlight the real thing; we never redraw or simulate it as though it were ours.
 
-1. Our card plays a small animated replica first — a ghost row rising into a list — so the user
-   recognises what they are about to be shown.
+1. Nothing rehearses inside our card. The in-card ghost replica is gone: it made the user press
+   "Show me the row" before anything happened, which is our UI standing in front of the actual task.
+   The guidance now just appears, on the real window, when the capability needs it.
 2. We open the exact pane (`Permissions.swift:32-45` already has the per-capability URLs), then locate
    the System Settings window and the drag-target row through the Accessibility API
    (`Capture/AXElement.swift` already wraps AX), and draw a floating overlay: a pulsing ring plus an
@@ -196,16 +199,23 @@ highlight the real thing; we never redraw or simulate it as though it were ours.
    with `chime.wav`. Screen Recording additionally needs the existing relaunch nudge, because the
    window server only honours the grant in a new process.
 
-Permissions stay one-at-a-time with the existing lead-in/after-grant pacing
-(`OnboardingView.swift:592-596`) — that pacing was a deliberate earlier fix and is not to be undone.
+Permissions stay one-at-a-time, and the lead-in/after-grant pacing inside an episode survives — that
+pacing was a deliberate earlier fix and is not to be undone. What *is* undone is the **automatic
+sequencing** around it: the card no longer asks for anything on its own. Each capability is a row the
+user clicks, and only that click starts its episode (`PermissionInvitations.swift`). The pacing was
+never the problem; spending it on prompts the user had not asked for was, because the dialog landed
+before the sentence explaining it could be read.
 
 ---
 
 ## Phase 6 — The tutorial, which ends inside Claude
 
 1. **"Learn how this works"** card — Start / Skip.
-2. **Collect frames.** Open a Wikipedia article, with a coach mark: "Scroll around and collect your
-   first frames." A **live counter reads our own store** — real frames, not a timer pretending.
+2. **Collect frames.** Open `anthropic.com` — Claude's own home, and the one page this app can put on
+   somebody's screen without choosing a third party's content for them — and ask them to scroll it.
+   The gate **reads our own store** (`TutorialGate.realFrames`): real frames, not a timer pretending.
+   The count is not narrated; the card says "Scroll through it for a bit" and then "Got it", and it
+   claims the page was opened only when `NSWorkspace` says it really was.
 3. **"Your screen is now searchable."** Only shown once frames actually landed.
 4. **Hand off to Claude — by doing it.** Direct user instruction: "Open claude for me and type the
    first thing in." The tutorial routes the suggested question through `ClaudeRouter` as
@@ -216,10 +226,17 @@ Permissions stay one-at-a-time with the existing lead-in/after-grant pacing
 
    **The surface is named at the call site** (`ClaudeHandoff.surface`), because Claude has two and
    they are not interchangeable: `claude://claude.ai/new` is an ordinary chat and `claude://code/new`
-   is the Claude Code tab. This beat shipped on the second one — inherited from the search bar, whose
-   "Claude target" dropdown deliberately *is* Claude Code in the app or the `claude` CLI in Terminal —
-   and dropped the user into the Code tab mid-tutorial. Either surface can answer (`ClaudeRegistrar`
-   writes the MCP entry into both configs); only one of them is where a person asks a question.
+   is the Claude Code tab. This beat shipped on the second one, inherited from the search bar back
+   when the bar was the thing that routed to Claude, and dropped the user into the Code tab
+   mid-tutorial. Either surface can answer (`ClaudeRegistrar` writes the MCP entry into both
+   configs); only one of them is where a person asks a question.
+
+   **The *target* is the user's, not the call site's.** `Settings → Agents → Claude target` picks the
+   Claude app or the `claude` CLI, and this handoff is what that dropdown steers — `ClaudeHandoff`
+   reads `SettingsStore.claudeTarget` as it hands over, and the CLI branch answers
+   `TutorialClaudeAsk.ranInTerminal` rather than pretending a composer was filled. On that target no
+   restart is ever offered: a `claude` process is new every time and reads `~/.claude.json` as it
+   starts, so quitting the Claude the user is reading would cost them a session and fix nothing.
 
    **The restart is conditional and consented.** Claude reads its MCP config at startup, so a Claude
    open from *before* we registered cannot call our tools — but that is a conditional justification
@@ -230,9 +247,18 @@ Permissions stay one-at-a-time with the existing lead-in/after-grant pacing
    choice — declining still hands the question over and the copy says the reach may be stale, which
    beats quitting somebody's conversation to force a gate. What comes back reports what happened, so
    an app that refuses to quit is `restarted: false`.
+   **The card gets out of Claude's way, without leaving.** Reported in one sentence — *when it opens
+   the Claude window, the flow window blocks the view*. Both beats take `TutorialPlacement.clearOfClaude`,
+   and `TutorialOverlay.parked` puts the card in whichever band around Claude's real window has room
+   (beside it, then above, then below, then the top trailing corner when a full-screen Claude leaves
+   nothing clear — never the bottom, where the composer is). Claude's frame comes from
+   `ClaudeWindowProbe`, which reads `CGWindowListCopyWindowInfo` and so needs no grant, and it is
+   re-read every tick because Claude opens *after* the card and the user can move it.
 5. **Prove it.** The MCP server writes a last-query timestamp into the data directory; the app watches
    for it, so "Found it" appears only when Claude has genuinely called one of our tools. This is the
-   payoff beat, and it is earned rather than staged.
+   payoff beat, and it is earned rather than staged. It is also the one card that **must not take the
+   keyboard** (`TutorialStep.takesFocusOnEntry`): the tool call happens when the user presses Return
+   in Claude's composer, and an accessory app activating over Claude eats exactly that keystroke.
 6. **"You're all set"** → `MenuBarSpotlight.show()` for "one more thing — I live up here."
 
 No shortcut-conflict step: we register no hotkey, so there is no conflict to warn about. Adding a fake
