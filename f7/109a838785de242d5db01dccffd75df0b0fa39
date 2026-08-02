@@ -1,0 +1,43 @@
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_56918216f0e901::t_94fc8342f7e52a 1713-1806,1819-1822,1824-1827,1829-1853,1873-1883
+  s_56918216f0e901::t_7d76c6d09834e6 1855-1872
+  s_56918216f0e901::t_43f70dcdea27a8 1854
+  s_56918216f0e901::t_b68cdfe4980622 1807-1818,1823,1828
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_56918216f0e901::t_dbb823611e776f 6-18,26-28,31-37,39,44,46,49-52,57,59-86,351
+  s_56918216f0e901::t_996cf52f84dd8a 319-337,343-350
+  s_56918216f0e901::t_4f5ab7609643e4 355
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_56918216f0e901::t_aa19014ee3fb64 49-55
+  s_56918216f0e901::t_458a8868e06443 164-172
+  s_56918216f0e901::t_bc8a442c3840cf 873-876
+  s_56918216f0e901::t_218a8aa715247f 173
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_56918216f0e901::t_212030947a7ea0 388-453,455-470,472-475,479-480,483-497,503-508,510-511,514,516-524,527-529,531-539,541-556,559-567,570-616
+  s_56918216f0e901::t_f24ef9831afbbc 498-502
+  s_56918216f0e901::t_7432cfa1f8ad81 225-233,255-257
+  s_56918216f0e901::t_eb6ce9a1245a29 234-243
+  s_56918216f0e901::t_329c075c1d6e38 620-625
+  s_56918216f0e901::t_58fb82952023a9 59,61
+  s_56918216f0e901::t_949866d1e3e9e5 32-42
+  s_56918216f0e901::t_e36751f772b201 619
+desktop/context-for-claude/Tests/ContextAppTests/TutorialRenderHarness.swift
+  s_56918216f0e901::t_4d48fa02c0faec 1-349
+  s_56918216f0e901::t_6d4afce0d2173e 350-367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f7109a838785de242d5db01dccffd75df0b0fa39",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
