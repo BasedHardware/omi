@@ -12,12 +12,13 @@ import XCTest
 /// `screencapture`, neither of which belongs in a hermetic suite; it is a tool for looking at the
 /// thing, and the assertions that have to hold every time live in `TutorialTests`.
 ///
-/// It exists for one beat in particular. The found-it card was a column of text rows and was reported
-/// as such — *"this after search after onboarding needs to show results in tabular form with screen if
-/// any. This list with only text looks so bland."* That is a judgement about a picture, and the only
-/// honest way to check a fix for it is to produce the picture. The states below are the ones the grid
-/// has to survive: every result with a screen, a result whose screen retention already removed, a
-/// spoken line among screens, and the card after one has been tapped.
+/// **It used to render the found-it grid and there is no longer one to render.** The search beats
+/// drew their own field and their own two-across grid of results on this card, which is the defect
+/// the current pass fixed: the tutorial now opens the *real* `SearchBarWindow`, so what a person has
+/// to look at is no longer a card imitating a search panel — it is a short coach mark that has to
+/// stay short, stay legible, and say something true in each of the states the real panel can leave it
+/// in. Those states are the cases below. The panel itself is `SearchRenderHarness`'s subject and is
+/// deliberately not re-rendered here.
 ///
 /// The same two rules `SearchRenderHarness` obeys, for the same reasons:
 ///
@@ -26,7 +27,7 @@ import XCTest
 ///   would draw the scrim over nothing and report a card nobody will ever see.
 /// - **Nothing of the user's is ever captured.** A opaque backdrop window covers the exact rectangle
 ///   that gets grabbed, so the frame contains this harness's own windows and the synthetic desktop
-///   under them and nothing else. Every row and every picture below is fabricated on the spot.
+///   under them and nothing else. Every event the world reports below is fabricated on the spot.
 final class TutorialRenderHarness: XCTestCase {
 
     private var outputDirectory: URL {
@@ -36,7 +37,7 @@ final class TutorialRenderHarness: XCTestCase {
     }
 
     @MainActor
-    func testRenderTheFoundItCard() throws {
+    func testRenderTheSearchBeatCards() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["CONTEXT_TUTORIAL_RENDER"] == "1",
             "on-screen render harness; set CONTEXT_TUTORIAL_RENDER=1 to run it")
@@ -44,15 +45,13 @@ final class TutorialRenderHarness: XCTestCase {
 
         let directory = outputDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let pictures = try Fixtures.thumbnails(in: directory)
 
         NSApplication.shared.setActivationPolicy(.accessory)
 
         var written: [String] = []
-        for (name, appearance, desktop, build) in Self.cases(pictures: pictures) {
+        for (name, appearance, desktop, build) in Self.cases() {
             let world = TutorialWorld()
-            let model = world.modelAtTheQueryBeat()
-            build(world, model)
+            let model = build(world)
             written.append(
                 try render(
                     name: name, model: model, desktop: Fixtures.desktopImage(desktop),
@@ -66,61 +65,85 @@ final class TutorialRenderHarness: XCTestCase {
 
     /// state × system appearance × desktop. The Dark pass is what proves the card's light pin rather
     /// than assuming it, and the two desktops are the extremes the glass has to stay legible over.
+    ///
+    /// Two of these carry an arrow, because both search beats are coach marks now — one hanging under
+    /// the "Search All" pill, one standing under the real panel — and an arrow changes the card's
+    /// width and its padding. A render that only ever showed the armless form would not be showing
+    /// what ships.
     @MainActor
-    private static func cases(
-        pictures: [String]
-    ) -> [(String, NSAppearance.Name, Fixtures.Desktop, (TutorialWorld, TutorialModel) -> Void)] {
+    private static func cases()
+        -> [(String, NSAppearance.Name, Fixtures.Desktop, (TutorialWorld) -> TutorialModel)]
+    {
         [
-            // Before anything is typed: the field, and nothing claimed.
-            ("00-asking", .aqua, .midGrey, { _, _ in }),
-            // The beat the report was about.
+            // "Click Search All, just up there." The beat that no longer swallows the press.
+            ("00-find-moments", .aqua, .midGrey, { $0.modelAtTheFindMomentsBeat() }),
+            // The panel is up and nothing has been typed into it yet. The card's whole job here is to
+            // stay out of the way of a surface that is doing the work.
+            ("01-asking", .aqua, .midGrey, { $0.modelAtTheQueryBeat() }),
+            // A real question that really found nothing, said as itself.
             (
-                "01-found-four-screens", .aqua, .midGrey,
-                { world, model in
-                    world.results = TutorialWorld.screens(pictures: pictures)
-                    model.search("throughput")
+                "02-found-nothing", .aqua, .midGrey,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "zzzz nothing matches", results: 0))
+                    return model
                 }
             ),
-            // One tapped. The chosen card carries the weight; nothing larger appears under the grid.
+            // The real panel came back with real hits. Continue lights; nothing is drawn twice.
             (
-                "02-found-and-chosen", .aqua, .midGrey,
-                { world, model in
-                    world.results = TutorialWorld.screens(pictures: pictures)
-                    model.search("throughput")
-                    if let first = model.results.first { model.choose(first) }
+                "03-found", .aqua, .midGrey,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "throughput", results: 12))
+                    return model
                 }
             ),
-            // Retention unlinked two of the pictures, and one result is speech. Both wells have to
-            // read as deliberate rather than as images that failed to load.
+            // One of them pressed: the panel has closed itself and the timeline is back at that
+            // moment. The card must not still be asking for a click.
             (
-                "03-found-mixed", .aqua, .midGrey,
-                { world, model in
-                    world.results = TutorialWorld.mixed(pictures: pictures)
-                    model.search("invoice")
+                "04-travelled", .aqua, .midGrey,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "throughput", results: 12))
+                    world.report(.openedMoment(at: 1_700_000_000, hasPicture: true))
+                    return model
                 }
             ),
-            // A spoken result tapped: the one case that still earns the larger preview, because the
-            // card the user pressed had no picture of its own.
+            // The same, for a moment with no picture left — a spoken line, or a frame retention has
+            // already unlinked. The aside is the only difference and it has to be the honest one.
             (
-                "04-spoken-chosen", .aqua, .midGrey,
-                { world, model in
-                    world.results = TutorialWorld.mixed(pictures: pictures)
-                    model.search("invoice")
-                    if let spoken = model.results.first(where: { !$0.isScreen }) { model.choose(spoken) }
+                "05-travelled-no-picture", .aqua, .midGrey,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "invoice", results: 4))
+                    world.report(.openedMoment(at: 1_700_000_000, hasPicture: false))
+                    return model
+                }
+            ),
+            // Escape, with nothing found. The one state this card grows a button for, because the
+            // gate it serves cannot be waived.
+            (
+                "06-panel-closed", .aqua, .midGrey,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.closed)
+                    return model
                 }
             ),
             (
-                "05-found-four-screens-darksystem-black", .darkAqua, .black,
-                { world, model in
-                    world.results = TutorialWorld.screens(pictures: pictures)
-                    model.search("throughput")
+                "07-found-darksystem-black", .darkAqua, .black,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "throughput", results: 12))
+                    return model
                 }
             ),
             (
-                "06-found-four-screens-lightsystem-white", .aqua, .white,
-                { world, model in
-                    world.results = TutorialWorld.screens(pictures: pictures)
-                    model.search("throughput")
+                "08-found-lightsystem-white", .aqua, .white,
+                { world in
+                    let model = world.modelAtTheQueryBeat()
+                    world.report(.answered(query: "throughput", results: 12))
+                    return model
                 }
             ),
         ]
@@ -256,32 +279,62 @@ final class TutorialRenderHarness: XCTestCase {
 
 // MARK: - Fabricated data
 
-/// A world that answers every gate honestly enough to reach the search beat, and hands back invented
-/// results when it gets there.
+/// A world that answers every gate honestly enough to reach the search beats, and then reports
+/// whatever the real search panel would have reported.
 ///
-/// **All of it is invented.** No row here came from the user's capture database and the pictures are
-/// generated on the spot by `Fixtures.thumbnails`.
+/// **Nothing here is a search.** The tutorial cannot run one any more — that is the change this
+/// harness exists to show — so the world's whole search vocabulary is `report`, which hands the model
+/// a `SearchPanelEvent` exactly as `SearchPanelWatch` hands it one in the app. No row, no count and
+/// no moment below came from the user's capture database; they are literals in this file.
 @MainActor
 final class TutorialWorld {
-    var results: [TutorialMemory] = []
 
     private var timelineIsVisible = false
+    private var searchPanelIsVisible = false
     private var hotkeyFired: (() -> Void)?
     private var dragTravelled: (() -> Void)?
+    private var searchPanelHappened: ((SearchPanelEvent) -> Void)?
 
-    /// A model driven — through the real gates, never by poking state — to the beat under test.
+    /// Tells the model what the real panel just did, and keeps the world's own idea of whether the
+    /// panel is on screen in step with it — the model asks on entry to a beat, and a world that said
+    /// "open" after reporting `.closed` would be answering two ways at once.
+    func report(_ event: SearchPanelEvent) {
+        switch event {
+        case .opened: searchPanelIsVisible = true
+        case .closed: searchPanelIsVisible = false
+        case .answered, .openedMoment: break
+        }
+        searchPanelHappened?(event)
+    }
+
+    /// A model driven — through the real gates, never by poking state — to the pill beat.
+    func modelAtTheFindMomentsBeat() -> TutorialModel {
+        let model = TutorialModel(environment: environment())
+        model.begin()
+        model.advance()  // invitation → collectFrames
+        model.poll()
+        model.advance()  // collectFrames → openTimeline
+        timelineIsVisible = true
+        hotkeyFired?()  // openTimeline → timeline
+        dragTravelled?()
+        model.advance()  // timeline → findMoments
+        precondition(model.step == .findMoments, "the harness did not reach the pill beat")
+        return model
+    }
+
+    /// The same, one beat further on: the user pressed the real pill and the real panel came up.
     func modelAtTheQueryBeat() -> TutorialModel {
+        let model = modelAtTheFindMomentsBeat()
+        report(.opened)  // findMoments → query
+        precondition(model.step == .query, "the harness did not reach the search beat")
+        return model
+    }
+
+    private func environment() -> TutorialEnvironment {
         var environment = TutorialEnvironment()
         environment.pollInterval = nil
         environment.screenIsGranted = { true }
-        environment.storeIsReadable = { true }
         environment.frameCount = { _ in TutorialModel.frameTarget }
-        environment.search = { _ in self.results }
-        environment.frameNear = { instant in
-            TutorialMoment(
-                at: instant, app: "Arc", windowTitle: "Comparing throughput — arc.net",
-                imagePath: self.previewPath)
-        }
         environment.openPage = { _ in true }
         environment.timelineChord = { "⌘⌘" }
         environment.timelineChordIsArmed = { true }
@@ -291,77 +344,12 @@ final class TutorialWorld {
         environment.stopWatchingDrag = { self.dragTravelled = nil }
         environment.presentTimeline = { self.timelineIsVisible = true }
         environment.timelineIsVisible = { self.timelineIsVisible }
+        environment.watchSearchPanel = { self.searchPanelHappened = $0 }
+        environment.stopWatchingSearchPanel = { self.searchPanelHappened = nil }
+        environment.searchPanelIsVisible = { self.searchPanelIsVisible }
+        environment.presentSearchPanel = { self.report(.opened) }
+        environment.dismissSearchPanel = { self.report(.closed) }
         environment.locateTarget = { _ in nil }
-
-        let model = TutorialModel(environment: environment)
-        model.begin()
-        model.advance()  // invitation → collectFrames
-        model.poll()
-        model.advance()  // collectFrames → openTimeline
-        timelineIsVisible = true
-        hotkeyFired?()  // openTimeline → timeline
-        dragTravelled?()
-        model.advance()  // timeline → findMoments
-        model.advance()  // findMoments → query
-        precondition(model.step == .query, "the harness did not reach the search beat")
-        return model
-    }
-
-    /// The larger preview's picture, for the one state that still shows one.
-    var previewPath: String {
-        (ProcessInfo.processInfo.environment["CONTEXT_TUTORIAL_RENDER_DIR"]
-            ?? NSTemporaryDirectory() + "tutorial-renders") + "/thumb-0.png"
-    }
-
-    /// Four screens, deliberately varied: a very long title, a short one, a domain, an app with no
-    /// site at all.
-    static func screens(pictures: [String]) -> [TutorialMemory] {
-        let rows: [(String, String, String, Double)] = [
-            (
-                "Comparing M4 Max and RTX 4090 throughput on long-context inference — arc.net", "Arc",
-                "tab Close Tab New Tab Search Tabs Update Aura/Icons/New/Default/search Open Profile "
-                    + "throughput tokens per second", 12
-            ),
-            ("Inbox", "Mail", "throughput numbers from the benchmark thread", 41),
-            (
-                "SearchBarView.swift — context-for-claude", "Cursor",
-                "func throughput(for frames: [RewindFrame]) -> Double", 63
-            ),
-            ("Benchmarks · archit-lal.github.example.io", "Arc", "sustained throughput chart", 190),
-        ]
-        return rows.enumerated().map { index, row in
-            memory(
-                index: index, title: row.0, app: row.1, text: row.2, minutesAgo: row.3,
-                path: pictures[index % pictures.count])
-        }
-    }
-
-    /// The same page with retention having taken two of the pictures, and a spoken line among them.
-    static func mixed(pictures: [String]) -> [TutorialMemory] {
-        var rows = screens(pictures: pictures)
-        rows[1] = memory(
-            index: 1, title: "Invoice 2026-07 — now.hdfcbank.example.com", app: "Arc",
-            text: "Invoice 2026-07 · amount due · billing address", minutesAgo: 41, path: nil)
-        rows[3] = TutorialMemory(
-            at: Date().timeIntervalSince1970 - 190 * 60,
-            when: "earlier",
-            text: "I'll send the invoice over before Friday, the one from last month",
-            app: "zoom.us",
-            kind: "said")
-        return rows
-    }
-
-    private static func memory(
-        index: Int, title: String, app: String, text: String, minutesAgo: Double, path: String?
-    ) -> TutorialMemory {
-        let at = Date().timeIntervalSince1970 - minutesAgo * 60
-        return TutorialMemory(
-            at: at, when: ContextTime.describe(at), text: text, app: app, kind: "screen",
-            window: title,
-            frame: path.map {
-                RewindFrame(
-                    id: Int64(index + 1), capturedAt: at, appName: app, bundleId: nil,
-                    windowTitle: title, ocrText: nil, imagePath: $0)
-            })
+        return environment
     }
 }

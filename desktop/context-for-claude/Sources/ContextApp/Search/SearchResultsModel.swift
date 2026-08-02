@@ -429,6 +429,11 @@ final class SearchResultsModel: ObservableObject {
             // their place in it.
             if let selection, !moments.contains(where: { $0.id == selection }) { self.selection = nil }
             loadError = nil
+            // Said out loud, so nothing outside this panel has to run a second search to find out
+            // what this one answered. The tutorial's search beat is the caller that matters: its gate
+            // is "a real question really came back with something", and this is the only place in the
+            // app that can report it without asking the database again.
+            SearchPanelWatch.report(.answered(query: query, results: moments.count))
         } catch {
             moments = []
             totalCount = 0
@@ -442,6 +447,11 @@ final class SearchResultsModel: ObservableObject {
             // do, wrote the user's own question into the unified log. The same reasoning keeps it out
             // of `loadError`: a note that spills SQL at somebody is not an explanation either.
             ContextLog.error("search read failed (\(type(of: error)))", "search")
+            // Reported too, at zero. A read that failed is not an answer, and an observer left
+            // waiting on a report that never came would be waiting for something that cannot arrive —
+            // `readFailureNote` is what tells the *user* the difference, and zero results is what
+            // stops anything downstream claiming a find.
+            SearchPanelWatch.report(.answered(query: query, results: 0))
         }
     }
 

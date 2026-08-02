@@ -30,7 +30,15 @@ enum RewindWindow {
         onOpenSettings: @escaping () -> Void = {},
         onSearch: @escaping (String) -> Void = { _ in }
     ) {
+        // Whether or not there is a window yet: this is what makes a timeline that has been opened
+        // once know to stand aside the next time the search panel comes up.
+        observeTheSearchPanel()
+
         if let window = current {
+            // A present is a show, and it outranks any yield in progress. Without this the window
+            // that is standing aside for the search panel would be ordered front at alpha 0 by the
+            // line below — on screen, invisible, and in the way.
+            setHidden(false)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -112,6 +120,8 @@ enum RewindWindow {
         ])
 
         current = window
+        // A brand-new window is not standing aside for anything, whatever the last one was doing.
+        isHiddenIntent = false
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -155,18 +165,108 @@ enum RewindWindow {
         guard let model else { return false }
         model.focus(on: instant)
         // A timeline behind the surface that just handed it a moment is a timeline the user has to
-        // go looking for.
+        // go looking for — and a timeline *standing aside* for that surface is one they cannot find
+        // at all, which is the ordinary case here: the search panel hides it, and then hands it a
+        // moment. Bringing it back is the same statement as bringing it forward.
+        setHidden(false)
         current?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         return true
     }
 
     /// Hides the window without discarding the loaded day.
+    ///
+    /// Clears the yield as well, and that is the half that is easy to forget: a close is a stronger
+    /// statement than "stand aside for a moment", so a `setHidden(false)` arriving afterwards — the
+    /// search panel finally closing, say — must not put the window back on screen. With the intent
+    /// cleared here that call is a no-op, because `setHidden` is idempotent on intent.
     static func dismiss() {
+        isHiddenIntent = false
         current?.orderOut(nil)
     }
 
     static var isVisible: Bool { current?.isVisible ?? false }
+
+    // MARK: - Standing aside
+
+    /// Whether the timeline is currently out of the way of another of this app's floating surfaces.
+    ///
+    /// The *intent*, not `isVisible`: a window that is mid-fade is still visible while hiding and
+    /// already visible while showing, so the two answer differently at exactly the moment it matters.
+    /// Readable from outside so a test can assert the yield without putting a window on screen.
+    private(set) static var isHiddenIntent = false
+
+    /// Gets out of the way while the search panel is up, and comes back when it goes.
+    ///
+    /// **Why the timeline hides at all.** The search bar is opened *from* the timeline — the pill is
+    /// in its own header — and it is a 760 pt floating slab that lands over the upper half of the
+    /// display. Two big floating surfaces stacked is the panel covering the thing that opened it, and
+    /// it is what "the rewind tab is hidden" asks for: the timeline steps back for the one surface
+    /// that is answering the same question, and returns the moment that surface is done.
+    ///
+    /// **The asymmetry is deliberate: the hide is immediate, the show fades.** `OnboardingWindow`
+    /// documents the trap this design sidesteps — an `orderOut` that lands *after* a show request
+    /// strands a window off screen on an `LSUIElement` app, so its version needs a generation counter
+    /// to make "a show that arrived mid-fade always wins". There is nothing to win here: hiding
+    /// happens on the calling turn, so there is no completion handler to arrive late and no race to
+    /// arbitrate. What is left is the part worth animating — a window *returning* is a step back into
+    /// the room, and it reads better fading in than popping. Reduce Motion collapses it to nothing.
+    ///
+    /// Idempotent on intent, so the unconditional restore in `SearchBarWindow.dismiss` costs nothing
+    /// on the second call, and a timeline the user never opened is a no-op both ways.
+    static func setHidden(_ hidden: Bool) {
+        guard hidden != isHiddenIntent else { return }
+        // Recorded before the window is looked for, so the flag is honest on a machine where no
+        // timeline has ever been opened — and so a `present` that happens next knows what to clear.
+        isHiddenIntent = hidden
+        guard let window = current else { return }
+
+        guard !hidden else {
+            window.orderOut(nil)
+            return
+        }
+        // Ordered in *before* the fade and from zero, so the window never flashes at full opacity for
+        // a frame. `orderFrontRegardless` rather than `makeKeyAndOrderFront`: coming back must not
+        // take focus off whatever the user moved on to.
+        window.alphaValue = 0
+        window.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = InkReduceMotion.duration(InkMotion.stepTransition)
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 1
+            },
+            completionHandler: {
+                MainActor.assumeIsolated {
+                    // Pinned however the animation ended, so the window can never be left at a
+                    // partial alpha — but only while it is still meant to be on screen.
+                    guard current === window, !isHiddenIntent else { return }
+                    window.alphaValue = 1
+                }
+            })
+    }
+
+    /// Starts listening to the real search surface, once.
+    ///
+    /// Called from `present` rather than at launch, and the reason is the same one that makes the
+    /// yield safe: a timeline that has never been opened has nothing to stand aside, and a
+    /// registration that only exists once there is a window to move cannot move one that was never
+    /// asked for. Idempotent — a second `present` re-uses the first registration rather than stacking
+    /// a second observer that would hide the window twice.
+    static func observeTheSearchPanel() {
+        guard searchPanelToken == nil else { return }
+        searchPanelToken = SearchPanelWatch.addObserver { event in
+            switch event {
+            case .opened: setHidden(true)
+            case .closed: setHidden(false)
+            // Not this window's business. What was asked and what was pressed belong to whoever is
+            // coaching the panel; all this window has to know is whether it is in the way.
+            case .answered, .openedMoment: break
+            }
+        }
+    }
+
+    private static var searchPanelToken: UUID?
 
     private static func centredFrame(on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame

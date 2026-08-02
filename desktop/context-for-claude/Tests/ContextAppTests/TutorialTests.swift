@@ -28,12 +28,16 @@ final class TutorialTests: XCTestCase {
         var frameCount = 0
         var framesAskedSince: [Double] = []
         var screenGranted = false
-        var searchResults: [TutorialMemory] = []
         var stampURL: URL?
         /// Starts closed. Nothing in this app opens a timeline until something opens it, and a world
         /// that begins with one already up would let a beat read a window it never caused.
         var timelineIsVisible = false
-        var momentNear: TutorialMoment?
+        /// The same rule for the search panel, and it matters more here: the beat that waits for one
+        /// is satisfied by it *appearing*, so a world that started with it up would satisfy that gate
+        /// before the user had touched anything.
+        var searchPanelIsVisible = false
+        var searchPanelPresentations = 0
+        var searchPanelDismissals = 0
 
         /// What the world answers when the tutorial hands the first question over. The happy path by
         /// default; every test that cares about a failing handoff sets its own.
@@ -72,12 +76,15 @@ final class TutorialTests: XCTestCase {
         var musicStops = 0
         var clicks = 0
         var chimes = 0
-        var scrubs: [Double] = []
 
         /// The two watchers, as the model armed them. Held rather than counted so a test can fire
         /// the *real* callback — which is the only way anything sets the gates they feed.
         var hotkeyWatch: (() -> Void)?
         var dragWatch: (() -> Void)?
+        /// The search panel's observer, as the model armed it. Held for the same reason the other two
+        /// are: the only honest way to satisfy the search gates is to send the model the events the
+        /// real panel sends, through the callback the model itself registered.
+        var searchPanelWatch: ((SearchPanelEvent) -> Void)?
 
         func environment() -> TutorialEnvironment {
             var environment = TutorialEnvironment()
@@ -87,9 +94,6 @@ final class TutorialTests: XCTestCase {
                 self.framesAskedSince.append(since)
                 return self.frameCount
             }
-            environment.search = { _ in self.searchResults }
-            environment.frameNear = { _ in self.momentNear }
-            environment.storeIsReadable = { true }
             environment.screenIsGranted = { self.screenGranted }
             environment.openPage = { url in
                 self.pagesOpened.append(url)
@@ -117,7 +121,17 @@ final class TutorialTests: XCTestCase {
             }
             environment.dismissTimeline = { self.timelineDismissals += 1 }
             environment.timelineIsVisible = { self.timelineIsVisible }
-            environment.scrubTimeline = { self.scrubs.append($0) }
+            environment.watchSearchPanel = { self.searchPanelWatch = $0 }
+            environment.stopWatchingSearchPanel = { self.searchPanelWatch = nil }
+            environment.searchPanelIsVisible = { self.searchPanelIsVisible }
+            environment.presentSearchPanel = {
+                self.searchPanelPresentations += 1
+                self.reportFromTheSearchPanel(.opened)
+            }
+            environment.dismissSearchPanel = {
+                self.searchPanelDismissals += 1
+                self.reportFromTheSearchPanel(.closed)
+            }
             environment.locateTarget = { _ in nil }
             environment.presentOverlay = { self.overlayPresented.append($0) }
             environment.dismissOverlay = { self.overlayDismissals += 1 }
@@ -154,16 +168,35 @@ final class TutorialTests: XCTestCase {
         func dragAcrossTheTimeline() {
             dragWatch?()
         }
+
+        /// The real search panel says what it just did.
+        ///
+        /// Modelled the way it happens: the shell's `onSearch` opens `SearchBarWindow` — the tutorial
+        /// does not take the press any more — and the panel then announces itself through
+        /// `SearchPanelWatch`. Nothing here reaches into the model, which is what makes the search
+        /// beats' gates facts about the panel rather than about the tutorial.
+        func reportFromTheSearchPanel(_ event: SearchPanelEvent) {
+            switch event {
+            case .opened: searchPanelIsVisible = true
+            case .closed: searchPanelIsVisible = false
+            case .answered, .openedMoment: break
+            }
+            searchPanelWatch?(event)
+        }
+
+        /// The user clicks the real "Search All" pill, which opens the real panel.
+        func pressTheSearchPill() {
+            reportFromTheSearchPanel(.opened)
+        }
+
+        /// They type a question into the real bar and it really answers.
+        func searchInTheRealPanel(_ query: String, results: Int) {
+            reportFromTheSearchPanel(.answered(query: query, results: results))
+        }
     }
 
     private func makeModel(_ world: World) -> TutorialModel {
         TutorialModel(environment: world.environment())
-    }
-
-    private func memory(_ text: String = "a line of captured text", at: Double = 1_699_999_000)
-        -> TutorialMemory
-    {
-        TutorialMemory(at: at, when: "earlier", text: text, app: "Safari", kind: "screen")
     }
 
     /// Satisfies whatever the current step is waiting for, honestly — the same inputs the real world
@@ -186,11 +219,13 @@ final class TutorialTests: XCTestCase {
         case .realGesture:
             world.dragAcrossTheTimeline()
             model.advance()
+        case .realSearchPanel:
+            // The click on the real pill is the transition; there is no button to press afterwards.
+            world.pressTheSearchPill()
         case .realSearchResult:
-            world.searchResults = [memory()]
-            // The search only fills the gate. Leaving the step is still the button's job, and the
-            // button still checks.
-            model.search("captured")
+            // The real panel answering fills the gate. Leaving the step is still the button's job,
+            // and the button still checks.
+            world.searchInTheRealPanel("captured", results: 1)
             model.advance()
         case .genuineToolCall:
             recordStamp(world, at: world.clock + 1)
@@ -448,10 +483,13 @@ final class TutorialTests: XCTestCase {
         while !model.step.isTerminal, guardrail < 40 {
             said.append(model.speech.everythingSaid)
             if model.step == .query {
-                // The empty-handed line as well as the found-it one.
-                world.searchResults = []
-                model.search("nothing captured matches this")
+                // Both the empty-handed lines as well as the found-it one: a real question that
+                // found nothing, and the panel closed under the beat.
+                world.searchInTheRealPanel("nothing captured matches this", results: 0)
                 said.append(model.speech.everythingSaid)
+                world.reportFromTheSearchPanel(.closed)
+                said.append(model.speech.everythingSaid)
+                world.reportFromTheSearchPanel(.opened)
             }
             stepForward(model, world)
             guardrail += 1
@@ -536,120 +574,228 @@ final class TutorialTests: XCTestCase {
         }
     }
 
-    // MARK: - The search
+    // MARK: - The search, conducted in the real search panel
 
-    func testAnEmptySearchStaysOnTheStepAndSaysSo() {
+    /// **The regression this whole section is here for.**
+    ///
+    /// The pill beat used to advance on the press: `Tutorial.searchPillWasPressed()` answered true,
+    /// the shell's guard swallowed it, and `SearchBarWindow` never opened — the user pressed a real
+    /// control and was shown a tutorial-only imitation of results on a coach card. So the gate was a
+    /// click and the surface was a copy.
+    ///
+    /// The gate is the panel now, and there is nothing in `TutorialModel` that can satisfy it: the
+    /// only route to `.opened` is the real panel announcing itself. A press that fails to open one —
+    /// which is what an intercepted press *is* — leaves the beat exactly where it was.
+    func testThePillBeatWaitsForTheRealSearchPanelAndNotForThePress() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .findMoments)
+
+        XCTAssertEqual(model.step.gate, .realSearchPanel)
+        XCTAssertFalse(model.gateIsSatisfied, "nothing is on screen yet")
+        XCTAssertFalse(model.advance(), "and no button may move past a panel that never came up")
+        XCTAssertEqual(model.step, .findMoments)
+
+        world.pressTheSearchPill()
+        XCTAssertTrue(model.searchPanelIsOpen)
+        XCTAssertEqual(model.step, .query, "the panel appearing is the transition")
+    }
+
+    /// The tutorial never consumes the press, which is what lets the real bar open at all.
+    ///
+    /// Asserted through the shell's own entry point, because that is the one the timeline calls:
+    /// `ContextApp.swift` opens `SearchBarWindow` unless this answers true. It answers false with the
+    /// tutorial stopped **and** with it running on the very beat that used to take the press.
+    func testTheTutorialNeverTakesTheSearchPillPress() {
+        XCTAssertFalse(
+            Tutorial.searchPillWasPressed(),
+            "the pill belongs to the timeline, in the tutorial as everywhere else")
+    }
+
+    /// The panel opening is not an answer. It reads the newest captures with nothing typed, and a
+    /// gate that counted those rows would be satisfied by the bar merely existing — the "found it"
+    /// beat would land on somebody who had not asked anything.
+    func testTheOpeningReadOfThePanelDoesNotCountAsAFind() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        world.searchResults = []
-        model.search("something nobody captured")
+        world.searchInTheRealPanel("", results: 60)
+        XCTAssertEqual(model.resultCount, 60, "the panel really is showing sixty things")
+        XCTAssertFalse(model.gateIsSatisfied, "and none of them was asked for")
+        XCTAssertFalse(model.advance())
+        XCTAssertEqual(model.speech.lead, "Type something you just looked at.")
+    }
+
+    func testARealQuestionThatFoundNothingStaysOnTheStepAndSaysSo() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+
+        world.searchInTheRealPanel("something nobody captured", results: 0)
         XCTAssertEqual(model.step, .query, "no result, no “found it”")
-        XCTAssertNotNil(model.searchMessage)
-        XCTAssertTrue(model.results.isEmpty)
         XCTAssertFalse(model.gateIsSatisfied)
-        // The expected line is the user's own instruction for this beat, quoted in
-        // `TutorialModel.speech`: "dont say search a word off the screen, say search something you
-        // just looked at." What is under test is unchanged — an empty result leaves the mark on the
-        // asking line rather than the found-it one.
-        XCTAssertEqual(
-            model.speech.lead, "Type something you just looked at.",
-            "and the mark does not say it found one")
+        XCTAssertEqual(model.speech.lead, "Nothing matched that.")
         XCTAssertFalse(model.advance(), "the found-it line is not reachable by pressing continue")
         XCTAssertFalse(model.step.gate.isWaivable, "and it cannot be waived either")
     }
 
-    func testARealResultTurnsTheCardIntoTheFoundItBeatAndCarriesTheRealHit() {
+    func testARealResultTurnsTheCardIntoTheFoundItBeat() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        let hit = memory("the invoice I was reading", at: 1_699_998_888)
-        world.searchResults = [hit]
-        model.search("invoice")
+        world.searchInTheRealPanel("invoice", results: 3)
 
         XCTAssertEqual(model.step, .query, "the found-it beat is the same card, changed")
-        XCTAssertEqual(model.results, [hit])
+        XCTAssertEqual(model.resultCount, 3)
         XCTAssertEqual(model.lastQuery, "invoice")
         XCTAssertEqual(model.speech.lead, "There it is.")
+        XCTAssertEqual(model.speech.aside, "Click it to go back to that moment.")
         XCTAssertTrue(model.gateIsSatisfied)
         XCTAssertTrue(model.advance())
     }
 
     /// A second search that finds nothing takes the found-it line back off the card. The line is a
-    /// statement about the current results, not a badge the step earned once.
+    /// statement about the current answer, not a badge the step earned once.
     func testAFailedSecondSearchWithdrawsTheFoundItLine() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        world.searchResults = [memory()]
-        model.search("captured")
+        world.searchInTheRealPanel("captured", results: 2)
         XCTAssertEqual(model.speech.lead, "There it is.")
 
-        world.searchResults = []
-        model.search("nothing at all")
-        XCTAssertEqual(model.speech.lead, "Type something you just looked at.")
-        XCTAssertNil(model.chosenMemory, "and the moment it was showing goes with it")
+        world.searchInTheRealPanel("nothing at all", results: 0)
+        XCTAssertEqual(model.speech.lead, "Nothing matched that.")
         XCTAssertFalse(model.gateIsSatisfied)
         XCTAssertFalse(model.advance())
     }
 
-    func testTappingAMemoryGoesBackToThatExactMoment() throws {
+    /// Pressing a result in the real panel closes it — the timeline comes back at that moment, which
+    /// is the payoff — so the card has to read the *travel*, not the empty screen it leaves behind.
+    func testTravellingToAMomentIsWhatTheCardSaysAndNotThatThePanelWentAway() {
         let world = World()
         world.screenGranted = true
-        world.momentNear = TutorialMoment(
-            at: 1_699_998_890, app: "Safari", windowTitle: "a captured window",
-            imagePath: "/tmp/does-not-need-to-exist.heic")
         let model = makeModel(world)
         drive(model, world, to: .query)
-        world.searchResults = [memory()]
-        model.search("captured")
+        world.searchInTheRealPanel("captured", results: 2)
 
-        // `XCTUnwrap` rather than a force unwrap: this file is also run against deliberately broken
-        // builds to check that these assertions bite, and a crash there would abort the whole suite
-        // before the other honesty tests got to report.
-        let hit = try XCTUnwrap(model.results.first)
-        model.choose(hit)
-        XCTAssertEqual(model.chosenMemory, hit)
-        XCTAssertEqual(model.chosenMoment, world.momentNear)
-        XCTAssertEqual(world.scrubs, [hit.at], "the timeline is repositioned on the real instant")
+        world.reportFromTheSearchPanel(.openedMoment(at: 1_699_998_888, hasPicture: true))
+        world.reportFromTheSearchPanel(.closed)
+
+        XCTAssertFalse(model.searchPanelIsOpen)
+        XCTAssertEqual(model.speech.lead, "There it is.")
         XCTAssertEqual(model.speech.aside, "That is the moment, exactly as it was.")
+        XCTAssertTrue(model.gateIsSatisfied)
     }
 
-    /// A hit with no surviving picture is said out loud rather than shown as a blank frame.
-    func testAMomentWithNoPictureIsAdmitted() throws {
+    /// A moment with no surviving picture is said out loud rather than claimed.
+    func testAMomentWithNoPictureIsAdmitted() {
         let world = World()
         world.screenGranted = true
-        world.momentNear = nil
         let model = makeModel(world)
         drive(model, world, to: .query)
-        world.searchResults = [memory()]
-        model.search("captured")
+        world.searchInTheRealPanel("captured", results: 1)
 
-        let hit = try XCTUnwrap(model.results.first)
-        model.choose(hit)
-        XCTAssertNil(model.chosenMoment)
+        world.reportFromTheSearchPanel(.openedMoment(at: 1_699_998_888, hasPicture: false))
         XCTAssertEqual(
             model.speech.aside, "No picture survived that second — the words are what I still have.")
     }
 
-    /// The pill advances because the real control in the real window was pressed.
-    func testTheSearchPillOnlyAdvancesTheStepThatAskedForIt() {
+    /// Escape on the panel with nothing found is a dead end unless the card says so and offers a way
+    /// back — the gate cannot be waived, so there has to be one.
+    func testAClosedPanelIsSaidOutLoudAndCanBeReopenedOnRequest() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+
+        world.reportFromTheSearchPanel(.closed)
+        XCTAssertFalse(model.searchPanelIsOpen)
+        XCTAssertEqual(model.speech.lead, "The search bar is gone.")
+        XCTAssertFalse(model.gateIsSatisfied)
+
+        model.openSearchPanel()
+        XCTAssertEqual(world.searchPanelPresentations, 1, "and only because the user asked")
+        XCTAssertTrue(model.searchPanelIsOpen)
+        XCTAssertEqual(model.speech.lead, "Type something you just looked at.")
+    }
+
+    /// The waiver on the pill beat has to *open* the panel, not skip past it: the beat after it has
+    /// nothing to be asked in otherwise — and the card must then not congratulate the user on a click
+    /// they never made.
+    func testWaivingThePillBeatOpensTheRealPanelAndSaysWhoOpenedIt() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
         drive(model, world, to: .findMoments)
-        model.searchPillWasPressed()
-        XCTAssertEqual(model.step, .query)
 
-        // Pressing it again later must not skip anything.
-        model.searchPillWasPressed()
+        XCTAssertFalse(model.waiverIsOffered, "not before the patience has run")
+        world.clock += TutorialModel.searchPanelPatience
+        XCTAssertTrue(model.waiverIsOffered)
+        XCTAssertTrue(model.waive())
+
         XCTAssertEqual(model.step, .query)
+        XCTAssertTrue(model.didWaiveSearchPanel)
+        XCTAssertEqual(world.searchPanelPresentations, 1)
+        XCTAssertTrue(model.searchPanelIsOpen)
+        XCTAssertEqual(model.speech.lead, "I opened the search bar for you.")
+    }
+
+    /// **The panel is the tutorial's furniture for two beats and nobody else's.**
+    ///
+    /// Leaving the search beats has to take it away, and the reason is not tidiness: the timeline
+    /// *stands aside* while the panel is up (`RewindWindow.setHidden`), and the only thing that ever
+    /// brings it back is the panel being dismissed. A run that carried an open panel into the Claude
+    /// beats would be covering Claude with it; a run abandoned mid-beat would leave the timeline
+    /// ordered out on an `LSUIElement` app with nothing to restore it.
+    func testTheSearchPanelIsClosedOnTheWayOutOfTheSearchBeats() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+        XCTAssertTrue(world.searchPanelIsVisible)
+
+        world.searchInTheRealPanel("captured", results: 1)
+        XCTAssertTrue(model.advance(), "query → claudeHandoff")
+
+        XCTAssertEqual(world.searchPanelDismissals, 1)
+        XCTAssertFalse(world.searchPanelIsVisible)
+    }
+
+    func testAbandoningTheTutorialMidSearchTakesThePanelWithIt() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+        XCTAssertTrue(world.searchPanelIsVisible)
+
+        model.abandon()
+
+        XCTAssertEqual(model.step, .skipped)
+        XCTAssertEqual(world.searchPanelDismissals, 1)
+        XCTAssertFalse(world.searchPanelIsVisible)
+    }
+
+    /// A panel the user closed themselves is not closed a second time on the way out. The dismissal
+    /// is what restores the timeline, and asking for one that is not needed is how a surface ends up
+    /// being told to come back at a moment nobody asked it to.
+    func testAPanelTheUserAlreadyClosedIsNotDismissedAgain() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+
+        world.reportFromTheSearchPanel(.closed)
+        let dismissalsAfterTheirOwn = world.searchPanelDismissals
+        model.abandon()
+        XCTAssertEqual(world.searchPanelDismissals, dismissalsAfterTheirOwn)
     }
 
     // MARK: - The Claude payoff
@@ -1074,8 +1220,7 @@ final class TutorialTests: XCTestCase {
             // Stopped one beat short so the chime count below is about this handoff and not about
             // every earned gate before it.
             drive(model, world, to: .query)
-            world.searchResults = [memory()]
-            model.search("captured")
+            world.searchInTheRealPanel("captured", results: 1)
             let chimesBefore = world.chimes
             XCTAssertTrue(model.advance())
             XCTAssertEqual(model.step, .claudeHandoff)
@@ -1202,9 +1347,14 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(TutorialGate.screenRecordingGrant.isWaivable)
         XCTAssertTrue(TutorialGate.realHotkey.isWaivable)
         XCTAssertTrue(TutorialGate.realGesture.isWaivable)
+        // The panel is waivable and the *answer* is not, and the split is the point: a pill that
+        // cannot be pressed is a machine problem the tutorial can work around by opening the panel
+        // itself, while a search that found nothing is the one thing it may never work around.
+        XCTAssertTrue(TutorialGate.realSearchPanel.isWaivable)
         XCTAssertEqual(TutorialStep.collectFrames.gate, .realFrames)
         XCTAssertEqual(TutorialStep.openTimeline.gate, .realHotkey)
         XCTAssertEqual(TutorialStep.timeline.gate, .realGesture)
+        XCTAssertEqual(TutorialStep.findMoments.gate, .realSearchPanel)
         XCTAssertEqual(TutorialStep.query.gate, .realSearchResult)
         XCTAssertEqual(TutorialStep.claudeProof.gate, .genuineToolCall)
     }
@@ -1222,7 +1372,10 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(model.hotkeyFired)
         XCTAssertFalse(model.timelineIsOpen)
         XCTAssertFalse(model.didDrag)
-        XCTAssertTrue(model.results.isEmpty)
+        XCTAssertFalse(model.searchPanelIsOpen)
+        XCTAssertEqual(model.resultCount, 0)
+        XCTAssertEqual(model.lastQuery, "")
+        XCTAssertNil(model.openedMomentHasPicture)
         XCTAssertNil(model.claudeAsk)
         XCTAssertNil(model.proof)
         XCTAssertFalse(model.didOpenReadingMaterial)
@@ -1703,97 +1856,59 @@ final class TutorialTests: XCTestCase {
         // The handoff still does: its two answers are buttons on the card, and Claude is opened by
         // this beat afterwards rather than being typed into during it.
         XCTAssertTrue(TutorialStep.claudeHandoff.takesFocusOnEntry)
-        // A coach mark leaves focus where the user is working; the query beat is the exception,
-        // because it has a text field the user has to type into.
+        // A coach mark leaves focus where the user is working. The query beat used to be the
+        // exception because it carried its own text field; the typing happens in the real search bar
+        // now, which is a non-activating panel holding the first responder while this app is not
+        // frontmost — a card that activated over it would take the field away at the exact moment it
+        // is asking somebody to type into it.
         XCTAssertFalse(TutorialStep.timeline.takesFocusOnEntry)
         XCTAssertFalse(TutorialStep.findMoments.takesFocusOnEntry)
-        XCTAssertTrue(TutorialStep.query.takesFocusOnEntry)
+        XCTAssertFalse(TutorialStep.query.takesFocusOnEntry)
         XCTAssertTrue(TutorialStep.invitation.takesFocusOnEntry)
     }
 
-    // MARK: - The found-it beat is a grid of pictures
+    // MARK: - The search beats are coach marks, not a search surface
 
-    /// **A result's headline is the window's own title, never the accessibility dump.**
+    /// **The two search beats point at the real panel and stand clear of it.**
     ///
-    /// `Queries.screenText` fills a screen hit's `text` with everything the window announced about
-    /// itself, in layout order and truncated — for a browser that is *"tab Close Tab New Tab Search
-    /// Tabs Update Aura/Icons/New/Default/search Open Profile…"*. That string was the headline of every
-    /// row on this card. `Hit.window` already carries the clean title, so the fix is to stop throwing
-    /// it away rather than to write a trimmer that guesses which part of the soup was the title.
-    func testAResultIsHeadlinedByItsWindowTitleAndNotByTheAccessibilityDump() {
-        let dump = "tab Close Tab New Tab Search Tabs Update Aura/Icons/New/Default/search Open Profile"
-        let hit = TutorialMemory(
-            at: 1_700_000_000, when: "Sun 2 Aug 2026 at 11:40 AM", text: dump, app: "ChatGPT Atlas",
-            kind: "screen", window: "Comparing throughput — arc.net")
+    /// This is the layout half of the same fix. The pill beat hangs its card under the "Search All"
+    /// pill; the query beat's card used to sit in the middle of the timeline window, which is the one
+    /// place it cannot be now — the timeline *stands aside* while the panel is up, so a mark aimed at
+    /// it would be aimed at something ordered off screen. It targets the panel instead and is placed
+    /// under its foot, because the panel's field is its top edge and that is the part of it the user
+    /// is being asked to type into.
+    func testTheSearchBeatsPointAtTheSurfaceTheyAreCoaching() {
+        XCTAssertEqual(TutorialStep.findMoments.target, .searchAllButton)
+        XCTAssertEqual(TutorialStep.query.target, .searchPanel)
+        XCTAssertTrue(TutorialStep.findMoments.usesSearchPanel)
+        XCTAssertTrue(TutorialStep.query.usesSearchPanel)
 
-        XCTAssertEqual(hit.title, "Comparing throughput — arc.net")
-        XCTAssertEqual(hit.source, "arc.net", "the domain in the title is what places the card")
-        XCTAssertEqual(hit.text, dump, "the matched words are not thrown away — the well still shows them")
-
-        // No window title recorded: the app is the honest headline, and the dump still is not.
-        let untitled = TutorialMemory(
-            at: 1_700_000_000, when: "…", text: dump, app: "ChatGPT Atlas", kind: "screen")
-        XCTAssertEqual(untitled.title, "ChatGPT Atlas")
-        XCTAssertEqual(untitled.source, "ChatGPT Atlas")
-
-        // Nothing recorded at all — no app, no window. The matched words are then the only true thing
-        // left to head the card with, so the card is never blank.
-        let anonymous = TutorialMemory(at: 1_700_000_000, when: "…", text: dump, app: nil, kind: "screen")
-        XCTAssertEqual(anonymous.title, dump)
+        // …and nothing else in the flow does, which is what makes `enter` closing the panel on the
+        // way into every other beat a complete rule rather than two named transitions.
+        for step in TutorialStep.allCases where step != .findMoments && step != .query {
+            XCTAssertFalse(step.usesSearchPanel, "\(step) would carry the panel into a beat about something else")
+        }
     }
 
-    /// A spoken line is not a window: it gets the words, and a title that says which side of the
-    /// microphone it came from rather than a name this app is not allowed to invent.
-    func testASpokenResultIsTitledBySideOfTheMicrophoneAndKeepsItsWords() {
-        let said = TutorialMemory(
-            at: 1_700_000_000, when: "…", text: "remind me to chase the invoice", app: "Slack",
-            kind: "said")
-        XCTAssertEqual(said.title, "You said")
-        XCTAssertEqual(said.source, "Slack")
-        XCTAssertFalse(said.isScreen)
-
-        let heard = TutorialMemory(
-            at: 1_700_000_000, when: "…", text: "can you cc finance on it", app: nil, kind: "heard")
-        XCTAssertEqual(heard.title, "Heard")
-        XCTAssertEqual(heard.source, "Conversation", "a line with no app is placed as a conversation")
+    /// The panel is ours and the music is not somebody else's problem: the search beats happen in
+    /// **this** app, so they must not be mistaken for the handovers that stop the cinematic bed.
+    func testTheSearchBeatsAreNotAHandoffToAnotherApp() {
+        XCTAssertFalse(TutorialStep.findMoments.handsOverToAnotherApp)
+        XCTAssertFalse(TutorialStep.query.handsOverToAnotherApp)
     }
 
-    /// **Three across does not fit this card, and two does.**
+    /// **A card under the real panel, measured against the real panel's real size.**
     ///
-    /// The search panel is 760 pt and puts three cards in it; this card is 470. `minimumCardWidth` is
-    /// the width that file names as the point where a thumbnail stops being recognisable as a screen —
-    /// so the column count is not a taste question, it is the only count that clears that floor.
-    func testTheGridsColumnsClearTheWidthAThumbnailNeedsToBeRecognisable() {
-        let content = TutorialOverlay.width - TutorialCardView.horizontalPadding * 2
-
-        XCTAssertEqual(TutorialResultGrid.columns, 2)
-        XCTAssertGreaterThanOrEqual(
-            TutorialResultGrid.cardWidth(contentWidth: content), SearchLayout.minimumCardWidth,
-            "a card in this grid is too narrow to read as a screen")
-
-        // …and the count above it genuinely does not clear it, which is what makes two the answer
-        // rather than a preference.
-        let threeAcross = (content - TutorialResultGrid.gutter * 2) / 3
-        XCTAssertLessThan(
-            threeAcross, SearchLayout.minimumCardWidth,
-            "three across now fits — the reason this grid is two across has gone")
-    }
-
-    /// **Every result reserves a picture, and the card still fits the display.**
+    /// The card used to draw a two-across grid of screenshots and this test used to hold that grid
+    /// under a ceiling derived from the search surface's own maximum. Neither is a claim about this
+    /// card any more — the results are `SearchResultsView`'s — but the argument survives inverted:
+    /// the coach mark now has to stand *beside* the tallest panel the search surface is allowed to
+    /// be, and the one thing it may never be laid over is the field at the top of it.
     ///
-    /// The defect was a column of text rows: *"this after search after onboarding needs to show
-    /// results in tabular form with screen if any. This list with only text looks so bland."* What
-    /// makes that a layout claim rather than a matter of taste is the well — a 4:3 picture of the
-    /// captured screen at the card's width — so the beat's card must measure at least one well per
-    /// grid row taller than the same card with nothing found. A text list cannot pass this.
-    ///
-    /// The ceiling is the other half, and it is the shipped one rather than a number picked here: the
-    /// search surface's own maximum, which its comments state as the height that "still fits a 13"
-    /// display" — bar, gap, header and `maximumResultsBodyHeight`. This card is a coach mark that
-    /// floats over the very timeline it is talking about, so it may not be taller than the panel that
-    /// is allowed to be the whole surface.
+    /// Two real geometries, both computed from shipped constants rather than picked: the display the
+    /// card comfortably clears, and the one where it cannot and degrades instead.
     @MainActor
-    func testTheFoundItCardReservesAWellPerResultAndStillFitsADisplay() throws {
+    func testTheQueryCardStandsUnderTheSearchPanelAndNeverOverItsField() {
         XCTAssertTrue(InkTestFonts.registered, "the bundled faces have to be registered to measure type")
 
         let world = World()
@@ -1801,75 +1916,49 @@ final class TutorialTests: XCTestCase {
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        let empty = cardHeight(model)
+        // Every state the card can be in while the panel is up. Which is tallest is not obvious, so
+        // all of them are measured rather than the one that looks worst.
+        var tallest = cardHeight(model)
+        world.searchInTheRealPanel("throughput", results: 12)
+        tallest = max(tallest, cardHeight(model))
+        world.searchInTheRealPanel("zzzz", results: 0)
+        tallest = max(tallest, cardHeight(model))
+        let card = NSSize(width: TutorialOverlay.width, height: tallest)
 
-        world.searchResults = (0..<TutorialModel.resultLimit).map { index in
-            let at = 1_699_990_000 + Double(index) * 90
-            let title = "Comparing M4 Max and RTX 4090 throughput — arc.net"
-            // The last one is speech, which is the case with no picture of its own — the state the
-            // card used to grow a second, larger preview in, and therefore the worst case for the
-            // ceiling. Its well is the same size, so the arithmetic below is unaffected.
-            guard index < TutorialModel.resultLimit - 1 else {
-                return TutorialMemory(
-                    at: at, when: "earlier", text: "the throughput numbers we talked about",
-                    app: "zoom.us", kind: "said")
-            }
-            return TutorialMemory(
-                at: at,
-                when: "earlier",
-                text: "tab Close Tab New Tab Search Tabs Update Aura/Icons/New/Default/search Open Profile",
-                app: "Arc",
-                kind: "screen",
-                window: title,
-                // The file need not exist: `SearchThumbnail` reserves the well from the aspect ratio
-                // and draws the neutral placeholder until (or unless) a decode lands, so the layout
-                // this measures is the shipped one without any image IO in a hermetic test.
-                frame: RewindFrame(
-                    id: Int64(index + 1), capturedAt: at, appName: "Arc", windowTitle: title,
-                    imagePath: "/tmp/tutorial-grid-\(index).heic"))
+        // The search surface at its ceiling, where `SearchBarWindow.barFrame` puts it: horizontally
+        // centred, its top an easy tenth of the way down.
+        //
+        // `showingNote: false`, and that is the honest worst case rather than the arithmetic one. The
+        // note is the read-failure line (`SearchResultsModel.readFailureNote`) and it appears only
+        // when the panel has **nothing** in it — a surface cannot be 34 pt taller for an error and
+        // simultaneously full to its 545 pt result ceiling.
+        let panelHeight = SearchLayout.surfaceHeight(
+            showingNote: false, panelHeight: SearchLayout.maximumResultsBodyHeight)
+        func panel(in visible: NSRect) -> NSRect {
+            let width = SearchLayout.surfaceWidth
+            let y = max(visible.minY, visible.maxY - panelHeight - visible.height * 0.10)
+            return NSRect(
+                x: visible.midX - width / 2, y: y, width: width, height: panelHeight)
         }
-        model.search("throughput")
-        XCTAssertEqual(model.results.count, 4, "the grid is being measured on the page it really draws")
 
-        let found = cardHeight(model)
+        // A 16" MacBook's usable area. The card clears the panel outright here.
+        let large = NSRect(x: 0, y: 0, width: 1728, height: 1092)
+        let onLarge = TutorialOverlay.under(card, panel: panel(in: large), in: large, margin: 14)
+        XCTAssertFalse(
+            onLarge.intersects(panel(in: large)),
+            "the card overlaps a full search panel on a 16\" display, where there is room for it not to")
+        XCTAssertTrue(large.contains(onLarge))
 
-        let content = TutorialOverlay.width - TutorialCardView.horizontalPadding * 2
-        let well = TutorialResultGrid.cardWidth(contentWidth: content) / SearchLayout.thumbnailAspect
-        let rows = ceil(Double(model.results.count) / Double(TutorialResultGrid.columns))
-        XCTAssertGreaterThanOrEqual(
-            found - empty, well * rows,
-            "the found-it card grew by \(found - empty) pt for \(model.results.count) results — less "
-                + "than the \(well * rows) pt \(Int(rows)) rows of screenshots take, so the results "
-                + "are being drawn as text again")
-
-        // The shipped ceiling for a floating surface on the smallest display this app supports.
-        let ceiling =
-            SearchLayout.barHeight + SearchLayout.panelGap + SearchLayout.panelHeaderHeight
-            + SearchLayout.maximumResultsBodyHeight
-        XCTAssertLessThanOrEqual(
-            found, ceiling,
-            "the found-it card measures \(found) pt, past the \(ceiling) pt the search surface is "
-                + "capped at for a 13\" display — a coach mark cannot be taller than the panel it is "
-                + "coaching")
-
-        // And tapping one does not put a second, larger copy of the picture under the grid. The card
-        // used to draw the chosen frame again at 140 pt, which was the only picture on it while the
-        // rows above were type; with a picture on every card it is the beat saying the same thing
-        // twice, and on the spoken result — which has no picture of its own — the render showed it
-        // pushing the mark's own line off the top of the display. `momentNear` is set so there
-        // genuinely *is* a frame it could have drawn; what must not happen is the card growing by one.
-        world.momentNear = TutorialMoment(
-            at: 1_699_990_000, app: "Arc", windowTitle: "Comparing throughput — arc.net",
-            imagePath: "/tmp/tutorial-grid-0.heic")
-        for result in model.results {
-            model.choose(result)
-            let chosen = cardHeight(model)
-            XCTAssertNotNil(model.chosenMoment, "the fixture stopped exercising the case that grew")
-            XCTAssertLessThan(
-                chosen, found + well,
-                "tapping “\(result.title)” added another picture-sized block under the grid")
-            XCTAssertLessThanOrEqual(chosen, ceiling)
-        }
+        // A 13" MacBook's, where a panel at its ceiling leaves less room than this card needs. It has
+        // to degrade over the *foot* of the panel — a scrolling grid — and never over its head.
+        let small = NSRect(x: 0, y: 0, width: 1470, height: 931)
+        let onSmall = TutorialOverlay.under(card, panel: panel(in: small), in: small, margin: 14)
+        XCTAssertTrue(small.contains(onSmall), "the card must stay on the display whatever it overlaps")
+        XCTAssertLessThan(
+            onSmall.maxY, panel(in: small).midY,
+            "the card has risen past the middle of the panel — the field, the query chip and the "
+                + "↵ Search affordance are the top of that surface and are what this beat is asking "
+                + "the user to touch")
     }
 
     /// The card's ideal height at the width the overlay hosts it at — the same `fittingSize` read

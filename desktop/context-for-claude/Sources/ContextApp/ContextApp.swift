@@ -29,6 +29,52 @@ struct ContextApp: App {
     }
 }
 
+/// **Who asked this process to go away.**
+///
+/// Almost nothing in an app needs to know this. One thing does: the app may only resurrect itself
+/// after a termination it did not ask for. `NSApplicationDelegate` is handed the same
+/// `applicationWillTerminate` for a user pressing Quit and for macOS ending the process out from
+/// under an onboarding run, and the two must not have the same answer — an app that comes back from
+/// its own Quit is an app that cannot be quit, which is far worse than one that needs reopening.
+///
+/// So the origin is recorded at the *cause* rather than inferred at the effect. Every path in this
+/// app that ends the process on the user's behalf says so here first; anything that arrives at
+/// `applicationWillTerminate` without having said so was somebody else's decision.
+@MainActor
+enum TerminationOrigin {
+
+    /// True when this process is ending because someone here asked it to.
+    private(set) static var wasRequestedLocally = false
+
+    /// The user pressed Quit. Call **before** `NSApp.terminate` — the delegate callback is
+    /// synchronous with it, so a flag set afterwards is a flag set too late.
+    static func userAskedToQuit() {
+        wasRequestedLocally = true
+        ContextLog.info("Quit requested by the user", "shell")
+    }
+
+    /// The Mac is logging out, restarting or shutting down.
+    ///
+    /// macOS quits every app the same way it quits us for a TCC change — a Quit Apple Event — so
+    /// without this a log-out in the middle of onboarding would be answered by the app reopening
+    /// itself into a session that is closing. Not a quit the *user* pressed, but just as much not
+    /// ours to undo.
+    static func systemIsPoweringOff() {
+        wasRequestedLocally = true
+        ContextLog.info("Power off in progress; this process will not reopen itself", "shell")
+    }
+
+    /// Puts the flag back to how a fresh process finds it.
+    ///
+    /// Nothing in the app calls this — a real process only ever ends once, so there is no un-asking.
+    /// It exists because the test suite runs every case in a single process, and a case that leaves
+    /// "the user pressed Quit" behind would silently pass the next case for the wrong reason: the
+    /// one assertion here that has to be trusted is the one that says the app does *not* come back.
+    static func resetForTesting() {
+        wasRequestedLocally = false
+    }
+}
+
 /// Everything that must happen once per process, in the order the rest of the app assumes:
 /// activation policy before any window can steal focus, fonts before anything draws, capture before
 /// the user can look at its status, onboarding last.
@@ -48,6 +94,16 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         // itself: focus rings, scrollers, the popover's own window background and corner rounding.
         // Every colour the app draws now comes from a system semantic colour (`Ink`), so following
         // the system is both correct and the smaller amount of code.
+
+        // A log-out, restart or shut-down quits every app the same way macOS quits us for a TCC
+        // change — a Quit Apple Event — so `applicationWillTerminate` alone cannot tell the two
+        // apart. This is the one notice macOS gives beforehand, and it is the difference between an
+        // app that reopens itself into a closing session and one that goes quietly.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { TerminationOrigin.systemIsPoweringOff() }
+        }
 
         registerBundledFonts()
 
@@ -87,14 +143,16 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                     RewindWindow.present(
                         store: store,
                         onOpenSettings: { SettingsWindow.present() },
-                        onSearch: { query in
-                            // The tutorial's "click Search All" beat advances because the real pill
-                            // in the real window was pressed. It answers true only while it is the
-                            // beat waiting for one; outside the tutorial this is a single boolean and
-                            // the bar opens as it always did.
-                            guard !Tutorial.searchPillWasPressed() else { return }
-                            SearchBarWindow.present(prefill: query)
-                        })
+                        // The tutorial's search beat rides on this the way the timeline beat rides on
+                        // the shortcut above: the press falls straight through, the real bar opens
+                        // because the user clicked the real pill, and the tutorial observes the panel
+                        // that came up rather than taking the press.
+                        //
+                        // It used to `guard !Tutorial.searchPillWasPressed() else { return }` — the
+                        // tutorial consumed the click and drew its own imitation of the results, so
+                        // the one beat that teaches people to search was the one beat where searching
+                        // did not open the search bar.
+                        onSearch: { query in SearchBarWindow.present(prefill: query) })
                 }
             }
 
@@ -122,15 +180,91 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// Menu-bar-only: dismissing onboarding must never take the process with it.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// **Whether a process being terminated right now has to bring itself back.**
+    ///
+    /// Pure, and separated from every fact it depends on, because this is the decision with a wrong
+    /// answer available in both directions and neither wrong answer is survivable:
+    ///
+    /// - Fail to revive and the user is where the bug report starts. macOS's own alert offers
+    ///   **"Quit & Reopen"**, and measured on macOS 26.5.2 the reopen half simply does not happen for
+    ///   this bundle. The live trace of the real incident: `Handling Quit AppleEvent` → `App
+    ///   termination approved` → `Termination complete` → launchd `exited due to exit(0)`, and then
+    ///   **not one further log line naming this bundle for the next five minutes** — no
+    ///   LaunchServices open request, no runningboard launch job, not even a failed one. Nothing was
+    ///   ever asked. AppKit's only contribution to the "Reopen" is
+    ///   `_setShouldRestoreStateOnNextLaunch: 1`, which is state restoration *for whenever something
+    ///   launches the app next* — and this app is `LSUIElement`, so there is no Dock icon, no
+    ///   ⌘-Tab entry, and nothing for the user to click. The app is simply gone, mid-setup.
+    /// - Revive too eagerly and the app cannot be quit. That is the worse failure, so every clause
+    ///   below is a reason to stay dead and the default is to stay dead.
+    ///
+    /// **It cannot loop.** The replacement process starts *with* the Screen Recording grant, so
+    /// `Permissions.screenGrantedAtLaunch` is true, which clears `screenPendingRelaunch`, which makes
+    /// `screenNeedsRelaunch` false — the third argument is false in the process this one starts, so
+    /// one revival is the most any grant can produce. And if the grant was revoked rather than given,
+    /// `CGPreflightScreenCaptureAccess()` is false and `screenNeedsRelaunch` is false immediately.
+    ///
+    /// - Parameters:
+    ///   - requestedLocally: the process is ending because something in this app asked it to — the
+    ///     menu bar's Quit, or a power-off we were told about. Never resurrect one of those.
+    ///   - onboardingInProgress: there is a card to come back to. A user who was not mid-setup has
+    ///     nothing to lose by staying quit, and reopening on them would be the app refusing to leave.
+    ///   - screenGrantPendingRelaunch: the Screen Recording grant is real but unusable until this
+    ///     process is replaced — which is the only reason macOS ends us here in the first place.
+    static func shouldReviveAfterTermination(
+        requestedLocally: Bool,
+        onboardingInProgress: Bool,
+        screenGrantPendingRelaunch: Bool
+    ) -> Bool {
+        guard !requestedLocally else { return false }
+        guard onboardingInProgress else { return false }
+        return screenGrantPendingRelaunch
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Closes the open session and writes a final heartbeat. Without this the last session stays
         // open forever and `status()` reports a recording that stopped hours ago.
         MainActor.assumeIsolated {
+            // First, because it is the only thing here that has to survive the teardown going wrong.
+            // The helper does not launch anything until this pid leaves the process table, so
+            // spawning it before the shutdown work is safe and ordering-free — and a `pause()` that
+            // hung would otherwise be the difference between the user getting their app back and not.
+            reviveIfTheSystemEndedThisRun()
+
             // The tutorial owns borderless overlay windows and the menu-bar spotlight. Quitting
             // mid-walkthrough without tearing them down leaves them on screen with no process behind
             // them, which the user cannot dismiss.
             Tutorial.abandon()
             Engine.shared.pause()
+        }
+    }
+
+    /// Leaves a relauncher behind when macOS is the one ending an onboarding run.
+    ///
+    /// The same detached helper the "Restart to finish" button uses — `Permissions.relaunchApp()`
+    /// and this share `spawnRelaunchHelper()` precisely so there is one shell script in the product.
+    /// The difference is who ends the process: there, we do; here, AppKit is already unwinding and
+    /// all we may do is arrange for something that outlives us.
+    @MainActor
+    private func reviveIfTheSystemEndedThisRun() {
+        guard
+            Self.shouldReviveAfterTermination(
+                requestedLocally: TerminationOrigin.wasRequestedLocally,
+                onboardingInProgress: OnboardingResume().step != nil,
+                screenGrantPendingRelaunch: Permissions.screenNeedsRelaunch)
+        else { return }
+
+        ContextLog.info(
+            "Terminated mid-onboarding with a Screen Recording grant waiting on a relaunch; reopening",
+            "shell")
+        guard Permissions.spawnRelaunchHelper() else {
+            // The process is going away either way — there is no staying up from inside
+            // `applicationWillTerminate`. Record it: the user is about to find the app gone with no
+            // Dock icon to bring it back, and that is exactly the shape of the original report.
+            ContextTelemetry.recordFallback(
+                area: .settings, from: "revive-after-system-quit", to: "stay-quit",
+                reason: "helper-spawn-failed", outcome: .degraded)
+            return
         }
     }
 

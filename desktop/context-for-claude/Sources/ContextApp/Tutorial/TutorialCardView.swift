@@ -30,8 +30,8 @@ struct TutorialCardView: View {
     @ObservedObject var chrome: TutorialOverlayChrome
 
     /// The air either side of everything on the card. A constant rather than a literal in the
-    /// modifier, because the results grid has to lay itself out inside what is left of the card's
-    /// width and a second copy of this number is a grid that overflows the day somebody moves one.
+    /// modifier so that anything measuring what the card has room for is measuring the same number
+    /// the card is drawn with, rather than a second copy of it that drifts.
     static let horizontalPadding: CGFloat = 22
 
     /// The card's outer width. A coach mark with an arrow is drawn a little narrower so the arrow has
@@ -197,8 +197,13 @@ struct TutorialCardView: View {
                 }
             }
 
-        case .query:
-            query
+        // The one control this beat has, and only in the one state that needs it: the user closed the
+        // search panel before finding anything. Everything else about this beat happens *in* the real
+        // panel — the field, the results, the card that is pressed to travel back — which is why
+        // there is nothing else here.
+        case .query where !model.searchPanelIsOpen && !model.gateIsSatisfied
+            && model.openedMomentHasPicture == nil:
+            InkButton("Open search", kind: .secondary) { model.openSearchPanel() }
 
         case .claudeProof where model.proof == nil:
             listening
@@ -220,44 +225,19 @@ struct TutorialCardView: View {
             .accessibilityLabel(Text("Waiting"))
     }
 
-    /// The search beat: type, press Return, and the real hits come back into the same card. The mark
-    /// changes its line to "There it is" — which it can only do because there was really a hit.
-    ///
-    /// **The hits come back as a grid of pictures, not as a list of sentences.** Every result here is
-    /// a moment that was on somebody's screen and has a frame on disk to prove it, and the first
-    /// version of this beat drew all of that as two text rows: a generic document glyph, a run of the
-    /// window's accessibility dump, and an MCP-format timestamp. Reported, exactly: *"this after
-    /// search after onboarding needs to show results in tabular form with screen if any. This list
-    /// with only text looks so bland."* Both halves of that are one defect — a person recognises the
-    /// moment they were just in from the *picture* of it, and a column of type gives them nothing to
-    /// recognise, so the beat that is supposed to land as "there it is" landed as a database dump.
-    ///
-    /// **What went with the list is the larger preview that used to hang under it.** Tapping a result
-    /// drew the chosen frame again at 140 pt, which was the only picture on the card when the rows
-    /// above it were type — and is now a second, larger copy of a card the user can already see, on a
-    /// surface that has to stay short enough to float over the timeline it is talking about. It was
-    /// kept for one case and that case is what killed it: a spoken line has no picture of its own, so
-    /// the preview appeared exactly when the card was least able to afford 150 pt, and the render
-    /// showed it pushing the mark's own line off the top of the display. What answers "tap it to go
-    /// back to that moment" is not a thumbnail on this card at all — it is the timeline underneath,
-    /// which `choose` has genuinely scrubbed to that instant.
-    @ViewBuilder
-    private var query: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if model.results.isEmpty {
-                TutorialQueryField(model: model)
-                if let message = model.searchMessage {
-                    Text(message)
-                        .inkStyle(InkType.statusLabel, color: Ink.errorRed)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                TutorialResultsGrid(
-                    model: model,
-                    contentWidth: cardWidth - Self.horizontalPadding * 2)
-            }
-        }
-    }
+    // The search beat's field and its grid of results stood here (`TutorialQueryField`,
+    // `TutorialResultsGrid`, `TutorialResultCard` and its style). All of it is gone, and none of it
+    // was replaced: the beat is conducted in the real search panel now, so the field is
+    // `SearchBarView`'s field and the results are `SearchResultsView`'s grid.
+    //
+    // It is worth naming what the deleted grid was for, because the reasoning survives its code. It
+    // existed to answer a report — *"this after search after onboarding needs to show results in
+    // tabular form with screen if any. This list with only text looks so bland."* — and the fix was
+    // to draw each hit as a picture of the moment, through the same `SearchThumbnail` and the same
+    // `FrameLoader` the real panel uses, so that the tutorial did not teach a different-looking
+    // result from the one the user was about to meet. That was the right instinct arriving one step
+    // short of its conclusion: the way to stop teaching a different-looking result is not to draw a
+    // faithful copy of the panel at 470 pt, it is to open the panel.
 
     // MARK: - Footer
 
@@ -304,11 +284,14 @@ struct TutorialCardView: View {
         case .invitation: return "Start"
         case .screenAccess: return model.screenIsGranted ? "Continue" : nil
         case .collectFrames: return "Continue"
-        // No button can move these two: one needs a keypress the tutorial must not fake, the other a
-        // gesture it must not mime. Both have a labelled way out that says what did not happen.
+        // No button can move these three: one needs a keypress the tutorial must not fake, one a
+        // gesture it must not mime, and one a click on the real pill — the press *is* the transition
+        // in every case, and a Continue beside it would be a second way past a lesson that has not
+        // been given. All three have a labelled way out that says what did not happen.
         case .openTimeline: return nil
         case .timeline: return model.didDrag ? "Continue" : nil
-        case .findMoments, .query, .claudeHandoff: return "Continue"
+        case .findMoments: return nil
+        case .query, .claudeHandoff: return "Continue"
         case .claudeProof: return model.proof == nil ? nil : "Continue"
         case .allSet: return "Continue"
         case .menuBar: return "Done"
@@ -322,6 +305,7 @@ struct TutorialCardView: View {
         case .screenRecordingGrant: return "Carry on without it"
         case .realHotkey: return "That shortcut isn't working — open it for me"
         case .realGesture: return "I can't drag it — carry on anyway"
+        case .realSearchPanel: return "I can't find that button — open search for me"
         case .userAction, .realSearchResult, .genuineToolCall: return ""
         }
     }
@@ -347,279 +331,21 @@ struct TutorialArrowShape: Shape {
         return path
     }
 }
+// MARK: - What used to stand here
 
-// MARK: - The query field
-
-/// Submits on Return and never pretends: the search it runs is the real one.
-struct TutorialQueryField: View {
-    @ObservedObject var model: TutorialModel
-    @State private var draft = ""
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Ink.secondary)
-            // Not "a word you saw". A word is a thing to recall; something you just looked at is a
-            // thing you already have — and recall is the one thing this beat must not ask for,
-            // because the store only holds the last few minutes and a half-remembered word finds
-            // nothing. Reported as: "dont say search a word off the screen, say search something you
-            // just looked at."
-            TextField("", text: $draft, prompt: Text("something you just looked at"))
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(Ink.primary)
-                .focused($isFocused)
-                .onSubmit { model.search(draft) }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Ink.rowFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Ink.hairline, lineWidth: 1)))
-        .onAppear { isFocused = true }
-    }
-}
-
-// MARK: - The results, as a grid of real moments
-
-/// Every number the found-it grid is laid out from.
-///
-/// Stated here rather than measured off the view for the same reason `SearchLayout` states the search
-/// panel's: the card is a **known width**, so the width of one result card is arithmetic, and
-/// arithmetic is something a test can hold against the picture it is supposed to produce. An
-/// `.adaptive` grid would quietly become one or three across after a padding change and nothing would
-/// say so.
-enum TutorialResultGrid {
-
-    /// **Two across, and three does not fit.**
-    ///
-    /// The real search panel is 760 pt wide and puts three cards in it (`SearchLayout.resultColumns`).
-    /// This card is 470 — it is a coach mark that floats over the timeline it is talking about, not a
-    /// panel — which leaves 426 pt of content. Three across is 133 pt a card, well under
-    /// `SearchLayout.minimumCardWidth`, the width that file names as the point where a thumbnail stops
-    /// being recognisable as a screen and a title has no room to say anything. Two across is 207,
-    /// which is inside the band the real cards live in.
-    static let columns = 2
-
-    /// A shade tighter than the panel's `SearchLayout.cardGutter` (14). The same gutter on a card two
-    /// thirds the width reads as a wider gap than it is, and the pictures are what should be carrying
-    /// the eye across the row.
-    static let gutter: CGFloat = 12
-
-    /// One result card's width, from the room the card has left after its own padding.
-    static func cardWidth(contentWidth: CGFloat) -> CGFloat {
-        max(0, (contentWidth - gutter * CGFloat(columns - 1)) / CGFloat(columns))
-    }
-
-    /// Fixed columns at that width. `.topLeading` so a row whose two titles wrap differently still
-    /// hangs its pictures off one line.
-    static func columnItems(contentWidth: CGFloat) -> [GridItem] {
-        Array(
-            repeating: GridItem(
-                .fixed(cardWidth(contentWidth: contentWidth)), spacing: gutter,
-                alignment: .topLeading),
-            count: columns)
-    }
-}
-
-/// The hits, two across, each one a picture of the moment it came from.
-struct TutorialResultsGrid: View {
-    @ObservedObject var model: TutorialModel
-    /// The room inside the card's own horizontal padding.
-    let contentWidth: CGFloat
-
-    var body: some View {
-        LazyVGrid(
-            columns: TutorialResultGrid.columnItems(contentWidth: contentWidth),
-            alignment: .leading,
-            spacing: TutorialResultGrid.gutter
-        ) {
-            ForEach(model.results) { memory in
-                TutorialResultCard(
-                    memory: memory,
-                    loader: model.loader,
-                    width: TutorialResultGrid.cardWidth(contentWidth: contentWidth),
-                    isChosen: model.chosenMemory == memory,
-                    action: { model.choose(memory) })
-            }
-        }
-        .frame(width: contentWidth, alignment: .leading)
-    }
-}
-
-/// One thing the tutorial's search found: the screen it was captured from, a short title, and where
-/// and when it happened.
-///
-/// **This is `SearchResultCard` at this card's width, and the copy is not a preference.** The two are
-/// deliberately the same object to look at — same 4:3 well through the same `SearchThumbnail` and the
-/// same `FrameLoader`, same `SearchSpokenWell` for a spoken line, same app icon, same
-/// `SearchTime.describe` under it — because the beat directly after this one hands the user to the
-/// real search panel, and a tutorial that taught a different-looking result is a tutorial teaching a
-/// surface that does not exist.
-///
-/// What could not be reused is the *frame*: `SearchResultCard.content` ends in
-/// `.frame(width: SearchLayout.cardWidth())`, which is arithmetic on the 760 pt search panel and
-/// comes out at 241 pt. Two of those plus a gutter is 495 pt inside a 426 pt card. The card takes its
-/// width as a parameter instead; everything the width does not decide is drawn by the same types the
-/// panel draws it with, so there is one place to change the look of a result and it is not this file.
-struct TutorialResultCard: View {
-    let memory: TutorialMemory
-    let loader: FrameLoader
-    let width: CGFloat
-    /// Whether this is the one the user tapped. The tutorial's own state — the card that was chosen
-    /// is the moment the timeline behind has travelled to.
-    let isChosen: Bool
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                well
-                Text(memory.title)
-                    // One line, always, and `.tail` rather than the default middle truncation: the
-                    // front of a window title is the part that says what it is.
-                    .inkStyle(InkType.rowCopy, color: Ink.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                HStack(spacing: 5) {
-                    glyph
-                    Text(memory.source)
-                        .inkStyle(InkType.statusLabel, color: Ink.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    // `.fixedSize`, which the panel's own card does not need and this one does: at
-                    // 207 pt a long source and a timestamp fill the row, and a separator that is
-                    // allowed to compress is a separator SwiftUI truncates to nothing — leaving two
-                    // labels butted together with a space between them. Seen in the render.
-                    Text("•").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
-                    // `SearchTime.describe` — "Today, 11:40 AM" — and not `memory.when`, which is
-                    // `ContextTime.describe`: the MCP wire format ("Sun 2 Aug 2026 at 11:40 AM"),
-                    // deliberately unfriendly because a model reasons better about a full date than
-                    // about "today". It was on this card, and it is one of the things that made the
-                    // beat read as a database dump.
-                    Text(SearchTime.describe(memory.at))
-                        .inkStyle(InkType.statusLabel, color: Ink.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-            }
-            .frame(width: width, alignment: .leading)
-        }
-        .buttonStyle(TutorialResultCardStyle(isHovering: isHovering, isChosen: isChosen))
-        .onHover { isHovering = $0 }
-        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
-        // The matched text, whole, for the two readers a 207 pt card cannot serve: somebody hovering
-        // to check *why* this moment came back, and somebody who cannot see the picture at all.
-        .help(memory.text)
-        .accessibilityLabel(Text(readAloud))
-        .accessibilityHint(Text(Self.activationHint))
-        .accessibilityAddTraits(isChosen ? [.isSelected] : [])
-    }
-
-    /// What pressing it does, said once. The label is already a sentence about *when* and *where*; the
-    /// hint is the only place the card can say that it is a door.
-    static let activationHint = "Goes back to this moment in the timeline"
-
-    /// The picture, or the words.
-    @ViewBuilder
-    private var well: some View {
-        if memory.isScreen {
-            // `fallbackText` is the honest substitute and only ever drawn when the picture is
-            // genuinely gone: retention unlinks files, and a frame can have had no image at all.
-            SearchThumbnail(frame: memory.frame, loader: loader, fallbackText: memory.text)
-        } else {
-            SearchSpokenWell(line: memory.text)
-        }
-    }
-
-    /// What owned the window, or that this was speech at all.
-    @ViewBuilder
-    private var glyph: some View {
-        if memory.isScreen, let app = memory.app, !app.isEmpty {
-            RewindAppIcon(appName: app, bundleId: nil, size: 12)
-        } else {
-            // A waveform for speech, and the same fallback for a frame that recorded no app:
-            // `RewindAppIcon` given an empty name draws a coloured disc with a "?" in it, which is a
-            // confident picture of nothing.
-            Image(systemName: memory.isScreen ? "rectangle.on.rectangle" : "waveform")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Ink.secondary)
-                .frame(width: 12, height: 12)
-                .accessibilityHidden(true)
-        }
-    }
-
-    /// The card read aloud. The matched words are included for a spoken line because the words *are*
-    /// the card, and left out for a screen because the title and source already name it — a page of
-    /// accessibility text read out after every card would make the grid unusable with VoiceOver.
-    private var readAloud: String {
-        let when = SearchTime.describe(memory.at)
-        guard memory.isScreen else { return "\(memory.title): \(memory.text), \(when)" }
-        return "\(memory.title), \(memory.source), \(when)"
-    }
-}
-
-/// How a result card answers the pointer: a wash behind it on hover, a stronger one with an edge when
-/// it is the one that was tapped, and a dip in opacity while it is held.
-///
-/// A mirror of `SearchResultsView`'s own `SearchResultCardStyle`, which is `private` to that file. The
-/// reasoning it carries is the reasoning this needs, so it is restated rather than reinvented: the
-/// affordance is drawn **outside** the card's bounds, because a card is a picture, a title and a
-/// source line with no padding of its own — insetting them to make room for a highlight would change
-/// the card's height, which the grid's layout and the tests on the card's fitting size are stated in
-/// terms of. A `background` is layout-neutral, and the negative padding lets the wash spread into the
-/// gutter the grid already leaves.
-///
-/// Weight and never hue. Selection here used to be a blue ring; a second meaning-bearing colour is one
-/// more thing to learn and one more chance to be off-brand (INV-UI-1).
-private struct TutorialResultCardStyle: ButtonStyle {
-    let isHovering: Bool
-    let isChosen: Bool
-
-    /// A shade larger than the card's own corner, because the wash sits outside it: two concentric
-    /// rounded rectangles with the *same* radius read as a rendering seam rather than as one object.
-    private static let cornerRadius = SearchLayout.cardCornerRadius + 4
-    /// How far the wash spreads past the card. Half the grid's gutter, so two chosen neighbours could
-    /// never touch.
-    private static let outset = TutorialResultGrid.gutter / 2
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-        let fill: Color = {
-            if isChosen { return SearchInk.chipFillSelected }
-            return isHovering || configuration.isPressed ? SearchInk.chipFillHover : .clear
-        }()
-        return
-            configuration.label
-            // Pressed drops opacity rather than scaling: a card is a picture of something real, and a
-            // photograph that shrinks under the finger reads as a toy.
-            .opacity(configuration.isPressed ? 0.72 : 1)
-            .background(
-                shape
-                    .fill(fill)
-                    .overlay(shape.strokeBorder(isChosen ? Ink.hairline : Color.clear, lineWidth: 1))
-                    .padding(-Self.outset)
-            )
-            // The whole card is the target, including the air between the picture and the caption — a
-            // control with holes in it is a control that ignores half its clicks.
-            .contentShape(Rectangle())
-            .animation(
-                InkReduceMotion.animation(.easeOut(duration: InkMotion.press)),
-                value: configuration.isPressed)
-    }
-}
-
-// `TutorialMomentPreview` and its `ContextTimeLabel` formatter stood here. Both went with the text
-// list — see `query` above for why the larger preview is now the card saying the same thing twice,
-// and `TutorialResultCard` for the timestamp the grid uses instead (`SearchTime.describe`, the one a
-// person reads, rather than a second local formatter). `TutorialModel.chosenMoment` is unaffected and
-// still carries the whole claim: it is what the two asides on this beat are chosen between, and what
-// the timeline was scrubbed to.
+// `TutorialQueryField`, `TutorialResultGrid`, `TutorialResultsGrid`, `TutorialResultCard` and its
+// button style were all below this line, along with the `TutorialMomentPreview` that predated them.
+// Roughly three hundred lines of a search surface, drawn on a coach mark 470 pt wide, reachable only
+// during the two minutes of a tutorial that runs once per install.
+//
+// None of it was wrong on its own terms — the grid was two across because three would have put a
+// 133 pt card under `SearchLayout.minimumCardWidth`; the cards used `SearchThumbnail`,
+// `SearchSpokenWell`, `RewindAppIcon` and `SearchTime.describe` precisely so the tutorial's results
+// looked like the real ones. The whole of it was the wrong idea, and the comments arguing the card
+// down to two columns are the tell: they are the arithmetic of fitting a 760 pt panel into a coach
+// mark, which is work that only exists if the coach mark is standing in for the panel.
+//
+// It is not standing in for anything now. `TutorialStep.findMoments` waits for `SearchBarWindow` to
+// come up because the user pressed the real pill; `TutorialStep.query` waits for that panel to
+// answer a real question. The card beside it says one line and offers Continue, which is all a coach
+// mark was ever supposed to be.

@@ -28,16 +28,23 @@ enum Tutorial {
 
     /// The real "Search All" pill in the real timeline was pressed.
     ///
-    /// The shell asks before opening its search bar, so the one real control serves both: during the
-    /// beat that asked for it the tutorial takes the press and answers true, and everywhere else this
-    /// is one boolean and the bar opens exactly as it always did. That is what lets the timeline be
-    /// opened by the user's own shortcut — there is no second, tutorial-only copy of the window with
-    /// different buttons wired behind it.
+    /// **The tutorial never takes this press, and that is the fix.** It used to: during the search
+    /// beat this answered `true`, the shell's `guard` swallowed the press, and the bar the user had
+    /// just been taught to click never opened — the beat drew its own field and its own grid of
+    /// results on a coach card instead. What they learned was a surface that only exists during the
+    /// tutorial.
     ///
-    /// - Returns: whether the tutorial consumed the press.
-    static func searchPillWasPressed() -> Bool {
-        TutorialController.shared.searchPillWasPressed()
-    }
+    /// The press falls through to `SearchBarWindow.present` now, exactly as it does from the menu bar
+    /// and from every other run of the app. The tutorial watches the panel that comes up
+    /// (`SearchPanelWatch`) and advances because it really did — the same principle the timeline beat
+    /// is built on, where the window the user learns to summon is opened by their own keypress.
+    ///
+    /// - Returns: `false`, always. The `Bool` is what is left of the interception: the shell still
+    ///   guards on it (`ContextApp.swift`, owned by another change in flight), and that guard and
+    ///   this return value are deleted together — `onSearch` becomes a bare
+    ///   `SearchBarWindow.present(prefill: query)`, which is already what `StatusView` and
+    ///   `TutorialEnvironment.presentTimeline` hand the same window.
+    static func searchPillWasPressed() -> Bool { false }
 }
 
 /// Owns the step machine, the poll timer, and the window the cards live in.
@@ -90,13 +97,6 @@ final class TutorialController {
     func abandon() {
         model?.abandon()
         stopTicking()
-    }
-
-    /// The pill press, offered to the running step machine. False when nothing is running or the
-    /// current beat is not the one that asked for it, which is what leaves the shell's own behaviour
-    /// untouched everywhere else.
-    func searchPillWasPressed() -> Bool {
-        model?.searchPillWasPressed() ?? false
     }
 
     /// One timer for the whole tutorial: the model's own polling and the overlay's re-anchoring.

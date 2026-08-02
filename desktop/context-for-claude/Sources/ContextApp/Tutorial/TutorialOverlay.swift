@@ -192,6 +192,10 @@ final class TutorialOverlay {
         case (.timelineWindow, .some(let rect)):
             frame.origin = CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2)
 
+        case (.searchPanel, .some(let rect)):
+            frame = Self.under(size, panel: rect, in: screen.visibleFrame, margin: Self.gap)
+            arrow = TutorialArrow(edge: .top, offset: 0)
+
         default:
             // No target, or a target that could not be located: the step says where it would rather
             // be, and there is no arrow either way.
@@ -304,6 +308,38 @@ final class TutorialOverlay {
         }
         return NSRect(
             x: trailingEdge, y: visible.maxY - size.height - margin,
+            width: size.width, height: size.height)
+    }
+
+    /// **A card coaching the real search panel: under its foot, never across its face.**
+    ///
+    /// Pure, and separated from `NSScreen`, for the same reason `parked` is — the failure it guards
+    /// against is a fact about a display geometry the machine this was written on does not have.
+    ///
+    /// The panel is not an occluder to be stood beside; it is 760 pt wide and the side bands on a
+    /// laptop are 315 pt, which is narrower than this card. So there is only one axis to work with,
+    /// and only one end of it: the panel's **top** edge is the prompt bar — the field the beat is
+    /// asking somebody to type into, and the one part of the surface a card may never be laid over.
+    /// Its bottom edge is the last row of a grid that scrolls. The card goes under the bottom.
+    ///
+    /// **Where it stops being possible, and what happens then.** At the search surface's own ceiling
+    /// (`SearchLayout.maximumResultsBodyHeight`, the height that file says "still fits a 13"
+    /// display") the panel leaves about 140 pt under it on that display, and this card is taller than
+    /// that. There is no placement that both fits and clears — so it takes the bottom of the screen
+    /// and overlaps the panel's foot, which costs the user part of the last visible row of results
+    /// and costs them nothing they are being asked to touch. The one invariant that survives every
+    /// geometry is the one worth stating: **the card's top edge never rises above the panel's
+    /// midpoint**, so the field, the query chip and the `↵ Search` affordance are never underneath
+    /// it.
+    nonisolated static func under(
+        _ size: NSSize, panel: CGRect, in visible: NSRect, margin: CGFloat
+    ) -> NSRect {
+        let x = min(
+            max(panel.midX - size.width / 2, visible.minX + 8),
+            max(visible.minX + 8, visible.maxX - size.width - 8))
+        let wanted = panel.minY - margin - size.height
+        return NSRect(
+            x: x.rounded(), y: max(visible.minY + 8, wanted).rounded(),
             width: size.width, height: size.height)
     }
 

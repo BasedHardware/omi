@@ -770,3 +770,95 @@ final class RewindTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Standing aside for the search panel
+
+/// **The timeline gets out of the way while the search panel is up, and comes back when it goes.**
+///
+/// Reported as: *"when this is shown the rewind tab is hidden"* — the search bar is opened from the
+/// timeline's own header and lands as a second floating slab over the top half of the display, so the
+/// panel ends up covering the very window it was summoned from.
+///
+/// None of this puts a window on screen. The yield is driven by `SearchPanelEvent`, which the real
+/// `SearchBarWindow` reports on every open and every dismissal — so the behaviour is reachable by
+/// telling `RewindWindow` what the panel did, which is exactly what the app does. `isHiddenIntent` is
+/// recorded whether or not there is a window to move, which is what makes that possible and is also
+/// the honest answer: it is the *intent*, and a window mid-fade is visible either way.
+@MainActor
+final class RewindYieldTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        RewindWindow.observeTheSearchPanel()
+        // Both directions, because `setHidden` is idempotent on intent and a test that inherited a
+        // yield from the one before it would assert nothing.
+        RewindWindow.setHidden(false)
+    }
+
+    override func tearDown() {
+        RewindWindow.setHidden(false)
+        super.tearDown()
+    }
+
+    func testThePanelOpeningYieldsTheTimelineAndClosingBringsItBack() {
+        SearchPanelWatch.report(.opened)
+        XCTAssertTrue(RewindWindow.isHiddenIntent, "the timeline is still over the panel")
+
+        SearchPanelWatch.report(.closed)
+        XCTAssertFalse(RewindWindow.isHiddenIntent, "and it never came back")
+    }
+
+    /// Everything the panel does that is not opening or closing leaves the timeline alone. A window
+    /// that hid itself because somebody typed would be unusable.
+    func testAskingAndAnsweringDoNotMoveTheTimeline() {
+        SearchPanelWatch.report(.answered(query: "invoice", results: 4))
+        XCTAssertFalse(RewindWindow.isHiddenIntent)
+
+        SearchPanelWatch.report(.opened)
+        SearchPanelWatch.report(.answered(query: "invoice", results: 4))
+        XCTAssertTrue(RewindWindow.isHiddenIntent, "an answer must not cancel the yield either")
+    }
+
+    /// **A `dismiss()` of an already-closed bar still restores the timeline.**
+    ///
+    /// The dead end this guards is the whole reason the announcement in `SearchBarWindow.dismiss`
+    /// sits before its `guard`: this app is `LSUIElement`, so a timeline ordered out with nothing
+    /// left to bring it back cannot be recovered by clicking anything. Dismissing a bar that some
+    /// other path already closed is the shape that reaches that code, and it is exactly the call that
+    /// has to still say `.closed`.
+    func testDismissingAnAlreadyClosedBarStillRestoresTheTimeline() {
+        SearchPanelWatch.report(.opened)
+        XCTAssertTrue(RewindWindow.isHiddenIntent)
+
+        XCTAssertFalse(SearchBarWindow.isVisible, "no bar was ever put on screen by this test")
+        SearchBarWindow.dismiss()
+
+        XCTAssertFalse(RewindWindow.isHiddenIntent)
+    }
+
+    /// A close outranks a yield. Once the timeline has been genuinely dismissed, the search panel
+    /// closing later must not put it back — the user closed it, and a window that reappears because
+    /// something else went away is a window they cannot get rid of.
+    func testATimelineThatWasDismissedIsNotResurrectedWhenThePanelCloses() {
+        SearchPanelWatch.report(.opened)
+        XCTAssertTrue(RewindWindow.isHiddenIntent)
+
+        RewindWindow.dismiss()
+        XCTAssertFalse(RewindWindow.isHiddenIntent, "the close cleared the yield")
+
+        SearchPanelWatch.report(.closed)
+        XCTAssertFalse(RewindWindow.isHiddenIntent)
+    }
+
+    /// Observing twice must not stack two observers: the second would take the yield down and up
+    /// again on one event, which is the shape that produces a flicker nobody can trace.
+    func testObservingIsIdempotent() {
+        RewindWindow.observeTheSearchPanel()
+        RewindWindow.observeTheSearchPanel()
+
+        SearchPanelWatch.report(.opened)
+        XCTAssertTrue(RewindWindow.isHiddenIntent)
+        SearchPanelWatch.report(.closed)
+        XCTAssertFalse(RewindWindow.isHiddenIntent)
+    }
+}

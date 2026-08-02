@@ -16,8 +16,12 @@ import Foundation
 ///    new frames (`TutorialGate.realFrames`). Time passing does not satisfy it, and there is no code
 ///    path that increments the count — it is assigned from the store on every poll. The card no
 ///    longer reads that number out; the gate still holds it.
-/// 2. **"Found it" needs something found.** `query` leaves only on a real hit from a real search
-///    (`.realSearchResult`). An empty result stays on the step and says so.
+/// 2. **"Found it" needs something found, in the real search panel.** `query` leaves only on a real
+///    answer to a real question (`.realSearchResult`), reported by `SearchBarWindow`'s own panel
+///    through `SearchPanelEvent`. An empty result stays on the step and says so — and so does the
+///    panel merely opening, which reads the newest captures with nothing typed and is not a search.
+///    Nothing in this type can run a query; the beat before it does not even take the press that
+///    opens the panel, so the surface the user is taught is the one they keep.
 /// 3. **The Claude payoff cannot be produced by this app.** `claudeProof` leaves only on a
 ///    `QueryStamp` written strictly after this run began watching (`.genuineToolCall`), which only
 ///    the MCP server writes, and only when Claude calls a tool.
@@ -44,25 +48,16 @@ final class TutorialModel: ObservableObject {
     /// something real.
     static let frameTarget = 5
 
-    /// Results asked of the store for the search beat. Small on purpose: this is a lesson in how
-    /// retrieval feels, not a search UI.
-    ///
-    /// **Four rather than five, and the grid is why.** The results are drawn as cards with the
-    /// captured screen on them (`TutorialResultGrid`), two across at the card's width — so four is two
-    /// full rows and five is two full rows plus a lone card that leaves half a row of air under the
-    /// grid on a coach mark that already has to stand clear of the timeline behind it. The beat needs
-    /// the user to recognise *one* moment and tap it; the fifth was never carrying that.
-    static let resultLimit = 4
-
     /// How long a waivable gate waits before it offers a way out. Long enough that a working machine
     /// never sees the escape hatch, short enough that a broken one is not a dead end.
     static let framePatience: Double = 45
     static let grantPatience: Double = 20
-    /// The two beats that wait on a physical action. Shorter than the frame wait: a user who is going
-    /// to press the chord or move their fingers does it in the first few seconds, and one who is not
-    /// is stuck rather than slow.
+    /// The three beats that wait on the user touching something. Shorter than the frame wait: a user
+    /// who is going to press the chord, move their fingers or click the pill does it in the first few
+    /// seconds, and one who is not is stuck rather than slow.
     static let hotkeyPatience: Double = 25
     static let dragPatience: Double = 25
+    static let searchPanelPatience: Double = 25
 
     /// The question the handoff puts on the clipboard. Answerable only from captured context, so a
     /// Claude that answers it has genuinely read the store rather than guessed.
@@ -135,11 +130,25 @@ final class TutorialModel: ObservableObject {
     /// scroll events; no amount of time on this step moves it.
     @Published private(set) var didDrag = false
 
-    @Published private(set) var results: [TutorialMemory] = []
-    @Published private(set) var searchMessage: String?
+    // MARK: The real search panel
+    //
+    // Every one of these is assigned from a `SearchPanelEvent` the real panel sent and from nowhere
+    // else. There is deliberately no search in this type any more: the tutorial cannot produce a
+    // result, cannot open a moment, and cannot make its own panel appear — it can only be told.
+
+    /// Whether the real search panel is on screen.
+    @Published private(set) var searchPanelIsOpen = false
+    /// Whether the tutorial had to open it because the pill could not. Read by the card, which then
+    /// says so rather than congratulating the user on a press they never made.
+    @Published private(set) var didWaiveSearchPanel = false
+    /// The last question the panel was really asked, trimmed. Empty means it has not been asked one —
+    /// the panel reads the newest captures on open with nothing typed, and that read is not a search.
     @Published private(set) var lastQuery = ""
-    @Published private(set) var chosenMemory: TutorialMemory?
-    @Published private(set) var chosenMoment: TutorialMoment?
+    /// How many moments the panel's last answer to a real question held.
+    @Published private(set) var resultCount = 0
+    /// Whether one of those results was pressed, and whether a picture of that instant survived.
+    /// Nil until one is — "we found things" is not "you went back to one".
+    @Published private(set) var openedMomentHasPicture: Bool?
 
     /// What really happened when the tutorial handed the first question over. Nil until the answer
     /// comes back — "we asked" is not an outcome and does not get a case.
@@ -161,16 +170,6 @@ final class TutorialModel: ObservableObject {
     /// in a space the user is not looking at, which is worse than the middle of the screen.
     @Published private(set) var claudeFrame: CGRect?
 
-    /// The one decoder the found-it grid's pictures come through.
-    ///
-    /// `FrameLoader` and not a `NSImage(contentsOfFile:)` of its own: it decodes off the main thread,
-    /// charges its cache the bitmaps' real bytes, and remembers a file it could not read so a pruned
-    /// frame costs one attempt rather than one per redraw — and this card re-publishes on every poll
-    /// tick, so "one per redraw" would be one per second for as long as the beat is up. Owned by the
-    /// model rather than by the view for exactly that reason: a loader built inside a `body` is a new
-    /// cache every time SwiftUI re-evaluates it.
-    let loader = FrameLoader()
-
     // MARK: - Internals
 
     private var environment: TutorialEnvironment
@@ -183,6 +182,10 @@ final class TutorialModel: ObservableObject {
     private var proofSince: Double = 0
     private var stepEnteredAt: Double = 0
     private var didOpenTimeline = false
+    /// Whether a search panel came up during this run, and so is this run's to take back off screen.
+    /// Set from the panel's own `.opened`, cleared the moment it is closed again, so a panel the user
+    /// dismissed themselves is never closed a second time on the way out.
+    private var searchPanelIsOurs = false
     private var hasBegun = false
     /// Whether the bed this run started is still running. Held so the fade is asked for exactly once
     /// however the run ends: the beat that hands the user to another app stops it (see
@@ -226,6 +229,10 @@ final class TutorialModel: ObservableObject {
         case .realFrames: didWaiveFrames = true
         case .screenRecordingGrant: didWaiveScreenAccess = true
         case .realHotkey: didWaiveHotkey = true
+        // Recorded for the same reason `didWaiveHotkey` is, and read in the same place: the next
+        // beat's card would otherwise say "there it is" about a panel the *tutorial* put on screen,
+        // which is a small lie of exactly the kind rule 4 is about.
+        case .realSearchPanel: didWaiveSearchPanel = true
         // Nothing recorded, and deliberately: `didWaiveHotkey` exists because a later card would
         // otherwise credit the user with a keypress they never made, and there is no equivalent
         // claim about the drag anywhere downstream to qualify. A flag set and never read is the
@@ -289,7 +296,12 @@ final class TutorialModel: ObservableObject {
         case .realFrames: return framesCollected >= Self.frameTarget
         case .realHotkey: return hotkeyFired
         case .realGesture: return didDrag
-        case .realSearchResult: return !results.isEmpty
+        case .realSearchPanel: return searchPanelIsOpen
+        // A **question** that came back with something, which is not the same as the panel having
+        // rows in it: it opens by reading the newest captures with nothing typed, and that read is
+        // the surface introducing itself rather than an answer to anybody. `lastQuery` is only ever
+        // non-empty because somebody typed.
+        case .realSearchResult: return !lastQuery.isEmpty && resultCount > 0
         case .genuineToolCall: return proof != nil
         }
     }
@@ -317,6 +329,14 @@ final class TutorialModel: ObservableObject {
             // Nothing on screen to drag. Same reasoning.
             if !timelineIsOpen { return true }
             return environment.now() - stepEnteredAt >= Self.dragPatience
+        case .realSearchPanel:
+            // No immediate escape here, unlike the two above. Those two can be *known* to be
+            // impossible — an unarmed chord cannot fire, a timeline that never opened cannot be
+            // dragged — and there is no equivalent fact about a pill. It is drawn in the timeline
+            // header whenever the timeline is up, its coach mark degrades to a card when the
+            // accessibility tree has not answered yet, and neither of those means the press will
+            // fail. So this waits out its patience like an ordinary slow start.
+            return environment.now() - stepEnteredAt >= Self.searchPanelPatience
         case .userAction, .realSearchResult, .genuineToolCall:
             return false
         }
@@ -399,6 +419,21 @@ final class TutorialModel: ObservableObject {
         environment.openScreenSettings()
     }
 
+    /// Puts the search panel back, when the user has closed it on a beat that needs it.
+    ///
+    /// A button on the card and never automatic, which is the difference between a helpful surface
+    /// and one that will not go away: the panel is dismissed by Escape, and an app that reopens it on
+    /// the next poll tick has taken the Escape key away from the user. The gate this serves cannot be
+    /// waived — a "found it" with nothing behind it is the one claim that would make the rest of the
+    /// product suspect — so a way back has to exist, and this is it.
+    func openSearchPanel() {
+        guard step == .query, !searchPanelIsOpen else { return }
+        environment.playClick()
+        environment.presentSearchPanel()
+        searchPanelIsOpen = environment.searchPanelIsVisible()
+        searchPanelIsOurs = searchPanelIsOurs || searchPanelIsOpen
+    }
+
     /// The real `openTimeline` shortcut fired.
     ///
     /// The window is already up by the time this runs — the shortcut's own handler opened it, which
@@ -432,55 +467,53 @@ final class TutorialModel: ObservableObject {
         environment.playChime()
     }
 
-    /// The real "Search All" button in the real timeline was pressed. Advances only from the step
-    /// that asked for it — the button keeps working for the rest of the tutorial and must not skip it.
+    /// The real search panel did something. **The only route into this type's search state.**
     ///
-    /// - Returns: whether the tutorial took the press. The shell asks, and opens its search bar only
-    ///   when the answer is no, so the one real pill serves both without a second window appearing
-    ///   over the beat that is using it.
-    @discardableResult
-    func searchPillWasPressed() -> Bool {
-        guard step == .findMoments else { return false }
-        return advance()
-    }
-
-    /// A real search of the real store; an empty result is reported, never routed around.
+    /// This is where the interception used to be. The old shape was `searchPillWasPressed()`: the
+    /// shell asked the tutorial before opening its search bar, the tutorial said yes during the beat
+    /// that wanted one, and the bar never opened — the user pressed a real control and got a
+    /// tutorial-only imitation of results drawn on a coach card. So the surface they were learning to
+    /// use was one they would never see again, and the beat's gate was a press rather than an answer.
     ///
-    /// It deliberately does **not** advance. The result *is* the gate, so leaving the step to
-    /// `advance()` means the one check that says "there was really a hit" is the one the button runs,
-    /// rather than a second copy of that condition written out here.
-    func search(_ query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        lastQuery = trimmed
-        chosenMemory = nil
-        chosenMoment = nil
-        guard !trimmed.isEmpty else {
-            results = []
-            searchMessage = "Type something you were just looking at."
-            return
-        }
-        guard environment.storeIsReadable() else {
-            results = []
-            searchMessage = "I can't read the capture store yet, so there is nothing to search."
-            return
-        }
-        let hits = environment.search(trimmed)
-        results = hits
-        guard !hits.isEmpty else {
-            searchMessage = "Nothing captured matches “\(trimmed)” yet. Try something you actually looked at."
-            return
-        }
-        searchMessage = nil
-        environment.playChime()
-    }
+    /// The press falls through to the shell now. The bar the user learns to open is opened by their
+    /// own click, exactly as it will be forever after — the same principle the timeline beat is built
+    /// on — and this is the tutorial finding out what happened afterwards. Nothing in here can put a
+    /// panel on screen, run a query, or produce a result.
+    ///
+    /// Every branch is guarded by the step, because the panel goes on working for the rest of the
+    /// tutorial and a stray open during a later beat must not move the flow.
+    func searchPanelReported(_ event: SearchPanelEvent) {
+        switch event {
+        case .opened:
+            searchPanelIsOpen = true
+            searchPanelIsOurs = true
+            // The press *is* the transition, so there is no button afterwards congratulating them on
+            // it — the same shape as `timelineHotkeyFired`. No "have I already done this" flag is
+            // needed and none is kept: `advance()` leaves the step, so a second `.opened` cannot find
+            // this branch again.
+            guard step == .findMoments else { return }
+            environment.playChime()
+            advance()
 
-    /// Tapping the memory goes back to the moment it came from: the real frame captured then, and —
-    /// when the shell has wired it — the timeline repositioned on it.
-    func choose(_ memory: TutorialMemory) {
-        chosenMemory = memory
-        chosenMoment = environment.frameNear(memory.at)
-        environment.scrubTimeline?(memory.at)
-        environment.playClick()
+        case .closed:
+            searchPanelIsOpen = false
+            searchPanelIsOurs = false
+
+        case .answered(let query, let results):
+            // Assigned whatever the step, so the card is never describing an answer that has been
+            // replaced. Trimmed by the panel already; kept as it arrived so the two cannot disagree
+            // about what was asked.
+            lastQuery = query
+            let hadAnAnswer = !lastQuery.isEmpty && resultCount > 0
+            resultCount = results
+            guard step == .query, !hadAnAnswer, !query.isEmpty, results > 0 else { return }
+            environment.playChime()
+
+        case .openedMoment(_, let hasPicture):
+            guard step == .query, openedMomentHasPicture == nil else { return }
+            openedMomentHasPicture = hasPicture
+            environment.playChime()
+        }
     }
 
     /// The handoff, done rather than described: open Claude and put the question in its prompt.
@@ -625,25 +658,47 @@ final class TutorialModel: ObservableObject {
             return TutorialSpeech("Now find one moment.", aside: "Click Search All, just up there.")
 
         case .query:
-            guard !results.isEmpty else {
-                // The instruction points at what the user still has in mind, not at a word they have
-                // to dredge up. "A word you saw" reads as a memory test, and it is one they can fail
-                // honestly — the store holds minutes, so a word half-remembered from an hour ago
-                // finds nothing and the beat lands as the app being broken. What they just looked at
-                // is the one thing they cannot get wrong. Reported as: "dont say search a word off
-                // the screen, say search something you just looked at."
+            // Ordered by what has already happened rather than by what is on screen, and that order
+            // matters: pressing a result **closes the panel** — the timeline comes back at that
+            // moment, which is the whole payoff — so the "it is not up" sentence below would land on
+            // the one user who has just done everything right.
+            if let hasPicture = openedMomentHasPicture {
                 return TutorialSpeech(
-                    "Type something you just looked at.",
-                    aside: "Anything you remember seeing, then press Return.")
+                    "There it is.",
+                    aside: hasPicture
+                        ? "That is the moment, exactly as it was."
+                        : "No picture survived that second — the words are what I still have.")
             }
-            guard chosenMemory != nil else {
-                return TutorialSpeech("There it is.", aside: "Tap it to go back to that moment.")
+            if gateIsSatisfied {
+                return TutorialSpeech("There it is.", aside: "Click it to go back to that moment.")
             }
+            guard searchPanelIsOpen else {
+                // The panel was closed with nothing found — Escape, a click elsewhere. The gate is
+                // not waivable and there is nothing on screen to satisfy it in, so the card says so
+                // and grows the one button that can put it back (`TutorialCardView`). It does not
+                // reopen by itself: a window that reappears because you closed it is a window you
+                // cannot close.
+                return TutorialSpeech(
+                    "The search bar is gone.", aside: "Open it again and I will wait for you.")
+            }
+            if !lastQuery.isEmpty, resultCount == 0 {
+                // A real question that really found nothing. Named as such rather than left looking
+                // like the beat had not started — the panel says the same thing in its own copy, and
+                // a card that kept asking for a first query would be arguing with it.
+                return TutorialSpeech(
+                    "Nothing matched that.", aside: "Try something you actually looked at.")
+            }
+            // The instruction points at what the user still has in mind, not at a word they have to
+            // dredge up. "A word you saw" reads as a memory test, and it is one they can fail
+            // honestly — the store holds minutes, so a word half-remembered from an hour ago finds
+            // nothing and the beat lands as the app being broken. What they just looked at is the one
+            // thing they cannot get wrong. Reported as: "dont say search a word off the screen, say
+            // search something you just looked at."
+            let opening =
+                didWaiveSearchPanel
+                ? "I opened the search bar for you." : "Type something you just looked at."
             return TutorialSpeech(
-                "There it is.",
-                aside: chosenMoment == nil
-                    ? "No picture survived that second — the words are what I still have."
-                    : "That is the moment, exactly as it was.")
+                opening, aside: "Anything you remember seeing, then press Return.")
 
         case .claudeHandoff:
             // Five answers, and only one of them says a prompt was filled in. "We opened Claude" is
@@ -757,6 +812,13 @@ final class TutorialModel: ObservableObject {
         // so no watcher can outlive the step whose gate it feeds.
         environment.stopWatchingTimelineHotkey()
         environment.stopWatchingDrag()
+        environment.stopWatchingSearchPanel()
+        // The search panel is the tutorial's own furniture for exactly two beats, and it goes back
+        // where it came from on the way into any other one — a 760 pt floating slab carried into the
+        // Claude beats would be sitting over the window those beats are about. Decided by the step
+        // (`TutorialStep.usesSearchPanel`) rather than by naming the two transitions here, so a beat
+        // inserted later cannot silently inherit a panel it knows nothing about.
+        if !next.usesSearchPanel { closeTheSearchPanel() }
         // The bed's last beat, decided by the step rather than by a timer — see
         // `TutorialStep.handsOverToAnotherApp`. Here rather than in `tearDown` because the run's end
         // is not something the tutorial gets to schedule: the proof beat waits on Claude and can wait
@@ -822,7 +884,35 @@ final class TutorialModel: ObservableObject {
             environment.presentOverlay(next)
             poll()
 
-        case .findMoments, .query:
+        case .findMoments:
+            // Armed before the card is on screen, so a user who reaches straight for the pill is not
+            // racing the watcher — the same reason the chord's watcher is armed before its card.
+            environment.watchSearchPanel { [weak self] event in
+                self?.searchPanelReported(event)
+            }
+            // Whatever is true right now, not what the last beat left behind: the panel can be open
+            // already — the user pressed the pill while reading the timeline card, or it was up
+            // before the tutorial started — and a beat waiting for something that has already
+            // happened is a beat that never ends.
+            searchPanelIsOpen = environment.searchPanelIsVisible()
+            environment.presentOverlay(next)
+            poll()
+            // After the card, so the beat is already on screen if the gate is met on entry.
+            if searchPanelIsOpen { advance() }
+
+        case .query:
+            environment.watchSearchPanel { [weak self] event in
+                self?.searchPanelReported(event)
+            }
+            // The one branch on which the tutorial opens the panel itself: the pill could not be
+            // pressed and the user took the way out that says so. Everywhere else it is already up,
+            // opened by their own click through the shell's own handler.
+            if didWaiveSearchPanel, !environment.searchPanelIsVisible() {
+                environment.presentSearchPanel()
+                environment.playSwoosh()
+            }
+            searchPanelIsOpen = environment.searchPanelIsVisible()
+            searchPanelIsOurs = searchPanelIsOurs || searchPanelIsOpen
             environment.presentOverlay(next)
             poll()
 
@@ -858,8 +948,15 @@ final class TutorialModel: ObservableObject {
     private func tearDown() {
         environment.stopWatchingTimelineHotkey()
         environment.stopWatchingDrag()
+        environment.stopWatchingSearchPanel()
         environment.dismissOverlay()
         environment.hideMenuBarSpotlight()
+        // Before the timeline, and the order is the point. Closing the panel is what brings a
+        // yielded timeline back (`RewindWindow.setHidden`), so a teardown that dismissed the timeline
+        // first would order out a window that the panel's close then restores — leaving the user
+        // looking at a timeline the tutorial thought it had taken away. `enter` has usually done this
+        // already; it is idempotent, which is what lets both call it.
+        closeTheSearchPanel()
         if didOpenTimeline {
             environment.dismissTimeline()
             didOpenTimeline = false
@@ -870,10 +967,20 @@ final class TutorialModel: ObservableObject {
         stopTheBed()
         targetFrame = nil
         claudeFrame = nil
-        // The decoded screens the found-it grid was holding. A tutorial is a thing that happens once
-        // per install, so leaving up to `FrameLoader.memoryBudgetBytes` of bitmaps pinned by a card
-        // nobody will see again is the one cost of showing pictures at all — and it is paid back here.
-        loader.purge()
+    }
+
+    /// Takes the search panel back off screen, once, and only if this run is what put it there.
+    ///
+    /// The guard is not politeness. This app is `LSUIElement` and the timeline **stands aside** while
+    /// the panel is up, so a panel closed by anything other than the panel's own dismissal would
+    /// leave the timeline ordered out with nothing to bring it back. Routing every close through
+    /// `dismissSearchPanel` — which is `SearchBarWindow.dismiss`, which announces `.closed`, which is
+    /// what restores the timeline — is what makes abandoning the tutorial mid-beat safe.
+    private func closeTheSearchPanel() {
+        guard searchPanelIsOurs else { return }
+        searchPanelIsOurs = false
+        searchPanelIsOpen = false
+        environment.dismissSearchPanel()
     }
 
     /// Fades the bed out, once.

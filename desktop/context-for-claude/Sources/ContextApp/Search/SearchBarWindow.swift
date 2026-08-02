@@ -24,6 +24,20 @@ final class SearchBarWindow {
 
     private static var current: NSWindow?
 
+    /// The panel's own rectangle, in AppKit screen coordinates, or nil when it is not up.
+    ///
+    /// Read by anything that has to stand *beside* this surface rather than on it — today the
+    /// tutorial's coach mark, which coaches the real panel and must not sit over the field the user
+    /// is being asked to type in. Nil is an ordinary answer and every caller has to live with it: the
+    /// panel is closed far more often than it is open.
+    ///
+    /// The window includes `SearchLayout.shadowMargin` of clear margin on every side, which is
+    /// deliberate — a card placed against this rectangle clears the shadow too.
+    static var panelFrame: NSRect? {
+        guard let window = current, window.isVisible else { return nil }
+        return window.frame
+    }
+
     /// Opens the bar, or brings it forward and re-focuses the field if it is already up.
     ///
     /// - Parameter prefill: a question to start from. This is the seam the timeline's "Search All"
@@ -36,6 +50,9 @@ final class SearchBarWindow {
             NotificationCenter.default.post(
                 name: refocusNotification, object: nil,
                 userInfo: prefill.isEmpty ? nil : [prefillKey: prefill])
+            // Announced on this branch too. "The panel is up" is the fact observers care about, and a
+            // second press of the pill on an already-open bar leaves them holding it either way.
+            SearchPanelWatch.report(.opened)
             return
         }
 
@@ -135,6 +152,10 @@ final class SearchBarWindow {
         // The shared chrome cue, which already honours the system UI-sound setting on its own.
         Sound.effect(.swoosh)
         ContextLog.info("search bar presented (key: \(window.isKeyWindow))", "search")
+        // Last, once the window is genuinely on screen. Anything listening for this — the timeline
+        // standing aside, the tutorial's search beat — is being told a fact about the display, so it
+        // is announced after the display has it and not before.
+        SearchPanelWatch.report(.opened)
     }
 
     /// **Activating a result: open the timeline there, then get out of the way.**
@@ -168,6 +189,15 @@ final class SearchBarWindow {
             // pill did nothing, would be a second-class timeline reachable only from here.
             onOpenSettings: { SettingsWindow.present() },
             onSearch: { query in SearchBarWindow.present(prefill: query) })
+        // Announced before the panel goes, so an observer sees "a result was activated" followed by
+        // "the panel closed" rather than the other way round — the close is a *consequence* of the
+        // activation here, and an observer that saw it first would read the beat as abandoned.
+        //
+        // `frame != nil` and not `kind == .screen`: what the fact is about is whether there is a
+        // picture of that instant to travel back to, and a screen whose file retention already
+        // unlinked has no more of one than a spoken line does.
+        SearchPanelWatch.report(
+            .openedMoment(at: moment.capturedAt, hasPicture: moment.frame != nil))
         dismiss()
     }
 
@@ -202,7 +232,18 @@ final class SearchBarWindow {
         }
     }
 
+    /// Closes the bar and tells everyone who stood aside for it that they can come back.
+    ///
+    /// **The announcement is before the guard, not after it, and that is load-bearing.** The one
+    /// thing a surface that hides another surface must never do is leave the other one hidden — this
+    /// app is `LSUIElement`, so a window ordered out with nothing to bring it back is a dead end. A
+    /// `dismiss()` of an already-closed bar is exactly the shape that reaches here after some *other*
+    /// path already closed the window (a result being opened, a second dismissal racing the first),
+    /// and it is precisely the call that has to still restore the timeline. Reporting `.closed`
+    /// unconditionally makes "the panel is not up" and "nothing is standing aside for it" the same
+    /// statement; every observer of this event is idempotent for the same reason.
     static func dismiss() {
+        SearchPanelWatch.report(.closed)
         guard let window = current else { return }
         current = nil
         if let keyObserver {
@@ -242,6 +283,82 @@ final class SearchBarWindow {
             animate: false)
     }
 
+}
+
+// MARK: - What the real search surface just did
+
+/// One thing that really happened on the real search surface.
+///
+/// Every case is a fact about the *shipped* panel — the window that came up, the read that finished,
+/// the card somebody pressed — and nothing here can be produced by asking. That is the whole reason
+/// it exists: two things outside this surface need to react to it, and neither of them may do so by
+/// growing a copy of it.
+///
+/// - **The timeline stands aside.** Two floating slabs stacked on one display is the search panel
+///   covering the very thing it was opened from, so `RewindWindow` yields on `.opened` and comes
+///   back on `.closed`.
+/// - **The tutorial coaches it.** Its search beats used to draw their own field and their own grid of
+///   results on a coach card — a tutorial teaching a surface that does not exist. They now watch
+///   these events instead, so what the user learns to press is the real pill and what answers them is
+///   the real panel.
+enum SearchPanelEvent: Equatable, Sendable {
+    /// The panel is on screen. Sent on a fresh open *and* on a press that re-focused one already up,
+    /// because the fact is about the display and not about how it got there.
+    case opened
+    /// The panel is gone, whichever route closed it. Always sent, even for a dismissal that found
+    /// nothing to close — see `SearchBarWindow.dismiss`.
+    case closed
+    /// A real read finished.
+    ///
+    /// - Parameters:
+    ///   - query: what was asked, trimmed. **Empty is a real value and means something specific**:
+    ///     the panel opens by reading the newest captures with nothing typed, so an observer waiting
+    ///     for somebody to genuinely search for something has to be able to tell that read apart from
+    ///     a question. Folding the two together would let the search beat's gate be satisfied by the
+    ///     bar merely opening.
+    ///   - results: how many moments came back. Zero for a read that failed as well as for one that
+    ///     genuinely found nothing — the panel says which in its own copy, and nothing downstream may
+    ///     treat "could not look" as an answer.
+    case answered(query: String, results: Int)
+    /// One of those results was activated, and the timeline has travelled to it.
+    ///
+    /// - Parameters:
+    ///   - at: the moment, in Unix epoch seconds.
+    ///   - hasPicture: whether a captured frame survives for that instant. False for a spoken line
+    ///     and for a screen whose file retention has already unlinked.
+    case openedMoment(at: Double, hasPicture: Bool)
+}
+
+/// Who is listening to the real search surface.
+///
+/// A registry of closures rather than `NotificationCenter`, for the same reason
+/// `GlobalShortcuts.addObserver` is one: the token makes a second `start` impossible to leak, the
+/// payload is a typed value rather than a `userInfo` dictionary every reader has to re-parse, and
+/// nothing here is discoverable by an observer that was never handed the type.
+///
+/// Observers are told, never asked. Nothing in here can make the panel do anything.
+@MainActor
+enum SearchPanelWatch {
+    private static var observers: [UUID: (SearchPanelEvent) -> Void] = [:]
+
+    /// - Returns: a token to hand back to `removeObserver`. Observers are additive; registering a
+    ///   second one never replaces the first.
+    @discardableResult
+    static func addObserver(_ observe: @escaping (SearchPanelEvent) -> Void) -> UUID {
+        let token = UUID()
+        observers[token] = observe
+        return token
+    }
+
+    static func removeObserver(_ token: UUID) {
+        observers[token] = nil
+    }
+
+    /// Tells every observer. Copied first so an observer that removes itself — or registers another —
+    /// while being told cannot mutate the collection being iterated.
+    static func report(_ event: SearchPanelEvent) {
+        for observe in Array(observers.values) { observe(event) }
+    }
 }
 
 // MARK: - Window

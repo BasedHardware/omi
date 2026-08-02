@@ -30,9 +30,11 @@ enum TutorialStep: String, CaseIterable, Sendable {
     case openTimeline
     /// The real timeline window is up, and the drag that travels through it. Gated on a real gesture.
     case timeline
-    /// "Find one moment" — the real Search All pill.
+    /// "Find one moment" — the real Search All pill, which opens the real search panel. Gated on
+    /// that panel really being on screen.
     case findMoments
-    /// Type a query, press Return, and the real hit that comes back is tapped to travel to it.
+    /// Type a query into **the real search bar**, press Return, and tap the real hit that comes back
+    /// to travel to it. Gated on a real answer to a real question.
     case query
     /// The handoff the first-run plan ends on: Claude reads its MCP config at startup, so it has to
     /// be restarted before it can answer from this store.
@@ -81,9 +83,10 @@ enum TutorialStep: String, CaseIterable, Sendable {
         case .collectFrames: return .realFrames
         case .openTimeline: return .realHotkey
         case .timeline: return .realGesture
+        case .findMoments: return .realSearchPanel
         case .query: return .realSearchResult
         case .claudeProof: return .genuineToolCall
-        case .invitation, .findMoments, .claudeHandoff, .allSet, .menuBar:
+        case .invitation, .claudeHandoff, .allSet, .menuBar:
             return .userAction
         case .finished, .skipped:
             return .userAction
@@ -97,7 +100,10 @@ enum TutorialStep: String, CaseIterable, Sendable {
         switch self {
         case .timeline: return .timelineTrack
         case .findMoments: return .searchAllButton
-        case .query: return .timelineWindow
+        // The real search panel, not the timeline window it was opened from — the timeline has
+        // stood aside by the time this beat begins, so a mark pointing at it would be pointing at
+        // something the user cannot see. The card stands under the panel it is coaching.
+        case .query: return .searchPanel
         default: return nil
         }
     }
@@ -142,6 +148,18 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// placement question anyway.
     var handsOverToAnotherApp: Bool { placement != .centred }
 
+    /// Whether this beat is conducted **in the real search panel**.
+    ///
+    /// Two beats are: pressing the pill that opens it, and asking it a question. Everything else in
+    /// the flow happens somewhere the panel would only be in the way — which is what this decides.
+    /// `TutorialModel.enter` closes the panel on the way into any step that answers false, so a user
+    /// who pressed Continue without tapping a result does not carry a floating slab into the Claude
+    /// beats with them.
+    ///
+    /// A property on the step rather than an `if` in the transition, for the same reason `placement`
+    /// is one: a beat added later has to answer the question, and a test can read the answer.
+    var usesSearchPanel: Bool { self == .findMoments || self == .query }
+
     /// Whether the card takes the keyboard when it appears.
     ///
     /// A card is a thing to press, so most of them do: this app is an accessory and is almost never
@@ -155,10 +173,15 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// activates over Claude the moment the beat begins eats the one keystroke the whole beat exists
     /// to wait for. The cost is that the Continue this card grows *afterwards* may need a click to
     /// activate first, which is the trade every coach-mark step in the flow already makes.
+    ///
+    /// **`query` used to be the exception and is now the rule.** It carried its own text field, so it
+    /// had to be typable and took focus to be so. The typing happens in the real search bar now, and
+    /// that bar is a non-activating panel whose whole trick is holding the first responder while this
+    /// app is not frontmost — a coach mark that activated over it would take the field away from the
+    /// user at the exact moment the card is asking them to type into it.
     var takesFocusOnEntry: Bool {
         guard self != .claudeProof else { return false }
-        // The query beat is a coach mark with a text field in it, so it has to be typable.
-        return target == nil || self == .query
+        return target == nil
     }
 }
 
@@ -189,8 +212,21 @@ enum TutorialGate: Equatable, Sendable {
     /// A real scroll gesture over one of this app's own windows, measured in points travelled.
     /// Waivable: a timeline that never opened has nothing to drag.
     case realGesture
-    /// At least one real hit from a real search of the real store. Not waivable: a "found it" with
-    /// nothing behind it is the one beat that would make everything else in the product suspect.
+    /// The **real search panel** is really on screen, reported by the panel itself
+    /// (`SearchPanelEvent.opened`) rather than by the press that asked for it.
+    ///
+    /// Observed and not intercepted, which is the fix this case is named for: the tutorial used to
+    /// swallow the "Search All" press and draw its own results on a coach card, so what the user
+    /// learned to press opened a surface that only existed during the tutorial. Now the press falls
+    /// through to the shell, the real bar opens because they pressed it, and this is how the beat
+    /// finds out — the same shape as `realHotkey`, for the same reason.
+    ///
+    /// Waivable, and the waiver opens the panel rather than skipping past it: the beat after this one
+    /// has nothing to be asked without it.
+    case realSearchPanel
+    /// At least one real hit from a real search of the real store, reported by the real panel that
+    /// ran it. Not waivable: a "found it" with nothing behind it is the one beat that would make
+    /// everything else in the product suspect.
     case realSearchResult
     /// A `QueryStamp` written strictly after this run started watching. Not waivable, and not
     /// producible by this app — only Claude calling one of our MCP tools writes it.
@@ -200,7 +236,9 @@ enum TutorialGate: Equatable, Sendable {
     /// labelled user action that says what did not happen.
     var isWaivable: Bool {
         switch self {
-        case .userAction, .screenRecordingGrant, .realFrames, .realHotkey, .realGesture: return true
+        case .userAction, .screenRecordingGrant, .realFrames, .realHotkey, .realGesture,
+            .realSearchPanel:
+            return true
         case .realSearchResult, .genuineToolCall: return false
         }
     }
@@ -215,4 +253,7 @@ enum TutorialTarget: Equatable, Sendable {
     case timelineTrack
     /// The timeline's "Search All" pill, found by walking our own accessibility tree.
     case searchAllButton
+    /// The real search panel, from `SearchBarWindow`'s own frame. Nil whenever it is not up, which is
+    /// most of the time — the coach mark degrades to a card, the way every target here can.
+    case searchPanel
 }

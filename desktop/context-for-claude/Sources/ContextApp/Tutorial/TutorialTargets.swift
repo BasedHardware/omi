@@ -17,6 +17,11 @@ enum TutorialTargetLocator {
         case .timelineWindow: return timelineWindow()?.frame
         case .timelineTrack: return trackFrame()
         case .searchAllButton: return searchAllFrame()
+        // Asked of the window that owns it rather than hunted for in `NSApp.windows`: the search
+        // panel is borderless and titleless, so there is nothing to identify it by from outside, and
+        // `SearchBarWindow` already holds the one reference to it. Nil while it is closed, which is
+        // the ordinary state and which the caller has to live with.
+        case .searchPanel: return SearchBarWindow.panelFrame
         }
     }
 
