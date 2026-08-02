@@ -122,23 +122,23 @@ app's own UI sounds, whereas failing closed would silently disable the product's
 `/Applications` symlink is already there; nothing else is styled.
 
 - **`scripts/make-dmg-background.sh`** — ImageMagick (installed, 7.1.1-47) renders the background at
-  1x and 2x: wordmark top-left, "Drag Context for Claude into Applications to install", and — in the
-  corridor between the two icon positions — a picture of the drag itself. A plain arrow used to sit
-  there, which states a direction and demonstrates nothing; install testers read it, understood it,
-  and still wanted to be *shown* the gesture. So the corridor now carries a dotted arc from the app
-  slot to the Applications slot, a translucent tilted tile partway along it, and an arrowhead into a
-  drop ring drawn darker than the one the tile left. Finder cannot animate a background picture, so
-  this is the single frame that carries the most motion.
-  **No mark.** It shipped with the app's glyph lifted out of the
+  1x and 2x: wordmark top-left, "Drag Context for Claude into Applications to install", and an arrow
+  between the two icon positions. **No mark.** It shipped with the app's glyph lifted out of the
   `.icns` at the top left, which put the mark on screen twice — Finder draws the real app icon in the
   left-hand slot 130 pt below it, and that icon is the thing the window exists to have dragged. A
-  second, smaller copy of it is a decoy, not branding. The tile in flight obeys the same rule: it is
-  *drawn* rather than lifted from the `.icns`, so it has no identity to be confused with the real
-  icon, and it is tilted — Finder never draws an item rotated, so nothing off-square can be misread
-  as a third installable thing. Its clearance from both icons, from the header and from the window
-  edge is asserted at render time, as is the rule that the finished raster carries no hue at all
-  (INV-UI-1); the window is 720 pt wide rather than 680 because the old corridor had no room for a
-  tile and a legible trail at once.
+  second, smaller copy of it is a decoy, not branding.
+
+  **The corridor stays an arrow, and that is a platform limit rather than a preference.** A dotted arc
+  with a translucent tile in flight along it was built and then reverted, because what was actually
+  wanted was *"a continuous animation of the app being dragged into Applications"* — and no disk image
+  can deliver one. Finder takes the window background from a static image path recorded in `.DS_Store`
+  and draws it once, so a GIF or a video renders as a single frame; macOS has not auto-run anything
+  from a mounted volume in many years, so there is nothing on a DMG that could drive motion without
+  the user launching it first. A still frame implying movement is a *worse* answer to that request
+  than an arrow, because it invites the same ask again. Anything that genuinely animates has to run
+  code the user started: an installer app on the image (a Gatekeeper prompt and a second signed
+  binary), or the app moving itself out of `/Volumes` on first launch. Neither is in scope here, and
+  both leave this window as it is.
 - **`package-dmg.sh`** gains the standard styling dance, no new dependency (`create-dmg` is *not*
   installed and is not worth adding): `hdiutil create -format UDRW` → `hdiutil attach -readwrite
   -noverify -noautoopen` → drop `.background/background.png` + `.VolumeIcon.icns`, `SetFile -a C` the
