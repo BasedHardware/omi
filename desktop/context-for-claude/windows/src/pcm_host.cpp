@@ -70,6 +70,11 @@ int main() {
     CHECK(buf[0] == 0x00);
     CHECK(buf[1] == 0x40);
 
+    const float tie = 16382.5f / 32767.0f;
+    ctx_pcm_encode_int16le(&tie, 1, buf);
+    CHECK(buf[0] == 0xFF);
+    CHECK(buf[1] == 0x3F);
+
     // Zero → 0x0000
     const float zero = 0.0f;
     ctx_pcm_encode_int16le(&zero, 1, buf);
