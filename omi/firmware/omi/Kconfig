@@ -2,6 +2,29 @@ source "Kconfig.zephyr"
 
 menu "Omi Features Configuration"
 
+config OMI_REQUIRE_BLE_ENCRYPTION
+    bool "Require an encrypted BLE link for user data and device control"
+    depends on BT_SMP
+    default y
+    help
+        "Mark every characteristic that carries user content (microphone audio,
+         stored recordings, button and accelerometer events) or changes device
+         state (mic gain, LED dim ratio, RTC/time sync, haptics, speaker) as
+         encryption-required, and ask the phone to raise the link to
+         BT_SECURITY_L2 as soon as it connects. Device Information, Battery and
+         the Omi features bitmap stay readable without pairing.
+
+         Omi has no display and no keypad, so its SMP IO capability is
+         NoInputNoOutput and pairing is Just Works: LE Secure Connections
+         without MITM protection, i.e. Security Level 2. Do not enable
+         CONFIG_BT_SMP_SC_ONLY or force BT_SECURITY_L4 -- Level 4 needs an
+         authenticated key, which this hardware cannot produce, so every
+         pairing attempt would fail and the device would be unusable.
+
+         Turning this off restores the pre-3.0.21 behaviour where any BLE
+         central in range can subscribe to the live microphone. It exists only
+         so a fleet can be staged, and it must stay 'y' in omi.conf."
+
 config OMI_CODEC_OPUS
     bool "Opus Audio Codec"
     help
@@ -125,6 +148,14 @@ config OMI_AAD_SETTLE_MS
         "Time to wait after clocking the T5838 into hardware AAD sleep before
          arming the WAKE interrupt. Lets the mic settle its noise floor and
          swallow the entry transient so it does not immediately false-wake."
+
+config OMI_ENABLE_MFG_DIAGNOSTICS
+    bool "Enable manufacturing-line diagnostics"
+    default n
+    help
+        "Emit production-line helpers on the console, including the local BLE
+         identity address. The identity address is a permanent tracking
+         identifier, so this must stay disabled in shipped images."
 
 config OMI_WATCHDOG_TIMEOUT_MS
     int "Watchdog timeout (ms)"

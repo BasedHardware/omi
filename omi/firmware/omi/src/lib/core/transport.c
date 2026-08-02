@@ -21,6 +21,7 @@
 #include <zephyr/sys/ring_buffer.h>
 
 #include "accel.h"
+#include "ble_perm.h"
 #include "button.h"
 #include "config.h"
 #include "features.h"
@@ -32,6 +33,7 @@
 #include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
+#include "speaker.h"
 #include "storage.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -53,12 +55,14 @@ struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
                                         const void *buf,
                                         uint16_t len,
                                         uint16_t offset,
                                         uint8_t flags);
+#endif
 
 static struct bt_conn_cb _callback_references;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
@@ -145,25 +149,25 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            audio_data_read_characteristic,
                            NULL,
                            NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, OMI_GATT_PERM_CCC),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid,
                            BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            audio_codec_read_characteristic,
                            NULL,
                            NULL),
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
                            BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            audio_data_write_handler,
                            NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+    BT_GATT_CCC(audio_ccc_config_changed_handler, OMI_GATT_PERM_CCC), //
 #endif
 
 };
@@ -184,23 +188,23 @@ static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
     BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_READ | OMI_GATT_PERM_WRITE,
                            settings_dim_ratio_read_handler,
                            settings_dim_ratio_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&settings_mic_gain_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_READ | OMI_GATT_PERM_WRITE,
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&settings_charging_status_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            settings_charging_status_read_handler,
                            NULL,
                            NULL),
-    BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(charging_status_ccc_config_changed_handler, OMI_GATT_PERM_CCC),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -252,6 +256,11 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
 
     LOG_INF("Time sync received: %u seconds", epoch_s);
 
+    if ((uint64_t) epoch_s < RTC_MIN_VALID_EPOCH_S || (uint64_t) epoch_s > RTC_MAX_VALID_EPOCH_S) {
+        LOG_WRN("Rejecting implausible time sync value: %u", epoch_s);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
     int err = rtc_set_utc_time((uint64_t) epoch_s);
     if (err) {
         LOG_ERR("Failed to set RTC time: %d", err);
@@ -278,13 +287,13 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&time_sync_service_uuid),
     BT_GATT_CHARACTERISTIC(&time_sync_write_characteristic_uuid.uuid,
                            BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            time_sync_write_handler,
                            NULL),
     BT_GATT_CHARACTERISTIC(&time_sync_read_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            time_sync_read_handler,
                            NULL,
                            NULL),
@@ -358,6 +367,7 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
                                         const void *buf,
@@ -365,13 +375,17 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         uint16_t offset,
                                         uint8_t flags)
 {
+    if (len == 0 || len > SPEAKER_MAX_WRITE_SIZE) {
+        LOG_WRN("Invalid speaker write length: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
     uint16_t amount = 400;
-    int16_t *int16_buf = (int16_t *) buf;
-    uint8_t *data = (uint8_t *) buf;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
 }
+#endif
 
 static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn,
                                                 const struct bt_gatt_attr *attr,
@@ -589,6 +603,86 @@ void broadcast_battery_level(struct k_work *work_item)
 #endif
 
 //
+// Link Security
+//
+
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+
+// Omi has no display and no keypad, so the SMP IO capability is
+// NoInputNoOutput and pairing is Just Works. That tops out at
+// BT_SECURITY_L2 (LE Secure Connections, encrypted, unauthenticated).
+// Asking for L3/L4 here would fail on every phone.
+#define OMI_REQUIRED_SECURITY BT_SECURITY_L2
+
+static void auth_cancel(struct bt_conn *conn)
+{
+    ARG_UNUSED(conn);
+    LOG_WRN("BLE pairing cancelled");
+}
+
+static void pairing_complete(struct bt_conn *conn, bool bonded)
+{
+    ARG_UNUSED(conn);
+    LOG_INF("BLE pairing complete (bonded: %d)", (int) bonded);
+}
+
+static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
+{
+    ARG_UNUSED(conn);
+    LOG_ERR("BLE pairing failed (reason %d)", (int) reason);
+}
+
+static struct bt_conn_auth_cb conn_auth_callbacks = {
+    .cancel = auth_cancel,
+};
+
+static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
+    .pairing_complete = pairing_complete,
+    .pairing_failed = pairing_failed,
+};
+
+static void _transport_security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
+{
+    ARG_UNUSED(conn);
+
+    if (err) {
+        LOG_ERR("BLE security change failed at level %u (err %d)", (unsigned int) level, (int) err);
+        return;
+    }
+
+    LOG_INF("BLE security level %u", (unsigned int) level);
+}
+
+static void request_link_encryption(struct bt_conn *conn)
+{
+    int err = bt_conn_set_security(conn, OMI_REQUIRED_SECURITY);
+    if (err) {
+        // Non-fatal: the link stays up, but every encrypted characteristic
+        // answers with ATT "Insufficient Authentication" until the central
+        // initiates pairing itself.
+        LOG_ERR("bt_conn_set_security(L2) failed (err %d)", err);
+    }
+}
+
+static int register_auth_callbacks(void)
+{
+    int err = bt_conn_auth_cb_register(&conn_auth_callbacks);
+    if (err) {
+        LOG_ERR("Failed to register BLE auth callbacks (err %d)", err);
+        return err;
+    }
+
+    err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
+    if (err) {
+        LOG_ERR("Failed to register BLE auth info callbacks (err %d)", err);
+        return err;
+    }
+
+    return 0;
+}
+#endif
+
+//
 // Connection Callbacks
 //
 
@@ -610,6 +704,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     current_connection = bt_conn_ref(conn);
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
+
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    // Ask for encryption before anything else so SMP runs while the phone is
+    // still discovering services, rather than after it tries an encrypted read.
+    request_link_encryption(conn);
+#endif
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     /* Kick the SD remount immediately (it may be off from offline AAD sleep) so
@@ -668,7 +768,7 @@ K_SEM_DEFINE(audio_tx_sem,
              CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
              CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
 
-static void transport_reset_after_disconnect(void)
+static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     k_work_cancel_delayable(&mtu_recheck_work);
     mtu_recheck_attempts = 0;
@@ -690,6 +790,8 @@ static void transport_reset_after_disconnect(void)
     }
 #endif
 
+    LOG_INF("Transport disconnected");
+
     if (current_connection != NULL) {
         bt_conn_unref(current_connection);
         current_connection = NULL;
@@ -704,15 +806,6 @@ static void transport_reset_after_disconnect(void)
     k_sem_init(&audio_tx_sem,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
-}
-
-static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
-{
-    ARG_UNUSED(conn);
-    ARG_UNUSED(err);
-
-    LOG_INF("Transport disconnected");
-    transport_reset_after_disconnect();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -773,6 +866,9 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
 static struct bt_conn_cb _callback_references = {
     .connected = _transport_connected,
     .disconnected = _transport_disconnected,
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    .security_changed = _transport_security_changed,
+#endif
     .le_param_req = _le_param_req,
     .le_param_updated = _le_param_updated,
     .le_phy_updated = _le_phy_updated,
@@ -927,6 +1023,7 @@ static void update_mtu(struct bt_conn *conn)
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
 static void log_local_ble_addresses(void)
 {
     bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
@@ -948,6 +1045,7 @@ static void log_local_ble_addresses(void)
         printk("BLE_ADDR[%u]: %s\n", (unsigned int) i, addr);
     }
 }
+#endif
 
 static int ensure_local_ble_identity(void)
 {
@@ -1033,6 +1131,14 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
+
+    if (tx_buffer_size > CODEC_OUTPUT_MAX_BYTES) {
+        LOG_ERR("Frame length %u exceeds the %u byte codec frame, dropping",
+                tx_buffer_size,
+                (uint32_t) CODEC_OUTPUT_MAX_BYTES);
+        tx_buffer_size = 0;
+        return false;
+    }
 
     return true;
 }
@@ -1147,11 +1253,13 @@ static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+BUILD_ASSERT(CODEC_OUTPUT_MAX_BYTES + OPUS_PREFIX_LENGTH <= MAX_WRITE_SIZE,
+             "A single codec frame plus its length prefix must fit in storage_temp_data");
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void)
 {
     uint8_t *buffer = tx_buffer + 2;
-    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+    uint32_t packet_size = tx_buffer_size + OPUS_PREFIX_LENGTH;
 
     // buffer_offset = buffer_offset+amount_to_fill;
     // check if adding the new packet will cause a overflow
@@ -1281,99 +1389,42 @@ static int restart_advertising(void)
     return 0;
 }
 
-static void transport_stop_pusher(void)
-{
-    atomic_set(&pusher_stop_flag, 1);
-    k_sem_give(&tx_queue_sem);
-    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
-    if (ret != 0) {
-        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
-        k_thread_abort(&pusher_thread);
-        LOG_WRN("Pusher thread aborted");
-    }
-}
-
-static int transport_start_pusher(void)
-{
-    atomic_set(&pusher_stop_flag, 0);
-    struct k_thread *thread = k_thread_create(&pusher_thread,
-                                              pusher_stack,
-                                              K_THREAD_STACK_SIZEOF(pusher_stack),
-                                              (k_thread_entry_t) pusher,
-                                              NULL,
-                                              NULL,
-                                              NULL,
-                                              K_PRIO_PREEMPT(7),
-                                              0,
-                                              K_NO_WAIT);
-    if (thread == NULL) {
-        LOG_ERR("Failed to create pusher thread");
-        return -ESRCH;
-    }
-
-    LOG_INF("Pusher successfully started");
-    return 0;
-}
-
 int transport_clear_bonds(void)
 {
     int err;
-    int adv_err = 0;
-    int pusher_err;
 
     LOG_INF("Clearing all BLE bonds");
-
-    transport_stop_pusher();
 
     if (current_connection != NULL) {
         err = bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
         if (err && err != -ENOTCONN) {
             LOG_WRN("Disconnect before unpair failed (err %d)", err);
         }
-        for (int i = 0; i < 10 && current_connection != NULL; i++) {
-            k_sleep(K_MSEC(50));
-        }
+        k_sleep(K_MSEC(150));
     }
-
-    transport_reset_after_disconnect();
 
     err = bt_unpair(BT_ID_DEFAULT, NULL);
     if (err && err != -ENOENT) {
         LOG_ERR("bt_unpair failed (err %d)", err);
-        pusher_err = transport_start_pusher();
-        if (pusher_err) {
-            LOG_ERR("Failed to restart pusher after bond clear error (err %d)", pusher_err);
-        }
         return err;
     }
 
     LOG_INF("BLE bonds cleared");
 
-    for (int i = 0; i < 5; i++) {
-        adv_err = restart_advertising();
-        if (!adv_err) {
-            break;
-        }
-        k_sleep(K_MSEC(100));
-    }
-
-    if (adv_err) {
-        LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
-    }
-
-    pusher_err = transport_start_pusher();
-    if (pusher_err) {
-        LOG_ERR("Failed to restart pusher after bond clear (err %d)", pusher_err);
-        return pusher_err;
-    }
-
-    return adv_err;
+    return restart_advertising();
 }
 
 int transport_off()
 {
     // Stop pusher thread when transport is turned off
-    transport_stop_pusher();
+    atomic_set(&pusher_stop_flag, 1);
+    k_sem_give(&tx_queue_sem);
+    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
+    if (ret != 0) {
+        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
+        k_thread_abort(&pusher_thread);
+        LOG_WRN("Pusher thread aborted during transport_off");
+    }
 
     // First disconnect any active connections
     if (current_connection != NULL) {
@@ -1434,6 +1485,13 @@ int transport_start()
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    err = register_auth_callbacks();
+    if (err) {
+        return err;
+    }
+#endif
+
     // Enable Bluetooth
     err = bt_enable(NULL);
     if (err) {
@@ -1449,7 +1507,9 @@ int transport_start()
     }
 
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
+#ifdef CONFIG_OMI_ENABLE_MFG_DIAGNOSTICS
     log_local_ble_addresses();
+#endif
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();
@@ -1538,7 +1598,24 @@ int transport_start()
         return -1;
     }
 
-    return transport_start_pusher();
+    struct k_thread *thread = k_thread_create(&pusher_thread,
+                                              pusher_stack,
+                                              K_THREAD_STACK_SIZEOF(pusher_stack),
+                                              (k_thread_entry_t) pusher,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              K_PRIO_PREEMPT(7),
+                                              0,
+                                              K_NO_WAIT);
+    if (thread == NULL) {
+        LOG_ERR("Failed to create pusher thread");
+        return -1;
+    }
+
+    LOG_INF("Pusher successfully started");
+
+    return 0;
 }
 
 struct bt_conn *get_current_connection()
