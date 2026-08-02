@@ -409,9 +409,14 @@ def restore_legacy_conversation_items(
         action_item.pop('id', None)
         action_item.pop('source', None)
 
+        staged_ref = staged_col.document(staged_snapshot.id)
         batch = client.batch()
         batch.create(action_item_ref, action_item)
-        batch.delete(staged_col.document(staged_snapshot.id))
+        # Keep the streamed staged row as the delete authority. If promotion
+        # or another recovery attempt updates it after the query, Firestore
+        # rejects the atomic batch instead of deleting the newer record.
+        delete_option = client.write_option(last_update_time=staged_snapshot.update_time)
+        batch.delete(staged_ref, option=delete_option)
         try:
             batch.commit()
         except (AlreadyExists, Conflict):

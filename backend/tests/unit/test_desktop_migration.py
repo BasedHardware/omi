@@ -2124,6 +2124,7 @@ class TestLegacyConversationRecovery:
         """Recovery removes only its marker and atomically recreates the original action item."""
         staged_snapshot = MagicMock()
         staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
         staged_snapshot.to_dict.return_value = {
             'id': 'legacy-task',
             'description': 'Call supplier',
@@ -2151,6 +2152,7 @@ class TestLegacyConversationRecovery:
         staged_ref = MagicMock()
         staged_col.document.return_value = staged_ref
         batch = MagicMock()
+        delete_option = object()
 
         def col_side_effect(collection_name):
             return action_items_col if collection_name == 'action_items' else staged_col
@@ -2158,6 +2160,7 @@ class TestLegacyConversationRecovery:
         firestore_client = MagicMock()
         firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
         firestore_client.batch.return_value = batch
+        firestore_client.write_option.return_value = delete_option
         with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
             result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
@@ -2177,7 +2180,8 @@ class TestLegacyConversationRecovery:
                 'completed': False,
             },
         )
-        batch.delete.assert_called_once_with(staged_ref)
+        firestore_client.write_option.assert_called_once_with(last_update_time=staged_snapshot.update_time)
+        batch.delete.assert_called_once_with(staged_ref, option=delete_option)
         batch.commit.assert_called_once()
 
     @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
