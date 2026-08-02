@@ -170,8 +170,11 @@ if [[ "${CFC_DMG_BACKGROUND_1X:-0}" == "1" ]]; then
 fi
 
 if [[ "$DO_STYLE" -eq 1 ]]; then
-    # Repaint when the art is missing or older than its own renderer or the icon it lifts the mark from.
-    if [[ ! -f "$BG_FILE" || "$BG_SCRIPT" -nt "$BG_FILE" || "$ICNS" -nt "$BG_FILE" ]]; then
+    # Repaint when the art is missing or older than its own renderer. The art used to be rebuilt when
+    # the .icns changed too, because it lifted the app's glyph out of it for the top-left mark. That
+    # mark is gone — the only icon the window shows is the app bundle Finder places in it — so the art
+    # no longer reads the .icns and that dependency would only cause pointless repaints.
+    if [[ ! -f "$BG_FILE" || "$BG_SCRIPT" -nt "$BG_FILE" ]]; then
         log "rendering the background art"
         "$BG_SCRIPT"
     fi

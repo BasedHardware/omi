@@ -26,8 +26,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_NAME="Context for Claude"
-ICNS="$PKG_DIR/Resources/ContextForClaude.icns"
 OUT_DIR="$PKG_DIR/Resources/DMG"
+
+# The header is a wordmark and one sentence, and deliberately **no mark**.
+#
+# It used to carry the app's own glyph, lifted out of the .icns, at the top left. That put the mark
+# on screen twice: Finder draws the real app icon in the left-hand slot 130 pt below it, and the
+# whole point of this window is that the user drags *that* icon. A second, smaller copy of it is not
+# branding, it is a decoy — the one thing an install window must not have is two things that look
+# like the app. The wordmark starts on the same left margin the mark used to occupy, so the header
+# block did not move; there is simply one fewer object in it.
 
 # ------------------------------------------------------------------ geometry (points, 1x)
 #
@@ -72,7 +80,6 @@ log()  { printf '\033[1m[dmg-bg]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[dmg-bg]\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v magick >/dev/null || die "ImageMagick (magick) not found — brew install imagemagick"
-[[ -f "$ICNS" ]] || die "no icon at $ICNS"
 
 # ------------------------------------------------------------------ palette
 #
@@ -99,22 +106,6 @@ TMP="$(mktemp -d /tmp/cfc-dmg-bg.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$OUT_DIR"
-
-# The app mark, lifted out of the .icns. sips first: ImageMagick reads .icns unreliably (it picks a
-# small representation or fails outright), while sips always hands back the 1024 pt master.
-sips -s format png "$ICNS" --out "$TMP/icon.png" >/dev/null 2>&1 \
-    || die "sips could not read $ICNS"
-
-# The header mark is the glyph alone, not the whole app tile. Take the tile's inverted luminance as an
-# alpha channel: the near-white plate falls away, the black mark stays, and the head's interior goes
-# transparent too — which is exactly what the template mark looks like. -trim then finds the glyph, so
-# nothing here depends on hardcoded crop offsets that would rot when the icon is regenerated.
-magick "$TMP/icon.png" -background white -alpha remove -alpha off \
-    \( +clone -colorspace gray -negate -level 25%,70% \) \
-    -compose copy_opacity -composite \
-    -fill "$INK" -colorize 100 -trim +repage "$TMP/mark.png"
-[[ "$(magick identify -format '%w' "$TMP/mark.png")" -gt 32 ]] \
-    || die "the mark extracted from $ICNS is degenerate ($(magick identify -format '%wx%h' "$TMP/mark.png")) — the icon's plate is no longer light enough for the luminance lift"
 
 render() {
     local S="$1" out="$2"
@@ -158,19 +149,20 @@ render() {
         -draw "polygon $shaft_end,$((ay - 14 * S)) $shaft_end,$((ay + 14 * S)) $a_x2,$ay" \
         "$TMP/arrow-$S.png"
 
-    # --- mark + wordmark + the one sentence, upper left.
-    local mark_h=$((44 * S))
-    magick "$TMP/mark.png" -resize "x${mark_h}" "$TMP/mark-$S.png"
-
+    # --- wordmark + the one sentence, upper left. No mark: see the note by APP_NAME.
+    #
+    # x=44 is the left margin the mark used to start on, so the header block still begins where it
+    # always did — the type moved into the space the mark vacated rather than the whole block
+    # shifting. The baselines (70 and 102) are untouched, so nothing about the header's height or its
+    # clearance from the drop targets at y 168 has changed.
     magick "$TMP/sheet-$S.png" \
         "$TMP/targets-$S.png" -compose over -composite \
         "$TMP/arrow-$S.png" -compose over -composite \
-        "$TMP/mark-$S.png" -geometry "+$((44 * S))+$((36 * S))" -compose over -composite \
         -gravity NorthWest \
         -font "$FONT_DISPLAY" -pointsize $((27 * S)) -fill "$INK" -stroke none \
-        -annotate "+$((96 * S))+$((70 * S))" "$APP_NAME" \
+        -annotate "+$((44 * S))+$((70 * S))" "$APP_NAME" \
         -font "$FONT_BODY" -pointsize $((15 * S)) -fill "$MID" \
-        -annotate "+$((97 * S))+$((102 * S))" "Drag $APP_NAME into Applications to install" \
+        -annotate "+$((45 * S))+$((102 * S))" "Drag $APP_NAME into Applications to install" \
         -alpha remove -alpha off \
         -strip -dither FloydSteinberg -colors 255 \
         -colorspace sRGB -type TrueColor -define png:color-type=2 \
