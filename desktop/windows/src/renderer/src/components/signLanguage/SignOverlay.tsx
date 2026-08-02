@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignAvatar } from './SignAvatar'
 import { SignWritingView } from './SignWritingView'
-import { TranslationResult, SignGloss } from '../../../../shared/types'
+import type { TranslationResult, SignGloss } from '../../../../shared/types'
 
 const FALLBACK_POSE_HOLD_MS = 6000
 
