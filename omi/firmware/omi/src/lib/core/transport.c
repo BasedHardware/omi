@@ -768,7 +768,7 @@ K_SEM_DEFINE(audio_tx_sem,
              CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
              CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
 
-static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
+static void transport_reset_after_disconnect(void)
 {
     k_work_cancel_delayable(&mtu_recheck_work);
     mtu_recheck_attempts = 0;
@@ -790,8 +790,6 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     }
 #endif
 
-    LOG_INF("Transport disconnected");
-
     if (current_connection != NULL) {
         bt_conn_unref(current_connection);
         current_connection = NULL;
@@ -806,6 +804,15 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     k_sem_init(&audio_tx_sem,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
+}
+
+static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(err);
+
+    LOG_INF("Transport disconnected");
+    transport_reset_after_disconnect();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -1389,12 +1396,49 @@ static int restart_advertising(void)
     return 0;
 }
 
+static void transport_stop_pusher(void)
+{
+    atomic_set(&pusher_stop_flag, 1);
+    k_sem_give(&tx_queue_sem);
+    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
+    if (ret != 0) {
+        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
+        k_thread_abort(&pusher_thread);
+        LOG_WRN("Pusher thread aborted");
+    }
+}
+
+static int transport_start_pusher(void)
+{
+    atomic_set(&pusher_stop_flag, 0);
+    struct k_thread *thread = k_thread_create(&pusher_thread,
+                                              pusher_stack,
+                                              K_THREAD_STACK_SIZEOF(pusher_stack),
+                                              (k_thread_entry_t) pusher,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              K_PRIO_PREEMPT(7),
+                                              0,
+                                              K_NO_WAIT);
+    if (thread == NULL) {
+        LOG_ERR("Failed to create pusher thread");
+        return -ESRCH;
+    }
+
+    LOG_INF("Pusher successfully started");
+    return 0;
+}
+
 int transport_clear_bonds(void)
 {
     int err;
     int adv_err = 0;
+    int pusher_err;
 
     LOG_INF("Clearing all BLE bonds");
+
+    transport_stop_pusher();
 
     if (current_connection != NULL) {
         err = bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -1404,15 +1448,17 @@ int transport_clear_bonds(void)
         for (int i = 0; i < 10 && current_connection != NULL; i++) {
             k_sleep(K_MSEC(50));
         }
-        if (current_connection != NULL) {
-            bt_conn_unref(current_connection);
-            current_connection = NULL;
-        }
     }
+
+    transport_reset_after_disconnect();
 
     err = bt_unpair(BT_ID_DEFAULT, NULL);
     if (err && err != -ENOENT) {
         LOG_ERR("bt_unpair failed (err %d)", err);
+        pusher_err = transport_start_pusher();
+        if (pusher_err) {
+            LOG_ERR("Failed to restart pusher after bond clear error (err %d)", pusher_err);
+        }
         return err;
     }
 
@@ -1421,26 +1467,28 @@ int transport_clear_bonds(void)
     for (int i = 0; i < 5; i++) {
         adv_err = restart_advertising();
         if (!adv_err) {
-            return 0;
+            break;
         }
         k_sleep(K_MSEC(100));
     }
 
-    LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
+    if (adv_err) {
+        LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
+    }
+
+    pusher_err = transport_start_pusher();
+    if (pusher_err) {
+        LOG_ERR("Failed to restart pusher after bond clear (err %d)", pusher_err);
+        return pusher_err;
+    }
+
     return adv_err;
 }
 
 int transport_off()
 {
     // Stop pusher thread when transport is turned off
-    atomic_set(&pusher_stop_flag, 1);
-    k_sem_give(&tx_queue_sem);
-    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
-    if (ret != 0) {
-        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
-        k_thread_abort(&pusher_thread);
-        LOG_WRN("Pusher thread aborted during transport_off");
-    }
+    transport_stop_pusher();
 
     // First disconnect any active connections
     if (current_connection != NULL) {
@@ -1614,24 +1662,7 @@ int transport_start()
         return -1;
     }
 
-    struct k_thread *thread = k_thread_create(&pusher_thread,
-                                              pusher_stack,
-                                              K_THREAD_STACK_SIZEOF(pusher_stack),
-                                              (k_thread_entry_t) pusher,
-                                              NULL,
-                                              NULL,
-                                              NULL,
-                                              K_PRIO_PREEMPT(7),
-                                              0,
-                                              K_NO_WAIT);
-    if (thread == NULL) {
-        LOG_ERR("Failed to create pusher thread");
-        return -1;
-    }
-
-    LOG_INF("Pusher successfully started");
-
-    return 0;
+    return transport_start_pusher();
 }
 
 struct bt_conn *get_current_connection()
