@@ -152,7 +152,7 @@ def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v1/knowledge-graph/sync', tags=['knowledge_graph'], response_model=LocalKgSyncResponse)
 def sync_local_knowledge_graph(
     payload: LocalKgSyncRequest,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:sync")),
 ):
     """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
     _require_legacy_graph_mutation(uid)
