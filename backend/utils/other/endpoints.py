@@ -43,7 +43,7 @@ def verify_token(token: str) -> str:
         The user's uid
 
     Raises:
-        InvalidIdTokenError: If the token is invalid
+        auth_errors.AuthError: If the token is invalid/expired/revoked (neutral taxonomy, ADR-0034)
     """
     # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
     # this exact concatenation is depended on by this repo's own integration
@@ -110,7 +110,10 @@ def get_current_user_uid(
 
     try:
         uid = verify_token(token)
-    except InvalidIdTokenError as e:
+    except auth_errors.AuthError as e:
+        # verify_token surfaces the neutral auth taxonomy (ADR-0034): InvalidToken/ExpiredToken/
+        # RevokedToken/JWKSUnavailable all subclass AuthError. Catch the base so every invalid/expired/
+        # revoked bearer maps to 401 — catching a removed SDK class here 500'd instead.
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
@@ -167,7 +170,8 @@ def get_current_user_uid_no_byok_validation(
 
     try:
         uid = verify_token(token)
-    except InvalidIdTokenError as e:
+    except auth_errors.AuthError as e:
+        # Neutral auth taxonomy (ADR-0034): catch the base so invalid/expired/revoked bearers -> 401.
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
@@ -211,7 +215,7 @@ def _verify_ws_auth(authorization: str) -> str:
         token = authorization.split(' ')[1]
         return verify_token(token)
     except auth_errors.AuthError as e:
-        close_code, reason = _get_ws_auth_close(e)
+        close_code, reason = map_ws_auth_close(e)
         logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
     except Exception as e:
@@ -219,7 +223,14 @@ def _verify_ws_auth(authorization: str) -> str:
         raise WebSocketException(code=1008, reason="Auth error")
 
 
-def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
+def map_ws_auth_close(error: Exception) -> 'tuple[int, str]':
+    """Shared WebSocket auth close-code mapper (ADR-0034).
+
+    Maps a neutral ``auth_errors.AuthError`` to the client recovery contract: 4001 (refresh the token)
+    for expired / JWKS-unavailable, 4004 (re-login) for revoked, 1008 for anything else. Every WS auth
+    entry point (the ``_verify_ws_auth`` dependency stack AND the first-message auth path used by
+    ``/v4/web/listen``) routes through this so a single close-code policy is applied everywhere.
+    """
     if isinstance(error, auth_errors.RevokedToken):
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
     if isinstance(error, auth_errors.JWKSUnavailable):
@@ -301,7 +312,7 @@ def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
 
     Raises:
         ValueError: If message format is invalid
-        InvalidIdTokenError: If token is invalid
+        auth_errors.AuthError: If token is invalid/expired/revoked (neutral taxonomy, ADR-0034)
     """
     if message.get("type") == "websocket.disconnect":
         raise ValueError("Client disconnected")

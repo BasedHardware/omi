@@ -49,7 +49,9 @@ class _App:
 def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]]:
     firebase_auth = _module(
         'firebase_admin.auth',
-        verify_id_token=lambda _token: {'uid': 'user-1'},
+        # Accept **kwargs: the neutral FirebaseAuthProvider calls verify_id_token(bearer,
+        # check_revoked=...) (ADR-0034), so a single-arg stub raises TypeError -> InvalidToken -> 401.
+        verify_id_token=lambda _token, **_kwargs: {'uid': 'user-1'},
         InvalidIdTokenError=_InvalidIdTokenError,
     )
     firebase_admin = _module('firebase_admin', auth=firebase_auth)
@@ -149,7 +151,8 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str) -> dict[str, str]:
+            def blocking_verify(_token: str, **_kwargs) -> dict[str, str]:
+                # **_kwargs: the neutral port passes check_revoked= through to the firebase SDK call.
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}

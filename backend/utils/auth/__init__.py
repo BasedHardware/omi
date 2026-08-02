@@ -8,7 +8,7 @@ from utils.auth.errors import (
     RevokedToken,
     Unsupported,
 )
-from utils.auth.factory import get_auth_provider, reset_auth_provider_for_tests
+from utils.auth.factory import auth_backend_name, get_auth_provider, reset_auth_provider_for_tests
 from utils.auth.ports import AuthProvider, Principal, UserProfile
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "RevokedToken",
     "JWKSUnavailable",
     "Unsupported",
+    "auth_backend_name",
     "get_auth_provider",
     "reset_auth_provider_for_tests",
 ]

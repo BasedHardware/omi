@@ -191,9 +191,13 @@ async def web_listen_handler(
     except ValueError as error:
         await websocket.close(code=1008, reason=str(error))
         return
-    except AuthError:
+    except AuthError as error:
+        # Map the neutral auth error through the shared WS close-code policy (ADR-0034) so the web
+        # client gets the same recovery contract as every other WS handler: 4001 to refresh an
+        # expired/JWKS-unavailable token, 4004 to force re-login on a revoked one, 1008 otherwise.
+        close_code, reason = auth.map_ws_auth_close(error)
         await websocket.send_json({'type': 'auth_response', 'success': False})
-        await websocket.close(code=1008, reason='Invalid token')
+        await websocket.close(code=close_code, reason=reason)
         return
     except Exception as error:
         logger.error('web listen auth failed error_type=%s', type(error).__name__)

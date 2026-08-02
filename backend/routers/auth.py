@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 import pathlib
 from utils.auth import get_auth_provider
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
-from utils.executors import critical_executor, run_blocking
+from utils.executors import auth_idp_executor, critical_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
@@ -1023,8 +1023,11 @@ async def _generate_custom_token(
         # + custom-token minting are proprietary and unnecessary under OIDC, so the adapter owns them.
         adapter = get_auth_provider()
 
+        # The signInWithIdp exchange is an outbound REST round-trip to the IdP with unpredictable
+        # latency. Run it on the dedicated external-I/O bulkhead, NOT critical_executor (8 workers,
+        # shared with token verification / rate-limit gates), so a slow IdP hop can't starve them.
         firebase_uid = await run_blocking(
-            critical_executor, adapter.exchange_idp_credential, provider, id_token, access_token
+            auth_idp_executor, adapter.exchange_idp_credential, provider, id_token, access_token
         )
         logger.info(f"Sign-in successful for {provider}, UID: {firebase_uid}")
 

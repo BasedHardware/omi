@@ -14,12 +14,21 @@ _lock = threading.Lock()
 _instance: Optional[AuthProvider] = None
 
 
+def auth_backend_name() -> str:
+    """The selected auth backend, normalized (``firebase`` default | ``oidc``).
+
+    Read this to gate Firebase-proprietary surfaces (e.g. the FirebaseUI external-app OAuth page)
+    without instantiating a provider — it mirrors the exact normalization ``get_auth_provider`` uses.
+    """
+    return (os.getenv("AUTH_BACKEND") or "firebase").strip().lower()
+
+
 def get_auth_provider() -> AuthProvider:
     global _instance
     if _instance is None:
         with _lock:
             if _instance is None:
-                backend = (os.getenv("AUTH_BACKEND") or "firebase").strip().lower()
+                backend = auth_backend_name()
                 if backend == "firebase":
                     from utils.auth.adapters.firebase import FirebaseAuthProvider
 
@@ -40,4 +49,4 @@ def reset_auth_provider_for_tests() -> None:
         _instance = None
 
 
-__all__ = ["get_auth_provider", "reset_auth_provider_for_tests"]
+__all__ = ["auth_backend_name", "get_auth_provider", "reset_auth_provider_for_tests"]

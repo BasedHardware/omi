@@ -153,6 +153,13 @@ class OIDCAuthProvider:
         resp = httpx.delete(
             f"{self._admin_api()}/users/{uid}", headers={"Authorization": f"Bearer {self._admin_token()}"}
         )
+        # Deletion is idempotent: a 404 means the identity is already gone (a prior attempt succeeded
+        # before the wipe marker committed, or the user was removed out-of-band). The account-deletion
+        # worker treats an already-absent auth user as success — mirror that here so retries complete
+        # instead of looping on a fatal "wipe failed". Matches Firebase, whose UserNotFoundError the
+        # worker already swallows, and the object-store adapters' no-raise-on-missing delete.
+        if resp.status_code == 404:
+            return
         if resp.status_code not in (200, 204):
             raise errors.AuthError(f"OIDC delete_user failed: status={resp.status_code}")
 
