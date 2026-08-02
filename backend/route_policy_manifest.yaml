@@ -71,10 +71,6 @@ routes:
     policy: *desktop_migration_policy
   - route_type: http
     method: POST
-    path: /v1/screen-activity/sync
-    policy: *desktop_migration_policy
-  - route_type: http
-    method: POST
     path: /v1/tts/synthesize
     policy: *desktop_migration_policy
   - route_type: http
