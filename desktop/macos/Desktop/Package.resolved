@@ -1,5 +1,5 @@
 {
-  "originHash" : "71c5c62ce7232afa115d0d75015209f444349e1047e6f9699549dff2c4da4ba0",
+  "originHash" : "697db2eb0443f29796095213e45992c679c95b1805c148d74e0ed8744b5b0373",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -33,7 +33,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidInference/FluidAudio.git",
       "state" : {
-        "revision" : "baa11f65daa3003daf4401308786b1dcdeddd84e"
+        "revision" : "19600a485baa4998812e4654b70d2bab8f2c9949"
       }
     },
     {

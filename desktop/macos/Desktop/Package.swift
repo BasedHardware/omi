@@ -5,8 +5,8 @@ let package = Package(
   name: "Omi Computer",
   platforms: [
     // Candidate v0.12.148 for release planning.
-        // Candidate v0.12.148 for release planning.
-        .macOS("14.0")
+    // Candidate v0.12.148 for release planning.
+    .macOS("14.0")
   ],
   dependencies: [
     .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
@@ -21,7 +21,7 @@ let package = Package(
     // against the now-truncated upstream tag set.
     .package(
       url: "https://github.com/FluidInference/FluidAudio.git",
-      revision: "baa11f65daa3003daf4401308786b1dcdeddd84e"
+      revision: "19600a485baa4998812e4654b70d2bab8f2c9949"
     ),
   ],
   targets: [
