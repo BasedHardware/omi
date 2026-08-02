@@ -424,6 +424,12 @@ def test_merge_rejects_firestore_path_separator_in_ids():
         kg_db.merge_synced_local_kg_nodes(UID, [{"nodeId": "folder/node", "label": "Invalid"}], db_client=_FakeDb())
 
 
+@pytest.mark.parametrize("node_id", ["__reserved__", "__name__"])
+def test_merge_rejects_firestore_reserved_ids(node_id):
+    with pytest.raises(kg_db.InvalidKnowledgeGraphDocumentIdError):
+        kg_db.merge_synced_local_kg_nodes(UID, [{"nodeId": node_id, "label": "Invalid"}], db_client=_FakeDb())
+
+
 def test_legacy_edge_label_slash_is_normalized_before_firestore_write():
     db = _FakeDb()
     result = kg_db.upsert_knowledge_edge(
