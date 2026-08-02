@@ -274,7 +274,7 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     await extractor.flushPendingExtractions()
     var extractionCount = await extractCount.value
     var markedIDs = await marked.value
-    var pendingCount = await extractor.pendingCount
+    let pendingCount = await extractor.pendingCount
     XCTAssertEqual(extractionCount, 1)
     XCTAssertTrue(markedIDs.isEmpty)
     XCTAssertEqual(pendingCount, 1, "failed mark must re-queue for retry")
@@ -323,7 +323,7 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     await extractor.flushPendingExtractions()
     var extractionCount = await extractCount.value
     var mergedCount = await mergeCount.value
-    var pendingCount = await extractor.pendingCount
+    let pendingCount = await extractor.pendingCount
     XCTAssertEqual(extractionCount, 1)
     XCTAssertEqual(mergedCount, 1)
     XCTAssertEqual(pendingCount, 1)
