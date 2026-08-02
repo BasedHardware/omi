@@ -12,7 +12,7 @@ overrides:
   postcss: '~8.5.18'
   protobufjs: '>=7.6.3'
   tar: '~7.5.18'
-  undici: '>=7.28.0'
+  undici: '~7.28.0'
   websocket-driver: '>=0.7.5'
 
 allowBuilds:
