@@ -250,20 +250,24 @@ struct ChatPromptTimeline: View {
     if let index = hoveredIndex, marks.indices.contains(index),
       positions.indices.contains(index)
     {
-      ChatPromptPreviewCard(mark: marks[index])
-        .onGeometryChange(for: CGFloat.self) {
-          $0.size.height
-        } action: {
-          previewHeight = $0
-        }
-        .offset(
-          x: -(ChatPromptTimelineMetrics.railWidth + ChatPromptTimelineMetrics.previewGap),
-          y: ChatPromptTimelineMetrics.previewCenterY(
-            anchorY: positions[index], cardHeight: previewHeight, railHeight: railHeight)
-            - previewHeight / 2
-        )
-        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
-        .allowsHitTesting(false)
+      VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
+        ChatPromptPreviewCard(mark: marks[index])
+        ChatMessageTimestamp(date: marks[index].createdAt)
+      }
+      .frame(width: ChatPromptTimelineMetrics.previewWidth, alignment: .trailing)
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.height
+      } action: {
+        previewHeight = $0
+      }
+      .offset(
+        x: -(ChatPromptTimelineMetrics.railWidth + ChatPromptTimelineMetrics.previewGap),
+        y: ChatPromptTimelineMetrics.previewCenterY(
+          anchorY: positions[index], cardHeight: previewHeight, railHeight: railHeight)
+          - previewHeight / 2
+      )
+      .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
+      .allowsHitTesting(false)
     }
   }
 }

@@ -75,10 +75,7 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   final anonymousSourceMigration =
       sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
-  return ProviderLinkResult(
-    destinationUid: destinationUid,
-    anonymousSourceMigration: anonymousSourceMigration,
-  );
+  return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
 
 class AuthService {

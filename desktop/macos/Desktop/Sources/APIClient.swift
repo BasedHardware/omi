@@ -591,6 +591,7 @@ extension APIClient {
 
   static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
@@ -604,6 +605,11 @@ extension APIClient {
     if !statuses.isEmpty {
       let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
       queryItems.append("statuses=\(statusStrings)")
+    }
+
+    if !sources.isEmpty {
+      let sourceStrings = sources.map { $0.rawValue }.joined(separator: ",")
+      queryItems.append("sources=\(sourceStrings)")
     }
 
     if let startDate = startDate {
@@ -632,6 +638,7 @@ extension APIClient {
     limit: Int = 50,
     offset: Int = 0,
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
@@ -645,6 +652,7 @@ extension APIClient {
     ]
     queryItems += Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -659,6 +667,13 @@ extension APIClient {
   /// Fetches a single conversation by ID
   func getConversation(id: String) async throws -> ServerConversation {
     return try await get("v1/conversations/\(id)")
+  }
+
+  /// Reads a capture detail through the archive's strict Omi-device provenance
+  /// contract. This is intentionally separate from the legacy mixed-source
+  /// conversation detail API.
+  func getOmiCapture(id: String) async throws -> ServerConversation {
+    try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
   }
 
   /// Deletes a conversation by ID
@@ -750,6 +765,7 @@ extension APIClient {
   static func conversationsCountEndpoint(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -757,6 +773,7 @@ extension APIClient {
   ) -> String {
     let queryItems = Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -775,6 +792,7 @@ extension APIClient {
   func getConversationsCount(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -783,6 +801,7 @@ extension APIClient {
     let endpoint = Self.conversationsCountEndpoint(
       includeDiscarded: includeDiscarded,
       statuses: statuses,
+      sources: sources,
       startDate: startDate,
       endDate: endDate,
       folderId: folderId,

@@ -1065,6 +1065,36 @@ actor TranscriptionStorage {
     }
   }
 
+  /// Source-scoped cache read for the cohort-only Omi capture archive.
+  /// Filtering happens before ordering and limiting so a cached page cannot
+  /// be filled by another source and then client-filtered.
+  func getLocalOmiCaptureConversations(
+    limit: Int = 50,
+    offset: Int = 0
+  ) async throws -> [ServerConversation] {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      let sessions =
+        try TranscriptionSessionRecord
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .filter(Column("discarded") == false)
+        .filter(Column("source") == ConversationSource.omi.rawValue)
+        .filter(
+          Column("conversationStatus") == LocalConversationStatus.completed.rawValue
+            || Column("conversationStatus") == LocalConversationStatus.processing.rawValue
+        )
+        .order(Column("startedAt").desc)
+        .limit(limit, offset: offset)
+        .fetchAll(database)
+
+      return sessions.compactMap { session in
+        session.toServerConversation(segments: [], transcriptIncluded: false)
+      }
+    }
+  }
+
   /// Read the richest cached projection for a detail screen.
   func getCachedConversation(id: String) async throws -> ServerConversation? {
     guard let session = try await getSessionByBackendId(id), let sessionId = session.id else {
@@ -1094,6 +1124,24 @@ actor TranscriptionStorage {
       }
 
       return try query.fetchCount(database)
+    }
+  }
+
+  /// Count companion to getLocalOmiCaptureConversations. Keeping the same
+  /// predicate prevents the archive from reporting a mixed-source cache total.
+  func getLocalOmiCaptureConversationsCount() async throws -> Int {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try TranscriptionSessionRecord
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .filter(Column("discarded") == false)
+        .filter(Column("source") == ConversationSource.omi.rawValue)
+        .filter(
+          Column("conversationStatus") == LocalConversationStatus.completed.rawValue
+            || Column("conversationStatus") == LocalConversationStatus.processing.rawValue
+        )
+        .fetchCount(database)
     }
   }
 }

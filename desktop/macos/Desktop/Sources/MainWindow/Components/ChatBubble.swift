@@ -17,8 +17,10 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
+  /// only the capability-gated main shell is allowed to turn them into controls.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
 
-  @State private var isTimestampHovering = false
   @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
@@ -35,7 +37,8 @@ struct ChatBubble: View {
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
-    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
+    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   ) {
     self.message = message
     self.app = app
@@ -46,6 +49,7 @@ struct ChatBubble: View {
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
+    self.chatFirstRichBlockContext = chatFirstRichBlockContext
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
@@ -89,41 +93,54 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    let groupedBlocks = ContentBlockGroup.visibleChatGroups(
-      message.contentBlocks,
-      isStreaming: message.isStreaming
-    )
+    Group {
+      if message.hidesEmptyStreamingPlaceholder,
+        message.isStreaming,
+        message.text.isEmpty,
+        message.contentBlocks.isEmpty
+      {
+        EmptyView()
+          .accessibilityHidden(true)
+      } else {
+        let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+          message.contentBlocks,
+          isStreaming: message.isStreaming,
+          richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+        )
 
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      // App personas keep their own image. The Omi mark is mounted below as an
-      // overlay in the leading gutter so it never changes the reply's x origin.
-      if message.sender == .ai {
-        if let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          // Default omi replies render avatar-free for a quieter timeline; only
+          // app personas keep their identity mark.
+          if message.sender == .ai, let app = app {
+            AsyncImage(url: URL(string: app.image)) { phase in
+              switch phase {
+              case .success(let image):
+                image
+                  .resizable()
+                  .aspectRatio(contentMode: .fill)
+              default:
+                Circle()
+                  .fill(OmiColors.backgroundTertiary)
+              }
             }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
           }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        }
-      }
 
-      // Bubbles hug their content up to a readable cap — omi replies sit
-      // left, user messages sit right, neither spans the full column.
-      VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        messageContentView(groupedBlocks)
+          // Bubbles hug their content up to a readable cap — omi replies sit
+          // left, user messages sit right, neither spans the full column.
+          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
+            messageContentView(groupedBlocks)
+          }
+          .frame(
+            maxWidth: 640,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+        .contentShape(Rectangle())
+        .onHover { isRowHovering = $0 }
       }
-      .frame(
-        maxWidth: 640,
-        alignment: message.sender == .user ? .trailing : .leading
-      )
     }
     .frame(
       maxWidth: .infinity,
@@ -302,6 +319,73 @@ struct ChatBubble: View {
       return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
+    case .questionCard(_, let questionID, let text, let options, let selectedOptionID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        QuestionCardView(
+          questionID: questionID,
+          text: text,
+          options: options,
+          selectedOptionID: selectedOptionID,
+          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
+            messageID: message.id,
+            questionID: questionID,
+            selectedOptionID: selectedOptionID
+          ),
+          onSelect: { optionID, isDeferral in
+            Task { @MainActor in
+              AnalyticsManager.shared.chatFirst(
+                .question(lifecycle: isDeferral ? .deferred : .answered)
+              )
+              AnalyticsManager.shared.chatFirst(
+                .richBlock(kind: .questionCard, outcome: .acted, action: .select)
+              )
+              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
+                questionID: questionID,
+                optionID: optionID
+              )
+            }
+          }
+        )
+      )
+    case .taskCard(_, let taskID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        TaskCardView(
+          taskID: taskID,
+          tasksStore: chatFirstRichBlockContext.tasksStore,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .goalLink(_, let goalID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        GoalLinkView(
+          goalID: goalID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation,
+          goalsStore: chatFirstRichBlockContext.canonicalGoalsStore
+        )
+      )
+    case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        CaptureLinkView(
+          conversationID: conversationID,
+          momentTimestampMs: momentTimestampMs,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .memoryLink(_, let memoryID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        MemoryLinkView(
+          memoryID: memoryID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .agentSpawn(
       _, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -332,30 +416,26 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      if includeRatingButtons {
-        ratingButtons
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      if includeRatingButtons || includeCopyButton {
+        HStack(spacing: OmiSpacing.sm) {
+          if includeRatingButtons {
+            ratingButtons
+          }
+
+          if includeCopyButton {
+            copyButton
+          }
+
+          if includeCopyButton, message.metadata != nil {
+            infoButton
+          }
+        }
       }
 
-      if includeCopyButton {
-        copyButton
-      }
+      Spacer(minLength: 0)
 
-      if includeCopyButton, message.metadata != nil {
-        infoButton
-      }
-
-      Text(message.createdAt, format: .dateTime.hour().minute())
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .onHover { isTimestampHovering = $0 }
-
-      if isTimestampHovering {
-        Text(message.createdAt, format: .dateTime.month(.abbreviated).day())
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .transition(.opacity)
-      }
+      ChatMessageTimestamp(date: message.createdAt)
     }
     // Quiet timeline: actions and timestamps only surface while the reader
     // is on the message — by pointer hover or keyboard focus — or
@@ -367,7 +447,6 @@ struct ChatBubble: View {
         transientFeedback: showRatingFeedback || showCopied || showInfoPopover
       ) ? 1 : 0
     )
-    .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
@@ -469,6 +548,19 @@ struct ChatBubble: View {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+/// Shared understated date treatment for a transcript row and its prompt-rail
+/// preview. Keeping this outside the bubble makes the time contextual rather
+/// than part of the message itself.
+struct ChatMessageTimestamp: View {
+  let date: Date
+
+  var body: some View {
+    Text(date, format: .dateTime.year().month(.abbreviated).day().hour().minute())
+      .scaledFont(size: OmiType.micro)
+      .foregroundColor(OmiColors.textTertiary.opacity(0.82))
   }
 }
 
@@ -918,6 +1010,11 @@ enum ContentBlockGroup: Identifiable {
   case toolCalls(id: String, calls: [ChatContentBlock])
   case thinking(id: String, text: String)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case questionCard(id: String, questionID: String, text: String, options: [[String: Any]], selectedOptionID: String?)
+  case taskCard(id: String, taskID: String)
+  case goalLink(id: String, goalID: String, summary: String)
+  case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
+  case memoryLink(id: String, memoryID: String, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -944,13 +1041,21 @@ enum ContentBlockGroup: Identifiable {
     case .toolCalls(let id, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .questionCard(let id, _, _, _, _): return id
+    case .taskCard(let id, _): return id
+    case .goalLink(let id, _, _): return id
+    case .captureLink(let id, _, _, _): return id
+    case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
   }
 
   /// Groups consecutive `.toolCall` blocks together; passes other blocks through
-  static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
+  static func group(
+    _ blocks: [ChatContentBlock],
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
 
@@ -974,6 +1079,35 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard(let id, let title, let summary, let fullText):
         flushToolCalls()
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
+      case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(
+          .questionCard(
+            id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
+      case .taskCard(let id, let taskID):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.taskCard(id: id, taskID: taskID))
+      case .goalLink(let id, let goalID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.goalLink(id: id, goalID: goalID, summary: summary))
+      case .captureLink(let id, let conversationID, let momentTimestampMs, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(
+          .captureLink(
+            id: id,
+            conversationID: conversationID,
+            momentTimestampMs: momentTimestampMs,
+            summary: summary
+          )
+        )
+      case .memoryLink(let id, let memoryID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -1013,7 +1147,11 @@ enum ContentBlockGroup: Identifiable {
 
   /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
   /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
-  static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
+  static func visibleChatGroups(
+    _ blocks: [ChatContentBlock],
+    isStreaming: Bool,
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
     // matching raw `spawn_agent` tool row is lifecycle plumbing, not a second
@@ -1037,11 +1175,12 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    return group(blocks).compactMap { group in
+    return group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled).compactMap { group in
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .agentSpawn, .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink, .agentSpawn,
+        .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil
