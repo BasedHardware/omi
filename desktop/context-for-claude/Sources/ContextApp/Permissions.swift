@@ -34,9 +34,22 @@ extension Capability {
         case .microphone:
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         case .systemAudio:
-            // A CoreAudio process tap is consented to as audio capture, so its switch sits in the
-            // Microphone pane. There is no separate system-audio pane to send anyone to.
-            return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            // **Not the Microphone pane.** This used to send system audio there, on the reasoning
+            // that a CoreAudio process tap is consented to as audio capture and that there was "no
+            // separate system-audio pane to send anyone to". Measured on macOS 26.5.2 (25F84), that
+            // is false in both halves: Privacy & Security ▸ Screen & System Audio Recording carries
+            // *two* lists — "Screen & System Audio Recording" and, below it, "System Audio Recording
+            // Only" — and the tap's switch is in the second one. The Microphone pane does not list
+            // it at all.
+            //
+            // So the old route opened a pane the row was not on, and the overlay then correctly
+            // refused to point at anything. From the user's side that is the same pane opening twice
+            // for what looks like one permission: "asking the screen/system audio recording
+            // permission multiple times".
+            //
+            // `PermissionChoreography.sectionOccurrence(for:)` is the other half of this pair — it
+            // picks which of the two lists to ring, and it has to say 1 for exactly this reason.
+            return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .screen:
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .accessibility:
@@ -269,33 +282,62 @@ enum Permissions {
         return defaults.bool(forKey: Key.screenPendingRelaunch)
     }
 
+    /// Quits this process and starts a fresh one, **in that order**.
+    ///
+    /// The order is the whole fix. This used to ask `NSWorkspace` to launch a second instance of our
+    /// own bundle with `createsNewApplicationInstance`, pump the runloop until the launch callback
+    /// fired, and only then `exit(0)`. Reported verbatim: *"when I did quit and reopen, it does not
+    /// quit and reopen on its own … the app does not reopen, which it should."*
+    ///
+    /// The callback is not the signal it was being read as. `openApplication` calls back when
+    /// LaunchServices has **accepted the request**, not when the replacement is running, so `exit(0)`
+    /// raced a process that had barely started. Worse, the two instances overlap by construction: a
+    /// second copy of a bundle that is already running is exactly the case LaunchServices may
+    /// coalesce back onto the instance already registered — the one about to call `exit(0)`. The
+    /// launch "succeeded" and the app was gone.
+    ///
+    /// So nothing here launches anything. A detached `/bin/sh` waits for this pid to leave the
+    /// process table and *then* opens the bundle, by which time there is no instance to coalesce
+    /// onto and `open` does the ordinary single-instance launch. The child is reparented to `launchd`
+    /// when we die, so our exit cannot take it with us — the one property the old shape could never
+    /// have, because whatever relaunches us has to outlive us.
+    ///
+    /// `kill -0` is a liveness test, not a signal: it asks whether the pid still exists and delivers
+    /// nothing. The 200-iteration ceiling is a leak guard — if this process somehow never dies, the
+    /// helper gives up after ~20 s rather than sitting in the process table forever.
     static func relaunchApp() -> Never {
         let url = Bundle.main.bundleURL
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        configuration.activates = true
+        // Single-quoted and escaped: the bundle name contains spaces ("Context for Claude.app") and
+        // the install location is the user's to choose.
+        let quoted = "'" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let script = """
+            i=0
+            while kill -0 \(pid) 2>/dev/null && [ $i -lt 200 ]; do
+              sleep 0.1
+              i=$((i+1))
+            done
+            exec /usr/bin/open \(quoted)
+            """
 
-        let launch = Latch()
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { app, error in
-            if let error {
-                ContextLog.error("Relaunch failed: \(error.localizedDescription)", "permissions")
-            } else {
-                ContextLog.info("Relaunched \(url.lastPathComponent) as pid \(app?.processIdentifier ?? -1)", "permissions")
-            }
-            launch.signal()
-        }
-
-        // The replacement has to be up before this process dies, or the user is left with no app at
-        // all and no way back except Finder. Pump the runloop rather than block it: this is called
-        // from a button, and a bare semaphore wait on the main thread stalls the very runloop
-        // LaunchServices replies on.
-        let deadline = Date().addingTimeInterval(10)
-        while !launch.isSignalled && Date() < deadline {
-            if Thread.isMainThread {
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-            } else {
-                usleep(50_000)
-            }
+        let relauncher = Process()
+        relauncher.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relauncher.arguments = ["-c", script]
+        do {
+            try relauncher.run()
+            ContextLog.info(
+                "Relaunch helper \(relauncher.processIdentifier) will reopen \(url.lastPathComponent)",
+                "permissions")
+        } catch {
+            // Nothing left to try, and exiting anyway would be the worst outcome: the user pressed a
+            // button labelled "Restart to finish" and would be left with no app and no Dock icon to
+            // reopen it from. Stay up instead — the card is still on screen and the menu bar still
+            // offers Quit — rather than terminate into nothing.
+            ContextLog.error("Relaunch helper failed to spawn: \(error.localizedDescription)", "permissions")
+            ContextTelemetry.recordFallback(
+                area: .settings, from: "relaunch", to: "stay-running",
+                reason: "helper-spawn-failed", outcome: .degraded)
+            while true { RunLoop.current.run(mode: .default, before: .distantFuture) }
         }
         exit(0)
     }
@@ -866,7 +908,12 @@ final class PermissionGate: ObservableObject {
 
     private func waitingDetail(for capability: Capability) -> String {
         switch capability {
-        case .microphone, .systemAudio: return "It’s under Privacy & Security ▸ Microphone."
+        case .microphone: return "It’s under Privacy & Security ▸ Microphone."
+        // Named for the list it is really in, not just the pane. That pane carries two, and sending
+        // someone to the top of it leaves them switching on the row they already switched on.
+        case .systemAudio:
+            return "It’s under Privacy & Security ▸ Screen & System Audio Recording, in the "
+                + "“System Audio Recording Only” list."
         case .screen: return "It’s under Privacy & Security ▸ Screen & System Audio Recording."
         case .accessibility: return "It’s under Privacy & Security ▸ Accessibility."
         }

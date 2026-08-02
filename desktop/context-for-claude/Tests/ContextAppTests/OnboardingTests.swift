@@ -768,12 +768,38 @@ final class SettingsRowLocatorTests: XCTestCase {
     /// list that is the right one, and "whichever row the walk reached first" would be correct only by
     /// luck. Measured live: a probe run against the Accessibility pane produced 477 locations, all at
     /// the identical rect, and 112 refusals — every refusal while a different pane was on screen.
+    /// **System audio picks the second list**, and this asserted 0 for all four while
+    /// `Capability.systemAudio.settingsPane` opened the *Microphone* pane — a pair that was
+    /// self-consistent and wrong together. Source for the new value, captured live on macOS 26.5.2
+    /// (25F84) rather than read off the code it checks: Privacy & Security ▸ Screen & System Audio
+    /// Recording renders *two* lists — "Screen & System Audio Recording", then "System Audio
+    /// Recording Only" — and this app appears in **both**. The Microphone pane lists the CoreAudio
+    /// tap nowhere at all.
     func testEveryCapabilityChoosesItsSectionExplicitly() {
-        for capability in Capability.allCases {
+        for capability in Capability.allCases where capability != .systemAudio {
             XCTAssertEqual(
                 PermissionChoreography.sectionOccurrence(for: capability), 0,
                 "\(capability) opens a pane whose first list is the right one")
         }
+
+        XCTAssertEqual(
+            PermissionChoreography.sectionOccurrence(for: .systemAudio), 1,
+            "the tap's switch is in “System Audio Recording Only”, the second list")
+    }
+
+    /// The two halves of that pair have to name the same pane, or the overlay rings a real row on the
+    /// wrong screen with total confidence — worse than not pointing at all.
+    func testSystemAudioPointsAtTheSamePaneItOpens() {
+        XCTAssertEqual(
+            Capability.systemAudio.settingsPane, Capability.screen.settingsPane,
+            "both switches live in Privacy & Security ▸ Screen & System Audio Recording")
+        XCTAssertNotEqual(
+            Capability.systemAudio.settingsPane, Capability.microphone.settingsPane,
+            "the Microphone pane does not list the CoreAudio tap at all")
+        XCTAssertNotEqual(
+            PermissionChoreography.sectionOccurrence(for: .systemAudio),
+            PermissionChoreography.sectionOccurrence(for: .screen),
+            "same pane, different lists — telling them apart is the whole job")
     }
 
     /// An app that is not in the list is not somebody else's row.

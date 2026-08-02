@@ -555,13 +555,22 @@ enum PermissionChoreography {
     /// section is chosen by construction rather than by whichever match the walk happened to reach
     /// first.
     ///
-    /// `systemAudio` is 0 rather than 1 despite the tap's switch also appearing in that second
-    /// section, because the overlay opens `Capability.settingsPane` and that route sends system audio
-    /// to the **Microphone** pane, which has a single list. Pointing at section 1 of a pane with one
-    /// section would degrade to a sentence on a row that is right there.
+    /// `systemAudio` is **1**: its switch is the one in "System Audio Recording Only", the second
+    /// list. This said 0, and justified it by noting that `Capability.settingsPane` sent system audio
+    /// to the Microphone pane — a pane with a single list, where section 1 does not exist.
+    ///
+    /// Both halves of that were wrong, and being wrong *together* is what made them look right. Live
+    /// on macOS 26.5.2 (25F84): Privacy & Security ▸ **Screen & System Audio Recording** carries both
+    /// lists, and the Microphone pane carries neither — it does not list the tap at all. So the old
+    /// pairing opened a pane the row was not on and then rang section 0 of it. `settingsPane` now
+    /// sends system audio to the Screen Recording pane and this picks the list within it. The two
+    /// have to move together, or the overlay rings the *screen recording* row while the card is
+    /// asking for system audio — the confident-arrow-at-the-wrong-control failure this file exists to
+    /// prevent.
     static func sectionOccurrence(for capability: Capability) -> Int {
         switch capability {
-        case .microphone, .systemAudio, .screen, .accessibility: return 0
+        case .microphone, .screen, .accessibility: return 0
+        case .systemAudio: return 1
         }
     }
 
