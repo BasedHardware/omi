@@ -1,0 +1,44 @@
+desktop/context-for-claude/docs/first-run-experience.md
+  s_56918216f0e901::t_dddd0e43095262 125-132,135-141
+  s_56918216f0e901::t_a88a74e9ecb84e 226-229
+desktop/context-for-claude/Sources/ContextApp/Onboarding/InkGlass.swift
+  s_56918216f0e901::t_34091382195ec7 562-580,585-587,591,594-595
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_56918216f0e901::t_9a66f0eb5f5e69 53-88,147-149
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialDemonstrations.swift
+  s_56918216f0e901::t_efea4d091eba7c 40-56,76-80,83-85,94-105,108-109,115,135-137,139-140,144-155,179-188,200
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_56918216f0e901::t_15b63041ac2161 72-80,171-175,189,572-575,577,744-749,851-854,858-864
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialStep.swift
+  s_56918216f0e901::t_6ee1a894848e22 124-144
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_56918216f0e901::t_7cd7fb12354697 1,3,335,1116-1179,1263-1268,1277-1279,1371-1372,1374-1385,1387-1388,1390-1397,1399-1402,1404-1435,1464-1466,1468,1633-1697,1714-1729
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_56918216f0e901::t_330f384d093add 80,82,84,95
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_9d5feb6a1f0d7f::t_e312d99fdfcf2f 152,162-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ee7de55525ab73cb12076aa49c51bfc73f4fbd62",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_9d5feb6a1f0d7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-af49c701931650d10",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
