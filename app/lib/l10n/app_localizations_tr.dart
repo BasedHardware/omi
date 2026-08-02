@@ -3203,6 +3203,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noTranscriptMessage => 'Bu sohbetin transkripti yok.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Sohbet URL\'si oluşturulamadı.';
 
   @override

@@ -3177,6 +3177,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noTranscriptMessage => 'לשיחה זו אין תמלול.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'לא ניתן היה ליצור כתובת URL של שיחה.';
 
   @override

@@ -3195,6 +3195,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noTranscriptMessage => 'Denne samtalen har ikke en transkripsjon.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Samtale-URL kunne ikke genereres.';
 
   @override

@@ -3171,6 +3171,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noTranscriptMessage => 'هذه المحادثة ليس لديها نسخ.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'تعذر إنشاء رابط المحادثة.';
 
   @override

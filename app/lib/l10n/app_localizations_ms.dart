@@ -3206,6 +3206,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noTranscriptMessage => 'Perbualan ini tidak mempunyai transkrip.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL perbualan tidak dapat dijana.';
 
   @override

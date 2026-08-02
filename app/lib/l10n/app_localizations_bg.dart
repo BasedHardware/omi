@@ -3202,6 +3202,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noTranscriptMessage => 'Този разговор няма транскрипт.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL адресът на разговора не можа да бъде генериран.';
 
   @override

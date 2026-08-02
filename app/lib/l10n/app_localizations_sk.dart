@@ -3199,6 +3199,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noTranscriptMessage => 'Táto konverzácia nemá prepis.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL konverzácie sa nedá vygenerovať.';
 
   @override

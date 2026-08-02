@@ -3205,6 +3205,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noTranscriptMessage => 'У этого разговора нет расшифровки.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL-адрес разговора не может быть создан.';
 
   @override

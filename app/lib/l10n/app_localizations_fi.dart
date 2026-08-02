@@ -3194,6 +3194,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noTranscriptMessage => 'Tällä keskustelulla ei ole litterointia.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Keskustelun URL-osoitetta ei voitu luoda.';
 
   @override

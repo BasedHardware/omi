@@ -968,6 +968,7 @@
     "segmentsCount": "{count}セグメント",
     "noTranscriptAvailable": "文字起こしがありません",
     "noTranscriptMessage": "この会話には文字起こしがありません。",
+    "cloudflareTranscriptListEmptyMessage": "Cloudflare の文字起こしはまだありません。",
     "conversationUrlCouldNotBeGenerated": "会話のURLを生成できませんでした。",
     "failedToGenerateConversationLink": "会話のリンク生成に失敗しました",
     "failedToGenerateShareLink": "共有リンクの生成に失敗しました",

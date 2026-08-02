@@ -3715,6 +3715,10 @@
     "@noTranscriptMessage": {
         "description": "Empty state message when no transcript"
     },
+    "cloudflareTranscriptListEmptyMessage": "No Cloudflare transcripts are available yet.",
+    "@cloudflareTranscriptListEmptyMessage": {
+        "description": "Empty state message when the self-hosted Cloudflare transcript list has no sessions"
+    },
     "conversationUrlCouldNotBeGenerated": "Conversation URL could not be generated.",
     "@conversationUrlCouldNotBeGenerated": {
         "description": "Error when URL generation fails"

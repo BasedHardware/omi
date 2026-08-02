@@ -3213,6 +3213,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get noTranscriptMessage => 'Овој разговор нема препис.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL на разговор не можеше да се генерира.';
 
   @override

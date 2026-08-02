@@ -3205,6 +3205,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noTranscriptMessage => 'Гэтая разнамова не мае стэнаграмы.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL разнамовы не мог быць сгенерыраны.';
 
   @override

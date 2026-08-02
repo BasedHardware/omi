@@ -70,19 +70,72 @@ void main() {
     final emptyProvider = CloudflareTranscriptProvider(api: _FakeApi());
     await tester.pumpWidget(_app(emptyProvider, const CloudflareTranscriptsPage()));
     await tester.pumpAndSettle();
+    expect(find.text('No Cloudflare transcripts are available yet.'), findsOneWidget);
+  });
+
+  testWidgets('detail empty keeps the detail-specific no-transcript message', (tester) async {
+    final provider = CloudflareTranscriptProvider(
+      api: _FakeApi(
+        detail: const CloudflareTranscriptDetail(session: session, chunks: []),
+      ),
+    );
+
+    await tester.pumpWidget(_app(provider, const CloudflareTranscriptDetailPage(session: session)));
+    await tester.pumpAndSettle();
+
     expect(find.text("This conversation doesn't have a transcript."), findsOneWidget);
   });
 
   testWidgets('list failures remain in the Cloudflare page and offer retry', (tester) async {
     final provider = CloudflareTranscriptProvider(
-      api: _FakeApi(error: const CloudflareTranscriptApiException('safe Worker error')),
+      api: _FakeApi(
+        listOutcomes: [const CloudflareTranscriptApiException('safe list Worker error')],
+      ),
     );
 
     await tester.pumpWidget(_app(provider, const CloudflareTranscriptsPage()));
     await tester.pumpAndSettle();
 
-    expect(find.text('safe Worker error'), findsOneWidget);
+    expect(find.text('safe list Worker error'), findsOneWidget);
     expect(find.byType(OutlinedButton), findsOneWidget);
+  });
+
+  testWidgets('detail failures remain visible and offer retry', (tester) async {
+    final provider = CloudflareTranscriptProvider(
+      api: _FakeApi(
+        transcriptOutcomes: [const CloudflareTranscriptApiException('safe detail Worker error')],
+      ),
+    );
+
+    await tester.pumpWidget(_app(provider, const CloudflareTranscriptDetailPage(session: session)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('safe detail Worker error'), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsOneWidget);
+  });
+
+  testWidgets('detail retry replaces an error with the retried transcript', (tester) async {
+    final api = _FakeApi(
+      transcriptOutcomes: [
+        const CloudflareTranscriptApiException('safe retryable detail error'),
+        const CloudflareTranscriptDetail(
+          session: session,
+          chunks: [CloudflareTranscriptChunk(sequence: 1, text: 'retried transcript')],
+        ),
+      ],
+    );
+    final provider = CloudflareTranscriptProvider(api: api);
+
+    await tester.pumpWidget(_app(provider, const CloudflareTranscriptDetailPage(session: session)));
+    await tester.pumpAndSettle();
+    expect(find.text('safe retryable detail error'), findsOneWidget);
+
+    await tester.tap(find.byType(OutlinedButton));
+    await tester.pumpAndSettle();
+
+    expect(api.transcriptCalls, 2);
+    expect(find.text('retried transcript'), findsOneWidget);
+    expect(find.text('safe retryable detail error'), findsNothing);
   });
 }
 
@@ -105,21 +158,31 @@ class _FakeApi implements CloudflareTranscriptApi {
       session: CloudflareTranscriptSession(id: 'unused', status: 'unknown'),
       chunks: [],
     ),
-    this.error,
-  });
+    List<Object>? listOutcomes,
+    List<Object>? transcriptOutcomes,
+  })  : _listOutcomes = List<Object>.from(listOutcomes ?? const []),
+        _transcriptOutcomes = List<Object>.from(transcriptOutcomes ?? const []);
 
   @override
   final bool enabled;
   final List<CloudflareTranscriptSession> sessions;
   final CloudflareTranscriptDetail detail;
-  final Object? error;
+  final List<Object> _listOutcomes;
+  final List<Object> _transcriptOutcomes;
+  int transcriptCalls = 0;
 
   @override
-  Future<CloudflareTranscriptDetail> getTranscript(String sessionId) async => detail;
+  Future<CloudflareTranscriptDetail> getTranscript(String sessionId) async {
+    transcriptCalls += 1;
+    final outcome = _transcriptOutcomes.isEmpty ? detail : _transcriptOutcomes.removeAt(0);
+    if (outcome is CloudflareTranscriptDetail) return outcome;
+    throw outcome;
+  }
 
   @override
   Future<List<CloudflareTranscriptSession>> listSessions({int limit = 50}) async {
-    if (error != null) throw error!;
-    return sessions;
+    final outcome = _listOutcomes.isEmpty ? sessions : _listOutcomes.removeAt(0);
+    if (outcome is List<CloudflareTranscriptSession>) return outcome;
+    throw outcome;
   }
 }

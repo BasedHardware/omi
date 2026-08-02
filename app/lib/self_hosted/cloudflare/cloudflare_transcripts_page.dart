@@ -28,7 +28,7 @@ class _CloudflareTranscriptsPageState extends State<CloudflareTranscriptsPage> {
         builder: (context, provider, _) {
           if (provider.isLoading && provider.sessions.isEmpty) return const Center(child: CircularProgressIndicator());
           if (provider.error != null) return _ErrorState(message: provider.error!, onRetry: provider.loadSessions);
-          if (provider.sessions.isEmpty) return Center(child: Text(context.l10n.noTranscriptMessage));
+          if (provider.sessions.isEmpty) return Center(child: Text(context.l10n.cloudflareTranscriptListEmptyMessage));
           return RefreshIndicator(
             onRefresh: provider.loadSessions,
             child: ListView.separated(

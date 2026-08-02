@@ -3202,6 +3202,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noTranscriptMessage => 'Ця розмова не має розшифровки.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL-адресу розмови не вдалося створити.';
 
   @override

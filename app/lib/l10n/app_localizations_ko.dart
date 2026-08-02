@@ -3143,6 +3143,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noTranscriptMessage => '이 대화에는 텍스트가 없습니다.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => '대화 URL을 생성할 수 없습니다.';
 
   @override

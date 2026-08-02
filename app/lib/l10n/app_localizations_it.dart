@@ -3210,6 +3210,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get noTranscriptMessage => 'Questa conversazione non ha una trascrizione.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'L\'URL della conversazione non può essere generato.';
 
   @override

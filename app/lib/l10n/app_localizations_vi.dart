@@ -3201,6 +3201,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noTranscriptMessage => 'Cuộc trò chuyện này không có bản ghi.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Không thể tạo URL cuộc trò chuyện.';
 
   @override

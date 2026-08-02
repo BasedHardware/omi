@@ -3197,6 +3197,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get noTranscriptMessage => 'Šis pokalbis neturi transkripcijos.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Pokalbio URL negalima sugeneruoti.';
 
   @override

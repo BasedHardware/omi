@@ -3222,6 +3222,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noTranscriptMessage => 'Dieses Gespräch hat kein Transkript.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Gesprächs-URL konnte nicht generiert werden.';
 
   @override

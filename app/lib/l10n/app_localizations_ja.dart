@@ -3143,6 +3143,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noTranscriptMessage => 'この会話には文字起こしがありません。';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'Cloudflare の文字起こしはまだありません。';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => '会話のURLを生成できませんでした。';
 
   @override

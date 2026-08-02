@@ -3138,6 +3138,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noTranscriptMessage => '此对话没有文字记录。';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => '无法生成对话URL。';
 
   @override

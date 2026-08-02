@@ -3201,6 +3201,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get noTranscriptMessage => 'এই কথোপকথনে কোনো ট্রান্সক্রিপ্ট নেই।';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'কথোপকথন URL তৈরি করা যায়নি।';
 
   @override

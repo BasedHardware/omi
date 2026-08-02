@@ -3179,6 +3179,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noTranscriptMessage => 'การสนทนานี้ไม่มีบันทึกคำพูด';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'ไม่สามารถสร้าง URL การสนทนาได้';
 
   @override

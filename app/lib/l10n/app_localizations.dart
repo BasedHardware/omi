@@ -6183,6 +6183,12 @@ abstract class AppLocalizations {
   /// **'This conversation doesn\'t have a transcript.'**
   String get noTranscriptMessage;
 
+  /// Empty state message when the self-hosted Cloudflare transcript list has no sessions
+  ///
+  /// In en, this message translates to:
+  /// **'No Cloudflare transcripts are available yet.'**
+  String get cloudflareTranscriptListEmptyMessage;
+
   /// Error when URL generation fails
   ///
   /// In en, this message translates to:

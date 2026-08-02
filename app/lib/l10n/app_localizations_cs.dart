@@ -3197,6 +3197,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noTranscriptMessage => 'Tato konverzace nemá přepis.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL konverzace nelze vygenerovat.';
 
   @override

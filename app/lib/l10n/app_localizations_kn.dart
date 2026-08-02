@@ -3208,6 +3208,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noTranscriptMessage => 'ಈ ಸಂವಾದವು ಪ್ರತಿಲೇಖನ ಹೊಂದಿಲ್ಲ.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'ಸಂವಾದ URL ಉತ್ಪಾದಿಸಲಿಲ್ಲ.';
 
   @override

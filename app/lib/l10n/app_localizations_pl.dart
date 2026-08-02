@@ -3202,6 +3202,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noTranscriptMessage => 'Ta rozmowa nie ma transkrypcji.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Adres URL rozmowy nie może być wygenerowany.';
 
   @override

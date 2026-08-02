@@ -3213,6 +3213,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noTranscriptMessage => 'Această conversație nu are transcriere.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL-ul conversației nu a putut fi generat.';
 
   @override

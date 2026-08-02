@@ -3220,6 +3220,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noTranscriptMessage => 'Αυτή η συνομιλία δεν έχει μεταγραφή.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να δημιουργηθεί.';
 
   @override

@@ -3215,6 +3215,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noTranscriptMessage => 'Ehhez a beszélgetéshez nincs átirat.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'A beszélgetés URL-je nem generálható.';
 
   @override

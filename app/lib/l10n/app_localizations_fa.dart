@@ -3202,6 +3202,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noTranscriptMessage => 'این گفتگو رونوشت ندارد.';
 
   @override
+  String get cloudflareTranscriptListEmptyMessage => 'No Cloudflare transcripts are available yet.';
+
+  @override
   String get conversationUrlCouldNotBeGenerated => 'URL گفتگو را نتوانستیم ایجاد کنیم.';
 
   @override
