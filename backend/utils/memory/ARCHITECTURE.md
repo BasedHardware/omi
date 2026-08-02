@@ -160,6 +160,14 @@ historical rows/vectors and canonical items, evidence, operations, reviews,
 assertions, outbox/projections, overrides, and task sidecars. Account-generation
 fences prevent an old lease or retry from resurrecting a recreated account.
 
+## Backend-authoritative platform
+
+The public authority and zkr replica boundary is documented in
+`docs/memory/backend-authority.md`. The capability contract is exposed through
+`GET /v1/memory/platform` and the hosted MCP `memory_platform` tool. Both are
+discovery surfaces; memory content continues through the existing scoped
+`MemoryService` and MCP tools.
+
 ## Operational controls and rollback
 
 The supported controls and rollback floor are documented in
