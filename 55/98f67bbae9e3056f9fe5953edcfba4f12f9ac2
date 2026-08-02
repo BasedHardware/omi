@@ -1,0 +1,29 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Cinematic.swift
+  s_56918216f0e901::t_5d6efb5e217dab 372-383,386-388
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingResume.swift
+  s_56918216f0e901::t_1bb42d27ce0864 1-77
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingResumeTests.swift
+  s_56918216f0e901::t_7b31ef12700a5b 1-162
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_56918216f0e901::t_11fa026321559e 109-116
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_56918216f0e901::t_3e0d4dee9b5fa3 859-863
+  s_56918216f0e901::t_db2e5c6a2ff228 120-123,125-127
+  s_56918216f0e901::t_35af61b4827eb7 998-1001
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "5598f67bbae9e3056f9fe5953edcfba4f12f9ac2",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
