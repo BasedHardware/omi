@@ -546,6 +546,10 @@ struct SettingsContentView: View {
 
   @State var isDeletingAccount: Bool = false
   @State var deleteAccountError: String?
+  @State var channelStatus: ChannelStatusResponse?
+  @State var channelLink: ChannelLinkResponse?
+  @State var channelLinkLoading: String?
+  @State var channelLinkError: String?
 
   // Developer API Key overrides — also double as BYOK free-plan credentials
   // when all four (Gemini, Anthropic, OpenAI, Deepgram) are provided.
@@ -675,6 +679,7 @@ struct SettingsContentView: View {
       }
       loadBackendSettings()
       loadSubscriptionInfo()
+      loadChannelStatus()
       // Sync transcription state with appState
       isTranscribing = appState.isTranscribing
       // Sync floating bar state with persisted preference (not transient visibility)
