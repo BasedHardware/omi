@@ -326,6 +326,8 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     edge_id = edge_data.get('id')
     if not edge_id:
         edge_id = f"{edge_data['source_id']}_{edge_data['label']}_{edge_data['target_id']}"
+    if isinstance(edge_id, str):
+        edge_id = edge_id.replace('/', '_')
     edge_id = _validated_document_id(edge_id, "edge id")
     edge_data['id'] = edge_id
 

@@ -13,7 +13,6 @@ from routers import knowledge_graph as kg_router
 
 UID = "uid-kg-sync-merge"
 BASE = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
-pytestmark = pytest.mark.integration
 
 
 class _Snapshot:
@@ -423,6 +422,18 @@ def test_merge_validates_all_edges_before_writing_any():
 def test_merge_rejects_firestore_path_separator_in_ids():
     with pytest.raises(kg_db.InvalidKnowledgeGraphDocumentIdError):
         kg_db.merge_synced_local_kg_nodes(UID, [{"nodeId": "folder/node", "label": "Invalid"}], db_client=_FakeDb())
+
+
+def test_legacy_edge_label_slash_is_normalized_before_firestore_write():
+    db = _FakeDb()
+    result = kg_db.upsert_knowledge_edge(
+        UID,
+        {"source_id": "source", "target_id": "target", "label": "works/with"},
+        db_client=db,
+    )
+
+    assert result["id"] == "source_works_with_target"
+    assert f"users/{UID}/knowledge_edges/source_works_with_target" in db.docs
 
 
 def test_sync_route_returns_422_when_edge_endpoints_missing(monkeypatch):
