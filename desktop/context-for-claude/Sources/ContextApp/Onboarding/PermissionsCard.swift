@@ -10,7 +10,12 @@ import SwiftUI
 struct PermissionsCardRow: Equatable {
     var capability: Capability
     var granted: Bool
-    /// One word — `Granted` / `Open` / `Checking` / `Action required`.
+    /// One word — `Granted` / `Allow` / `Open Settings` / `Asking…` / `Later` / `Action required`.
+    ///
+    /// It is an **imperative** on every row that still has something to do, and that is the whole
+    /// point of it now. Nothing on this card fires by itself, so the status column is the row's only
+    /// affordance: "Open" described a state nobody was being asked to change, and a card of four
+    /// described states with no visible verb is a card people sit and wait on.
     var status: String
 
     var title: String { capability.title }
@@ -19,14 +24,14 @@ struct PermissionsCardRow: Equatable {
 // MARK: - The card
 
 /// The permissions step's column: what is about to happen, the four rows, and whichever of the two
-/// panels the run has reached.
+/// footers the run has reached.
 ///
 /// Split out of `OnboardingView` because **this is the card whose height varies**. Every other step
-/// is a headline, a sentence and a button; this one grows a 42 pt escape panel while the gate waits
-/// in System Settings and a 125 pt replica panel when the by-hand grant is offered, on top of a
-/// preamble that changes length with the gate's phase and four sentences that wrap or do not. The
-/// card is a fixed size, so "does the tallest state still fit" is a real question with a wrong
-/// answer available — and a `private var` on a `View` is not something a test can measure.
+/// is a headline, a sentence and a button; this one grows a 42 pt escape panel while a gate waits in
+/// System Settings, on top of a preamble that changes length with the phase and four sentences that
+/// wrap or do not. The card is a fixed size, so "does the tallest state still fit" is a real question
+/// with a wrong answer available — and a `private var` on a `View` is not something a test can
+/// measure.
 ///
 /// It takes values and closures and owns no state, so `NSHostingView(rootView:).fittingSize` on it
 /// is exactly the height the real card demands. `PermissionsCardTests` measures every state this
@@ -37,21 +42,20 @@ struct PermissionsCard: View {
     /// What is about to happen, in the order it happens.
     let preamble: String
     let rows: [PermissionsCardRow]
-    /// The gate has an ask in flight, so the rows are not a second entrance to it.
+    /// A gate has an ask in flight, so the rows are not a second entrance to it.
     var rowsDisabled: Bool = false
-    /// The capability whose wait may be escaped — the gate is standing in System Settings for it.
+    /// The capability whose wait may be escaped — a gate is standing in System Settings for it.
     var postponing: Capability?
-    /// The by-hand grant being offered, and how far along it is.
-    var handGrant: Capability?
-    var guiding: Bool = false
+    /// Every required capability has an answer, so the card may be left.
+    var canContinue: Bool = false
     /// When the mark started saying the headline. Defaults to now, which is what a card appearing
     /// wants; a caller passing an instant in the past gets the delivery already finished.
     var phraseStart: Date = Date()
 
     var onRow: (Capability) -> Void = { _ in }
     var onPostpone: (Capability) -> Void = { _ in }
-    var onShowRow: (Capability) -> Void = { _ in }
-    var onSkipHandGrant: () -> Void = {}
+    var onContinue: () -> Void = {}
+    var onDeferRest: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: InkLayout.permissionsBlockSpacing) {
@@ -74,31 +78,51 @@ struct PermissionsCard: View {
                         title: row.title,
                         granted: row.granted,
                         status: row.status,
-                        // The sequence asks for each of these itself. The row stays tappable only
-                        // as the way back for someone who said no and changed their mind.
+                        // **The row is the trigger.** It used to be described as "the way back for
+                        // someone who said no and changed their mind", because the sequence asked
+                        // for each of these itself. The sequence is gone: this tap is the only thing
+                        // that raises a macOS prompt on this card.
                         action: { onRow(row.capability) }
                     )
                 }
             }
-            // While the gate has an ask in flight the rows are not a second entrance to it. A tap
-            // during the pause between two capabilities used to fire a request for a *different*
-            // one, which is the collision the broker now refuses and this stops from being offered.
+            // While a gate has an ask in flight the rows are not a second entrance to it. A tap
+            // during an episode used to fire a request for a *different* capability, which is the
+            // collision the broker now refuses and this stops from being offered.
             .disabled(rowsDisabled)
 
             if let postponing {
                 postponePanel(for: postponing)
-            }
-
-            if let handGrant {
-                handGrantPanel(for: handGrant)
+            } else {
+                footer
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // MARK: The way off the card
+
+    /// Continue, and — while anything required is still unanswered — the escape beside it.
+    ///
+    /// The card **cannot** advance by itself any more, and that is deliberate rather than a
+    /// consequence. It used to leave the moment the last required grant landed, which was fine while
+    /// a run was driving: the grant was the end of something. Now the user is driving, and a card
+    /// that vanished under them the instant they granted the third row would take the fourth — the
+    /// one macOS never prompts for — away with it before they had a chance to click it.
+    private var footer: some View {
+        HStack(spacing: 10) {
+            InkButton("Continue") { onContinue() }
+                .disabled(!canContinue)
+            if !canContinue {
+                InkButton("I’ll do these later", kind: .secondary) { onDeferRest() }
+            }
+        }
+        .padding(.top, 2)
+    }
+
     // MARK: The escape
 
-    /// The escape, and the only thing other than a grant that ends a wait.
+    /// The escape from one capability's wait, and the only thing other than a grant that ends it.
     ///
     /// It is a button the user presses on purpose, with the consequence written next to it — never a
     /// default, never a timeout, never a quiet Continue. A literal "grant or you cannot proceed" is
@@ -124,60 +148,22 @@ struct PermissionsCard: View {
         case .accessibility: return "I’ll read your screen from pixels rather than text."
         }
     }
-
-    // MARK: The choreography
-
-    /// The by-hand grant, offered with a replica of what is about to be shown.
-    ///
-    /// The replica is ours and is captioned as ours. What it previews is System Settings' own
-    /// affordance — on macOS 26 a dashed row with an instruction to drag it up into the list — which
-    /// no application can draw and this one does not try to. Half a second of a likeness on our card
-    /// is what makes the real thing recognised rather than puzzled over.
-    private func handGrantPanel(for capability: Capability) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            GhostRowReplica()
-                .frame(width: 168)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text(guiding ? "Look for the ring." : "I’ll show you the row.")
-                    .inkStyle(.rowCopy)
-                    .foregroundStyle(Ink.primary)
-
-                Text(
-                    guiding
-                        ? "System Settings is open and I’m pointing at the row. Flip it and I’ll notice."
-                        : "It opens System Settings and rings the row so you don’t have to hunt for it."
-                )
-                .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 10) {
-                    InkButton(guiding ? "Waiting…" : "Show me the row") { onShowRow(capability) }
-                        .disabled(guiding)
-                    InkButton("Skip it", kind: .secondary) { onSkipHandGrant() }
-                }
-            }
-        }
-        .padding(.top, 2)
-    }
 }
 
 #if DEBUG
-#Preview("Permissions — the by-hand grant") {
+#Preview("Permissions — nothing asked yet") {
     PermissionsCard(
-        title: "One you flip yourself.",
+        title: "First…",
         preamble: """
-            That's the three macOS will ask about. The fourth has no dialog — it is a switch you \
-            flip yourself, and this is what it looks like.
+            macOS asks separately for each of these, and I won’t ask for any of them until you tell \
+            me to. Read them, then click the one you’re ready for — I take them one at a time.
             """,
         rows: [
-            PermissionsCardRow(capability: .microphone, granted: true, status: "Granted"),
-            PermissionsCardRow(capability: .systemAudio, granted: true, status: "Granted"),
-            PermissionsCardRow(capability: .screen, granted: true, status: "Granted"),
-            PermissionsCardRow(capability: .accessibility, granted: false, status: "Open"),
+            PermissionsCardRow(capability: .microphone, granted: false, status: "Allow"),
+            PermissionsCardRow(capability: .systemAudio, granted: false, status: "Allow"),
+            PermissionsCardRow(capability: .screen, granted: false, status: "Allow"),
+            PermissionsCardRow(capability: .accessibility, granted: false, status: "Allow"),
         ],
-        handGrant: .accessibility,
         phraseStart: Date().addingTimeInterval(-5))
     .frame(width: InkLayout.permissionsMaxWidth)
     .padding(InkLayout.pagePaddingHorizontal)

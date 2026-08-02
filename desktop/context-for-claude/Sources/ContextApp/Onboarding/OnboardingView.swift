@@ -102,21 +102,11 @@ struct OnboardingView: View {
     /// Fixed order. Microphone first because it is the one people expect; the system tap second
     /// because it only makes sense once the mic has been explained; screen, and then the window text
     /// that sharpens it, because the second is worth nothing without the first.
-    private let capabilities: [Capability] = [.microphone, .systemAudio, .screen, .accessibility]
-
-    /// The grants without which the app does nothing, and therefore the only ones the sequence asks
-    /// for.
     ///
-    /// Accessibility is deliberately outside this list. It cannot be prompted — macOS grants it by
-    /// hand in System Settings and offers no dialog at all — so gating completion on it would strand
-    /// anyone unwilling to leave the flow on a step with no button that could finish it. Capture
-    /// degrades to OCR-only without it: a worse product, and a working one. It gets the choreography
-    /// instead, which is a better offer than a prompt that does not exist.
-    ///
-    /// The list itself lives on `PermissionGate`, because the gate is what the list is *for*: it is
-    /// the set `canLeaveStep` quantifies over, and two copies of it would be two answers to "may
-    /// this card be left".
-    private var requiredCapabilities: [Capability] { gate.required }
+    /// The order and the required subset both live on `PermissionInvitations`, because that is what
+    /// they are *for*: the set `canLeaveStep` quantifies over. Two copies would be two answers to
+    /// "may this card be left".
+    private var capabilities: [Capability] { invitations.listed }
 
     /// Owned by the auth layer, observed here. Everything Context for Claude records lands in this
     /// account, so the step machine asks it who the user is before it asks macOS for a microphone.
@@ -131,21 +121,18 @@ struct OnboardingView: View {
         PermissionChoreography.probedCapability == nil ? .welcome : .permissions
     @State private var settled = false
 
-    /// Who decides whether this card may be left. Not the view, and not a clock: the gate advances
-    /// only on a terminal answer the user authored — a grant, or an explicit "I'll do this later".
-    @StateObject private var gate = PermissionGate()
+    /// Who asks, when the user says to, and who decides whether this card may be left. Not the view,
+    /// and not a clock: an answer is terminal only when the user authored it — a grant, or an
+    /// explicit "I'll do this later".
+    @StateObject private var invitations = PermissionInvitations()
 
     @State private var granted: [Capability: Bool] = [:]
-    @State private var asked: Set<Capability> = []
-    @State private var requesting: Set<Capability> = []
     @State private var reported = false
     @State private var needsRelaunch = false
     /// Whether System Settings is the app the user is looking at. The card steps aside for the pane
     /// it opened and comes straight back when the pane is not what they are reading — this app has no
     /// Dock icon, so a card hidden on a phase alone would be a card with no way back.
     @State private var settingsIsFrontmost = false
-    /// The gate's run, held so leaving the card can end its unbounded watch.
-    @State private var setupTask: Task<Void, Never>?
 
     @State private var connectorSurfaces: Set<ClaudeSurface> = []
     @State private var connectorMessage: String?
@@ -153,14 +140,10 @@ struct OnboardingView: View {
     @State private var modelProgress: Double?
     @State private var warmingModels = false
 
-    @State private var granting = false
     @State private var openedScreenSettings = false
     @State private var cueDrift = false
     @State private var finale = false
 
-    /// The by-hand grant the choreography is currently offering, and how far along it is.
-    @State private var handGrant: Capability?
-    @State private var guiding = false
     /// The capability the overlay is currently pointing at on the gate's behalf. See `syncSpotlight`.
     @State private var spotlit: Capability?
     @State private var spotlightTask: Task<Void, Never>?
@@ -229,15 +212,13 @@ struct OnboardingView: View {
     /// lead-in the card exists to be read during, so the preamble explaining what macOS was about to
     /// ask for was on screen for roughly zero frames and the card blinked out three times. The gate's
     /// phase is what answers this now: only a dialog genuinely being up, or the user genuinely
-    /// standing in System Settings.
+    /// standing in System Settings. Every route to a prompt goes through an invitation, so there is
+    /// one phase to consult rather than a phase plus a set of hand-tapped rows plus a `guiding` flag.
     private var yieldsScreen: Bool {
         if auth.isSigningIn { return true }
-        if PermissionGate.cardYields(to: gate.phase, settingsIsFrontmost: settingsIsFrontmost) { return true }
-        // A row tapped by hand, outside the gate's run.
-        if !requesting.isEmpty { return true }
-        // The choreography is pointing at a row in System Settings. Covering the thing we just spent
-        // a card teaching them to recognise would be the one unforgivable version of this step.
-        if guiding, settingsIsFrontmost { return true }
+        if PermissionGate.cardYields(to: invitations.phase, settingsIsFrontmost: settingsIsFrontmost) {
+            return true
+        }
         // The Screen Recording grant happens entirely in System Settings, and the app relaunches
         // itself the moment it lands — there is nothing here worth covering it for.
         if step == .done, !isGranted(.screen), openedScreenSettings { return true }
@@ -435,26 +416,28 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - 4. Permissions — one at a time, then the one macOS will not prompt for
+    // MARK: - 4. Permissions — one at a time, and never before the user says so
 
     private var permissions: some View {
         PermissionsCard(
             title: setupTitle,
             preamble: setupPreamble,
             rows: permissionRows,
-            rowsDisabled: gate.isBusy,
-            postponing: postponing,
-            handGrant: handGrant,
-            guiding: guiding,
-            onRow: { request($0) },
-            onPostpone: { gate.postpone($0) },
-            onShowRow: { beginHandGrant($0) },
-            onSkipHandGrant: { finishHandGrant() }
+            rowsDisabled: invitations.isBusy,
+            postponing: invitations.postponing,
+            canContinue: invitations.canLeaveStep,
+            // The click is the whole interaction now, so it gets the app's click — but only when it
+            // did something. A sound over a press the board refused is the card claiming to have
+            // heard something it ignored.
+            onRow: { if invitations.invite($0) { Sound.effect(.click) } },
+            onPostpone: { invitations.postpone($0) },
+            onContinue: { leavePermissions() },
+            onDeferRest: { deferTheRest() }
         )
         // The watch is unbounded on purpose, so it needs an owner that ends it. Leaving the card is
-        // that owner — and the card can only be left once the gate has its answers.
+        // that owner — and the card can only be left once every required capability is answered.
         .onDisappear {
-            setupTask?.cancel()
+            invitations.cancel()
             // The overlay is a window over another application. It outlives this view unless
             // something takes it down, and a spotlight left pointing at System Settings after
             // onboarding has moved on is worse than one that never appeared.
@@ -463,8 +446,9 @@ struct OnboardingView: View {
             PermissionOverlay.hide()
         }
         // **The gate's wait is what the spotlight is for.** Every other route to the overlay is a
-        // special case; this is the one the three promptable capabilities take.
-        .onChange(of: gate.phase, initial: true) { _, phase in syncSpotlight(to: phase) }
+        // special case; this is the one every capability takes once its pane is open — which now
+        // includes the one macOS never prompts for, because a click on its row runs the same episode.
+        .onChange(of: invitations.phase, initial: true) { _, phase in syncSpotlight(to: phase) }
         .onReceive(permissionTick) { _ in refreshPermissions() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
@@ -484,12 +468,6 @@ struct OnboardingView: View {
         }
     }
 
-    /// The capability whose wait may be escaped: the gate is standing in System Settings for it.
-    private var postponing: Capability? {
-        guard case .waitingInSettings(let capability) = gate.phase else { return nil }
-        return capability
-    }
-
     /// One subscription for the life of the view, not a fresh publisher on every body pass.
     /// `permissions` is a computed property, so a `Timer.publish(…)` written inline there built a new
     /// `TimerPublisher` every time the card re-rendered — and this card re-renders on model-download
@@ -498,47 +476,44 @@ struct OnboardingView: View {
 
     /// What is about to happen, in the order it happens, before any of it happens.
     ///
-    /// Changes once the run starts: standing still, it is a warning; running, it is a caption for
-    /// the row that is lit. Accessibility is named as optional here rather than discovered as an
-    /// unaskable fourth row later.
+    /// Standing still it is an instruction; mid-episode it is the gate's caption for the phase.
+    ///
+    /// The resting copy is the part that changed, and it changed because the behaviour did. It used
+    /// to open "macOS will ask three times", which was a promise the card kept the moment it
+    /// appeared — three dialogs, on a timer, over this sentence. Nothing is asked now until a row is
+    /// clicked, so the sentence has to say that: it is the only thing telling the reader that the
+    /// card is waiting for them rather than the other way round. Accessibility is named here as the
+    /// one with no dialog rather than discovered later as an unaskable fourth row.
     private var setupPreamble: String {
-        if handGrant != nil {
-            return """
-            That's the three macOS will ask about. The fourth has no dialog — it is a switch you \
-            flip yourself, and this is what it looks like.
-            """
-        }
-        // The gate says where the run is, including the sentence that has to be on screen while the
-        // user is standing in System Settings deciding.
-        if let caption = gate.caption { return caption }
-        if granting {
-            return "One at a time. Answer each one and I’ll wait for it to land before the next."
-        }
+        // The gate says where the episode is, including the sentence that has to be on screen while
+        // the user is standing in System Settings deciding.
+        if let caption = invitations.caption { return caption }
         return """
-        macOS will ask three times — microphone, then the audio of your calls, then your screen. \
-        Each one is a separate question and I’ll ask them one at a time. The fourth, window text, \
-        only System Settings can grant; it makes me quote exactly instead of guessing, and I work \
-        without it.
+        Nothing is asked until you click it. Read these, then click whichever you’re ready for — \
+        macOS asks separately for each, and I take them one at a time. Window text is the odd one: \
+        it has no dialog at all, so clicking it opens System Settings and I’ll show you the switch.
         """
     }
 
     private var setupTitle: String {
-        if handGrant != nil { return "One you flip yourself." }
         // "First…" only survives for a run that never signed in; once the account is known, the
         // permissions are no longer the first thing being asked for.
-        if !granting { return auth.isSignedIn ? "Now the permissions." : "First…" }
+        guard invitations.isBusy else { return auth.isSignedIn ? "Now the permissions." : "First…" }
         return "Say yes."
     }
 
     // MARK: The choreography
 
-    /// Opens the pane, waits for it to arrive, then points at the real row — and keeps watching for
-    /// the grant so the user's part ends at the switch.
-    private func beginHandGrant(_ capability: Capability) {
-        guard !guiding else { return }
-        Sound.effect(.click)
-        guiding = true
-
+    /// Opens the pane and holds the overlay up for `CONTEXT_CHOREOGRAPHY_PROBE`.
+    ///
+    /// The probe exists because the choreography is the hardest thing here to see: it needs a
+    /// capability that is *not* granted, on a machine where checking a build means all of them are.
+    /// So it forces the pane open and points, with no grant to wait for — the positioning is the
+    /// whole of what is being checked, and it stays up until the card is dismissed by hand.
+    ///
+    /// It is the one path on this card that opens a pane without a click, and it can only ever
+    /// *show* the overlay: the grant still has to be given by hand, exactly as it would be otherwise.
+    private func probeChoreography(_ capability: Capability) {
         Task { @MainActor in
             // Through the door, like every other pane in the app. This is the call site that was
             // observed stomping the Screen Recording pane the user had just been sent to, 1.9 s
@@ -547,46 +522,26 @@ struct OnboardingView: View {
             // System Settings has to be up, and on the right pane, before there is anything to find.
             // Pointing before it exists is how an overlay ends up ringing the last pane's rows.
             try? await Task.sleep(for: .milliseconds(1_200))
-            guard guiding else { return }
+            guard step == .permissions else { return }
             PermissionOverlay.show(
                 for: capability,
                 caption: "Switch on \(PermissionChoreography.appDisplayName).")
-
-            // The probe points at a row that is already on, so there is no grant coming and nothing
-            // to wait for. It holds the ring up until it is dismissed by hand, which is the whole
-            // point of it: the positioning is what is being checked.
-            guard PermissionChoreography.probedCapability == nil else { return }
-
-            while guiding, !Permissions.check(capability) {
-                try? await Task.sleep(for: .milliseconds(500))
-            }
-            guard guiding else { return }
-            PermissionOverlay.confirmGranted()
-            refreshPermissions()
-            try? await Task.sleep(for: .milliseconds(900))
-            finishHandGrant()
         }
-    }
-
-    /// Ends the choreography, whether the grant landed or the user skipped it. Window text is an
-    /// improvement, not a requirement, so this never blocks — but it no longer *advances* either.
-    /// Leaving the card is one predicate in one place, and this is not it.
-    private func finishHandGrant() {
-        guiding = false
-        PermissionOverlay.hide()
-        handGrant = nil
-        advanceIfAnswered()
     }
 
     /// **Points at the row for whichever capability the gate is standing in System Settings for.**
     ///
     /// The gate's own `waitingInSettings` phase is what drives this, and that is the fix: the
-    /// spotlight used to be reachable only from `beginHandGrant` — which is offered for Accessibility
-    /// alone — and from the finale. The three capabilities the gate actually walks reached System
-    /// Settings through `PermissionGate.waitInSettings`, which opens the pane and polls and never
-    /// asked for an overlay at all. `PermissionGate.spotlightSubject` is the predicate; this is only
-    /// the wiring, and it is deliberately the *only* wiring, so there is one answer to "should
-    /// something be pointing right now" rather than one per call site.
+    /// spotlight used to be reachable only from a "Show me the row" button offered for Accessibility
+    /// alone, and from the finale. Every other capability reached System Settings through
+    /// `PermissionGate.waitInSettings`, which opens the pane and polls and never asked for an overlay
+    /// at all. `PermissionGate.spotlightSubject` is the predicate; this is only the wiring, and it is
+    /// deliberately the *only* wiring, so there is one answer to "should something be pointing right
+    /// now" rather than one per call site.
+    ///
+    /// It is also what makes the showing **automatic**. There is no longer a button on our card that
+    /// asks permission to point at System Settings — a card asking to be allowed to help is one more
+    /// thing to read and dismiss before the actual instruction. The pane opening is the trigger.
     private func syncSpotlight(to phase: PermissionGate.Phase) {
         let subject = PermissionGate.spotlightSubject(of: phase)
         guard subject != spotlit else { return }
@@ -609,8 +564,8 @@ struct OnboardingView: View {
 
         spotlightTask = Task { @MainActor in
             // The pane has to be up before there is anything to find. Pointing before it exists is
-            // how an overlay ends up ringing the last pane's rows — the same reason `beginHandGrant`
-            // waits, and the same duration.
+            // how an overlay ends up ringing the last pane's rows — the same reason the probe waits,
+            // and the same duration.
             try? await Task.sleep(for: .milliseconds(1_200))
             guard !Task.isCancelled, spotlit == subject else { return }
             PermissionOverlay.show(
@@ -886,13 +841,12 @@ struct OnboardingView: View {
         case .signIn:
             scheduleSettle(after: 0.34)
         case .permissions:
-            // `runSetup` first, and the order matters. It claims the step synchronously by setting
-            // `granting`, and `refreshPermissions` advances the moment it sees the required grants in
-            // with no run in flight — so refreshing first means a machine that already has all three
-            // grants leaves this card before the run has decided whether the by-hand grant still
-            // needs offering. Observed live: the card skipped straight to the connector.
-            runSetup()
+            // Reading the current grants is the *only* thing that happens on arrival now. There is
+            // no ordering hazard left to comment on: nothing here can advance the card, because the
+            // card is left by pressing a button.
             refreshPermissions()
+            warmModels()
+            if let probe = PermissionChoreography.probedCapability { probeChoreography(probe) }
             scheduleSettle(after: 0.34)
         case .connector:
             refreshConnectorStatus()
@@ -924,11 +878,20 @@ struct OnboardingView: View {
         granted[capability] ?? false
     }
 
+    /// The word at the end of a row, which on this card is also the row's only affordance.
+    ///
+    /// It is an **imperative** wherever there is still something to do. "Open" was a state, and a
+    /// state was honest while a run was walking the rows for the user; now the user is the only thing
+    /// that starts an ask, so a row that describes itself instead of asking to be clicked is a row
+    /// nobody clicks. "Allow" is macOS's own word for the button on the dialog it raises, and
+    /// "Open Settings" is the truth about a second click: TCC spends each prompt exactly once.
     private func status(for capability: Capability) -> String {
         if capability == .screen, needsRelaunch { return "Action required" }
         if isGranted(capability) { return "Granted" }
-        if requesting.contains(capability) || gate.subject == capability || !reported { return "Checking" }
-        return asked.contains(capability) || gate.answers[capability] != nil ? "Action required" : "Open"
+        if invitations.subject == capability { return "Asking…" }
+        if !reported { return "Checking" }
+        if invitations.answers[capability] == .deferred { return "Later" }
+        return invitations.offered.contains(capability) ? "Open Settings" : "Allow"
     }
 
     private func refreshPermissions() {
@@ -938,8 +901,8 @@ struct OnboardingView: View {
             next[capability] = report.first { $0.name == capability.rawValue }?.granted
                 ?? Permissions.check(capability)
         }
-        // One place for the success cue, so a grant sounds the same however it was obtained — the
-        // one-at-a-time run, a tap on a row, or the switch flipped under the overlay's ring.
+        // One place for the success cue, so a grant sounds the same however it was obtained — a
+        // click on a row, or the switch flipped under the overlay's ring in System Settings.
         let landed = capabilities.filter { next[$0] == true && granted[$0] != true }
         granted = next
         needsRelaunch = Permissions.screenNeedsRelaunch
@@ -947,90 +910,39 @@ struct OnboardingView: View {
         reported = true
 
         // Deliberately does not advance. This poll used to be a second exit from the card, and a
-        // poll cannot tell a grant the user made from a question they never answered. The gate owns
-        // the exit; this only keeps the rows honest.
+        // poll cannot tell a grant the user made from a question they never answered. The button
+        // owns the exit; this only keeps the rows honest.
     }
 
-    /// **The one exit from the permissions card.**
+    // MARK: - The two ways off this card
+
+    /// **The one exit from the permissions card**, and it is a button.
     ///
-    /// `gate.canLeaveStep` is the whole predicate: every required capability answered, and every
-    /// answer authored by the user — granted, or postponed by pressing a button that says so. No
-    /// timeout reaches this. The old card had two exits and neither consulted a grant at all.
-    private func advanceIfAnswered() {
-        guard step == .permissions, handGrant == nil, !granting else { return }
-        guard gate.canLeaveStep else { return }
+    /// `invitations.canLeaveStep` is the whole predicate: every required capability answered, and
+    /// every answer authored by the user — granted, or postponed by pressing a button that says so.
+    /// No timeout reaches this and neither does a poll. The guard is kept even though the button is
+    /// already disabled without it, because "may this card be left" must have exactly one answer and
+    /// a disabled button is a drawing rather than an assertion.
+    private func leavePermissions() {
+        guard step == .permissions, invitations.canLeaveStep else { return }
         advance()
     }
 
-    /// First tap raises the system prompt; once macOS has answered, a second tap can only be
-    /// resolved in System Settings.
-    private func request(_ capability: Capability) {
-        guard !isGranted(capability), !requesting.contains(capability) else { return }
-        guard !asked.contains(capability) else {
-            Permissions.openSettings(for: capability)
-            return
-        }
-        asked.insert(capability)
-        requesting.insert(capability)
-        Task { @MainActor in
-            _ = await Permissions.request(capability)
-            requesting.remove(capability)
-            refreshPermissions()
-        }
-    }
-
-    // MARK: - The one click
-
-    /// Everything the single button on the first screen is responsible for, in order.
+    /// "I'll do these later": answers everything still outstanding, deliberately, and moves on.
     ///
-    /// The sequencing and the waiting both live in `PermissionGate` — one at a time, with the
-    /// lead-in and after-grant pacing that was a deliberate earlier fix, and an *unbounded* watch on
-    /// a grant made in System Settings. This is only the wiring.
-    ///
-    /// It no longer ends in `advance()`. It used to, unconditionally, under a comment reading "Move
-    /// on anyway" — which is how a live run reached the tutorial with Screen Recording never
-    /// granted and nothing said about it.
-    ///
-    /// Registration and the login item happen at the end, whether or not every permission landed —
-    /// Claude should be able to reach Context for Claude and report the gap, which is far better than
-    /// Context for Claude being invisible because a microphone was declined.
-    private func runSetup() {
-        guard !granting else { return }
-        granting = true
-
-        setupTask = Task { @MainActor in
-            // Only the promptable ones. Asking for Accessibility inside this loop would throw System
-            // Settings over the card mid-sequence, with no dialog to answer and nothing to come back
-            // to — the run has to stay inside the window it started in. It gets the choreography
-            // below instead, once the run is finished and there is nothing left to interrupt.
-            await gate.run()
-            for capability in requiredCapabilities where gate.answers[capability] != nil {
-                asked.insert(capability)
-            }
-            refreshPermissions()
-
-            if !LoginItem.isEnabled { _ = LoginItem.enable() }
-            warmModels()
-
-            // The by-hand offer is decided *before* the run is released, and this ordering is
-            // load-bearing: `granting` is part of the exit predicate, so releasing it first opens a
-            // window in which the choreography is skipped entirely. It did, on the first live run:
-            // the card went straight to the connector.
-            //
-            // The one macOS will not prompt for is offered here rather than skipped, because the
-            // choreography is a better answer than a row the user can only discover is unaskable. The
-            // probe is how this path is exercised on a machine whose grants are all already in,
-            // without revoking one to get at it.
-            handGrant =
-                PermissionChoreography.probedCapability
-                ?? (Permissions.check(.accessibility) ? nil : .accessibility)
-            granting = false
-
-            // Give the last row's checkmark a beat to land before the card changes under it.
-            try? await Task.sleep(for: .milliseconds(600))
-            refreshPermissions()
-            advanceIfAnswered()
-        }
+    /// This exists *because* nothing is asked automatically. The per-capability escape only appears
+    /// once an episode has reached System Settings, so a user who simply does not want to click any
+    /// of these had no answer to give and no way forward — which is the dead end the postpone escape
+    /// was written to prevent, reappearing one level up.
+    /// It goes through the same exit predicate as Continue rather than advancing on its own. The
+    /// board refuses a card-wide skip while an episode is in flight — that episode has its own
+    /// escape on screen — and a button that advanced anyway would leave the card with a required
+    /// capability unanswered, which is the one thing this step is arranged to make impossible.
+    private func deferTheRest() {
+        guard step == .permissions else { return }
+        invitations.deferRest()
+        guard invitations.canLeaveStep else { return }
+        advance()
     }
 
     // MARK: - Models
@@ -1073,7 +985,7 @@ struct OnboardingView: View {
             // "I'll do this later" was a real answer, given deliberately on the permissions card.
             // Opening the pane over them again here would take it back. The button on this card is
             // still the route forward whenever they want it.
-            if gate.answers[.screen] != .deferred { openScreenSettingsOnce() }
+            if invitations.answers[.screen] != .deferred { openScreenSettingsOnce() }
             return
         }
 

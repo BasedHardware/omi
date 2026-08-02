@@ -808,7 +808,10 @@ final class PermissionGate: ObservableObject {
         case .idle, .complete:
             return nil
         case .explaining:
-            return "One at a time. I’ll ask, and I’ll wait for your answer before the next one."
+            // There is no "next one" any more: a gate now runs a single capability, started by the
+            // user clicking that row. Promising a queue would describe sequencing the card no longer
+            // does — and the whole point of the click-driven model is that nothing is queued at you.
+            return "I’ll ask macOS for this one, and wait for your answer."
         case .prompting:
             return "macOS is asking. I’ll wait."
         case .waitingInSettings(let capability):

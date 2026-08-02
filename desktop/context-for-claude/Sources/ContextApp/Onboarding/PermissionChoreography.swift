@@ -9,17 +9,22 @@ import SwiftUI
 //  into the list" arrow inside Privacy & Security are System Settings' own UI. No application can
 //  draw inside another application's window, and no application should pretend to: a replica of
 //  someone else's control, presented where theirs would be, is a forgery whether or not it was
-//  meant as one. So the choreography is two distinct acts, and they never blur:
+//  meant as one. So there is exactly one act, and it happens **over System Settings**:
+//  `PermissionOverlay` finds the *real* area, the *real* row and the *real* control through the
+//  Accessibility API, dashes the row and the slot it has to land in, glows the control, and drags a
+//  token of this app along an arrow between them. It draws nothing that belongs to System Settings —
+//  everything it draws is plainly ours, sitting outside their controls and pointing at them rather
+//  than replacing them.
 //
-//  1. **On our card**, `GhostRowReplica` plays a small animation of a ghost row rising into a list.
-//     It is ours, it is obviously ours, and it is captioned as a preview. Its whole job is that the
-//     real thing is recognised a second later rather than met cold.
-//  2. **Over System Settings**, `PermissionOverlay` finds the *real* area, the *real* row and the
-//     *real* control through the Accessibility API, outlines the area, glows the control, and draws
-//     an arrow into it. It draws nothing that belongs to System Settings — everything it draws is
-//     plainly ours, sitting outside their controls and pointing at them rather than replacing them.
+//  **There used to be a second act, on our own card**: `GhostRowReplica`, a small animation of a
+//  ghost row rising into a list, behind a "Show me the row" button, so the real affordance was
+//  recognised rather than met cold. It is gone, and the reason is worth keeping. A rehearsal of an
+//  instruction is still a thing to read and dismiss before the instruction, and it sat in the one
+//  place the user was already being asked to read four sentences and press a button. The real
+//  overlay is now *automatic* — the pane opening is the trigger — so what the replica was preparing
+//  people for arrives at the same moment they would have been reading about it.
 //
-//  And the rule that governs act 2: **a confident arrow aimed at nothing is worse than a
+//  And the rule that governs the whole of it: **a confident arrow aimed at nothing is worse than a
 //  sentence.** The lookup fails for ordinary reasons — Accessibility itself is not granted yet, the
 //  list is scrolled, the pane relaid out on a macOS we have not seen, the window dragged half off a
 //  second display. Every one of those degrades to `PermissionGuidance.instruction`: words, no
@@ -1176,127 +1181,3 @@ enum PermissionOverlay {
     }
 }
 
-// MARK: - Our own replica, on our own card
-
-/// A ghost row rising into a list — ours, drawn by us, on our card, before the real pane opens.
-///
-/// This exists because the real affordance arrives cold otherwise: macOS 26 shows a dashed row and
-/// an instruction to drag it up into the list, and a user meeting that for the first time in a
-/// Privacy pane has to work out what it wants before they can do it. Half a second of *this* is what
-/// makes the real one recognised on sight.
-///
-/// It is a rough likeness on purpose. Nothing here is a facsimile of System Settings' control and
-/// nothing here is presented as System Settings — it sits on our sheet, in our palette, under a
-/// caption that says what it is a preview of.
-struct GhostRowReplica: View {
-    /// How many settled rows sit above the one that rises. Three is enough to read as a list.
-    private static let settledRows = 3
-    private static let rowHeight: CGFloat = 22
-    private static let riseSeconds: Double = 1.5
-
-    @State private var risen = false
-    @State private var switched = false
-    /// Stops the loop when the card changes under it. Without this the replica keeps re-arming
-    /// itself for the life of the process, long after the step that showed it.
-    @State private var onScreen = false
-
-    var body: some View {
-        VStack(spacing: 5) {
-            ForEach(0..<Self.settledRows, id: \.self) { index in
-                row(ghost: false, on: index == 0, width: [0.52, 0.4, 0.46][index])
-            }
-            row(ghost: !risen, on: switched, width: 0.58)
-                .offset(y: risen ? 0 : Self.rowHeight + 12)
-                .opacity(risen ? 1 : 0.55)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Ink.rowFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(Ink.separator, lineWidth: 1))
-        )
-        .accessibilityLabel(Text("A preview of the row you are about to switch on in System Settings"))
-        .onAppear {
-            onScreen = true
-            play()
-        }
-        .onDisappear { onScreen = false }
-    }
-
-    /// One row: a name bar and a switch. Dashed while it is still the ghost.
-    private func row(ghost: Bool, on: Bool, width: CGFloat) -> some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(Ink.primary.opacity(ghost ? 0.16 : 0.3))
-                .frame(height: 7)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .scaleEffect(x: width, anchor: .leading)
-            switchShape(on: on)
-        }
-        .padding(.horizontal, 7)
-        .frame(height: Self.rowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(ghost ? Color.clear : Ink.primary.opacity(0.05))
-                .overlay {
-                    if ghost {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(
-                                Ink.hairline,
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    }
-                }
-        )
-    }
-
-    /// A switch, in `Ink.accent` when on — the one accent this app draws with, and a fixed one, so
-    /// this replica is the same colour on every machine (`INV-UI-1`).
-    private func switchShape(on: Bool) -> some View {
-        Capsule(style: .continuous)
-            .fill(on ? Ink.accent : Ink.primary.opacity(0.16))
-            .frame(width: 22, height: 12)
-            .overlay(alignment: on ? .trailing : .leading) {
-                Circle()
-                    .fill(Ink.surface)
-                    .frame(width: 10, height: 10)
-                    .padding(1)
-            }
-    }
-
-    /// Rise, then flip. Under Reduce Motion it is simply already risen and already on: the still
-    /// frame carries the same information, which is what the animation was for.
-    private func play() {
-        guard !InkReduceMotion.isEnabled else {
-            risen = true
-            switched = true
-            return
-        }
-        // The reset is animated too. Snapping the row back to the bottom between passes reads as a
-        // glitch, which is the one thing a preview cannot afford to look like.
-        withAnimation(.easeIn(duration: 0.28)) {
-            risen = false
-            switched = false
-        }
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.72).delay(0.5)) { risen = true }
-        withAnimation(.easeOut(duration: 0.22).delay(1.3)) { switched = true }
-        // Loops for as long as the card is up: the user is reading a sentence beside it, and one
-        // pass finishing before they look is a preview they never saw.
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(Self.riseSeconds + 1.4))
-            guard onScreen, !InkReduceMotion.isEnabled else { return }
-            play()
-        }
-    }
-}
-
-#if DEBUG
-#Preview("Ghost row") {
-    GhostRowReplica()
-        .frame(width: 320)
-        .padding(40)
-        .background(Ink.surface)
-}
-#endif

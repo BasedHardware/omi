@@ -625,9 +625,24 @@ struct SettingsSpotlightScene: Equatable, Sendable {
     /// instruction. What is dashed now is `destination` and `source` — the two particular rects the
     /// gesture is actually between.
     var area: CGRect?
-    /// **Where the thing has to end up**: the list inside the pane. Dashed and tinted, so it reads
-    /// as a drop target rather than as a decoration. `nil` for a gesture that moves nothing.
+    /// **Where the thing has to end up**: the list inside the pane. The arrow aims into it and the
+    /// caption sits clear of it, and it is **never dashed** — see `dropSlot`. `nil` for a gesture
+    /// that moves nothing.
     var destination: CGRect?
+    /// **The one row-sized slot inside `destination` the thing actually lands in.** Dashed and
+    /// tinted; the only drop affordance drawn.
+    ///
+    /// This is the defect the reference screenshots were sent to describe. `destination` used to be
+    /// what got the dashes, and `destination` is a whole list — so the overlay drew one big dashed
+    /// rectangle around every row in the pane, which is the "not the entire thing" the report is
+    /// about. A box around a list says "somewhere in here"; a box around a single row-height strip
+    /// at the edge the row is coming from says where it goes.
+    ///
+    /// `nil` for a gesture that moves nothing, and computed rather than measured: System Settings
+    /// does not answer a frame for a slot that does not exist yet. Everything it is derived from —
+    /// the list, and the height of the row being dragged — was measured, and it is clipped back into
+    /// the list, so it can be generous about *which* row and never wrong about where the list is.
+    var dropSlot: CGRect?
     /// The glowing control. `nil` when we know where the window is and nothing about its contents:
     /// the region is still drawn, and nothing claims to know which control to press.
     var focus: CGRect?
@@ -639,6 +654,12 @@ struct SettingsSpotlightScene: Equatable, Sendable {
     var arrow: ArrowPlan?
     /// The sentence. Beside the arrow when there is one, over the boundary when there is not.
     var caption: String
+    /// The name on the travelling token — this application, as System Settings lists it.
+    ///
+    /// Carried on the scene rather than read from the bundle at draw time so the token is a pure
+    /// function of the scene like everything else here, and so the render harness draws the same
+    /// frame the app does.
+    var subject: String = ""
     /// Rects the dimming scrim must not cover — our own windows, so the card that is talking the
     /// user through this does not get dimmed by its own overlay.
     var exclusions: [CGRect] = []
@@ -659,7 +680,8 @@ struct SettingsSpotlightScene: Equatable, Sendable {
         caption: String,
         display: DisplayGeometry,
         space: ScreenSpace,
-        exclusions: [CGRect] = []
+        exclusions: [CGRect] = [],
+        subject: String = PermissionChoreography.appDisplayName
     ) -> SettingsSpotlightScene? {
         guard let displayGlobal = space.globalFrame(of: display) else { return nil }
         guard displayGlobal.intersects(target.focus) else { return nil }
@@ -678,8 +700,10 @@ struct SettingsSpotlightScene: Equatable, Sendable {
         let list = onDisplay(target.list)
 
         let arrow: ArrowPlan
+        var glow = focus
         var source: CGRect?
         var destination: CGRect?
+        var slot: CGRect?
         switch target.gesture {
         case .click where target.isListed:
             // The row is right there. **The dashes go round the row, not round the pane** — the
@@ -689,28 +713,63 @@ struct SettingsSpotlightScene: Equatable, Sendable {
             arrow = .pointing(at: focus, keepClearOf: area, within: bounds)
         case .click:
             // Not listed, and the pane offers a **+**. The list is still where the app has to end up,
-            // so it is still the drop target — the glow on **+** is what says how to get it there.
+            // so it is still the drop target — the glow on **+** is what says how to get it there —
+            // but what is *drawn* as the target is the slot a new row would appear in, arriving from
+            // the **+** below it. A dashed box around the whole list would be the same "somewhere in
+            // here" the drag case was reported for.
             destination = list
+            slot = list.map { landingSlot(in: $0, arrivingFrom: focus) }
             arrow = .pointing(at: focus, keepClearOf: area, within: bounds)
         case .drag(let from):
             let localSource = local(from)
             source = localSource
             // `clamped` already made `focus` the list for a drag; `list` is the same rect and is what
-            // this is *about*, so it is what the arrow aims into.
-            destination = list ?? focus
-            arrow = .dragging(from: localSource, to: destination ?? focus)
+            // this is *about*, so it is what the arrow aims into — but only as far as the slot.
+            let landing = list ?? focus
+            destination = landing
+            let slotted = landingSlot(in: landing, arrivingFrom: localSource)
+            slot = slotted
+            // The glow follows the slot rather than staying on the whole list. `drawFocusGlow`
+            // refuses to ring a rect that is already dashed, and that refusal is what keeps a drag
+            // from carrying two competing highlights; pointing it at the list instead would put a
+            // white ring back around every row in the pane.
+            glow = slotted
+            arrow = .dragging(from: localSource, to: slotted)
         }
 
         return SettingsSpotlightScene(
             bounds: bounds,
             area: area,
             destination: destination,
-            focus: focus,
+            dropSlot: slot,
+            focus: glow,
             source: source,
             arrow: arrow,
             caption: caption,
+            subject: subject,
             exclusions: exclusions.map(local),
             backingScaleFactor: display.backingScaleFactor)
+    }
+
+    /// **The one row's worth of list the thing has to land in.**
+    ///
+    /// A pure function over two measured rects, because "the dotted highlight is around the row and
+    /// not around the list" is a claim with a wrong answer available and the wrong answer is a
+    /// screenshot away from looking deliberate.
+    ///
+    /// The slot goes at the edge of `list` nearest whatever is arriving — the foot for a row loose
+    /// below the pane, the head for one above it — because that is the edge the arrow crosses and
+    /// the edge a real drop would land on. Its height is the arriving row's, floored so a bare label
+    /// frame does not produce a sliver, and clipped back into the list so nothing is ever drawn
+    /// outside the thing it is a slot in.
+    static func landingSlot(in list: CGRect, arrivingFrom source: CGRect) -> CGRect {
+        let height = min(max(source.height, 30), max(list.height, 1))
+        let inset = min(6, list.width / 8)
+        let y = source.midY > list.midY ? list.maxY - height : list.minY
+        let slot = CGRect(
+            x: list.minX + inset, y: y, width: max(list.width - inset * 2, 1), height: height)
+        let clipped = slot.intersection(list)
+        return clipped.isNull || clipped.isEmpty ? list : clipped
     }
 
     /// **Something was resolved and something will therefore be drawn.**
@@ -937,12 +996,17 @@ struct SettingsSpotlightCanvas: View {
         return holes
     }
 
-    /// **The two dashed regions.**
+    /// **The two dashed regions, and neither of them is the list.**
     ///
-    /// A rounded rectangle round the destination with a tint inside it, and a second one round the
-    /// source. The tint is the only thing that distinguishes them and it is doing real work: a drop
-    /// target has to look like somewhere a thing can be *put*, and an outline alone looks like
+    /// A rounded rectangle round the **drop slot** with a tint inside it, and a second one round the
+    /// source row. The tint is the only thing that distinguishes them and it is doing real work: a
+    /// drop target has to look like somewhere a thing can be *put*, and an outline alone looks like
     /// something already selected.
+    ///
+    /// It used to dash `destination`, which is a whole list, and that is the defect the reference
+    /// screenshots were sent to describe: one dashed rectangle around every row in the pane says
+    /// "somewhere in here", and on a pane holding two lists and a loose row below them that is a
+    /// gesture at a window rather than an instruction. `dropSlot` is one row of it.
     ///
     /// When nothing is being moved — the `framing` tier, where all we know is where the window is —
     /// the settings area is dashed instead, and the honest degrade holds: still a rect somebody
@@ -951,8 +1015,8 @@ struct SettingsSpotlightCanvas: View {
         if scene.destination == nil, scene.source == nil, let area = scene.area {
             return drawRegion(in: &context, rect: area, cornerRadius: 14, filled: false, inset: Self.boundaryInset)
         }
-        if let destination = scene.destination {
-            drawRegion(in: &context, rect: destination, cornerRadius: 12, filled: true, inset: 6)
+        if let slot = scene.dropSlot {
+            drawRegion(in: &context, rect: slot, cornerRadius: 9, filled: true, inset: 4)
         }
         if let source = scene.source {
             drawRegion(in: &context, rect: source, cornerRadius: 8, filled: false, inset: 5)
@@ -1017,10 +1081,10 @@ struct SettingsSpotlightCanvas: View {
     /// glow alone leaves the user guessing at the edge of what they are meant to hit.
     private func drawFocusGlow(in context: inout GraphicsContext) {
         guard let focus = scene.focus else { return }
-        // A drag's focus *is* the list, which the dashed drop target already surrounds. Ringing it a
+        // A drag's focus *is* the drop slot, which the dashed region already surrounds. Ringing it a
         // second time draws two different highlights round one rect and says there are two things to
-        // look at.
-        guard focus != scene.destination else { return }
+        // look at. `destination` is checked too, for the tiers that never grew a slot.
+        guard focus != scene.destination, focus != scene.dropSlot else { return }
         let breath = scene.confirmed ? 1 : 0.5 + 0.5 * sin(phase * 2 * .pi)
         let ring = Path(roundedRect: focus.insetBy(dx: -8, dy: -8), cornerRadius: 11)
 
@@ -1133,30 +1197,110 @@ struct SettingsSpotlightCanvas: View {
         let hand = DragHandPlan.at(CGFloat(handPhase), along: arrow)
         guard hand.opacity > 0.01 else { return }
 
-        drawCarriedRow(in: &context, hand: hand, source: source)
+        drawCarriedToken(in: &context, hand: hand, source: source)
         drawHand(in: &context, hand: hand)
     }
 
-    /// The row, in the hand's grip. Without it the hand is a cursor wandering across the pane; with
-    /// it the gesture is unmistakable, because moving the thing is what a drag *is*.
-    private func drawCarriedRow(
+    /// **The floating Context for Claude row, in the hand's grip.**
+    ///
+    /// Without something in the hand the hand is a cursor wandering across the pane; with it the
+    /// gesture is unmistakable, because moving the thing is what a drag *is*. And what is being moved
+    /// has to be recognisable as *this app*: the pane it lands on is a list of applications, and a
+    /// blank rectangle travelling into it says a row goes there without saying whose.
+    ///
+    /// So the token carries the mark and the name — the same two things System Settings puts on the
+    /// real row, drawn in white on a dark plate so it reads over either appearance.
+    ///
+    /// Floored to a legible size rather than drawn at the source's exact size. The rect the
+    /// Accessibility API answers for a loose row is often the *label* alone, and a 146 × 24 plate
+    /// with an icon in it is a smudge; the dashes stay on the measured rect, and only the thing being
+    /// carried is grown.
+    private func drawCarriedToken(
         in context: inout GraphicsContext, hand: DragHandPlan, source: CGRect
     ) {
         guard hand.isCarrying else { return }
+        let size = CGSize(width: max(source.width, 210), height: max(source.height, 44))
         let carried = CGRect(
-            x: hand.position.x - source.width / 2, y: hand.position.y - source.height / 2,
-            width: source.width, height: source.height)
-        let path = Path(roundedRect: carried, cornerRadius: 7)
+            x: hand.position.x - size.width / 2, y: hand.position.y - size.height / 2,
+            width: size.width, height: size.height)
+        let path = Path(roundedRect: carried, cornerRadius: 9)
 
         var shadow = context
         shadow.addFilter(.blur(radius: 10))
         shadow.fill(
-            Path(roundedRect: carried.offsetBy(dx: 0, dy: 5), cornerRadius: 7),
-            with: .color(.black.opacity(0.34 * hand.opacity)))
-        context.fill(path, with: .color(Ink.accent.opacity(0.24 * hand.opacity)))
+            Path(roundedRect: carried.offsetBy(dx: 0, dy: 6), cornerRadius: 9),
+            with: .color(.black.opacity(0.42 * hand.opacity)))
+        // Dark rather than translucent: this passes over both the pane and the desktop on its way
+        // up, and a plate that changes legibility mid-travel reads as a rendering fault.
+        context.fill(path, with: .color(.black.opacity(0.80 * hand.opacity)))
         context.stroke(
             path, with: .color(Ink.accent.opacity(hand.opacity)),
             style: StrokeStyle(lineWidth: 2, dash: Self.dash))
+
+        let inset: CGFloat = 8
+        let side = min(carried.height - inset * 2, 30)
+        let tile = CGRect(
+            x: carried.minX + inset, y: carried.midY - side / 2, width: side, height: side)
+        drawMark(in: &context, tile: tile, opacity: hand.opacity)
+
+        let room = CGSize(width: carried.maxX - tile.maxX - inset * 2, height: carried.height)
+        guard !scene.subject.isEmpty, room.width > 8 else { return }
+        var name = context.resolve(
+            Text(scene.subject).font(.system(size: 14, weight: .medium)).foregroundStyle(.white))
+        name.shading = .color(.white.opacity(hand.opacity))
+        let measured = name.measure(in: room)
+        context.draw(
+            name,
+            in: CGRect(
+                x: tile.maxX + inset, y: carried.midY - measured.height / 2,
+                width: min(measured.width, room.width), height: measured.height))
+    }
+
+    /// The app's own mark on a tile: a round head, two eyes and two little legs.
+    ///
+    /// Transcribed from `MenuBar/ContextMark`'s 20 × 20 design box rather than reusing it, and the
+    /// reason is a boundary rather than an oversight. `ContextMark` vends a **main-actor** AppKit
+    /// template `NSImage`, which is the right shape for a status item and the wrong one here: this is
+    /// a non-isolated `Canvas` renderer that draws paths, and reaching a main-actor image out of it
+    /// would mean either an `assumeIsolated` that traps if SwiftUI ever renders off the main thread,
+    /// or an `Image` threaded through a `Sendable` scene. The geometry is the shared thing and it is
+    /// a dozen numbers, copied once; `SpotlightDropSlotTests` renders the token and asserts the plate
+    /// is not blank, so a mark that stopped drawing is caught even though a mark that drifted is not.
+    ///
+    /// `ContextMark` draws in AppKit's y-up space; every y below is that geometry subtracted from 20,
+    /// because a `Canvas` is y-down.
+    private func drawMark(in context: inout GraphicsContext, tile: CGRect, opacity: CGFloat) {
+        let scale = min(tile.width, tile.height) / 20
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: tile.minX + x * scale, y: tile.minY + (20 - y) * scale)
+        }
+        func box(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> CGRect {
+            CGRect(
+                x: tile.minX + x * scale, y: tile.minY + (20 - y - height) * scale,
+                width: width * scale, height: height * scale)
+        }
+        let white = GraphicsContext.Shading.color(.white.opacity(opacity))
+
+        context.stroke(
+            Path(ellipseIn: box(3.4, 5.9, 13.2, 12.6)), with: white,
+            style: StrokeStyle(lineWidth: 1.9 * scale))
+        for x in [7.9, 12.1] as [CGFloat] {
+            context.fill(Path(ellipseIn: box(x - 0.78, 11.0, 1.56, 2.1)), with: white)
+        }
+
+        // Straight down out of the head, then a short foot curving outward. Written out twice rather
+        // than mirrored: the source drawing is not symmetric to the pixel and a mirror would be a
+        // different mark that happens to look similar.
+        var legs = Path()
+        legs.move(to: point(7.7, 6.4))
+        legs.addLine(to: point(7.3, 3.3))
+        legs.addCurve(to: point(5.8, 2.6), control1: point(7.2, 2.7), control2: point(6.5, 2.5))
+        legs.move(to: point(12.3, 6.4))
+        legs.addLine(to: point(12.7, 3.3))
+        legs.addCurve(to: point(14.2, 2.6), control1: point(12.8, 2.7), control2: point(13.5, 2.5))
+        context.stroke(
+            legs, with: white,
+            style: StrokeStyle(lineWidth: 1.7 * scale, lineCap: .round, lineJoin: .round))
     }
 
     private func drawHand(in context: inout GraphicsContext, hand: DragHandPlan) {

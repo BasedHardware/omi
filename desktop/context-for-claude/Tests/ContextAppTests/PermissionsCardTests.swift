@@ -8,9 +8,12 @@ import XCTest
 
 /// **The truncation regression, stated as a measurement.**
 ///
-/// What shipped: the permissions card is drawn on a fixed pane, and its tallest state — the by-hand
-/// grant, where a replica of the System Settings row is added under the four permission rows — asked
-/// for more height than the pane had. Nothing overflowed and nothing warned. SwiftUI paid for the
+/// What shipped: the permissions card is drawn on a fixed pane, and its tallest state at the time —
+/// the by-hand grant, where a replica of the System Settings row was added under the four permission
+/// rows — asked for more height than the pane had. That panel has since been deleted (the overlay it
+/// offered now appears by itself), but the *mechanism* is unchanged and is what these measure: a
+/// fixed pane, content that can grow, and no warning when the two disagree. Nothing overflowed and
+/// nothing warned. SwiftUI paid for the
 /// shortfall by offering the four rows less height than they needed, and a `Text` given less height
 /// than it needs ends in an ellipsis: three of the four first-person sentences were cut off
 /// mid-word on screen ("…so I can hear what you talk…", "…so I know what you're working…", "…so I
@@ -65,28 +68,24 @@ final class PermissionsCardLayoutTests: XCTestCase {
         }
         func card(
             _ title: String, _ preamble: String, granted: Set<Capability> = [],
-            status: @escaping (Capability) -> String = { _ in "Open" },
-            postponing: Capability? = nil, handGrant: Capability? = nil, guiding: Bool = false
+            status: @escaping (Capability) -> String = { _ in "Allow" },
+            postponing: Capability? = nil, canContinue: Bool = false
         ) -> PermissionsCard {
             PermissionsCard(
                 title: title, preamble: preamble, rows: rows(granted: granted, status: status),
-                postponing: postponing, handGrant: handGrant, guiding: guiding,
+                postponing: postponing, canContinue: canContinue,
                 // Far enough in the past that the phrase has been said, so this measures the
                 // finished headline rather than however much of it a given frame had revealed.
                 phraseStart: Date().addingTimeInterval(-5))
         }
         let granted: (Capability) -> String = { _ in "Granted" }
 
-        // The longest preamble on the card: the one shown before anything has been asked.
+        // The longest preamble on the card: the one shown before anything has been asked, which is
+        // also the card's resting state now that nothing is asked for until a row is clicked.
         let opening = """
-            macOS will ask three times — microphone, then the audio of your calls, then your screen. \
-            Each one is a separate question and I’ll ask them one at a time. The fourth, window text, \
-            only System Settings can grant; it makes me quote exactly instead of guessing, and I work \
-            without it.
-            """
-        let handGrantPreamble = """
-            That's the three macOS will ask about. The fourth has no dialog — it is a switch you \
-            flip yourself, and this is what it looks like.
+            Nothing is asked until you click it. Read these, then click whichever you’re ready for — \
+            macOS asks separately for each, and I take them one at a time. Window text is the odd one: \
+            it has no dialog at all, so clicking it opens System Settings and I’ll show you the switch.
             """
         // `PermissionGate.caption`, in the phases the card draws a panel for.
         let explaining = "One at a time. I’ll ask, and I’ll wait for your answer before the next one."
@@ -101,6 +100,10 @@ final class PermissionsCardLayoutTests: XCTestCase {
         }
 
         return [
+            // **The state the card now rests in**: everything readable, nothing in flight, and the
+            // only way forward is a button. This is the tallest of the four-row states and the one
+            // the click-to-ask change made load-bearing — the old opening was on screen for as long
+            // as it took a timer to reach the first dialog.
             ("nothing granted", card("First…", opening)),
             (
                 "nothing granted, already signed in",
@@ -108,14 +111,14 @@ final class PermissionsCardLayoutTests: XCTestCase {
             ),
             (
                 "explaining the microphone",
-                card("Say yes.", explaining, status: { _ in "Checking" })
+                card("Say yes.", explaining, status: { _ in "Asking…" })
             ),
             ("a dialog is up", card("Say yes.", prompting)),
             (
                 "one granted",
                 card(
                     "Say yes.", confirming, granted: [.microphone],
-                    status: { $0 == .microphone ? "Granted" : "Open" })
+                    status: { $0 == .microphone ? "Granted" : "Allow" })
             ),
             // The escape panel, on the longest of the four waiting captions.
             (
@@ -124,7 +127,7 @@ final class PermissionsCardLayoutTests: XCTestCase {
                     "Say yes.",
                     waiting("It’s under Privacy & Security ▸ Screen & System Audio Recording."),
                     granted: [.microphone, .systemAudio],
-                    status: { [.microphone, .systemAudio].contains($0) ? "Granted" : "Checking" },
+                    status: { [.microphone, .systemAudio].contains($0) ? "Granted" : "Asking…" },
                     postponing: .screen)
             ),
             (
@@ -138,35 +141,34 @@ final class PermissionsCardLayoutTests: XCTestCase {
                 card(
                     "Now the permissions.", opening, granted: [.microphone, .systemAudio],
                     status: {
-                        [.microphone, .systemAudio].contains($0) ? "Granted" : "Action required"
-                    })
+                        [.microphone, .systemAudio].contains($0) ? "Granted" : "Later"
+                    },
+                    canContinue: true)
             ),
-            // **The state that shipped broken.** Four rows and the replica panel together.
+            // The three required grants are in and the fourth — the one macOS never prompts for — is
+            // still there to be clicked. The card holds until Continue is pressed, which is the whole
+            // reason this state exists at all: it used to leave by itself the instant the third grant
+            // landed, taking the fourth row with it.
             (
-                "the by-hand grant, offered",
+                "required in, window text still open",
                 card(
-                    "One you flip yourself.", handGrantPreamble,
+                    "Now the permissions.", opening,
                     granted: [.microphone, .systemAudio, .screen],
-                    status: { $0 == .accessibility ? "Open" : "Granted" }, handGrant: .accessibility)
-            ),
-            (
-                "the by-hand grant, guiding",
-                card(
-                    "One you flip yourself.", handGrantPreamble,
-                    granted: [.microphone, .systemAudio, .screen],
-                    status: { $0 == .accessibility ? "Open" : "Granted" }, handGrant: .accessibility,
-                    guiding: true)
+                    status: { $0 == .accessibility ? "Allow" : "Granted" }, canContinue: true)
             ),
             (
                 "everything granted",
-                card("Now the permissions.", opening, granted: Set(all), status: granted)
+                card(
+                    "Now the permissions.", opening, granted: Set(all), status: granted,
+                    canContinue: true)
             ),
             (
                 "the screen needs a relaunch",
                 card(
                     "Now the permissions.", opening,
                     granted: [.microphone, .systemAudio, .screen],
-                    status: { $0 == .screen ? "Action required" : ($0 == .accessibility ? "Open" : "Granted") })
+                    status: { $0 == .screen ? "Action required" : ($0 == .accessibility ? "Allow" : "Granted") },
+                    canContinue: true)
             ),
         ]
     }
@@ -175,8 +177,9 @@ final class PermissionsCardLayoutTests: XCTestCase {
 
     /// **Every state fits, with the dots' band already taken out of the budget.**
     ///
-    /// This is the test the defect needed. At the shipped 520 pt pane the by-hand state measures
-    /// past the budget and this fails; nothing else about the card has to be described for it to.
+    /// This is the test the defect needed, and the one that keeps the copy honest: every sentence
+    /// on this card is one somebody may rewrite, and a rewrite that costs a line is invisible until
+    /// it costs four. `testTheFitMeasurementReportsAnOverflow` is what proves it can still fail.
     @MainActor
     func testEveryPermissionsStateFitsTheCard() {
         XCTAssertTrue(Self.fonts, "no font files found next to the package")
@@ -193,35 +196,60 @@ final class PermissionsCardLayoutTests: XCTestCase {
         }
     }
 
-    /// …and the budget is not so generous that the measurement could never fail.
+    /// …and the measurement is still of the real card.
     ///
-    /// A "fits" test passes just as happily on a card three times too big for its content, which is
-    /// its own defect and would also mean the test has stopped watching anything. The tallest state
-    /// has to be genuinely close to the budget.
+    /// **The old form of this test was a ratio against the budget** — the tallest state had to be
+    /// within 25% of the pane — and it had to change, because what made the card tall changed by
+    /// design. The tallest state used to be the by-hand grant: four rows *plus* a 125 pt panel
+    /// holding an animated replica of a System Settings row and a "Show me the row" button. That
+    /// panel is gone; the overlay it asked permission to draw now appears on its own when the pane
+    /// opens. Keeping the ratio would have been asserting that a deleted panel is still there.
+    ///
+    /// So the claim is restated relative to the card's own parts rather than to the pane, which is
+    /// what makes it survive the pane being resized again: the full card has to be substantially
+    /// taller than the same card stripped to a headline and one row. A measurement that had stopped
+    /// seeing the rows, the preamble or the footer could not clear this.
     @MainActor
-    func testTheTallestStateReallyIsNearTheBudget() {
-        let budget = OnboardingWindow.cardContentHeight
+    func testTheMeasurementIsStillOfTheWholeCard() {
+        let stripped = PermissionsCard(
+            title: "First…", preamble: "Short.",
+            rows: [PermissionsCardRow(capability: .microphone, granted: false, status: "Allow")],
+            phraseStart: Date().addingTimeInterval(-5))
         let tallest = states().map { height(of: $0.1) }.max() ?? 0
+        // Three rows fewer, at the 40 pt a single-line row cannot go under — the checkbox plus its
+        // padding — so the margin is the arithmetic of the rows themselves rather than a number
+        // somebody measured once and would have to re-measure after every copy change.
+        let floor = height(of: stripped) + 3 * 40
         XCTAssertGreaterThan(
-            tallest, budget * 0.75,
-            "the tallest permissions state uses only \(Int(tallest.rounded())) pt of \(Int(budget.rounded())) — "
-                + "either the pane has grown far past what it needs, or this stopped measuring the real card")
+            tallest, floor,
+            "the tallest permissions state measures \(Int(tallest.rounded())) pt against "
+                + "\(Int(height(of: stripped).rounded())) pt for a headline and one row — three more "
+                + "rows cannot account for less than 120 pt, so this has stopped measuring the card")
     }
 
-    /// **The measurement can fail.** Squeeze the same card into the pane it shipped with and the
-    /// worst state overflows, exactly the way the real defect overflowed.
+    /// **The measurement can fail.**
     ///
-    /// Without this the test above would pass just as happily on a measurement structurally
-    /// incapable of reporting an overflow.
+    /// Without this, the fit test above would pass just as happily on a measurement structurally
+    /// incapable of reporting an overflow. It used to be proved by re-measuring the state that
+    /// shipped broken against the 520 pt pane it truncated on; that state no longer exists, so the
+    /// overflow is provoked directly instead — a preamble nobody would write, on the real card, in
+    /// the real column.
     @MainActor
-    func testTheFitMeasurementCatchesTheCardThatShipped() {
-        // 520 pt, less the same margins and the same dot band.
-        let shipped = 520 - 2 * InkLayout.pagePaddingVertical - InkLayout.progressBandHeight
-        let tallest = states().map { height(of: $0.1) }.max() ?? 0
+    func testTheFitMeasurementReportsAnOverflow() {
+        let budget = OnboardingWindow.cardContentHeight
+        let flooded = PermissionsCard(
+            title: "First…",
+            preamble: String(
+                repeating: "A preamble long enough that this card cannot possibly fit the pane. ",
+                count: 12),
+            rows: Capability.allCases.map {
+                PermissionsCardRow(capability: $0, granted: false, status: "Allow")
+            },
+            phraseStart: Date().addingTimeInterval(-5))
         XCTAssertGreaterThan(
-            tallest, shipped,
-            "the by-hand state has to measure as outgrowing the 520 pt pane it truncated on, or this "
-                + "test is not watching the defect it was written for")
+            height(of: flooded), budget,
+            "a card with twelve times too much copy measured as fitting — the fit test is not "
+                + "capable of reporting an overflow and therefore is not watching anything")
     }
 
     /// **A row wraps rather than truncating.** The other half of the fix, asserted on the row itself

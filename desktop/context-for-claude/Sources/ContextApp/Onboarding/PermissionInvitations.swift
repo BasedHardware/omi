@@ -1,0 +1,223 @@
+import Combine
+import Foundation
+
+/// **Nothing is asked for until the user asks for it.**
+///
+/// The permissions card used to start `PermissionGate.run()` the instant it appeared, and the gate
+/// walked every required capability back to back: microphone, then the audio of your calls, then the
+/// screen, each separated by a 900 ms lead-in and a 1.1 s confirmation beat. The pacing was real —
+/// it was a deliberate earlier fix — but the *sequencing* was not the user's, and that is what made
+/// the card unreadable. Three system dialogs arrived over about five seconds, each one covering the
+/// sentence that explained it. Reported verbatim: "the user gets no time to read what the window is
+/// saying while asking for permissions … it pops up the permission before the user can even read".
+///
+/// A longer lead-in would not have fixed it. The problem is not how long the sentence is on screen,
+/// it is that the moment was chosen by a timer rather than by the person reading. So the run is gone
+/// and **a click is the only trigger**.
+///
+/// Every listed capability keeps its **own** `PermissionGate`, which is the same episode engine as
+/// before — one hold on `PermissionBroker`, the same lead-in, the same confirmation beat, the same
+/// unbounded watch on a grant made in System Settings, the same two terminal answers. A gate whose
+/// `required` list is a single capability runs exactly one episode and stops, so "one at a time" is a
+/// consequence of the shape rather than a rule every call site has to remember.
+///
+/// The alternative was a flag on the gate that made `run()` stop after the first capability. That
+/// would have left the sequencing in the tree, un-run, waiting for the next person who did not read
+/// this comment to switch it back on.
+@MainActor
+final class PermissionInvitations: ObservableObject {
+
+    /// Every capability the card lists, in the order it lists them.
+    let listed: [Capability]
+
+    /// The ones without which the app does nothing, and therefore the only ones that hold the card
+    /// shut. `canLeaveStep` quantifies over exactly this list and nothing else.
+    ///
+    /// Accessibility is listed and deliberately not required. macOS has no dialog for it — it is a
+    /// switch flipped by hand in System Settings — so gating the card on it would strand anyone
+    /// unwilling to leave the flow on a step with no button that could finish it. Capture degrades to
+    /// OCR-only without it: a worse product, and a working one.
+    let required: [Capability]
+
+    /// The capability whose episode is in flight, and `nil` the rest of the time.
+    ///
+    /// At most one, ever. `PermissionBroker` would serialise two anyway, but queueing a second ask
+    /// behind the first is the *sequencing* this type exists to remove: the user would click a second
+    /// row, see nothing happen, and then meet a dialog minutes later with no idea what asked for it.
+    @Published private(set) var inFlight: Capability?
+
+    /// The capabilities the user has already clicked once.
+    ///
+    /// What separates "Allow" from "Open Settings" on a row. TCC shows each prompt exactly once, so
+    /// after the first click the pane is the only route left, and a row that still says "Allow" is a
+    /// row promising a dialog that will never appear.
+    @Published private(set) var offered: Set<Capability> = []
+
+    private let gates: [Capability: PermissionGate]
+    private let granted: @MainActor (Capability) -> Bool
+    private let openSettings: @MainActor (Capability) -> Void
+    private var runs: [Capability: Task<Void, Never>] = [:]
+    private var relays: [AnyCancellable] = []
+
+    /// Everything defaults to the live path. `gate` is a factory rather than a list so a test can
+    /// build the whole board over one fake `PermissionAsking` and one private broker, which is the
+    /// only way the click-to-ask claims below can be asserted without touching real TCC state.
+    ///
+    /// The three closures are `@MainActor` because everything they can be handed is: a
+    /// `PermissionGate` is main-actor isolated and so is any test double of `PermissionAsking`, and
+    /// a bare `(Capability) -> …` could not call either.
+    init(
+        listed: [Capability] = [.microphone, .systemAudio, .screen, .accessibility],
+        required: [Capability] = [.microphone, .systemAudio, .screen],
+        granted: @escaping @MainActor (Capability) -> Bool = { Permissions.check($0) },
+        openSettings: @escaping @MainActor (Capability) -> Void = { Permissions.openSettings(for: $0) },
+        gate: @MainActor (Capability) -> PermissionGate = { PermissionGate(required: [$0]) }
+    ) {
+        self.listed = listed
+        self.required = required
+        self.granted = granted
+        self.openSettings = openSettings
+
+        var built: [Capability: PermissionGate] = [:]
+        for capability in listed { built[capability] = gate(capability) }
+        gates = built
+
+        // A nested `ObservableObject` does not republish through its owner on its own, and
+        // everything the card draws — the caption, the status words, whether Continue is live — is a
+        // gate's `@Published` state one level down. Without this relay the card would render the
+        // first frame of an episode and then sit still through the whole of it.
+        //
+        // The sink is not `@Sendable`, so it inherits this initialiser's main-actor isolation and
+        // may touch `self`. That is also why it must stay a plain closure literal here rather than
+        // being moved to a method reference.
+        for gate in built.values {
+            gate.objectWillChange
+                .sink { [weak self] _ in self?.objectWillChange.send() }
+                .store(in: &relays)
+        }
+    }
+
+    // MARK: - What the card draws
+
+    /// The phase of the episode in flight, or `.idle` when the card is waiting on the user — which is
+    /// now its resting state rather than a moment between two dialogs.
+    var phase: PermissionGate.Phase {
+        guard let inFlight, let gate = gates[inFlight] else { return .idle }
+        return gate.phase
+    }
+
+    /// The capability the card is currently about, if any.
+    var subject: Capability? {
+        guard let inFlight else { return nil }
+        return gates[inFlight]?.subject
+    }
+
+    /// The gate's own sentence for the phase it is in. `nil` when nothing is in flight, and the card
+    /// says its own opening line instead.
+    var caption: String? {
+        guard let inFlight else { return nil }
+        return gates[inFlight]?.caption
+    }
+
+    /// True while an episode owns the screen — the rows must not be a second entrance to it.
+    var isBusy: Bool { inFlight != nil }
+
+    /// Every terminal answer, merged. Each gate only ever answers for its own capability.
+    var answers: [Capability: PermissionGate.Answer] {
+        var merged: [Capability: PermissionGate.Answer] = [:]
+        for (capability, gate) in gates {
+            merged[capability] = gate.answers[capability]
+        }
+        return merged
+    }
+
+    /// **The single exit predicate**, unchanged in meaning: every required capability answered, and
+    /// every answer authored by the user — granted, or postponed by pressing a button that says so.
+    /// No timeout reaches this, and neither does a click.
+    var canLeaveStep: Bool {
+        required.allSatisfy { answers[$0] != nil }
+    }
+
+    /// The required capabilities still without an answer. What "I'll do these later" would defer, and
+    /// the reason it can be offered as one button rather than four.
+    var unanswered: [Capability] {
+        required.filter { answers[$0] == nil }
+    }
+
+    /// The capability whose wait may be escaped: the gate is standing in System Settings for it.
+    var postponing: Capability? {
+        guard case .waitingInSettings(let capability) = phase else { return nil }
+        return capability
+    }
+
+    // MARK: - The click
+
+    /// **The only thing that starts an ask.**
+    ///
+    /// Three refusals, and each one is a state a click can genuinely arrive in:
+    ///
+    /// - Already granted. There is nothing to ask for, and re-running the episode would put a
+    ///   checkmark through a beat of "Checking" for no reason.
+    /// - Something else is in flight. A second dialog cannot be stacked on the first, and queueing it
+    ///   would reintroduce exactly the surprise this type removes.
+    /// - Already answered and still not granted. The user postponed it and has changed their mind;
+    ///   TCC spends each prompt exactly once, so the pane is the only route left.
+    ///
+    /// Returns whether the click did anything, so the card can decline to make a noise about a press
+    /// that changed nothing. A click sound over a refused click is the interface claiming to have
+    /// heard something it ignored.
+    @discardableResult
+    func invite(_ capability: Capability) -> Bool {
+        guard let gate = gates[capability], !granted(capability) else { return false }
+        guard inFlight == nil else { return false }
+
+        offered.insert(capability)
+
+        guard gate.answers[capability] == nil else {
+            openSettings(capability)
+            return true
+        }
+
+        inFlight = capability
+        runs[capability] = Task { @MainActor [weak self] in
+            await gate.run()
+            guard let self, self.inFlight == capability else { return }
+            self.inFlight = nil
+        }
+        return true
+    }
+
+    /// The escape from one capability's wait, and the only thing other than a grant that ends it.
+    ///
+    /// The run is cancelled as well as answered. `waitInSettings` re-asks the system on a poll, so
+    /// without the cancel the phase — and with it the panel the user just pressed — would linger for
+    /// up to one poll after the press, which reads as a button that did not work.
+    func postpone(_ capability: Capability) {
+        gates[capability]?.postpone(capability)
+        runs[capability]?.cancel()
+    }
+
+    /// **The escape from the card.**
+    ///
+    /// Nothing is asked automatically any more, which means a user who clicks nothing at all would
+    /// otherwise sit on this card forever with no answer to give: the per-capability escape only
+    /// exists once an episode has reached System Settings. This is the same deliberate, named,
+    /// never-automatic answer applied to everything still outstanding.
+    ///
+    /// Refused while an episode is in flight, because that episode has its own escape on screen and
+    /// two escapes offering different scopes at once is a choice nobody can make correctly.
+    func deferRest() {
+        guard inFlight == nil else { return }
+        for capability in unanswered {
+            gates[capability]?.postpone(capability)
+        }
+    }
+
+    /// Ends every watch. The card owns this: `waitInSettings` is unbounded by design, so leaving the
+    /// step is the only thing that can stop it.
+    func cancel() {
+        for task in runs.values { task.cancel() }
+        runs.removeAll()
+        inFlight = nil
+    }
+}
