@@ -29,6 +29,17 @@ from firebase_admin import firestore as fb_firestore
     assert _MODULE.count_boundary_violations(source) == 6
 
 
+def test_flags_parent_package_client_and_sdk_imports():
+    # Regression: parent-package import forms bypassed the seal — ``from google.cloud import
+    # firestore_v1`` (versioned client, not the literal ``firestore`` member) and ``from database
+    # import _client`` (raw client via its parent package).
+    source = '''
+from google.cloud import firestore_v1
+from database import _client
+'''
+    assert _MODULE.count_boundary_violations(source) == 2
+
+
 def test_flags_raw_ops_regardless_of_receiver():
     source = '''
 snapshot = db_client.document(path).get()

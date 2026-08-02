@@ -28,6 +28,16 @@ from langchain_pinecone import PineconeVectorStore
     assert _MODULE.count_boundary_violations(source) == 5
 
 
+def test_flags_dynamic_pinecone_imports():
+    # Regression: literal dynamic-import forms bypassed the static import check.
+    source = '''
+import importlib
+importlib.import_module('pinecone')
+__import__('langchain_pinecone')
+'''
+    assert _MODULE.count_boundary_violations(source) == 2
+
+
 def test_ignores_the_neutral_port_and_unrelated_code():
     source = '''
 from utils.vector import get_vector_store, VectorRecord

@@ -2,8 +2,9 @@
 """Keep the vector-store boundary sealed: utils/vector/ is the only door (WP4).
 
 Outside ``backend/utils/vector/`` (and the documented exceptions below) no module may import the raw
-vector client — ``pinecone`` (``import pinecone`` / ``from pinecone[...] import ...``) or
-``langchain_pinecone``. Callers reach vector search through the neutral port
+vector client — ``pinecone`` (``import pinecone`` / ``from pinecone[...] import ...`` / a literal
+``importlib.import_module('pinecone')`` / ``__import__('pinecone')``) or ``langchain_pinecone``.
+Callers reach vector search through the neutral port
 (``utils.vector.get_vector_store()`` → ``upsert`` / ``query`` / ``delete_by_ids`` / …), so the backend
 stays swappable (Pinecone | Qdrant). This is the vector-store analogue of the Firestore and
 object-store boundary guards; without it an upstream merge could silently reintroduce a raw Pinecone
@@ -58,6 +59,17 @@ class _BoundaryVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802 - AST visitor name
         if _is_forbidden_import_module(node.module):
             self.count += 1
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
+        # Literal dynamic-import forms that dodge the static ``import``: ``importlib.import_module('pinecone')``,
+        # ``import_module('pinecone')`` and ``__import__('pinecone')`` with a forbidden string literal.
+        func = node.func
+        func_name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if func_name in ('import_module', '__import__') and node.args:
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str) and _is_forbidden_import_module(first.value):
+                self.count += 1
         self.generic_visit(node)
 
 

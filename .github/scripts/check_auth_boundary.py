@@ -3,8 +3,9 @@
 
 Outside ``backend/utils/auth/`` (and the documented exceptions below) no module may touch the Firebase
 **auth** surface — ``import firebase_admin.auth`` / ``from firebase_admin.auth import ...`` /
-``from firebase_admin import auth`` / a ``firebase_admin.auth`` attribute access (e.g.
-``firebase_admin.auth.verify_id_token(...)`` after a plain ``import firebase_admin``). Callers reach
+``from firebase_admin import auth`` / a ``<firebase_admin-alias>.auth`` attribute access (e.g.
+``firebase_admin.auth.verify_id_token(...)`` after a plain ``import firebase_admin``, or
+``fb.auth.verify_id_token(...)`` after ``import firebase_admin as fb``). Callers reach
 authentication through the neutral port (``utils.auth.get_auth_provider()`` → verify_token /
 get_user_profile / …), so the backend stays swappable (Firebase | OIDC/Keycloak).
 
@@ -41,9 +42,28 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     return module == 'firebase_admin.auth' or module.startswith('firebase_admin.auth.')
 
 
+def _firebase_admin_aliases(tree: ast.AST) -> set[str]:
+    """Local names bound to the ``firebase_admin`` package by ``import`` statements.
+
+    ``import firebase_admin`` / ``import firebase_admin as fb`` / ``import firebase_admin.auth``
+    all bind a name that can then reach the auth surface via ``<name>.auth`` — an alias must not
+    let ``fb.auth.verify_id_token(...)`` slip past the boundary. ``firebase_admin`` is always
+    recognised so a raw ``firebase_admin.auth`` attribute access is caught even in a snippet that
+    imports the submodule directly.
+    """
+    aliases = {'firebase_admin'}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == 'firebase_admin' or alias.name.startswith('firebase_admin.'):
+                    aliases.add(alias.asname or alias.name.split('.', 1)[0])
+    return aliases
+
+
 class _BoundaryVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, aliases: set[str]) -> None:
         self.count = 0
+        self._aliases = aliases
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802 - AST visitor name
         for alias in node.names:
@@ -61,16 +81,18 @@ class _BoundaryVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:  # noqa: N802 - AST visitor name
-        # ``firebase_admin.auth`` attribute access (catches firebase_admin.auth.verify_id_token(...)
-        # after a plain ``import firebase_admin``). initialize_app / messaging / firestore are allowed.
-        if node.attr == 'auth' and isinstance(node.value, ast.Name) and node.value.id == 'firebase_admin':
+        # ``<firebase_admin-alias>.auth`` attribute access (catches fb.auth.verify_id_token(...) after
+        # ``import firebase_admin as fb`` as well as the plain ``import firebase_admin`` form).
+        # initialize_app / messaging / firestore are allowed.
+        if node.attr == 'auth' and isinstance(node.value, ast.Name) and node.value.id in self._aliases:
             self.count += 1
         self.generic_visit(node)
 
 
 def count_boundary_violations(source: str, filename: str = '<unknown>') -> int:
-    visitor = _BoundaryVisitor()
-    visitor.visit(ast.parse(source, filename=filename))
+    tree = ast.parse(source, filename=filename)
+    visitor = _BoundaryVisitor(_firebase_admin_aliases(tree))
+    visitor.visit(tree)
     return visitor.count
 
 

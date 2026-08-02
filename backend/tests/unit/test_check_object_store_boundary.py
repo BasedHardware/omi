@@ -42,6 +42,35 @@ url = blob.generate_signed_url(version="v4")
     assert _MODULE.count_boundary_violations(source) == 9
 
 
+def test_flags_raw_blob_deletion():
+    # Regression: raw GCS Blob deletion escaped the method-name list (a bare ``.delete`` collides with
+    # dict/ORM APIs, so it can't just be listed). Receiver/type-aware: the blob factory chain, a
+    # ``blob``/``*_blob`` receiver, and the distinctive bucket ``delete_blob(s)`` methods are caught.
+    source = '''
+bucket.blob(key).delete()          # blob factory chain
+bucket.get_blob(key).delete()      # get_blob factory chain
+blob.delete()                      # a Blob handed across a module boundary
+self._blob.delete()                # *_blob receiver
+bucket.delete_blob(name)           # distinctive bucket method
+bucket.delete_blobs(names)         # distinctive bucket method
+'''
+    assert _MODULE.count_boundary_violations(source) == 6
+
+
+def test_blob_delete_does_not_flag_the_port_or_unrelated_delete():
+    # The blessed port form and unrelated ``.delete()`` receivers must NOT trip the guard.
+    source = '''
+from utils.object_store import get_object_store
+
+get_object_store().delete(bucket, key)   # the neutral port
+store.delete(bucket, key)                # port handle
+session.delete(row)                      # ORM
+cache.delete(cache_key)                  # cache
+os.remove(path)
+'''
+    assert _MODULE.count_boundary_violations(source) == 0
+
+
 def test_ignores_the_neutral_port_and_unrelated_code():
     source = '''
 from utils.object_store import get_object_store, ObjectNotFound

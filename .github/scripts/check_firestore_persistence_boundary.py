@@ -50,6 +50,19 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     )
 
 
+def _is_forbidden_firestore_member(name: str) -> bool:
+    # A ``from google.cloud import <name>`` / ``from firebase_admin import <name>`` member that reaches
+    # the Firestore SDK: ``firestore`` and the versioned client packages ``firestore_v1``,
+    # ``firestore_admin_v1``, … (``from google.cloud import firestore_v1`` bypasses the plain-import seal).
+    return name == 'firestore' or name.startswith('firestore_') or name.startswith('firestore.')
+
+
+def _is_forbidden_database_member(name: str) -> bool:
+    # ``from database import _client`` (parent-package form) reaches the raw client; the blessed
+    # ``database.*`` ports (document_store, sentinels, firestore_errors, document_ids, …) stay allowed.
+    return name == '_client' or name.startswith('_client.')
+
+
 class _BoundaryVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.count = 0
@@ -64,9 +77,13 @@ class _BoundaryVisitor(ast.NodeVisitor):
         # ``from google.cloud.firestore import X`` / ``from database._client import X``.
         if _is_forbidden_import_module(node.module):
             self.count += 1
-        # ``from google.cloud import firestore`` / ``from firebase_admin import firestore``.
+        # ``from google.cloud import firestore`` / ``firestore_v1`` / ``from firebase_admin import firestore``.
         elif node.module in ('google.cloud', 'firebase_admin'):
-            if any(alias.name == 'firestore' for alias in node.names):
+            if any(_is_forbidden_firestore_member(alias.name) for alias in node.names):
+                self.count += 1
+        # ``from database import _client`` (parent-package import of the raw client).
+        elif node.module == 'database':
+            if any(_is_forbidden_database_member(alias.name) for alias in node.names):
                 self.count += 1
         self.generic_visit(node)
 

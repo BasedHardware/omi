@@ -5,7 +5,9 @@ Outside ``backend/utils/object_store/`` (and the documented exceptions below) no
   * import the raw client — ``google.cloud.storage`` (or ``from google.cloud import storage``); or
   * run a raw blob/bucket op — ``.upload_from_string`` / ``.upload_from_filename`` /
     ``.upload_from_file`` / ``.download_as_bytes`` / ``.download_to_filename`` / ``.copy_blob`` /
-    ``.make_public`` / ``.list_blobs`` / ``.generate_signed_url`` method call.
+    ``.delete_blob`` / ``.delete_blobs`` / ``.make_public`` / ``.list_blobs`` /
+    ``.generate_signed_url`` method call, or a raw ``Blob.delete()`` (receiver/type-aware, since a
+    bare ``.delete`` name collides — see ``_is_raw_blob_delete``).
 
 Callers reach object storage through the neutral port (``utils.object_store.get_object_store()`` →
 ``put`` / ``get_bytes`` / ``presign_get`` / ``public_url`` / …), so the backend stays swappable
@@ -45,6 +47,8 @@ _FORBIDDEN_OP_METHODS = frozenset(
         'download_as_bytes',
         'download_to_filename',
         'copy_blob',
+        'delete_blob',
+        'delete_blobs',
         'make_public',
         'list_blobs',
         'generate_signed_url',
@@ -56,6 +60,38 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     if not module:
         return False
     return module == 'google.cloud.storage' or module.startswith('google.cloud.storage')
+
+
+def _looks_like_blob_name(name: str) -> bool:
+    # A receiver identifier that denotes a GCS Blob object: exactly ``blob`` or a ``*_blob`` suffix.
+    return name == 'blob' or name.endswith('_blob')
+
+
+def _is_raw_blob_delete(node: ast.Call) -> bool:
+    """A raw GCS ``Blob.delete()`` — receiver/type-aware, because bare ``.delete`` collides everywhere.
+
+    Caught: ``bucket.blob(key).delete()`` / ``bucket.get_blob(key).delete()`` (the receiver is a GCS
+    blob factory call) and a Blob handed across a module boundary then deleted, ``blob.delete()`` /
+    ``x._blob.delete()`` (receiver named ``blob`` / ``*_blob``). The blessed port form
+    ``get_object_store().delete(...)`` is NOT flagged (its receiver is neither).
+    """
+    func = node.func
+    if not (isinstance(func, ast.Attribute) and func.attr == 'delete'):
+        return False
+    receiver = func.value
+    # ``<...>.blob(...).delete()`` / ``<...>.get_blob(...).delete()`` — receiver is a blob factory call.
+    if (
+        isinstance(receiver, ast.Call)
+        and isinstance(receiver.func, ast.Attribute)
+        and receiver.func.attr in ('blob', 'get_blob')
+    ):
+        return True
+    # ``blob.delete()`` / ``self._blob.delete()`` — receiver identifier looks like a Blob.
+    if isinstance(receiver, ast.Name):
+        return _looks_like_blob_name(receiver.id)
+    if isinstance(receiver, ast.Attribute):
+        return _looks_like_blob_name(receiver.attr)
+    return False
 
 
 class _BoundaryVisitor(ast.NodeVisitor):
@@ -80,6 +116,8 @@ class _BoundaryVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         if isinstance(node.func, ast.Attribute) and node.func.attr in _FORBIDDEN_OP_METHODS:
+            self.count += 1
+        elif _is_raw_blob_delete(node):
             self.count += 1
         self.generic_visit(node)
 

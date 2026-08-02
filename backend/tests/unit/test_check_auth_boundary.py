@@ -27,6 +27,16 @@ firebase_admin.auth.verify_id_token(token)
     assert _MODULE.count_boundary_violations(source) == 4
 
 
+def test_flags_aliased_firebase_admin_auth_access():
+    # Regression: ``import firebase_admin as fb; fb.auth.verify_id_token(...)`` bypassed the guard
+    # because the ``fb.auth`` attribute access was matched only against the literal ``firebase_admin``.
+    source = '''
+import firebase_admin as fb
+fb.auth.verify_id_token(token)
+'''
+    assert _MODULE.count_boundary_violations(source) == 1
+
+
 def test_ignores_non_auth_firebase_and_the_port():
     source = '''
 import firebase_admin
