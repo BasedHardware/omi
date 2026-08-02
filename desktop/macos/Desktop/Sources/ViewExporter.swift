@@ -1,5 +1,4 @@
 import AppKit
-import ObjCExceptionCatcher
 import OmiTheme
 import SwiftUI
 
@@ -741,53 +740,20 @@ enum ViewExporter {
     }
     .environment(\.colorScheme, .dark)
 
-    let hostingView = NSHostingView(rootView: wrappedView)
-    hostingView.setFrameSize(size)
+    // Offscreen hosting + capture lives in PersonProfileRenderer, which product code shares.
+    guard let pngData = PersonProfileRenderer.renderPNG(wrappedView, size: size) else {
+      NSLog("ViewExporter: SKIP \(name) - no bitmap")
+      return false
+    }
+    try? pngData.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+    NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(pngData.count / 1024)KB")
 
-    let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: size),
-      styleMask: [.borderless],
-      backing: .buffered,
-      defer: false
-    )
-    window.contentView = hostingView
-    window.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1)
-
-    hostingView.needsLayout = true
-    hostingView.layoutSubtreeIfNeeded()
-
-    var success = false
-    let exception = ObjCExceptionCatcher.catching {
-      // Export PNG
-      guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
-      else {
-        NSLog("ViewExporter: SKIP \(name) - no bitmap")
-        return
-      }
-      hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
-
-      if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-        let pngPath = "\(dir)/\(name).png"
-        try? pngData.write(to: URL(fileURLWithPath: pngPath))
-        let kb = pngData.count / 1024
-        NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
-      }
-
-      // Export PDF (vector data preserved for SVG conversion)
-      let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
-      let pdfPath = "\(dir)/\(name).pdf"
-      try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
+    // Export PDF (vector data preserved for SVG conversion)
+    if let pdfData = PersonProfileRenderer.renderPDF(wrappedView, size: size) {
+      try? pdfData.write(to: URL(fileURLWithPath: "\(dir)/\(name).pdf"))
       NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
-
-      success = true
     }
-    if let exception {
-      NSLog("ViewExporter: SKIP \(name) - \(exception.name.rawValue): \(exception.reason ?? "unknown")")
-      success = false
-    }
-
-    window.orderOut(nil)
-    return success
+    return true
   }
 
   // MARK: - PDF to SVG conversion

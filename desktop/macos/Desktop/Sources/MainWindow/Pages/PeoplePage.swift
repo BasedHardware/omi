@@ -699,26 +699,18 @@ struct PeoplePage: View {
   @State private var editingItem: PeopleReviewItem?
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Fixed header + connectors + search
-      VStack(alignment: .leading, spacing: 20) {
-        header
-        connectorSection
-        searchField
+    Group {
+      // Selecting a person takes over the whole page: a profile is its own
+      // surface, not a row expansion, so the list chrome steps out of the way.
+      if let person = selectedPerson {
+        PersonProfilePage(
+          person: person,
+          onBack: { withAnimation(SBMotion.standard) { viewModel.selectedID = nil } },
+          onAsk: { PeopleChatCorrection.ask(prompt: $0) }
+        )
+      } else {
+        listBody
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, 28)
-      .padding(.top, 24)
-      .padding(.bottom, 14)
-
-      // Human-in-the-loop: never silently assert an uncertain identity/fact — ask first.
-      if !viewModel.reviewQueue.isEmpty {
-        reviewSection
-          .padding(.horizontal, 28)
-          .padding(.bottom, 14)
-      }
-
-      content
     }
     .background(Color.clear)
     .onAppear {
@@ -745,10 +737,41 @@ struct PeoplePage: View {
     }
   }
 
+  /// The person whose profile is open, resolved from the single selection owner
+  /// (`viewModel.selectedID`) so a reload that drops the person closes the page.
+  private var selectedPerson: PeopleIntelPerson? {
+    guard let id = viewModel.selectedID else { return nil }
+    return viewModel.people.first { $0.id == id }
+  }
+
+  private var listBody: some View {
+    VStack(spacing: 0) {
+      // Fixed header + connectors + search
+      VStack(alignment: .leading, spacing: 20) {
+        header
+        connectorSection
+        searchField
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 28)
+      .padding(.top, 24)
+      .padding(.bottom, 14)
+
+      // Human-in-the-loop: never silently assert an uncertain identity/fact — ask first.
+      if !viewModel.reviewQueue.isEmpty {
+        reviewSection
+          .padding(.horizontal, 28)
+          .padding(.bottom, 14)
+      }
+
+      content
+    }
+  }
+
   // MARK: Review surface
 
   private var reviewSection: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 7) {
       HStack(spacing: 8) {
         Image(systemName: "questionmark.circle")
           .font(.system(size: 13, weight: .medium))
@@ -1104,7 +1127,7 @@ private struct ConnectorCard: View {
         ZStack {
           RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(tint.opacity(0.16))
-            .frame(width: 34, height: 34)
+            .frame(width: 28, height: 28)
           Image(systemName: systemIcon)
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(tint)
@@ -1149,8 +1172,8 @@ private struct ConnectorCard: View {
           .padding(.vertical, 7)
       }
     }
-    .padding(14)
-    .frame(width: 176, height: 152, alignment: .topLeading)
+    .padding(11)
+    .frame(width: 148, height: 118, alignment: .topLeading)
     .sbCard(radius: 14)
   }
 }
@@ -1208,11 +1231,6 @@ private struct PersonRowView: View {
       }
       .buttonStyle(.plain)
 
-      if isSelected {
-        PersonDetailView(person: person, onFixInChat: onFixInChat)
-          .padding(.horizontal, 14)
-          .padding(.bottom, 14)
-      }
     }
     .background(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1293,249 +1311,6 @@ private struct PersonAvatar: View {
     }
   }
 }
-
-private struct RelationshipPill: View {
-  let text: String
-  @Environment(\.sbTheme) private var sb
-
-  var body: some View {
-    Text(text)
-      .geistMono(size: 10.5, tracking: 0.2)
-      .foregroundStyle(sb.ink(.w6))
-      .padding(.horizontal, 8)
-      .padding(.vertical, 2)
-      .background(Capsule().fill(sb.ink(.w08)))
-      .lineLimit(1)
-  }
-}
-
-private struct ChannelDots: View {
-  let channels: [PersonChannel]
-  @Environment(\.sbTheme) private var sb
-
-  var body: some View {
-    HStack(spacing: 3) {
-      ForEach(channels.prefix(6)) { channel in
-        Circle()
-          .fill(PeopleChannelPalette.color(for: channel.key))
-          .frame(width: 7, height: 7)
-      }
-      if channels.count > 6 {
-        Text("+\(channels.count - 6)")
-          .geistMono(size: 9, tracking: 0)
-          .foregroundStyle(sb.ink(.w35))
-      }
-    }
-  }
-}
-
-// MARK: - Person Detail
-
-private struct PersonDetailView: View {
-  let person: PeopleIntelPerson
-  let onFixInChat: () -> Void
-  @Environment(\.sbTheme) private var sb
-
-  private var hasContactSection: Bool {
-    if let contact = person.contactName, !contact.isEmpty { return true }
-    if let linkedin = person.linkedin, !linkedin.isEmpty { return true }
-    return false
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      if person.needsConfirmation == true, let reason = person.confirmReason, !reason.isEmpty {
-        HStack(alignment: .top, spacing: 6) {
-          Image(systemName: "questionmark.circle")
-            .font(.system(size: 12))
-            .foregroundStyle(sb.ink(.w45))
-          Text(reason)
-            .geist(size: 12)
-            .foregroundStyle(sb.ink(.w6))
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous).fill(sb.ink(.w04))
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(sb.ink(.w08), lineWidth: 1)
-        )
-      }
-
-      if !person.who.isEmpty {
-        Text(person.who)
-          .geist(size: 13.5)
-          .foregroundStyle(sb.ink(.w8))
-          .lineSpacing(3)
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      textSection("Now", person.now)
-      textSection("Overall", person.overall)
-
-      if !person.channels.isEmpty {
-        VStack(alignment: .leading, spacing: 8) {
-          SBSectionLabel(text: "Channels")
-          VStack(alignment: .leading, spacing: 6) {
-            ForEach(person.channels) { channel in
-              HStack(spacing: 8) {
-                Circle()
-                  .fill(PeopleChannelPalette.color(for: channel.key))
-                  .frame(width: 7, height: 7)
-                Text(channel.label)
-                  .geist(size: 12.5)
-                  .foregroundStyle(sb.ink(.w75))
-                Spacer(minLength: 8)
-                Text("\(channel.count.formatted())")
-                  .geistMono(size: 11.5, tracking: 0)
-                  .foregroundStyle(sb.ink(.w45))
-                if let last = PeopleDateFormat.relative(from: channel.last) {
-                  Text("· \(last)")
-                    .geistMono(size: 11, tracking: 0)
-                    .foregroundStyle(sb.ink(.w35))
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if let connections = person.connections, !connections.isEmpty {
-        VStack(alignment: .leading, spacing: 10) {
-          SBSectionLabel(text: "Connected")
-          if let circle = person.circle {
-            ConnectionCircleChip(circle: circle)
-          }
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
-              ForEach(connections) { connection in
-                ConnectionAvatarView(connection: connection)
-              }
-            }
-            .padding(.vertical, 1)
-          }
-        }
-      }
-
-      bulletSection("Activities", person.activities)
-      bulletSection("Open threads", person.openThreads)
-      bulletSection("Facts", person.facts)
-
-      if !person.aliases.isEmpty {
-        VStack(alignment: .leading, spacing: 8) {
-          SBSectionLabel(text: "Also known as")
-          Text(person.aliases.joined(separator: ", "))
-            .geist(size: 12.5)
-            .foregroundStyle(sb.ink(.w6))
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-
-      if hasContactSection {
-        VStack(alignment: .leading, spacing: 8) {
-          SBSectionLabel(text: "Contact")
-          if let contact = person.contactName, !contact.isEmpty {
-            HStack(spacing: 8) {
-              Image(systemName: "person.crop.circle")
-                .font(.system(size: 12))
-                .foregroundStyle(sb.ink(.w35))
-              Text(contact)
-                .geist(size: 12.5)
-                .foregroundStyle(sb.ink(.w75))
-                .textSelection(.enabled)
-            }
-          }
-          if let linkedin = person.linkedin, !linkedin.isEmpty {
-            HStack(spacing: 8) {
-              Image(systemName: "briefcase")
-                .font(.system(size: 12))
-                .foregroundStyle(sb.ink(.w35))
-              if let urlString = linkedin.url, let url = URL(string: urlString) {
-                Link(linkedin.displayText ?? urlString, destination: url)
-                  .geist(size: 12.5)
-                  .foregroundStyle(sb.ink(.w75))
-              } else if let text = linkedin.displayText {
-                Text(text)
-                  .geist(size: 12.5)
-                  .foregroundStyle(sb.ink(.w75))
-                  .textSelection(.enabled)
-              }
-            }
-          }
-        }
-      }
-
-      // Correct-by-chat: route to the existing chat surface to fix what Omi knows.
-      Button(action: onFixInChat) {
-        HStack(spacing: 6) {
-          Image(systemName: "bubble.left")
-            .font(.system(size: 11.5))
-          Text("Looks wrong? Confirm or correct")
-            .geist(size: 12, weight: .medium)
-        }
-        .foregroundStyle(sb.ink(.w6))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(sb.ink(.w12), lineWidth: 1)
-        )
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(14)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(sb.ink(.w02))
-    )
-  }
-
-  @ViewBuilder
-  private func textSection(_ title: String, _ body: String) -> some View {
-    if !body.isEmpty {
-      VStack(alignment: .leading, spacing: 8) {
-        SBSectionLabel(text: title)
-        Text(body)
-          .geist(size: 12.5)
-          .foregroundStyle(sb.ink(.w7))
-          .lineSpacing(2)
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func bulletSection(_ title: String, _ items: [String]) -> some View {
-    if !items.isEmpty {
-      VStack(alignment: .leading, spacing: 8) {
-        SBSectionLabel(text: title)
-        VStack(alignment: .leading, spacing: 6) {
-          ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-            HStack(alignment: .top, spacing: 8) {
-              Circle()
-                .fill(sb.ink(.w25))
-                .frame(width: 4, height: 4)
-                .padding(.top, 6)
-              Text(item)
-                .geist(size: 12.5)
-                .foregroundStyle(sb.ink(.w7))
-                .lineSpacing(2)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-// MARK: - Connected (social graph)
 
 /// Subtle neutral chip summarizing the social cluster this person sits in.
 private struct ConnectionCircleChip: View {

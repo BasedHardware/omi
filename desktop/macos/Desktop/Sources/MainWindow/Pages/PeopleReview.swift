@@ -193,4 +193,14 @@ enum PeopleChatCorrection {
     ChatProvider.mainInstance?.draftText = "Correct what you know about \(subject). Here's what's off: "
     NotificationCenter.default.post(name: .navigateToChat, object: nil)
   }
+
+  /// Sends a person-scoped question to chat. The profile page's ask bar and its
+  /// suggested prompts both route here so there is one chat hand-off, not two.
+  @MainActor
+  static func ask(prompt: String) {
+    let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    ChatProvider.mainInstance?.draftText = trimmed
+    NotificationCenter.default.post(name: .navigateToChat, object: nil)
+  }
 }

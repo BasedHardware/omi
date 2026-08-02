@@ -39,7 +39,7 @@ enum WhatsAppReader {
 
   // MARK: - Paths
 
-  private static var groupContainer: URL {
+  static var groupContainer: URL {
     FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent("Library/Group Containers/group.net.whatsapp.WhatsApp.shared", isDirectory: true)
   }

@@ -1257,7 +1257,7 @@ enum PeopleGraphBuilder {
     return lowered.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
   }
 
-  private static func slug(_ n: String) -> String {
+  static func slug(_ n: String) -> String {
     var out = ""
     var lastDash = false
     for ch in n.lowercased() {
