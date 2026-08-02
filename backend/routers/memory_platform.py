@@ -96,7 +96,7 @@ def search_memory_platform(
     limit: int = Query(100, ge=1, le=MAX_PRODUCT_MEMORY_READ_LIMIT),
     offset: int = Query(0, ge=0, le=MAX_PLATFORM_SEARCH_OFFSET),
     uid: str = Depends(_rate_limited_uid('tools:search')),
-) -> ProductMemorySearchResponse:
+):
     _validate_search_bounds(query, limit, offset)
     authz = _require_product_authorization(uid)
     policy = authz.policy
