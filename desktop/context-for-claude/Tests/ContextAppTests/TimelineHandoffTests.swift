@@ -372,13 +372,21 @@ final class TimelineHandoffTests: XCTestCase {
 
     // MARK: - Which result the keyboard is on
 
-    /// **↓ and ↑ step through the page, and Return opens whatever they are on.**
+    /// **The arrow keys step through the page, and Return opens whatever they are on.**
     ///
     /// The keyboard is the only route into the results that exists: the field holds the first
     /// responder for the life of the surface and the cards cannot take focus, so without this the
-    /// feature is pointer-only. Clamped rather than wrapping — see `moveSelection`.
+    /// feature is pointer-only. Clamped rather than wrapping — see `SearchResultsModel.move`.
+    ///
+    /// **The stepping rule changed with the panel**, and the expected values here changed with it:
+    /// ↓ used to mean "the next card in the ranking", which on a three-across grid moved the
+    /// highlight *sideways*. It now moves a row, and ←/→ carry the ranking. The geometry is
+    /// `SearchResultsModel.destination`, exercised exhaustively — ragged rows, short pages, the
+    /// empty page — in `SearchSurfaceTests`; what this covers is the model driving it, on the same
+    /// four-card page as before.
     @MainActor
     func testTheKeyboardStepsThroughTheResultsAndStopsAtBothEnds() {
+        // Four cards, three across: rows [0 1 2] [3].
         let moments = (1...4).map { Self.screenMoment(id: Int64($0), at: 1_700_000_000 + Double($0)) }
         let model = SearchResultsModel(moments: moments, query: "invoice")
 
@@ -386,31 +394,33 @@ final class TimelineHandoffTests: XCTestCase {
         XCTAssertNil(model.selection)
         XCTAssertNil(model.selectedMoment)
 
-        model.moveSelection(1)
+        model.move(.down)
         XCTAssertEqual(model.selectedMoment?.id, moments[0].id, "↓ enters at the best answer")
 
-        model.moveSelection(1)
-        model.moveSelection(1)
-        XCTAssertEqual(model.selectedMoment?.id, moments[2].id)
+        model.move(.right)
+        model.move(.right)
+        XCTAssertEqual(model.selectedMoment?.id, moments[2].id, "→ walks the ranking")
 
-        model.moveSelection(-1)
+        model.move(.left)
         XCTAssertEqual(model.selectedMoment?.id, moments[1].id)
 
-        for _ in 0..<10 { model.moveSelection(1) }
+        for _ in 0..<10 { model.move(.down) }
         XCTAssertEqual(
             model.selectedMoment?.id, moments[3].id,
             "the selection wrapped or ran off the end — either one loses the user's place")
-        for _ in 0..<10 { model.moveSelection(-1) }
-        XCTAssertEqual(model.selectedMoment?.id, moments[0].id)
+        for _ in 0..<10 { model.move(.up) }
+        XCTAssertEqual(
+            model.selectedMoment?.id, moments[0].id,
+            "↑ off the top row must hold the selection, not drop it and re-enter at the far end")
 
         // ↑ from the field enters at the far end, which is what an "up from nothing" press means.
         model.clearSelection()
-        model.moveSelection(-1)
+        model.move(.up)
         XCTAssertEqual(model.selectedMoment?.id, moments[3].id)
 
         // An empty answer has nothing to select, and pressing the key at it is not an error.
         let empty = SearchResultsModel(moments: [])
-        empty.moveSelection(1)
+        empty.move(.down)
         XCTAssertNil(empty.selection)
     }
 
@@ -443,7 +453,7 @@ final class TimelineHandoffTests: XCTestCase {
 
         // Step to the end of the page. With nothing typed the order is pure recency, so the last
         // card is the older of the two frames — the invoice.
-        for _ in 0..<5 { model.moveSelection(1) }
+        for _ in 0..<5 { model.move(.down) }
         let invoice = try XCTUnwrap(model.selectedMoment)
         XCTAssertTrue(
             invoice.title.contains("Invoice"),

@@ -119,7 +119,7 @@ struct SearchBarView: View {
                     available: SearchLayout.queryFieldWidth,
                     onSubmit: submit,
                     onCancel: onDismiss,
-                    onMoveSelection: { results.moveSelection($0) })
+                    onGridStep: { results.move($0) })
                 Spacer(minLength: 12)
                 if note == nil { keyboardHint }
             }
@@ -220,8 +220,8 @@ private struct SearchQueryField: View {
     let available: CGFloat
     let onSubmit: () -> Void
     let onCancel: () -> Void
-    /// ↓ and ↑, as a step through the results. See `SearchResultsModel.moveSelection`.
-    var onMoveSelection: (Int) -> Void = { _ in }
+    /// The four arrow keys, as a move on the results grid. See `SearchResultsModel.move`.
+    var onGridStep: (SearchGridStep) -> Bool = { _ in false }
 
     private var isTyped: Bool { !query.isEmpty }
 
@@ -246,7 +246,7 @@ private struct SearchQueryField: View {
                 }
                 SearchField(
                     text: $query, onSubmit: onSubmit, onCancel: onCancel,
-                    onMoveSelection: onMoveSelection)
+                    onGridStep: onGridStep)
             }
             .padding(.leading, isTyped ? SearchMetrics.chipPaddingHorizontal : 0)
         }
@@ -271,12 +271,16 @@ private struct SearchField: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onCancel: () -> Void
-    /// ↓ and ↑ reach the results from here for the same reason Return and Escape do: the field holds
-    /// the first responder for the whole life of this surface, so a key press that never reaches the
-    /// field's delegate never happens at all. The cards cannot take focus themselves — the panel is
-    /// non-activating and full keyboard access is off by default — so this is not one way into the
-    /// results, it is the only one.
-    var onMoveSelection: (Int) -> Void = { _ in }
+    /// The arrow keys reach the results from here for the same reason Return and Escape do: the
+    /// field holds the first responder for the whole life of this surface, so a key press that never
+    /// reaches the field's delegate never happens at all. The cards cannot take focus themselves —
+    /// the panel is non-activating and full keyboard access is off by default — so this is not one
+    /// way into the results, it is the only one.
+    ///
+    /// Returns whether the results took the key, which is what lets ← and → be shared: the field
+    /// keeps them until a card is selected, and gets them back the moment one is not. See
+    /// `SearchResultsModel.move`.
+    var onGridStep: (SearchGridStep) -> Bool = { _ in false }
 
     func makeNSView(context: Context) -> FocusingTextField {
         // The same role the chip is measured with, resolved to the AppKit font it is made of. The
@@ -314,7 +318,7 @@ private struct SearchField: NSViewRepresentable {
         context.coordinator.text = $text
         context.coordinator.onSubmit = onSubmit
         context.coordinator.onCancel = onCancel
-        context.coordinator.onMoveSelection = onMoveSelection
+        context.coordinator.onGridStep = onGridStep
         // Only when it really differs: assigning `stringValue` moves the insertion point to the end,
         // which would fight the user on every keystroke.
         if field.stringValue != text { field.stringValue = text }
@@ -322,25 +326,25 @@ private struct SearchField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            text: $text, onSubmit: onSubmit, onCancel: onCancel, onMoveSelection: onMoveSelection)
+            text: $text, onSubmit: onSubmit, onCancel: onCancel, onGridStep: onGridStep)
     }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var text: Binding<String>
         var onSubmit: () -> Void
         var onCancel: () -> Void
-        var onMoveSelection: (Int) -> Void
+        var onGridStep: (SearchGridStep) -> Bool
 
         init(
             text: Binding<String>,
             onSubmit: @escaping () -> Void,
             onCancel: @escaping () -> Void,
-            onMoveSelection: @escaping (Int) -> Void = { _ in }
+            onGridStep: @escaping (SearchGridStep) -> Bool = { _ in false }
         ) {
             self.text = text
             self.onSubmit = onSubmit
             self.onCancel = onCancel
-            self.onMoveSelection = onMoveSelection
+            self.onGridStep = onGridStep
         }
 
         @objc func submitFromField(_ sender: NSTextField) {
@@ -365,11 +369,18 @@ private struct SearchField: NSViewRepresentable {
             // move the insertion point to the end of the line, which is a no-op the user cannot see
             // — so letting it through would look exactly like the key doing nothing.
             case #selector(NSResponder.moveDown(_:)):
-                onMoveSelection(1)
-                return true
+                return onGridStep(.down)
             case #selector(NSResponder.moveUp(_:)):
-                onMoveSelection(-1)
-                return true
+                return onGridStep(.up)
+            // …and ← / → are the opposite case: they are the *field's* by default, because moving
+            // the insertion point through a query is what a person does with them all day. They are
+            // only borrowed while a card is selected, and the borrow is announced by the return
+            // value rather than by a flag this file would have to keep in step — `false` here means
+            // the results declined, and AppKit hands the key straight back to the field editor.
+            case #selector(NSResponder.moveLeft(_:)):
+                return onGridStep(.left)
+            case #selector(NSResponder.moveRight(_:)):
+                return onGridStep(.right)
             default:
                 return false
             }

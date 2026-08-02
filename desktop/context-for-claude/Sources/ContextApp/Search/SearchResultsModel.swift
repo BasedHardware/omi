@@ -89,6 +89,22 @@ struct SearchAppFacet: Identifiable, Equatable, Sendable {
     var id: String { name }
 }
 
+// MARK: - Moving through the grid
+
+/// One arrow key, as a direction on the results grid.
+///
+/// A direction rather than the `±1` this used to take, because the results are a **grid** and the
+/// old signature could not describe one: with three cards across, "the card below this one" is
+/// three along, and a single delta collapses ↓ and → onto the same movement. That is what the
+/// surface shipped — pressing ↓ walked the highlight *sideways* across the first row — and it is
+/// invisible in a delta and obvious in a direction.
+enum SearchGridStep: Equatable, Sendable {
+    case up
+    case down
+    case left
+    case right
+}
+
 // MARK: - The model
 
 @MainActor
@@ -119,6 +135,24 @@ final class SearchResultsModel: ObservableObject {
     @Published private(set) var time: SearchTimeFilter = .anytime
     @Published private(set) var website: String?
     @Published private(set) var app: String?
+
+    /// Whether the three filter rows are open under the header.
+    ///
+    /// **Closed is the resting state, and that is the whole of a defect this surface shipped with.**
+    /// The filter block is three full-width sections — time chips, a site row, a row of 46 pt app
+    /// icons — and it sat above the results inside a panel whose ceiling is
+    /// `SearchLayout.maximumResultsBodyHeight`. It ate very nearly all of it. So the answer to a
+    /// query was: a screenful of filter furniture, the word `RESULTS`, one row of cards, and the
+    /// next row sliced by the panel's edge. A person who had just searched their own machine saw
+    /// three of their hundred-and-nine screenshots without scrolling, under a stack of controls they
+    /// had not asked for — which is exactly the report this closed: the results "look dull", they
+    /// should "already pop up with screens".
+    ///
+    /// Closing it by default is not hiding the filters; it is putting them one press behind the
+    /// thing they filter. The header stays visible, says `Filter`, carries a chevron, and — when a
+    /// chip really is lit — names the narrowing in words (`hiddenFilterSummary`), so a collapsed
+    /// block can never be a filter the user cannot see acting on an answer they can.
+    @Published private(set) var isShowingFilters = false
     @Published var pickedDate = Date() {
         didSet { if time == .pickADate { reload() } }
     }
@@ -223,6 +257,23 @@ final class SearchResultsModel: ObservableObject {
         reload()
     }
 
+    /// Open or close the filter block. Does not re-read: which controls are on screen is not a
+    /// question about the answer.
+    func toggleFilters() {
+        isShowingFilters.toggle()
+    }
+
+    /// What the header says about a narrowing the closed block is no longer showing, or nil when
+    /// there is nothing hidden — the block is open, or nothing is lit.
+    ///
+    /// This is what makes closing the block safe. A lit chip changes the answer, so a collapsed
+    /// block that swallowed one would leave the panel reporting a narrowed count with nothing on
+    /// screen to explain it, and no way to tell a filtered answer from an empty machine.
+    var hiddenFilterSummary: String? {
+        guard !isShowingFilters else { return nil }
+        return SearchCopy.filterSummary(time: time, website: website, app: app)
+    }
+
     // MARK: Which result the keyboard is on
 
     /// The moment Return would open, or nil while the keyboard is still in the field.
@@ -231,25 +282,87 @@ final class SearchResultsModel: ObservableObject {
         return moments.first { $0.id == selection }
     }
 
-    /// Steps the selection through the page in **reading order** — what ↓ and ↑ do.
+    /// Steps the selection through the page — what the four arrow keys do.
     ///
-    /// Reading order, not grid geometry, and deliberately: the grid's reading order *is* the ranking
-    /// order, so "next" means "the next best answer" rather than "the card below this one", and one
-    /// pair of keys covers the whole page. ← and → are not offered because the field owns them: they
-    /// move the insertion point through the query, and a surface where an arrow key means two things
-    /// depending on invisible state is worse than one where it means one.
+    /// **Reading order was the first design and the grid outgrew it.** The original rule stepped
+    /// ±1 on ↓/↑ and offered ← and → to nobody, on the reasoning that the grid's reading order *is*
+    /// the ranking order, so "next" means "the next best answer" and one pair of keys covers the
+    /// page. That reasoning is still true about the *order*; what it got wrong is the *key*. With
+    /// three cards across, ↓ moved the highlight one card to the right, and a key labelled "down"
+    /// that visibly moves sideways reads as broken rather than as clever — the more so now that
+    /// this panel opens on the grid rather than on the filter block. So ↓/↑ move by a row and ←/→
+    /// move along the ranking, which is the arrangement every macOS icon grid already teaches.
+    ///
+    /// **← and → still belong to the query until the keyboard is in the grid.** That was the real
+    /// objection to offering them, and it is answered by state rather than by omission: with nothing
+    /// selected this returns `false` and the field moves the insertion point exactly as before, so
+    /// typing and editing a query are untouched. Only once ↓ has stepped into the results do they
+    /// mean anything here.
+    ///
+    /// - Returns: whether the results took the key. `false` means "not mine" — the caller must let
+    ///   the field have it, or ← and → would be dead in the one place they are most used.
+    @discardableResult
+    func move(_ step: SearchGridStep) -> Bool {
+        guard !moments.isEmpty else { return false }
+        let index = selection.flatMap { current in moments.firstIndex { $0.id == current } }
+        guard index != nil || (step != .left && step != .right) else { return false }
+        let landing = Self.destination(
+            of: step, from: index, count: moments.count, columns: Self.gridColumns)
+        selection = landing.map { moments[$0].id }
+        return true
+    }
+
+    /// How many cards a row holds, as the navigation sees it. Read off the layout rather than
+    /// restated, so a grid that becomes two or four across cannot leave ↓ stepping by three.
+    nonisolated static var gridColumns: Int { SearchLayout.resultColumns }
+
+    /// **Where an arrow key lands** — the whole of 2-D navigation, as arithmetic.
+    ///
+    /// Static and pure so every case is a test rather than something to try by hand on a page that
+    /// happens to be twelve cards long: the ones that break in the wild are the ragged last row, the
+    /// page shorter than one row, and the empty page, none of which anybody thinks to open.
+    ///
+    /// `nil` means **the keyboard is back in the field**, which is a real destination and not a
+    /// failure — see `.left` below.
     ///
     /// Clamped rather than wrapping. Wrapping at the bottom of a 60-card page puts the selection back
     /// at the top with no scroll to explain it, which reads as the key having lost the selection.
-    func moveSelection(_ delta: Int) {
-        guard !moments.isEmpty else { return }
-        guard let current = selection, let index = moments.firstIndex(where: { $0.id == current }) else {
+    nonisolated static func destination(
+        of step: SearchGridStep, from index: Int?, count: Int, columns: Int
+    ) -> Int? {
+        guard count > 0, columns > 0 else { return nil }
+        let last = count - 1
+        guard let index, (0...last).contains(index) else {
             // The first press steps *into* the results from the field: down enters at the best
             // answer, up enters at the last one, which is what an "end" key press means to a list.
-            selection = (delta >= 0 ? moments.first : moments.last)?.id
-            return
+            // ← and → do not enter at all — with no card to move from they are still the query's.
+            switch step {
+            case .down: return 0
+            case .up: return last
+            case .left, .right: return nil
+            }
         }
-        selection = moments[min(max(0, index + delta), moments.count - 1)].id
+        switch step {
+        case .down:
+            // Clamped to the last card and not to the last *full* row: on a ragged final row ↓ from
+            // the row above would otherwise do nothing, and a key that appears dead at the bottom of
+            // the page is how a user concludes the grid is not navigable at all.
+            return min(index + columns, last)
+        case .up:
+            // Held at the top row rather than stepping out. The way out is ←, and it has to be only
+            // one key: if ↑ also left the grid then a second ↑ would re-enter at the *last* card —
+            // the "up from nothing" rule above — and the keyboard would teleport to the bottom of
+            // the page for pressing one key twice.
+            return index < columns ? index : index - columns
+        case .left:
+            // Out of the first card is out of the grid, back to the query. One exit, at the one
+            // place where "the thing before this" really is the search field: the top-left corner.
+            // Every other ← is the previous card in the ranking, which is also the previous row's
+            // last card at a row start — the same flow a macOS icon grid has.
+            return index == 0 ? nil : index - 1
+        case .right:
+            return min(index + 1, last)
+        }
     }
 
     /// Puts the keyboard back in the field with nothing selected — what a new question means, and

@@ -62,6 +62,14 @@ final class SearchRenderHarness: XCTestCase {
             // conversation card and a screen card have to be legible as different things without a
             // badge, and identical in size so the grid rows stay level.
             ("10-typed-mixed", "invoice", Fixtures.mixed(thumbnails: thumbnails)),
+            // The filter block **open**, which is now a state you have to ask for. It is here
+            // because it is the state the panel's ceiling is hardest on — the three sections plus a
+            // whole card — and because it is the only render that shows the chips at all now that
+            // the panel opens on the grid.
+            ("11-typed-twelve-filters-open", "gpu benchmarks", Fixtures.filtersOpen(thumbnails: thumbnails)),
+            // …and the other half of that bargain: a narrowing the closed block is not showing has
+            // to be named in the header, or a count that fell from 109 to 4 has no visible cause.
+            ("12-narrowed-filters-closed", "gpu benchmarks", Fixtures.narrowedButClosed(thumbnails: thumbnails)),
         ]
 
         var written: [String] = []
@@ -536,6 +544,24 @@ enum Fixtures {
             totalCount: 109,
             websites: SearchResultsModel.facetWebsites(moments),
             apps: SearchResultsModel.facetApps(moments))
+    }
+
+    /// The same page with the filter block opened, as if the user had pressed `Filter`.
+    static func filtersOpen(thumbnails: [String]) -> SearchResultsModel {
+        let model = twelve(thumbnails: thumbnails)
+        model.toggleFilters()
+        return model
+    }
+
+    /// A narrowed answer with the block **closed** — the state the header's summary exists for.
+    ///
+    /// Narrowed through the real `select` calls rather than by constructing a model that merely
+    /// looks narrowed, so the header is reporting state the surface actually set.
+    static func narrowedButClosed(thumbnails: [String]) -> SearchResultsModel {
+        let model = twelve(thumbnails: thumbnails)
+        model.select(time: .today)
+        model.select(website: "arc.net")
+        return model
     }
 
     /// The first `count` of the same fabricated moments — the sparse states, where the panel has to

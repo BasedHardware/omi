@@ -134,19 +134,25 @@ final class SearchSurfaceTests: XCTestCase {
             SearchLayout.minimumCardWidth * 1.2)
     }
 
-    /// **The panel is tall enough for a whole card.**
+    /// **The panel is tall enough for a whole card, even with the filter block open.**
     ///
     /// This is the clipped-card defect stated as arithmetic. The body's ceiling has to clear the
     /// filter block plus one complete card — picture, title *and* source line — or the very first
     /// row the user sees is sliced through the middle at the panel's edge, which is what the first
     /// two passes of this design did.
+    ///
+    /// Measured with the block **open**, because that is the state the claim is now about: the
+    /// block is closed at rest (`SearchResultsModel.isShowingFilters`), and measuring it closed
+    /// would leave this asserting that a header plus one card fits in 545 pt — true, and not the
+    /// defect. What the ceiling has to survive is the state where the filters really are above the
+    /// grid, which is the state this opens.
     @MainActor
     func testTheCeilingLeavesRoomForAWholeCard() {
-        let filterBlock = NSHostingView(
-            rootView: SearchFilterContent(
-                model: SearchResultsModel(
-                    moments: [], websites: ["arc.net"],
-                    apps: [SearchAppFacet(name: "Arc", bundleId: nil)])))
+        let model = SearchResultsModel(
+            moments: [], websites: ["arc.net"],
+            apps: [SearchAppFacet(name: "Arc", bundleId: nil)])
+        model.toggleFilters()
+        let filterBlock = NSHostingView(rootView: SearchFilterContent(model: model))
         filterBlock.layoutSubtreeIfNeeded()
         // The empty content, less the one-line "no results" note the grid replaces.
         let filters = filterBlock.fittingSize.height - SearchLayout.chipHeight
@@ -155,6 +161,214 @@ final class SearchSurfaceTests: XCTestCase {
             SearchLayout.maximumResultsBodyHeight, filters + SearchLayout.cardHeight(),
             "the panel tops out at \(SearchLayout.maximumResultsBodyHeight) pt, which cuts the first "
                 + "row of cards — it needs \(filters + SearchLayout.cardHeight())")
+    }
+
+    // MARK: - The results lead, and the filters are one press behind them
+
+    /// **A search shows the user their screenshots, not a screenful of filter controls.**
+    ///
+    /// The reported defect, as arithmetic on the real view. The panel's body is capped at
+    /// `SearchLayout.maximumResultsBodyHeight`, and the filter block — four time chips, a row of
+    /// site pills, a row of 46 pt app icons — used to sit inside that cap *above* the grid and take
+    /// very nearly all of it. So a query with a hundred and nine answers showed three of them and
+    /// sliced the fourth row, and what a person saw after searching their own machine was a stack
+    /// of controls they had not asked for. That is the state this is a guard against.
+    ///
+    /// Two whole rows is the floor rather than the target: one row is indistinguishable from a
+    /// list, and one row is exactly what the old arrangement managed. The comparison against the
+    /// open block is what keeps this honest — it proves the closed state really is buying rows,
+    /// rather than the numbers happening to satisfy a threshold.
+    @MainActor
+    func testTheOpenedPanelSpendsItsHeightOnResultsRatherThanOnFilters() {
+        /// The panel's natural height for a page of `cards`, in whichever filter state.
+        func naturalHeight(cards: Int, showingFilters: Bool) -> CGFloat {
+            let model = SearchResultsModel(
+                moments: (1...cards).map {
+                    Self.moment(id: Int64($0), title: "Docs — arc.net", app: "Arc")
+                },
+                websites: ["arc.net", "duckduckgo.com"],
+                apps: [SearchAppFacet(name: "Arc", bundleId: nil)])
+            if showingFilters { model.toggleFilters() }
+            let host = NSHostingView(rootView: SearchFilterContent(model: model))
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize.height
+        }
+
+        /// How many whole rows of cards the ceiling leaves for the grid, measured by growing the
+        /// page by a row and seeing what that costs — so the row's height and the chrome around it
+        /// are both the view's own numbers rather than constants restated here.
+        func visibleRows(showingFilters: Bool) -> Int {
+            let one = naturalHeight(cards: SearchLayout.resultColumns, showingFilters: showingFilters)
+            let two = naturalHeight(cards: SearchLayout.resultColumns * 2, showingFilters: showingFilters)
+            let row = two - one
+            XCTAssertGreaterThan(row, 0, "a second row of cards cost the panel no height at all")
+            let chrome = one - row
+            return Int(((SearchLayout.maximumResultsBodyHeight - chrome) / row).rounded(.down))
+        }
+
+        let closed = visibleRows(showingFilters: false)
+        let open = visibleRows(showingFilters: true)
+        print("[search] whole rows of cards visible — filters closed: \(closed), open: \(open)")
+
+        XCTAssertGreaterThanOrEqual(
+            closed, 2,
+            "a search shows \(closed) row(s) of results before the user has to scroll — the panel is "
+                + "spending its height on something other than the answer")
+        XCTAssertGreaterThan(
+            open, 0, "with the filters open the grid is gone entirely, not merely pushed down")
+        XCTAssertGreaterThan(
+            closed, open,
+            "closing the filter block bought the grid no rows, so it is not what is between the user "
+                + "and their screenshots and this guard is measuring the wrong thing")
+    }
+
+    /// **The panel opens on the results, and a filter it is not showing is named in words.**
+    ///
+    /// Both halves are the same claim: closing the block may cost the user controls, never
+    /// information. A count that fell from 109 to 4 with no visible cause is indistinguishable from
+    /// a machine that captured almost nothing, and there would be nothing on screen to undo.
+    @MainActor
+    func testAFilterTheClosedBlockIsHidingIsStillNamedInTheHeader() throws {
+        let model = SearchResultsModel(
+            moments: [], websites: ["arc.net"], apps: [SearchAppFacet(name: "Arc", bundleId: nil)])
+
+        XCTAssertFalse(
+            model.isShowingFilters,
+            "the panel opens on the filter block again — the results are back below the fold")
+        XCTAssertNil(
+            model.hiddenFilterSummary,
+            "nothing is narrowing this answer, so the header is reporting a filter nobody set")
+
+        model.select(time: .today)
+        model.select(website: "arc.net")
+        model.select(app: "Arc")
+        let summary = try XCTUnwrap(
+            model.hiddenFilterSummary,
+            "three filters are narrowing the answer and the closed header says nothing about any of them")
+        for lit in ["today", "arc.net", "Arc"] {
+            XCTAssertTrue(
+                summary.contains(lit), "the header does not name the lit `\(lit)` filter: \(summary)")
+        }
+        // …and the accessibility label carries it too, since the chevron says nothing to a reader.
+        XCTAssertTrue(SearchResultsView.filterDisclosureLabel(summary: summary).contains(summary))
+
+        // Open the block and the lit chips say it themselves — saying it twice is how the two get
+        // to disagree.
+        model.toggleFilters()
+        XCTAssertNil(model.hiddenFilterSummary)
+        XCTAssertEqual(SearchResultsView.filterDisclosureLabel(summary: nil), "Filter")
+    }
+
+    // MARK: - The arrow keys on a grid
+
+    /// **↓ means the card below, not the card to the right.**
+    ///
+    /// The defect this fixes is a signature one for a list turned into a grid: the selection stepped
+    /// ±1 through the ranking, so on a three-across grid pressing ↓ walked the highlight *sideways*
+    /// along the first row. Pure arithmetic, so the cases that actually break are reachable — the
+    /// ragged last row, a page shorter than one row, an empty page — none of which anybody opens by
+    /// hand.
+    func testTheArrowKeysMoveThroughTheResultsAsAGridRatherThanAsAList() {
+        // Eight cards, three across: rows [0 1 2] [3 4 5] [6 7].
+        func step(_ direction: SearchGridStep, from index: Int?, count: Int = 8) -> Int? {
+            SearchResultsModel.destination(of: direction, from: index, count: count, columns: 3)
+        }
+
+        // Entering from the field is unchanged: ↓ at the best answer, ↑ at the last one.
+        XCTAssertEqual(step(.down, from: nil), 0)
+        XCTAssertEqual(step(.up, from: nil), 7)
+
+        // The fix. Down is a row.
+        XCTAssertEqual(step(.down, from: 0), 3, "↓ moved sideways instead of down")
+        XCTAssertEqual(step(.down, from: 1), 4)
+        XCTAssertEqual(step(.up, from: 4), 1)
+        XCTAssertEqual(step(.up, from: 5), 2)
+
+        // The ragged final row: ↓ from above it must still reach it, or the last results on the
+        // page are only ever reachable sideways.
+        XCTAssertEqual(step(.down, from: 5), 7)
+        XCTAssertEqual(step(.down, from: 7), 7, "clamped at the end rather than wrapping to the top")
+
+        // ↑ is held at the top row rather than stepping out, so that a second press cannot re-enter
+        // at the far end and teleport the keyboard to the bottom of the page.
+        XCTAssertEqual(step(.up, from: 0), 0)
+        XCTAssertEqual(step(.up, from: 2), 2)
+
+        // ← and → walk the ranking, which flows across a row boundary exactly as reading does.
+        XCTAssertEqual(step(.right, from: 2), 3)
+        XCTAssertEqual(step(.left, from: 3), 2)
+        XCTAssertEqual(step(.right, from: 7), 7)
+
+        // The one exit: ← off the best answer puts the keyboard back in the query.
+        XCTAssertNil(step(.left, from: 0))
+
+        // Every card on the page is reachable, which is what makes row-stepping safe: ↓ alone skips
+        // two cards in three, and a result the keyboard cannot land on is a result Return cannot open.
+        var reached: Set<Int> = [0]
+        var cursor = 0
+        while let next = step(.right, from: cursor), next != cursor {
+            cursor = next
+            reached.insert(next)
+        }
+        XCTAssertEqual(
+            reached, Set(0..<8),
+            "→ does not reach every card, so some results are unreachable from the keyboard")
+
+        // A page shorter than one row is a whole grid with no second row to move to.
+        XCTAssertEqual(step(.down, from: nil, count: 2), 0)
+        XCTAssertEqual(step(.down, from: 0, count: 2), 1, "↓ on a short page must reach its last card")
+        XCTAssertEqual(step(.up, from: 1, count: 2), 1)
+
+        // An empty page, and a degenerate column count, are ordinary states rather than errors.
+        for direction in [SearchGridStep.up, .down, .left, .right] {
+            XCTAssertNil(SearchResultsModel.destination(of: direction, from: nil, count: 0, columns: 3))
+            XCTAssertNil(SearchResultsModel.destination(of: direction, from: 0, count: 0, columns: 3))
+            XCTAssertNil(SearchResultsModel.destination(of: direction, from: 0, count: 8, columns: 0))
+        }
+
+        // The grid the keys step over is the grid the panel draws — a column count restated here
+        // would let ↓ keep stepping by three after the panel became two or four across.
+        XCTAssertEqual(SearchResultsModel.gridColumns, SearchLayout.resultColumns)
+    }
+
+    /// **← and → belong to the query until the keyboard is actually in the grid.**
+    ///
+    /// This is the whole reason those two keys were previously offered to nobody: they move the
+    /// insertion point through what has been typed, and a bar where they sometimes do not is a bar
+    /// that eats your editing. The borrow is announced by the return value, so the field can hand
+    /// the key straight back — and this asserts both directions of that, plus the way out.
+    @MainActor
+    func testLeftAndRightStayWithTheQueryUntilTheKeyboardIsInTheGrid() {
+        let model = SearchResultsModel(
+            moments: (1...6).map { Self.moment(id: Int64($0), title: "Docs — arc.net", app: "Arc") },
+            query: "invoice")
+
+        XCTAssertFalse(model.move(.left), "← was taken from the query with no card selected")
+        XCTAssertFalse(model.move(.right), "→ was taken from the query with no card selected")
+        XCTAssertNil(model.selection)
+
+        XCTAssertTrue(model.move(.down))
+        XCTAssertEqual(model.selectedMoment?.id, model.moments[0].id)
+        XCTAssertTrue(model.move(.right), "→ is the grid's once a card is selected")
+        XCTAssertEqual(model.selectedMoment?.id, model.moments[1].id)
+        XCTAssertTrue(model.move(.down))
+        XCTAssertEqual(
+            model.selectedMoment?.id, model.moments[4].id, "↓ did not move a whole row on the model")
+
+        // Back out along the ranking, and off the front of it: the last ← is consumed (it is what
+        // drops the selection), and the one after it is the query's again.
+        for _ in 0..<4 { XCTAssertTrue(model.move(.left)) }
+        XCTAssertEqual(model.selectedMoment?.id, model.moments[0].id)
+        XCTAssertTrue(model.move(.left))
+        XCTAssertNil(model.selection, "← off the best answer must put the keyboard back in the query")
+        XCTAssertFalse(model.move(.left))
+
+        // An empty answer never takes an arrow key at all, so every one of them still edits.
+        let empty = SearchResultsModel(moments: [])
+        for direction in [SearchGridStep.up, .down, .left, .right] {
+            XCTAssertFalse(empty.move(direction), "\(direction) was consumed over an empty page")
+            XCTAssertNil(empty.selection)
+        }
     }
 
     /// **A body with more below it says so; one that contains everything does not.**

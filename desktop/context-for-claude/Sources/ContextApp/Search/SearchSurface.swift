@@ -751,6 +751,27 @@ enum SearchCopy {
         }
     }
 
+    /// **What is narrowing this answer, in words** — for the header, when the filter block is closed
+    /// and the lit chips are therefore not on screen. Nil when nothing is narrowing it.
+    ///
+    /// The point of the sentence is that closing the block costs the user no information. A count
+    /// that dropped from 109 to 4 with no visible cause is the worst state this panel could be in:
+    /// it is indistinguishable from a machine that captured almost nothing, and the user has no way
+    /// to find the control that did it. Naming the narrowing removes that state entirely, which is
+    /// what earns the closed block.
+    ///
+    /// The filters are named in the order the block draws them, so pressing `Filter` shows the lit
+    /// chips in the order they were just read out. `pickADate` says "a date" rather than the date
+    /// itself: the day lives in the picker, and a header that reprints it would be the one place in
+    /// the surface where a filter's *value* is stated twice and can disagree with itself.
+    static func filterSummary(time: SearchTimeFilter, website: String?, app: String?) -> String? {
+        var parts: [String] = []
+        if time != .anytime { parts.append(time == .pickADate ? "a date" : time.title) }
+        if let website { parts.append(SearchSource.truncated(website)) }
+        if let app { parts.append(app) }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
     /// What a section says when it has nothing in it yet.
     ///
     /// Every one of these is reachable on a fresh install — a Mac that has captured for ten minutes

@@ -92,12 +92,40 @@ struct SearchResultsView: View {
 
     // MARK: Header
 
+    /// The `Filter` row — and, since the block below it closes, **the control that opens it**.
+    ///
+    /// The row was already a filter glyph and the word `Filter` over the block it describes; making
+    /// it the disclosure adds a chevron and a hit target and invents nothing. A separate "Filters"
+    /// button beside it would have been a second thing meaning the first thing.
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Ink.secondary)
-            Text("Filter").inkStyle(.rowCopy, color: Ink.primary)
+            Button(action: { model.toggleFilters() }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Ink.secondary)
+                    Text("Filter").inkStyle(.rowCopy, color: Ink.primary)
+                    // What the closed block is doing to the answer. See `SearchCopy.filterSummary`
+                    // — without it a narrowed count has no visible cause.
+                    if let summary = model.hiddenFilterSummary {
+                        Text(summary)
+                            .inkStyle(.statusLabel, color: Ink.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    // Down when open, right when closed — the direction the block will move, which
+                    // is the one thing a chevron is read for. Rotated rather than swapped for a
+                    // second symbol so the turn is the animation.
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Ink.secondary)
+                        .rotationEffect(.degrees(model.isShowingFilters ? 0 : -90))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(Self.filterDisclosureLabel(summary: model.hiddenFilterSummary)))
+            .accessibilityAddTraits(model.isShowingFilters ? [.isSelected] : [])
             Spacer(minLength: 12)
             // Nil is a state and not a missing value: an untouched bar over an empty capture has no
             // verdict to report, and `No results` there answers a search nobody ran.
@@ -109,6 +137,15 @@ struct SearchResultsView: View {
         }
         .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
         .frame(height: SearchLayout.panelHeaderHeight)
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: model.isShowingFilters)
+    }
+
+    /// What the disclosure is called to VoiceOver. The chevron says "open me" to the eye and nothing
+    /// at all to a reader, so the label has to carry both the action and, when there is one, the
+    /// narrowing the closed block is holding.
+    static func filterDisclosureLabel(summary: String?) -> String {
+        guard let summary else { return "Filter" }
+        return "Filter — \(summary)"
     }
 
     /// Fixed-width columns, not adaptive: the panel is a known width, so the card width is arithmetic
@@ -135,9 +172,16 @@ struct SearchFilterContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: InkLayout.rhythm[3]) {
-            timeSection
-            websiteSection
-            appSection
+            // **The results are what the panel is for, and the filters are one press away.** The
+            // three sections are drawn above the grid when they are drawn at all, because that is
+            // where a control belongs relative to what it narrows; what changed is that they are
+            // not drawn by default. See `SearchResultsModel.isShowingFilters` for the panel-height
+            // arithmetic that made the old arrangement show three cards out of a hundred and nine.
+            if model.isShowingFilters {
+                timeSection
+                websiteSection
+                appSection
+            }
             resultsSection
         }
         .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
@@ -219,28 +263,42 @@ struct SearchFilterContent: View {
         }
     }
 
+    /// **The `RESULTS` header is only drawn when something is above it to be separated from.**
+    ///
+    /// With the filter block open it is one of four section headers and it is doing that job. With
+    /// the block closed the grid is the only thing in the panel, directly under a header that
+    /// already says how many results there are — so a second, smaller, all-caps label repeating the
+    /// word is a rung of chrome between the user and the first row of pictures, and this panel's
+    /// ceiling is measured in fractions of a card.
     @ViewBuilder
     private var resultsSection: some View {
-        SearchSection(title: "Results") {
-            if model.moments.isEmpty {
-                // Which sentence depends on whether anything was asked. "Nothing captured matches
-                // that yet" over an untouched search bar is a verdict on a search that never ran.
-                SearchEmptyNote(SearchCopy.results(intent: model.intent))
-            } else {
-                LazyVGrid(columns: SearchResultsView.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
-                    ForEach(model.moments) { moment in
-                        SearchResultCard(
-                            moment: moment,
-                            loader: model.loader,
-                            isSelected: model.selection == moment.id
-                        ) {
-                            onOpen(moment)
-                        }
-                        // The anchor `scrollTo` travels to. The same id the selection is stored by,
-                        // so the two cannot drift: a card the keyboard can select is a card the
-                        // panel can scroll to, by construction.
-                        .id(moment.id)
+        if model.isShowingFilters {
+            SearchSection(title: "Results") { results }
+        } else {
+            results.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var results: some View {
+        if model.moments.isEmpty {
+            // Which sentence depends on whether anything was asked. "Nothing captured matches
+            // that yet" over an untouched search bar is a verdict on a search that never ran.
+            SearchEmptyNote(SearchCopy.results(intent: model.intent))
+        } else {
+            LazyVGrid(columns: SearchResultsView.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
+                ForEach(model.moments) { moment in
+                    SearchResultCard(
+                        moment: moment,
+                        loader: model.loader,
+                        isSelected: model.selection == moment.id
+                    ) {
+                        onOpen(moment)
                     }
+                    // The anchor `scrollTo` travels to. The same id the selection is stored by,
+                    // so the two cannot drift: a card the keyboard can select is a card the
+                    // panel can scroll to, by construction.
+                    .id(moment.id)
                 }
             }
         }
