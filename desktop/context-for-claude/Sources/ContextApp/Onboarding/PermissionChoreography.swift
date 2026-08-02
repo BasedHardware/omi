@@ -272,10 +272,12 @@ struct SettingsRowLocator {
     /// arrow this whole file is arranged to avoid. Ordinal, not by header text: the header is a
     /// sibling of the section rather than its ancestor, so there is no containment relation to
     /// search, and the order of the sections is stable where their wording is not.
+    ///
+    /// **It names a section, and an absent section is not a reason to point somewhere else.** See
+    /// `Walk.hit(inSection:)`.
     func locate(in root: any SettingsElement, preferring occurrence: Int = 0) -> Location {
         let state = survey(root)
-        guard !state.hits.isEmpty else { return .notFound }
-        let hit = state.hits[clamp(occurrence, to: state.hits.count)]
+        guard let hit = state.hit(inSection: occurrence) else { return .notFound }
         return hit.isClipped ? .offscreen(hit.located) : .visible(hit.located)
     }
 
@@ -285,8 +287,7 @@ struct SettingsRowLocator {
     ) -> TargetLocation {
         let state = survey(root)
 
-        if !state.hits.isEmpty {
-            let hit = state.hits[clamp(occurrence, to: state.hits.count)]
+        if let hit = state.hit(inSection: occurrence) {
             let section = hit.section.map { state.sections[$0] }
             let target = SettingsSpotlightTarget(
                 row: hit.located.row,
@@ -303,8 +304,13 @@ struct SettingsRowLocator {
             return hit.isClipped ? .offscreen(target) : .visible(target)
         }
 
-        guard !state.sections.isEmpty else { return .notFound }
-        let section = state.sections[clamp(occurrence, to: state.sections.count)]
+        // **The section asked for, or nothing.** Clamping here was the other half of the same defect:
+        // a pane with one list, asked about the second, answered with the first list's **+** — so the
+        // instruction under the arrow ("Click + and choose …") named a list the user was not looking
+        // at. The two lists of the Screen Recording pane both exist whether or not we are in either,
+        // so this only refuses on a pane that genuinely has no such section.
+        guard occurrence >= 0, occurrence < state.sections.count else { return .notFound }
+        let section = state.sections[occurrence]
         // A stray label of ours belongs to the section it sits nearest, which in every layout that
         // has one means the section it has to be dragged into.
         let stray = state.strayLabels.min { a, b in
@@ -312,10 +318,6 @@ struct SettingsRowLocator {
         }
         return .notListed(
             NotListed(area: section.clipped, list: section.list, add: section.add, strayRow: stray))
-    }
-
-    private func clamp(_ index: Int, to count: Int) -> Int {
-        min(max(index, 0), count - 1)
     }
 
     // MARK: The walk
@@ -377,6 +379,41 @@ struct SettingsRowLocator {
         init(limits: Limits) {
             self.limits = limits
             nodesRemaining = limits.maxNodes
+        }
+
+        /// **Our row in the section that was asked for, and never a different section's row.**
+        ///
+        /// This replaced `hits[clamp(occurrence, to: hits.count)]`, and the clamp is the whole of a
+        /// live defect. On the Screen & System Audio Recording pane the *second* list — "System Audio
+        /// Recording Only" — routinely holds no row for this application: macOS creates that TCC
+        /// record lazily, on a CoreAudio process tap the app attempts, so until one has been tried
+        /// the list does not mention us at all. Measured on macOS 26.5.2 (25F84): `tccutil reset
+        /// AudioCapture com.omi.context-for-claude` left that list holding one other application and
+        /// nothing of ours, which is the reported screenshot exactly.
+        ///
+        /// In that state there is **one** hit — the screen-recording row in the upper list — and
+        /// `clamp(1, to: 1)` answered `0`. The overlay then rang the *Screen Recording* switch with
+        /// total confidence while the card was asking for system audio. Measured live against the
+        /// real pane in that state, through `guidance(for:appName:windows:windowFrame:space:)`: the
+        /// walk answered a row at y 451.5 with its switch at (1233, 457.5) — the upper list's row for
+        /// this app, whose label OCR put at y 458.5 — while the lower list's rows begin at y 1019.
+        /// With the clamp gone the same call answers the **+** under the lower list at (819, 1056),
+        /// inside that list's own area of (819, 1019.5, 460, 60.5).
+        ///
+        /// Reported verbatim: *"Even after I turned it on this still doesnt go away … this is only
+        /// showing properly in accessibility and is not perfect for audio now"* — the switch the user
+        /// turned on was the one the arrow pointed at, and it was the wrong one.
+        ///
+        /// An ordinal that names a section has to be matched against the section a hit was found in,
+        /// which the walk already records. The one fallback is a pane the walk found no sections in at
+        /// all — the flat Microphone layout on a macOS that does not wrap it, and every fixture that
+        /// does not model one. There the pane *is* the single list, so ordinal 0 names it and any
+        /// other ordinal names nothing.
+        func hit(inSection occurrence: Int) -> Hit? {
+            guard occurrence >= 0 else { return nil }
+            if let inSection = hits.first(where: { $0.section == occurrence }) { return inSection }
+            guard sections.isEmpty, occurrence == 0 else { return nil }
+            return hits.first
         }
     }
 
@@ -648,6 +685,15 @@ enum PermissionChoreography {
     /// have to move together, or the overlay rings the *screen recording* row while the card is
     /// asking for system audio — the confident-arrow-at-the-wrong-control failure this file exists to
     /// prevent.
+    ///
+    /// **And that failure happened anyway, by a route the ordinal alone could not prevent.** The row
+    /// this names is created lazily, on a tap the app attempts, and is simply not in the list before
+    /// then (measured — `Permissions.materialiseSettingsRow(for:)`) — so the pane routinely held
+    /// **one** row for this app, in the *other* list, and `SettingsRowLocator` clamped the ordinal
+    /// onto it. Two things follow, and both live elsewhere because neither belongs to this number:
+    /// the walk no longer clamps (`SettingsRowLocator.Walk.hit(inSection:)`), and the tap is
+    /// attempted before the pane is opened (`PermissionGate.waitInSettings`), which usually answers
+    /// the question outright and otherwise gets the row drawn before anybody looks for it.
     static func sectionOccurrence(for capability: Capability) -> Int {
         switch capability {
         case .microphone, .screen, .accessibility: return 0

@@ -147,9 +147,24 @@ private final class RecordingAsker: PermissionAsking {
     /// True while the grant is real but unusable until a relaunch. Never a reason to keep waiting.
     var screenNeedsRelaunch = false
 
+    /// Capabilities whose System Settings row macOS only draws once the app has tried the thing the
+    /// row governs — and, for these, whether trying it is itself the grant. A CoreAudio tap that
+    /// comes back *is* the consent, so this is not a contrivance: it is the ordinary answer for an
+    /// application macOS is already willing to let record.
+    var grantsOnMaterialise: Set<Capability> = []
+    /// Capabilities whose grant only becomes visible when the watch re-asks the system. System audio
+    /// has no preflight, so a switch flipped by hand is invisible until another tap is built — this
+    /// is the only shape that grant can arrive in.
+    var grantsOnRefresh: Set<Capability> = []
+
     private(set) var asked: [Capability] = []
     private(set) var settingsOpened: [Capability] = []
     private(set) var refreshed: [Capability] = []
+    private(set) var materialised: [Capability] = []
+    /// Everything done to the outside world, in the order it was done. The lists above answer
+    /// *what*; only an order can answer the claim that matters for a row macOS creates lazily —
+    /// that it was created **before** the user was sent to look for it.
+    private(set) var order: [String] = []
     private(set) var sawOverlap = false
     private var inFlight = 0
 
@@ -185,9 +200,24 @@ private final class RecordingAsker: PermissionAsking {
 
     func promptIsSpent(_ capability: Capability) -> Bool { promptSpent.contains(capability) }
 
-    func openSettings(for capability: Capability) { settingsOpened.append(capability) }
+    func openSettings(for capability: Capability) {
+        settingsOpened.append(capability)
+        order.append("open:\(capability.rawValue)")
+    }
 
-    func refresh(_ capability: Capability) async { refreshed.append(capability) }
+    func refresh(_ capability: Capability) async {
+        refreshed.append(capability)
+        if grantsOnRefresh.contains(capability) { alreadyGranted.insert(capability) }
+    }
+
+    func materialiseSettingsRow(for capability: Capability) async {
+        materialised.append(capability)
+        order.append("materialise:\(capability.rawValue)")
+        // The suspension a real tap has. Without it the two side effects could be ordered by the
+        // absence of a suspension point rather than by the code under test.
+        await Task.yield()
+        if grantsOnMaterialise.contains(capability) { alreadyGranted.insert(capability) }
+    }
 }
 
 /// The pacing constants are real seconds in production. Every test drives the run at zero, so the
@@ -306,6 +336,113 @@ final class PermissionSequencingTests: XCTestCase {
 /// The permissions step used to have two exits and neither consulted a grant. One of them was
 /// written under the comment "Move on anyway". These are the assertions that make that unwritable.
 final class PermissionGateTests: XCTestCase {
+
+    // MARK: - The row that does not exist until you try
+    //
+    //  Reported verbatim, with a screenshot of Privacy & Security ▸ Screen & System Audio Recording:
+    //  *"Even after I turned it on this still doesnt go away … this is only showing properly in
+    //  accessibility and is not perfect5 for audio now?"* In the screenshot this app is in the upper
+    //  list and switched **on**, and the lower list — "System Audio Recording Only" — holds one other
+    //  application and no row for us at all.
+    //
+    //  Measured on macOS 26.5.2 (25F84), and this is where the claim comes from rather than from the
+    //  code it checks: `tccutil reset AudioCapture com.omi.context-for-claude` **removed** our row
+    //  from that lower list, reproducing the screenshot exactly; a CoreAudio process-tap attempt by
+    //  the app put it back, twice; and the row then survived quitting the app. macOS creates the
+    //  record lazily, on an attempt — so the pane was being opened onto a list this app was not in.
+    //
+    //  Both times, the tap attempt *itself* came back granted, with no dialog and nothing for the
+    //  user to do. The two tests below are the two halves of the sequencing that follows from that.
+
+    /// **The tap is attempted before the pane is opened, so the row is drawn before anyone looks.**
+    ///
+    /// `promptSpent` is the state every run after the first is in, and it is what made this
+    /// unreachable: `PermissionRun` skips the ask outright once macOS has spent the prompt, so the
+    /// episode went straight to the pane and the only code that would ever have created the row
+    /// never ran again.
+    @MainActor
+    func testTheSystemAudioRowIsCreatedBeforeTheUserIsSentToLookForIt() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.systemAudio]
+        let gate = instantGate(asker, required: [.systemAudio])
+
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.phase == .waitingInSettings(.systemAudio) },
+            "the gate never reached the Settings watch for system audio")
+
+        XCTAssertEqual(
+            asker.order.prefix(2), ["materialise:systemAudio", "open:systemAudio"],
+            "the pane was opened before the tap that makes macOS draw our row in it — which is a "
+                + "user sent to hunt for a row that is not there")
+
+        gate.postpone(.systemAudio)
+        await run.value
+    }
+
+    /// **A tap that comes back is the answer, and there is then nothing in System Settings to do.**
+    ///
+    /// The other half of "one coherent step". Opening the pane anyway would put a window in front of
+    /// the user, point at a row, and take it all down a beat later — which reads as the app not
+    /// knowing what it just did.
+    @MainActor
+    func testATapThatSucceedsAnswersTheStepWithoutOpeningThePane() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.systemAudio]
+        asker.grantsOnMaterialise = [.systemAudio]
+        let gate = instantGate(asker, required: [.systemAudio])
+
+        // Bounded rather than plainly awaited. `waitInSettings` is unbounded by design, so a gate
+        // that never attempts the tap never gets its answer and simply never returns — the failure
+        // this is written for is a **hang**, which on CI is a timeout with no message rather than an
+        // assertion. The deadline turns it back into one.
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.answers[.systemAudio] != nil },
+            "the tap was never attempted, so the step never got an answer")
+        run.cancel()
+        await run.value
+
+        XCTAssertEqual(gate.answers[.systemAudio], .granted)
+        XCTAssertEqual(asker.materialised, [.systemAudio])
+        XCTAssertTrue(
+            asker.settingsOpened.isEmpty,
+            "System Settings was opened for a permission the app had just been given")
+        XCTAssertNil(
+            PermissionGate.spotlightSubject(of: gate.phase),
+            "and nothing is left pointing at a pane nobody was sent to")
+    }
+
+    /// **A switch flipped by hand is noticed by re-asking the system, not by re-reading a cache.**
+    ///
+    /// System audio is the one capability with no preflight: `Permissions.check` serves a
+    /// `UserDefaults` answer written by the last real tap, so a grant made in System Settings is
+    /// invisible to this process until another tap is built. A watch that only re-read `isGranted`
+    /// would sit there forever with the user staring at a switch they had already flipped — the
+    /// "still doesnt go away" half of the report. This asker only grants on `refresh`, so a gate that
+    /// stopped re-probing would hang here rather than pass quietly.
+    @MainActor
+    func testAFlippedSystemAudioSwitchIsNoticedByReProbingRatherThanReReading() async {
+        let asker = RecordingAsker(grants: [])
+        asker.promptSpent = [.systemAudio]
+        asker.grantsOnRefresh = [.systemAudio]
+        let gate = instantGate(asker, required: [.systemAudio])
+
+        // Bounded for the same reason as above: a watch that stopped re-probing would sit in
+        // `waitInSettings` forever rather than fail.
+        let run = Task { await gate.run() }
+        await advance(
+            until: { gate.answers[.systemAudio] != nil },
+            "the watch never noticed the flipped switch")
+        run.cancel()
+        await run.value
+
+        XCTAssertEqual(gate.answers[.systemAudio], .granted)
+        XCTAssertFalse(asker.refreshed.isEmpty, "the watch never re-asked the system")
+        XCTAssertNil(
+            PermissionGate.spotlightSubject(of: gate.phase),
+            "the grant landed and the overlay is still being asked to point at the row")
+    }
 
     /// **D1.** No second capability may reach a prompt or a pane while one is in flight.
     ///
@@ -519,6 +656,56 @@ final class PermissionGateTests: XCTestCase {
 
 // MARK: - Grouping
 
+/// **When the idle card is allowed to spend a CoreAudio tap on re-asking.**
+///
+/// System audio is the only capability `Permissions.check` answers from a cache rather than from a
+/// preflight, so this schedule is the whole of how a card that is *not* mid-episode ever notices a
+/// switch the user flipped. The rule is asserted here as a value because the read that uses it needs
+/// `UserDefaults`, a TCC prompt record and a live HAL, none of which a test may have.
+final class SystemAudioProbeScheduleTests: XCTestCase {
+
+    /// **The regression.** "Never probed" is the state a machine is in before its first tap, and it
+    /// used to be the one state that could never recover: the read returned `false` at the first
+    /// guard without scheduling anything, so the card polled `check` every 1.5 s forever and never
+    /// once asked CoreAudio. Reported verbatim: *"Even after I turned it on this still doesnt go
+    /// away."*
+    func testAnUnknownAnswerIsReProbedRatherThanAssumedToBeNo() {
+        XCTAssertTrue(
+            Permissions.systemAudioProbeIsDue(cached: nil, prompted: true, secondsSinceProbe: 60),
+            "a card that has never probed can never learn the answer, whatever the user does")
+    }
+
+    /// And nothing is asked before the user asks. The first tap raises the TCC consent dialog, so a
+    /// poll that probed one before the row had been clicked would put a dialog in front of somebody
+    /// who had not asked for it — the surprise the click-driven card exists to remove.
+    func testNothingIsProbedBeforeTheUserHasClickedTheRow() {
+        for cached in [nil, false] as [Bool?] {
+            XCTAssertFalse(
+                Permissions.systemAudioProbeIsDue(
+                    cached: cached, prompted: false, secondsSinceProbe: 3_600),
+                "a background probe raised the consent dialog before anything was clicked")
+        }
+    }
+
+    /// A grant is trusted for the life of the process: a second global tap while capture is live is
+    /// the one thing that can knock the live tap over.
+    func testAGrantIsNeverReProbed() {
+        XCTAssertFalse(
+            Permissions.systemAudioProbeIsDue(cached: true, prompted: true, secondsSinceProbe: 3_600))
+    }
+
+    /// The slow cadence is real. A probe is a tap built and torn down, and the poll that calls this
+    /// runs every 1.5 s.
+    func testAFreshAnswerIsNotReProbedOnEveryPoll() {
+        XCTAssertFalse(
+            Permissions.systemAudioProbeIsDue(cached: false, prompted: true, secondsSinceProbe: 1.5))
+        XCTAssertTrue(
+            Permissions.systemAudioProbeIsDue(
+                cached: false, prompted: true,
+                secondsSinceProbe: Permissions.systemAudioProbeInterval + 1))
+    }
+}
+
 final class CapabilityGroupTests: XCTestCase {
 
     /// A group reads "Granted" only when **every** member is.
@@ -630,6 +817,12 @@ enum PaneFixture {
         var y: CGFloat = 145
         for apps in sections {
             var rows: [FakeElement] = []
+            // Each list is laid out where its rows are, not at a shared origin. That is what the real
+            // pane does — "Screen & System Audio Recording" above, "System Audio Recording Only"
+            // below it — and it is the only thing that lets a test tell one section's geometry from
+            // the other's. Both used to be `y: 145, height: 1600`, which made every section-level
+            // assertion vacuously true.
+            let top = y
             for app in apps {
                 rows.append(
                     FakeElement(
@@ -643,15 +836,14 @@ enum PaneFixture {
                         ]))
                 y += 40
             }
+            let list = CGRect(x: 603, y: top, width: 460, height: max(y - top, 40))
             groups.append(
                 FakeElement(
                     elementRole: kAXScrollAreaRole,
-                    elementFrame: CGRect(x: 603, y: 145, width: 460, height: 1_600),
+                    elementFrame: list,
                     children: [
                         FakeElement(
-                            elementRole: kAXOutlineRole,
-                            elementFrame: CGRect(x: 603, y: 145, width: 460, height: 1_600),
-                            children: rows)
+                            elementRole: kAXOutlineRole, elementFrame: list, children: rows)
                     ]))
             y += 60
         }
@@ -760,6 +952,68 @@ final class SettingsRowLocatorTests: XCTestCase {
 
         XCTAssertNotEqual(screen.row, audio.row)
         XCTAssertLessThan(screen.row.minY, audio.row.minY, "section 0 is the upper list")
+    }
+
+    /// **An ordinal naming a list we are not in must refuse, not answer the other list's row.**
+    ///
+    /// The regression, and the live one. `hits[clamp(occurrence, to: hits.count)]` turned a request
+    /// for the second list into the first list's row whenever we were only in one of them — which on
+    /// the Screen & System Audio Recording pane is the *normal* state during the system-audio step,
+    /// because macOS does not create the "System Audio Recording Only" record until the app has
+    /// attempted a CoreAudio process tap.
+    ///
+    /// The measurement this fixture stands in for, taken against the real pane on macOS 26.5.2
+    /// (25F84) after `tccutil reset AudioCapture com.omi.context-for-claude`: asking for system
+    /// audio, the walk answered a row at y 451.5 with its switch at (1233, 457.5) — the **upper**
+    /// list's Screen Recording row for this app, whose label OCR put at y 458.5 — while the lower
+    /// list's rows begin at y 1019. With the clamp gone the same live call answers the **+** under
+    /// the lower list at (819, 1056) instead. The overlay rang the screen switch, the user turned it
+    /// on, and the system-audio row on the card never cleared. Reported verbatim: *"Even after I
+    /// turned it on this still doesnt go away."*
+    func testAnOrdinalNamingAListWeAreNotInRefusesRatherThanRingingTheOtherListsRow() {
+        let pane = PaneFixture.outlinePane(sections: [
+            ["Claude", PaneFixture.appName, "Cursor"],
+            ["Cursor"],
+        ])
+        guard case .visible(let screen) = locator.locate(in: pane, preferring: 0) else {
+            return XCTFail("the upper list holds our row")
+        }
+
+        let audio = locator.locate(in: pane, preferring: 1)
+        XCTAssertEqual(
+            audio, .notFound,
+            "the second list holds no row for this app, and the answer given was \(audio) — a "
+                + "confident arrow at a control the card is not asking about")
+        if case .visible(let mistaken) = audio {
+            XCTAssertNotEqual(mistaken.row, screen.row, "…and it was the screen recording row")
+        }
+    }
+
+    /// The same refusal at the richer entry point, where "we are not in this list" has somewhere to
+    /// point: the **+** under that list. It has to be *that* list's **+** — pointing at the upper
+    /// list's add button under the words "Click + and choose Context for Claude" sends the user to
+    /// add us to a list we are already in.
+    func testTheAddButtonOfferedIsTheOneUnderTheListThatWasAskedAbout() {
+        let pane = PaneFixture.outlinePane(sections: [
+            ["Claude", PaneFixture.appName, "Cursor"],
+            ["Cursor"],
+        ])
+        guard case .visible(let upper) = locator.locateTarget(in: pane, preferring: 0) else {
+            return XCTFail("the upper list holds our row")
+        }
+        guard case .notListed(let lower) = locator.locateTarget(in: pane, preferring: 1) else {
+            return XCTFail("the second list holds no row for this app, so it cannot be pointed at")
+        }
+        XCTAssertGreaterThan(
+            lower.list.minY, upper.row.minY,
+            "the list offered is above the row we are already listed in — it is the wrong list")
+    }
+
+    /// And a pane that has no such section at all still refuses rather than falling back a list.
+    func testAnOrdinalBeyondEverySectionRefuses() {
+        let pane = PaneFixture.outlinePane(sections: [["Claude", PaneFixture.appName]])
+        XCTAssertEqual(locator.locate(in: pane, preferring: 1), .notFound)
+        XCTAssertEqual(locator.locateTarget(in: pane, preferring: 1), .notFound)
     }
 
     /// Every capability picks a section explicitly, and every one picks the first.

@@ -335,7 +335,10 @@ enum Permissions {
         relauncher.arguments = ["-c", script]
         do {
             try relauncher.run()
-            ContextLog.info(
+            // `milestone`: the helper outlives this process, so its pid is the only handle anyone
+            // has on "did the relaunch actually get arranged" — and `info` is evicted from the log
+            // within minutes, which is how the last failure came to have no trace at all.
+            ContextLog.milestone(
                 "Relaunch helper \(relauncher.processIdentifier) will reopen \(url.lastPathComponent)",
                 "permissions")
             return true
@@ -423,22 +426,57 @@ enum Permissions {
     // `UserDefaults` and served from there, and a stale answer is refreshed at most once every 30
     // seconds, off the polling thread.
 
-    private static let systemAudioProbeInterval: Double = 30
+    /// The slow cadence: how stale a background answer may get before another tap is worth building.
+    static let systemAudioProbeInterval: Double = 30
 
-    /// The last answer we got from an actual tap. Never probes: probing from a background poll would
-    /// raise the consent dialog behind the user's back, and that prompt belongs to the row they tap.
+    /// **Whether the background poll should spend a CoreAudio tap on re-asking.**
+    ///
+    /// A pure function, and separate from the read that uses it, because every input is a fact this
+    /// process cannot make up on demand — a `UserDefaults` pair and a TCC prompt record — and the
+    /// rule they combine into is the one with a wrong answer available. It is asserted directly
+    /// rather than through a read with a side effect on a HAL that has to be talked to.
+    ///
+    /// - `cached == true` never re-probes: a grant is trusted for the life of the process, because a
+    ///   second global tap while capture is live is the one thing that can knock the live tap over.
+    /// - `cached == nil` **does**, and that is the fix. "Never probed" was previously answered `false`
+    ///   with no probe scheduled, forever — the state a machine is in before its first tap, and the
+    ///   one state that could never recover on its own.
+    /// - `prompted == false` never probes, whatever else is true. The first tap raises the TCC
+    ///   consent dialog, and raising it from a poll is precisely the surprise the click-driven card
+    ///   exists to remove. Once the user has clicked the row, macOS has spent that prompt.
+    static func systemAudioProbeIsDue(cached: Bool?, prompted: Bool, secondsSinceProbe: Double) -> Bool {
+        guard cached != true, prompted else { return false }
+        return secondsSinceProbe > systemAudioProbeInterval
+    }
+
+    /// The last answer we got from an actual tap, and the schedule that stops it going stale.
+    ///
+    /// **The condition for re-probing is "we do not have a grant", not "we have a recorded denial".**
+    /// It used to return at the first `guard` whenever the key was absent, which is the state a
+    /// machine that has never run a tap is in — so the one case that could *never* recover on its own
+    /// was the fresh one. The card polls `check` every 1.5 s, `check` came here, and here answered
+    /// `false` forever without ever asking CoreAudio a single question. A user who flipped the switch
+    /// in System Settings watched the row keep saying it was missing, which is the reported *"even
+    /// after I turned it on this still doesnt go away"* with the episode already over.
+    ///
+    /// A grant, by contrast, is still trusted for the life of the process: a second global tap while
+    /// capture is live is the one thing that can knock the live tap over.
+    ///
+    /// `hasPrompted` is what keeps this inside the card's own rule — **nothing is asked until the
+    /// user asks**. The first tap raises the TCC consent dialog, and raising it from a background
+    /// poll would be exactly the surprise `PermissionInvitations` exists to remove; after the user
+    /// has clicked the row once, macOS has spent that prompt and a probe is silent.
     private static func cachedSystemAudioGrant() -> Bool {
-        guard let cached = defaults.object(forKey: Key.systemAudioGranted) as? Bool else {
-            return false  // never probed — unknown, reported as "Open" rather than guessed at
-        }
-        if !cached, ContextTime.now - defaults.double(forKey: Key.systemAudioProbedAt) > systemAudioProbeInterval {
-            // A denial can be reversed in System Settings without telling us, and re-probing is
-            // silent once the answer is on record. A grant, by contrast, is trusted for the life of
-            // the process: a second global tap while capture is live is the one thing that can knock
-            // the live tap over.
+        let cached = defaults.object(forKey: Key.systemAudioGranted) as? Bool
+        if systemAudioProbeIsDue(
+            cached: cached,
+            prompted: hasPrompted(.systemAudio),
+            secondsSinceProbe: ContextTime.now - defaults.double(forKey: Key.systemAudioProbedAt))
+        {
             scheduleSystemAudioProbe()
         }
-        return cached
+        // Never probed and never asked for — unknown, reported as "Open" rather than guessed at.
+        return cached ?? false
     }
 
     /// Re-asks CoreAudio, now, instead of waiting for the 30 s staleness window.
@@ -447,13 +485,50 @@ enum Permissions {
     /// invisible to this process until another tap is built. A watch that only polls `check` would
     /// therefore wait forever on a switch the user has already flipped, so the watcher refreshes
     /// explicitly rather than relying on a read with a side effect.
-    /// Throttled, because a probe is a real CoreAudio tap and the watch that calls this polls twice
-    /// a second. Two seconds is fast enough that a flipped switch reads as instant and slow enough
-    /// that the tap is not being rebuilt continuously under the user.
+    ///
+    /// **Two cadences, and what separates them is whether the user is looking at the switch.** This
+    /// is the fast one and it is only reached from `PermissionGate`'s unbounded watch: the user is
+    /// standing in System Settings with our arrow on the row, so the flip has to register while they
+    /// are still looking at it. The slow one is `systemAudioProbeInterval` — 30 s — which is what an
+    /// idle card and the menu bar pay for the same fact.
+    ///
+    /// Neither is the overlay tracker's 40 ms tick, deliberately. A probe is a real CoreAudio tap,
+    /// built and torn down behind `systemAudioProbeLock`, and rebuilding one at tick rate would both
+    /// serialise the watch behind the HAL and keep re-creating a global tap under a user who may be
+    /// in a call. Two seconds against the watch's 500 ms poll is at most one probe every four polls.
     static func refreshSystemAudioGrant(minimumInterval: Double = 2) async {
         guard !cachedSystemAudioGrant() else { return }
         guard ContextTime.now - defaults.double(forKey: Key.systemAudioProbedAt) >= minimumInterval
         else { return }
+        _ = await probeSystemAudio()
+    }
+
+    /// **Attempts the thing the row governs, before anybody is sent to look for the row.**
+    ///
+    /// macOS creates the "System Audio Recording Only" TCC record **lazily** — on a CoreAudio process
+    /// tap the application attempts, not when it is installed and not when the pane is opened.
+    /// Measured on macOS 26.5.2 (25F84): `tccutil reset AudioCapture com.omi.context-for-claude`
+    /// **removed** our row from that list, reproducing the reported screenshot exactly — this app in
+    /// the upper list and switched on, the lower list holding one other application and nothing of
+    /// ours. A tap attempt by the app put the row back, twice, and it then survived quitting the app.
+    /// System Settings does not always redraw the list at once, so the row can take a minute or two
+    /// to become visible even after the record exists; nothing here waits for that.
+    ///
+    /// The more useful half is that **the attempt is itself the answer.** Both times, immediately
+    /// after that reset, the tap came back and `check(.systemAudio)` was true — no dialog, nothing
+    /// for the user to do, and the pane never needed at all. Opening System Settings first turned a
+    /// permission that was already available into a window, an arrow and a row to hunt for; and when
+    /// the row genuinely was not drawn yet, there was nothing in that list to point at. Attempting
+    /// the tap first collapses both into one step.
+    ///
+    /// `PermissionRun` is why this cannot live inside the ask: it skips `request` outright once
+    /// `promptIsSpent`, which is every run after the first, so from the second run onwards nothing in
+    /// the episode ever tried the tap again.
+    ///
+    /// Only system audio needs this — every other capability is listed as soon as macOS knows the app
+    /// exists — so it is a no-op for the rest rather than a per-capability branch at the call site.
+    static func materialiseSettingsRow(for c: Capability) async {
+        guard c == .systemAudio, !cachedSystemAudioGrant() else { return }
         _ = await probeSystemAudio()
     }
 
@@ -610,6 +685,10 @@ protocol PermissionAsking {
     /// Re-asks the system for a capability whose grant this process cannot otherwise notice.
     /// Only system audio has one; everything else answers from a preflight.
     func refresh(_ capability: Capability) async
+    /// Makes this capability's row in System Settings **exist**, for the one capability whose row
+    /// macOS only creates once the app has tried the thing it governs. Called before the pane is
+    /// opened, so nobody is ever sent to hunt for a row that is not drawn yet.
+    func materialiseSettingsRow(for capability: Capability) async
     /// True when the Screen Recording grant is real but this process cannot use it until it is
     /// relaunched. Never a reason to keep waiting: the grant is already the user's answer.
     var screenNeedsRelaunch: Bool { get }
@@ -628,7 +707,20 @@ struct LivePermissionAsking: PermissionAsking {
         await Permissions.refreshSystemAudioGrant()
     }
 
+    func materialiseSettingsRow(for capability: Capability) async {
+        await Permissions.materialiseSettingsRow(for: capability)
+    }
+
     var screenNeedsRelaunch: Bool { Permissions.screenNeedsRelaunch }
+}
+
+extension PermissionAsking {
+    /// **Three of the four capabilities are already listed**, so doing nothing is the correct
+    /// behaviour rather than an omission — macOS lists an application under Microphone, Screen
+    /// Recording and Accessibility as soon as it knows it exists. Defaulted so a test double that has
+    /// nothing to say about the lazily-created row does not have to say it, and so the one capability
+    /// that *does* need work says so in one place (`Permissions.materialiseSettingsRow(for:)`).
+    func materialiseSettingsRow(for capability: Capability) async {}
 }
 
 // MARK: - One door
@@ -1002,6 +1094,23 @@ final class PermissionGate: ObservableObject {
     private func waitInSettings(for capability: Capability) async {
         phase = .waitingInSettings(capability)
         if openedSettings.insert(capability).inserted {
+            // **The row first, then the pane.** System audio's row in "System Audio Recording Only"
+            // does not exist until this app has attempted a CoreAudio process tap — macOS creates the
+            // record lazily — so opening the pane before attempting one sends the user to a list they
+            // are not in, and points an overlay at a row that is not drawn. See
+            // `Permissions.materialiseSettingsRow(for:)` for the measurement.
+            await asking.materialiseSettingsRow(for: capability)
+            guard !Task.isCancelled else { return }
+            // The attempt is itself an answer for system audio: an application that already holds the
+            // consent gets its tap, and there is then nothing in System Settings to do. Ending here
+            // rather than opening the pane anyway is what keeps this one step instead of a pane that
+            // opens and is immediately made pointless.
+            if asking.isGranted(capability) {
+                answers[capability] = .granted
+                phase = .confirming(capability)
+                try? await Task.sleep(for: pacing.afterGrant)
+                return
+            }
             asking.openSettings(for: capability)
         }
 
