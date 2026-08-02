@@ -342,6 +342,28 @@ async def fetch_backend_tools() -> list[dict[str, Any]]:
     return data if isinstance(data, list) else data.get("tools", [])
 
 
+LOCAL_KG_SYNC_TABLES = frozenset({"local_kg_nodes", "local_kg_edges"})
+
+
+async def promote_local_kg_to_backend(table: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if table not in LOCAL_KG_SYNC_TABLES or not runtime.firebase_token:
+        return None
+    headers = {"Authorization": f"Bearer {runtime.firebase_token}"}
+    payload = {"table": table, "rows": rows}
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{runtime.backend_url}/v1/knowledge-graph/sync",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+            return body if isinstance(body, dict) else None
+    except httpx.HTTPError:
+        return None
+
+
 async def execute_backend_tool(name: str, params: dict[str, Any]) -> str:
     if not runtime.firebase_token:
         return "Error: Firebase token is not set"
@@ -753,8 +775,12 @@ async def sync(request: Request) -> dict[str, Any]:
         applied = run_sync(table, rows)
     except (ValueError, sqlite3.Error) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    promotion = await promote_local_kg_to_backend(table, rows)
     runtime.last_activity_at = time.monotonic()
-    return {"applied": applied, "table": table}
+    response: dict[str, Any] = {"applied": applied, "table": table}
+    if promotion is not None:
+        response["promotion"] = promotion
+    return response
 
 
 @app.websocket("/ws")

@@ -2,8 +2,8 @@ import importlib
 import sys
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel
-from typing import List, Dict, Any, Callable, cast
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Callable, Literal, cast
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
@@ -87,6 +87,19 @@ class DeleteKnowledgeGraphResponse(BaseModel):
     status: str
 
 
+class LocalKgSyncRequest(BaseModel):
+    table: Literal["local_kg_nodes", "local_kg_edges"]
+    rows: List[Dict[str, Any]] = Field(min_length=1)
+
+
+class LocalKgSyncResponse(BaseModel):
+    table: str
+    merged: int
+    skipped: int
+    nodes_evicted: int
+    edges_evicted: int
+
+
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     graph = get_knowledge_graph_payload(uid)
@@ -133,3 +146,13 @@ def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     _require_legacy_graph_mutation(uid)
     kg_db.delete_knowledge_graph(uid)
     return {"status": "deleted"}
+
+
+@router.post('/v1/knowledge-graph/sync', tags=['knowledge_graph'], response_model=LocalKgSyncResponse)
+def sync_local_knowledge_graph(
+    payload: LocalKgSyncRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
+    result = kg_db.merge_synced_local_kg(uid, payload.table, payload.rows, db_client=firestore_db)
+    return LocalKgSyncResponse(**result)

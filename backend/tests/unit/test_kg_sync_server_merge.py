@@ -1,0 +1,281 @@
+"""Server-side merge of agent-VM local_kg_* sync into Firestore knowledge graph."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
+
+import pytest
+
+from database import knowledge_graph as kg_db
+from routers import knowledge_graph as kg_router
+
+UID = "uid-kg-sync-merge"
+BASE = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+
+
+class _Snapshot:
+    def __init__(self, db: "_FakeDb", path: str, *, exists: bool):
+        self._db = db
+        self._path = path
+        self.id = path.rsplit("/", 1)[-1]
+        self.reference = _DocRef(db, path)
+        self.exists = exists
+
+    def to_dict(self):
+        return self._db.docs.get(self._path)
+
+
+class _DocRef:
+    def __init__(self, db: "_FakeDb", path: str):
+        self._db = db
+        self.path = path
+        self.id = path.rsplit("/", 1)[-1]
+
+    def get(self):
+        return _Snapshot(self._db, self.path, exists=self.path in self._db.docs)
+
+    def set(self, data: dict[str, Any], merge: bool = False):
+        if merge and self.path in self._db.docs:
+            existing = dict(self._db.docs[self.path])
+            existing.update(data)
+            self._db.docs[self.path] = existing
+        else:
+            self._db.docs[self.path] = dict(data)
+
+    def delete(self):
+        self._db.docs.pop(self.path, None)
+
+    def collection(self, name: str):
+        return _CollectionRef(self._db, f"{self.path}/{name}")
+
+
+class _CollectionRef:
+    def __init__(self, db: "_FakeDb", path: str):
+        self._db = db
+        self.path = path
+        self._limit: int | None = None
+
+    def document(self, doc_id: str):
+        return _DocRef(self._db, f"{self.path}/{doc_id}")
+
+    def limit(self, count: int):
+        self._limit = count
+        return self
+
+    def order_by(self, _field_path: str, *_args, **_kwargs):
+        return self
+
+    def where(self, *_args, **_kwargs):
+        return self
+
+    def stream(self):
+        prefix = f"{self.path}/"
+        depth = self.path.count("/")
+        emitted = 0
+        for path in sorted(self._db.docs):
+            if path.startswith(prefix) and path.count("/") == depth + 1:
+                yield _Snapshot(self._db, path, exists=True)
+                emitted += 1
+                if self._limit is not None and emitted >= self._limit:
+                    break
+
+
+class _FakeDb:
+    def __init__(self, docs: dict[str, Any] | None = None):
+        self.docs = dict(docs or {})
+
+    def collection(self, name: str):
+        return _CollectionRef(self, name)
+
+    def get_all(self, refs):
+        return [ref.get() for ref in refs]
+
+
+def _node_doc(node_id: str, *, label: str, updated_at: datetime) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "label": label,
+        "node_type": "concept",
+        "aliases": [],
+        "memory_ids": [],
+        "created_at": updated_at - timedelta(days=1),
+        "updated_at": updated_at,
+        "label_lower": label.lower(),
+        "aliases_lower": [],
+    }
+
+
+def _edge_doc(edge_id: str, *, source_id: str, target_id: str, created_at: datetime) -> dict[str, Any]:
+    return {
+        "id": edge_id,
+        "source_id": source_id,
+        "target_id": target_id,
+        "label": "related_to",
+        "memory_ids": [],
+        "created_at": created_at,
+    }
+
+
+def test_local_kg_node_row_maps_and_merges_aliases(monkeypatch):
+    db = _FakeDb()
+    row = {
+        "nodeId": "node-a",
+        "label": "Omi",
+        "nodeType": "org",
+        "aliasesJson": '["Based Hardware"]',
+        "createdAt": "2026-07-01T12:00:00Z",
+        "updatedAt": "2026-07-02T12:00:00Z",
+    }
+    result = kg_db.merge_synced_local_kg_nodes(UID, [row], db_client=db)
+
+    stored = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
+    assert result == {
+        "table": "local_kg_nodes",
+        "merged": 1,
+        "skipped": 0,
+        "nodes_evicted": 0,
+        "edges_evicted": 0,
+    }
+    assert stored["label"] == "Omi"
+    assert stored["node_type"] == "org"
+    assert stored["aliases"] == ["Based Hardware"]
+
+    updated = {
+        **row,
+        "aliasesJson": '["Based Hardware", "Omi Inc"]',
+        "updatedAt": "2026-07-03T12:00:00Z",
+    }
+    kg_db.merge_synced_local_kg_nodes(UID, [updated], db_client=db)
+    merged = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
+    assert merged["aliases"] == ["Based Hardware", "Omi Inc"]
+
+
+def test_local_kg_edge_row_upserts_by_edge_id():
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="A", updated_at=BASE),
+            f"users/{UID}/knowledge_nodes/node-b": _node_doc("node-b", label="B", updated_at=BASE),
+        }
+    )
+    row = {
+        "edgeId": "edge-1",
+        "sourceNodeId": "node-a",
+        "targetNodeId": "node-b",
+        "label": "works_at",
+        "createdAt": "2026-07-01T12:00:00Z",
+    }
+    result = kg_db.merge_synced_local_kg_edges(UID, [row], db_client=db)
+    stored = db.docs[f"users/{UID}/knowledge_edges/edge-1"]
+
+    assert result["merged"] == 1
+    assert stored["source_id"] == "node-a"
+    assert stored["target_id"] == "node-b"
+    assert stored["label"] == "works_at"
+
+
+def test_enforce_caps_evicts_oldest_nodes_and_dangling_edges():
+    docs: dict[str, Any] = {}
+    for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_NODES):
+        node_id = f"old-{index:03d}"
+        docs[f"users/{UID}/knowledge_nodes/{node_id}"] = _node_doc(
+            node_id,
+            label=node_id,
+            updated_at=BASE + timedelta(hours=index),
+        )
+    docs[f"users/{UID}/knowledge_nodes/fresh-node"] = _node_doc(
+        "fresh-node",
+        label="Fresh",
+        updated_at=BASE + timedelta(days=30),
+    )
+    docs[f"users/{UID}/knowledge_edges/stale-edge"] = _edge_doc(
+        "stale-edge",
+        source_id="old-000",
+        target_id="fresh-node",
+        created_at=BASE,
+    )
+    docs[f"users/{UID}/knowledge_edges/keep-edge"] = _edge_doc(
+        "keep-edge",
+        source_id="fresh-node",
+        target_id="old-001",
+        created_at=BASE + timedelta(days=30),
+    )
+    db = _FakeDb(docs)
+
+    eviction = kg_db.enforce_knowledge_graph_caps(UID, db_client=db)
+
+    assert eviction["nodes_evicted"] == 1
+    assert eviction["edges_evicted"] == 1
+    assert f"users/{UID}/knowledge_nodes/old-000" not in db.docs
+    assert f"users/{UID}/knowledge_nodes/fresh-node" in db.docs
+    assert f"users/{UID}/knowledge_edges/stale-edge" not in db.docs
+    assert f"users/{UID}/knowledge_edges/keep-edge" in db.docs
+
+
+def test_enforce_caps_evicts_oldest_edges_when_over_limit():
+    docs: dict[str, Any] = {}
+    for index in range(2):
+        node_id = f"node-{index}"
+        docs[f"users/{UID}/knowledge_nodes/{node_id}"] = _node_doc(
+            node_id,
+            label=node_id,
+            updated_at=BASE,
+        )
+    for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_EDGES + 1):
+        edge_id = f"edge-{index:04d}"
+        docs[f"users/{UID}/knowledge_edges/{edge_id}"] = _edge_doc(
+            edge_id,
+            source_id="node-0",
+            target_id="node-1",
+            created_at=BASE + timedelta(minutes=index),
+        )
+    db = _FakeDb(docs)
+
+    eviction = kg_db.enforce_knowledge_graph_caps(UID, db_client=db)
+
+    assert eviction["edges_evicted"] == 1
+    assert f"users/{UID}/knowledge_edges/edge-0000" not in db.docs
+    remaining_edges = [path for path in db.docs if path.startswith(f"users/{UID}/knowledge_edges/")]
+    assert len(remaining_edges) == kg_db.MAX_KNOWLEDGE_GRAPH_EDGES
+
+
+def test_sync_route_delegates_to_merge(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    def fake_merge(uid, table, rows, *, db_client=None):
+        captured["uid"] = uid
+        captured["table"] = table
+        captured["rows"] = rows
+        captured["db_client"] = db_client
+        return {
+            "table": table,
+            "merged": len(rows),
+            "skipped": 0,
+            "nodes_evicted": 0,
+            "edges_evicted": 0,
+        }
+
+    monkeypatch.setattr(kg_router.kg_db, "merge_synced_local_kg", fake_merge)
+    monkeypatch.setattr(kg_router, "firestore_db", object())
+
+    rows = [{"nodeId": "n1", "label": "Test"}]
+    response = kg_router.sync_local_knowledge_graph(
+        payload=kg_router.LocalKgSyncRequest(table="local_kg_nodes", rows=rows),
+        uid=UID,
+    )
+
+    assert captured == {"uid": UID, "table": "local_kg_nodes", "rows": rows, "db_client": kg_router.firestore_db}
+    assert response.merged == 1
+    assert response.table == "local_kg_nodes"
+
+
+def test_invalid_local_kg_rows_are_skipped():
+    db = _FakeDb()
+    result = kg_db.merge_synced_local_kg_nodes(
+        UID,
+        [{"nodeId": "", "label": "Bad"}, {"label": "Missing id"}, "not-a-row"],
+        db_client=db,
+    )
+    assert result["merged"] == 0
+    assert result["skipped"] == 3
+    assert db.docs == {}
