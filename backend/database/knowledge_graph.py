@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
+from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple, TypedDict, cast
+import json
 import uuid
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -742,6 +743,175 @@ def get_knowledge_graph(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
         'node_limit': MAX_KNOWLEDGE_GRAPH_NODES,
         'edge_limit': MAX_KNOWLEDGE_GRAPH_EDGES,
     }
+
+
+def _parse_sync_timestamp(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and value.strip():
+        normalized = value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _parse_aliases_json(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return sorted({item.strip() for item in cast(List[Any], value) if isinstance(item, str) and item.strip()})
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(parsed, list):
+            return sorted({item.strip() for item in parsed if isinstance(item, str) and item.strip()})
+    return []
+
+
+def _node_sort_timestamp(node: Dict[str, Any]) -> datetime:
+    for field in ("updated_at", "created_at"):
+        parsed = _parse_sync_timestamp(node.get(field))
+        if parsed is not None:
+            return parsed
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _edge_sort_timestamp(edge: Dict[str, Any]) -> datetime:
+    parsed = _parse_sync_timestamp(edge.get("created_at"))
+    return parsed if parsed is not None else datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _local_kg_node_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    node_id = row.get("nodeId") or row.get("node_id")
+    label = row.get("label")
+    if not isinstance(node_id, str) or not node_id.strip() or not isinstance(label, str) or not label.strip():
+        return None
+    node_type = row.get("nodeType") or row.get("node_type") or "concept"
+    aliases = _parse_aliases_json(row.get("aliasesJson") if "aliasesJson" in row else row.get("aliases_json"))
+    node_data: Dict[str, Any] = {
+        "id": node_id.strip(),
+        "label": label.strip(),
+        "node_type": node_type if isinstance(node_type, str) and node_type.strip() else "concept",
+        "aliases": aliases,
+        "memory_ids": [],
+    }
+    created_at = _parse_sync_timestamp(row.get("createdAt") if "createdAt" in row else row.get("created_at"))
+    updated_at = _parse_sync_timestamp(row.get("updatedAt") if "updatedAt" in row else row.get("updated_at"))
+    if created_at is not None:
+        node_data["created_at"] = created_at
+    if updated_at is not None:
+        node_data["updated_at"] = updated_at
+    return node_data
+
+
+def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    edge_id = row.get("edgeId") or row.get("edge_id")
+    source_id = row.get("sourceNodeId") or row.get("source_node_id")
+    target_id = row.get("targetNodeId") or row.get("target_node_id")
+    label = row.get("label")
+    if not all(isinstance(value, str) and value.strip() for value in (edge_id, source_id, target_id, label)):
+        return None
+    edge_data: Dict[str, Any] = {
+        "id": edge_id.strip(),
+        "source_id": source_id.strip(),
+        "target_id": target_id.strip(),
+        "label": label.strip(),
+        "memory_ids": [],
+    }
+    created_at = _parse_sync_timestamp(row.get("createdAt") if "createdAt" in row else row.get("created_at"))
+    if created_at is not None:
+        edge_data["created_at"] = created_at
+    return edge_data
+
+
+def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str, int]:
+    """Evict oldest nodes/edges when Firestore collections exceed public GET caps.
+
+    Eviction uses document timestamps only (updated_at for nodes, created_at for edges).
+    Local synced graph rows carry no confidence score, so oldest-first is the stable rule.
+    """
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    edges_ref = user_ref.collection(knowledge_edges_collection)
+    nodes_evicted = 0
+    edges_evicted = 0
+
+    node_docs = list(nodes_ref.stream())
+    if len(node_docs) > MAX_KNOWLEDGE_GRAPH_NODES:
+        sorted_nodes = sorted(node_docs, key=lambda doc: _node_sort_timestamp(_typed_doc(doc)))
+        for doc in sorted_nodes[: len(node_docs) - MAX_KNOWLEDGE_GRAPH_NODES]:
+            doc.reference.delete()
+            nodes_evicted += 1
+
+    surviving_node_ids = {cast(str, doc.id) for doc in nodes_ref.stream()}
+
+    edge_docs = list(edges_ref.stream())
+    for doc in edge_docs:
+        edge = _typed_doc(doc)
+        source_id = edge.get("source_id")
+        target_id = edge.get("target_id")
+        if source_id not in surviving_node_ids or target_id not in surviving_node_ids:
+            doc.reference.delete()
+            edges_evicted += 1
+
+    edge_docs = list(edges_ref.stream())
+    if len(edge_docs) > MAX_KNOWLEDGE_GRAPH_EDGES:
+        sorted_edges = sorted(edge_docs, key=lambda doc: _edge_sort_timestamp(_typed_doc(doc)))
+        for doc in sorted_edges[: len(edge_docs) - MAX_KNOWLEDGE_GRAPH_EDGES]:
+            doc.reference.delete()
+            edges_evicted += 1
+
+    return {"nodes_evicted": nodes_evicted, "edges_evicted": edges_evicted}
+
+
+def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Dict[str, Any]], *, db_client: Any = None) -> Dict[str, Any]:
+    merged = 0
+    skipped = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
+        node_data = _local_kg_node_to_firestore(row)
+        if node_data is None:
+            skipped += 1
+            continue
+        upsert_knowledge_node(uid, node_data, db_client=db_client)
+        merged += 1
+    eviction = enforce_knowledge_graph_caps(uid, db_client=db_client)
+    return {"table": "local_kg_nodes", "merged": merged, "skipped": skipped, **eviction}
+
+
+def merge_synced_local_kg_edges(uid: str, rows: Iterable[Dict[str, Any]], *, db_client: Any = None) -> Dict[str, Any]:
+    merged = 0
+    skipped = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
+        edge_data = _local_kg_edge_to_firestore(row)
+        if edge_data is None:
+            skipped += 1
+            continue
+        upsert_knowledge_edge(uid, edge_data, db_client=db_client)
+        merged += 1
+    eviction = enforce_knowledge_graph_caps(uid, db_client=db_client)
+    return {"table": "local_kg_edges", "merged": merged, "skipped": skipped, **eviction}
+
+
+def merge_synced_local_kg(
+    uid: str,
+    table: Literal["local_kg_nodes", "local_kg_edges"],
+    rows: Iterable[Dict[str, Any]],
+    *,
+    db_client: Any = None,
+) -> Dict[str, Any]:
+    if table == "local_kg_nodes":
+        return merge_synced_local_kg_nodes(uid, rows, db_client=db_client)
+    return merge_synced_local_kg_edges(uid, rows, db_client=db_client)
 
 
 def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
