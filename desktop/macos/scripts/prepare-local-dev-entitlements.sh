@@ -29,7 +29,7 @@ BUNDLE_ID="$3"
 SIGNING_MODE="$4"
 
 case "$SIGNING_MODE" in
-    development|adhoc) ;;
+    development|adhoc|local-cert) ;;
     *)
         echo "Unsupported local signing mode: $SIGNING_MODE" >&2
         exit 2
@@ -63,10 +63,14 @@ cp "$BASE_ENTITLEMENTS" "$TEMP_ENTITLEMENTS"
     "$TEMP_ENTITLEMENTS" >/dev/null 2>&1 || true
 
 LIBRARY_VALIDATION_KEY="com.apple.security.cs.disable-library-validation"
-if [ "$SIGNING_MODE" = "adhoc" ]; then
+if [ "$SIGNING_MODE" = "adhoc" ] || [ "$SIGNING_MODE" = "local-cert" ]; then
     # Hardened runtime rejects ad-hoc third-party frameworks even when the app
-    # and nested code are all ad-hoc signed. This exception is limited to the
-    # explicitly opted-in named-bundle path; real identities retain validation.
+    # and nested code are all ad-hoc signed. A self-signed local certificate
+    # fails the same way: library validation compares Team IDs, and such a
+    # certificate has none, so dyld refuses the bundled Sparkle/Sentry/onnx
+    # frameworks with "different Team IDs" and the app aborts at launch. This
+    # exception is limited to the local named-bundle paths; a real Apple
+    # identity (which carries a Team ID) retains validation.
     /usr/libexec/PlistBuddy \
         -c "Add :$LIBRARY_VALIDATION_KEY bool true" \
         "$TEMP_ENTITLEMENTS" >/dev/null 2>&1 || \

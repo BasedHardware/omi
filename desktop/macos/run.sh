@@ -512,6 +512,12 @@ sign_app_bundle() {
         local local_signing_mode="development"
         if [ "$SIGN_IDENTITY" = "-" ]; then
             local_signing_mode="adhoc"
+        elif ! echo "$SIGN_IDENTITY" | grep -qE '\([A-Z0-9]{10}\)'; then
+            # A self-signed local certificate carries no Team ID, so hardened
+            # runtime library validation rejects the bundled frameworks exactly
+            # as it does ad-hoc code. Only Apple identities — spelled
+            # "... (TEAMID)" — keep validation on.
+            local_signing_mode="local-cert"
         fi
         effective_entitlements="$("$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
             Desktop/Omi.entitlements \

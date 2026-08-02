@@ -64,6 +64,20 @@ has_key "$development_entitlements" "com.apple.developer.applesignin" \
 has_key "$development_entitlements" "com.apple.security.cs.disable-library-validation" \
     && fail "real-identity fallback disabled library validation"
 
+# A self-signed local certificate has no Team ID, so hardened runtime library
+# validation rejects the bundled frameworks and the app aborts at launch with
+# "different Team IDs" — exactly the ad-hoc failure. It needs the same exception.
+local_cert_entitlements="$("$PREPARE_SCRIPT" \
+    "$BASE_ENTITLEMENTS" "$TMP_ROOT/worktree-c/.dev" \
+    com.omi.omi-local-cert local-cert)"
+has_key "$local_cert_entitlements" "com.apple.developer.applesignin" \
+    && fail "local-cert fallback retained Sign in with Apple"
+local_cert_library_validation="$(/usr/libexec/PlistBuddy \
+    -c "Print :com.apple.security.cs.disable-library-validation" \
+    "$local_cert_entitlements")"
+[ "$local_cert_library_validation" = "true" ] \
+    || fail "local-cert fallback did not disable library validation"
+
 # Named apps in one worktree also get distinct generated files.
 second_bundle_entitlements="$("$PREPARE_SCRIPT" \
     "$BASE_ENTITLEMENTS" "$TMP_ROOT/worktree-a/.dev" \
