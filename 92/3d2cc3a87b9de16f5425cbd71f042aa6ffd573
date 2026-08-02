@@ -1,0 +1,19 @@
+desktop/context-for-claude/scripts/make-dmg-background.sh
+  s_56918216f0e901::t_18501d8c8c74af 7-8,39-41,49-54,57-63,69,71,81-82,91-93,100-189,196-197,199,201-206,209-212,224-277,285,287,289,295-296,300,303-305,308,312,314-334,342-350,352-353,360,364-384,388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "923d2cc3a87b9de16f5425cbd71f042aa6ffd573",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
