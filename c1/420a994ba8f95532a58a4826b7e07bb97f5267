@@ -1,0 +1,66 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_1833483671ebc5::t_362938898c4162 479-486,488-490,492-494,501,507-516,525
+  s_1833483671ebc5::t_3f0a6a9062b836 215-216,219-221
+  s_1833483671ebc5::t_70db6301cb962d 567-568
+  s_1833483671ebc5::t_6459883f7aea55 429-432
+  s_1833483671ebc5::t_44b8953562b44e 124-127
+  s_1833483671ebc5::t_30601e89efd17d 535-544
+  s_1833483671ebc5::t_060e01fa433a56 913-914,917-919,921-927,931,933-940
+  s_1833483671ebc5::t_21bd92a6fca4d4 419,426-428,433-435,438,440,449-451
+  s_1833483671ebc5::t_c31923ce93f200 881-887,891-894
+  s_1833483671ebc5::t_2483ede4caf820 844-846,848-849
+  s_1833483671ebc5::t_11a75a1b95d9c4 106-109
+  s_1833483671ebc5::t_a516718398920e 904-905,941-945,988
+desktop/context-for-claude/Tests/ContextAppTests/SpotlightDropSlotTests.swift
+  s_1833483671ebc5::t_feb5ca9f59109c 238,244-246,248-249,251,257-258
+  s_1833483671ebc5::t_6dd05c6b8c1933 1-199,201-202,204-209,211-237,239-243,247,250,252-256,259-276
+  s_1833483671ebc5::t_e67f9f6fe2b6a1 200,203,210
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsSpotlight.swift
+  s_1833483671ebc5::t_7398e8c38a3d7e 773,1200,1204-1218,1222,1224-1226,1231-1235,1239-1288,1292,1299-1301,1303
+  s_1833483671ebc5::t_ddfae8d5e87bca 703,706,716-719,721,727-737,744-745,749,754-772
+  s_1833483671ebc5::t_5330dfc77f3147 628-630,632-645
+  s_1833483671ebc5::t_cda3ab48c5f796 1289-1291,1293-1298
+  s_1833483671ebc5::t_603e293bbbd841 657-662
+  s_1833483671ebc5::t_8f2380ee064fce 683-684
+  s_1833483671ebc5::t_f1bfa3d38534b2 999,1001-1003,1006-1010,1018-1019
+  s_1833483671ebc5::t_ce3ec1cf962782 1084,1086-1087
+  s_1833483671ebc5::t_62e14f77334f70 774,1302
+desktop/context-for-claude/Tests/ContextAppTests/PermissionInvitationTests.swift
+  s_1833483671ebc5::t_891eb72205a836 1-361
+  s_1833483671ebc5::t_13e2324c5c39d6 362-373
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionsCard.swift
+  s_1833483671ebc5::t_76e2d82e19ec71 13-18,27,30-34,45,47,49-50,57-58,81-84,89-91,96-97,99-103,105-117,120,125,154,156,158-159,162-165
+desktop/context-for-claude/Tests/ContextAppTests/PermissionsCardTests.swift
+  s_1833483671ebc5::t_9dc176b510e206 219-222,224,226-227
+  s_1833483671ebc5::t_41d13b8ee09c89 71-72,76,83-84,86-88
+  s_1833483671ebc5::t_d8ce942a53a18e 103-106,114,121
+  s_1833483671ebc5::t_d981da3dd1ca8a 199-206,208-211,213-217,225,230,232-236,238-248,250-252
+  s_1833483671ebc5::t_46d99e794d07c6 130,144-146,148-151,153,155,157,161-163,170-171
+  s_1833483671ebc5::t_0df61c8de8468b 11-16
+  s_1833483671ebc5::t_21ec8d0d4cb7d2 180-182
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionInvitations.swift
+  s_1833483671ebc5::t_c1736b3f74ac7f 1-56,59-64,69-71,75-84,87-88,93-164,173-177,179-186,188-223
+  s_1833483671ebc5::t_62de70d6c2d3a8 85-86,89-92
+  s_1833483671ebc5::t_c9b4bdbb75b872 57-58,65-68,72-74
+  s_1833483671ebc5::t_15284256d4f9ad 165-172,178,187
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_1833483671ebc5::t_874d45f0dfe508 811-814
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_1833483671ebc5::t_ec11f5e157a394 12-17,19-25,27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "c1420a994ba8f95532a58a4826b7e07bb97f5267",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
