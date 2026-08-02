@@ -86,11 +86,21 @@ final class DesktopChatDriftGuardTests: XCTestCase {
 
   func testChatFirstShellUsesModernTopNavigation() throws {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
+    let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
     // omi-test-quality: source-inspection -- the cohort shell must share the
-    // modern top-navigation surface and must not resurrect its retired rail.
+    // modern top-navigation and Dashboard/Home chat surfaces and must not
+    // resurrect either its retired rail or ChatPage's nested header.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
+    XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
     XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
+    XCTAssertFalse(shellSource.contains("\n      ChatPage("))
+    XCTAssertTrue(dashboardSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(dashboardSource.contains("chatTranscriptFirstPageDidLoad()"))
+
+    let homeSource = try sourceFile("MainWindow/DesktopHomeView.swift")
+    XCTAssertTrue(homeSource.contains("if usesChatFirstShell,"))
   }
 
   func testMainAndNotchChatShareTheTranscriptFade() throws {

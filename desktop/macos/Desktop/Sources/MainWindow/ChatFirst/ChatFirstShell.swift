@@ -105,16 +105,16 @@ struct ChatFirstShell: View {
   private var destination: some View {
     switch navigation.route {
     case .chat:
-      ChatPage(
+      DashboardPage(
+        viewModel: viewModelContainer.dashboardViewModel,
+        homeStatusStore: viewModelContainer.homeStatusStore,
+        appState: appState,
         appProvider: viewModelContainer.appProvider,
         chatProvider: viewModelContainer.chatProvider,
-        chatFirstRichBlockContext: ChatFirstRichBlockContext(
-          navigation: navigation,
-          tasksStore: viewModelContainer.tasksStore,
-          chatProvider: viewModelContainer.chatProvider,
-          canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
-          promptMaterializationCoordinator: promptMaterializationCoordinator
-        )
+        memoriesViewModel: viewModelContainer.memoriesViewModel,
+        taskChatCoordinator: viewModelContainer.taskChatCoordinator,
+        chatFirstRichBlockContext: richBlockContext,
+        selectedIndex: legacySelectionBinding
       )
       .accessibilityIdentifier("chat-first-route-chat")
       .onAppear {
@@ -184,6 +184,16 @@ struct ChatFirstShell: View {
 
   private var topBarSinceDate: Date {
     topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
+  }
+
+  private var richBlockContext: ChatFirstRichBlockContext {
+    ChatFirstRichBlockContext(
+      navigation: navigation,
+      tasksStore: viewModelContainer.tasksStore,
+      chatProvider: viewModelContainer.chatProvider,
+      canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
+      promptMaterializationCoordinator: promptMaterializationCoordinator
+    )
   }
 
   private var modernTopBarSelection: Binding<Int> {

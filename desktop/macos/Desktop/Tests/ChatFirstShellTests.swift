@@ -337,4 +337,23 @@ final class ChatFirstShellTests: XCTestCase {
       .more(.apps)
     )
   }
+
+  func testExplicitLegacyDesignIsTheOnlyPathThatMountsTheSidebarShell() throws {
+    var sample = ChatFirstShellCapabilitySample()
+    sample.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesChatFirst(false, sample.variant)
+    )
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesChatFirst(true, sample.variant)
+    )
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesChatFirst(false, .legacy)
+    )
+  }
 }

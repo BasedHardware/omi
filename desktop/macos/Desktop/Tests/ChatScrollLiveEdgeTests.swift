@@ -14,16 +14,35 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
     XCTAssertTrue(ChatScrollLiveEdge.isAtBottom(visibleMaxY: 1_000, documentHeight: 1_000))
   }
 
-  func testStaleLiveEdgeSampleCannotResumeFollowingDuringGesture() {
+  func testOnlySettledPhysicalScrollCanResumeFollowing() {
     XCTAssertFalse(
-      ChatScrollLiveEdge.canResumeFollowing(isAtBottom: true, userIsScrolling: true),
-      "A passive live-edge sample must not take ownership from an active user gesture."
+      ChatScrollLiveEdge.canResumeFollowing(
+        source: .passivePosition,
+        isAtBottom: true,
+        userIsScrolling: false
+      ),
+      "A passive live-edge sample after a prompt jump must not resume following."
     )
     XCTAssertTrue(
-      ChatScrollLiveEdge.canResumeFollowing(isAtBottom: true, userIsScrolling: false)
+      ChatScrollLiveEdge.canResumeFollowing(
+        source: .settledUserScroll,
+        isAtBottom: true,
+        userIsScrolling: false
+      )
     )
     XCTAssertFalse(
-      ChatScrollLiveEdge.canResumeFollowing(isAtBottom: false, userIsScrolling: false)
+      ChatScrollLiveEdge.canResumeFollowing(
+        source: .settledUserScroll,
+        isAtBottom: true,
+        userIsScrolling: true
+      )
+    )
+    XCTAssertFalse(
+      ChatScrollLiveEdge.canResumeFollowing(
+        source: .settledUserScroll,
+        isAtBottom: false,
+        userIsScrolling: false
+      )
     )
   }
 

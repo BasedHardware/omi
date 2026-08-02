@@ -235,6 +235,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
+  private var visibleTranscriptMessages: [ChatMessage] {
+    ChatTranscriptWindow.recentMessages(in: messages)
+  }
+
   @ViewBuilder
   private func scrollContent(proxy: ScrollViewProxy) -> some View {
     ScrollView {
@@ -271,14 +275,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
-      transcriptGeometry.setMessages(messages)
+      transcriptGeometry.setMessages(visibleTranscriptMessages)
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
     }
     // Refresh reply previews only once a streamed answer settles. Rebuilding
     // sources for every token would re-walk the entire transcript.
     .onChange(of: messages.last?.isStreaming) { wasStreaming, isStreaming in
       guard wasStreaming == true, isStreaming != true else { return }
-      transcriptGeometry.setMessages(messages)
+      transcriptGeometry.setMessages(visibleTranscriptMessages)
     }
     // A journal restore may be populated by background events while the
     // loader is still collecting its canonical snapshot. Reveal it only after
@@ -342,11 +346,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .followingBottom
         userIsScrolling = false
         transcriptGeometry.reset()
-        transcriptGeometry.setMessages(messages)
+        transcriptGeometry.setMessages(visibleTranscriptMessages)
       }
     }
     .onAppear {
-      transcriptGeometry.setMessages(messages)
+      transcriptGeometry.setMessages(visibleTranscriptMessages)
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
@@ -558,9 +562,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       welcomeContent()
     } else {
       let dupeIds = duplicateMessageIds
-      let displayMessages = AgentLifecycleDisplayProjection.project(
-        ChatTranscriptWindow.recentMessages(in: messages)
-      )
+      let displayMessages = AgentLifecycleDisplayProjection.project(visibleTranscriptMessages)
       let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(
@@ -634,26 +636,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           height: position.documentHeight,
           scrollTop: position.scrollTop
         )
-        if ChatScrollLiveEdge.canResumeFollowing(
-          isAtBottom: position.isAtBottom,
-          userIsScrolling: userIsScrolling
-        ) {
-          transcriptGeometry.setFollowingLiveEdge(true)
-        }
-        // Resume live following when the reader scrolls back to the
-        // live edge. atBottom == true is unambiguous intent to follow
-        // again; only atBottom == false is ambiguous (it can be a
-        // geometry/layout change, not user intent) and must NOT switch
-        // to .freeScrolling on its own.
-        if ChatScrollLiveEdge.canResumeFollowing(
-          isAtBottom: position.isAtBottom,
-          userIsScrolling: userIsScrolling
-        ) && scrollMode == .freeScrolling {
-          cancelAllPendingScrolls()
-          userIsScrolling = false
-          scrollMode = .followingBottom
-          hasActivityBelow = false
-        }
       }
       UserScrollDetector {
         scrollMode = .freeScrolling
@@ -670,6 +652,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       } onScrollSettledAtBottom: {
         guard
           ChatScrollLiveEdge.canResumeFollowing(
+            source: .settledUserScroll,
             isAtBottom: true,
             userIsScrolling: userIsScrolling
           ), scrollMode == .freeScrolling

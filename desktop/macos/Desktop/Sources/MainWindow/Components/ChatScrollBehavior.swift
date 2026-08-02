@@ -21,11 +21,21 @@ enum ChatScrollLiveEdge {
     visibleMaxY >= documentHeight - intentEpsilon
   }
 
-  /// A stale AppKit sample can still report the live edge after physical input
-  /// has started. Never let that passive sample take ownership back from the
-  /// user's active gesture.
-  static func canResumeFollowing(isAtBottom: Bool, userIsScrolling: Bool) -> Bool {
-    isAtBottom && !userIsScrolling
+  enum FollowResumeSource: Equatable {
+    case passivePosition
+    case settledUserScroll
+  }
+
+  /// Only a completed physical scroll at the live edge may hand transcript
+  /// ownership back to auto-follow. AppKit also emits bottom-position samples
+  /// after programmatic prompt jumps and layout changes; treating those as
+  /// reader intent makes the viewport snap away from selected history.
+  static func canResumeFollowing(
+    source: FollowResumeSource,
+    isAtBottom: Bool,
+    userIsScrolling: Bool
+  ) -> Bool {
+    source == .settledUserScroll && isAtBottom && !userIsScrolling
   }
 }
 
@@ -482,40 +492,28 @@ struct ChatScrollContainer<Content: View>: View {
   }
 
   private var scrollDetectors: some View {
-    ZStack {
-      ScrollPositionDetector { position in
-        if ChatScrollLiveEdge.canResumeFollowing(
-          isAtBottom: position.isAtBottom,
-          userIsScrolling: userIsScrolling
-        ) && scrollMode == .freeScrolling {
-          cancelAllPendingScrolls()
-          userIsScrolling = false
-          scrollMode = .followingBottom
-          hasActivityBelow = false
-        }
-      }
-      UserScrollDetector {
-        scrollMode = .freeScrolling
-        userIsScrolling = true
-        hasActivityBelow = false
-        cancelAllPendingScrolls()
-        let endWork = DispatchWorkItem {
-          userIsScrolling = false
-        }
-        userScrollEndWorkItem = endWork
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
-      } onScrollSettledAtBottom: {
-        guard
-          ChatScrollLiveEdge.canResumeFollowing(
-            isAtBottom: true,
-            userIsScrolling: userIsScrolling
-          ), scrollMode == .freeScrolling
-        else { return }
-        cancelAllPendingScrolls()
+    UserScrollDetector {
+      scrollMode = .freeScrolling
+      userIsScrolling = true
+      hasActivityBelow = false
+      cancelAllPendingScrolls()
+      let endWork = DispatchWorkItem {
         userIsScrolling = false
-        scrollMode = .followingBottom
-        hasActivityBelow = false
       }
+      userScrollEndWorkItem = endWork
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+    } onScrollSettledAtBottom: {
+      guard
+        ChatScrollLiveEdge.canResumeFollowing(
+          source: .settledUserScroll,
+          isAtBottom: true,
+          userIsScrolling: userIsScrolling
+        ), scrollMode == .freeScrolling
+      else { return }
+      cancelAllPendingScrolls()
+      userIsScrolling = false
+      scrollMode = .followingBottom
+      hasActivityBelow = false
     }
   }
 
