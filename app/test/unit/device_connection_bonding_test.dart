@@ -38,5 +38,19 @@ void main() {
       expect(connection, isNotNull);
       expect((connection!.transport as NativeBleTransport).requiresBond, isFalse);
     });
+
+    test('name-detected OmiGlass does not require bonding even when typed as omi', () {
+      final device = BtDevice(
+        id: 'AA:BB:CC:DD:EE:FF',
+        name: 'Omi Glass',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'AA:BB:CC:DD:EE:FF'),
+      );
+
+      final connection = DeviceConnectionFactory.create(device);
+      expect(connection, isNotNull);
+      expect((connection!.transport as NativeBleTransport).requiresBond, isFalse);
+    });
   });
 }

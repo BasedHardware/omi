@@ -100,7 +100,8 @@ class DeviceConnectionFactory {
 
     // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
+    final isOmiGlass =
+        device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -109,7 +110,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null || deviceId.trim().isEmpty) return null;
-        final needsBond = device.type == DeviceType.limitless || device.type == DeviceType.omi;
+        final needsBond = !isOmiGlass && (device.type == DeviceType.limitless || device.type == DeviceType.omi);
         transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 
