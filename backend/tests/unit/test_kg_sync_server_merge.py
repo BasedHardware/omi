@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import pytest
+from pydantic import ValidationError
 
 from database import knowledge_graph as kg_db
 from routers import knowledge_graph as kg_router
@@ -277,6 +278,14 @@ def test_sync_route_delegates_to_merge(monkeypatch):
     assert captured == {"uid": UID, "table": "local_kg_nodes", "rows": rows, "db_client": kg_router.firestore_db}
     assert response.merged == 1
     assert response.table == "local_kg_nodes"
+
+
+def test_sync_request_rejects_oversized_batch():
+    with pytest.raises(ValidationError):
+        kg_router.LocalKgSyncRequest(
+            table="local_kg_nodes",
+            rows=[{"nodeId": str(index), "label": "Test"} for index in range(kg_router.LOCAL_KG_SYNC_MAX_ROWS + 1)],
+        )
 
 
 def test_invalid_local_kg_rows_are_skipped():

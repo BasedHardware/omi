@@ -14,6 +14,7 @@ from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
 
 router = APIRouter()
+LOCAL_KG_SYNC_MAX_ROWS = 100
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 KnowledgeGraphLoader = Callable[[str], Payload]
@@ -89,7 +90,7 @@ class DeleteKnowledgeGraphResponse(BaseModel):
 
 class LocalKgSyncRequest(BaseModel):
     table: Literal["local_kg_nodes", "local_kg_edges"]
-    rows: List[Dict[str, Any]] = Field(min_length=1)
+    rows: List[Dict[str, Any]] = Field(min_length=1, max_length=LOCAL_KG_SYNC_MAX_ROWS)
 
 
 class LocalKgSyncResponse(BaseModel):
