@@ -2891,7 +2891,7 @@ actor RewindDatabase {
   // MARK: - Screenshot Embedding Methods
 
   /// Screenshots with OCR that have not yet been processed by the screen→KG extractor.
-  func getScreenshotsPendingKGExtraction(limit: Int = 50) throws -> [(
+  func getScreenshotsPendingKGExtraction(limit: Int = 50, afterID: Int64 = 0) throws -> [(
     id: Int64, ocrText: String, appName: String, windowTitle: String?
   )] {
     guard let dbQueue = dbQueue else {
@@ -2903,9 +2903,9 @@ actor RewindDatabase {
         db,
         sql: """
               SELECT id, ocrText, appName, windowTitle FROM screenshots
-              WHERE kgExtracted = 0 AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
+              WHERE kgExtracted = 0 AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20 AND id > ?
               ORDER BY id LIMIT ?
-          """, arguments: [limit]
+          """, arguments: [afterID, limit]
       ).compactMap { row in
         guard let id: Int64 = row["id"],
           let ocrText: String = row["ocrText"],

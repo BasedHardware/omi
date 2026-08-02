@@ -13,6 +13,7 @@ actor ScreenKnowledgeGraphExtractor {
     let input: ScreenKGExtractionInput
     let contentHash: String
     let ownerID: String
+    let mergeCompleted: Bool
   }
 
   private let minTextLength = 20
@@ -33,15 +34,24 @@ actor ScreenKnowledgeGraphExtractor {
   typealias ExtractionBackend = @Sendable (ScreenKGExtractionInput) async throws -> String
   typealias KGMarkedWriter = @Sendable (_ ids: [Int64]) async throws -> Void
   typealias PendingFetcher =
-    @Sendable (_ limit: Int) async throws -> [(
+    @Sendable (_ limit: Int, _ afterID: Int64) async throws -> [(
       id: Int64, ocrText: String, appName: String, windowTitle: String?
     )]
   typealias OwnerIDProvider = @Sendable () async -> String?
+  typealias GraphMerger =
+    @Sendable (
+      _ nodes: [LocalKGNodeRecord],
+      _ edges: [LocalKGEdgeRecord],
+      _ authorization: LocalMutationAuthorization
+    ) async throws -> Void
+  typealias OwnerMatchChecker = @Sendable (_ expectedOwnerID: String) -> Bool
 
   private let extractEntities: ExtractionBackend
   private let markExtracted: KGMarkedWriter
   private let fetchPending: PendingFetcher
   private let activeOwnerID: OwnerIDProvider
+  private let mergeGraphImpl: GraphMerger
+  private let ownerMatches: OwnerMatchChecker
 
   private init() {
     self.extractEntities = { input in
@@ -51,25 +61,46 @@ actor ScreenKnowledgeGraphExtractor {
     self.markExtracted = { ids in
       try await RewindDatabase.shared.markScreenshotsKGExtracted(ids: ids)
     }
-    self.fetchPending = { limit in
-      try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(limit: limit)
+    self.fetchPending = { limit, afterID in
+      try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(limit: limit, afterID: afterID)
     }
     self.activeOwnerID = { RuntimeOwnerIdentity.currentOwnerId() }
+    self.mergeGraphImpl = { nodes, edges, authorization in
+      try await KnowledgeGraphStorage.shared.mergeGraph(
+        nodes: nodes, edges: edges, authorization: authorization)
+    }
+    self.ownerMatches = { expectedOwnerID in
+      RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
+        && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+    }
   }
 
   init(
     extractEntitiesForTesting: @escaping ExtractionBackend,
     markExtractedForTesting: @escaping KGMarkedWriter,
     fetchPendingForTesting: PendingFetcher? = nil,
-    activeOwnerIDForTesting: @escaping OwnerIDProvider = { "test-owner" }
+    activeOwnerIDForTesting: @escaping OwnerIDProvider = { "test-owner" },
+    mergeGraphForTesting: GraphMerger? = nil,
+    ownerMatchesForTesting: OwnerMatchChecker? = nil
   ) {
     self.extractEntities = extractEntitiesForTesting
     self.markExtracted = markExtractedForTesting
     self.fetchPending =
-      fetchPendingForTesting ?? { limit in
-        try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(limit: limit)
+      fetchPendingForTesting ?? { limit, afterID in
+        try await RewindDatabase.shared.getScreenshotsPendingKGExtraction(
+          limit: limit, afterID: afterID)
       }
     self.activeOwnerID = activeOwnerIDForTesting
+    self.mergeGraphImpl =
+      mergeGraphForTesting ?? { nodes, edges, authorization in
+        try await KnowledgeGraphStorage.shared.mergeGraph(
+          nodes: nodes, edges: edges, authorization: authorization)
+      }
+    self.ownerMatches =
+      ownerMatchesForTesting ?? { expectedOwnerID in
+        RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
+          && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+      }
   }
 
   var pendingCount: Int { pendingItems.count }
@@ -127,7 +158,9 @@ actor ScreenKnowledgeGraphExtractor {
     }
 
     guard generation == ownerGeneration else { return }
-    pendingItems.append(PendingItem(id: id, input: input, contentHash: hash, ownerID: ownerID))
+    pendingItems.append(
+      PendingItem(
+        id: id, input: input, contentHash: hash, ownerID: ownerID, mergeCompleted: false))
 
     if pendingItems.count >= maxPendingItems {
       await flushPendingExtractions()
@@ -219,30 +252,55 @@ actor ScreenKnowledgeGraphExtractor {
 
   private func runBackfillBatch() async {
     var processedThisLaunch = 0
+    var afterID: Int64 = 0
+    let generation = ownerGeneration
 
     do {
       while processedThisLaunch < maxBackfillItemsPerLaunch {
+        guard generation == ownerGeneration else { return }
         if pausedForProductGate { break }
 
-        let rows = try await fetchPending(backfillBatchSize)
+        guard let ownerID = await resolvedOwnerID(expectedOwnerID: nil) else { return }
+        guard generation == ownerGeneration else { return }
+
+        let rows = try await fetchPending(backfillBatchSize, afterID)
+        guard generation == ownerGeneration else { return }
         if rows.isEmpty { break }
 
         for row in rows {
+          guard generation == ownerGeneration else { return }
           await queueScreenshot(
-            id: row.id, ocrText: row.ocrText, appName: row.appName, windowTitle: row.windowTitle)
+            id: row.id,
+            ocrText: row.ocrText,
+            appName: row.appName,
+            windowTitle: row.windowTitle,
+            expectedOwnerID: ownerID)
         }
+        guard generation == ownerGeneration else { return }
 
         while !pendingItems.isEmpty {
+          guard generation == ownerGeneration else { return }
           if pausedForProductGate { break }
           let before = pendingItems.count
           await flushPendingExtractions()
           if pendingItems.count >= before { break }
         }
 
-        if pausedForProductGate { break }
-        if !pendingItems.isEmpty { break }
-
+        if let maxID = rows.map(\.id).max() {
+          afterID = max(afterID, maxID)
+        }
         processedThisLaunch += rows.count
+
+        if pausedForProductGate { break }
+        if !pendingItems.isEmpty {
+          if !pausedForProductGate {
+            startFlushTimerIfNeeded()
+          }
+          if processedThisLaunch >= maxBackfillItemsPerLaunch { break }
+          try? await Task.sleep(nanoseconds: 200_000_000)
+          continue
+        }
+
         if processedThisLaunch < maxBackfillItemsPerLaunch {
           try? await Task.sleep(nanoseconds: 200_000_000)
         }
@@ -255,22 +313,33 @@ actor ScreenKnowledgeGraphExtractor {
   private func processItem(_ item: PendingItem, generation: Int) async {
     guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
 
+    var mergeCompleted = item.mergeCompleted
     do {
-      let jsonText = try await extractEntities(item.input)
-      guard generation == ownerGeneration else { return }
-      guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+      if !mergeCompleted {
+        let jsonText = try await extractEntities(item.input)
+        guard generation == ownerGeneration else { return }
+        guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
 
-      guard let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) else {
-        log(
-          "ScreenKnowledgeGraphExtractor: invalid extraction JSON for screenshot \(item.id) — will retry"
-        )
-        pendingItems.append(item)
-        return
-      }
+        guard let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) else {
+          log(
+            "ScreenKnowledgeGraphExtractor: invalid extraction JSON for screenshot \(item.id) — will retry"
+          )
+          pendingItems.append(item)
+          return
+        }
 
-      let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed.nodes, edges: parsed.edges)
-      if !records.nodes.isEmpty || !records.edges.isEmpty {
-        try await mergeGraph(nodes: records.nodes, edges: records.edges)
+        let records = KnowledgeGraphRecordBuilder.buildRecords(nodes: parsed.nodes, edges: parsed.edges)
+        if !records.nodes.isEmpty || !records.edges.isEmpty {
+          try await mergeGraph(
+            nodes: records.nodes,
+            edges: records.edges,
+            expectedOwnerID: item.ownerID,
+            generation: generation)
+          guard generation == ownerGeneration else { return }
+          guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+          ChatToolExecutor.onKnowledgeGraphUpdated?()
+        }
+        mergeCompleted = true
       }
 
       guard generation == ownerGeneration else { return }
@@ -293,23 +362,36 @@ actor ScreenKnowledgeGraphExtractor {
         return
       }
       log("ScreenKnowledgeGraphExtractor: extraction failed for screenshot \(item.id): \(error.localizedDescription)")
-      pendingItems.append(item)
+      pendingItems.append(
+        PendingItem(
+          id: item.id,
+          input: item.input,
+          contentHash: item.contentHash,
+          ownerID: item.ownerID,
+          mergeCompleted: mergeCompleted))
     }
   }
 
-  private func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
-    guard RuntimeOwnerIdentity.currentOwnerId() != nil,
-      !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
-    else {
+  private func mergeGraph(
+    nodes: [LocalKGNodeRecord],
+    edges: [LocalKGEdgeRecord],
+    expectedOwnerID: String,
+    generation: Int
+  ) async throws {
+    guard generation == ownerGeneration else {
+      throw LocalMutationAuthorizationError.revoked
+    }
+    guard await resolvedOwnerID(expectedOwnerID: expectedOwnerID) != nil else {
       throw LocalMutationAuthorizationError.revoked
     }
 
-    try await KnowledgeGraphStorage.shared.mergeGraph(
-      nodes: nodes,
-      edges: edges,
-      authorization: LocalMutationAuthorization {
-        RuntimeOwnerIdentity.currentOwnerId() != nil
-          && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+    let expected = expectedOwnerID
+    let matches = ownerMatches
+    try await mergeGraphImpl(
+      nodes,
+      edges,
+      LocalMutationAuthorization {
+        matches(expected)
       })
   }
 
