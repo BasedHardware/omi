@@ -1,0 +1,30 @@
+desktop/context-for-claude/Tests/ContextAppTests/TerminationRevivalTests.swift
+  s_56918216f0e901::t_f846d4681a2788 7-10,12-13,59-60,65,67-68,73-105,109,115,136,152,158-162,168,176-179,181-187,194-195,199-200,204-237,239-241,245-263,318-360
+  s_56918216f0e901::t_3429cbccfdeab2 361
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_56918216f0e901::t_a99d62314bbba5 67
+  s_56918216f0e901::t_13dbfc973410d7 81-144
+  s_56918216f0e901::t_2449aedadfc54d 54-56
+  s_56918216f0e901::t_96c6834cc0a1ae 344-371,373-378
+  s_56918216f0e901::t_beefd2d54362fc 270-293,297-299,301-305
+  s_56918216f0e901::t_fb2f752fc6a807 2,145-146,306-307,311,315,379-380
+desktop/context-for-claude/Sources/ContextApp/Support/Log.swift
+  s_56918216f0e901::t_48378e524f6325 12-43,50-57
+  s_56918216f0e901::t_79ac5aa242091d 58-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "bf259ac7da7d5aa0ef88d252d07bf73c2b141d12",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
