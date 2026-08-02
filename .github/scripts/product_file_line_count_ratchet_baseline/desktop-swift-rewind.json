@@ -1,12 +1,12 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1668,
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3756,
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3811,
     "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1856
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Add authorized updateAgentStartedAt for recurring-task investigation dedup gate.",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Store permissions are tightened across the whole directory chain rather than the leaf only, with a one-shot repair for trees created by older builds.",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Store permissions are tightened across the whole directory chain rather than the leaf only, with a one-shot repair for trees created by older builds; kgExtracted migration and screenshot query helpers track which OCR rows were promoted into local_kg_nodes so ScreenKnowledgeGraphExtractor does not reprocess the same capture.",
     "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Search-result rows load a downsampled ImageIO thumbnail instead of the full-resolution screenshot, so a long results list no longer retains full-size images behind a 120x80 view."
   },
   "threshold": 1500
