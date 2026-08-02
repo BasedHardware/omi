@@ -3,9 +3,11 @@
 
 The evidence is uploaded as a GitHub Actions artifact by the trusted
 qualification run.  Its run ID is the authority boundary: promotion verifies
-that run came from this workflow on main and then compares freshly downloaded
-release bytes with this document.  GitHub release bodies/assets are never the
-qualification authority.
+that run came from this workflow on main and then binds the evidence to the
+release using GitHub's immutable per-asset SHA-256 digests (the ``digest``
+field exposed by the REST release-assets API).  Release assets are never
+downloaded during promotion; their content-addressed digests are compared
+against the trusted artifact instead.
 """
 
 from __future__ import annotations
