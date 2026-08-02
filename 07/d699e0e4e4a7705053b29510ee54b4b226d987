@@ -1,0 +1,25 @@
+desktop/macos/scripts/smoke-signed-desktop-artifact.sh
+  s_0c099cae24c74c::t_ef4b10b25b1473 537-540
+desktop/macos/scripts/bundle-size-harness.sh
+  s_0c099cae24c74c::t_806b4a13620494 181-185
+desktop/macos/scripts/audit-desktop-bundle-deps.sh
+  s_0c099cae24c74c::t_532d10e5fd9d09 234-238
+desktop/macos/run.sh
+  s_0c099cae24c74c::t_3349e6b8896c16 479-483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "07d699e0e4e4a7705053b29510ee54b4b226d987",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
