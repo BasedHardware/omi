@@ -79,6 +79,7 @@ def _stub_startup(agent_proxy: ModuleType, monkeypatch, *, ensure_result, health
 
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
     monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "uid-gone"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
@@ -107,5 +108,7 @@ class TestAgentWsStartupSurvivesAGoneClient:
 
         await agent_proxy.agent_ws(websocket)
 
-        assert [s for s in websocket.send_attempts if "not responding" in s], "the error event must still be attempted"
+        assert [
+            s for s in websocket.send_attempts if "agent_vm_not_ready" in s
+        ], "the typed error event must still be attempted"
         assert websocket.close_attempts == [4003], "the connection must still be closed with its not-healthy code"

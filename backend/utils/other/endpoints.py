@@ -13,6 +13,7 @@ import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database import users as users_db
 from database.users import record_client_device, record_user_platform
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -24,6 +25,60 @@ logger = logging.getLogger(__name__)
 
 WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
+WS_AUTH_CODE_ACCOUNT_DELETION = 4005
+ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES = frozenset({'deleting_auth', 'pending', 'retrying', 'running', 'failed'})
+
+
+def get_user_deletion_wipe_status(uid: str) -> str | None:
+    """Indirection keeps lightweight auth test doubles import-compatible."""
+    loader = getattr(users_db, 'get_user_deletion_wipe_status', None)
+    if loader is None:
+        return None
+    return cast(Callable[[str], str | None], loader)(uid)
+
+
+def _account_deletion_status(uid: str) -> str | None:
+    """Read the uncached deletion authority, failing closed if it is unavailable."""
+    try:
+        return get_user_deletion_wipe_status(uid)
+    except Exception as error:
+        logger.error(
+            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
+            uid,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        ) from error
+
+
+def _enforce_account_deletion_http_access(uid: str) -> None:
+    status = _account_deletion_status(uid)
+    if status in ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'code': 'account_deletion_in_progress',
+                'status': status,
+                'retryable': False,
+            },
+        )
+
+
+def _enforce_account_deletion_ws_access(uid: str) -> None:
+    try:
+        status = _account_deletion_status(uid)
+    except HTTPException as error:
+        raise WebSocketException(
+            code=1013,
+            reason='Account deletion state unavailable; retry later',
+        ) from error
+    if status in ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES:
+        raise WebSocketException(
+            code=WS_AUTH_CODE_ACCOUNT_DELETION,
+            reason='Account deletion in progress',
+        )
 
 
 def get_user(uid: str) -> Any:
@@ -113,6 +168,8 @@ def get_current_user_uid(
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    _enforce_account_deletion_http_access(uid)
+
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
@@ -170,6 +227,8 @@ def get_current_user_uid_no_byok_validation(
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    _enforce_account_deletion_http_access(uid)
+
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
@@ -208,11 +267,15 @@ def _verify_ws_auth(authorization: str) -> str:
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
+        _enforce_account_deletion_ws_access(uid)
+        return uid
     except (InvalidIdTokenError, CertificateFetchError) as e:
         close_code, reason = _get_ws_auth_close(e)
         logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
+    except WebSocketException:
+        raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
@@ -323,7 +386,9 @@ def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     if not token:
         raise ValueError("Missing token")
 
-    return verify_token(token)
+    uid = verify_token(token)
+    _enforce_account_deletion_ws_access(uid)
+    return uid
 
 
 cached: Dict[str, Any] = {}

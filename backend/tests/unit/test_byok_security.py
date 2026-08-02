@@ -1126,18 +1126,22 @@ class TestAuthDependencyBYOKIntegration:
     """Verify shared auth dependencies call (or skip) BYOK validation."""
 
     @patch('utils.other.endpoints.validate_byok_request')
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-123')
-    def test_get_current_user_uid_calls_byok_validation(self, _mock_verify, _mock_platform, mock_validate):
+    def test_get_current_user_uid_calls_byok_validation(
+        self, _mock_verify, _mock_platform, _mock_deletion, mock_validate
+    ):
         from utils.other.endpoints import get_current_user_uid
 
         uid = get_current_user_uid(authorization='Bearer fake-token')
         assert uid == 'uid-123'
         mock_validate.assert_called_once_with('uid-123')
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-456')
-    def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform):
+    def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform, _mock_deletion):
         """get_current_user_uid_no_byok_validation must NOT call validate_byok_request."""
         from utils.other.endpoints import get_current_user_uid_no_byok_validation
 

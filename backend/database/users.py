@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
+ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES = frozenset({'deleting_auth', 'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 
 
@@ -311,6 +312,20 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
         },
         merge=True,
     )
+
+
+def get_user_deletion_wipe_status(uid: str) -> str | None:
+    """Return the authoritative deletion lifecycle state for an authenticated UID.
+
+    This intentionally bypasses caches: an accepted deletion must become an
+    access barrier on the very next request, and a cached pre-delete miss would
+    reopen the exact half-deleted-account window this marker closes.
+    """
+    snapshot = db.collection('account_deletions').document(uid).get()
+    if not snapshot.exists:
+        return None
+    status = (snapshot.to_dict() or {}).get('wipe_status')
+    return status if isinstance(status, str) and status else None
 
 
 def mark_user_deletion_wipe_running(uid: str):

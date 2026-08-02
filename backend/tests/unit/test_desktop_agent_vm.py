@@ -38,6 +38,44 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeypatch):
+    writes = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: None)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
+    monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm", lambda *args: writes.append(args))
+    tasks = BackgroundTasks()
+
+    response = await desktop_agent_vm.provision_agent_vm(tasks, "fresh-firebase-uid")
+
+    assert response.status == "provisioning"
+    assert response.agent_status == "provisioning"
+    assert response.ip is None
+    assert writes[0][0] == "fresh-firebase-uid"
+    assert writes[0][2] == "provisioning"
+    assert len(tasks.tasks) == 1
+
+
+def test_ready_state_rejects_unknown_or_invalid_address():
+    with pytest.raises(ValueError, match="usable IP"):
+        desktop_agent_vm._set_vm("uid", "vm", "ready", "token", "now", "unknown")
+    with pytest.raises(ValueError, match="usable IP"):
+        desktop_agent_vm._set_vm("uid", "vm", "ready", "token", "now", "not-an-ip")
+
+
+def test_instance_address_parser_never_returns_unknown_placeholder():
+    assert desktop_agent_vm._ip({}) is None
+    assert desktop_agent_vm._ip({"networkInterfaces": [{"accessConfigs": [{"natIP": "unknown"}]}]}) is None
+    assert desktop_agent_vm._ip({"networkInterfaces": [{"accessConfigs": [{"natIP": "34.1.2.3"}]}]}) == "34.1.2.3"
+
+
+@pytest.mark.asyncio
 async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     vm = {
         "vmName": "omi-agent-user",
@@ -65,6 +103,36 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     assert response.ip is None
     assert writes[0][2] == "provisioning"
     assert len(tasks.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-stale",
+        "zone": "us-central1-a",
+        "ip": "34.1.2.3",
+        "authToken": "old-token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+    clears = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def not_found(*_args):
+        return "NOT_FOUND", None
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
+    monkeypatch.setattr(desktop_agent_vm, "_delete_vm_if_current", lambda *args: clears.append(args) or True)
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response is None
+    assert clears == [("uid", "omi-agent-stale", "old-token")]
 
 
 @pytest.mark.asyncio

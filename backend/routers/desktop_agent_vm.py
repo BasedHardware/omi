@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import logging
 import os
 import uuid
@@ -9,7 +10,7 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from google.cloud.firestore import DELETE_FIELD
+from google.cloud.firestore import DELETE_FIELD, transactional
 from pydantic import BaseModel, ConfigDict, Field
 
 from database._client import get_firestore_client
@@ -93,6 +94,8 @@ def _set_vm(
     ip: str | None = None,
     zone: str = _ZONE,
 ) -> None:
+    if status == "ready" and not _is_usable_vm_ip(ip):
+        raise ValueError("refusing to persist ready agentVm without a usable IP address")
     vm: dict[str, Any] = {
         "vmName": vm_name,
         "zone": zone,
@@ -105,8 +108,79 @@ def _set_vm(
     get_firestore_client().collection("users").document(uid).set({"agentVm": vm}, merge=True)
 
 
-def _delete_vm(uid: str) -> None:
-    get_firestore_client().collection("users").document(uid).update({"agentVm": DELETE_FIELD})
+@transactional
+def _set_vm_if_current_txn(
+    transaction,
+    user_ref,
+    expected_vm_name: str,
+    expected_auth_token: str,
+    status: str,
+    ip: str | None,
+    zone: str,
+) -> bool:
+    snapshot = user_ref.get(transaction=transaction)
+    current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if not isinstance(current, dict):
+        return False
+    if current.get("vmName") != expected_vm_name or current.get("authToken") != expected_auth_token:
+        return False
+    if status == "ready" and not _is_usable_vm_ip(ip):
+        raise ValueError("refusing to persist ready agentVm without a usable IP address")
+    next_vm = {
+        **current,
+        "vmName": expected_vm_name,
+        "zone": zone,
+        "status": status,
+        "authToken": expected_auth_token,
+    }
+    if _is_usable_vm_ip(ip):
+        next_vm["ip"] = ip
+    else:
+        next_vm.pop("ip", None)
+    transaction.set(user_ref, {"agentVm": next_vm}, merge=True)
+    return True
+
+
+def _set_vm_if_current(
+    uid: str,
+    expected_vm_name: str,
+    expected_auth_token: str,
+    status: str,
+    ip: str | None = None,
+    zone: str = _ZONE,
+) -> bool:
+    client = get_firestore_client()
+    return _set_vm_if_current_txn(
+        client.transaction(),
+        client.collection("users").document(uid),
+        expected_vm_name,
+        expected_auth_token,
+        status,
+        ip,
+        zone,
+    )
+
+
+@transactional
+def _delete_vm_if_current_txn(transaction, user_ref, expected_vm_name: str, expected_auth_token: str) -> bool:
+    snapshot = user_ref.get(transaction=transaction)
+    current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if not isinstance(current, dict):
+        return False
+    if current.get("vmName") != expected_vm_name or current.get("authToken") != expected_auth_token:
+        return False
+    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
+    return True
+
+
+def _delete_vm_if_current(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
+    client = get_firestore_client()
+    return _delete_vm_if_current_txn(
+        client.transaction(),
+        client.collection("users").document(uid),
+        expected_vm_name,
+        expected_auth_token,
+    )
 
 
 def _get_access_token() -> str:
@@ -147,11 +221,22 @@ async def _instance(project: str, zone: str, vm_name: str) -> tuple[str, dict[st
     return str(instance.get("status", "UNKNOWN")), instance
 
 
-def _ip(instance: dict[str, Any]) -> str:
+def _is_usable_vm_ip(value: Any) -> bool:
+    if not isinstance(value, str) or not value or value == "unknown":
+        return False
     try:
-        return str(instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"])
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _ip(instance: dict[str, Any]) -> str | None:
+    try:
+        candidate = str(instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"])
     except (KeyError, IndexError, TypeError):
-        return "unknown"
+        return None
+    return candidate if _is_usable_vm_ip(candidate) else None
 
 
 async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str, auth_token: str) -> str:
@@ -192,7 +277,10 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
     _, instance = await _instance(project, _ZONE, vm_name)
     if instance is None:
         raise RuntimeError("GCE created VM is unavailable")
-    return _ip(instance)
+    ip = _ip(instance)
+    if ip is None:
+        raise RuntimeError("GCE created VM has no usable IP address")
+    return ip
 
 
 async def _start_vm(project: str, vm_name: str, zone: str) -> str:
@@ -207,7 +295,10 @@ async def _start_vm(project: str, vm_name: str, zone: str) -> str:
     _, instance = await _instance(project, zone, vm_name)
     if instance is None:
         raise RuntimeError("GCE restarted VM is unavailable")
-    return _ip(instance)
+    ip = _ip(instance)
+    if ip is None:
+        raise RuntimeError("GCE restarted VM has no usable IP address")
+    return ip
 
 
 async def _provision_background(
@@ -215,10 +306,10 @@ async def _provision_background(
 ) -> None:
     try:
         ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
-        await run_blocking(db_executor, _set_vm, uid, vm_name, "ready", auth_token, _now(), ip)
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
     except Exception as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
-        await run_blocking(db_executor, _set_vm, uid, vm_name, "error", auth_token, _now())
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
 
 
 async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> None:
@@ -227,21 +318,20 @@ async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> Non
     auth_token = str(vm.get("authToken") or "")
     try:
         ip = await _start_vm(project, vm_name, zone)
-        await run_blocking(db_executor, _set_vm, uid, vm_name, "ready", auth_token, _now(), ip, zone)
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip, zone)
     except Exception as exc:
         logger.error("Agent VM restart failed for uid=%s: %s", uid, exc)
-        await run_blocking(db_executor, _set_vm, uid, vm_name, "error", auth_token, _now(), None, zone)
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error", None, zone)
 
 
 async def _recover_background(uid: str, vm: dict[str, Any], ip: str) -> None:
     await run_blocking(
         db_executor,
-        _set_vm,
+        _set_vm_if_current,
         uid,
         str(vm["vmName"]),
-        "ready",
         str(vm.get("authToken") or ""),
-        _now(),
+        "ready",
         ip,
         str(vm.get("zone") or _ZONE),
     )
@@ -309,7 +399,13 @@ async def get_agent_status(
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
         return _response(vm)
     if gce_status == "NOT_FOUND":
-        await run_blocking(db_executor, _delete_vm, uid)
+        await run_blocking(
+            db_executor,
+            _delete_vm_if_current,
+            uid,
+            str(vm["vmName"]),
+            str(vm.get("authToken") or ""),
+        )
         return None
     if gce_status in {"TERMINATED", "STOPPED"}:
         pending = {**vm, "status": "provisioning", "ip": None}
@@ -326,8 +422,15 @@ async def get_agent_status(
         )
         background_tasks.add_task(_restart_background, uid, project, vm)
         return _response(pending)
-    if gce_status == "RUNNING" and status in {"error", "stopped"} and instance is not None:
+    if (
+        gce_status == "RUNNING"
+        and instance is not None
+        and (status in {"error", "stopped"} or not _is_usable_vm_ip(vm.get("ip")))
+    ):
         pending = {**vm, "status": "provisioning", "ip": None}
-        background_tasks.add_task(_recover_background, uid, vm, _ip(instance))
+        instance_ip = _ip(instance)
+        if instance_ip is None:
+            return _response(pending)
+        background_tasks.add_task(_recover_background, uid, vm, instance_ip)
         return _response(pending)
     return _response(vm)

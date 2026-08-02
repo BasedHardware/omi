@@ -134,6 +134,18 @@ def _get_user_context(uid: str) -> Tuple[Optional[Dict[str, Any]], str]:
     return None, 'enhanced'
 
 
+_ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES = frozenset({'deleting_auth', 'pending', 'retrying', 'running', 'failed'})
+
+
+def _get_account_deletion_status(uid: str) -> Optional[str]:
+    """Read the uncached deletion authority for the proxy's independent auth boundary."""
+    doc = _get_firestore_db().collection('account_deletions').document(uid).get()
+    if not doc.exists:
+        return None
+    status = (doc.to_dict() or {}).get('wipe_status')
+    return status if isinstance(status, str) and status else None
+
+
 def _refresh_vm(uid: str) -> Optional[Dict[str, Any]]:
     """Re-read the VM info from Firestore (called after restart to get new IP)."""
     doc = _get_firestore_db().collection('users').document(uid).get()
@@ -625,11 +637,55 @@ async def agent_ws(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid token")
         return
 
+    try:
+        deletion_status = await run_blocking(db_executor, _get_account_deletion_status, uid)
+    except Exception:
+        logger.error("[agent-proxy] deletion fence unavailable for uid=%s", uid, exc_info=True)
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "account_deletion_state_unavailable",
+                "retryable": True,
+                "message": "Account status is temporarily unavailable. Please try again.",
+            },
+        )
+        await _close_client(websocket, uid, 1013, "Account state unavailable")
+        return
+    if deletion_status in _ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES:
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "account_deletion_in_progress",
+                "retryable": False,
+                "message": "Account deletion is in progress.",
+            },
+        )
+        await _close_client(websocket, uid, 4005, "Account deletion in progress")
+        return
+
     # Look up the user's agent VM and data protection level
     vm, data_protection_level = await run_blocking(db_executor, _get_user_context, uid)
     if not vm:
         logger.warning(f"[agent-proxy] WS rejected: uid={uid} no VM")
-        await websocket.close(code=4002, reason="No agent VM available")
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "agent_vm_not_ready",
+                "state": "not_provisioned",
+                "retryable": True,
+                "message": "Your agent is still being prepared. Please try again shortly.",
+            },
+        )
+        await _close_client(websocket, uid, 4002, "Agent VM not ready")
         return
 
     # Accept WebSocket first so we can send status messages during VM startup
@@ -660,7 +716,17 @@ async def agent_ws(websocket: WebSocket):
             # Wait for VM to be healthy after restart
             healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
             if not healthy:
-                await _send_startup_event(websocket, uid, {"type": "error", "message": "Agent VM is not responding"})
+                await _send_startup_event(
+                    websocket,
+                    uid,
+                    {
+                        "type": "error",
+                        "code": "agent_vm_not_ready",
+                        "state": "provisioning",
+                        "retryable": True,
+                        "message": "Your agent is still starting. Please try again shortly.",
+                    },
+                )
                 await _close_client(websocket, uid, 4003, "VM not healthy")
                 return
     else:
@@ -675,7 +741,17 @@ async def agent_ws(websocket: WebSocket):
         vm_token = vm["authToken"]
         healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
         if not healthy:
-            await _send_startup_event(websocket, uid, {"type": "error", "message": "Agent VM is not responding"})
+            await _send_startup_event(
+                websocket,
+                uid,
+                {
+                    "type": "error",
+                    "code": "agent_vm_not_ready",
+                    "state": "provisioning",
+                    "retryable": True,
+                    "message": "Your agent is still starting. Please try again shortly.",
+                },
+            )
             await _close_client(websocket, uid, 4003, "VM not healthy")
             return
 
