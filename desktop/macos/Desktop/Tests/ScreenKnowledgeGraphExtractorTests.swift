@@ -74,6 +74,37 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertEqual(pending, 0)
   }
 
+  func testDisabledExtractionDoesNotQueueOrBackfill() async {
+    let extracted = LockedBox(0)
+    let fetchCalls = LockedBox(0)
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await extracted.increment()
+        return "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { _ in },
+      fetchPendingForTesting: { _, _ in
+        await fetchCalls.increment()
+        return []
+      },
+      extractionEnabledForTesting: { false })
+
+    await extractor.queueScreenshot(
+      id: 1,
+      ocrText: String(repeating: "private screen text ", count: 3),
+      appName: "Mail",
+      windowTitle: "Inbox")
+    await extractor.scheduleBackfillIfNeeded()
+    await extractor.flushPendingExtractions()
+
+    let pending = await extractor.pendingCount
+    let extractionCount = await extracted.value
+    let backfillCalls = await fetchCalls.value
+    XCTAssertEqual(pending, 0)
+    XCTAssertEqual(extractionCount, 0)
+    XCTAssertEqual(backfillCalls, 0)
+  }
+
   func testResetDropsPendingQueue() async {
     let extractor = ScreenKnowledgeGraphExtractor(
       extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },

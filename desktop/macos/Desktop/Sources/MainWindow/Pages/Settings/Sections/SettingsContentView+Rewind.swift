@@ -7,6 +7,63 @@ import WebKit
 extension SettingsContentView {
   var rewindSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      settingsCard(settingId: "rewind.knowledgegraph") {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.textSecondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Screen Knowledge Graph")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text("Build graph entries from screen OCR after you explicitly enable this setting")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $rewindSettings.screenKnowledgeGraphExtractionEnabled)
+              .toggleStyle(OmiToggleStyle())
+              .onChange(of: rewindSettings.screenKnowledgeGraphExtractionEnabled) { _, enabled in
+                if !enabled {
+                  Task { await ScreenKnowledgeGraphExtractor.shared.reset() }
+                } else {
+                  Task { await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded() }
+                }
+              }
+          }
+
+          Text(
+            "OCR text stays on this Mac when on-device extraction is available. Screenshots are never uploaded. If you allow cloud fallback, OCR text may be sent to Omi's Gemini proxy."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+
+          HStack {
+            Text("Allow cloud fallback")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
+
+            Spacer()
+
+            Toggle("", isOn: $rewindSettings.screenKnowledgeGraphCloudFallbackEnabled)
+              .toggleStyle(OmiToggleStyle())
+              .disabled(!rewindSettings.screenKnowledgeGraphExtractionEnabled)
+              .onChange(of: rewindSettings.screenKnowledgeGraphCloudFallbackEnabled) { _, enabled in
+                if enabled && rewindSettings.screenKnowledgeGraphExtractionEnabled {
+                  Task { await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded() }
+                } else if !enabled {
+                  Task { await ScreenKnowledgeGraphExtractor.shared.reset() }
+                }
+              }
+          }
+        }
+      }
+
       // Storage Stats
       settingsCard(settingId: "rewind.storage") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

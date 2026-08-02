@@ -113,10 +113,10 @@ struct GeminiProxyScreenKGBackend: ScreenKGExtractionBackend {
 
 /// Selects on-device extraction when available, otherwise Gemini proxy.
 enum ScreenKGExtractionBackendSelector {
-  static func preferredBackend() -> any ScreenKGExtractionBackend {
+  static func preferredBackend(allowCloudFallback: Bool) -> (any ScreenKGExtractionBackend)? {
     if OnDeviceScreenKGExtractionBackend.isAvailable {
       return OnDeviceScreenKGExtractionBackend.shared
     }
-    return GeminiProxyScreenKGBackend()
+    return allowCloudFallback ? GeminiProxyScreenKGBackend() : nil
   }
 }

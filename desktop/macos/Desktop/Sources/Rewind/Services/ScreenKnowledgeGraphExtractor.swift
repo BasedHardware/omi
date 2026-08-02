@@ -45,6 +45,7 @@ actor ScreenKnowledgeGraphExtractor {
       _ authorization: LocalMutationAuthorization
     ) async throws -> Void
   typealias OwnerMatchChecker = @Sendable (_ expectedOwnerID: String) -> Bool
+  typealias ExtractionGate = @Sendable () -> Bool
 
   private let extractEntities: ExtractionBackend
   private let markExtracted: KGMarkedWriter
@@ -52,10 +53,16 @@ actor ScreenKnowledgeGraphExtractor {
   private let activeOwnerID: OwnerIDProvider
   private let mergeGraphImpl: GraphMerger
   private let ownerMatches: OwnerMatchChecker
+  private let extractionEnabled: ExtractionGate
+  private let backendAvailable: ExtractionGate
 
   private init() {
     self.extractEntities = { input in
-      let backend = ScreenKGExtractionBackendSelector.preferredBackend()
+      let allowCloudFallback = UserDefaults.standard.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+      guard let backend = ScreenKGExtractionBackendSelector.preferredBackend(allowCloudFallback: allowCloudFallback)
+      else {
+        throw ScreenKGExtractionError.onDeviceUnavailable
+      }
       return try await backend.extractEntities(from: input)
     }
     self.markExtracted = { ids in
@@ -73,6 +80,13 @@ actor ScreenKnowledgeGraphExtractor {
       RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
         && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
     }
+    self.extractionEnabled = {
+      UserDefaults.standard.bool(forKey: .screenKnowledgeGraphExtractionEnabled)
+    }
+    self.backendAvailable = {
+      let allowCloudFallback = UserDefaults.standard.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+      return ScreenKGExtractionBackendSelector.preferredBackend(allowCloudFallback: allowCloudFallback) != nil
+    }
   }
 
   init(
@@ -81,7 +95,9 @@ actor ScreenKnowledgeGraphExtractor {
     fetchPendingForTesting: PendingFetcher? = nil,
     activeOwnerIDForTesting: @escaping OwnerIDProvider = { "test-owner" },
     mergeGraphForTesting: GraphMerger? = nil,
-    ownerMatchesForTesting: OwnerMatchChecker? = nil
+    ownerMatchesForTesting: OwnerMatchChecker? = nil,
+    extractionEnabledForTesting: @escaping ExtractionGate = { true },
+    backendAvailableForTesting: @escaping ExtractionGate = { true }
   ) {
     self.extractEntities = extractEntitiesForTesting
     self.markExtracted = markExtractedForTesting
@@ -101,6 +117,8 @@ actor ScreenKnowledgeGraphExtractor {
         RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
           && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
       }
+    self.extractionEnabled = extractionEnabledForTesting
+    self.backendAvailable = backendAvailableForTesting
   }
 
   var pendingCount: Int { pendingItems.count }
@@ -123,6 +141,7 @@ actor ScreenKnowledgeGraphExtractor {
     windowTitle: String?,
     expectedOwnerID: String? = nil
   ) async {
+    guard extractionEnabled(), backendAvailable() else { return }
     guard ocrText.count >= minTextLength else { return }
     guard let ownerID = await resolvedOwnerID(expectedOwnerID: expectedOwnerID) else { return }
     let generation = ownerGeneration
@@ -175,6 +194,11 @@ actor ScreenKnowledgeGraphExtractor {
 
   /// Backfill screenshots captured before the extractor shipped (capped per launch).
   func scheduleBackfillIfNeeded() async {
+    guard extractionEnabled() else { return }
+    guard backendAvailable() else {
+      backfillScheduled = false
+      return
+    }
     guard !backfillScheduled else { return }
     backfillScheduled = true
     await runBackfillBatch()
@@ -183,6 +207,11 @@ actor ScreenKnowledgeGraphExtractor {
   func flushPendingExtractions() async {
     flushTask?.cancel()
     flushTask = nil
+    guard extractionEnabled(), backendAvailable() else {
+      pendingItems.removeAll()
+      backfillScheduled = false
+      return
+    }
     guard !pendingItems.isEmpty else { return }
     guard !pausedForProductGate else { return }
 
@@ -420,6 +449,8 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   private func backendName() -> String {
-    ScreenKGExtractionBackendSelector.preferredBackend().name
+    let allowCloudFallback = UserDefaults.standard.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+    return ScreenKGExtractionBackendSelector.preferredBackend(allowCloudFallback: allowCloudFallback)?.name
+      ?? "unavailable"
   }
 }

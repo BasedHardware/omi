@@ -399,6 +399,18 @@ class RewindSettings: ObservableObject {
     }
   }
 
+  @Published var screenKnowledgeGraphExtractionEnabled: Bool {
+    didSet {
+      defaults.set(screenKnowledgeGraphExtractionEnabled, forKey: .screenKnowledgeGraphExtractionEnabled)
+    }
+  }
+
+  @Published var screenKnowledgeGraphCloudFallbackEnabled: Bool {
+    didSet {
+      defaults.set(screenKnowledgeGraphCloudFallbackEnabled, forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+    }
+  }
+
   @Published var captureInterval: Double {
     didSet {
       defaults.set(captureInterval, forKey: "rewindCaptureInterval")
@@ -423,6 +435,8 @@ class RewindSettings: ObservableObject {
   private init() {
     // Load settings with defaults
     self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
+    self.screenKnowledgeGraphExtractionEnabled = defaults.bool(forKey: .screenKnowledgeGraphExtractionEnabled)
+    self.screenKnowledgeGraphCloudFallbackEnabled = defaults.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
     self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
     self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 

@@ -58,6 +58,8 @@ enum DefaultsKey: String {
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  case screenKnowledgeGraphExtractionEnabled = "screenKnowledgeGraphExtractionEnabled"
+  case screenKnowledgeGraphCloudFallbackEnabled = "screenKnowledgeGraphCloudFallbackEnabled"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
