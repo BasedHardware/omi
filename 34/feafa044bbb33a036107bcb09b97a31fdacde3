@@ -1,0 +1,72 @@
+desktop/context-for-claude/Sources/ContextApp/Capture/AXElement.swift
+  s_1833483671ebc5::t_6e73f38551a642 53-81
+desktop/context-for-claude/Sources/ContextCore/Accessibility.swift
+  s_1833483671ebc5::t_971444a6a250f6 341-353
+  s_1833483671ebc5::t_3c626a4def28a6 295-300,304-307
+  s_1833483671ebc5::t_b6cac4dd648846 142-203
+  s_1833483671ebc5::t_01d10612d2b949 308-309
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_1833483671ebc5::t_94d82cad7efa02 379,433-488,973,988
+  s_1833483671ebc5::t_16a78024334a1e 990,994-995
+  s_1833483671ebc5::t_bf6895d7ed4ca3 938
+  s_1833483671ebc5::t_499af4dd1d93a5 140-146
+  s_1833483671ebc5::t_9b89dc37a2991f 814
+  s_1833483671ebc5::t_a1170b6467fec2 1051
+  s_1833483671ebc5::t_2f0366e209597e 293-298
+  s_1833483671ebc5::t_0bdd0e17c83cfb 981,1020-1036
+  s_1833483671ebc5::t_362616ac6160fa 242-245,251-252
+  s_1833483671ebc5::t_fa568d2d117cfd 351-378
+  s_1833483671ebc5::t_0355cdb2ff7d58 522-526
+  s_1833483671ebc5::t_a68a89287d232b 799-800
+  s_1833483671ebc5::t_b2f31d647c2fd4 188-192
+  s_1833483671ebc5::t_ae69948d87255e 921-937
+  s_1833483671ebc5::t_36ab7649160dde 380
+  s_1833483671ebc5::t_a40c84b58dd284 489-490
+  s_1833483671ebc5::t_c2572064a2e430 972
+  s_1833483671ebc5::t_c79eed2ceba158 974-976,978-980
+  s_1833483671ebc5::t_5f519a92fac8d5 982-987
+  s_1833483671ebc5::t_bb4910444bb2c8 989
+  s_1833483671ebc5::t_e231ef042aad61 1037
+  s_78809b44c6f54f::t_ec3cc96a76cd6a 968-970,977
+desktop/context-for-claude/Tests/ContextCoreTests/CaptureAddressTests.swift
+  s_1833483671ebc5::t_47566ed232e8b6 1-117,119-120,124,129-130,133-256,259,261-267
+  s_1833483671ebc5::t_9a358caca7cdec 118,121-123,125-128,131-132
+  s_1833483671ebc5::t_81354a33f3d0fc 257-258,260
+desktop/context-for-claude/Tests/ContextCoreTests/ExclusionsTests.swift
+  s_1833483671ebc5::t_1599ce686dfbc1 305-313,320-327
+desktop/context-for-claude/Sources/ContextCore/Exclusions.swift
+  s_1833483671ebc5::t_0829162a58153d 521-539
+  s_1833483671ebc5::t_5d2fbbb27b2d8a 764-778,790-805,813,815-821,823
+  s_1833483671ebc5::t_04ce9197a86be8 1049-1058,1064-1071,1074-1077
+  s_1833483671ebc5::t_48cd430a4c149a 36-44,52,59
+  s_1833483671ebc5::t_9e2ac2779bc701 540,944,1084
+desktop/context-for-claude/Tests/ContextAppTests/CapturePacingTests.swift
+  s_1833483671ebc5::t_41ca82bd83d282 37-42,44-45,47,50,55
+  s_1833483671ebc5::t_4a08b66403118f 106-116,124-137
+  s_1833483671ebc5::t_2417a892ea3d5e 1-36,43,46,48,56-105,117-123,138-141
+  s_1833483671ebc5::t_b2e9d0cebd395b 49,51-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "34feafa044bbb33a036107bcb09b97a31fdacde3",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_78809b44c6f54f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aafcb766ceb741903",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
