@@ -486,6 +486,44 @@ def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
     )
 
 
+def test_refresh_token_ignores_retired_scopes_echoed_by_client():
+    scopes = ['memories.read', 'screen_activity.read']
+    grant = mcp_oauth.create_or_update_grant(
+        'user-legacy-scope', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes
+    )
+    first_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    legacy_scope = 'memories.read screen_activity.read'
+
+    second_pair = mcp_oauth.rotate_refresh_token(
+        first_pair['refresh_token'],
+        'omi-chatgpt-prod',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scope=legacy_scope,
+    )
+
+    assert second_pair is not None
+    assert second_pair['refresh_token'] != first_pair['refresh_token']
+    assert second_pair['scope'] == 'memories.read'
+
+    third_pair = mcp_oauth.rotate_refresh_token(
+        second_pair['refresh_token'],
+        'omi-chatgpt-prod',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scope=legacy_scope,
+    )
+    assert third_pair is not None
+    assert third_pair['scope'] == 'memories.read'
+    assert (
+        mcp_oauth.rotate_refresh_token(
+            third_pair['refresh_token'],
+            'omi-chatgpt-prod',
+            mcp_oauth.MCP_RESOURCE_URL,
+            scope='memories.read evil.scope',
+        )
+        is None
+    )
+
+
 def test_revoke_user_grant_invalidates_tokens():
     scopes = ['memories.read']
     grant = mcp_oauth.create_or_update_grant('user-3', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)

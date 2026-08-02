@@ -31,6 +31,7 @@ SUPPORTED_SCOPES = [
     "chat.read",
     "people.read",
 ]
+RETIRED_SCOPES = frozenset({"screen_activity.read"})
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
@@ -691,12 +692,20 @@ def rotate_refresh_token(
             transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
             return None
         try:
-            requested_scopes: List[str] = (
-                normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
-            )
+            stored_scopes: List[str] = list(data.get("scopes") or [])
+            if scope:
+                supported_granted = [item for item in stored_scopes if item in SUPPORTED_SCOPES]
+                filtered_items = [item for item in scope.split() if item and item not in RETIRED_SCOPES]
+                requested_scopes = (
+                    supported_granted
+                    if not filtered_items
+                    else normalize_scopes(" ".join(filtered_items), {"allowed_scopes": supported_granted})
+                )
+            else:
+                requested_scopes = stored_scopes
         except ValueError:
             return None
-        if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
+        if not set(requested_scopes).issubset(set(stored_scopes)):
             return None
         (
             access_token,
