@@ -449,24 +449,11 @@ class UploadFilesResult {
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
 /// 429 is backend capacity unless the response carries Omi's explicit reason.
-enum SyncRateLimitKind { fairUse, backfillPaced, backendCapacity }
-
-enum SyncUploadLane { fresh, backfill }
+enum SyncRateLimitKind { fairUse, backendCapacity }
 
 @visibleForTesting
-bool shouldRequestSyncCaptureManifest(String? conversationId, SyncUploadLane syncLane) =>
-    conversationId != null && syncLane == SyncUploadLane.fresh;
-
-/// The lane a batch actually uploads on once fresh-capture provenance resolved.
-///
-/// A batch with no capture manifest is exactly what the server classifies as
-/// backfill (`unbound_capture_time`), so it uploads on the paced backfill lane.
-/// Holding it back on the client instead strands the account: a manifest denial
-/// is often permanent (403 unverifiable provenance, 409 already claimed), so a
-/// client-side cooldown retries the same denial forever and never uploads.
-@visibleForTesting
-SyncUploadLane syncUploadLaneForCaptureManifest(SyncUploadLane requestedLane, String? captureManifest) =>
-    captureManifest == null ? SyncUploadLane.backfill : requestedLane;
+bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
+    conversationId != null && claimLiveCapture;
 
 Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
   final claims = <Map<String, String>>[];
@@ -563,16 +550,10 @@ int? _parseRetryAfterSeconds(http.Response response) {
 ///
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
-SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
-  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
-  if (reason == 'fair_use') {
-    return SyncRateLimitKind.fairUse;
-  }
-  if (reason == 'backfill_paced' || reason == 'backfill_capacity') {
-    return SyncRateLimitKind.backfillPaced;
-  }
-  return SyncRateLimitKind.backendCapacity;
-}
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
+    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
+        ? SyncRateLimitKind.fairUse
+        : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -584,12 +565,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
-  SyncUploadLane syncLane = SyncUploadLane.fresh,
+  bool claimLiveCapture = false,
 }) async {
   String? captureManifest;
-  if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
+  if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-    syncLane = syncUploadLaneForCaptureManifest(syncLane, captureManifest);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
@@ -598,10 +578,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
-    headers: {
-      'X-Omi-Sync-Lane-Hint': syncLane.name,
-      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
-    },
+    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
     onUploadProgress: onUploadProgress,
   );
 

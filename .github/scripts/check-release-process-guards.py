@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -296,7 +297,9 @@ def _load_workflow_contract(raw_bytes: bytes) -> tuple[dict[str, object] | None,
             if type(publication_digest) is not str or _SHA256_HEX.fullmatch(publication_digest) is None:
                 errors.append(_fixture_sha256_error("publication_script_sha256"))
             elif type(publication_script) is str and _sha256_text(publication_script) != publication_digest:
-                errors.append("Codemagic workflow contract fixture publication script digest does not match publication_script")
+                errors.append(
+                    "Codemagic workflow contract fixture publication script digest does not match publication_script"
+                )
     return (contract if not errors else None), errors
 
 
@@ -422,9 +425,7 @@ def check_codemagic_release_publishers() -> list[str]:
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
             match = forbidden_authority.search(scalar)
             if match is not None:
-                errors.append(
-                    f"{CANONICAL_WORKFLOW} contains forbidden broad GCP authority {match.group(0)!r}"
-                )
+                errors.append(f"{CANONICAL_WORKFLOW} contains forbidden broad GCP authority {match.group(0)!r}")
 
     preview_environment = preview.get("environment")
     preview_groups = preview_environment.get("groups") if isinstance(preview_environment, dict) else None
@@ -631,15 +632,19 @@ def check_desktop_codemagic_release() -> list[str]:
             errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
     dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
     dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
-    if 'GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}"' not in dispatch_body:
-        errors.append(
-            "Codemagic qualification dispatch must bind GH_TOKEN to the scoped desktop_secrets GITHUB_TOKEN"
-        )
+    if (
+        'GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}"'
+        not in dispatch_body
+    ):
+        errors.append("Codemagic qualification dispatch must bind GH_TOKEN to the scoped desktop_secrets GITHUB_TOKEN")
     if "gh release edit \"$CM_TAG\"" in dispatch_body:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
-    if "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body or "exit 1" not in dispatch_body:
+    if (
+        "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body
+        or "exit 1" not in dispatch_body
+    ):
         errors.append("desktop qualification handoff must fail closed after bounded dispatch retries")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
         errors.append("desktop candidate retries must not delete immutable qualification evidence")
@@ -970,23 +975,67 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        required = (
-            "    triggering:\n"
-            "      events:\n"
-            "        - push\n"
-            "      branch_patterns:\n"
-            "        - pattern: main\n"
-            "          include: true\n"
-            "      cancel_previous_builds: true\n"
-            "    when:\n"
-            "      changeset:\n"
-            "        includes:\n"
-            "          - 'app/**'"
-        )
-        if required not in body:
-            errors.append(
-                f"{workflow_id} must natively trigger on main app/** pushes and cancel stale builds"
-            )
+        if "    when:\n      changeset:\n        includes:\n          - 'app/**'" not in body:
+            errors.append(f"{workflow_id} must retain its app/** changeset guard")
+
+    dispatcher = ROOT / ".github/workflows/mobile_internal_build.yml"
+    if not dispatcher.exists():
+        errors.append("mobile internal build dispatcher is missing")
+    else:
+        dispatcher_text = dispatcher.read_text(encoding="utf-8")
+        dispatcher_script = ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
+        try:
+            workflow = yaml.load(dispatcher_text, Loader=yaml.BaseLoader)
+        except yaml.YAMLError as exc:
+            errors.append(f"mobile internal build dispatcher is not valid YAML: {exc}")
+            workflow = None
+        if not isinstance(workflow, dict):
+            errors.append("mobile internal build dispatcher must be a YAML mapping")
+        else:
+            triggers = workflow.get("on")
+            if not isinstance(triggers, dict):
+                errors.append("mobile internal build dispatcher must declare push, schedule, and workflow_dispatch triggers")
+            else:
+                push = triggers.get("push")
+                if not isinstance(push, dict) or push.get("branches") != ["main"] or push.get("paths") != ["app/**"]:
+                    errors.append("mobile internal build dispatcher must trigger on main app/** pushes")
+                schedule = triggers.get("schedule")
+                if not isinstance(schedule, list) or schedule != [{"cron": "0 */3 * * *"}]:
+                    errors.append("mobile internal build dispatcher must retain its three-hour schedule")
+                if "workflow_dispatch" not in triggers:
+                    errors.append("mobile internal build dispatcher must retain workflow_dispatch")
+            concurrency = workflow.get("concurrency")
+            if not isinstance(concurrency, dict) or concurrency.get("group") != "mobile-internal-build":
+                errors.append("mobile internal build dispatcher must use the mobile-internal-build concurrency group")
+            elif concurrency.get("cancel-in-progress") != "false":
+                errors.append("mobile internal build dispatcher must not cancel an in-progress sequential dispatch")
+            jobs = workflow.get("jobs")
+            dispatch_job = jobs.get("dispatch") if isinstance(jobs, dict) else None
+            steps = dispatch_job.get("steps") if isinstance(dispatch_job, dict) else None
+            runs = [step.get("run", "") for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+            if not any("python3 .github/scripts/dispatch_mobile_internal_builds.py" in run for run in runs):
+                errors.append("mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py")
+
+        if not dispatcher_script.exists():
+            errors.append("mobile internal build dispatcher script is missing")
+        else:
+            try:
+                script_tree = ast.parse(dispatcher_script.read_text(encoding="utf-8"), filename=str(dispatcher_script))
+            except (OSError, SyntaxError) as exc:
+                errors.append(f"mobile internal build dispatcher script is not valid Python: {exc}")
+            else:
+                workflow_values = None
+                for node in script_tree.body:
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "MOBILE_WORKFLOWS" for target in node.targets
+                    ):
+                        try:
+                            workflow_values = ast.literal_eval(node.value)
+                        except (ValueError, TypeError):
+                            workflow_values = None
+                        break
+                if workflow_values != ("ios-internal-auto", "android-internal-auto"):
+                    errors.append("mobile internal build dispatcher script must declare both Codemagic mobile workflows")
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")

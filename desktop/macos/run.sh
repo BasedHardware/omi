@@ -6,6 +6,13 @@ set -e
 # a non-English locale (e.g. de_DE.UTF-8 expects a comma separator).
 export LC_NUMERIC=C
 
+# Codex, launchd, and other non-login shells may not inherit Homebrew's bin
+# directory. Keep the launcher self-contained so tools such as pkg-config are
+# discoverable on both Apple Silicon and Intel Macs.
+# shellcheck source=launcher-bootstrap.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/launcher-bootstrap.sh"
+omi_configure_homebrew_path
+
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
@@ -1029,6 +1036,12 @@ RESOURCE_BUNDLE="$SWIFTPM_DEBUG_PRODUCTS_DIR/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
     macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
+    # SwiftPM places Resources/node at the resource-bundle root, while the
+    # app runtime and signed-artifact audit use the app-style nested layout.
+    # Move the universal runtime within the disposable bundle so we do not
+    # package a second 200+ MiB copy.
+    omi_normalize_packaged_resource_bundle \
+        "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
 substep "Copying agent"

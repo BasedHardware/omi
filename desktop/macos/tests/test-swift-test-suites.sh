@@ -151,8 +151,18 @@ unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
 if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
   fail "default runner unexpectedly succeeded despite AlphaTests failure"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
+if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)," "$TMPDIR/default-runner.out"; then
   fail "runner did not default local suite execution to four workers"
+fi
+
+# ...and the same per-suite budget as CI. A smaller local default is not a
+# harmless local nicety: the slowest legitimate suite needs ~245s, so a 120s
+# default reported the documented local runner FAILED on a clean main.
+ci_workflow="$(cd "$MACOS_DIR/../.." && pwd)/.github/workflows/desktop-swift-ci.yml"
+ci_budget="$(sed -n 's/^[[:space:]]*OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:[[:space:]]*"\{0,1\}\([0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' "$ci_workflow" | head -1)"
+[ -n "$ci_budget" ] || fail "could not read OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS from $ci_workflow"
+if ! grep -q "worker(s), ${ci_budget}s per-suite budget." "$TMPDIR/default-runner.out"; then
+  fail "runner default per-suite budget does not match CI's ${ci_budget}s"
 fi
 
 export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=1

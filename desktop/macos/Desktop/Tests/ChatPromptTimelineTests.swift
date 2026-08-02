@@ -643,37 +643,3 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
       300, accuracy: 0.001)
   }
 }
-
-@MainActor
-final class ChatPromptTimelineScrollerControllerTests: XCTestCase {
-  func testCustomTimelineHidesAndRestoresTheLegacyVerticalScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = true
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
-    XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? false)
-    XCTAssertEqual(scrollView.verticalScroller?.alphaValue, 0)
-
-    XCTAssertFalse(controller.setSuppressed(true), "duplicate geometry updates must be a no-op")
-
-    controller.setSuppressed(false)
-
-    XCTAssertTrue(scrollView.hasVerticalScroller)
-  }
-
-  func testRestoringPreservesAnInitiallyHiddenScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = false
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-    controller.restore()
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
-  }
-}

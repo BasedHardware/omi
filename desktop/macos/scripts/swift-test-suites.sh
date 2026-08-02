@@ -15,7 +15,12 @@ PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
 # diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
 WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
-SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-120}"
+# The per-suite budget must clear the slowest legitimate suite, not the median
+# one: MemoryAtlasPerformanceHarnessTests runs 19 tests whose XCTest `measure`
+# blocks take ~245s in isolation, so a 120s local default reported it FAILED on
+# a clean main while CI (300s, see .github/workflows/desktop-swift-ci.yml) was
+# green. Keep this in sync with that workflow — the check below proves it.
+SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-300}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -170,7 +175,7 @@ for suite in "${suites[@]}"; do
   fi
 done
 
-echo "Ran $suite_count Swift suites in isolation with $WORKERS worker(s)."
+echo "Ran $suite_count Swift suites in isolation with $WORKERS worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
 
 if [ -n "$failed_suites" ]; then
   echo "FAILED Swift suites:$failed_suites"
