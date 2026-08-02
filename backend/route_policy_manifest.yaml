@@ -71,6 +71,10 @@ routes:
     policy: *desktop_migration_policy
   - route_type: http
     method: POST
+    path: /v1/knowledge-graph/sync
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
     path: /v1/screen-activity/sync
     policy: *desktop_migration_policy
   - route_type: http
