@@ -37,7 +37,8 @@ final class ClaudeHandoffTests: XCTestCase {
         _ claudes: [FakeClaude],
         registeredAt: Date?,
         mechanism: ClaudeRouter.Mechanism = .prefilledTab(
-            surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!)
+            surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!),
+        serverIsLoaded: ClaudeServerLiveness.State = .unknown
     ) -> ClaudeHandoff.Probe {
         ClaudeHandoff.Probe(
             desktopIsInstalled: { true },
@@ -52,16 +53,22 @@ final class ClaudeHandoffTests: XCTestCase {
             copyToClipboard: { _ in },
             // Answers at once: the live one polls for ten seconds, and a test that waited on that
             // would be a test nobody runs.
-            waitForExit: { _, done in done() })
+            waitForExit: { _, done in done() },
+            // `.unknown` by default so every test above this line keeps asserting the date rule it
+            // was written for; the liveness cases name it explicitly.
+            serverIsLoaded: { serverIsLoaded })
     }
 
     /// Every restart test below is about the Claude **app**, so the target is named rather than left
     /// to `SettingsStore.shared` — a test that read the real preference would pass or fail depending
     /// on what the person running it had picked in Settings.
     private func ask(
-        _ claudes: [FakeClaude], registeredAt: Date?, restartingFirst: Bool
+        _ claudes: [FakeClaude],
+        registeredAt: Date?,
+        restartingFirst: Bool,
+        serverIsLoaded: ClaudeServerLiveness.State = .unknown
     ) -> TutorialClaudeAsk? {
-        let probe = probe(claudes, registeredAt: registeredAt)
+        let probe = probe(claudes, registeredAt: registeredAt, serverIsLoaded: serverIsLoaded)
         var answer: TutorialClaudeAsk?
         ClaudeHandoff.ask(
             "what was I reading", to: .claudeApp, restartingFirst: restartingFirst, probe: probe
@@ -85,6 +92,107 @@ final class ClaudeHandoffTests: XCTestCase {
         XCTAssertFalse(
             ClaudeHandoff.restartIsNeeded(launchedAt: registeredAt.addingTimeInterval(-60), registeredAt: nil))
         XCTAssertFalse(ClaudeHandoff.restartIsNeeded(launchedAt: nil, registeredAt: nil))
+    }
+
+    // MARK: - A live server outranks the date
+
+    /// **The regression this whole seam exists for.**
+    ///
+    /// A user ran the tutorial and Claude answered its suggested question with "I don't have access
+    /// to what you were reading before this conversation started" — having called no tool at all.
+    /// The MCP server process had died four minutes earlier (the app bundle was replaced underneath
+    /// it) and Claude does not respawn a server that dies, so that Claude had our registration and
+    /// none of our tools.
+    ///
+    /// Every date-based check said it was fine, and that is the bug: Claude had launched *after* we
+    /// registered, so `restartIsNeeded(launchedAt:registeredAt:)` answered false, the handoff
+    /// reported `mayNotReachMe: false`, and the card told the user to press Return and wait for a
+    /// proof beat that could never fire. Observed liveness has to be able to overrule the proxy.
+    func testAClaudeWhoseServerDiedNeedsARestartEvenThoughItPostdatesTheRegistration() {
+        let launchedAfterWeRegistered = registeredAt.addingTimeInterval(300)
+        XCTAssertFalse(
+            ClaudeHandoff.restartIsNeeded(
+                launchedAt: launchedAfterWeRegistered, registeredAt: registeredAt),
+            "precondition: the date proxy on its own sees nothing wrong here")
+
+        XCTAssertTrue(
+            ClaudeHandoff.restartIsNeeded(
+                launchedAt: launchedAfterWeRegistered, registeredAt: registeredAt,
+                serverIsLoaded: .notServingClaudeDesktop),
+            "a Claude with no live server of ours cannot call our tools, whenever it launched")
+    }
+
+    /// And the user is told so rather than left waiting. Declining the restart has to produce
+    /// `mayNotReachMe`, because that is the flag the proof beat reads to say "quitting and reopening
+    /// Claude is what fixes it" instead of "press Return and I will notice".
+    func testADeadServerIsAdmittedToTheUserInsteadOfWaitingSilently() {
+        let claude = FakeClaude(launchedAt: registeredAt.addingTimeInterval(300))
+        let answer = ask(
+            [claude], registeredAt: registeredAt, restartingFirst: false,
+            serverIsLoaded: .notServingClaudeDesktop)
+
+        XCTAssertEqual(claude.terminateCalls, 0, "they declined; nothing may be quit")
+        XCTAssertEqual(
+            answer, .prompted(restarted: false, mayNotReachMe: true),
+            "the card must not imply the tools are reachable when no server is running")
+    }
+
+    /// The other direction, and a live false positive before this landed: we rewrite the config
+    /// whenever the app starts, so a Claude that launched two minutes *before* that write looks stale
+    /// by date while it is demonstrably serving our tools. Offering to quit it would cost somebody
+    /// their conversation to fix nothing.
+    func testAClaudeThatIsDemonstrablyServingOurToolsIsNeverRestarted() {
+        let launchedBeforeWeRewroteTheConfig = registeredAt.addingTimeInterval(-140)
+        XCTAssertTrue(
+            ClaudeHandoff.restartIsNeeded(
+                launchedAt: launchedBeforeWeRewroteTheConfig, registeredAt: registeredAt),
+            "precondition: the date proxy alone would quit this Claude")
+
+        let claude = FakeClaude(launchedAt: launchedBeforeWeRewroteTheConfig)
+        let answer = ask(
+            [claude], registeredAt: registeredAt, restartingFirst: true,
+            serverIsLoaded: .servingClaudeDesktop)
+
+        XCTAssertEqual(claude.terminateCalls, 0, "we quit a Claude that was already serving our tools")
+        XCTAssertEqual(answer, .prompted(restarted: false, mayNotReachMe: false))
+    }
+
+    /// A probe that could not read the process table is not evidence, and must not start quitting
+    /// applications on its own. It leaves the date rule exactly as it was.
+    func testAnUnreadableProcessTableChangesNothing() {
+        for launchedAt in [registeredAt.addingTimeInterval(-300), registeredAt.addingTimeInterval(300)] {
+            XCTAssertEqual(
+                ClaudeHandoff.restartIsNeeded(
+                    launchedAt: launchedAt, registeredAt: registeredAt, serverIsLoaded: .unknown),
+                ClaudeHandoff.restartIsNeeded(launchedAt: launchedAt, registeredAt: registeredAt),
+                "`.unknown` has to be a no-op, not a vote")
+        }
+    }
+
+    /// The consent question the card asks has to come from the same evidence the handoff acts on.
+    /// A card that says "it has not read me yet" while the handoff quietly decides otherwise is how
+    /// a user gets asked to give up a session for no reason.
+    func testTheConsentQuestionAgreesWithTheLivenessEvidence() {
+        let claude = FakeClaude(launchedAt: registeredAt.addingTimeInterval(300))
+        XCTAssertTrue(
+            ClaudeHandoff.restartIsNeeded(
+                for: .claudeApp,
+                probe: probe([claude], registeredAt: registeredAt, serverIsLoaded: .notServingClaudeDesktop)))
+        XCTAssertFalse(
+            ClaudeHandoff.restartIsNeeded(
+                for: .claudeApp,
+                probe: probe([claude], registeredAt: registeredAt, serverIsLoaded: .servingClaudeDesktop)))
+    }
+
+    /// Liveness is about this Mac's process table, not about any one Claude — but with no Claude
+    /// running there is nothing to restart, so a dead server still has to end in a plain handover.
+    func testADeadServerWithNoClaudeRunningIsStillJustAHandover() {
+        let answer = ask(
+            [], registeredAt: registeredAt, restartingFirst: true,
+            serverIsLoaded: .notServingClaudeDesktop)
+        XCTAssertEqual(
+            answer, .prompted(restarted: false, mayNotReachMe: false),
+            "launching Claude fresh loads the server, so there is nothing to warn about")
     }
 
     // MARK: - What the handoff actually does

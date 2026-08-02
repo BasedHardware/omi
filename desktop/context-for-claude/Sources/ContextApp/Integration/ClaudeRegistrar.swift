@@ -1,4 +1,5 @@
 import ContextCore
+import Darwin
 import Foundation
 
 /// Points Claude Code and Claude Desktop at the bundled `context-for-claude-mcp` server.
@@ -360,5 +361,120 @@ enum ClaudeRegistrar {
         let standardized = URL(fileURLWithPath: path).standardizedFileURL.path
         guard standardized.hasPrefix(home + "/") else { return standardized }
         return "~/" + String(standardized.dropFirst(home.count + 1))
+    }
+}
+
+// MARK: - Is a server actually running?
+
+/// Whether Claude Desktop has a **live** `context-for-claude-mcp` process right now.
+///
+/// `ClaudeRegistrar` above answers "is the registration on disk". This answers the question that
+/// actually decides whether Claude can call our tools — "is one of our servers running" — and the two
+/// come apart in a way that is not theoretical.
+///
+/// Claude spawns a stdio MCP server **once, when it launches, and does not respawn it if it dies.**
+/// Replacing the app bundle kills the running one: the kernel invalidates a process whose executable
+/// has been rewritten underneath it, so every update, reinstall and rebuild takes out the server
+/// inside whatever Claude was already open. From that moment the user has a registration, no tools,
+/// and nothing anywhere that says so — until they restart Claude. This Mac's own MCP log records it
+/// twice, as a four-minute outage and as one that lasted three days.
+///
+/// That gap is what handed the tutorial's payoff question to a Claude which then told the user it had
+/// no access to what they had been reading. It is invisible to every disk-based check: Claude had
+/// launched *after* we registered, so the config was correct, the entry was there, and the date
+/// comparison in `ClaudeHandoff.restartIsNeeded` said everything was fine.
+enum ClaudeServerLiveness {
+
+    /// What could be established, kept as three cases because they are three different amounts of
+    /// evidence — and only one of them may be used to ask the user to quit Claude.
+    enum State: Equatable {
+        /// At least one live server built from the binary we registered descends from a running
+        /// Claude Desktop, so that Claude can reach our tools.
+        case servingClaudeDesktop
+        /// The process list was read and no such server exists. Evidence of absence rather than
+        /// absence of evidence, and the only state that justifies offering a restart.
+        case notServingClaudeDesktop
+        /// Nothing could be established. Never acted on: callers fall back to what they knew before.
+        case unknown
+    }
+
+    /// `PROC_PIDPATHINFO_MAXSIZE`, which the C macro does not export to Swift ("structure not
+    /// supported"), so its value is restated rather than a smaller buffer invented — `proc_pidpath`
+    /// fails outright on a buffer below it.
+    private static let executablePathCapacity = 4 * 1_024
+
+    /// How far up a process tree to look for Claude. The real chain is two hops
+    /// (`context-for-claude-mcp` → `Claude.app/Contents/Helpers/disclaimer` → `Claude`); the bound is
+    /// what stops a cyclic or corrupted parent chain from spinning this loop forever.
+    private static let maximumAncestorHops = 8
+
+    /// - Parameter claudeDesktopPIDs: the running Claude Desktop processes, passed in rather than
+    ///   read here so this file stays free of AppKit and the whole decision stays testable.
+    static func state(
+        binary: String = ClaudeRegistrar.mcpBinaryPath,
+        claudeDesktopPIDs: Set<pid_t>
+    ) -> State {
+        // No Claude Desktop means the question is moot, not answered: there is nothing for a server
+        // to be serving, and reporting an absence here would read as a fault.
+        guard !claudeDesktopPIDs.isEmpty else { return .unknown }
+        guard let servers = liveProcesses(matching: binary) else { return .unknown }
+        guard !servers.isEmpty else { return .notServingClaudeDesktop }
+
+        // Attribution matters because Claude Code spawns this same binary, and one of *its* servers
+        // must never be read as proof that Claude Desktop has one. A chain that cannot be resolved
+        // counts as Claude's, because the cost of being wrong is asymmetric: the only thing this
+        // state gates is an offer to quit somebody's Claude, and guessing "not Claude's" would take
+        // an open conversation on the strength of a parent lookup that failed.
+        let servesClaude = servers.contains { descends($0, from: claudeDesktopPIDs) ?? true }
+        return servesClaude ? .servingClaudeDesktop : .notServingClaudeDesktop
+    }
+
+    /// Every live process whose executable is exactly `binary`, or nil when the process list could
+    /// not be read at all.
+    ///
+    /// Exact match, not a name match: a server left behind by a previous install lives at a
+    /// different path, is not the binary we just registered, and is not evidence that *this* build
+    /// is reachable.
+    private static func liveProcesses(matching binary: String) -> [pid_t]? {
+        let capacity = proc_listallpids(nil, 0)
+        guard capacity > 0 else { return nil }
+        // Headroom, because processes can be created between sizing the buffer and filling it.
+        var pids = [pid_t](repeating: 0, count: Int(capacity) + 64)
+        let byteCount = Int32(pids.count * MemoryLayout<pid_t>.size)
+        let written = pids.withUnsafeMutableBufferPointer {
+            proc_listallpids($0.baseAddress, byteCount)
+        }
+        guard written > 0 else { return nil }
+        return pids.prefix(Int(written)).filter { $0 > 0 && executablePath(of: $0) == binary }
+    }
+
+    private static func executablePath(of pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: executablePathCapacity)
+        // A process that exited between the listing and this call, or one this user may not inspect,
+        // answers nothing — which is not the path we are looking for either way.
+        guard proc_pidpath(pid, &buffer, UInt32(executablePathCapacity)) > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    /// Walks up from `pid` looking for one of `ancestors`. Nil means the walk ran out of parents it
+    /// could read before reaching an answer — "I could not tell", which is not "no".
+    private static func descends(_ pid: pid_t, from ancestors: Set<pid_t>) -> Bool? {
+        var current = pid
+        for _ in 0..<maximumAncestorHops {
+            guard let parent = parentPID(of: current) else { return nil }
+            if ancestors.contains(parent) { return true }
+            // launchd (1) and the kernel (0) top every tree: the walk finished, and Claude was not
+            // anywhere on it.
+            if parent <= 1 { return false }
+            current = parent
+        }
+        return nil
+    }
+
+    private static func parentPID(of pid: pid_t) -> pid_t? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return pid_t(info.pbi_ppid)
     }
 }

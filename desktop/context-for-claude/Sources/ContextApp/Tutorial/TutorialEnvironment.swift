@@ -400,10 +400,13 @@ enum TutorialHotkeyWatch {
 ///
 /// So there are two rules, and both are about evidence:
 ///
-/// 1. **A restart is only ever *needed* on evidence** — `restartIsNeeded(launchedAt:registeredAt:)`,
-///    which is `launchDate <= claudeDesktopRegisteredAt` and nothing else. A Claude launched after
-///    we wrote already has us. A missing date on either side is not evidence, and answers false:
-///    this must never quit an app because it could not tell.
+/// 1. **A restart is only ever *needed* on evidence** — `restartIsNeeded(launchedAt:registeredAt:
+///    serverIsLoaded:)`. The strongest evidence is a live server process: `ClaudeServerLiveness`
+///    looks for one belonging to the running Claude, and what it finds settles the question either
+///    way, because it is the thing the user actually cares about rather than a proxy for it. Only
+///    when it cannot tell does this fall back to `launchDate <= claudeDesktopRegisteredAt`, on the
+///    reasoning that a Claude launched after we wrote already read us. A missing date on either side
+///    is not evidence, and answers false: this must never quit an app because it could not tell.
 /// 2. **Even when it is needed, the user decides.** `ask` takes `restartingFirst` from the card, and
 ///    the card only offers it after saying what it would do. Declining hands the question over to
 ///    the Claude they already have and says the reach may be stale — which is a better outcome than
@@ -464,6 +467,12 @@ enum ClaudeHandoff {
         /// timeout. A seam so a test never sleeps — the live one polls for ten seconds, a test's
         /// answers at once.
         var waitForExit: @MainActor ([RunningClaude], @escaping @MainActor () -> Void) -> Void
+        /// Whether a server of ours is alive inside the Claude Desktop that is running now.
+        ///
+        /// The evidence the date comparison cannot supply. Declared last and defaulted to `.unknown`
+        /// so the tests that predate it keep exercising the date path they were written for — and
+        /// `.unknown` is the honest default anyway: a `Probe` nobody wired this into has not looked.
+        var serverIsLoaded: @MainActor () -> ClaudeServerLiveness.State = { .unknown }
 
         @MainActor
         static func live() -> Probe {
@@ -500,6 +509,13 @@ enum ClaudeHandoff {
                         }
                         done()
                     }
+                },
+                serverIsLoaded: {
+                    ClaudeServerLiveness.state(
+                        claudeDesktopPIDs: Set(
+                            NSRunningApplication.runningApplications(
+                                withBundleIdentifier: ClaudeRelaunch.bundleIdentifier
+                            ).map(\.processIdentifier)))
                 })
         }
     }
@@ -514,6 +530,35 @@ enum ClaudeHandoff {
     static func restartIsNeeded(launchedAt: Date?, registeredAt: Date?) -> Bool {
         guard let launchedAt, let registeredAt else { return false }
         return launchedAt <= registeredAt
+    }
+
+    /// The same decision, once a live server has been looked for.
+    ///
+    /// **The regression this exists for.** The date comparison above is a *proxy*: it asks whether
+    /// Claude started before we wrote the config, and infers the tools from that. The inference is
+    /// only sound while a server that was spawned stays spawned, and it does not. Claude starts its
+    /// MCP servers once and does not respawn one that dies, so replacing the app bundle — an update,
+    /// a reinstall, a rebuild — leaves a Claude that launched *after* the registration with no tools
+    /// at all. Every question this file asked answered "fine": the entry was on disk, the launch date
+    /// was later than the write. The tutorial handed its payoff question to that Claude, and Claude
+    /// told the user it had no access to what they had been reading.
+    ///
+    /// So a real observation of a running server outranks the proxy in **both** directions. It says
+    /// no restart is needed when the tools are demonstrably there — which the date test also gets
+    /// wrong the other way, every time we rewrite the config behind a Claude that is already serving
+    /// us — and it says a restart *is* needed when they are demonstrably not, which is the case the
+    /// proxy cannot see at all. `.unknown` changes nothing and falls back, because a probe that could
+    /// not look is not a reason to start quitting applications.
+    static func restartIsNeeded(
+        launchedAt: Date?,
+        registeredAt: Date?,
+        serverIsLoaded: ClaudeServerLiveness.State
+    ) -> Bool {
+        switch serverIsLoaded {
+        case .servingClaudeDesktop: return false
+        case .notServingClaudeDesktop: return true
+        case .unknown: return restartIsNeeded(launchedAt: launchedAt, registeredAt: registeredAt)
+        }
     }
 
     /// Whether any Claude on this Mac right now is one a restart would genuinely help, for the target
@@ -535,8 +580,13 @@ enum ClaudeHandoff {
         guard target == .claudeApp else { return false }
         let probe = injected ?? .live()
         let registeredAt = probe.registeredAt()
+        // Read once and shared across the running Claudes: the answer is about this Mac's process
+        // table, not about any one of them, and probing per-process would let two Claudes in the
+        // same list disagree about a fact neither of them owns.
+        let serverIsLoaded = probe.serverIsLoaded()
         return probe.running().contains {
-            restartIsNeeded(launchedAt: $0.launchedAt, registeredAt: registeredAt)
+            restartIsNeeded(
+                launchedAt: $0.launchedAt, registeredAt: registeredAt, serverIsLoaded: serverIsLoaded)
         }
     }
 
@@ -600,8 +650,10 @@ enum ClaudeHandoff {
 
         let registeredAt = probe.registeredAt()
         let running = probe.running()
+        let serverIsLoaded = probe.serverIsLoaded()
         let stale = running.filter {
-            restartIsNeeded(launchedAt: $0.launchedAt, registeredAt: registeredAt)
+            restartIsNeeded(
+                launchedAt: $0.launchedAt, registeredAt: registeredAt, serverIsLoaded: serverIsLoaded)
         }
 
         guard !stale.isEmpty else {
