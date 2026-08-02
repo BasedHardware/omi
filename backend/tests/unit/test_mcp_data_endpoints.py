@@ -14,6 +14,8 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -513,6 +515,25 @@ class TestDailySummaries:
         mock_db.get_daily_summaries.return_value = [{'date': '2026-06-11', 'content': 'x'}]
         result = sse.execute_tool(UID, 'get_daily_summaries', {'limit': 5})
         assert result['daily_summaries'][0]['date'] == '2026-06-11'
+
+
+class TestScreenActivity:
+    def test_rest_route_is_empty_for_rows_and_summary(self, monkeypatch):
+        screen_db = MagicMock()
+        monkeypatch.setattr(rest, 'screen_activity_db', screen_db, raising=False)
+        app = FastAPI()
+        app.include_router(rest.router)
+        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+        client = TestClient(app)
+
+        rows = client.get('/v1/mcp/screen-activity')
+        summary = client.get('/v1/mcp/screen-activity', params={'summary': 'true'})
+
+        assert rows.status_code == 200
+        assert rows.json() == []
+        assert summary.status_code == 200
+        assert summary.json() == {'apps': {}, 'total_screenshots': 0}
+        screen_db.assert_not_called()
 
 
 class TestToolRegistry:
