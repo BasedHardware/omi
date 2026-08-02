@@ -779,19 +779,6 @@ def _parse_aliases_json(value: Any) -> List[str]:
     return []
 
 
-def _node_sort_timestamp(node: Dict[str, Any]) -> datetime:
-    for field in ("updated_at", "created_at"):
-        parsed = _parse_sync_timestamp(node.get(field))
-        if parsed is not None:
-            return parsed
-    return datetime.min.replace(tzinfo=timezone.utc)
-
-
-def _edge_sort_timestamp(edge: Dict[str, Any]) -> datetime:
-    parsed = _parse_sync_timestamp(edge.get("created_at"))
-    return parsed if parsed is not None else datetime.min.replace(tzinfo=timezone.utc)
-
-
 def _local_kg_node_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     node_id = row.get("nodeId") or row.get("node_id")
     label = row.get("label")
@@ -844,11 +831,26 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     return edge_data
 
 
-def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str, int]:
-    """Evict oldest nodes/edges when Firestore collections exceed public GET caps.
+def _knowledge_graph_endpoint_ids_exist(
+    uid: str,
+    source_id: str,
+    target_id: str,
+    *,
+    db_client: Any = None,
+) -> bool:
+    client = _firestore_client(db_client)
+    nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
+    if source_id == target_id:
+        return bool(nodes_ref.document(source_id).get().exists)
+    snapshots = client.get_all([nodes_ref.document(source_id), nodes_ref.document(target_id)])
+    return all(bool(snapshot.exists) for snapshot in snapshots)
 
-    Eviction uses document timestamps only (updated_at for nodes, created_at for edges).
-    Local synced graph rows carry no confidence score, so oldest-first is the stable rule.
+
+def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str, int]:
+    """Evict excess nodes/edges beyond the public GET caps.
+
+    Keep the same document-id prefix GET returns (order_by('__name__').limit(cap)),
+    then drop dangling edges whose endpoints are no longer present.
     """
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
@@ -859,8 +861,8 @@ def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str
 
     node_docs = list(nodes_ref.stream())
     if len(node_docs) > MAX_KNOWLEDGE_GRAPH_NODES:
-        sorted_nodes = sorted(node_docs, key=lambda doc: _node_sort_timestamp(_typed_doc(doc)))
-        for doc in sorted_nodes[: len(node_docs) - MAX_KNOWLEDGE_GRAPH_NODES]:
+        sorted_nodes = sorted(node_docs, key=lambda doc: cast(str, doc.id))
+        for doc in sorted_nodes[MAX_KNOWLEDGE_GRAPH_NODES:]:
             doc.reference.delete()
             nodes_evicted += 1
 
@@ -877,8 +879,8 @@ def enforce_knowledge_graph_caps(uid: str, *, db_client: Any = None) -> Dict[str
 
     edge_docs = list(edges_ref.stream())
     if len(edge_docs) > MAX_KNOWLEDGE_GRAPH_EDGES:
-        sorted_edges = sorted(edge_docs, key=lambda doc: _edge_sort_timestamp(_typed_doc(doc)))
-        for doc in sorted_edges[: len(edge_docs) - MAX_KNOWLEDGE_GRAPH_EDGES]:
+        sorted_edges = sorted(edge_docs, key=lambda doc: cast(str, doc.id))
+        for doc in sorted_edges[MAX_KNOWLEDGE_GRAPH_EDGES:]:
             doc.reference.delete()
             edges_evicted += 1
 
@@ -911,6 +913,11 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any
             continue
         edge_data = _local_kg_edge_to_firestore(row)
         if edge_data is None:
+            skipped += 1
+            continue
+        source_id = cast(str, edge_data["source_id"])
+        target_id = cast(str, edge_data["target_id"])
+        if not _knowledge_graph_endpoint_ids_exist(uid, source_id, target_id, db_client=db_client):
             skipped += 1
             continue
         upsert_knowledge_edge(uid, edge_data, db_client=db_client)

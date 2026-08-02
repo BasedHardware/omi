@@ -176,30 +176,30 @@ def test_local_kg_edge_row_upserts_by_edge_id():
     assert stored["label"] == "works_at"
 
 
-def test_enforce_caps_evicts_oldest_nodes_and_dangling_edges():
+def test_enforce_caps_evicts_nodes_beyond_get_name_prefix_and_dangling_edges():
     docs: dict[str, Any] = {}
     for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_NODES):
-        node_id = f"old-{index:03d}"
+        node_id = f"keep-{index:03d}"
         docs[f"users/{UID}/knowledge_nodes/{node_id}"] = _node_doc(
             node_id,
             label=node_id,
             updated_at=BASE + timedelta(hours=index),
         )
-    docs[f"users/{UID}/knowledge_nodes/fresh-node"] = _node_doc(
-        "fresh-node",
-        label="Fresh",
+    docs[f"users/{UID}/knowledge_nodes/zzz-excess"] = _node_doc(
+        "zzz-excess",
+        label="Excess",
         updated_at=BASE + timedelta(days=30),
     )
     docs[f"users/{UID}/knowledge_edges/stale-edge"] = _edge_doc(
         "stale-edge",
-        source_id="old-000",
-        target_id="fresh-node",
+        source_id="zzz-excess",
+        target_id="keep-001",
         created_at=BASE,
     )
     docs[f"users/{UID}/knowledge_edges/keep-edge"] = _edge_doc(
         "keep-edge",
-        source_id="fresh-node",
-        target_id="old-001",
+        source_id="keep-000",
+        target_id="keep-001",
         created_at=BASE + timedelta(days=30),
     )
     db = _FakeDb(docs)
@@ -208,13 +208,13 @@ def test_enforce_caps_evicts_oldest_nodes_and_dangling_edges():
 
     assert eviction["nodes_evicted"] == 1
     assert eviction["edges_evicted"] == 1
-    assert f"users/{UID}/knowledge_nodes/old-000" not in db.docs
-    assert f"users/{UID}/knowledge_nodes/fresh-node" in db.docs
+    assert f"users/{UID}/knowledge_nodes/zzz-excess" not in db.docs
+    assert f"users/{UID}/knowledge_nodes/keep-000" in db.docs
     assert f"users/{UID}/knowledge_edges/stale-edge" not in db.docs
     assert f"users/{UID}/knowledge_edges/keep-edge" in db.docs
 
 
-def test_enforce_caps_evicts_oldest_edges_when_over_limit():
+def test_enforce_caps_evicts_edges_beyond_get_name_prefix():
     docs: dict[str, Any] = {}
     for index in range(2):
         node_id = f"node-{index}"
@@ -223,7 +223,7 @@ def test_enforce_caps_evicts_oldest_edges_when_over_limit():
             label=node_id,
             updated_at=BASE,
         )
-    for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_EDGES + 1):
+    for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_EDGES):
         edge_id = f"edge-{index:04d}"
         docs[f"users/{UID}/knowledge_edges/{edge_id}"] = _edge_doc(
             edge_id,
@@ -231,14 +231,21 @@ def test_enforce_caps_evicts_oldest_edges_when_over_limit():
             target_id="node-1",
             created_at=BASE + timedelta(minutes=index),
         )
+    docs[f"users/{UID}/knowledge_edges/zzz-excess"] = _edge_doc(
+        "zzz-excess",
+        source_id="node-0",
+        target_id="node-1",
+        created_at=BASE + timedelta(days=30),
+    )
     db = _FakeDb(docs)
 
     eviction = kg_db.enforce_knowledge_graph_caps(UID, db_client=db)
 
     assert eviction["edges_evicted"] == 1
-    assert f"users/{UID}/knowledge_edges/edge-0000" not in db.docs
+    assert f"users/{UID}/knowledge_edges/zzz-excess" not in db.docs
     remaining_edges = [path for path in db.docs if path.startswith(f"users/{UID}/knowledge_edges/")]
     assert len(remaining_edges) == kg_db.MAX_KNOWLEDGE_GRAPH_EDGES
+    assert f"users/{UID}/knowledge_edges/edge-0000" in db.docs
 
 
 def test_sync_route_delegates_to_merge(monkeypatch):
@@ -321,7 +328,7 @@ def test_merge_preserves_stable_node_id_despite_label_collision():
     assert f"users/{UID}/knowledge_edges/edge-local" in db.docs
 
 
-def test_merge_preserves_synced_timestamps_for_eviction():
+def test_merge_evicts_by_document_name_not_timestamp():
     db = _FakeDb()
     old_ts = "2026-01-01T00:00:00Z"
     new_ts = "2026-07-01T12:00:00Z"
@@ -331,8 +338,8 @@ def test_merge_preserves_synced_timestamps_for_eviction():
             "label": f"keep-{index:03d}",
             "nodeType": "concept",
             "aliasesJson": "[]",
-            "createdAt": new_ts,
-            "updatedAt": new_ts,
+            "createdAt": old_ts,
+            "updatedAt": old_ts,
         }
         for index in range(kg_db.MAX_KNOWLEDGE_GRAPH_NODES)
     ]
@@ -341,19 +348,44 @@ def test_merge_preserves_synced_timestamps_for_eviction():
         UID,
         [
             {
-                "nodeId": "stale-local",
-                "label": "Stale",
+                "nodeId": "zzz-excess",
+                "label": "Excess",
                 "nodeType": "concept",
                 "aliasesJson": "[]",
-                "createdAt": old_ts,
-                "updatedAt": old_ts,
+                "createdAt": new_ts,
+                "updatedAt": new_ts,
             }
         ],
         db_client=db,
     )
 
-    assert f"users/{UID}/knowledge_nodes/stale-local" not in db.docs
+    assert f"users/{UID}/knowledge_nodes/zzz-excess" not in db.docs
     assert f"users/{UID}/knowledge_nodes/keep-000" in db.docs
     keep = db.docs[f"users/{UID}/knowledge_nodes/keep-000"]
-    assert keep["updated_at"] == datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
-    assert keep["created_at"] == datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+    assert keep["updated_at"] == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+    assert keep["created_at"] == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+
+
+def test_merge_skips_edges_when_endpoints_missing():
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="A", updated_at=BASE),
+        }
+    )
+    row = {
+        "edgeId": "edge-missing-target",
+        "sourceNodeId": "node-a",
+        "targetNodeId": "node-missing",
+        "label": "related_to",
+        "createdAt": "2026-07-01T12:00:00Z",
+    }
+    result = kg_db.merge_synced_local_kg_edges(UID, [row], db_client=db)
+
+    assert result == {
+        "table": "local_kg_edges",
+        "merged": 0,
+        "skipped": 1,
+        "nodes_evicted": 0,
+        "edges_evicted": 0,
+    }
+    assert f"users/{UID}/knowledge_edges/edge-missing-target" not in db.docs
