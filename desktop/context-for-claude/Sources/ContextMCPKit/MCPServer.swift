@@ -47,7 +47,47 @@ public final class MCPServer {
     recorded, which is what separates "did not happen" from "was not captured".
     """
 
+    /// Every MCP revision this server's wire behaviour is correct under, newest first.
+    ///
+    /// The list is short because this server is small: it answers `initialize`, `ping`, `tools/list`
+    /// and `tools/call`, and returns `text` content. Nothing in that set changed across these four
+    /// revisions. The one removal that could have mattered — `2025-06-18` dropping JSON-RPC batching
+    /// — costs us nothing, because ``run(input:output:)`` has only ever read one object per line and
+    /// an array frame has always come back as an invalid request. Everything the newer revisions
+    /// *added* (elicitation, sampling, tasks, structured output) is capability-gated, and this server
+    /// declares `tools` and nothing else, so agreeing to a newer number promises no work it does not
+    /// already do.
+    public static let supportedProtocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+
+    /// What we answer a client whose requested revision is not in that list.
+    ///
+    /// The spec's rule is "respond with a version you support, *should* be your latest". We answer
+    /// the oldest instead, on purpose: a client asking for something we do not recognise is either
+    /// older than every revision here — in which case our latest is further from it, not closer — or
+    /// newer, in which case it reads a floor it certainly still supports. This is also the value this
+    /// server answered unconditionally before negotiation existed, so no client that works today can
+    /// be broken by the change; only clients that ask for something newer see a different number.
     public static let protocolVersion = "2024-11-05"
+
+    /// The revision to run the session under, given what the client asked for in `initialize`.
+    ///
+    /// **Echoing the client's ask is the MUST**, and until this existed we ignored it and answered
+    /// `2024-11-05` to everyone. That was tolerated — every shipping Claude lists `2024-11-05` among
+    /// the versions it accepts — but it silently pinned every session to the oldest revision we know,
+    /// which is the revision that has no `icons` field in it. Advertising ``ServerIcon`` while
+    /// negotiating a version that does not define it would be a field smuggled onto the wire rather
+    /// than a thing we agreed to speak.
+    ///
+    /// A missing or non-string `protocolVersion` falls back rather than erroring: an `initialize`
+    /// that cannot be read is still an `initialize`, and refusing it would cost the user every tool
+    /// to gain a pedantry.
+    static func negotiatedProtocolVersion(requestedBy params: JSONValue?) -> String {
+        guard let requested = params?["protocolVersion"]?.stringValue,
+              supportedProtocolVersions.contains(requested)
+        else { return protocolVersion }
+        return requested
+    }
+
     /// What Claude sees this connector called.
     ///
     /// Deliberately identical to `ClaudeConfig.serverName`, the key we write into Claude's config.
@@ -146,9 +186,18 @@ public final class MCPServer {
         switch request.method {
         case "initialize":
             return RPC.result(id: request.id, [
-                "protocolVersion": .string(Self.protocolVersion),
+                "protocolVersion": .string(Self.negotiatedProtocolVersion(requestedBy: request.params)),
                 "capabilities": ["tools": [:]],
-                "serverInfo": ["name": .string(Self.serverName), "version": .string(Self.serverVersion)],
+                // `icons` is the only place MCP lets a server say what it looks like, and it rides
+                // here or nowhere: there is no per-tool, per-call or config-file route a client
+                // reads instead. Sent unconditionally, including to clients whose negotiated
+                // revision predates the field — it is an unknown key those clients drop, which is
+                // cheaper than tracking which of them would have used it.
+                "serverInfo": [
+                    "name": .string(Self.serverName),
+                    "version": .string(Self.serverVersion),
+                    "icons": .array([ServerIcon.json]),
+                ],
                 "instructions": .string(Self.instructions),
             ])
 

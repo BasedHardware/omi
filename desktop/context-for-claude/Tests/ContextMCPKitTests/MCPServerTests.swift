@@ -28,6 +28,42 @@ final class MCPServerTests: XCTestCase {
         XCTAssertNotNil(result["capabilities"]?["tools"], "a server with no tools capability is ignored")
     }
 
+    /// The revision a session runs under is the client's to ask for and ours to confirm, and for a
+    /// long time we ignored the ask and answered `2024-11-05` to everyone. Both shipping Claudes
+    /// tolerate that — `2024-11-05` is on their supported list — but it pinned every session to the
+    /// oldest revision we know, which is the one with no `icons` field in it. Asserted for every
+    /// version we claim rather than for the newest alone, so dropping one from the list is a failure
+    /// here and not a silent downgrade in the field.
+    func testInitializeAgreesToTheRevisionTheClientAskedFor() throws {
+        let server = MCPServer(store: nil)
+
+        for version in MCPServer.supportedProtocolVersions {
+            let response = try XCTUnwrap(server.handle(line: initialize(id: 1, protocolVersion: version)))
+
+            XCTAssertEqual(try parse(response)["result"]?["protocolVersion"]?.stringValue, version)
+        }
+    }
+
+    /// A revision we do not know is answered with our floor, not with our newest: a client asking
+    /// for something unfamiliar is either older than everything here — in which case the newest is
+    /// further from it — or newer, in which case the floor is a version it certainly still reads.
+    /// This is also the value every client got before negotiation existed, which is what makes the
+    /// change unable to break one that works today.
+    func testAnUnknownRevisionFallsBackToTheOneWeAlwaysAnswered() throws {
+        let server = MCPServer(store: nil)
+
+        for version in ["2099-01-01", "2024-10-07", "", "not-a-date"] {
+            let response = try XCTUnwrap(server.handle(line: initialize(id: 2, protocolVersion: version)), version)
+
+            XCTAssertEqual(try parse(response)["result"]?["protocolVersion"]?.stringValue,
+                           MCPServer.protocolVersion, version)
+        }
+        // A client that sends no version at all still gets a session rather than an error: an
+        // `initialize` we cannot read the ask from is still an `initialize`.
+        let bare = try XCTUnwrap(server.handle(line: request(id: 3, method: "initialize")))
+        XCTAssertEqual(try parse(bare)["result"]?["protocolVersion"]?.stringValue, MCPServer.protocolVersion)
+    }
+
     /// The instructions ride on `initialize` and nowhere else, so a client that never reads them is
     /// a client the tool descriptions have to carry alone. Asserted as *present and non-trivial* on
     /// the wire rather than word for word: pinning the prose would make every future edit to it a
@@ -183,6 +219,15 @@ final class MCPServerTests: XCTestCase {
 
     private func request(id: Int, method: String) -> String {
         #"{"jsonrpc":"2.0","id":\#(id),"method":"\#(method)"}"#
+    }
+
+    /// The real first frame: a client naming the revision it wants. `clientInfo` is included because
+    /// every shipping client sends it and a server that only works without it works nowhere.
+    private func initialize(id: Int, protocolVersion: String) -> String {
+        #"""
+        {"jsonrpc":"2.0","id":\#(id),"method":"initialize","params":{"protocolVersion":"\#(protocolVersion)",\#
+        "capabilities":{},"clientInfo":{"name":"test-client","version":"0"}}}
+        """#
     }
 
     private func parse(_ line: String, file: StaticString = #filePath, line sourceLine: UInt = #line) throws -> JSONValue {

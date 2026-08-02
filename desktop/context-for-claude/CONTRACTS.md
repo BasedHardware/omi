@@ -270,9 +270,14 @@ public final class MCPServer {
 }
 ```
 
-Implements `initialize` (protocolVersion `"2024-11-05"`, `serverInfo` name `"context-for-claude"`,
-version `"1.0.0"`, capabilities `{"tools":{}}`), `notifications/initialized` (no response),
-`tools/list`, `tools/call`, and `ping`. Unknown methods return JSON-RPC error `-32601`.
+Implements `initialize` (`serverInfo` name `"context-for-claude"`, version `"1.0.0"`, capabilities
+`{"tools":{}}`, plus one `icons` entry — the app mark as a 128×128 PNG `data:` URI, see
+`ServerIcon.swift`), `notifications/initialized` (no response), `tools/list`, `tools/call`, and
+`ping`. Unknown methods return JSON-RPC error `-32601`.
+
+`protocolVersion` echoes the client's request when it is one of `"2025-11-25"`, `"2025-06-18"`,
+`"2025-03-26"` or `"2024-11-05"`, and falls back to `"2024-11-05"` for anything else or for an
+`initialize` that names no version.
 
 ### `Sources/ContextMCP/main.swift` — owner: **mcp protocol agent**
 

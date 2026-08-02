@@ -8,6 +8,15 @@ import Foundation
 /// *disk*: which binary to name, whether a surface exists on this Mac at all, and what to tell the
 /// user afterwards. The two surfaces are handled independently on purpose — an unparseable
 /// `~/.claude.json` must not cost the user their Claude Desktop connection, and vice versa.
+///
+/// **The connector's icon is not declared here, and there is no key for it.** Both configs describe
+/// a stdio entry as `type`/`command`/`args`/`env` and nothing else. Claude Code does carry an
+/// `iconUrl`, but only on its `claudeai-proxy` server type — the remote connectors claude.ai
+/// provisions from its own directory — and it never reads one off a local entry; Claude Desktop's
+/// other icon route is the `icon`/`icons` field of a `.mcpb` Desktop Extension manifest, which is a
+/// packaging format this app does not ship as. So the icon rides on the `initialize` result instead
+/// (``ServerIcon``, `Sources/ContextMCPKit/`), which is where MCP puts it. Adding an icon key here
+/// would be inert at best, and a key the client's schema does not know at worst.
 enum ClaudeRegistrar {
     struct Result {
         /// Whether the surface ended in the state the call was after: connected after `register()`,
