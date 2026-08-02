@@ -414,7 +414,7 @@ def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lan
         ("    branches: [main]\n", "    branches: [release]\n"),
         ("    paths: ['app/**']\n", "    paths: ['desktop/**']\n"),
         ("    - cron: '0 */3 * * *'\n", "    - cron: '0 */4 * * *'\n"),
-        ("cancel-in-progress: true", "cancel-in-progress: false"),
+        ("cancel-in-progress: false", "cancel-in-progress: true"),
     ),
 )
 def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
