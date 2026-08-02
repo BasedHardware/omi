@@ -1,0 +1,19 @@
+desktop/context-for-claude/Tests/ContextAppTests/CaptureWriteOrderTests.swift
+  s_1833483671ebc5::t_ce16ebfe7bc14a 1-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ac9e825587d3b01a528230ad1e2f8b616cd14cf5",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
