@@ -501,71 +501,6 @@ class TestPeople:
         assert 'speech_samples' not in result['people'][0]
 
 
-class TestScreenActivity:
-    def _row(self):
-        return {
-            'id': 's1',
-            'timestamp': '2026-06-11 10:00:00.000',
-            'appName': 'Cursor',
-            'windowTitle': 'mcp.py',
-            'ocrText': 'def foo',
-        }
-
-    @patch('routers.mcp.screen_activity_db')
-    def test_rest_rows(self, mock_db):
-        mock_db.get_screen_activity.return_value = [self._row()]
-        result = rest.get_screen_activity(uid=UID)
-        assert result == [
-            {
-                'id': 's1',
-                'timestamp': '2026-06-11 10:00:00.000',
-                'app_name': 'Cursor',
-                'window_title': 'mcp.py',
-                'ocr_text': 'def foo',
-            }
-        ]
-
-    @patch('routers.mcp.screen_activity_db')
-    def test_rest_summary_mode(self, mock_db):
-        mock_db.get_screen_activity_summary.return_value = {'apps': {'Cursor': {'count': 1}}, 'total_screenshots': 1}
-        result = rest.get_screen_activity(summary=True, uid=UID)
-        assert result['total_screenshots'] == 1
-        mock_db.get_screen_activity.assert_not_called()
-
-    @patch('routers.mcp_sse.screen_activity_db')
-    def test_tool_rows(self, mock_db):
-        mock_db.get_screen_activity.return_value = [self._row()]
-        result = sse.execute_tool(UID, 'get_screen_activity', {'limit': 5})
-        assert result['screen_activity'][0]['app_name'] == 'Cursor'
-
-    @patch('routers.mcp_sse.screen_activity_db')
-    def test_tool_summary(self, mock_db):
-        mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
-        result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
-        assert result['total_screenshots'] == 0
-
-    @patch('routers.mcp_sse.screen_activity_db')
-    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
-        # Regression for #9189: a missing Firestore index must surface as a typed,
-        # actionable ToolExecutionError, not an opaque 500.
-        from google.api_core.exceptions import FailedPrecondition
-
-        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
-        with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
-        assert exc_info.value.code == -32009
-        assert 'index' in exc_info.value.message.lower()
-
-    @patch('routers.mcp_sse.screen_activity_db')
-    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
-        from google.api_core.exceptions import FailedPrecondition
-
-        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
-        with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
-        assert exc_info.value.code == -32009
-
-
 class TestDailySummaries:
     @patch('routers.mcp.daily_summaries_db')
     def test_rest(self, mock_db):
@@ -588,7 +523,6 @@ class TestToolRegistry:
             'get_goals',
             'get_chat_messages',
             'get_people',
-            'get_screen_activity',
             'get_daily_summaries',
         ]:
             assert expected in names, f"{expected} missing from MCP_TOOLS"

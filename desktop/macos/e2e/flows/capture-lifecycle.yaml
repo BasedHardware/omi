@@ -64,7 +64,6 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/MemoryModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ObservationRecord.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift
-  - desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
   - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
   - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
   - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift

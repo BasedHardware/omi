@@ -9,7 +9,6 @@ MCP_FULL_ACCESS_SCOPES = [
     "action_items.write",
     "goals.read",
     "chat.read",
-    "screen_activity.read",
     "people.read",
 ]
 MCP_MEMORY_GRANT_SCOPES = ["memories.read", "memories.write"]

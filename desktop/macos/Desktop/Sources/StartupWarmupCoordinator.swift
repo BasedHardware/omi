@@ -142,11 +142,6 @@ final class StartupWarmupCoordinator {
       await measurePerfAsync("DATA LOAD: Task agent restore") {
         await TaskAgentManager.shared.restoreSessionsFromDatabase()
       }
-      await measurePerfAsync("DATA LOAD: Screen activity sync") {
-        await ScreenActivitySyncService.shared.start(
-          initialDelay: StartupWarmupPolicy.screenActivitySyncInitialDelay
-        )
-      }
     }
 
     logPerf("DATA LOAD: DB warmup complete", cpu: true)
