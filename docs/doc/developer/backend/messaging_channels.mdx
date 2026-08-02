@@ -6,7 +6,7 @@ description: "Authentication, account linking, and core-chat delivery for Telegr
 
 ## Overview
 
-Telegram, iMessage, and SMS are thin adapters over the existing Omi core chat. Inbound messages are stored as external chat messages, sent through the normal retrieval and quota path, and returned through the originating provider. Telegram and Sendblue group conversations retain the provider group identity and participant attribution.
+Telegram, iMessage, and SMS are thin adapters over the existing Omi core chat. Inbound messages are stored as external chat messages, sent through the normal retrieval and quota path, and returned through the originating provider. Telegram, Sendblue, and Twilio Conversations group rooms retain the provider conversation identity and participant attribution.
 
 The app remains the account authority. A channel never creates an Omi account from an inbound message and never receives a Firebase credential.
 
@@ -39,8 +39,9 @@ This is preferable to treating an SMS or call code as a chat password. It preser
 | POST | `/v1/webhooks/telegram` | Telegram secret-token header | Receive Telegram direct, group, and media messages |
 | POST | `/v1/webhooks/sendblue/{path_token}` | Sendblue secret header and path token | Receive iMessage direct, group, and media messages |
 | POST | `/v1/webhooks/twilio/sms` | Twilio signature | Receive Twilio SMS and MMS messages |
+| POST | `/v1/webhooks/twilio/conversations` | Twilio signature | Receive Twilio Conversations group and media messages |
 
-Provider webhook setup is deployment configuration. The Telegram bot must point at `/v1/webhooks/telegram`; Sendblue must point at the path-token URL and send `sb-signing-secret`; Twilio must point the SMS-capable `TWILIO_SMS_NUMBER` messaging webhook at `/v1/webhooks/twilio/sms`.
+Provider webhook setup is deployment configuration. The Telegram bot must point at `/v1/webhooks/telegram`; Sendblue must point at the path-token URL and send `sb-signing-secret`; Twilio Programmable Messaging must point the SMS-capable `TWILIO_SMS_NUMBER` webhook at `/v1/webhooks/twilio/sms`; and the Twilio Conversations Service must enable the `onMessageAdded` webhook at `/v1/webhooks/twilio/conversations`.
 
 ## Delivery and failure behavior
 
@@ -48,6 +49,6 @@ Webhook events are claimed by provider event ID before processing. Duplicate eve
 
 Each linked channel invokes `execute_chat_stream` with the normal ordered core-tool registry and deferred per-user app tools. This covers the text core-chat path, including retrieval, memories, actions, calendar, mail, channel management, phone verification, screen activity, and URL fetching. Telegram, Sendblue, and Twilio media is downloaded through provider-allowlisted HTTPS hosts, bounded by attachment size and count, and normalized into the core turn. Images use the existing vision description path, audio uses the existing pre-recorded transcription path, text files are included as bounded text, and other media is recorded as attachment metadata.
 
-Telegram and Sendblue group replies use the provider group identifier. A group link code binds the group conversation, not the sender, so other participants do not inherit a private one-to-one binding. Sendblue group messaging is a provider-beta capability and requires a plan with group access. A normal Twilio SMS/MMS number remains one-to-one; Twilio Conversations is required for SMS group rooms and is intentionally a separate adapter boundary.
+Telegram, Sendblue, and Twilio Conversations group replies use the provider group identifier. A group link code binds the group conversation, not the sender, so other participants do not inherit a private one-to-one binding. Sendblue group messaging is a provider-beta capability and requires a plan with group access. A normal Twilio SMS/MMS number remains one-to-one; Twilio Conversations handles SMS group rooms through its signed `onMessageAdded` webhook and Conversations Messages API.
 
 Local tests use fake Firestore and HTTP clients. A live acceptance check still needs deployed provider secrets, provider webhook registration, a Firebase-authenticated account, and one real inbound/outbound turn for each channel.
