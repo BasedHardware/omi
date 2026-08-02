@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversations_section_header.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_api.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_configuration.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_models.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_provider.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcripts_page.dart';
@@ -96,6 +97,27 @@ void main() {
       ),
     );
     expect(find.text('Daily Recaps'), findsOneWidget);
+    expect(find.byKey(const Key('cloudflare_transcripts_entry')), findsNothing);
+  });
+
+  testWidgets('invalid Cloudflare configuration hides the Conversations entry', (tester) async {
+    const configuration = CloudflareTranscriptConfiguration(
+      workerUrl: 'https://credential@worker.example.test',
+      token: 'token',
+    );
+    final provider = CloudflareTranscriptProvider(
+      api: CloudflareTranscriptHttpApi(configuration: configuration),
+    );
+
+    await tester.pumpWidget(
+      _app(
+        provider,
+        const Scaffold(
+          body: ConversationsSectionHeader(showDailySummaries: false, hasOmiConversationState: false),
+        ),
+      ),
+    );
+
     expect(find.byKey(const Key('cloudflare_transcripts_entry')), findsNothing);
   });
 

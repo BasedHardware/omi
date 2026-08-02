@@ -13,9 +13,28 @@ void main() {
     token: token,
   );
   Matcher isNonSecretApiException() => predicate(
-    (Object error) => error is CloudflareTranscriptApiException && !error.message.contains(token),
-    'a non-secret CloudflareTranscriptApiException',
-  );
+        (Object error) => error is CloudflareTranscriptApiException && !error.message.contains(token),
+        'a non-secret CloudflareTranscriptApiException',
+      );
+
+  test('invalid Worker configuration stays disabled and does not invoke HTTP', () async {
+    var requestCount = 0;
+    const invalidConfiguration = CloudflareTranscriptConfiguration(
+      workerUrl: 'http://worker.example.test',
+      token: token,
+    );
+    final api = CloudflareTranscriptHttpApi(
+      configuration: invalidConfiguration,
+      client: MockClient((_) async {
+        requestCount += 1;
+        return http.Response('{}', 200);
+      }),
+    );
+
+    expect(api.enabled, isFalse);
+    expect(await api.listSessions(), isEmpty);
+    expect(requestCount, 0);
+  });
 
   test('lists every cursor page with bearer authorization', () async {
     final requests = <http.Request>[];

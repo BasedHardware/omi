@@ -14,19 +14,27 @@ class CloudflareTranscriptConfiguration {
   final String workerUrl;
   final String token;
 
-  bool get isConfigured => workerUrl.trim().isNotEmpty && token.trim().isNotEmpty;
+  bool get isConfigured {
+    final uri = Uri.tryParse(workerUrl.trim());
+    return token.trim().isNotEmpty && uri != null && isValidWorkerUri(uri);
+  }
 
   Uri get baseUri {
     final uri = Uri.tryParse(workerUrl.trim());
-    if (uri == null ||
-        !uri.hasAuthority ||
-        uri.userInfo.isNotEmpty ||
-        uri.query.isNotEmpty ||
-        uri.fragment.isNotEmpty ||
-        !isAllowedScheme(uri)) {
-      throw const CloudflareTranscriptConfigurationException('Worker URL must be HTTPS or loopback HTTP.');
+    if (uri == null || !isValidWorkerUri(uri)) {
+      throw const CloudflareTranscriptConfigurationException(
+          'Worker URL must be HTTPS or loopback HTTP without credentials, query, or fragment.');
     }
     return uri.replace(path: uri.path.replaceFirst(RegExp(r'/+$'), ''));
+  }
+
+  static bool isValidWorkerUri(Uri uri) {
+    return isAllowedScheme(uri) &&
+        uri.hasAuthority &&
+        uri.host.isNotEmpty &&
+        uri.userInfo.isEmpty &&
+        uri.query.isEmpty &&
+        uri.fragment.isEmpty;
   }
 
   static bool isAllowedScheme(Uri uri) {
