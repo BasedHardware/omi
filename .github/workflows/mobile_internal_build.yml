@@ -2,7 +2,7 @@ name: Mobile internal builds
 
 # App changes land on main in bursts, so a Codemagic build per merge is mostly superseded minutes
 # later. Codemagic's own triggering has no rate limit, so the push trigger is replaced by this:
-# a two-hourly batch that builds only when app code changed, plus an immediate build for an
+# a three-hourly batch that builds only when app code changed, plus an immediate build for an
 # allowlisted author who needs their own change on a device now. Anyone else can still start a
 # build by hand, here or in Codemagic.
 
@@ -11,7 +11,7 @@ on:
     branches: [main]
     paths: ['app/**']
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 concurrency:

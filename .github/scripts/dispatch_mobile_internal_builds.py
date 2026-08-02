@@ -3,7 +3,7 @@
 
 App changes land on main in bursts, and a build per merge is mostly wasted: the earlier one is
 superseded minutes later. Codemagic's own triggering has no rate limit, so the push trigger is
-replaced by this: a two-hourly batch that builds only when app code actually changed, plus an
+replaced by this: a three-hourly batch that builds only when app code actually changed, plus an
 immediate build for an allowlisted author who needs their own change on a device now.
 """
 
@@ -47,7 +47,7 @@ def decide_dispatch(
         who = {actor.lower()} | {author.lower() for author in commit_authors}
         if who & instant_actors:
             return True, "instant-actor"
-        return False, "batched: the two-hourly run picks this up"
+        return False, "batched: the three-hourly run picks this up"
 
     if event == "schedule":
         if has_pending_app_commits:
