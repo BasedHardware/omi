@@ -219,7 +219,7 @@ def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
     scopes = mcp_oauth.normalize_scopes(
         (
             'memories.read memories.write conversations.read action_items.read action_items.write '
-            'goals.read chat.read screen_activity.read people.read'
+            'goals.read chat.read people.read'
         ),
         client,
     )
@@ -445,7 +445,6 @@ def test_default_clients_can_request_all_supported_tool_scopes():
             'action_items.write',
             'goals.read',
             'chat.read',
-            'screen_activity.read',
             'people.read',
         ]
     )
