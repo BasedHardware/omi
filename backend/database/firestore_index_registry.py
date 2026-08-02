@@ -215,6 +215,14 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
 )
 
+LEGACY_CONVERSATION_RECOVERY_QUERY = FirestoreQuerySpec(
+    identifier='staged_tasks_legacy_conversation_recovery_by_id',
+    collection_group='staged_tasks',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('source', '==', 'source'),),
+    index_fields=(_asc('source'), _asc('__name__')),
+)
+
 REQUIRED_MEMORY_PROCESSING_QUERY = FirestoreQuerySpec(
     identifier='memory_items_required_processing_by_capture',
     collection_group='memory_items',
@@ -445,6 +453,7 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
+    LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
 

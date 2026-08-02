@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Чека синхронизација",
     "syncStatusRetrying": "Обработката не успеа — нов обид",
     "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusTooOld": "Премногу стар за синхронизација — Omi не може да го прифати",
     "syncStatusFileUnavailable": "Датотеката е недостапна",
     "syncStatusUploaded": "Поставено · се обработува на Omi",
     "noRecordingsYet": "Сè уште нема снимки",

@@ -548,7 +548,7 @@ assert_helper_runtime_integrity() {
   [[ -d "$resources/agent" ]] || fail "agent runtime missing"
   [[ -f "$resources/agent/src/runtime/omi-tool-manifest.ts" ]] || fail "agent tool manifest missing"
   [[ -d "$resources/pi-mono-extension" ]] || fail "pi-mono-extension missing"
-  [[ -x "$resources/Omi Computer_Omi Computer.bundle/node" ]] || fail "bundled node missing"
+  [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
   local sharp_arch expected_arch sharp_native libvips_native
   for sharp_arch in arm64 x64; do
     expected_arch="$sharp_arch"

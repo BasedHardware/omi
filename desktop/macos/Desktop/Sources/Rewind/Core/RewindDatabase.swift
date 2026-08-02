@@ -2270,66 +2270,11 @@ actor RewindDatabase {
           """)
     }
 
-    // One-time migration: move non-top-5 AI tasks from action_items to staged_tasks
-    migrator.registerMigration("migrateAITasksToStaged") { db in
-      // Get all AI-extracted (screenshot) tasks that are active
-      let aiTasks = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT * FROM action_items
-          WHERE source LIKE '%screenshot%'
-          AND (completed IS NULL OR completed = 0)
-          AND (deleted IS NULL OR deleted = 0)
-          ORDER BY relevanceScore ASC NULLS LAST, createdAt DESC
-          """)
-
-      guard !aiTasks.isEmpty else { return }
-
-      // Top 5 stay in action_items with [screen] suffix
-      let top5 = Array(aiTasks.prefix(5))
-      let rest = Array(aiTasks.dropFirst(5))
-
-      // Add [screen] suffix to top 5 descriptions if not already tagged
-      for task in top5 {
-        let desc = task["description"] as? String ?? ""
-        if !desc.hasSuffix(" [screen]") && !desc.hasPrefix("[screen]") {
-          try db.execute(
-            sql: "UPDATE action_items SET description = ? WHERE id = ?",
-            arguments: [desc + " [screen]", task["id"]]
-          )
-        }
-      }
-
-      // Move the rest to staged_tasks
-      for task in rest {
-        try db.execute(
-          sql: """
-            INSERT OR IGNORE INTO staged_tasks (
-                backendId, backendSynced, description, completed, deleted,
-                source, conversationId, priority, category, tagsJson,
-                deletedBy, dueAt, screenshotId, confidence, sourceApp,
-                windowTitle, contextSummary, currentActivity, metadataJson,
-                embedding, relevanceScore, scoredAt, createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-          arguments: [
-            task["backendId"], task["backendSynced"],
-            task["description"], task["completed"], task["deleted"],
-            task["source"], task["conversationId"], task["priority"],
-            task["category"], task["tagsJson"], task["deletedBy"],
-            task["dueAt"], task["screenshotId"], task["confidence"],
-            task["sourceApp"], task["windowTitle"], task["contextSummary"],
-            task["currentActivity"], task["metadataJson"], task["embedding"],
-            task["relevanceScore"], task["scoredAt"],
-            task["createdAt"], task["updatedAt"],
-          ])
-
-        // Delete from action_items
-        try db.execute(
-          sql: "DELETE FROM action_items WHERE id = ?",
-          arguments: [task["id"]]
-        )
-      }
+    // Keep the migration identifier so existing databases retain a stable
+    // history, but no longer move UI-visible action_items into a local staging
+    // table. The Tasks screen does not render staged rows, so that migration
+    // could make a freshly upgraded local list appear to lose tasks.
+    migrator.registerMigration("migrateAITasksToStaged") { _ in
     }
 
     migrator.registerMigration("addActionItemSortOrder") { db in

@@ -3015,6 +3015,7 @@
     "syncStatusWaiting": "等待同步",
     "syncStatusRetrying": "无法处理 — 正在重试",
     "syncStatusFailed": "失败 — 点按“重试”",
+    "syncStatusTooOld": "太旧，无法同步 — Omi 无法接收",
     "syncStatusFileUnavailable": "文件不可用",
     "syncStatusUploaded": "已上传 · 正在 Omi 上处理",
     "noRecordingsYet": "暂无录音",

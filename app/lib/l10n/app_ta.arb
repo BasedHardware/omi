@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "ஒத்திசைவுக்காக காத்திருக்கிறது",
     "syncStatusRetrying": "செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது",
     "syncStatusFailed": "தோல்வி — Retry-ஐ அழுத்தவும்",
+    "syncStatusTooOld": "ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது",
     "syncStatusFileUnavailable": "கோப்பு கிடைக்கவில்லை",
     "syncStatusUploaded": "பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது",
     "noRecordingsYet": "இன்னும் பதிவுகள் இல்லை",

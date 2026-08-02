@@ -3028,6 +3028,7 @@
     "syncStatusWaiting": "Oczekuje na synchronizację",
     "syncStatusRetrying": "Przetwarzanie nie powiodło się — ponawianie",
     "syncStatusFailed": "Niepowodzenie — naciśnij Ponów",
+    "syncStatusTooOld": "Zbyt stare, aby zsynchronizować — Omi nie może tego przyjąć",
     "syncStatusFileUnavailable": "Plik niedostępny",
     "syncStatusUploaded": "Przesłano · przetwarzanie w Omi",
     "noRecordingsYet": "Brak nagrań",

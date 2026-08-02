@@ -243,7 +243,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.askOmiShortcut == shortcut && !shortcutSettings.askOmiUsesCustomShortcut
     return Button {
-      shortcutSettings.askOmiShortcut = shortcut
+      Self.selectPreset(shortcut, settings: shortcutSettings)
       isRecordingCustomShortcut = false
       captureError = nil
       resetDetectionState()
@@ -263,6 +263,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
       )
     }
     .buttonStyle(.plain)
+  }
+
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.askOmiShortcut = shortcut
   }
 
   private func beginCustomShortcutCapture() {

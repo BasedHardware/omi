@@ -3035,6 +3035,7 @@
     "syncStatusWaiting": "Menunggu sinkronisasi",
     "syncStatusRetrying": "Gagal diproses — mencoba lagi",
     "syncStatusFailed": "Gagal — ketuk Coba Lagi",
+    "syncStatusTooOld": "Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya",
     "syncStatusFileUnavailable": "File tidak tersedia",
     "syncStatusUploaded": "Diunggah · diproses di Omi",
     "noRecordingsYet": "Belum ada rekaman",

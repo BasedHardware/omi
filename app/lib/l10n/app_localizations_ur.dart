@@ -9785,4 +9785,7 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔';
+
+  @override
+  String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
 }

@@ -29,6 +29,28 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertEqual(ShortcutHintLayout.visibleTokens(for: tokens), tokens)
   }
 
+  func testOnboardingFloatingBarPresetPersistsImmediately() {
+    let previousShortcut = ShortcutSettings.shared.askOmiShortcut
+    defer { ShortcutSettings.shared.askOmiShortcut = previousShortcut }
+
+    let preset = ShortcutSettings.askOmiCommandJShortcut
+    OnboardingFloatingBarShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+
+    XCTAssertEqual(ShortcutSettings.shared.askOmiShortcut, preset)
+    XCTAssertFalse(ShortcutSettings.shared.askOmiUsesCustomShortcut)
+  }
+
+  func testOnboardingVoicePresetPersistsImmediately() {
+    let previousShortcut = ShortcutSettings.shared.pttShortcut
+    defer { ShortcutSettings.shared.pttShortcut = previousShortcut }
+
+    let preset = ShortcutSettings.pttPresets[0]
+    OnboardingVoiceShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+
+    XCTAssertEqual(ShortcutSettings.shared.pttShortcut, preset)
+    XCTAssertFalse(ShortcutSettings.shared.pttUsesCustomShortcut)
+  }
+
   func testExplicitPTTMicrophoneOverridesAutomaticBluetoothFallback() {
     XCTAssertEqual(
       PTTInputDeviceRouting.overrideDeviceID(
