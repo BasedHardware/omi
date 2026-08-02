@@ -48,7 +48,13 @@ def _validated_document_id(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} must be a non-empty string")
     normalized = value.strip()
-    if normalized in {".", ".."} or "/" in normalized or "\x00" in normalized or len(normalized.encode("utf-8")) > 1500:
+    if (
+        normalized in {".", ".."}
+        or (normalized.startswith("__") and normalized.endswith("__"))
+        or "/" in normalized
+        or "\x00" in normalized
+        or len(normalized.encode("utf-8")) > 1500
+    ):
         raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} is not a valid Firestore document id")
     return normalized
 
