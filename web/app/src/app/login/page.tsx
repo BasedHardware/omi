@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { LoginClient } from './LoginClient';
 
 export const metadata: Metadata = {
   title: 'Sign In to Omi',
-  description: 'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
+  description:
+    'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
   alternates: {
     canonical: '/login',
   },
   openGraph: {
     title: 'Sign In to Omi',
-    description: 'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
+    description:
+      'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
     url: '/login',
     type: 'website',
     images: [
@@ -24,11 +27,16 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Sign In to Omi',
-    description: 'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
+    description:
+      'Sign in to Omi - Your AI companion that turns thoughts into action. Access your conversations, memories, and AI-powered apps.',
     images: ['/login-bg.png'],
   },
 };
 
 export default function LoginPage() {
-  return <LoginClient />;
+  return (
+    <Suspense>
+      <LoginClient />
+    </Suspense>
+  );
 }
