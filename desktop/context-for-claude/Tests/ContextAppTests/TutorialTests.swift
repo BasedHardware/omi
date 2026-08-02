@@ -43,6 +43,17 @@ final class TutorialTests: XCTestCase {
         /// Whether a Claude is open that predates our MCP config.
         var claudeNeedsRestart = false
 
+        /// Every page the tutorial asked the world to open, in order, and whether the world would
+        /// take them. Both matter: the capture beat's card claims a page was opened, and the claim
+        /// has to follow the answer rather than the attempt.
+        var pagesOpened: [URL] = []
+        var pageWillOpen = true
+
+        /// Where Claude's window is, for the beats whose card has to stand clear of it. Nil is the
+        /// ordinary state — Claude is not running when the tutorial starts.
+        var claudeWindow: CGRect?
+        var claudeWindowLookups = 0
+
         /// Whether the machine is genuinely listening for the timeline chord.
         var chordIsArmed = true
         /// Whether a timeline window actually comes up when something opens one. False models the
@@ -78,6 +89,14 @@ final class TutorialTests: XCTestCase {
             environment.frameNear = { _ in self.momentNear }
             environment.storeIsReadable = { true }
             environment.screenIsGranted = { self.screenGranted }
+            environment.openPage = { url in
+                self.pagesOpened.append(url)
+                return self.pageWillOpen
+            }
+            environment.claudeWindowFrame = {
+                self.claudeWindowLookups += 1
+                return self.claudeWindow
+            }
             environment.askClaude = { question, restartingFirst, answer in
                 self.claudeAsks.append(question)
                 self.claudeAsksRestartingFirst.append(restartingFirst)
@@ -203,8 +222,10 @@ final class TutorialTests: XCTestCase {
 
     // MARK: - Ordering
 
-    /// Also the guard on what the flow does *not* contain. A beat that opens a website, or a second
-    /// beat that only announces the next one, would land in this list and fail here.
+    /// Also the guard on what the flow does *not* contain: a beat whose whole job is to announce the
+    /// next beat, or a second card between two that belong together, would land in this list and
+    /// fail here. (Opening a page is not a beat and never was one — it is something `collectFrames`
+    /// does on entry, which is why the list did not move when the page came back.)
     func testTheFlowWalksEveryBeatInOrder() {
         let world = World()
         world.screenGranted = true
@@ -292,7 +313,12 @@ final class TutorialTests: XCTestCase {
     }
 
     /// The sentence the user reads is a consequence of the store, not of the step being on screen.
-    /// Ten minutes of ticking must not turn "go and look at something" into "got it".
+    /// Ten minutes of ticking must not turn the waiting line into "got it".
+    ///
+    /// The waiting line changed when this beat stopped telling people to "go and look at something"
+    /// and started opening a page for them to scroll instead. The guard was never about that wording,
+    /// so it is now asserted two ways: the exact line, and — the part that actually catches the bug —
+    /// that a hundred idle ticks leave it *not* claiming success.
     func testTheCaptureBeatSaysGotItOnlyOnceItReallyHasIt() {
         let world = World()
         world.screenGranted = true
@@ -304,7 +330,8 @@ final class TutorialTests: XCTestCase {
             model.poll()
         }
         let waiting = model.speech
-        XCTAssertEqual(waiting.lead, "Go and look at something.")
+        XCTAssertEqual(waiting.lead, "I opened Anthropic's website.")
+        XCTAssertNotEqual(waiting.lead, "Got it.", "idling must never read as success")
 
         world.frameCount = TutorialModel.frameTarget
         model.poll()
@@ -1126,6 +1153,8 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(model.results.isEmpty)
         XCTAssertNil(model.claudeAsk)
         XCTAssertNil(model.proof)
+        XCTAssertFalse(model.didOpenReadingMaterial)
+        XCTAssertNil(model.claudeFrame)
     }
 
     func testEveryNonTerminalStepHasASuccessorAndTerminalsHaveNone() {
@@ -1137,13 +1166,362 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(TutorialStep.flow.last?.next, .finished)
     }
 
-    /// The one step that asks the user to go and work somewhere else is the one step that must not
-    /// park itself in the middle of where they are working.
-    func testOnlyTheCaptureBeatStandsOutOfTheWay() {
+    /// Every step that asks the user to work somewhere else is a step that must not park itself in
+    /// the middle of where they are working. Stated as a table so adding a beat that opens something
+    /// has to come here and say where its card goes.
+    func testOnlyTheBeatsThatAskForWorkElsewhereLeaveTheMiddle() {
+        let expected: [TutorialStep: TutorialPlacement] = [
+            .collectFrames: .outOfTheWay,
+            .claudeHandoff: .clearOfClaude,
+            .claudeProof: .clearOfClaude,
+        ]
         for step in TutorialStep.flow {
             XCTAssertEqual(
-                step.placement, step == .collectFrames ? .outOfTheWay : .centred,
-                "\(step) sits in the wrong place")
+                step.placement, expected[step] ?? .centred, "\(step) sits in the wrong place")
         }
+    }
+
+    // MARK: - The page the capture beat opens
+
+    /// The beat opens one page, it is Anthropic's, and the card asks for the gesture that actually
+    /// produces frames.
+    ///
+    /// The URL is asserted through the constant rather than by opening anything: a test that proved
+    /// this by launching a browser would take over the screen of whoever ran the suite.
+    func testTheCaptureBeatOpensAnthropicsSiteAndAsksForAScroll() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .collectFrames)
+
+        XCTAssertEqual(world.pagesOpened, [TutorialModel.readingMaterial])
+        XCTAssertEqual(TutorialModel.readingMaterial.host(), "www.anthropic.com")
+        XCTAssertTrue(model.didOpenReadingMaterial)
+
+        let said = model.speech.everythingSaid
+        XCTAssertTrue(said.contains("Anthropic"), "the card does not name the page it opened: \(said)")
+        XCTAssertTrue(
+            said.localizedCaseInsensitiveContains("scroll"),
+            "the card asks for something other than the gesture that produces frames: \(said)")
+    }
+
+    /// One page for the whole run, and only this beat opens it. The tutorial is not a thing that
+    /// opens windows on somebody's machine as it goes.
+    func testNoOtherBeatOpensAnything() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        model.begin()
+        var guardrail = 0
+        while !model.step.isTerminal, guardrail < 40 {
+            stepForward(model, world)
+            guardrail += 1
+        }
+        XCTAssertEqual(world.pagesOpened, [TutorialModel.readingMaterial])
+    }
+
+    /// A page that would not open is not described as open.
+    ///
+    /// The same rule as every other claim in this flow: `NSWorkspace` answers, and the sentence
+    /// follows the answer. A card pointing at a browser that never came up would send the user
+    /// looking for a window that is not there.
+    func testAPageThatWouldNotOpenIsNeverClaimedAsOpened() {
+        let world = World()
+        world.screenGranted = true
+        world.pageWillOpen = false
+        let model = makeModel(world)
+        drive(model, world, to: .collectFrames)
+
+        XCTAssertFalse(model.didOpenReadingMaterial)
+        let said = model.speech.everythingSaid
+        XCTAssertFalse(said.contains("Anthropic"), "the card claims a page it never opened: \(said)")
+        XCTAssertTrue(
+            said.localizedCaseInsensitiveContains("scroll"),
+            "the fallback still has to ask for the gesture: \(said)")
+    }
+
+    /// **The beat asks for a gesture, not for attention.**
+    ///
+    /// "Go and look at something" asked the user to do a thing this app cannot observe, on content
+    /// they had to find for themselves, on a machine that is brand new. Read off the production copy
+    /// through the production model in every state the capture beat has, so the phrasing cannot come
+    /// back on one branch.
+    func testNoCardAsksTheUserToLookAtSomething() {
+        var said: [String] = []
+
+        for opens in [true, false] {
+            let world = World()
+            world.screenGranted = true
+            world.pageWillOpen = opens
+            let model = makeModel(world)
+            drive(model, world, to: .collectFrames)
+            said.append(model.speech.everythingSaid)
+            // The state where frames have genuinely landed says something else again.
+            world.frameCount = TutorialModel.frameTarget
+            model.poll()
+            said.append(model.speech.everythingSaid)
+        }
+
+        // And the branch where the screen was never granted at all, which is allowed to say the app
+        // cannot see — that is a statement about this app, not an instruction to the user.
+        let blind = World()
+        let blindModel = makeModel(blind)
+        drive(blindModel, blind, to: .screenAccess)
+        blind.clock += TutorialModel.grantPatience + 1
+        XCTAssertTrue(blindModel.waive())
+        said.append(blindModel.speech.everythingSaid)
+        XCTAssertTrue(
+            blind.pagesOpened.isEmpty,
+            "a page was opened for somebody who had just declined to be watched, and nothing they "
+                + "scroll on it can be captured")
+
+        XCTAssertEqual(said.count, 5)
+        for line in said {
+            for phrase in ["look at", "look around", "see anything", "watch something"] {
+                XCTAssertFalse(
+                    line.localizedCaseInsensitiveContains(phrase),
+                    "“\(phrase)” is the beat asking for attention instead of a gesture: \(line)")
+            }
+        }
+    }
+
+    // MARK: - The chord, being typed
+
+    /// **A double tap is drawn as a double tap.**
+    ///
+    /// `⌘⌘` is the app's own default for `openTimeline`, and it is one key struck twice. The two caps
+    /// therefore never light together — a picture of two ⌘ keys held at once is a gesture no hand can
+    /// make, and a user copying it would never fire the shortcut.
+    func testARepeatedTapIsDrawnAsTwoSeparatePresses() {
+        let cycle = TutorialChordCycle(chord: "⌘⌘")
+        XCTAssertEqual(cycle.keys, ["⌘", "⌘"])
+        XCTAssertTrue(cycle.isRepeatedTap)
+
+        var beatsWithFirstDown: [Int] = []
+        var beatsWithSecondDown: [Int] = []
+        for beat in 0..<cycle.beats {
+            let first = cycle.isDown(0, at: beat)
+            let second = cycle.isDown(1, at: beat)
+            XCTAssertFalse(first && second, "both caps are down at beat \(beat), which is not a tap")
+            if first { beatsWithFirstDown.append(beat) }
+            if second { beatsWithSecondDown.append(beat) }
+        }
+
+        XCTAssertFalse(beatsWithFirstDown.isEmpty, "the first tap never happens")
+        XCTAssertFalse(beatsWithSecondDown.isEmpty, "the second tap never happens")
+        XCTAssertLessThan(
+            beatsWithFirstDown.last!, beatsWithSecondDown.first!,
+            "the second tap has to follow the first, not precede it")
+        XCTAssertGreaterThan(
+            beatsWithSecondDown.first! - beatsWithFirstDown.last!, 1,
+            "there is no gap between the taps, so they read as one long press")
+    }
+
+    /// An ordinary chord is held together: the modifiers stay down while the last key is struck, and
+    /// there is a moment where the whole chord is down — which is the moment it would fire.
+    func testAnOrdinaryChordIsDrawnAsKeysHeldTogether() {
+        let cycle = TutorialChordCycle(chord: "⌘⇧K")
+        XCTAssertEqual(cycle.keys, ["⌘", "⇧", "K"])
+        XCTAssertFalse(cycle.isRepeatedTap)
+
+        var sawWholeChord = false
+        for beat in 0..<cycle.beats {
+            let down = (0..<3).map { cycle.isDown($0, at: beat) }
+            // Nothing lifts before the key after it goes down: a cap that is down implies every cap
+            // before it is down too.
+            for index in 1..<3 where down[index] {
+                XCTAssertTrue(
+                    down[index - 1],
+                    "cap \(index) is down at beat \(beat) with cap \(index - 1) already lifted")
+            }
+            if down.allSatisfy({ $0 }) { sawWholeChord = true }
+        }
+        XCTAssertTrue(sawWholeChord, "the chord is never shown complete, so it is never shown firing")
+    }
+
+    /// A keycap is a key, not a character: `Space` is one cap and not five, and the loop repeats
+    /// rather than running off the end of a step that can last minutes.
+    func testTheCycleSplitsByKeycapAndRepeatsForever() {
+        XCTAssertEqual(TutorialChordCycle(chord: "⌘⇧Space").keys, ["⌘", "⇧", "Space"])
+        XCTAssertEqual(TutorialChordCycle(chord: "⌥⌥").keys, ["⌥", "⌥"])
+        XCTAssertEqual(TutorialChordCycle(chord: "F5").keys, ["F5"])
+
+        for chord in ["⌘⌘", "⌘⇧K", "F5"] {
+            let cycle = TutorialChordCycle(chord: chord)
+            XCTAssertGreaterThan(cycle.beats, 0)
+            for beat in 0..<cycle.beats {
+                for index in cycle.keys.indices {
+                    XCTAssertEqual(
+                        cycle.isDown(index, at: beat),
+                        cycle.isDown(index, at: beat + cycle.beats),
+                        "\(chord) does not repeat at cap \(index), beat \(beat)")
+                }
+            }
+            // Every cap is up at some point, so the loop has a rest and reads as repeated rather
+            // than as a stuck key.
+            let restingBeat = (0..<cycle.beats).first { beat in
+                cycle.keys.indices.allSatisfy { !cycle.isDown($0, at: beat) }
+            }
+            XCTAssertNotNil(restingBeat, "\(chord) never lets go")
+        }
+    }
+
+    /// A chord this app could not parse still has to divide by something, and must not draw a key
+    /// that is not there.
+    func testAnEmptyChordDrawsNothingAndDoesNotDivideByZero() {
+        let cycle = TutorialChordCycle(chord: "")
+        XCTAssertTrue(cycle.keys.isEmpty)
+        XCTAssertGreaterThan(cycle.beats, 0)
+        for beat in 0..<24 {
+            XCTAssertFalse(cycle.isDown(0, at: beat))
+            XCTAssertFalse(cycle.isDown(-1, at: beat))
+        }
+    }
+
+    // MARK: - The gesture, being made
+
+    /// **The content moves with the fingers, by exactly as much.**
+    ///
+    /// The one thing the drag demonstration can get *wrong* rather than merely ugly: a picture whose
+    /// panels travelled against the hand would teach an inverted drag to somebody who has never made
+    /// this gesture, and it would look perfectly deliberate.
+    func testTheDemonstratedPanelsFollowTheHandExactly() {
+        for step in stride(from: -1.0, through: 1.0, by: 0.1) {
+            let phase = CGFloat(step)
+            XCTAssertEqual(
+                TutorialScrollCycle.content(phase), TutorialScrollCycle.hand(phase), accuracy: 0.001,
+                "the panels disagree with the hand at phase \(phase)")
+        }
+        XCTAssertEqual(TutorialScrollCycle.hand(0), 0, "the sweep has to have a resting middle")
+        XCTAssertEqual(TutorialScrollCycle.hand(1), TutorialScrollCycle.travel)
+        XCTAssertEqual(TutorialScrollCycle.hand(-1), -TutorialScrollCycle.travel)
+    }
+
+    /// The sweep runs both ways, because which direction travels *back* through the day depends on
+    /// the user's own natural-scrolling setting and the gate accepts either.
+    func testTheSweepTravelsBothWays() {
+        XCTAssertLessThan(TutorialScrollCycle.hand(-1), 0)
+        XCTAssertGreaterThan(TutorialScrollCycle.hand(1), 0)
+    }
+
+    /// The ticks behind the panels travel the same way and less far. Parallax, not disagreement: a
+    /// backdrop moving the other way would be a second inverted drag in the same picture.
+    func testTheBackdropTrailsTheHandWithoutContradictingIt() {
+        for step in stride(from: -1.0, through: 1.0, by: 0.1) {
+            let phase = CGFloat(step)
+            let hand = TutorialScrollCycle.hand(phase)
+            let backdrop = TutorialScrollCycle.backdrop(phase)
+            XCTAssertGreaterThanOrEqual(hand * backdrop, 0, "the backdrop travels against the hand")
+            XCTAssertLessThanOrEqual(abs(backdrop), abs(hand))
+        }
+        XCTAssertNotEqual(TutorialScrollCycle.backdrop(1), TutorialScrollCycle.hand(1))
+    }
+
+    // MARK: - Standing clear of Claude
+
+    /// The two Claude beats are the only ones that ask where Claude's window is, and they stop
+    /// asking the moment the flow leaves them.
+    func testClaudesWindowIsOnlyLookedForByTheBeatsThatStandBesideIt() {
+        let world = World()
+        world.screenGranted = true
+        world.claudeWindow = CGRect(x: 400, y: 200, width: 900, height: 700)
+        let model = makeModel(world)
+
+        drive(model, world, to: .collectFrames)
+        model.poll()
+        XCTAssertNil(model.claudeFrame, "a beat with no Claude on it read Claude's window")
+        XCTAssertEqual(world.claudeWindowLookups, 0)
+
+        drive(model, world, to: .claudeHandoff)
+        model.poll()
+        XCTAssertEqual(model.claudeFrame, world.claudeWindow)
+        XCTAssertGreaterThan(world.claudeWindowLookups, 0)
+
+        drive(model, world, to: .allSet)
+        model.poll()
+        XCTAssertNil(model.claudeFrame, "the frame outlived the beat that needed it")
+    }
+
+    /// **The card stands beside Claude rather than on it.**
+    ///
+    /// The report was one sentence — the flow window blocks the Claude window — and the fix has to
+    /// hold on geometry the machine it was written on does not have, so it is swept here rather than
+    /// looked at once.
+    func testTheCardParksInTheWidestBandBesideClaude() {
+        let visible = NSRect(x: 0, y: 0, width: 1_800, height: 1_000)
+        let card = NSSize(width: 470, height: 300)
+        let margin: CGFloat = 28
+
+        // Claude on the left: the card takes the room on the right.
+        let onTheLeft = CGRect(x: 40, y: 100, width: 900, height: 800)
+        let right = TutorialOverlay.parked(card, in: visible, clearOf: onTheLeft, margin: margin)
+        XCTAssertFalse(right.intersects(onTheLeft), "the card is on top of Claude")
+        XCTAssertGreaterThanOrEqual(right.minX, onTheLeft.maxX)
+
+        // Claude on the right: the card takes the room on the left.
+        let onTheRight = CGRect(x: 860, y: 100, width: 900, height: 800)
+        let left = TutorialOverlay.parked(card, in: visible, clearOf: onTheRight, margin: margin)
+        XCTAssertFalse(left.intersects(onTheRight))
+        XCTAssertLessThanOrEqual(left.maxX, onTheRight.minX)
+
+        // Both bands fit: the wider one wins, so the card is never squeezed into a sliver it barely
+        // clears when there is a whole half-display next door.
+        let slightlyLeft = CGRect(x: 520, y: 100, width: 700, height: 800)
+        let widest = TutorialOverlay.parked(card, in: visible, clearOf: slightlyLeft, margin: margin)
+        XCTAssertGreaterThanOrEqual(widest.minX, slightlyLeft.maxX)
+    }
+
+    /// A Claude that spans the display still leaves the card off the composer at the foot of it.
+    func testAFullWidthClaudePushesTheCardAboveIt() {
+        let visible = NSRect(x: 0, y: 0, width: 1_400, height: 1_200)
+        let card = NSSize(width: 470, height: 260)
+        let wide = CGRect(x: 20, y: 0, width: 1_360, height: 860)
+
+        let parked = TutorialOverlay.parked(card, in: visible, clearOf: wide, margin: 28)
+        XCTAssertFalse(parked.intersects(wide), "the card is over the conversation")
+        XCTAssertGreaterThanOrEqual(parked.minY, wide.maxY)
+    }
+
+    /// A Claude that covers the whole usable area leaves nothing clear. The card then takes the top
+    /// trailing corner — over Claude, but off the column its answer arrives in and nowhere near the
+    /// composer, which is the keystroke the next beat is waiting for.
+    func testACardWithNowhereClearToStandStaysOffTheComposer() {
+        let visible = NSRect(x: 0, y: 0, width: 1_200, height: 800)
+        let card = NSSize(width: 470, height: 300)
+        let fullScreen = visible
+
+        let parked = TutorialOverlay.parked(card, in: visible, clearOf: fullScreen, margin: 28)
+        XCTAssertGreaterThan(
+            parked.minY, visible.midY, "the card is in the bottom half, over the composer")
+        XCTAssertGreaterThan(
+            parked.minX, visible.midX, "the card is over the middle, where the answer arrives")
+        XCTAssertTrue(visible.contains(parked), "the card left the usable area")
+    }
+
+    /// Claude not found is not a licence to sit in the middle: the middle is exactly where an app
+    /// that has just been opened puts its window.
+    func testAClaudeThatCannotBeFoundStillKeepsTheCardOutOfTheMiddle() {
+        let visible = NSRect(x: 0, y: 0, width: 1_600, height: 900)
+        let card = NSSize(width: 470, height: 300)
+
+        let parked = TutorialOverlay.parked(card, in: visible, clearOf: nil, margin: 28)
+        XCTAssertGreaterThan(parked.minX, visible.midX)
+        XCTAssertTrue(visible.contains(parked))
+    }
+
+    /// **The proof beat never takes the keyboard.** It is waiting for Claude to call one of our
+    /// tools, which happens when the user presses Return in Claude's composer — and an accessory app
+    /// that activates over Claude eats exactly that keystroke.
+    func testTheProofBeatNeverTakesTheKeyboardOffClaude() {
+        XCTAssertFalse(TutorialStep.claudeProof.takesFocusOnEntry)
+        // The handoff still does: its two answers are buttons on the card, and Claude is opened by
+        // this beat afterwards rather than being typed into during it.
+        XCTAssertTrue(TutorialStep.claudeHandoff.takesFocusOnEntry)
+        // A coach mark leaves focus where the user is working; the query beat is the exception,
+        // because it has a text field the user has to type into.
+        XCTAssertFalse(TutorialStep.timeline.takesFocusOnEntry)
+        XCTAssertFalse(TutorialStep.findMoments.takesFocusOnEntry)
+        XCTAssertTrue(TutorialStep.query.takesFocusOnEntry)
+        XCTAssertTrue(TutorialStep.invitation.takesFocusOnEntry)
     }
 }

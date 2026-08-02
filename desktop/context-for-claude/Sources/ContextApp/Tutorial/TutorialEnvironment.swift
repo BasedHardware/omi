@@ -47,6 +47,12 @@ struct TutorialMoment: Equatable, Sendable {
 /// allowed to say "your question is in Claude" on the one branch where a prompt was genuinely
 /// pre-filled, and a test can hold this where it cannot hold a paragraph. Nothing here is reachable
 /// by the tutorial *asking* — every case is the answer that came back.
+///
+/// Two families, because there are two targets: `Settings → Agents → Claude target` chooses between
+/// the Claude app and the `claude` CLI, and what "it worked" looks like is genuinely different on
+/// each. The app pre-fills a composer and waits for the user's Return; the CLI takes the question as
+/// an argument and is already running with it. Collapsing those into one case would put the app
+/// branch's "press Return there" in front of somebody whose question has already been sent.
 enum TutorialClaudeAsk: Equatable, Sendable {
     /// Claude opened with the question already in its prompt, waiting for the user to send it.
     ///
@@ -59,16 +65,42 @@ enum TutorialClaudeAsk: Equatable, Sendable {
     ///     the restart, and true when the app would not quit. The card has to say so, because the
     ///     proof beat can then wait on something that will never arrive.
     case prompted(restarted: Bool, mayNotReachMe: Bool)
+    /// The `claude` CLI was launched with the question, in whichever app this Mac opens `.command`
+    /// files with — `handler` is that app's name, so the card can point at the window that just
+    /// appeared rather than at a generic "Terminal" the user may not run.
+    ///
+    /// There is no `restarted`/`mayNotReachMe` pair here, and that is not an omission: a CLI process
+    /// is new every time and reads `~/.claude.json` as it starts, so it can never be the stale-config
+    /// case those two flags exist to describe.
+    case ranInTerminal(handler: String)
     /// Nothing on this Mac answers `claude://` links, so the question went on the clipboard and
     /// Claude was brought forward. A pre-fill was *not* achieved and the card must not imply one.
     case copiedInstead
     /// Claude Desktop is not installed. The question is on the clipboard for the CLI.
     case notInstalled
+    /// The Terminal target was chosen and there is no `claude` command on this Mac to run. The
+    /// question is on the clipboard. Distinct from `notInstalled` because the two say to install
+    /// different things, and a card that named the wrong one would send somebody to the wrong page.
+    case commandNotFound
 
     /// Whether a prompt really got filled in. The one condition allowed to sound like success.
     var didPrefill: Bool {
         if case .prompted = self { return true }
         return false
+    }
+
+    /// Whether the question genuinely reached a Claude — the condition for the sound that means it
+    /// worked.
+    ///
+    /// Wider than `didPrefill` on purpose. The CLI branch fills no composer, and that is the point of
+    /// it: the question was handed straight to a running `claude`, which is at least as much of an
+    /// arrival as a pre-fill. What stays outside is the three clipboard admissions, where nothing
+    /// reached anything.
+    var didReachClaude: Bool {
+        switch self {
+        case .prompted, .ranInTerminal: return true
+        case .copiedInstead, .notInstalled, .commandNotFound: return false
+        }
     }
 }
 
@@ -114,27 +146,49 @@ struct TutorialEnvironment {
 
     // MARK: The world outside
 
-    /// Opens Claude with a question already typed into its prompt, and answers what really happened.
+    /// Opens a URL in whatever the user's default browser is, and answers whether it really opened.
     ///
-    /// The tutorial opens nothing else. It used to launch a text-dense stranger's website to have
-    /// something to capture, which put a third party's page on the screen of someone who had just
-    /// been asked to let this app watch their screen — and taught the product on content that was not
-    /// theirs. The capture beat now runs on whatever they already have open, which is both the more
-    /// honest demonstration and the more convincing one.
+    /// The `Bool` is the whole reason this is not a `-> Void`. The capture beat's card says "I opened
+    /// Anthropic's website" — a claim about something the user can look up by glancing at their
+    /// Dock — and a card that says it while `NSWorkspace` answered false is the same class of lie as
+    /// a frame count driven by a clock. The model records what came back and the copy follows it.
+    ///
+    /// This is the *only* page the tutorial opens, and it took an argument to earn its way back. An
+    /// earlier version launched a text-dense **stranger's** website to have something to capture,
+    /// which put a third party's page on the screen of someone who had just been asked to let this
+    /// app watch their screen. What replaced it — "go and look at something of your own" — was worse
+    /// on the machine that matters: a first run is a fresh Mac with an empty desktop, and the beat
+    /// sat there waiting for frames the user had nothing to generate. `anthropic.com` is the one
+    /// page this app can open without choosing somebody else's content for them.
+    var openPage: (URL) -> Bool = { _ in false }
+
+    /// Hands a question to Claude, and answers what really happened.
+    ///
+    /// *Which* Claude is not a parameter here on purpose: the live implementation reads
+    /// `Settings → Agents → Claude target` at the moment of the handoff, and this seam exists so a
+    /// test can stub the whole act rather than to give the tutorial a second opinion about where the
+    /// question should go. Both targets come back through the same `TutorialClaudeAsk`.
     ///
     /// Asynchronous because the honest version of this can have a wait in it: a Claude the user has
     /// agreed to restart takes a moment to go.
     ///
     /// The `Bool` is the user's answer to "may I restart it first", asked by the card and never
-    /// assumed here. It is ignored when no running Claude needs one.
+    /// assumed here. It is ignored when no running Claude needs one, and on the Terminal target,
+    /// where no restart is ever needed.
     var askClaude: (String, Bool, @escaping (TutorialClaudeAsk) -> Void) -> Void = { _, _, answer in
         answer(.notInstalled)
     }
 
     /// Whether a Claude is open that was launched before our MCP config was written, and so cannot
     /// call our tools until it restarts. The one question the card has to ask before it may offer to
-    /// quit an app the user is using.
+    /// quit an app the user is using. Answers false whenever the chosen target is the CLI, which
+    /// never has a stale config to restart out of.
     var claudeRestartIsNeeded: () -> Bool = { false }
+
+    /// Where Claude's own window is right now, in AppKit screen coordinates, or nil when there is
+    /// none on screen. Read every tick for the two beats that have to stand clear of it — Claude
+    /// opens *after* the card does, and the user can move it while they read.
+    var claudeWindowFrame: () -> CGRect? = { nil }
 
     // MARK: Our own windows
 
@@ -232,10 +286,16 @@ struct TutorialEnvironment {
         environment.requestScreenAccess = { await Permissions.request(.screen) }
         environment.openScreenSettings = { Permissions.openSettings(for: .screen) }
 
+        environment.openPage = { NSWorkspace.shared.open($0) }
+
+        // Both of these read `Settings → Agents → Claude target` inside `ClaudeHandoff`, on the call
+        // rather than here, so a target changed while the card is up is the target the next attempt
+        // uses. Nothing in this file caches it — see `ClaudeHandoff` on the preference's one home.
         environment.askClaude = { question, restartingFirst, answer in
             ClaudeHandoff.ask(question, restartingFirst: restartingFirst, then: answer)
         }
         environment.claudeRestartIsNeeded = { ClaudeHandoff.restartIsNeeded() }
+        environment.claudeWindowFrame = { ClaudeWindowProbe.frame() }
 
         // The honest fallback only, for the machine where the chord cannot fire. Wired exactly as
         // the shell wires it (`ContextApp.swift`) so the window the tutorial has to open is the same
@@ -306,12 +366,22 @@ enum TutorialHotkeyWatch {
 
 /// Puts the tutorial's first question into Claude, rather than telling the user to type it.
 ///
-/// The prompt is **pre-filled, not sent**: `ClaudeRouter` opens `claude://claude.ai/new?q=…`, which
-/// lands the question in the composer of a *normal new chat* with the user still holding the Return
-/// key. That is the reused mechanism, not a second one — the search bar routes through the same
-/// `ClaudeRouter`, only asking for its own surface. Every failure is then reported as itself: no
-/// handler for the scheme is the clipboard branch, no Claude at all is its own branch, and neither is
-/// allowed to come back looking like a pre-fill.
+/// On the default target the prompt is **pre-filled, not sent**: `ClaudeRouter` opens
+/// `claude://claude.ai/new?q=…`, which lands the question in the composer of a *normal new chat* with
+/// the user still holding the Return key. That is the reused mechanism, not a second one — this type
+/// owns no routing of its own, it only decides what to ask `ClaudeRouter` for. Every failure is then
+/// reported as itself: no handler for the scheme is the clipboard branch, no Claude at all is its own
+/// branch, and neither is allowed to come back looking like a pre-fill.
+///
+/// ## The target is the user's, and this is where it is read
+///
+/// `Settings → Agents → Claude target` chooses between the Claude app and the `claude` CLI, and this
+/// handoff is its consumer. The preference lives in exactly one place — `SettingsStore.claudeTarget`,
+/// the only owner and only writer of `context.settings.claudeTarget` — and is read *here*, at the
+/// moment of the handoff, rather than captured when the tutorial's environment was built. A second
+/// copy on `ClaudeRouter` is deliberately not reintroduced: a preference with two homes is a
+/// preference that disagrees with itself, and the version of this app that had one shipped a dropdown
+/// nothing read.
 ///
 /// ## The surface is a decision, not an inherited default
 ///
@@ -344,7 +414,8 @@ enum TutorialHotkeyWatch {
 @MainActor
 enum ClaudeHandoff {
 
-    /// Where the tutorial's question goes: a normal new chat on Claude's home surface.
+    /// Where the tutorial's question goes *in the Claude app*: a normal new chat on Claude's home
+    /// surface. Ignored by the Terminal target, whose CLI is its own surface.
     ///
     /// Named, and a stored constant rather than a literal inside `Probe.live`, so the choice is a
     /// thing a test can read without opening a URL — asserting this by launching Claude would mean
@@ -373,11 +444,18 @@ enum ClaudeHandoff {
     /// each of these reaches for something — `NSWorkspace`, `NSPasteboard`, `ClaudeRouter` — that is
     /// isolated to it.
     struct Probe {
-        var isInstalled: @MainActor () -> Bool
+        /// Claude **Desktop** specifically, which is what the `.claudeApp` target needs and what the
+        /// restart decision is about. Named for the app rather than for "Claude" so the Terminal
+        /// path's skipping of it reads as deliberate: a Mac with the `claude` CLI and no desktop app
+        /// is a perfectly good machine for that target.
+        var desktopIsInstalled: @MainActor () -> Bool
         var running: @MainActor () -> [RunningClaude]
         /// When our registration was last written, from `ClaudeRegistrar`.
         var registeredAt: @MainActor () -> Date?
-        var route: @MainActor (String) -> Result<ClaudeRouter.Delivery, ClaudeRouter.RouteError>
+        /// The one routing call. Takes the target so there is a single path to `ClaudeRouter` rather
+        /// than one per target, and so a test can assert *which* target the preference produced.
+        var route:
+            @MainActor (String, ClaudeRouter.Target) -> Result<ClaudeRouter.Delivery, ClaudeRouter.RouteError>
         var copyToClipboard: @MainActor (String) -> Void
         /// Waits for the Claudes it is given to actually go, then calls back on the main actor.
         ///
@@ -390,7 +468,7 @@ enum ClaudeHandoff {
         @MainActor
         static func live() -> Probe {
             Probe(
-                isInstalled: { ClaudeRelaunch.isInstalled },
+                desktopIsInstalled: { ClaudeRelaunch.isInstalled },
                 running: {
                     NSRunningApplication.runningApplications(
                         withBundleIdentifier: ClaudeRelaunch.bundleIdentifier
@@ -402,7 +480,11 @@ enum ClaudeHandoff {
                     }
                 },
                 registeredAt: { ClaudeRegistrar.claudeDesktopRegisteredAt },
-                route: { ClaudeRouter.route($0, to: .claudeApp, surface: surface) },
+                // `surface` is the chat surface this beat asks for and is ignored by `.terminal`,
+                // which has no URL to build.
+                route: { question, target in
+                    ClaudeRouter.route(question, to: target, surface: surface)
+                },
                 copyToClipboard: { text in
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
@@ -434,11 +516,23 @@ enum ClaudeHandoff {
         return launchedAt <= registeredAt
     }
 
-    /// Whether any Claude on this Mac right now is one a restart would genuinely help.
+    /// Whether any Claude on this Mac right now is one a restart would genuinely help, for the target
+    /// the user has actually chosen. The card's consent question hangs off this.
     ///
-    /// `probe` is optional rather than defaulted to `.live()` because a default argument is
-    /// evaluated in the *caller's* isolation, and building the live probe needs the main actor.
-    static func restartIsNeeded(probe injected: Probe? = nil) -> Bool {
+    /// `settings` and `probe` are optional rather than defaulted to `.shared`/`.live()` because a
+    /// default argument is evaluated in the *caller's* isolation, and both of those need the main
+    /// actor.
+    static func restartIsNeeded(settings: SettingsStore? = nil, probe: Probe? = nil) -> Bool {
+        restartIsNeeded(for: (settings ?? .shared).claudeTarget, probe: probe)
+    }
+
+    /// - Parameter target: the Terminal target always answers false, and that is a fact about the
+    ///   CLI rather than a shortcut. `claude` is a new process on every invocation and reads
+    ///   `~/.claude.json` as it starts, so it cannot be the "launched before we registered" case at
+    ///   all. Offering to quit somebody's Claude Desktop to fix a CLI that was never broken would be
+    ///   the exact trade this type exists to refuse: a real cost for nothing.
+    static func restartIsNeeded(for target: ClaudeRouter.Target, probe injected: Probe? = nil) -> Bool {
+        guard target == .claudeApp else { return false }
         let probe = injected ?? .live()
         let registeredAt = probe.registeredAt()
         return probe.running().contains {
@@ -448,16 +542,56 @@ enum ClaudeHandoff {
 
     // MARK: - The handoff
 
+    /// The handoff, to whichever Claude the user chose in Settings.
+    ///
+    /// This overload exists so that "read the preference" is a step with a name that a test can call:
+    /// the defect it replaces was a hard-coded `.claudeApp` here, which left the Settings dropdown
+    /// writing a key nothing read. `settings` is injectable for exactly that test and defaults to the
+    /// one real store.
+    ///
     /// - Parameter restartingFirst: whether the user has agreed to a restart. Ignored when no
     ///   running Claude needs one, so consent can never be turned into a quit that was pointless.
     static func ask(
         _ question: String,
         restartingFirst: Bool,
+        settings: SettingsStore? = nil,
+        probe: Probe? = nil,
+        then answer: @escaping (TutorialClaudeAsk) -> Void
+    ) {
+        ask(
+            question, to: (settings ?? .shared).claudeTarget, restartingFirst: restartingFirst,
+            probe: probe, then: answer)
+    }
+
+    /// - Parameters:
+    ///   - target: where the question goes. Named rather than assumed — see the type's note on the
+    ///     preference having exactly one home.
+    ///   - restartingFirst: whether the user has agreed to a restart. Ignored when no running Claude
+    ///     needs one, so consent can never be turned into a quit that was pointless.
+    static func ask(
+        _ question: String,
+        to target: ClaudeRouter.Target,
+        restartingFirst: Bool,
         probe injected: Probe? = nil,
         then answer: @escaping (TutorialClaudeAsk) -> Void
     ) {
         let probe = injected ?? .live()
-        guard probe.isInstalled() else {
+
+        guard target == .claudeApp else {
+            // The Terminal target skips every question below it, and each skip is its own fact. The
+            // `claude` CLI does not need Claude Desktop installed; it reads `~/.claude.json` fresh on
+            // every launch, so there is no stale config for a restart to fix; and so `restartingFirst`
+            // is deliberately unused here rather than passed along. Quitting an app the user is in
+            // the middle of, to help a process that has not started yet, would be a cost with no
+            // purchase. What can still fail — no `claude` on this Mac — fails inside `deliver`, on
+            // `ClaudeRouter`'s own answer rather than on a second guess at it.
+            deliver(
+                question, to: target, restarted: false, mayNotReachMe: false, probe: probe,
+                then: answer)
+            return
+        }
+
+        guard probe.desktopIsInstalled() else {
             probe.copyToClipboard(question)
             ContextLog.info("no Claude Desktop; the question went to the clipboard", "tutorial")
             answer(.notInstalled)
@@ -474,7 +608,9 @@ enum ClaudeHandoff {
             // Nothing here a restart would help: either no Claude is running, or the one that is
             // was launched after we registered and already has us. Terminating would cost the user
             // their session and buy nothing.
-            deliver(question, restarted: false, mayNotReachMe: false, probe: probe, then: answer)
+            deliver(
+                question, to: target, restarted: false, mayNotReachMe: false, probe: probe,
+                then: answer)
             return
         }
 
@@ -482,7 +618,9 @@ enum ClaudeHandoff {
             // They said no. Their Claude keeps its conversation, the question still goes in, and the
             // card says the reach may be stale rather than pretending otherwise.
             ContextLog.info("handing over without the restart the user declined", "tutorial")
-            deliver(question, restarted: false, mayNotReachMe: true, probe: probe, then: answer)
+            deliver(
+                question, to: target, restarted: false, mayNotReachMe: true, probe: probe,
+                then: answer)
             return
         }
 
@@ -495,32 +633,43 @@ enum ClaudeHandoff {
                 ContextLog.info("Claude did not quit; handing over to the process still running", "tutorial")
             }
             deliver(
-                question, restarted: quit, mayNotReachMe: !quit, probe: probe, then: answer)
+                question, to: target, restarted: quit, mayNotReachMe: !quit, probe: probe,
+                then: answer)
         }
     }
 
+    /// The single call into `ClaudeRouter`, and the one place a delivery becomes a sentence the card
+    /// is allowed to say.
+    ///
+    /// The answer is switched off the *mechanism* that came back rather than off the target that was
+    /// asked for, because those are different claims: asking for the app and getting the clipboard is
+    /// a real outcome, and it is the one the router reports when nothing on the Mac answers
+    /// `claude://`. `restarted`/`mayNotReachMe` only reach the `.prompted` case, which is the only
+    /// case they describe.
     private static func deliver(
         _ question: String,
+        to target: ClaudeRouter.Target,
         restarted: Bool,
         mayNotReachMe: Bool,
         probe: Probe,
         then answer: @escaping (TutorialClaudeAsk) -> Void
     ) {
-        switch probe.route(question) {
+        switch probe.route(question, target) {
         case .success(let delivery):
             switch delivery.mechanism {
             case .prefilledTab:
                 answer(.prompted(restarted: restarted, mayNotReachMe: mayNotReachMe))
-            case .clipboard, .terminal:
-                // `.terminal` is unreachable for `.claudeApp` and is folded in rather than crashed
-                // on: either way the question is somewhere to paste from, which is what the card
-                // has to say.
+            case .terminal(_, let handler):
+                answer(.ranInTerminal(handler: handler))
+            case .clipboard:
                 answer(.copiedInstead)
             }
         case .failure(let error):
             probe.copyToClipboard(question)
             ContextLog.error("could not hand the question to Claude: \(error.sentence)", "tutorial")
-            answer(.notInstalled)
+            // Which thing is missing decides which sentence the card gets: a Mac with no `claude`
+            // command and a Mac with no Claude Desktop need to be told to install different things.
+            answer(target == .terminal ? .commandNotFound : .notInstalled)
         }
     }
 }
@@ -537,5 +686,58 @@ enum ClaudeRelaunch {
 
     static var isInstalled: Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
+    }
+}
+
+// MARK: - Where Claude is on screen
+
+/// Claude's own window, so the tutorial's card can stand beside it instead of on top of it.
+///
+/// `CGWindowListCopyWindowInfo` rather than the Accessibility API, for the same reason
+/// `SettingsWindowProbe` uses it: since 10.15 only `kCGWindowName` is gated behind Screen
+/// Recording — bounds, owner and layer are not — so this answers on a machine that has granted this
+/// app nothing at all. Nothing here reads a *name*, and nothing here needs one.
+///
+/// Every branch can answer nil and the caller has to live with it: Claude may not be running, may
+/// have no window yet (the handoff has only just launched it), or may be on a display that has since
+/// gone away. A placement that invents a rectangle when it cannot find one would park the card in a
+/// space the user is not looking at, which is worse than the middle of the screen.
+@MainActor
+enum ClaudeWindowProbe {
+
+    /// The largest ordinary window belonging to Claude, in AppKit screen coordinates.
+    ///
+    /// Largest rather than frontmost, and layer 0 only: an app's tooltips, its own panels and its
+    /// menu-bar extras all appear in the same listing, and the window the user is reading is the big
+    /// one. A pane the card is asked to stand clear of has to be the pane, not a popover on it.
+    static func frame() -> CGRect? {
+        let pids = Set(
+            NSRunningApplication.runningApplications(
+                withBundleIdentifier: ClaudeRelaunch.bundleIdentifier
+            ).map(\.processIdentifier))
+        guard !pids.isEmpty else { return nil }
+        guard
+            let listing = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return nil }
+
+        var best: CGRect?
+        for window in listing {
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t, pids.contains(pid),
+                (window[kCGWindowLayer as String] as? Int) == 0,
+                let raw = window[kCGWindowBounds as String] as? NSDictionary,
+                let bounds = CGRect(dictionaryRepresentation: raw)
+            else { continue }
+            // A collapsed entry is a window nobody is reading; treating one as the pane would send
+            // the card to stand beside a point.
+            guard bounds.width > 200, bounds.height > 200 else { continue }
+            if best == nil || bounds.width * bounds.height > best!.width * best!.height {
+                best = bounds
+            }
+        }
+        // The listing is in global CoreGraphics coordinates and the card is placed with
+        // `NSWindow.setFrame`, which is not the same space. `ScreenSpace` owns that flip for the
+        // whole app — a second copy of it here is how an overlay ends up on the wrong monitor.
+        return best.flatMap { ScreenSpace.live.appKit(from: $0) }
     }
 }

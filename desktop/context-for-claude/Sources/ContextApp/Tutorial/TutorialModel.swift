@@ -62,6 +62,15 @@ final class TutorialModel: ObservableObject {
     /// Claude that answers it has genuinely read the store rather than guessed.
     static let suggestedQuestion = "What was I reading about a few minutes ago?"
 
+    /// The page the capture beat opens for the user to scroll.
+    ///
+    /// A named constant rather than a literal inside the live environment, so a test can assert
+    /// *which* page this beat opens without a browser appearing on the screen of whoever ran the
+    /// suite. Anthropic's own site, which is the one page this app may open without choosing a third
+    /// party's content for somebody — see `TutorialEnvironment.openPage` for why the beat opens a
+    /// page at all after a version of it deliberately did not.
+    static let readingMaterial = URL(string: "https://www.anthropic.com")!
+
     /// The chord the timeline really opens on, read through the environment from the shortcut layer
     /// that registers it rather than written out here. A tutorial that taught a chord the app does
     /// not listen for would be teaching a surface that does not exist — and the user can rebind it in
@@ -84,6 +93,11 @@ final class TutorialModel: ObservableObject {
     @Published private(set) var framesCollected = 0
     @Published private(set) var didWaiveFrames = false
     @Published private(set) var didWaiveScreenAccess = false
+
+    /// Whether the page the capture beat asks the user to scroll really opened. Assigned from
+    /// `NSWorkspace`'s own answer and from nowhere else: the card claims it out loud, and a machine
+    /// with no browser that could answer the URL gets a different sentence rather than that claim.
+    @Published private(set) var didOpenReadingMaterial = false
 
     @Published private(set) var screenIsGranted = false
     @Published private(set) var isRequestingScreenAccess = false
@@ -127,6 +141,11 @@ final class TutorialModel: ObservableObject {
     /// Where the current step's coach mark points, or nil for a card. Republished on every poll so a
     /// window that moved takes its coach mark with it.
     @Published private(set) var targetFrame: CGRect?
+
+    /// Where Claude's window is, for the two beats whose card has to stand clear of it. Nil on every
+    /// other step and nil whenever it cannot be found — a placement that guessed would park the card
+    /// in a space the user is not looking at, which is worse than the middle of the screen.
+    @Published private(set) var claudeFrame: CGRect?
 
     // MARK: - Internals
 
@@ -283,6 +302,10 @@ final class TutorialModel: ObservableObject {
         // Republished every tick: a coach mark that keeps pointing at where a window *used* to be is
         // the confident arrow aimed at nothing.
         targetFrame = step.target.flatMap { environment.locateTarget($0) }
+        // The same argument, for the window this app does not own. Claude opens *after* the card
+        // that talks about it, and the user can move it while they read — so the beat that has to
+        // stand clear of it asks every tick rather than once.
+        claudeFrame = step.placement == .clearOfClaude ? environment.claudeWindowFrame() : nil
 
         switch step {
         case .screenAccess:
@@ -452,8 +475,10 @@ final class TutorialModel: ObservableObject {
             guard let self else { return }
             self.isAskingClaude = false
             self.claudeAsk = outcome
-            // Only the branch that genuinely filled a prompt gets the sound that means it worked.
-            if outcome.didPrefill { self.environment.playChime() }
+            // Only a branch that genuinely reached a Claude gets the sound that means it worked —
+            // which is the pre-filled composer *and* the CLI that was handed the question, but
+            // neither of the two clipboard admissions.
+            if outcome.didReachClaude { self.environment.playChime() }
         }
     }
 
@@ -517,9 +542,22 @@ final class TutorialModel: ObservableObject {
                     "I still cannot see your screen.",
                     aside: "Nothing will arrive until Screen Recording is on.")
             case .nothingArrived, .tooLittleArrived, .waiting:
+                // The ask is a *gesture*, not an act of attention. "Go and look at something" left
+                // the user standing at an empty desktop deciding what to look at, and it asked for
+                // something this app cannot observe — scrolling is the thing that actually produces
+                // distinct screens for the store to hold.
+                //
+                // Two sentences, because opening the page can fail: a Mac with no handler for an
+                // `https` URL is rare and a Mac where the open was refused is not, and the card must
+                // not point at a window that never came up.
+                guard didOpenReadingMaterial else {
+                    return TutorialSpeech(
+                        "Open something you would read.",
+                        aside: "Then scroll through it for a bit, and I will tell you when I have it.")
+                }
                 return TutorialSpeech(
-                    "Go and look at something.",
-                    aside: "Anything you would normally read. I will tell you when I have it.")
+                    "I opened Anthropic's website.", stress: "Anthropic",
+                    aside: "Scroll through it for a bit, and I will tell you when I have it.")
             }
 
         case .openTimeline:
@@ -567,8 +605,10 @@ final class TutorialModel: ObservableObject {
                     : "That is the moment, exactly as it was.")
 
         case .claudeHandoff:
-            // Three answers, and only one of them says a prompt was filled in. "We opened Claude" is
-            // not "your question is in Claude", and the difference is the whole beat.
+            // Five answers, and only one of them says a prompt was filled in. "We opened Claude" is
+            // not "your question is in Claude", and the difference is the whole beat. The two
+            // Terminal answers are separate rather than folded into the app's: the CLI takes the
+            // question as an argument, so there is no composer to describe and no Return to ask for.
             switch claudeAsk {
             case .prompted(let restarted, let mayNotReachMe):
                 return TutorialSpeech(
@@ -582,6 +622,10 @@ final class TutorialModel: ObservableObject {
                         }
                         return "I typed it in for you."
                     }())
+            case .ranInTerminal(let handler):
+                return TutorialSpeech(
+                    "Claude is running in \(handler).", stress: "Claude",
+                    aside: "You have it set to Terminal, so I handed your question to the claude command.")
             case .copiedInstead:
                 return TutorialSpeech(
                     "Claude would not take it directly.", stress: "Claude",
@@ -590,6 +634,13 @@ final class TutorialModel: ObservableObject {
                 return TutorialSpeech(
                     "Claude Desktop is not on this Mac.", stress: "Claude",
                     aside: "I copied your question, ready to paste into the claude command.")
+            case .commandNotFound:
+                // The mirror of the line above, for the other target: they chose Terminal and there
+                // is no claude command here. Naming the right missing thing is the point — sending
+                // somebody to install the app they already have would waste their afternoon.
+                return TutorialSpeech(
+                    "There is no claude command on this Mac.", stress: "claude",
+                    aside: "I copied your question, ready to paste in wherever you run it.")
             case nil:
                 // The consent beat. It names the cost before it offers the button, because the cost
                 // is somebody else's open conversation.
@@ -617,7 +668,13 @@ final class TutorialModel: ObservableObject {
                     return TutorialSpeech(
                         "Send it in Claude.", stress: "Claude",
                         aside: "It is already in the prompt — press Return there, and I will notice.")
-                case .copiedInstead, .notInstalled:
+                case .ranInTerminal:
+                    // Nothing to press. The CLI was launched with the question as its argument, so
+                    // asking for a Return here would be asking for a keystroke that has no job.
+                    return TutorialSpeech(
+                        "Claude is answering in your terminal.", stress: "Claude",
+                        aside: "I will only say this worked once Claude has really called me.")
+                case .copiedInstead, .notInstalled, .commandNotFound:
                     return TutorialSpeech(
                         "Paste it into Claude.", stress: "Claude",
                         aside: "I will only say this worked once Claude has really called me.")
@@ -675,6 +732,24 @@ final class TutorialModel: ObservableObject {
             framesSince = environment.now()
             framesCollected = 0
             environment.presentOverlay(next)
+            // After the card, not before it. `openPage` brings the browser forward, and a browser
+            // that arrives last is the window the user's next scroll lands in — which is the whole
+            // ask of this beat. The card floats above it either way.
+            //
+            // Assigned, never assumed: the sentence on the card is a claim about something the user
+            // can check by looking at their Dock.
+            //
+            // Not opened at all for someone who declined the screen grant. Nothing they scroll can
+            // be captured, this beat already knows it and says so, and putting a page on the screen
+            // of somebody who just told this app not to look at their screen is the tutorial taking
+            // something for its own benefit.
+            if !didWaiveScreenAccess {
+                didOpenReadingMaterial = environment.openPage(Self.readingMaterial)
+                // The sound the timeline gets when it arrives, for the same reason: something the
+                // user did not open themselves has appeared on their screen. Only on the branch
+                // where it really did.
+                if didOpenReadingMaterial { environment.playSwoosh() }
+            }
             // One immediate read, so the gate starts from the store's answer rather than from a
             // placeholder that happens to be zero.
             poll()
@@ -744,6 +819,7 @@ final class TutorialModel: ObservableObject {
         }
         environment.stopMusic()
         targetFrame = nil
+        claudeFrame = nil
     }
 }
 

@@ -68,8 +68,10 @@ final class TutorialOverlay {
         // where "Start" had to be pressed twice and still did nothing.
         //
         // A coach mark does not, because the user is being asked to work in another window and taking
-        // focus off the browser mid-scroll would be taking the lesson away from them.
-        if step.target == nil || step == .query {
+        // focus off the browser mid-scroll would be taking the lesson away from them. Neither does
+        // the beat waiting on Claude, whose next keystroke belongs to somebody else's composer —
+        // the rule is `TutorialStep.takesFocusOnEntry`, where it can be read and asserted.
+        if step.takesFocusOnEntry {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         } else {
@@ -167,7 +169,11 @@ final class TutorialOverlay {
         let size = NSSize(width: Self.width, height: fittingHeight())
 
         let target = model.targetFrame
-        let screen = screenFor(target)
+        // Claude's window is not a coach-mark target — nothing points at it — but it is the thing
+        // the card has to stand clear of, and it decides which display this card belongs on just as
+        // firmly as a target would. `claudeFrame` is nil on every step that is not one of the two.
+        let claude = model.claudeFrame
+        let screen = screenFor(target ?? claude)
         var frame = NSRect(origin: .zero, size: size)
         var arrow: TutorialArrow?
 
@@ -196,12 +202,15 @@ final class TutorialOverlay {
                     x: visible.midX - size.width / 2,
                     y: visible.midY - size.height / 2 + visible.height * 0.04)
             case .outOfTheWay:
-                // The capture beat asks the user to go and use their own machine on their own
-                // content. A card in the middle of the screen would be sitting on the very thing it
-                // just told them to go and look at, so it stands down into the corner and waits.
+                // The capture beat opens a page and asks the user to scroll it. A card in the middle
+                // of the screen would be sitting on the very thing it just told them to read, so it
+                // stands down into the corner and waits.
                 frame.origin = CGPoint(
                     x: visible.maxX - size.width - Self.gap * 2,
                     y: visible.minY + Self.gap * 2)
+            case .clearOfClaude:
+                frame = Self.parked(
+                    size, in: visible, clearOf: claude, margin: Self.gap * 2)
             }
         }
 
@@ -222,6 +231,80 @@ final class TutorialOverlay {
         window.setFrame(clamped, display: true)
         window.contentView?.frame = NSRect(origin: .zero, size: clamped.size)
         hosting?.frame = NSRect(origin: .zero, size: clamped.size)
+    }
+
+    /// **A card parked beside another application's window, never on the middle of it.**
+    ///
+    /// Pure, and separated from `NSScreen`, for the same reason `OnboardingWindow.placement` is: the
+    /// failure it prevents depends entirely on geometry the machine it was written on does not have.
+    /// `TutorialTests` sweeps it; nothing here can be checked by looking at one screen.
+    ///
+    /// The defect it fixes was reported in one sentence — *when it opens the Claude window, the flow
+    /// window blocks the view* — and the two obvious repairs are both wrong. Lowering the card's
+    /// level leaves it exactly where it was, invisible under Claude and still swallowing the clicks
+    /// aimed at it. Hiding it takes away the coaching the user still needs, on the one beat where
+    /// they are being asked to do something in an app they have never used this way. The card has to
+    /// be *somewhere else*, and somewhere else has to be computed from where Claude actually is.
+    ///
+    /// The order of preference, and why:
+    ///
+    /// 1. **Beside it**, in whichever band has the room — the widest of the two, so a Claude nudged
+    ///    to one side of a big display puts the card on the open side rather than in the sliver.
+    /// 2. **Above, then below.** A window that spans the width still usually leaves a band, and the
+    ///    top one is preferred because Claude's composer — the thing the user has to type Return
+    ///    into — is at the foot of its window.
+    /// 3. **The top trailing corner**, when the window covers the usable area outright. Nothing is
+    ///    genuinely clear at that point, and this is the least-wrong overlap for the same reason: it
+    ///    is off the column the answer streams down and well away from the composer.
+    ///
+    /// `occluder` nil means Claude could not be found — not running yet, no window on screen, a
+    /// display unplugged. Then the card takes the trailing edge, which is the part of a display least
+    /// likely to hold the window an app just opened, and never the centre, which is the part most
+    /// likely to.
+    ///
+    /// `margin` is passed rather than read from `Self.gap` because this is `nonisolated` — the whole
+    /// point is that it can be swept off the main actor — and a `@MainActor` type's own statics are
+    /// not reachable from there.
+    nonisolated static func parked(
+        _ size: NSSize, in visible: NSRect, clearOf occluder: CGRect?, margin: CGFloat
+    ) -> NSRect {
+        let middle = visible.midY - size.height / 2
+        let trailingEdge = visible.maxX - size.width - margin
+
+        guard let occluder, !occluder.isEmpty, occluder.intersects(visible) else {
+            return NSRect(x: trailingEdge, y: middle, width: size.width, height: size.height)
+        }
+
+        let leading = occluder.minX - visible.minX
+        let trailing = visible.maxX - occluder.maxX
+        if max(leading, trailing) >= size.width + margin {
+            // Centred in its band rather than jammed against the screen edge: the card reads as
+            // standing beside the window, which is what it is doing.
+            let x =
+                trailing >= leading
+                ? occluder.maxX + (trailing - size.width) / 2
+                : visible.minX + (leading - size.width) / 2
+            return NSRect(x: x, y: middle, width: size.width, height: size.height)
+        }
+
+        // Horizontally over the window's own centre for the bands above and below it — the card is
+        // beside the *conversation* either way, and lining it up with the window it is talking about
+        // is easier to connect than a card in an unrelated corner.
+        let centred = min(
+            max(occluder.midX - size.width / 2, visible.minX + margin),
+            max(visible.minX + margin, trailingEdge))
+        if visible.maxY - occluder.maxY >= size.height + margin {
+            return NSRect(
+                x: centred, y: visible.maxY - size.height - margin,
+                width: size.width, height: size.height)
+        }
+        if occluder.minY - visible.minY >= size.height + margin {
+            return NSRect(
+                x: centred, y: visible.minY + margin, width: size.width, height: size.height)
+        }
+        return NSRect(
+            x: trailingEdge, y: visible.maxY - size.height - margin,
+            width: size.width, height: size.height)
     }
 
     private func clamp(_ frame: NSRect, into bounds: NSRect) -> NSRect {

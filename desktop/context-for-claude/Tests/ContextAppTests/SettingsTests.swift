@@ -535,7 +535,30 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(engine.isFaviconFetchAllowed)
     }
 
-    // MARK: - Agents (I13)
+    // MARK: - Agents (I9, I13)
+
+    /// The Claude-target dropdown's one home.
+    ///
+    /// `context.settings.claudeTarget` is written here and nowhere else, and `ClaudeHandoff` is the
+    /// only thing that reads it — see `ClaudeHandoffTests.testTheHandoffRoutesToTheTargetChosenInSettings`
+    /// for the other half, which is that choosing Terminal actually sends the question there. The two
+    /// halves matter together: this store persisted the choice perfectly for a whole release while
+    /// the handoff ignored it, which is a setting that lies rather than a setting that works.
+    @MainActor
+    func testTheClaudeTargetDefaultsToTheAppAndPersists() {
+        let suite = "context.settings.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let first = SettingsStore(defaults: defaults, appliesToRunningApp: false)
+        XCTAssertEqual(
+            first.claudeTarget, .claudeApp,
+            "the app is the default: it is the target that needs nothing installed beyond Claude itself")
+        first.claudeTarget = .terminal
+
+        let second = SettingsStore(defaults: defaults, appliesToRunningApp: false)
+        XCTAssertEqual(second.claudeTarget, .terminal)
+    }
 
     /// Detection reads the disk. The seam is injected so this asserts the *mapping*, not what happens
     /// to be installed on the machine running the suite.

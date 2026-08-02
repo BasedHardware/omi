@@ -140,6 +140,29 @@ final class ClaudeRouterTests: XCTestCase {
         XCTAssertTrue(availability.detail.contains("Ghostty"), availability.detail)
     }
 
+    /// The Settings row's subtitle is these two sentences, so it describes both options as they
+    /// really are on the machine reading it — including the one that is not there.
+    ///
+    /// This is the copy `SettingsAgentsPane` shows under "Claude target". It is asked about
+    /// `ClaudeHandoff.surface` because that is the surface the handoff really opens; a row promising
+    /// a Claude Code tab while the handoff opens a chat would be the same mismatch, one layer up.
+    func testTheTargetSubtitleDescribesBothOptionsHonestly() {
+        let both = ClaudeRouter.targetSubtitle(
+            surface: .chat,
+            probe: probe(
+                claudeHandler: URL(fileURLWithPath: "/Applications/Claude.app"),
+                terminalHandler: URL(fileURLWithPath: "/Applications/Ghostty.app"),
+                executable: { _ in true }))
+        XCTAssertTrue(both.contains("new Claude chat"), both)
+        XCTAssertTrue(both.contains("Ghostty"), both)
+
+        // Neither absence is hidden: a row that quietly described a target this Mac cannot reach is
+        // exactly the dropdown-that-lies this copy exists to prevent.
+        let neither = ClaudeRouter.targetSubtitle(surface: .chat, probe: probe())
+        XCTAssertTrue(neither.contains("clipboard"), neither)
+        XCTAssertTrue(neither.contains("claude command"), neither)
+    }
+
     @MainActor
     func testRoutingAnEmptyQueryFailsBeforeItTouchesAnything() {
         for surface in ClaudeRouter.Surface.allCases {

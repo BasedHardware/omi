@@ -51,10 +51,13 @@ final class InkAccentTests: XCTestCase {
 
     /// **The fix reaches the pixels**, on one of the controls that was drawing the machine's accent.
     ///
-    /// `TutorialScrollHint` is the tutorial's drag hint — three travelling capsules at
-    /// `Ink.accent.opacity(0.85)`, and one of the two sites this sweep started from. Asserting the
-    /// token alone would leave the interesting half unproven: that this view spends the token rather
-    /// than a colour of its own. So the view is rendered and its most saturated pixel is read.
+    /// `TutorialScrollDemo` is the tutorial's drag hint — the accented panel under the hand, at
+    /// `Ink.accent.opacity(0.85)`, and one of the two sites this sweep started from. (It was three
+    /// travelling capsules at that same alpha when this test was written; the hint became a hand
+    /// sweeping over a strip so the beat shows the *gesture* rather than its outcome. The alpha did
+    /// not move, deliberately — the composited hue below was measured at it.) Asserting the token
+    /// alone would leave the interesting half unproven: that this view spends the token rather than
+    /// a colour of its own. So the view is rendered and its most saturated pixel is read.
     ///
     /// The pixel is composited — `Ink.accent` at 0.85 over `Ink.wash` over white — so it is compared
     /// to the token by **hue, within 8°**, and not by equality. `BrandColour`'s clearance is
@@ -72,15 +75,18 @@ final class InkAccentTests: XCTestCase {
     /// test guards, rather than a colour of its own.
     @MainActor
     func testTheTutorialDragHintDrawsTheGuardedAccent() throws {
+        // Big enough for the hint's own layout — it is a 46 pt strip now, and a frame that clipped
+        // it could leave the accented panel outside the bitmap, which would fail this test for a
+        // reason that has nothing to do with the accent.
         let renderer = ImageRenderer(
-            content: TutorialScrollHint()
-                .frame(width: 120, height: 20)
+            content: TutorialScrollDemo()
+                .frame(width: 220, height: 60)
                 .background(Color.white))
         renderer.scale = 2
-        let image = try XCTUnwrap(renderer.nsImage, "TutorialScrollHint did not render")
+        let image = try XCTUnwrap(renderer.nsImage, "TutorialScrollDemo did not render")
         let pixel = try XCTUnwrap(Self.mostSaturatedPixel(of: image), "the hint rendered no colour at all")
 
-        assertReadsOnBrand(pixel, "TutorialScrollHint's travelling capsule, as rendered")
+        assertReadsOnBrand(pixel, "TutorialScrollDemo's accented panel, as rendered")
 
         let drawn = try XCTUnwrap(BrandColour.read(pixel))
         let token = try XCTUnwrap(BrandColour.read(NSColor(Ink.accent)))

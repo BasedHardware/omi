@@ -7,17 +7,23 @@ import Foundation
 /// array literal rather than a scattered set of `case`s in a `next()` switch.
 ///
 /// There are eleven of them and there used to be fourteen. The cuts were beats that taught nothing:
-/// one that opened a stranger's website — teaching this app on somebody else's content — and one that
-/// only announced the next beat. "It's time to open the timeline" came back as `openTimeline`, but
-/// inverted: it no longer announces a chord and then opens the window itself, it asks for the chord
-/// and waits, and the window that appears is opened by the keypress. What is left is one idea per
-/// card, and every card that asks for something waits for it.
+/// one that opened *a stranger's* website — teaching this app on somebody else's content — and one
+/// that only announced the next beat. "It's time to open the timeline" came back as `openTimeline`,
+/// but inverted: it no longer announces a chord and then opens the window itself, it asks for the
+/// chord and waits, and the window that appears is opened by the keypress. What is left is one idea
+/// per card, and every card that asks for something waits for it.
+///
+/// The page came back too, and the word that was doing the work in that objection was *stranger's*.
+/// `collectFrames` opens `anthropic.com` — Claude's own home, and the one page this app can put on
+/// screen without picking a third party's content for somebody. What it replaces is worse than a
+/// borrowed page: the beat used to tell the user to go and find something to look at, which on the
+/// machine this runs on first is an empty desktop and a card waiting for frames that cannot arrive.
 enum TutorialStep: String, CaseIterable, Sendable {
     /// "Let me show you what I do", Start / Skip.
     case invitation
     /// Screen Recording, asked for here and only if it is genuinely missing.
     case screenAccess
-    /// "Go look at something" — on whatever the user actually has open, gated on real frames.
+    /// "Scroll for a bit" — on the page this beat opens for them, gated on real frames.
     case collectFrames
     /// The chord, taught the only way a chord can be taught: the user presses it and the real window
     /// opens because they did. Gated on the real shortcut really firing.
@@ -98,11 +104,40 @@ enum TutorialStep: String, CaseIterable, Sendable {
 
     /// Where the card goes when it has no target to sit beside.
     ///
-    /// One step needs an answer other than "the middle of the screen": `collectFrames` asks the user
-    /// to go and use their own machine, and a card parked over the thing they were told to look at is
-    /// the tutorial getting in the way of its own lesson.
+    /// "The middle of the screen" is only the right answer for a card whose whole job is to be read.
+    /// Two beats put something else on screen and then ask the user to work in it:
+    ///
+    /// - `collectFrames` opens a page and asks them to scroll it. A card parked over the page is the
+    ///   tutorial getting in the way of its own lesson.
+    /// - The two Claude beats open **another application's window** and then ask the user to read it
+    ///   and press Return in it. A centred card lands squarely on the column Claude's answer arrives
+    ///   in and on the composer under it — which is the "it blocks the view" report — so those two
+    ///   stand beside the real window rather than on it.
     var placement: TutorialPlacement {
-        self == .collectFrames ? .outOfTheWay : .centred
+        switch self {
+        case .collectFrames: return .outOfTheWay
+        case .claudeHandoff, .claudeProof: return .clearOfClaude
+        default: return .centred
+        }
+    }
+
+    /// Whether the card takes the keyboard when it appears.
+    ///
+    /// A card is a thing to press, so most of them do: this app is an accessory and is almost never
+    /// frontmost, and a SwiftUI button in an inactive window spends the first click on activation.
+    /// A coach mark does not, because the user is being asked to work in another window and taking
+    /// focus off it mid-gesture takes the lesson away from them.
+    ///
+    /// **`claudeProof` is a card that must not**, and it is the reason this is a property rather
+    /// than the `target == nil` test it grew out of. That beat is waiting for Claude to call one of
+    /// our tools, which happens when the user presses Return in Claude's composer — so an app that
+    /// activates over Claude the moment the beat begins eats the one keystroke the whole beat exists
+    /// to wait for. The cost is that the Continue this card grows *afterwards* may need a click to
+    /// activate first, which is the trade every coach-mark step in the flow already makes.
+    var takesFocusOnEntry: Bool {
+        guard self != .claudeProof else { return false }
+        // The query beat is a coach mark with a text field in it, so it has to be typable.
+        return target == nil || self == .query
     }
 }
 
@@ -112,6 +147,10 @@ enum TutorialPlacement: Equatable, Sendable {
     case centred
     /// The bottom trailing corner, clear of whatever the user was asked to go and do.
     case outOfTheWay
+    /// Beside Claude's own window, in whichever band around it has the room. The only placement that
+    /// is a function of something outside this app, because it is the only one that has to hold two
+    /// things on screen at once: Claude, and the card coaching the user through it.
+    case clearOfClaude
 }
 
 /// What a step is waiting for. Only one of these can be satisfied by the user pressing a button.

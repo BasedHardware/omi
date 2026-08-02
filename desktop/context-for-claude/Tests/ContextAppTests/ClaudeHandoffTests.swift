@@ -40,13 +40,13 @@ final class ClaudeHandoffTests: XCTestCase {
             surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!)
     ) -> ClaudeHandoff.Probe {
         ClaudeHandoff.Probe(
-            isInstalled: { true },
+            desktopIsInstalled: { true },
             running: { claudes.map(\.running) },
             registeredAt: { registeredAt },
-            route: { query in
+            route: { query, target in
                 .success(
                     ClaudeRouter.Delivery(
-                        target: .claudeApp, mechanism: mechanism,
+                        target: target, mechanism: mechanism,
                         deliveredCharacters: query.count, wasTruncated: false))
             },
             copyToClipboard: { _ in },
@@ -55,13 +55,16 @@ final class ClaudeHandoffTests: XCTestCase {
             waitForExit: { _, done in done() })
     }
 
+    /// Every restart test below is about the Claude **app**, so the target is named rather than left
+    /// to `SettingsStore.shared` — a test that read the real preference would pass or fail depending
+    /// on what the person running it had picked in Settings.
     private func ask(
         _ claudes: [FakeClaude], registeredAt: Date?, restartingFirst: Bool
     ) -> TutorialClaudeAsk? {
         let probe = probe(claudes, registeredAt: registeredAt)
         var answer: TutorialClaudeAsk?
         ClaudeHandoff.ask(
-            "what was I reading", restartingFirst: restartingFirst, probe: probe
+            "what was I reading", to: .claudeApp, restartingFirst: restartingFirst, probe: probe
         ) { answer = $0 }
         return answer
     }
@@ -171,15 +174,17 @@ final class ClaudeHandoffTests: XCTestCase {
     func testAMissingClaudeIsItsOwnAnswer() {
         var copied: [String] = []
         let probe = ClaudeHandoff.Probe(
-            isInstalled: { false },
+            desktopIsInstalled: { false },
             running: { [] },
             registeredAt: { self.registeredAt },
-            route: { _ in .failure(.unavailable("no")) },
+            route: { _, _ in .failure(.unavailable("no")) },
             copyToClipboard: { copied.append($0) },
             waitForExit: { _, done in done() })
 
         var answer: TutorialClaudeAsk?
-        ClaudeHandoff.ask("what was I reading", restartingFirst: true, probe: probe) { answer = $0 }
+        ClaudeHandoff.ask(
+            "what was I reading", to: .claudeApp, restartingFirst: true, probe: probe
+        ) { answer = $0 }
         XCTAssertEqual(answer, .notInstalled)
         XCTAssertEqual(copied, ["what was I reading"], "and the question is somewhere to paste from")
     }
@@ -224,8 +229,148 @@ final class ClaudeHandoffTests: XCTestCase {
     func testNoSchemeHandlerIsReportedAsTheClipboard() {
         let probe = probe([], registeredAt: registeredAt, mechanism: .clipboard)
         var answer: TutorialClaudeAsk?
-        ClaudeHandoff.ask("what was I reading", restartingFirst: false, probe: probe) { answer = $0 }
+        ClaudeHandoff.ask(
+            "what was I reading", to: .claudeApp, restartingFirst: false, probe: probe
+        ) { answer = $0 }
         XCTAssertEqual(answer, .copiedInstead)
         XCTAssertFalse(answer?.didPrefill ?? true)
+    }
+
+    // MARK: - The target the user actually chose
+
+    /// A store on its own defaults suite, so nothing here reads the preference of whoever is running
+    /// the suite, and nothing here leaves one behind.
+    private func makeSettings(_ target: ClaudeRouter.Target) -> SettingsStore {
+        let suite = "context.handoff.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let store = SettingsStore(defaults: defaults, appliesToRunningApp: false)
+        store.claudeTarget = target
+        return store
+    }
+
+    /// A probe that records which target reached `ClaudeRouter` and answers the way the real router
+    /// would for it — a pre-filled tab for the app, a running CLI for the terminal.
+    private func routingProbe(
+        desktopIsInstalled: Bool = true,
+        running: [FakeClaude] = [],
+        registeredAt: Date? = nil,
+        routing: @escaping (ClaudeRouter.Target) -> Void = { _ in },
+        copying: @escaping (String) -> Void = { _ in }
+    ) -> ClaudeHandoff.Probe {
+        ClaudeHandoff.Probe(
+            desktopIsInstalled: { desktopIsInstalled },
+            running: { running.map(\.running) },
+            registeredAt: { registeredAt },
+            route: { query, target in
+                routing(target)
+                let mechanism: ClaudeRouter.Mechanism =
+                    target == .terminal
+                    ? .terminal(cli: "/opt/homebrew/bin/claude", handler: "Ghostty")
+                    : .prefilledTab(surface: .chat, url: URL(string: "claude://claude.ai/new?q=x")!)
+                return .success(
+                    ClaudeRouter.Delivery(
+                        target: target, mechanism: mechanism,
+                        deliveredCharacters: query.count, wasTruncated: false))
+            },
+            copyToClipboard: copying,
+            waitForExit: { _, done in done() })
+    }
+
+    /// **The regression.** The handoff hard-coded `.claudeApp`, which left
+    /// `Settings → Agents → Claude target` writing a key that nothing read: picking Terminal changed
+    /// nothing at all, and a control that changes nothing is worse than no control, because the user
+    /// believes it. Asserted for **both** values of the dropdown, on the target that reaches the
+    /// router and on the answer that comes back.
+    func testTheHandoffRoutesToTheTargetChosenInSettings() {
+        for target in ClaudeRouter.Target.allCases {
+            var routed: [ClaudeRouter.Target] = []
+            var answer: TutorialClaudeAsk?
+            ClaudeHandoff.ask(
+                "what was I reading", restartingFirst: false,
+                settings: makeSettings(target), probe: routingProbe(routing: { routed.append($0) })
+            ) { answer = $0 }
+
+            XCTAssertEqual(routed, [target], "the dropdown has to decide where the question goes")
+            switch target {
+            case .claudeApp:
+                XCTAssertEqual(answer, .prompted(restarted: false, mayNotReachMe: false))
+            case .terminal:
+                XCTAssertEqual(answer, .ranInTerminal(handler: "Ghostty"))
+            }
+        }
+    }
+
+    /// The CLI needs no desktop app. Gating the terminal target on Claude Desktop would fail the one
+    /// machine the target exists for: a Mac with `claude` on it and nothing in `/Applications`.
+    func testTheTerminalTargetDoesNotNeedClaudeDesktopInstalled() {
+        var copied: [String] = []
+        var answer: TutorialClaudeAsk?
+        ClaudeHandoff.ask(
+            "what was I reading", to: .terminal, restartingFirst: false,
+            probe: routingProbe(desktopIsInstalled: false, copying: { copied.append($0) })
+        ) { answer = $0 }
+
+        XCTAssertEqual(answer, .ranInTerminal(handler: "Ghostty"))
+        XCTAssertTrue(copied.isEmpty, "nothing needed the clipboard: the question was handed over")
+    }
+
+    /// And it never takes somebody's Claude session to do it. A `claude` process is new every time
+    /// and reads `~/.claude.json` as it starts, so there is no stale config a restart could fix —
+    /// quitting the app they are using would be a cost that buys this handoff nothing.
+    func testTheTerminalTargetNeverQuitsTheClaudeTheUserIsUsing() {
+        let stale = FakeClaude(launchedAt: registeredAt.addingTimeInterval(-300))
+        var answer: TutorialClaudeAsk?
+        ClaudeHandoff.ask(
+            "what was I reading", to: .terminal, restartingFirst: true,
+            probe: routingProbe(running: [stale], registeredAt: registeredAt)
+        ) { answer = $0 }
+
+        XCTAssertEqual(stale.terminateCalls, 0, "the CLI target quit an app it does not even use")
+        XCTAssertEqual(answer, .ranInTerminal(handler: "Ghostty"))
+    }
+
+    /// So the card must not ask for that consent either. The question "may I close and reopen
+    /// Claude?" is only honest when the answer would change something.
+    func testTheConsentQuestionIsOnlyEverAskedForTheAppTarget() {
+        let stale = FakeClaude(launchedAt: registeredAt.addingTimeInterval(-300))
+        let probe = probe([stale], registeredAt: registeredAt)
+
+        XCTAssertTrue(ClaudeHandoff.restartIsNeeded(for: .claudeApp, probe: probe))
+        XCTAssertFalse(ClaudeHandoff.restartIsNeeded(for: .terminal, probe: probe))
+        XCTAssertTrue(
+            ClaudeHandoff.restartIsNeeded(settings: makeSettings(.claudeApp), probe: probe),
+            "the settings-reading form has to agree with the explicit one")
+        XCTAssertFalse(ClaudeHandoff.restartIsNeeded(settings: makeSettings(.terminal), probe: probe))
+    }
+
+    /// No `claude` command is its own answer, and not the app's. The two say to install different
+    /// things, and telling somebody to install an app they already have wastes their afternoon.
+    func testAMissingClaudeCommandIsNotReportedAsAMissingApp() {
+        var copied: [String] = []
+        let probe = ClaudeHandoff.Probe(
+            desktopIsInstalled: { true },
+            running: { [] },
+            registeredAt: { self.registeredAt },
+            route: { _, _ in .failure(.unavailable("I can't find the claude command on this Mac.")) },
+            copyToClipboard: { copied.append($0) },
+            waitForExit: { _, done in done() })
+
+        var answer: TutorialClaudeAsk?
+        ClaudeHandoff.ask(
+            "what was I reading", to: .terminal, restartingFirst: false, probe: probe
+        ) { answer = $0 }
+        XCTAssertEqual(answer, .commandNotFound)
+        XCTAssertEqual(copied, ["what was I reading"], "and the question is somewhere to paste from")
+    }
+
+    /// The CLI branch fills no composer and must never read as one — but it did reach a Claude, so
+    /// it is not one of the clipboard admissions either.
+    func testTheTerminalAnswerIsAnArrivalWithoutBeingAPrefill() {
+        let terminal = TutorialClaudeAsk.ranInTerminal(handler: "Ghostty")
+        XCTAssertFalse(terminal.didPrefill, "nothing was typed into a prompt")
+        XCTAssertTrue(terminal.didReachClaude, "but the question was handed to a real claude")
+        XCTAssertFalse(TutorialClaudeAsk.commandNotFound.didReachClaude)
+        XCTAssertFalse(TutorialClaudeAsk.commandNotFound.didPrefill)
     }
 }

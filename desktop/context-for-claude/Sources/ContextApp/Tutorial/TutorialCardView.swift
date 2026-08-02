@@ -15,8 +15,12 @@ import SwiftUI
 /// - **A frame readout.** The capture beat used to show five dots filling and "3 of 5 frames", which
 ///   is this app's plumbing narrated at someone who has been using it for ninety seconds. The gate is
 ///   unchanged — the step still cannot be left until the frames are genuinely in the store — but the
-///   card says "Go and look at something" and then "Got it", which is the same fact in a human's
+///   card says "Scroll through it for a bit" and then "Got it", which is the same fact in a human's
 ///   words. Nothing here is on a timer; see `TutorialModel.outcome`.
+///
+/// The two beats that ask for a *physical action* draw it rather than describe it: the chord types
+/// itself and the gesture is made by a hand. Both live in `TutorialDemonstrations.swift`, both are
+/// rendered only while their step is still waiting, and neither can move the flow along.
 ///
 /// Every colour is an `Ink` token — a named system colour or an alpha on one — so it reads correctly
 /// in both appearances and carries no borrowed brand. Nothing here is purple, and nothing here reads
@@ -103,20 +107,25 @@ struct TutorialCardView: View {
         case .collectFrames where model.outcome == .waiting:
             listening
 
-        // The chord itself, as the thing to press. Shown only when it is genuinely registered: a
-        // tutorial that taught keys this machine does not listen for would be teaching a surface
-        // that is not there, and this beat cannot be earned on such a machine at all.
+        // The chord, typing itself. Shown only when it is genuinely registered: a tutorial that
+        // taught keys this machine does not listen for would be teaching a surface that is not
+        // there, and this beat cannot be earned on such a machine at all.
+        //
+        // It moves because the app's own default chord is a *double tap* of ⌘, and a still picture
+        // of two ⌘ symbols side by side says the opposite of that. See `TutorialChordCycle`.
         case .openTimeline where model.timelineChordIsArmed:
-            HStack(spacing: 8) {
-                chordKey(model.timelineChord)
+            HStack(spacing: 10) {
+                TutorialChordDemo(chord: model.timelineChord)
                 Text("opens it from anywhere.")
                     .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-        // The drag hint, and only until they have dragged. Leaving a loop running under "there you
-        // go" would be the card still asking for something it has already been given.
+        // The gesture, being made, and only until they have made it. Leaving a loop running under
+        // "there you go" would be the card still asking for something it has already been given —
+        // which is also what stops it: this branch is the only thing rendering it.
         case .timeline where model.timelineIsOpen && !model.didDrag:
-            TutorialScrollHint()
+            TutorialScrollDemo()
 
         case .claudeHandoff:
             VStack(alignment: .leading, spacing: 12) {
@@ -260,22 +269,6 @@ struct TutorialCardView: View {
         case .userAction, .realSearchResult, .genuineToolCall: return ""
         }
     }
-
-    // MARK: - Pieces
-
-    private func chordKey(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 13, weight: .semibold, design: .rounded))
-            .foregroundStyle(Ink.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Ink.rowFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Ink.hairline, lineWidth: 1)))
-    }
 }
 
 // MARK: - The arrow
@@ -296,44 +289,6 @@ struct TutorialArrowShape: Shape {
         }
         path.closeSubpath()
         return path
-    }
-}
-
-// MARK: - The drag hint
-
-/// Three marks travelling, which is the gesture the timeline step is asking for. Collapses to a
-/// static glyph under Reduce Motion, where a loop would be exactly what the setting exists to stop.
-///
-/// The glyph points both ways on purpose. Which direction travels *back* depends on the user's own
-/// natural-scrolling setting, which this app does not get to read off them, and the gate accepts
-/// either — so an arrow committing to one of them would be the picture disagreeing with the
-/// behaviour for half of everybody.
-struct TutorialScrollHint: View {
-    @State private var shift = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.left.and.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Ink.secondary)
-            ZStack(alignment: .leading) {
-                Capsule().fill(Ink.wash).frame(height: 6)
-                HStack(spacing: 5) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        Capsule().fill(Ink.accent.opacity(0.85)).frame(width: 22, height: 6)
-                    }
-                }
-                .offset(x: shift ? -34 : 34)
-            }
-            .frame(height: 6)
-            .clipShape(Capsule())
-        }
-        .onAppear {
-            guard !InkReduceMotion.isEnabled else { return }
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                shift = true
-            }
-        }
     }
 }
 

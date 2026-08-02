@@ -3,11 +3,25 @@ import ContextCore
 import Foundation
 import UniformTypeIdentifiers
 
-/// Hands a query to Claude. That is the entire retrieval story.
+/// Hands a query to Claude.
 ///
-/// This app ships no search engine. The bar takes a sentence and gives it to Claude, which answers it
-/// with the MCP tools already registered by `ClaudeRegistrar` — so the only thing that happens here is
-/// delivery, and the only thing that can go wrong is delivering it somewhere the user cannot see.
+/// **This is no longer the search bar's path.** It used to be the entire retrieval story — the bar
+/// took a sentence and gave it to Claude, which answered it with the MCP tools `ClaudeRegistrar`
+/// registers. The bar answers for itself now, over this app's own indexes (`SearchResultsModel`), so
+/// nothing here is on the way to a result any more.
+///
+/// What is still on this path is the *guided hand-off*: the first-run tutorial teaches somebody to
+/// ask Claude a question about their own day, and `ClaudeHandoff` routes that one suggested question
+/// through here into a real Claude. That is a different act from searching — it is the moment the
+/// product's whole premise becomes visible — and it is why this file survives the search bar leaving
+/// it.
+///
+/// **Which target that handoff uses is the user's choice, not this file's.** `Settings → Agents →
+/// Claude target` writes `SettingsStore.claudeTarget`, `ClaudeHandoff` reads it at the moment it
+/// hands over, and both branches below are reachable from that one dropdown. There is deliberately no
+/// `preferredTarget` here: the preference has a home in Settings, and a second copy of it on the
+/// router is how the two ever come to disagree. The Settings row also reads `targetSubtitle`, so what
+/// it promises is what this file would really do on that particular Mac.
 ///
 /// Two targets, matching the reference's "Claude target" dropdown:
 ///
@@ -341,29 +355,19 @@ enum ClaudeRouter {
         return url
     }
 
-    // MARK: - The user's choice
-
-    /// The target the search bar routes to, persisted for the Agents pane's dropdown.
-    ///
-    /// Defaults to the Claude app rather than the CLI: a pre-filled composer is reviewable before it
-    /// runs, and a terminal window that starts talking to an agent is not.
-    static var preferredTarget: Target {
-        get {
-            guard let raw = UserDefaults.standard.string(forKey: preferredTargetKey),
-                let target = Target(rawValue: raw)
-            else {
-                return .claudeApp
-            }
-            return target
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: preferredTargetKey) }
-    }
-
-    private static let preferredTargetKey = "context.settings.claudeTarget"
-
     // MARK: - Copy
+    //
+    // `preferredTarget` used to live here: a `UserDefaults` reader over
+    // `"context.settings.claudeTarget"`, whose one caller was the search bar deciding where to send
+    // what had been typed. The bar no longer sends anything anywhere, so the reader had no readers —
+    // and a persisted preference that nothing reads is worse than no preference at all, because the
+    // Settings row that writes it still looks like it does something. It is not coming back: the key
+    // has exactly one owner, `SettingsStore.claudeTarget`, and exactly one consumer, `ClaudeHandoff`,
+    // which reads it there.
 
-    /// The reference's "Claude target" subtitle, rewritten to describe what actually happens.
+    /// The reference's "Claude target" subtitle, rewritten to describe what actually happens — one
+    /// sentence per target, each a fact about the machine it is running on. Read by
+    /// `SettingsAgentsPane`, so the row cannot promise a pre-fill on a Mac that has no Claude.
     static func targetSubtitle(surface: Surface, probe: Probe = .live()) -> String {
         let app = availability(of: .claudeApp, surface: surface, probe: probe)
         let terminal = availability(of: .terminal, surface: surface, probe: probe)

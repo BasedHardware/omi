@@ -17,6 +17,9 @@ struct SettingsAgentsPane: View {
     @State private var registrationMessage: String?
     @State private var isRegistering = false
     @State private var survey: [(surface: AgentSurface, presence: AgentPresence)] = []
+    /// What each Claude target would really do *on this Mac*, from `ClaudeRouter`'s own probe. Nil
+    /// until it has answered, which is one frame — see `targetSubtitle` for what stands in.
+    @State private var targetDetail: String?
 
     var body: some View {
         SettingsPaneScroll {
@@ -39,8 +42,7 @@ struct SettingsAgentsPane: View {
                 SettingsRow(
                     icon: "macwindow",
                     title: "Claude target",
-                    subtitle: "Open a Claude Code tab in the Claude desktop app with the prompt "
-                        + "pre-filled, or run the `claude` CLI in Terminal."
+                    subtitle: targetSubtitle
                 ) {
                     Picker("", selection: $store.claudeTarget) {
                         ForEach(ClaudeRouter.Target.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -113,10 +115,28 @@ struct SettingsAgentsPane: View {
         }
         .task {
             // Off the main actor: `survey` stats a handful of paths and asks LaunchServices, and
-            // neither belongs on a pane's first render.
+            // neither belongs on a pane's first render. The target probe is the same kind of work —
+            // one LaunchServices question and a walk of the `claude` candidates — so it goes here
+            // rather than into `body`, which would re-run it on every keystroke elsewhere in the pane.
             survey = AgentDetector.live.survey()
             registration = ClaudeRegistrar.status()
+            targetDetail = ClaudeRouter.targetSubtitle(surface: ClaudeHandoff.surface)
         }
+    }
+
+    /// The Claude-target row's subtitle: what the choice governs, then what each option would really
+    /// do on this Mac.
+    ///
+    /// The second half comes from `ClaudeRouter` rather than from a sentence typed here, because the
+    /// true answer is machine-specific — which app answers `claude://`, whether there is a `claude`
+    /// on the PATH this app can see, which terminal opens `.command` files — and a hard-coded
+    /// description would be wrong on somebody's Mac and have no way of knowing. It asks about
+    /// `ClaudeHandoff.surface` specifically: the row must describe the surface the handoff really
+    /// opens, and this pane naming a different one would be the same defect in reverse.
+    private var targetSubtitle: String {
+        let lead = "Where your question goes when I hand one to Claude for you."
+        guard let targetDetail else { return lead }
+        return "\(lead) \(targetDetail)"
     }
 
     private var connectionSubtitle: String {
