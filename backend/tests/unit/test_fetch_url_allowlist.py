@@ -137,6 +137,10 @@ class TestRuntimeEnforcement:
         allowlist = ['https://example.com/page']
         assert not is_url_allowlisted('https://example.com/page.', allowlist)
 
+    def test_is_url_allowlisted_rejects_unlisted_path_parameters(self):
+        allowlist = ['https://example.com/page']
+        assert not is_url_allowlisted('https://example.com/page;secret', allowlist)
+
     def test_is_url_allowlisted_canonicalizes_host_and_default_port(self):
         allowlist = ['HTTPS://Example.COM:443/page']
         assert is_url_allowlisted('https://example.com/page', allowlist)

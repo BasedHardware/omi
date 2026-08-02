@@ -39,7 +39,7 @@ def normalize_user_url(url: str) -> str:
 
 def _canonical_user_url(
     url: str, *, strip_trailing_punctuation: bool = True
-) -> Optional[Tuple[str, str, str, str, str]]:
+) -> Optional[Tuple[str, str, str, str, str, str]]:
     normalized = normalize_user_url(url) if strip_trailing_punctuation else (url or '').strip()
     if not normalized:
         return None
@@ -53,7 +53,7 @@ def _canonical_user_url(
     hostname = parsed.hostname.rstrip('.').lower()
     default_port = 443 if parsed.scheme.lower() == 'https' else 80
     effective_port = '' if port in (None, default_port) else str(port)
-    return parsed.scheme.lower(), hostname, effective_port, parsed.path or '/', parsed.query
+    return parsed.scheme.lower(), hostname, effective_port, parsed.path or '/', parsed.params, parsed.query
 
 
 def extract_urls_from_text(text: str) -> List[str]:
