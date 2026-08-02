@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from google.api_core.exceptions import AlreadyExists, Conflict
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -24,6 +24,7 @@ BATCH_LIMIT = 500  # Firestore hard limit
 # enough that a user with a large historical migration never holds an HTTP
 # request open for an unbounded number of Firestore commits.
 LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE = 50
+LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES = 3
 
 
 def _user_col(uid: str, collection: str):
@@ -395,32 +396,52 @@ def restore_legacy_conversation_items(
     skipped_existing = 0
 
     for staged_snapshot in page:
-        staged_row = staged_snapshot.to_dict() or {}
         # Keep the marker check in addition to the indexed query so a permissive
         # fake or future query refactor can never restore an ordinary staged row.
-        if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
-            continue
-
         action_item_ref = action_items_col.document(staged_snapshot.id)
-        action_item = dict(staged_row)
-        # `id` is document identity and `source` is the recovery marker, not
-        # original action-item data. Recreating either would mutate the legacy
-        # task's meaning rather than restoring it.
-        action_item.pop('id', None)
-        action_item.pop('source', None)
+        staged_ref = staged_col.document(staged_snapshot.id)
+        for attempt in range(LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1):
+            staged_row = staged_snapshot.to_dict() or {}
+            if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
+                break
 
-        batch = client.batch()
-        batch.create(action_item_ref, action_item)
-        batch.delete(staged_col.document(staged_snapshot.id))
-        try:
-            batch.commit()
-        except (AlreadyExists, Conflict):
-            # A current action item has the authoritative identity. Preserve it
-            # and preserve the staged row for manual inspection rather than
-            # deleting either record after a race.
-            skipped_existing += 1
-            continue
-        restored += 1
+            action_item = dict(staged_row)
+            # `id` is document identity and `source` is the recovery marker, not
+            # original action-item data. Recreating either would mutate the legacy
+            # task's meaning rather than restoring it.
+            action_item.pop('id', None)
+            action_item.pop('source', None)
+
+            batch = client.batch()
+            batch.create(action_item_ref, action_item)
+            # Keep the streamed staged row as the delete authority. If promotion
+            # or another recovery attempt updates it after the query, Firestore
+            # rejects the atomic batch instead of deleting the newer record.
+            delete_option = client.write_option(last_update_time=staged_snapshot.update_time)
+            batch.delete(staged_ref, option=delete_option)
+            try:
+                batch.commit()
+            except (AlreadyExists, Conflict):
+                # An action-item collision preserves both copies for the next
+                # recovery pass or manual inspection.
+                skipped_existing += 1
+                break
+            except FailedPrecondition:
+                # A stale-row update is not an identity collision: it may be a
+                # score or metadata write with no corresponding action item.
+                # Refresh the row and retry so recovery never acknowledges an
+                # arbitrary contention as complete. Exhaustion re-raises and
+                # leaves the sweep unacknowledged for a later request.
+                if attempt >= LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES:
+                    raise
+                refreshed_snapshot = staged_ref.get()
+                if not refreshed_snapshot.exists:
+                    break
+                staged_snapshot = refreshed_snapshot
+                continue
+            else:
+                restored += 1
+                break
 
     return {
         'restored': restored,
