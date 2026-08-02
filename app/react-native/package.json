@@ -9,6 +9,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings 20",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -51,11 +54,17 @@
   "devDependencies": {
     "@react-native-community/cli": "^20.2.0",
     "@types/react": "~19.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "babel-plugin-module-resolver": "^5.0.3",
     "babel-preset-expo": "56.0.17",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "metro-resolver": "0.84.4",
     "patch-package": "^8.0.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.65.0"
   },
   "expo": {
     "autolinking": {}

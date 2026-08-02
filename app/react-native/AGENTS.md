@@ -21,6 +21,13 @@ pnpm run android      # expo run:android (prebuilds + runs on emulator/device)
 Firebase is wired via config plugins in app.json (`@react-native-firebase/app`, `/auth`);
 place `google-services.json` in the prebuilt `android/app/`.
 
+## Validation
+```bash
+pnpm run typecheck    # TypeScript strict mode check
+pnpm run lint         # ESLint (TS, React, React Hooks)
+```
+See `TESTING.md` for full validation and device testing procedures.
+
 ## Status
 Phase 1 vertical slice (Expo Router): auth → conversations → live capture (mic→Deepgram) →
 memories. `pnpm install` / `expo start` are the dev entry points.
