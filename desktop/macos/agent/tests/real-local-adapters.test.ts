@@ -433,4 +433,40 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     expect(requests.find((request) => request.method === "session/new")?.params).toMatchObject({ mcpServers: [] });
     await adapter.stop();
   });
+
+  it("withholds Codex-only env vars from Hermes and OpenClaw subprocesses", async () => {
+    // The bridge may have the BYOK key or headless flags in its own process env;
+    // they must reach only the Codex adapter, never Hermes/OpenClaw.
+    process.env.OPENAI_API_KEY = "sk-omi-secret";
+    process.env.NO_BROWSER = "1";
+    process.env.INITIAL_AGENT_MODE = "agent-full-access";
+
+    for (const [commandEnv, adapter] of [
+      ["OMI_HERMES_ADAPTER_COMMAND", new HermesRuntimeAdapter()],
+      ["OMI_OPENCLAW_ADAPTER_COMMAND", new OpenClawRuntimeAdapter()],
+    ] as const) {
+      process.env[commandEnv] = commandEnv === "OMI_HERMES_ADAPTER_COMMAND"
+        ? "/Users/dazheng/.local/bin/hermes acp --accept-hooks"
+        : "openclaw acp";
+      const proc = createMockProcess();
+      vi.mocked(spawn).mockReturnValue(proc as any);
+      collectJsonRpc(proc, (request) => {
+        if (request.method === "initialize") {
+          writeJsonRpcResult(proc, request, { protocolVersion: 1 });
+        }
+      });
+
+      await adapter.start();
+
+      const spawnEnv = vi.mocked(spawn).mock.calls[0][1]?.env as NodeJS.ProcessEnv;
+      expect(spawnEnv.OMI_ADAPTER_ID).toBe(adapter.adapterId);
+      expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
+      expect(spawnEnv.NO_BROWSER).toBeUndefined();
+      expect(spawnEnv.INITIAL_AGENT_MODE).toBeUndefined();
+
+      await adapter.stop();
+      vi.mocked(spawn).mockReset();
+      delete process.env[commandEnv];
+    }
+  });
 });
