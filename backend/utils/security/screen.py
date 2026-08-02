@@ -294,7 +294,8 @@ def screen_labelled_chunks(sources: Sequence[LabelledContent]) -> list[str]:
     return chunks
 
 
-def _first_json_object(text: str) -> Optional[dict[str, object]]:
+def _json_objects(text: str) -> list[dict[str, object]]:
+    parsed_objects: list[dict[str, object]] = []
     depth = 0
     start = -1
     in_string = False
@@ -320,9 +321,10 @@ def _first_json_object(text: str) -> Optional[dict[str, object]]:
                 try:
                     parsed = json.loads(text[start : index + 1])
                 except ValueError:
-                    return None
-                return parsed if isinstance(parsed, dict) else None
-    return None
+                    continue
+                if isinstance(parsed, dict):
+                    parsed_objects.append(parsed)
+    return parsed_objects
 
 
 def _sanitize_reason(value: object) -> Optional[str]:
@@ -343,9 +345,12 @@ def parse_security_screen_verdict(output: Optional[str]) -> Optional[SecurityScr
     """
     if not output or not output.strip():
         return None
-    parsed = _first_json_object(output)
-    if parsed is None:
+    parsed_objects = _json_objects(output)
+    if len(parsed_objects) > 1:
+        return SecurityScreenVerdict.strict('ambiguous security screen verdict')
+    if not parsed_objects:
         return None
+    parsed = parsed_objects[0]
     decision = parsed.get('decision')
     if decision == 'auto':
         return SecurityScreenVerdict.auto()
@@ -392,6 +397,7 @@ class SecurityScreener:
         self,
         sources: Sequence[LabelledContent],
         cancel: Optional[asyncio.Event] = None,
+        deadline: Optional[float] = None,
     ) -> ScreenOutcome:
         """Screen a batch of labelled content.
 
@@ -408,11 +414,8 @@ class SecurityScreener:
             return ScreenOutcome.screened(SecurityScreenVerdict.strict('input truncated'))
         token = cancel if cancel is not None else asyncio.Event()
         chunks = screen_labelled_chunks(sources)
-        deadline = (
-            None
-            if self._total_timeout_seconds is None
-            else asyncio.get_running_loop().time() + self._total_timeout_seconds
-        )
+        if deadline is None and self._total_timeout_seconds is not None:
+            deadline = asyncio.get_running_loop().time() + self._total_timeout_seconds
         authoritative = self._classify_chunks(self._classifier, chunks, token, deadline)
         if self._shadow is None:
             return await authoritative

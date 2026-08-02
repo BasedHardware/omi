@@ -40,6 +40,7 @@ SCREEN_TIMEOUT_ENV_VAR = 'OMI_SECURITY_SCREEN_TIMEOUT_SECONDS'
 DEFAULT_SCREEN_TIMEOUT_SECONDS = 8.0
 SCREEN_TOTAL_TIMEOUT_ENV_VAR = 'OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS'
 DEFAULT_SCREEN_TOTAL_TIMEOUT_SECONDS = 15.0
+MAX_SCREEN_COMPLETION_TOKENS = 64
 
 STRICT_PREFIX = '[SECURITY-SCREENED: STRICT'
 
@@ -82,7 +83,9 @@ async def _llm_classify(system: str, user: str, cancel: asyncio.Event) -> Option
     # The trusted policy rides in a system-role message and only the labelled
     # chunk goes in the user message, so an attacker-controlled result cannot
     # issue same-priority instructions to the classifier.
-    response = await get_llm('security_screen').ainvoke([('system', system), ('human', user)])
+    response = await get_llm('security_screen').ainvoke(
+        [('system', system), ('human', user)], max_completion_tokens=MAX_SCREEN_COMPLETION_TOKENS
+    )
     content = getattr(response, 'content', None)
     if isinstance(content, str):
         return content
@@ -117,6 +120,7 @@ async def screen_tool_result(
     floor: Optional[SecurityPosture] = None,
     cancel: Optional[asyncio.Event] = None,
     classify_content: Optional[str] = None,
+    deadline: Optional[float] = None,
 ) -> str:
     """Screen one tool result and return it with any provenance notice prepended.
 
@@ -144,7 +148,10 @@ async def screen_tool_result(
 
     active = screener if screener is not None else build_screener()
     try:
-        outcome = await active.screen([LabelledContent(source, to_classify)], cancel)
+        if deadline is None:
+            outcome = await active.screen([LabelledContent(source, to_classify)], cancel)
+        else:
+            outcome = await active.screen([LabelledContent(source, to_classify)], cancel, deadline)
     except asyncio.CancelledError:
         raise
     except Exception as error:

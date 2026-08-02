@@ -364,14 +364,20 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
 
 
 @_traceable(name="chat.tool_execution", run_type="tool")
-async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
+async def _execute_tool(
+    tool_name: str,
+    tool_input: dict,
+    registry: dict,
+    configurable: dict,
+    screen_deadline: Optional[float] = None,
+) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
     classify = chat_memory_content_for_classification(result) if tool_name in CHAT_MEMORY_TOOL_NAMES else result
-    result = await screen_tool_result(tool_name, result, classify_content=classify)
+    result = await screen_tool_result(tool_name, result, classify_content=classify, deadline=screen_deadline)
     return result
 
 
@@ -527,6 +533,7 @@ async def _run_anthropic_agent_stream(
     system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
     producer_started_at = asyncio.get_running_loop().time()
+    screen_deadline = producer_started_at + AGENT_STREAM_MAX_DURATION_SECONDS
     loop_iteration = 0
 
     while True:
@@ -655,11 +662,13 @@ async def _run_anthropic_agent_stream(
 
             # Execute tool
             try:
-                result = await _execute_tool(block.name, block.input, tool_registry, configurable)
+                result = await _execute_tool(
+                    block.name, block.input, tool_registry, configurable, screen_deadline=screen_deadline
+                )
             except Exception as e:
                 logger.error(f"Tool execution error ({block.name}): {e}")
                 result = f"Error executing tool: {str(e)}"
-                result = await screen_tool_result(block.name, result)
+                result = await screen_tool_result(block.name, result, deadline=screen_deadline)
 
             logger.info(f"Tool ended: {block.name}")
 

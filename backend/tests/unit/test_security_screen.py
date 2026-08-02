@@ -131,6 +131,12 @@ def test_a_verdict_embedded_in_prose_is_still_read():
     assert verdict.reason == 'exfiltration'
 
 
+def test_multiple_verdict_objects_fail_closed():
+    verdict = parse_security_screen_verdict('{"decision":"auto"}\n{"decision":"strict"}')
+    assert verdict is not None and verdict.decision is SecurityPosture.STRICT
+    assert verdict.reason == 'ambiguous security screen verdict'
+
+
 @pytest.mark.parametrize(
     'output',
     [
@@ -343,6 +349,14 @@ async def test_the_total_screen_budget_bounds_all_retries():
     outcome = await screener.screen(_tool_result('hello'))
     assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
     assert len(calls) == 1
+
+
+async def test_an_expired_absolute_deadline_stops_screening_before_the_classifier():
+    screener, calls = _screener('{"decision":"auto"}')
+    deadline = asyncio.get_running_loop().time() - 1
+    outcome = await screener.screen(_tool_result('hello'), deadline=deadline)
+    assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
+    assert calls == []
 
 
 def test_the_unscreened_notice_names_the_kind_and_forbids_instructions():
