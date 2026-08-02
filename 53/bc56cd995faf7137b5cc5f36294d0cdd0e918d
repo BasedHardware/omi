@@ -1,0 +1,36 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsSpotlight.swift
+  s_56918216f0e901::t_8431728caa1df0 1043,1045-1047,1049-1052,1054-1056,1058-1061
+  s_56918216f0e901::t_35dcbad903fd37 775-821
+  s_56918216f0e901::t_408c14bb99bcac 990,992-996
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingTests.swift
+  s_56918216f0e901::t_1cb1c6d455563a 908-950
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_56918216f0e901::t_1f40aa6b512650 104-133
+  s_56918216f0e901::t_279a7bcd2b9b0d 937-945,951-964,973-980,984
+  s_56918216f0e901::t_71cac3e60f9f1a 1134-1138
+  s_56918216f0e901::t_4bbd61db3c383b 840-845,851-856
+  s_56918216f0e901::t_fc45cc3801c4b8 78-85
+  s_56918216f0e901::t_1ae5007defd66c 32-61
+desktop/context-for-claude/Tests/ContextAppTests/SettingsSpotlightTests.swift
+  s_56918216f0e901::t_13829214b0c5e2 557-659,666-683,691-693,701-703,712-714,720-722,735-788,790-810
+  s_56918216f0e901::t_26ef24922ddd91 371-373,377,389-439
+  s_56918216f0e901::t_e3c8df98258065 440-441
+  s_56918216f0e901::t_e8583543c86ab9 684
+  s_56918216f0e901::t_9871b9fc64e82c 1056-1060,1069-1072
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "53bc56cd995faf7137b5cc5f36294d0cdd0e918d",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
