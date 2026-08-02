@@ -1320,6 +1320,7 @@ int transport_clear_bonds(void)
     int err;
     int adv_err = 0;
     int pusher_err;
+    int unpair_err = 0;
 
     LOG_INF("Clearing all BLE bonds");
 
@@ -1340,14 +1341,13 @@ int transport_clear_bonds(void)
     err = bt_unpair(BT_ID_DEFAULT, NULL);
     if (err && err != -ENOENT) {
         LOG_ERR("bt_unpair failed (err %d)", err);
-        pusher_err = transport_start_pusher();
-        if (pusher_err) {
-            LOG_ERR("Failed to restart pusher after bond clear error (err %d)", pusher_err);
-        }
-        return err;
+        unpair_err = err;
+    } else {
+        LOG_INF("BLE bonds cleared");
     }
 
-    LOG_INF("BLE bonds cleared");
+    ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);
+    k_sem_reset(&tx_queue_sem);
 
     for (int i = 0; i < 5; i++) {
         adv_err = restart_advertising();
@@ -1364,10 +1364,10 @@ int transport_clear_bonds(void)
     pusher_err = transport_start_pusher();
     if (pusher_err) {
         LOG_ERR("Failed to restart pusher after bond clear (err %d)", pusher_err);
-        return pusher_err;
+        return unpair_err ? unpair_err : pusher_err;
     }
 
-    return adv_err;
+    return unpair_err ? unpair_err : adv_err;
 }
 
 int transport_off()
