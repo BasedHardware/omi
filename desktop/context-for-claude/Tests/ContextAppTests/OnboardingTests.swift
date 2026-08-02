@@ -894,3 +894,120 @@ final class PermissionGuidanceTests: XCTestCase {
 extension CGRect {
     fileprivate var center: CGPoint { CGPoint(x: midX, y: midY) }
 }
+
+// MARK: - No timer acts for the user
+
+/// **A static checker, not behavioural coverage.** It reads `OnboardingView.swift` as text. It cannot
+/// prove the card behaves; it can only prove the scheduling primitives that used to make it behave
+/// badly are gone, and say exactly which line brought one back.
+///
+/// It exists because the defect it guards is invisible to every seam this suite has. The card
+/// dismissed itself 1.6 s after the last step arrived, relaunched the app 1.5 s after a grant landed,
+/// and drew every button at `opacity(0)` until a 340 ms timer fired — none of which any assertion on
+/// `OnboardingStep` or `PermissionInvitations` can see, because none of it goes through them. The
+/// rule they violated was given as: *"During onboarding have no time based triggers. Only after
+/// clicks or user pressing continue or grant permission."*
+///
+/// The honest test would drive a real `OnboardingView` and assert that no window closes while nothing
+/// is pressed. SwiftUI gives no seam to do that, and inventing one would mean the view under test is
+/// not the view that ships. So: a tripwire, labelled as one. If `OnboardingView` ever gains a
+/// protocol-shaped clock, delete this and assert the behaviour instead.
+final class OnboardingHasNoTimedTriggersTests: XCTestCase {
+
+    /// The one timed thing the flow keeps, and why it is allowed.
+    ///
+    /// macOS posts no notification for a TCC grant or for System Settings coming forward, so polling
+    /// is the only way to *detect* an action the user has already taken. Detection is not a trigger:
+    /// what these polls do when they succeed is offer a button.
+    private let permittedPolls = [
+        "Permissions.grantWatchPoll",  // watching for a switch the user flips in System Settings
+        "waitForSettingsFrontmost",  // waiting for the pane to exist before pointing at it
+    ]
+
+    /// Anything that can run code later, which is the whole family the rule is about.
+    private let schedulingPrimitives = [
+        "Task.sleep",
+        "asyncAfter",
+        "Timer.publish",
+        "scheduledTimer",
+    ]
+
+    func testNothingInTheOnboardingCardIsScheduledOnAClock() throws {
+        let source = try onboardingSource()
+
+        var offenders: [(line: Int, text: String)] = []
+        for (index, raw) in source.components(separatedBy: "\n").enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard schedulingPrimitives.contains(where: line.contains) else { continue }
+            guard !permittedPolls.contains(where: line.contains) else { continue }
+            offenders.append((index + 1, line))
+        }
+
+        XCTAssertTrue(
+            offenders.isEmpty,
+            """
+            OnboardingView schedules work on a clock:
+            \(offenders.map { "  OnboardingView.swift:\($0.line): \($0.text)" }.joined(separator: "\n"))
+
+            Onboarding advances only on a click, Continue, or a grant. If this line watches for \
+            something the user did, route it through Permissions.grantWatchPoll or \
+            waitForSettingsFrontmost — both are on the allow-list above, and both may only ever \
+            end by offering a control, never by pressing one.
+            """)
+    }
+
+    /// The two specific things that used to happen without the user, named so a regression reads as
+    /// the bug rather than as an anonymous style violation.
+    func testTheCardNeitherClosesNorRestartsItself() throws {
+        let source = try onboardingSource()
+
+        for (action, needle) in [
+            ("close the window", "OnboardingWindow.dismiss()"),
+            ("restart the app", "Permissions.relaunchApp()"),
+        ] {
+            let callers = functionsCalling(needle, in: source)
+            XCTAssertFalse(callers.isEmpty, "expected \(needle) to still be called somewhere")
+            for caller in callers {
+                XCTAssertTrue(
+                    caller.hasPrefix("close") || caller.hasPrefix("restart"),
+                    """
+                    \(needle) is reached from \(caller)(), which is not a button handler — the flow \
+                    must never \(action) on its own. closeOnboarding() and restartForScreenGrant() \
+                    are the only paths, and both are pressed.
+                    """)
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private func onboardingSource() throws -> String {
+        let url = InkSourceSweep.uiSourceRoot.appendingPathComponent("Onboarding/OnboardingView.swift")
+        return InkSourceSweep.strippingComments(from: try String(contentsOf: url, encoding: .utf8))
+    }
+
+    /// The `private func` / `private var` each occurrence of `needle` sits inside.
+    ///
+    /// Brace-free and deliberately crude: it walks declarations in order and attributes a hit to the
+    /// most recent one. That is sound here because `OnboardingView` declares its members flat.
+    private func functionsCalling(_ needle: String, in source: String) -> [String] {
+        var current = "<file scope>"
+        var found: [String] = []
+        for raw in source.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if let name = declarationName(of: line) { current = name }
+            if line.contains(needle) { found.append(current) }
+        }
+        return found
+    }
+
+    private func declarationName(of line: String) -> String? {
+        for keyword in ["private func ", "func ", "private var ", "var "] {
+            guard line.hasPrefix(keyword) else { continue }
+            let rest = line.dropFirst(keyword.count)
+            let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+            return name.isEmpty ? nil : String(name)
+        }
+        return nil
+    }
+}

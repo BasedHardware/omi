@@ -214,6 +214,40 @@ enum Permissions {
 
     static let systemSettingsBundleID = "com.apple.systempreferences"
 
+    /// How often anything here re-asks the system for an answer only the user can give.
+    ///
+    /// Polling is the one timed thing the onboarding flow keeps, and it earns its place by being
+    /// *detection* rather than a trigger: macOS posts no notification when a TCC switch is flipped, or
+    /// when System Settings comes forward, so asking repeatedly is the only way to notice the user did
+    /// something. Nothing downstream of a poll may advance a card or start an action the user did not.
+    /// Seconds is the source spelling because `Timer.publish` takes a `TimeInterval` and `Duration`
+    /// cannot be handed to it — two literals would be two cadences waiting to drift apart.
+    static let grantWatchPollSeconds: TimeInterval = 0.4
+    static var grantWatchPoll: Duration { .seconds(grantWatchPollSeconds) }
+
+    /// Waits until System Settings is actually frontmost, so an overlay points at a pane that exists.
+    ///
+    /// This replaces a flat `Task.sleep(1_200 ms)` at both onboarding call sites. The sleep was a
+    /// guess at how long the pane takes to appear and it was wrong in both directions: on a cold
+    /// System Settings launch the overlay drew before the pane arrived and ringed the *previous*
+    /// pane's rows, and on a warm one it made the user wait more than a second after their own click
+    /// for a hint that was already positionable.
+    ///
+    /// - Parameter timeout: gives up pointing rather than waiting forever — System Settings may be
+    ///   refused, or the user may have switched away. Returning on a timeout is safe because every
+    ///   caller re-checks what it is about to draw.
+    /// - Returns: whether the pane came forward.
+    @discardableResult
+    static func waitForSettingsFrontmost(timeout: Duration = .seconds(6)) async -> Bool {
+        var waited: Duration = .zero
+        while waited < timeout {
+            if systemSettingsIsFrontmost { return true }
+            try? await Task.sleep(for: grantWatchPoll)
+            waited += grantWatchPoll
+        }
+        return systemSettingsIsFrontmost
+    }
+
     // MARK: - Screen Recording relaunch
 
     /// Screen Recording only takes effect after a relaunch — the UI has to say so rather than

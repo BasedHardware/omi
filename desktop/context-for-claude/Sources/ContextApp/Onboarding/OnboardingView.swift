@@ -119,7 +119,6 @@ struct OnboardingView: View {
     /// only ever *skips forward past* cards, and only when the environment variable is set.
     @State private var step: OnboardingStep =
         PermissionChoreography.probedCapability == nil ? .welcome : .permissions
-    @State private var settled = false
 
     /// Who asks, when the user says to, and who decides whether this card may be left. Not the view,
     /// and not a clock: an answer is terminal only when the user authored it — a grant, or an
@@ -252,11 +251,11 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             says(Self.welcomeLead, style: .introHero)
 
-            // The button arrives after the last word does; offering it mid-sentence invites a
-            // click before the sentence has been read.
+            // Live on the first frame. It used to wait out the word-by-word reveal — 1200 ms of a
+            // button drawn at zero opacity — on the theory that offering it mid-sentence invites a
+            // click before the sentence is read. But a reader who is ready is the only judge of
+            // that, and hiding the control does not make them read; it makes them wait.
             InkButton("Turn me on") { advance() }
-                .opacity(settled ? 1 : 0)
-                .animation(stepAnimation, value: settled)
         }
     }
 
@@ -280,10 +279,9 @@ struct OnboardingView: View {
     /// listening" — and a character that speaks on one screen and vanishes on the next is a
     /// flourish rather than a character. One call site shape, one character, the whole flow.
     ///
-    /// It deliberately does **not** gate on `settled`: the words arriving *are* this card's
-    /// entrance, and the rest of the card settles in behind them. Nothing here delays a button —
-    /// `scheduleSettle` is untouched, and `SpokenCadence.maximumPhrase` caps a phrase at the
-    /// duration the welcome hero already took.
+    /// The words arriving *are* this card's entrance. That is the only thing on a card that is still
+    /// timed, and it is timed because it is an animation rather than a gate: no button waits on it,
+    /// and `SpokenCadence.maximumPhrase` caps a phrase at the duration the welcome hero already took.
     private func says(
         _ lead: [(String, Emphasis)],
         style: InkTextStyle,
@@ -307,9 +305,9 @@ struct OnboardingView: View {
                 style: .firstTitle,
                 aside: "Three things I take in, and one place they go.")
 
-            // The list and the button settle in behind the mark, rather than the whole card waiting
-            // for one timer: the character speaks first and its furniture follows, which is the
-            // order those two things happen in.
+            // The list and the button are here from the first frame. They used to fade in behind
+            // the mark on a 340 ms timer; the mark still speaks first, because its own text
+            // animates, but nothing the user can press is waiting on a clock.
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 9) {
                     ForEach(Self.valueClaims, id: \.copy) { claim in
@@ -331,8 +329,6 @@ struct OnboardingView: View {
                 InkButton("Continue") { advance() }
                     .padding(.top, 4)
             }
-            .opacity(settled ? 1 : 0)
-            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -472,7 +468,14 @@ struct OnboardingView: View {
     /// `permissions` is a computed property, so a `Timer.publish(…)` written inline there built a new
     /// `TimerPublisher` every time the card re-rendered — and this card re-renders on model-download
     /// progress. Matches `StatusView`'s own pattern.
-    private let permissionTick = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+    ///
+    /// It is spelled through `Permissions.grantWatchPollSeconds` rather than a bare `1.5` so it is
+    /// visibly the *permitted* kind of clock: it detects a switch the user flipped in System Settings,
+    /// and all it may do on noticing is redraw the rows. `refreshPermissions` deliberately does not
+    /// advance the card — see the note there.
+    private let permissionTick = Timer
+        .publish(every: Permissions.grantWatchPollSeconds, on: .main, in: .common)
+        .autoconnect()
 
     /// What is about to happen, in the order it happens, before any of it happens.
     ///
@@ -519,9 +522,10 @@ struct OnboardingView: View {
             // observed stomping the Screen Recording pane the user had just been sent to, 1.9 s
             // after they tapped the row that opened it.
             await PermissionBroker.shared.openSettings(for: capability)
-            // System Settings has to be up, and on the right pane, before there is anything to find.
-            // Pointing before it exists is how an overlay ends up ringing the last pane's rows.
-            try? await Task.sleep(for: .milliseconds(1_200))
+            // System Settings has to be up before there is anything to find. Waiting for it to come
+            // forward, rather than sleeping a fixed 1200 ms and hoping, is what keeps the overlay off
+            // the previous pane's rows on a cold launch.
+            await Permissions.waitForSettingsFrontmost()
             guard step == .permissions else { return }
             PermissionOverlay.show(
                 for: capability,
@@ -565,8 +569,8 @@ struct OnboardingView: View {
         spotlightTask = Task { @MainActor in
             // The pane has to be up before there is anything to find. Pointing before it exists is
             // how an overlay ends up ringing the last pane's rows — the same reason the probe waits,
-            // and the same duration.
-            try? await Task.sleep(for: .milliseconds(1_200))
+            // and now the same condition rather than the same guessed duration.
+            await Permissions.waitForSettingsFrontmost()
             guard !Task.isCancelled, spotlit == subject else { return }
             PermissionOverlay.show(
                 for: subject,
@@ -599,8 +603,6 @@ struct OnboardingView: View {
                     }
                 }
             }
-            .opacity(settled ? 1 : 0)
-            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -658,8 +660,6 @@ struct OnboardingView: View {
                 InkButton("Show me") { startTutorial() }
                 InkButton("Not now", kind: .secondary) { advance() }
             }
-            .opacity(settled ? 1 : 0)
-            .animation(stepAnimation, value: settled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -675,22 +675,46 @@ struct OnboardingView: View {
 
     // MARK: - 7. Done
 
+    /// The last card, and the only one that used to end itself.
+    ///
+    /// Exactly one button, whichever state the run finished in — there is always something to press,
+    /// because a final screen with no control is a screen that has to close on a timer.
     private var done: some View {
         VStack(spacing: 14) {
             says(
-                [(isGranted(.screen) ? "I’m listening." : "One more thing.", .plain)],
+                [(doneHeadline, .plain)],
                 style: .stepHeadline,
-                aside: isGranted(.screen) ? homeLine : "Switch me on in Settings. I’ll do the rest.")
+                aside: doneAside)
 
-            if !isGranted(.screen) {
-                InkButton("Open Screen Recording", kind: .secondary) {
-                    Permissions.openSettings(for: .screen)
+            Group {
+                if !isGranted(.screen) {
+                    InkButton("Open Screen Recording", kind: .secondary) {
+                        Permissions.openSettings(for: .screen)
+                    }
+                } else if needsRelaunch {
+                    InkButton("Restart to finish") { restartForScreenGrant() }
+                } else {
+                    InkButton("Done") { closeOnboarding() }
                 }
-                .padding(.top, 4)
             }
+            .padding(.top, 4)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
+    }
+
+    private var doneHeadline: String {
+        if !isGranted(.screen) { return "One more thing." }
+        return needsRelaunch ? "Almost." : "I’m listening."
+    }
+
+    private var doneAside: String {
+        if !isGranted(.screen) { return "Switch me on in Settings. I’ll do the rest." }
+        // Naming the reason matters: "restart" with no cause reads as something having gone wrong.
+        // macOS decides what a process may capture when it starts, so this one has to start again.
+        return needsRelaunch
+            ? "macOS gives screen access to a program when it starts, so I need to start again."
+            : homeLine
     }
 
     /// Where I live. Said once, here, because it is the last thing on screen and the only place it is
@@ -826,20 +850,25 @@ struct OnboardingView: View {
         // Chrome, and gated as chrome: `Sound` already honours the system UI-sound setting for this
         // cue, and a failure to play it can never stop the card from changing.
         Sound.effect(.click)
-        settled = false
         withAnimation(stepAnimation) { step = next }
         beginStep()
     }
 
+    /// Arrival work only. **Nothing scheduled, nothing deferred.**
+    ///
+    /// Every card used to hand its own furniture to a timer — `scheduleSettle(after: 0.34)`, and a
+    /// full 1200 ms on the welcome card so the button waited out the word-by-word reveal. The
+    /// buttons were drawn at `opacity(0)` until it fired, so for between a third of a second and a
+    /// second and a half the only control on screen was invisible and unclickable. Reported as the
+    /// rule this file now keeps: *"During onboarding have no time based triggers. Only after clicks
+    /// or user pressing continue or grant permission."*
+    ///
+    /// A fade-in is not worth a control the user cannot press. The text still animates — that is the
+    /// card's entrance, and it gates nothing — but every button is live on the first frame.
     private func beginStep() {
         switch step {
-        case .welcome:
-            // The word-by-word reveal runs for 1200 ms; the step is not settled until it lands.
-            scheduleSettle(after: InkMotion.wordReveal)
-        case .value:
-            scheduleSettle(after: 0.34)
-        case .signIn:
-            scheduleSettle(after: 0.34)
+        case .welcome, .value, .signIn, .tutorial:
+            break
         case .permissions:
             // Reading the current grants is the *only* thing that happens on arrival now. There is
             // no ordering hazard left to comment on: nothing here can advance the card, because the
@@ -847,28 +876,10 @@ struct OnboardingView: View {
             refreshPermissions()
             warmModels()
             if let probe = PermissionChoreography.probedCapability { probeChoreography(probe) }
-            scheduleSettle(after: 0.34)
         case .connector:
             refreshConnectorStatus()
-            scheduleSettle(after: 0.34)
-        case .tutorial:
-            scheduleSettle(after: 0.34)
         case .done:
             finish()
-            scheduleSettle(after: 0.34)
-        }
-    }
-
-    private func scheduleSettle(after seconds: Double) {
-        guard !InkReduceMotion.isEnabled else {
-            settled = true
-            return
-        }
-        let target = step
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(seconds))
-            guard step == target else { return }
-            withAnimation(.easeOut(duration: InkMotion.settle)) { settled = true }
         }
     }
 
@@ -990,50 +1001,71 @@ struct OnboardingView: View {
         }
 
         // "I live up here" is only useful if the user can find "here". Ring the real status item
-        // and walk the pointer to it while the line is still on screen.
+        // and walk the pointer to it while the line is still on screen. The ring comes down when the
+        // user closes the card, not on a timer of its own.
         MenuBarSpotlight.show()
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1_600))
-            guard step == .done, isGranted(.screen) else { return }
-            withAnimation(.easeOut(duration: InkReduceMotion.duration(InkMotion.finaleGlow))) { finale = true }
-            OnboardingWindow.dismiss()
-            // Outlive the card briefly: the ring is the last thing left pointing at the icon, and
-            // clearing it with the window would take the answer away with the question.
-            try? await Task.sleep(for: .milliseconds(2_500))
-            MenuBarSpotlight.hide()
-        }
     }
 
-    /// Opens the Screen Recording pane once, points at the real row, then watches for the grant and
-    /// relaunches into it — so the user's part is one switch, with no button to find afterwards.
+    /// **The last click of the flow.** The card used to close itself 1.6 s after arriving here, and
+    /// take the menu-bar ring down 2.5 s after that — so the final screen, the one naming where the
+    /// app now lives, was the one screen the user was given the least control over. Reading it
+    /// slowly was indistinguishable from not reading it, and either way it left.
+    ///
+    /// Now it waits. The glow and the dismissal are the same gesture as the press, so the finale is
+    /// still seen; it is just no longer scheduled.
+    private func closeOnboarding() {
+        Sound.effect(.click)
+        withAnimation(.easeOut(duration: InkReduceMotion.duration(InkMotion.finaleGlow))) { finale = true }
+        MenuBarSpotlight.hide()
+        OnboardingWindow.dismiss()
+    }
+
+    /// Restarts into the Screen Recording grant, from a button.
+    ///
+    /// The window server fixes what a process may capture when that process connects, so a grant
+    /// made while this app is running belongs to the *next* one. That was previously done for the
+    /// user 1.5 s after the grant landed — the app replacing itself while they were still in System
+    /// Settings looking at the switch they had just flipped. The remedy is the same; who starts it
+    /// is not.
+    private func restartForScreenGrant() {
+        Sound.effect(.click)
+        PermissionOverlay.hide()
+        MenuBarSpotlight.hide()
+        Permissions.relaunchApp()
+    }
+
+    /// Opens the Screen Recording pane once, points at the real row, and watches for the switch.
+    ///
+    /// The watch is a poll because macOS posts no notification for a TCC grant — it is how this app
+    /// *detects the user's action*, which is the one thing a clock here is allowed to do. It starts
+    /// nothing on its own: when the grant lands the card offers a button and stops.
     private func openScreenSettingsOnce() {
         guard !openedScreenSettings else { return }
         openedScreenSettings = true
         Permissions.openSettings(for: .screen)
 
         Task { @MainActor in
-            // Same reason as the by-hand grant: nothing to point at until the pane is up.
-            try? await Task.sleep(for: .milliseconds(1_200))
+            // Nothing to point at until the pane is up. Waiting for System Settings to actually come
+            // forward, rather than assuming it takes 1200 ms, means the overlay lands on the pane
+            // that is really there — on a slow launch the fixed sleep rang the previous pane's rows.
+            await Permissions.waitForSettingsFrontmost()
             guard step == .done, !Permissions.check(.screen) else { return }
             PermissionOverlay.show(
                 for: .screen,
                 caption: "Switch on \(PermissionChoreography.appDisplayName).")
 
             while step == .done, !Permissions.check(.screen) {
-                try? await Task.sleep(for: .milliseconds(1_000))
+                try? await Task.sleep(for: Permissions.grantWatchPoll)
             }
             guard step == .done, Permissions.check(.screen) else {
                 PermissionOverlay.hide()
                 return
             }
             granted[.screen] = true
+            needsRelaunch = Permissions.screenNeedsRelaunch
             Sound.effect(.chime)
+            // Witness the grant on the overlay, then stop. The restart is the user's to press.
             PermissionOverlay.confirmGranted()
-            // The grant is real but this process cannot use it. Relaunching is the whole remedy.
-            try? await Task.sleep(for: .milliseconds(1_500))
-            PermissionOverlay.hide()
-            Permissions.relaunchApp()
         }
     }
 }
