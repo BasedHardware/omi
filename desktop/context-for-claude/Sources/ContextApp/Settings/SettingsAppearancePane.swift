@@ -185,16 +185,20 @@ struct TimelinePreview: View {
 
     /// Real apps, so the derived segment colours are the ones the user will actually see.
     ///
-    /// Chosen for the *hues* `RewindPalette` gives them, not arbitrarily: these eight sweep 0.9° →
-    /// 186°, so the strip reads red → orange → yellow → green → teal → blue rather than clustering
+    /// Chosen for the *hues* `RewindPalette` gives them, not arbitrarily: these eight sweep 2.4° →
+    /// 196.9°, so the strip reads red → orange → lime → green → teal → cyan rather than clustering
     /// into one colour. `SettingsTests` pins the sweep, because it is a property of these names and
     /// nothing else enforces it.
     ///
+    /// There is no yellow in that list and there cannot be: the palette's bands skip the 38°–88°
+    /// family outright, because at the luminance white monogram type allows it can only render olive.
+    /// See `RewindPalette.bands`.
+    ///
     /// A first draft used Terminal, Figma and iTerm2, which under the palette's old 250° arc landed
     /// at 228°, 244° and 244° and rendered visibly violet segments — exactly what a settings pane
-    /// must not show off under `INV-UI-1`. That cannot recur from this side: the arc now stops at
-    /// 220°, and `RewindTests` proves on the rendered pixel that no colour the palette can emit reads
-    /// violet. Under today's arc those three are 200°, 215° and 215°.
+    /// must not show off under `INV-UI-1`. That cannot recur from this side: no band reaches 220°,
+    /// and `RewindTests` proves on the rendered pixel that no colour the palette can emit reads
+    /// violet. Under today's bands those three are 210.5°, 216.0° and 216.1°.
     static let sampleApps = [
         "Notes", "Photos", "Warp", "Messages", "Finder", "Arc", "Cursor", "Xcode",
     ]

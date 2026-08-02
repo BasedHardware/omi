@@ -216,7 +216,7 @@ final class RewindTrackView: NSView {
         if let icon {
             NSGraphicsContext.saveGraphicsState()
             NSBezierPath(ovalIn: rect).addClip()
-            icon.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+            Self.drawIcon(icon, in: rect)
             NSGraphicsContext.restoreGraphicsState()
         } else {
             // The monogram fallback, in the app's own track colour so the badge still agrees with
@@ -234,6 +234,34 @@ final class RewindTrackView: NSView {
                 at: NSPoint(
                     x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2))
         }
+    }
+
+    /// One app icon, into a badge, the right way up.
+    ///
+    /// **`respectFlipped: true`, and the four-argument overload it replaces is the reason every logo
+    /// on the timeline was upside down.** `NSImage.draw(in:from:operation:fraction:)` is documented
+    /// as behaving like the six-argument form with `respectFlipped: false` — it ignores the flipped
+    /// state of the current context and draws in AppKit's bottom-left orientation regardless. This
+    /// view is `isFlipped` (the track measures time left-to-right and everything else here top-down),
+    /// so the icon came out mirrored about its horizontal axis: Finder's face upside down, Chrome's
+    /// ring inverted, Safari's needle pointing the wrong way. It is invisible on the few icons that
+    /// happen to be vertically symmetric, which is presumably how it survived.
+    ///
+    /// **Template images are tinted; full-colour artwork is never touched.** `isTemplate` is the
+    /// app's own declaration that its icon is a monochrome stencil meant to take on the surrounding
+    /// label colour — a handful of system agents ship one. Drawn as-is that stencil is opaque black,
+    /// which disappears into a dark badge ring, so it is composited with `labelColor` and follows the
+    /// appearance like every other stencil on the machine. A real icon is full-colour artwork and is
+    /// drawn exactly as its author drew it: no tint, no rendering mode, no blend. The distinction is
+    /// the image's own flag, never a decision made here — forcing a real icon through the template
+    /// path is the other half of the same defect class this method exists to close.
+    static func drawIcon(_ icon: NSImage, in rect: NSRect) {
+        icon.draw(
+            in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+            hints: nil)
+        guard icon.isTemplate else { return }
+        NSColor.labelColor.set()
+        rect.fill(using: .sourceAtop)
     }
 
     /// How an hour label is set.

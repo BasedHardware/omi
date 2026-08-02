@@ -65,6 +65,19 @@ final class AppIconCache {
         return icon
     }
 
+    /// Puts an image in the cache under a name, skipping resolution entirely.
+    ///
+    /// **Nothing in the app calls this; it exists so the badge drawing can be put in front of a known
+    /// image.** The defect it was added for — `NSImage.draw(in:from:operation:fraction:)` ignoring a
+    /// flipped context and mirroring every logo on the track — is invisible on a vertically symmetric
+    /// icon and invisible on no icon at all, so a guard over `RewindTrackView`'s real drawing path
+    /// needs a way to say "this app's icon is red on top and blue underneath". Resolution itself is
+    /// untouched: a seeded name simply never reaches `resolveURL`.
+    func seed(_ icon: NSImage, forApp appName: String) {
+        cache.setObject(icon, forKey: appName as NSString)
+        misses.remove(appName)
+    }
+
     /// Identifier from the row, then identifier learned for that app name, then an exact-name probe.
     private func resolveURL(appName: String, bundleId: String?) -> URL? {
         for identifier in [bundleId, bundleIdsByApp[appName]].compactMap({ $0 }) {
@@ -100,6 +113,15 @@ struct RewindAppIcon: View {
         Group {
             if let icon {
                 Image(nsImage: icon)
+                    // **Stated rather than inferred, and the two cases are not the same picture.**
+                    // `Image(nsImage:)` picks its rendering mode from `isTemplate`, so leaving it off
+                    // is *usually* right and silently wrong the moment anything upstream has an
+                    // opinion — a templated real icon is a flat silhouette in the foreground colour,
+                    // which is a logo the user cannot recognise. `.original` says the artwork ships
+                    // as its author drew it. A genuine stencil (`isTemplate`, which a few system
+                    // agents ship) keeps `.template` and takes the surrounding label colour, because
+                    // that is what its author asked for. Same rule as `RewindTrackView.drawIcon`.
+                    .renderingMode(icon.isTemplate ? .template : .original)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
