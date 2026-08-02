@@ -3,9 +3,19 @@ import ContextCore
 
 /// One real memory, as the tutorial shows it.
 ///
-/// A projection of `Hit` rather than the hit itself: the card needs a time, a line of text, and the
-/// app it came from, and carrying the whole wire shape into the view would invite the view to grow a
-/// dependency on fields the tutorial has no business rendering.
+/// A projection of `Hit` rather than the hit itself: the card needs a time, a line of text, the app
+/// it came from and the picture that was on screen, and carrying the whole wire shape into the view
+/// would invite the view to grow a dependency on fields the tutorial has no business rendering.
+///
+/// **`text` is not a title and never was.** `Queries.screenText` fills it with the window's
+/// accessibility dump, or failing that its OCR, truncated — which for a browser is every string the
+/// chrome exposes, in layout order: *"tab Close Tab New Tab Search Tabs Update …"*. Setting that as
+/// the headline of a result is how this beat came to be reported as "this list with only text looks
+/// so bland": a run of interface soup, an app name, and a wire-format timestamp. So the window title
+/// travels alongside it (`window`, straight off the hit — nothing here parses or trims), `title` is
+/// derived from that the way the real search panel derives its own, and `text` stays exactly what it
+/// is: the words the hit matched on, which the card shows *inside* the well when there is no picture
+/// and hands to VoiceOver in full.
 struct TutorialMemory: Identifiable, Equatable, Sendable {
     var id: Double { at }
     /// Unix epoch seconds — the exact moment, which is what "jump back to it" means.
@@ -13,23 +23,67 @@ struct TutorialMemory: Identifiable, Equatable, Sendable {
     let when: String
     let text: String
     let app: String?
+    /// The window's own title, when the capture recorded one. Nil for speech, which was not in a
+    /// window, and for a frame whose owner announced nothing.
+    let window: String?
     /// "said", "heard", or "screen", straight from the hit.
     let kind: String
+    /// The frame that was really captured at this moment, for the card's picture.
+    ///
+    /// Resolved once, at search time, by the same nearest-frame lookup `frameNear` uses — see
+    /// `TutorialEnvironment.live`. Nil is an ordinary outcome and never an error: speech was never on
+    /// screen, retention unlinks files, and a machine can genuinely have no frame within reach of the
+    /// instant a spoken line landed on.
+    let frame: RewindFrame?
 
-    init(_ hit: Hit) {
+    init(_ hit: Hit, frame: RewindFrame? = nil) {
         at = hit.at
         when = hit.when
         text = hit.text
         app = hit.app
+        window = hit.window
         kind = hit.kind
+        self.frame = frame
     }
 
-    init(at: Double, when: String, text: String, app: String?, kind: String) {
+    init(
+        at: Double, when: String, text: String, app: String?, kind: String,
+        window: String? = nil, frame: RewindFrame? = nil
+    ) {
         self.at = at
         self.when = when
         self.text = text
         self.app = app
+        self.window = window
         self.kind = kind
+        self.frame = frame
+    }
+
+    /// Whether this was something seen rather than something said. The one question the card's well
+    /// and its glyph both turn on.
+    var isScreen: Bool { kind == "screen" }
+
+    /// The card's headline — a short, clean line, never the matched text.
+    ///
+    /// `SearchSource.title` and `SearchSpeech.title` rather than a second opinion about either: the
+    /// real results panel answers this question for the same two kinds of row, and a tutorial that
+    /// named them differently would be teaching a surface the user is about to leave.
+    var title: String {
+        guard isScreen else {
+            return SearchSpeech.title(for: kind == "said" ? .mic : .system)
+        }
+        let derived = SearchSource.title(appName: app ?? "", windowTitle: window)
+        // Neither a title nor an app — nothing was recorded about the window at all. The matched
+        // words are then the only true thing left to head the card with.
+        return derived.isEmpty ? text : derived
+    }
+
+    /// The line under the title: the site the window was showing, the app that owned it, or that
+    /// this was a conversation.
+    var source: String {
+        guard isScreen else { return app ?? SearchSpeech.unplacedSource }
+        let derived = SearchSource.source(appName: app ?? "", windowTitle: window)
+        return derived.isEmpty ? RewindQueries.unknownApp : derived
     }
 }
 
@@ -262,23 +316,43 @@ struct TutorialEnvironment {
             return (try? RewindQueries.frameCount(store, since: since, until: ContextTime.now)) ?? 0
         }
 
+        /// The frame really captured nearest an instant, or nil.
+        ///
+        /// One implementation with two callers, and they have to be one: the grid shows a picture per
+        /// result and tapping one says "that is the moment, exactly as it was". Two lookups with two
+        /// windows could disagree — a card showing one frame while the sentence under it was written
+        /// about another — which is precisely the class of claim this whole flow is built not to make.
+        ///
+        /// A window around the moment rather than the whole day: only the nearest frame is ever
+        /// wanted, so it reads seconds instead of hours.
+        func nearestFrame(to instant: Double) -> RewindFrame? {
+            guard let store else { return nil }
+            let span: Double = 120
+            let frames =
+                (try? RewindQueries.frames(
+                    store, since: instant - span, until: instant + span)) ?? []
+            guard let index = frames.nearestIndex(to: instant) else { return nil }
+            return frames[index]
+        }
+
         environment.search = { query in
             guard let store, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return []
             }
             let hits = (try? Queries.recall(store, query: query, limit: TutorialModel.resultLimit)) ?? []
-            return hits.map(TutorialMemory.init)
+            // The picture is fetched here, once per result, rather than in the card: a `body` that
+            // reads the database is a database read on every re-publish, and the beat re-publishes on
+            // every poll tick. `resultLimit` is four, so this is four bounded window reads per Return
+            // — and only for the kind of hit that can have a picture at all. Speech was never on
+            // screen, and looking for a frame near it here would put whatever happened to be in front
+            // of the user under somebody's sentence.
+            return hits.map { hit in
+                TutorialMemory(hit, frame: hit.kind == "screen" ? nearestFrame(to: hit.at) : nil)
+            }
         }
 
         environment.frameNear = { instant in
-            guard let store else { return nil }
-            // A window around the moment rather than the whole day: this is called on a tap and only
-            // ever needs the nearest frame, so it reads seconds instead of hours.
-            let span: Double = 120
-            let frames = (try? RewindQueries.frames(
-                store, since: instant - span, until: instant + span)) ?? []
-            guard let index = frames.nearestIndex(to: instant) else { return nil }
-            let frame = frames[index]
+            guard let frame = nearestFrame(to: instant) else { return nil }
             return TutorialMoment(
                 at: frame.capturedAt, app: frame.appName, windowTitle: frame.windowTitle,
                 imagePath: frame.imagePath)

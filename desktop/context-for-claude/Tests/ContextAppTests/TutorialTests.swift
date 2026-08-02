@@ -1710,6 +1710,177 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(TutorialStep.query.takesFocusOnEntry)
         XCTAssertTrue(TutorialStep.invitation.takesFocusOnEntry)
     }
+
+    // MARK: - The found-it beat is a grid of pictures
+
+    /// **A result's headline is the window's own title, never the accessibility dump.**
+    ///
+    /// `Queries.screenText` fills a screen hit's `text` with everything the window announced about
+    /// itself, in layout order and truncated — for a browser that is *"tab Close Tab New Tab Search
+    /// Tabs Update Aura/Icons/New/Default/search Open Profile…"*. That string was the headline of every
+    /// row on this card. `Hit.window` already carries the clean title, so the fix is to stop throwing
+    /// it away rather than to write a trimmer that guesses which part of the soup was the title.
+    func testAResultIsHeadlinedByItsWindowTitleAndNotByTheAccessibilityDump() {
+        let dump = "tab Close Tab New Tab Search Tabs Update Aura/Icons/New/Default/search Open Profile"
+        let hit = TutorialMemory(
+            at: 1_700_000_000, when: "Sun 2 Aug 2026 at 11:40 AM", text: dump, app: "ChatGPT Atlas",
+            kind: "screen", window: "Comparing throughput — arc.net")
+
+        XCTAssertEqual(hit.title, "Comparing throughput — arc.net")
+        XCTAssertEqual(hit.source, "arc.net", "the domain in the title is what places the card")
+        XCTAssertEqual(hit.text, dump, "the matched words are not thrown away — the well still shows them")
+
+        // No window title recorded: the app is the honest headline, and the dump still is not.
+        let untitled = TutorialMemory(
+            at: 1_700_000_000, when: "…", text: dump, app: "ChatGPT Atlas", kind: "screen")
+        XCTAssertEqual(untitled.title, "ChatGPT Atlas")
+        XCTAssertEqual(untitled.source, "ChatGPT Atlas")
+
+        // Nothing recorded at all — no app, no window. The matched words are then the only true thing
+        // left to head the card with, so the card is never blank.
+        let anonymous = TutorialMemory(at: 1_700_000_000, when: "…", text: dump, app: nil, kind: "screen")
+        XCTAssertEqual(anonymous.title, dump)
+    }
+
+    /// A spoken line is not a window: it gets the words, and a title that says which side of the
+    /// microphone it came from rather than a name this app is not allowed to invent.
+    func testASpokenResultIsTitledBySideOfTheMicrophoneAndKeepsItsWords() {
+        let said = TutorialMemory(
+            at: 1_700_000_000, when: "…", text: "remind me to chase the invoice", app: "Slack",
+            kind: "said")
+        XCTAssertEqual(said.title, "You said")
+        XCTAssertEqual(said.source, "Slack")
+        XCTAssertFalse(said.isScreen)
+
+        let heard = TutorialMemory(
+            at: 1_700_000_000, when: "…", text: "can you cc finance on it", app: nil, kind: "heard")
+        XCTAssertEqual(heard.title, "Heard")
+        XCTAssertEqual(heard.source, "Conversation", "a line with no app is placed as a conversation")
+    }
+
+    /// **Three across does not fit this card, and two does.**
+    ///
+    /// The search panel is 760 pt and puts three cards in it; this card is 470. `minimumCardWidth` is
+    /// the width that file names as the point where a thumbnail stops being recognisable as a screen —
+    /// so the column count is not a taste question, it is the only count that clears that floor.
+    func testTheGridsColumnsClearTheWidthAThumbnailNeedsToBeRecognisable() {
+        let content = TutorialOverlay.width - TutorialCardView.horizontalPadding * 2
+
+        XCTAssertEqual(TutorialResultGrid.columns, 2)
+        XCTAssertGreaterThanOrEqual(
+            TutorialResultGrid.cardWidth(contentWidth: content), SearchLayout.minimumCardWidth,
+            "a card in this grid is too narrow to read as a screen")
+
+        // …and the count above it genuinely does not clear it, which is what makes two the answer
+        // rather than a preference.
+        let threeAcross = (content - TutorialResultGrid.gutter * 2) / 3
+        XCTAssertLessThan(
+            threeAcross, SearchLayout.minimumCardWidth,
+            "three across now fits — the reason this grid is two across has gone")
+    }
+
+    /// **Every result reserves a picture, and the card still fits the display.**
+    ///
+    /// The defect was a column of text rows: *"this after search after onboarding needs to show
+    /// results in tabular form with screen if any. This list with only text looks so bland."* What
+    /// makes that a layout claim rather than a matter of taste is the well — a 4:3 picture of the
+    /// captured screen at the card's width — so the beat's card must measure at least one well per
+    /// grid row taller than the same card with nothing found. A text list cannot pass this.
+    ///
+    /// The ceiling is the other half, and it is the shipped one rather than a number picked here: the
+    /// search surface's own maximum, which its comments state as the height that "still fits a 13"
+    /// display" — bar, gap, header and `maximumResultsBodyHeight`. This card is a coach mark that
+    /// floats over the very timeline it is talking about, so it may not be taller than the panel that
+    /// is allowed to be the whole surface.
+    @MainActor
+    func testTheFoundItCardReservesAWellPerResultAndStillFitsADisplay() throws {
+        XCTAssertTrue(InkTestFonts.registered, "the bundled faces have to be registered to measure type")
+
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .query)
+
+        let empty = cardHeight(model)
+
+        world.searchResults = (0..<TutorialModel.resultLimit).map { index in
+            let at = 1_699_990_000 + Double(index) * 90
+            let title = "Comparing M4 Max and RTX 4090 throughput — arc.net"
+            // The last one is speech, which is the case with no picture of its own — the state the
+            // card used to grow a second, larger preview in, and therefore the worst case for the
+            // ceiling. Its well is the same size, so the arithmetic below is unaffected.
+            guard index < TutorialModel.resultLimit - 1 else {
+                return TutorialMemory(
+                    at: at, when: "earlier", text: "the throughput numbers we talked about",
+                    app: "zoom.us", kind: "said")
+            }
+            return TutorialMemory(
+                at: at,
+                when: "earlier",
+                text: "tab Close Tab New Tab Search Tabs Update Aura/Icons/New/Default/search Open Profile",
+                app: "Arc",
+                kind: "screen",
+                window: title,
+                // The file need not exist: `SearchThumbnail` reserves the well from the aspect ratio
+                // and draws the neutral placeholder until (or unless) a decode lands, so the layout
+                // this measures is the shipped one without any image IO in a hermetic test.
+                frame: RewindFrame(
+                    id: Int64(index + 1), capturedAt: at, appName: "Arc", windowTitle: title,
+                    imagePath: "/tmp/tutorial-grid-\(index).heic"))
+        }
+        model.search("throughput")
+        XCTAssertEqual(model.results.count, 4, "the grid is being measured on the page it really draws")
+
+        let found = cardHeight(model)
+
+        let content = TutorialOverlay.width - TutorialCardView.horizontalPadding * 2
+        let well = TutorialResultGrid.cardWidth(contentWidth: content) / SearchLayout.thumbnailAspect
+        let rows = ceil(Double(model.results.count) / Double(TutorialResultGrid.columns))
+        XCTAssertGreaterThanOrEqual(
+            found - empty, well * rows,
+            "the found-it card grew by \(found - empty) pt for \(model.results.count) results — less "
+                + "than the \(well * rows) pt \(Int(rows)) rows of screenshots take, so the results "
+                + "are being drawn as text again")
+
+        // The shipped ceiling for a floating surface on the smallest display this app supports.
+        let ceiling =
+            SearchLayout.barHeight + SearchLayout.panelGap + SearchLayout.panelHeaderHeight
+            + SearchLayout.maximumResultsBodyHeight
+        XCTAssertLessThanOrEqual(
+            found, ceiling,
+            "the found-it card measures \(found) pt, past the \(ceiling) pt the search surface is "
+                + "capped at for a 13\" display — a coach mark cannot be taller than the panel it is "
+                + "coaching")
+
+        // And tapping one does not put a second, larger copy of the picture under the grid. The card
+        // used to draw the chosen frame again at 140 pt, which was the only picture on it while the
+        // rows above were type; with a picture on every card it is the beat saying the same thing
+        // twice, and on the spoken result — which has no picture of its own — the render showed it
+        // pushing the mark's own line off the top of the display. `momentNear` is set so there
+        // genuinely *is* a frame it could have drawn; what must not happen is the card growing by one.
+        world.momentNear = TutorialMoment(
+            at: 1_699_990_000, app: "Arc", windowTitle: "Comparing throughput — arc.net",
+            imagePath: "/tmp/tutorial-grid-0.heic")
+        for result in model.results {
+            model.choose(result)
+            let chosen = cardHeight(model)
+            XCTAssertNotNil(model.chosenMoment, "the fixture stopped exercising the case that grew")
+            XCTAssertLessThan(
+                chosen, found + well,
+                "tapping “\(result.title)” added another picture-sized block under the grid")
+            XCTAssertLessThanOrEqual(chosen, ceiling)
+        }
+    }
+
+    /// The card's ideal height at the width the overlay hosts it at — the same `fittingSize` read
+    /// `TutorialOverlay.fittingHeight()` sizes the window from, so this measures what ships.
+    @MainActor
+    private func cardHeight(_ model: TutorialModel) -> CGFloat {
+        let host = NSHostingView(
+            rootView: TutorialCardView(model: model, chrome: TutorialOverlayChrome()))
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.height
+    }
 }
 
 // MARK: - Walking the rendered tree

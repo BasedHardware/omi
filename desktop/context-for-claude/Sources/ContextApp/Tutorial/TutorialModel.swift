@@ -46,7 +46,13 @@ final class TutorialModel: ObservableObject {
 
     /// Results asked of the store for the search beat. Small on purpose: this is a lesson in how
     /// retrieval feels, not a search UI.
-    static let resultLimit = 5
+    ///
+    /// **Four rather than five, and the grid is why.** The results are drawn as cards with the
+    /// captured screen on them (`TutorialResultGrid`), two across at the card's width — so four is two
+    /// full rows and five is two full rows plus a lone card that leaves half a row of air under the
+    /// grid on a coach mark that already has to stand clear of the timeline behind it. The beat needs
+    /// the user to recognise *one* moment and tap it; the fifth was never carrying that.
+    static let resultLimit = 4
 
     /// How long a waivable gate waits before it offers a way out. Long enough that a working machine
     /// never sees the escape hatch, short enough that a broken one is not a dead end.
@@ -154,6 +160,16 @@ final class TutorialModel: ObservableObject {
     /// other step and nil whenever it cannot be found — a placement that guessed would park the card
     /// in a space the user is not looking at, which is worse than the middle of the screen.
     @Published private(set) var claudeFrame: CGRect?
+
+    /// The one decoder the found-it grid's pictures come through.
+    ///
+    /// `FrameLoader` and not a `NSImage(contentsOfFile:)` of its own: it decodes off the main thread,
+    /// charges its cache the bitmaps' real bytes, and remembers a file it could not read so a pruned
+    /// frame costs one attempt rather than one per redraw — and this card re-publishes on every poll
+    /// tick, so "one per redraw" would be one per second for as long as the beat is up. Owned by the
+    /// model rather than by the view for exactly that reason: a loader built inside a `body` is a new
+    /// cache every time SwiftUI re-evaluates it.
+    let loader = FrameLoader()
 
     // MARK: - Internals
 
@@ -854,6 +870,10 @@ final class TutorialModel: ObservableObject {
         stopTheBed()
         targetFrame = nil
         claudeFrame = nil
+        // The decoded screens the found-it grid was holding. A tutorial is a thing that happens once
+        // per install, so leaving up to `FrameLoader.memoryBudgetBytes` of bitmaps pinned by a card
+        // nobody will see again is the one cost of showing pictures at all — and it is paid back here.
+        loader.purge()
     }
 
     /// Fades the bed out, once.
