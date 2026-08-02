@@ -6,6 +6,6 @@ export const metadata: Metadata = {
   description: 'Omi memory for APIs, MCP, local replicas, and embedded products.',
 };
 
-export default function Home() {
+export default function MemoryPlatformPage() {
   return <PlatformPage />;
 }
