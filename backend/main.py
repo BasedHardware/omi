@@ -84,6 +84,7 @@ from routers import (
     tts,
     memory_admin,
     memory_product,
+    memory_platform,
     task_recommendations,
     conversation_finalization,
     public_shared_conversation_chat,
@@ -215,6 +216,7 @@ app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
+app.include_router(memory_platform.router)
 app.include_router(task_recommendations.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
