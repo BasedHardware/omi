@@ -18,6 +18,7 @@ from services.channel_chat import (
     normalize_link_token,
     parse_channel_command,
     parse_sendblue_inbound,
+    parse_twilio_conversation_inbound,
     parse_twilio_sms_inbound,
     parse_telegram_update,
     sanitize_channel_reply,
@@ -119,7 +120,13 @@ async def revoke_channel(
 
 
 async def _send_and_record(
-    channel: str, event_id: str, channel_chat_id: str, reply: str, *, is_group: bool = False
+    channel: str,
+    event_id: str,
+    channel_chat_id: str,
+    reply: str,
+    *,
+    is_group: bool = False,
+    provider_mode: Optional[str] = None,
 ) -> None:
     reply = sanitize_channel_reply(channel, reply)
     await run_blocking(
@@ -127,10 +134,16 @@ async def _send_and_record(
         channels_db.update_webhook_event,
         channel,
         event_id,
-        {'status': 'ready', 'reply': reply, 'channel_chat_id': channel_chat_id, 'is_group': is_group},
+        {
+            'status': 'ready',
+            'reply': reply,
+            'channel_chat_id': channel_chat_id,
+            'is_group': is_group,
+            'provider_mode': provider_mode,
+        },
     )
     try:
-        await send_channel_message(channel, channel_chat_id, reply, is_group=is_group)
+        await send_channel_message(channel, channel_chat_id, reply, is_group=is_group, provider_mode=provider_mode)
     except ChannelProviderError:
         raise HTTPException(status_code=503, detail='Channel delivery unavailable')
     await run_blocking(db_executor, channels_db.update_webhook_event, channel, event_id, {'status': 'delivered'})
@@ -145,6 +158,7 @@ async def _duplicate_event_response(channel: str, event_id: str, event: Optional
         str(event['channel_chat_id']),
         str(event['reply']),
         is_group=bool(event.get('is_group')),
+        provider_mode=str(event['provider_mode']) if event.get('provider_mode') else None,
     )
     return {'status': 'redelivered'}
 
@@ -229,6 +243,7 @@ async def _handle_payload(channel: str, payload: Dict[str, Any]) -> Dict[str, An
         payload['channel_chat_id'],
         reply,
         is_group=payload['channel_chat_id'] != payload['channel_user_id'],
+        provider_mode=payload.get('provider_mode'),
     )
     return {'status': 'delivered'}
 
@@ -278,6 +293,21 @@ async def twilio_sms_webhook(request: Request) -> Dict[str, Any]:
     if not verify_twilio_webhook(url, params, signature):
         raise HTTPException(status_code=403, detail='Invalid Twilio signature')
     payload = parse_twilio_sms_inbound(params)
+    if payload is None:
+        return {'status': 'ignored'}
+    return await _handle_payload('sms', payload)
+
+
+@router.post('/v1/webhooks/twilio/conversations', tags=['channels'])
+async def twilio_conversations_webhook(request: Request) -> Dict[str, Any]:
+    base_api_url = os.getenv('BASE_API_URL', '').rstrip('/')
+    url = f'{base_api_url}{request.url.path}' if base_api_url else str(request.url)
+    signature = request.headers.get('X-Twilio-Signature')
+    form_data = await parse_multipart_form(request, max_part_size=PHONE_CALL_MAX_PART_SIZE)
+    params = {str(key): str(value) for key, value in form_data.multi_items()}
+    if not verify_twilio_webhook(url, params, signature):
+        raise HTTPException(status_code=403, detail='Invalid Twilio signature')
+    payload = parse_twilio_conversation_inbound(params)
     if payload is None:
         return {'status': 'ignored'}
     return await _handle_payload('sms', payload)

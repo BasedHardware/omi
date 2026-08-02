@@ -1,4 +1,5 @@
 import hmac
+import json
 import os
 import re
 import uuid
@@ -232,6 +233,68 @@ def parse_twilio_sms_inbound(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return payload
 
 
+def parse_twilio_conversation_inbound(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if body.get('EventType') != 'onMessageAdded' or body.get('Author') in {'omi', 'system'}:
+        return None
+    message_sid = body.get('MessageSid')
+    conversation_sid = body.get('ConversationSid')
+    author = body.get('Author')
+    text = body.get('Body')
+    if not isinstance(message_sid, str) or not message_sid:
+        return None
+    if not isinstance(conversation_sid, str) or not conversation_sid:
+        return None
+    if not isinstance(author, str) or not author:
+        return None
+    if len(message_sid) > 128 or len(conversation_sid) > 128 or len(author) > 254:
+        return None
+    text = text.strip() if isinstance(text, str) else ''
+    if len(text) > CHANNEL_MAX_INBOUND_LENGTH:
+        return None
+    media = body.get('Media')
+    if isinstance(media, str):
+        try:
+            media = json.loads(media)
+        except (TypeError, ValueError):
+            media = []
+    attachments: List[Dict[str, Any]] = []
+    if isinstance(media, list):
+        for item in media[:10]:
+            if not isinstance(item, dict):
+                continue
+            media_sid = item.get('Sid') or item.get('sid')
+            media_url = item.get('Url') or item.get('url')
+            service_sid = body.get('ChatServiceSid') or item.get('ServiceSid') or item.get('service_sid')
+            if not isinstance(media_url, str) and isinstance(media_sid, str) and isinstance(service_sid, str):
+                media_url = f'https://mcs.us1.twilio.com/v1/Services/{service_sid}/Media/{media_sid}'
+            if not isinstance(media_url, str) or not media_url.strip():
+                continue
+            mime_type = item.get('ContentType') or item.get('content_type') or 'application/octet-stream'
+            filename = item.get('Filename') or item.get('file_name') or 'attachment'
+            attachments.append(
+                {
+                    'source': 'twilio',
+                    'url': media_url.strip(),
+                    'filename': str(filename),
+                    'mime_type': str(mime_type),
+                }
+            )
+    if not text and not attachments:
+        return None
+    payload: Dict[str, Any] = {
+        'event_id': message_sid,
+        'message_id': message_sid,
+        'channel_user_id': author,
+        'channel_chat_id': conversation_sid,
+        'text': text,
+        'provider_mode': 'twilio_conversations',
+        'sender_name': author,
+    }
+    if attachments:
+        payload['attachments'] = attachments
+    return payload
+
+
 def parse_channel_command(text: str) -> Optional[Tuple[str, str]]:
     if not text.startswith('/'):
         return None
@@ -370,7 +433,14 @@ async def generate_channel_reply(
     return response
 
 
-async def send_channel_message(channel: str, channel_chat_id: str, text: str, *, is_group: bool = False) -> None:
+async def send_channel_message(
+    channel: str,
+    channel_chat_id: str,
+    text: str,
+    *,
+    is_group: bool = False,
+    provider_mode: Optional[str] = None,
+) -> None:
     client = get_webhook_client()
     if channel == 'telegram':
         token = _setting('TELEGRAM_BOT_TOKEN')
@@ -402,6 +472,17 @@ async def send_channel_message(channel: str, channel_chat_id: str, text: str, *,
                 'content-type': 'application/json',
             },
             json=body,
+        )
+    elif provider_mode == 'twilio_conversations':
+        account_sid = _setting('TWILIO_ACCOUNT_SID')
+        auth_token = _setting('TWILIO_AUTH_TOKEN')
+        if not account_sid or not auth_token or not re.fullmatch(r'CH[0-9a-fA-F]{32}', channel_chat_id):
+            raise ChannelProviderError('Twilio Conversations credentials or conversation ID are not configured')
+        url = f'https://conversations.twilio.com/v1/Conversations/{channel_chat_id}/Messages'
+        response = await client.post(
+            url,
+            auth=(account_sid, auth_token),
+            data={'Body': text},
         )
     else:
         try:

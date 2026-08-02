@@ -102,6 +102,26 @@ def test_sendblue_and_twilio_parsers_preserve_media_urls():
     assert twilio['attachments'][0]['mime_type'] == 'image/jpeg'
 
 
+def test_twilio_conversations_parser_binds_the_room_and_expands_media():
+    assert channel_chat.parse_twilio_conversation_inbound({'EventType': 'onMessageAdded', 'Author': 'system'}) is None
+    payload = channel_chat.parse_twilio_conversation_inbound(
+        {
+            'EventType': 'onMessageAdded',
+            'MessageSid': 'IM1',
+            'ConversationSid': 'CH1',
+            'ChatServiceSid': 'IS1',
+            'Author': '+15551234567',
+            'Body': 'look',
+            'Media': '[{"Sid":"ME1","ContentType":"image/jpeg","Filename":"photo.jpg"}]',
+        }
+    )
+    assert payload is not None
+    assert payload['channel_user_id'] == '+15551234567'
+    assert payload['channel_chat_id'] == 'CH1'
+    assert payload['provider_mode'] == 'twilio_conversations'
+    assert payload['attachments'][0]['url'] == 'https://mcs.us1.twilio.com/v1/Services/IS1/Media/ME1'
+
+
 def test_twilio_sms_parser_uses_sender_identity_and_rejects_empty_messages():
     assert (
         channel_chat.parse_twilio_sms_inbound({'MessageSid': 'SM1', 'From': '+15551234567', 'To': '+15557654321'})
@@ -339,6 +359,19 @@ def test_provider_delivery_uses_provider_specific_auth(monkeypatch):
             },
             'json': {'group_id': 'group-1', 'from_number': '+15557654321', 'content': 'hello'},
         },
+    )
+
+    monkeypatch.setenv('TWILIO_ACCOUNT_SID', 'AC' + '1' * 32)
+    monkeypatch.setenv('TWILIO_AUTH_TOKEN', 'auth-token')
+    conversation_sid = 'CH' + '2' * 32
+    asyncio.run(
+        channel_chat.send_channel_message(
+            'sms', conversation_sid, 'hello', is_group=True, provider_mode='twilio_conversations'
+        )
+    )
+    assert requests[-1] == (
+        f'https://conversations.twilio.com/v1/Conversations/{conversation_sid}/Messages',
+        {'auth': ('AC' + '1' * 32, 'auth-token'), 'data': {'Body': 'hello'}},
     )
 
 

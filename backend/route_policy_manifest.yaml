@@ -248,6 +248,29 @@ routes:
       owner: backend
   - route_type: http
     method: POST
+    path: /v1/webhooks/twilio/conversations
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - webhook_signature
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: webhook
+      visibility: public_undocumented
+      data_domain: chat
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v2/agent/provision
     policy: *desktop_migration_policy
   - route_type: http
