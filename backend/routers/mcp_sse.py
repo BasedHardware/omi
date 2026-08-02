@@ -96,6 +96,7 @@ from utils.mcp_analytics import (
     result_count_for_tool_result,
     schedule_mcp_tool_call,
 )
+from utils.mcp_memory_platform import build_mcp_memory_platform_payload
 from utils.observability.api_keys import record_api_key_repairs
 from utils.other.endpoints import (
     cutover_enforcement_enabled,
@@ -277,6 +278,7 @@ def invalid_mcp_auth_exception(
 
 TOOL_REQUIRED_SCOPE = {
     "get_user_profile": "memories.read",
+    "memory_platform": "memories.read",
     "get_memories": "memories.read",
     "search_memories": "memories.read",
     "create_memory": "memories.write",
@@ -328,6 +330,13 @@ def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 # MCP Tool Definitions
 MCP_TOOLS: List[Dict[str, Any]] = [
+    {
+        "name": "memory_platform",
+        "description": "Describe Omi's backend-authoritative memory contract and its zkr mirror boundary.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {"type": "object", "properties": {}},
+    },
     {
         "name": "get_user_profile",
         "description": (
@@ -850,7 +859,10 @@ def execute_tool(
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     memory_system = pin_memory_system(user_id, db_client=db)
 
-    if tool_name == "get_user_profile":
+    if tool_name == "memory_platform":
+        return build_mcp_memory_platform_payload()
+
+    elif tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
             return {"profile": None, "message": "No profile has been generated for this user yet."}

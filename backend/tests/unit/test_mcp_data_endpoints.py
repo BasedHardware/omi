@@ -254,6 +254,7 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert session_id is None
     assert 'get_memories' in names
     assert 'search_memories' in names
+    assert 'memory_platform' in names
     assert 'create_memory' not in names
     assert 'get_conversations' not in names
 
@@ -605,6 +606,7 @@ class TestToolRegistry:
     def test_new_tools_registered(self):
         names = {t['name'] for t in sse.MCP_TOOLS}
         for expected in [
+            'memory_platform',
             'get_action_items',
             'get_goals',
             'get_chat_messages',
@@ -613,6 +615,16 @@ class TestToolRegistry:
             'get_daily_summaries',
         ]:
             assert expected in names, f"{expected} missing from MCP_TOOLS"
+
+    def test_memory_platform_dispatch_returns_backend_authority_payload(self):
+        result = sse.execute_tool(UID, 'memory_platform', {})
+
+        assert result['authority'] == 'omi_backend'
+        assert result['canonical_store']['collection'] == 'memory_items'
+        assert result['surfaces']['rest'] == 'GET /v1/memory/platform'
+        assert result['surfaces']['mcp'] == 'memory_platform'
+        assert result['zkr']['replica_role'] == 'mirror'
+        assert result['zkr']['sync_implemented'] is False
 
     def test_every_tool_has_a_dispatch_branch(self):
         # Each declared read-only data tool must dispatch (not fall through to "Unknown tool").
