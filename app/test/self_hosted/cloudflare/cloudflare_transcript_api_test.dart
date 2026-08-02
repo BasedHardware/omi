@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_api.dart';
 import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_configuration.dart';
+import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_models.dart';
 
 void main() {
   const token = 'test-token-that-must-not-appear-in-errors';
@@ -138,6 +139,31 @@ void main() {
     expect(transcript.fullText, 'first\nsecond');
   });
 
+  test('accepts only JSON integers for transcript chunk sequence values', () async {
+    for (final invalidSequence in <String>['"1"', 'null', '1.5', 'true']) {
+      final api = CloudflareTranscriptHttpApi(
+        configuration: configuration,
+        client: MockClient(
+          (_) async => http.Response(
+            '{"session":{"id":"session-1"},"chunks":[{"sequence":$invalidSequence,"text":"chunk"}]}',
+            200,
+          ),
+        ),
+      );
+
+      await expectLater(api.getTranscript('session-1'), throwsA(isA<CloudflareTranscriptApiException>()));
+    }
+  });
+
+  test('chunk model rejects non-integer JSON sequence values', () {
+    for (final invalidSequence in <Object?>['1', null, 1.5, true]) {
+      expect(
+        () => CloudflareTranscriptChunk.fromJson({'sequence': invalidSequence, 'text': 'chunk'}),
+        throwsA(isA<CloudflareTranscriptApiException>()),
+      );
+    }
+  });
+
   test('rejects a non-object transcript chunk in the Worker detail response', () async {
     final api = CloudflareTranscriptHttpApi(
       configuration: configuration,
@@ -202,6 +228,67 @@ void main() {
     await expectLater(
       timeoutApi.listSessions(),
       throwsA(predicate((Object error) => !error.toString().contains(token))),
+    );
+  });
+
+  test('preserves known Cloudflare errors without replacing their safe message', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => http.Response('not relevant', 404)),
+    );
+
+    await expectLater(
+      api.listSessions(),
+      throwsA(
+        predicate(
+          (Object error) =>
+              error is CloudflareTranscriptApiException && error.message == 'Worker request failed with HTTP 404.',
+        ),
+      ),
+    );
+  });
+
+  test('preserves injected Cloudflare errors without replacing their safe message', () async {
+    const knownMessage = 'known safe domain error';
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((_) async => throw const CloudflareTranscriptApiException(knownMessage)),
+    );
+
+    await expectLater(
+      api.listSessions(),
+      throwsA(
+        predicate(
+          (Object error) => error is CloudflareTranscriptApiException && error.message == knownMessage,
+        ),
+      ),
+    );
+  });
+
+  test('wraps ClientException values in a fixed safe Cloudflare error', () async {
+    const sensitiveSentinel = 'token-url-request-response-secret';
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient(
+        (request) async => throw http.ClientException(
+          'transport failure $sensitiveSentinel $token ${request.url}',
+          request.url,
+        ),
+      ),
+    );
+
+    await expectLater(
+      api.listSessions(),
+      throwsA(
+        predicate(
+          (Object error) =>
+              error is CloudflareTranscriptApiException &&
+              error.message == 'Worker request failed.' &&
+              !error.message.contains(sensitiveSentinel) &&
+              !error.message.contains(token) &&
+              !error.message.contains('worker.example.test'),
+        ),
+      ),
     );
   });
 }

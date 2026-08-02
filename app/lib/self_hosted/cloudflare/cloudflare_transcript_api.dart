@@ -4,7 +4,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'cloudflare_transcript_configuration.dart';
+import 'cloudflare_transcript_exception.dart';
 import 'cloudflare_transcript_models.dart';
+
+export 'cloudflare_transcript_exception.dart';
 
 abstract interface class CloudflareTranscriptApi {
   bool get enabled;
@@ -85,12 +88,12 @@ class CloudflareTranscriptHttpApi implements CloudflareTranscriptApi {
       }
       final chunk = Map<String, dynamic>.from(rawChunk);
       if (_parseSequence(chunk['sequence']) == null || chunk['text'] is! String) {
-        throw const CloudflareTranscriptApiException('Worker response contains a malformed transcript chunk.');
+        throw const CloudflareTranscriptApiException.malformedTranscriptChunk();
       }
     }
   }
 
-  int? _parseSequence(Object? value) => value is int ? value : int.tryParse(value?.toString() ?? '');
+  int? _parseSequence(Object? value) => value is int ? value : null;
 
   Uri _endpoint(String path, {Map<String, String>? queryParameters}) {
     final base = _configuration.baseUri;
@@ -112,19 +115,14 @@ class CloudflareTranscriptHttpApi implements CloudflareTranscriptApi {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) throw const CloudflareTranscriptApiException('Worker response is not a JSON object.');
       return Map<String, dynamic>.from(decoded);
+    } on CloudflareTranscriptApiException {
+      rethrow;
     } on TimeoutException {
       throw const CloudflareTranscriptApiException('Worker request timed out.');
     } on FormatException {
       throw const CloudflareTranscriptApiException('Worker response is not valid JSON.');
+    } catch (_) {
+      throw const CloudflareTranscriptApiException.transportFailure();
     }
   }
-}
-
-class CloudflareTranscriptApiException implements Exception {
-  const CloudflareTranscriptApiException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }

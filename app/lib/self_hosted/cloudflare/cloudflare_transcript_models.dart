@@ -1,3 +1,5 @@
+import 'cloudflare_transcript_exception.dart';
+
 class CloudflareTranscriptSession {
   const CloudflareTranscriptSession({
     required this.id,
@@ -31,7 +33,7 @@ class CloudflareTranscriptChunk {
 
   factory CloudflareTranscriptChunk.fromJson(Map<String, dynamic> json) {
     return CloudflareTranscriptChunk(
-      sequence: _parseInt(json['sequence']) ?? 0,
+      sequence: _requiredJsonInt(json['sequence']),
       text: json['text'] as String? ?? '',
     );
   }
@@ -70,3 +72,8 @@ class CloudflareTranscriptDetail {
 DateTime? _parseDate(Object? value) => value is String ? DateTime.tryParse(value)?.toLocal() : null;
 
 int? _parseInt(Object? value) => value is int ? value : int.tryParse(value?.toString() ?? '');
+
+int _requiredJsonInt(Object? value) {
+  if (value is int) return value;
+  throw const CloudflareTranscriptApiException.malformedTranscriptChunk();
+}
