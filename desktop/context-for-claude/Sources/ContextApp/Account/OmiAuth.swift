@@ -53,6 +53,14 @@ final class OmiAuth: ObservableObject {
     @Published private(set) var isSignedIn = false
     @Published private(set) var isSigningIn = false
 
+    /// Why the last sign-in did not finish, or `nil` if none has failed since one was last started.
+    ///
+    /// Published rather than returned, because the surface that starts a sign-in is usually gone
+    /// before it ends: the menu bar popover is `.transient` and macOS tears it down the moment the
+    /// browser takes focus, so an error held in a view's `@State` is an error nobody is ever shown.
+    /// Living here, it is still on screen the next time the popover opens.
+    @Published private(set) var lastSignInError: String?
+
     private var session: OmiSession?
     private var refreshFlight: RefreshFlight?
 
@@ -106,12 +114,42 @@ final class OmiAuth: ObservableObject {
         )
     }
 
+    /// Starts a sign-in **that outlives the view which asked for it**, and records the outcome here.
+    ///
+    /// The same round trip as `signIn(provider:)` — this is not a second sign-in path, it owns the
+    /// task rather than the credentials — and it exists for one reason: a caller that cannot await.
+    /// The menu bar popover is an `NSPopover` with `.transient` behaviour, so opening the browser
+    /// closes it and destroys its view; a `Task` a *view* owns would be a sign-in cancelled halfway
+    /// through by the user looking at their browser. This type is a singleton for the life of the
+    /// app, so a task started here simply finishes.
+    ///
+    /// Onboarding keeps the `async` form: it has a card on screen for the whole round trip and a
+    /// step to advance to afterwards, which is a decision only that caller can make.
+    func beginSignIn(provider: OmiAuthProvider) {
+        guard !isSigningIn else {
+            ContextLog.info("Sign-in already in progress; ignoring duplicate request", "auth")
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.signIn(provider: provider)
+            } catch {
+                // `signIn` already logged the cause; this is the sentence the user is shown.
+                self.lastSignInError = error.localizedDescription
+            }
+        }
+    }
+
     func signIn(provider: OmiAuthProvider) async throws {
         guard !isSigningIn else {
             ContextLog.info("Sign-in already in progress; ignoring duplicate request", "auth")
             throw OmiAuthError.cancelled
         }
         isSigningIn = true
+        // A new attempt clears the last one's verdict: a stale error under a live "waiting for your
+        // browser…" line is the app contradicting itself.
+        lastSignInError = nil
         defer { isSigningIn = false }
 
         // Resolve the key before a browser opens. Discovering a misconfigured build *after* the user
@@ -179,6 +217,9 @@ final class OmiAuth: ObservableObject {
         userId = nil
         email = nil
         isSignedIn = false
+        // Signing out is a clean slate, and the popover offers a Sign in link the instant this
+        // lands — under which a previous attempt's failure would read as this one's.
+        lastSignInError = nil
         SessionStore.clear()
         MCPKeyProvisioner.shared.removeKey()
         ContextLog.info("Signed out", "auth")

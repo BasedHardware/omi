@@ -24,6 +24,15 @@ struct StatusView: View {
     @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
     @State private var claudeNote: String?
 
+    /// Whether the two provider rows are showing under the account line.
+    ///
+    /// A disclosure rather than two rows that are always there: the signed-out state is meant to
+    /// read as one sentence with one thing to press, and a menu that permanently carries two
+    /// provider rows for a state most users are never in is a menu that has grown a settings pane.
+    /// `@State`, so re-opening the popover comes back to the resting state — which is right, because
+    /// re-opening it is how a user backs out of a menu on this platform.
+    @State private var offeringProviders = false
+
     /// Permissions are flipped in System Settings, outside this process, and a system-audio consent
     /// dialog can be answered while the popover is still on screen. The subscription lives and dies
     /// with the popover, so this costs nothing the other 23 hours of the day.
@@ -216,42 +225,94 @@ struct StatusView: View {
         .padding(.trailing, 4)
     }
 
-    /// Which Omi account the recordings land in, and whether anything is stuck on the way there.
+    /// Which Omi account the recordings land in, whether anything is stuck on the way there, and —
+    /// when there is no account — the way back in.
+    ///
     /// A recorder that is quietly not syncing looks identical to one that is, which is why the
-    /// backlog is on screen rather than in a log.
+    /// backlog is on screen rather than in a log. The same argument is why the sign-in is here: this
+    /// popover carried a `Sign out` and nothing to undo it with, so a user who signed out had no
+    /// route back to an account anywhere in the app — onboarding does not run twice, and there is no
+    /// Dock icon, window menu or Account pane to find one in. A state the app can enter and cannot
+    /// leave is a dead end, not a preference.
     private var accountLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(accountSummary)
-                    .font(.system(size: Self.menuFontSize))
-                    .foregroundStyle(auth.isSignedIn ? Ink.secondary : Ink.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let note = uploadNote {
-                    Text(note)
-                        .font(.system(size: Self.menuSmallFontSize))
-                        .foregroundStyle(uploads.lastError == nil ? Ink.secondary : Ink.errorRed)
+        let account = self.account
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(account.summary)
+                        .font(.system(size: Self.menuFontSize))
+                        // Not signed in is the state with something to do about it, so it is the
+                        // state that gets full contrast — the same rule the Claude line follows.
+                        .foregroundStyle(auth.isSignedIn ? Ink.secondary : Ink.primary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let note = account.note {
+                        Text(note)
+                            .font(.system(size: Self.menuSmallFontSize))
+                            .foregroundStyle(account.noteIsError ? Ink.errorRed : Ink.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if let action = account.action {
+                    Button(action.title) { perform(action) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: Self.menuFontSize))
+                        .foregroundStyle(action.isRepair ? Ink.accent : Ink.tertiary)
                 }
             }
+            .frame(minHeight: Self.rowHeight)
+            .padding(.leading, Self.rowTextInset)
+            .padding(.trailing, 4)
 
-            Spacer(minLength: 8)
-
-            if auth.isSignedIn {
-                Button("Sign out") { auth.signOut() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: Self.menuFontSize))
-                    .foregroundStyle(Ink.tertiary)
+            // Outside the inset above on purpose: these are commands, and every command on this
+            // surface starts on the one left edge `MenuCommand` holds open for a checkmark.
+            // Indenting them under the sentence would give the popover a second left margin.
+            if account.showsProviders {
+                ForEach(AccountPresentation.providers) { choice in
+                    MenuCommand(title: choice.title) { begin(choice.provider) }
+                }
             }
         }
-        .frame(minHeight: Self.rowHeight)
-        .padding(.leading, Self.rowTextInset)
-        .padding(.trailing, 4)
     }
 
-    private var accountSummary: String {
-        guard auth.isSignedIn else { return "Not signed in — nothing is reaching your Omi account" }
-        return "Syncing to \(auth.email ?? "your Omi account")"
+    /// The account line as a value. Every branch lives in `AccountPresentation`, so this view has no
+    /// judgement of its own about a state it cannot be driven through in a test.
+    private var account: AccountPresentation {
+        AccountPresentation(
+            signedIn: auth.isSignedIn,
+            signingIn: auth.isSigningIn,
+            email: auth.email,
+            offeringProviders: offeringProviders,
+            signInError: auth.lastSignInError,
+            uploadNote: uploadNote,
+            uploadFailed: uploads.lastError != nil)
+    }
+
+    private func perform(_ action: AccountPresentation.Action) {
+        switch action {
+        case .signOut:
+            auth.signOut()
+            // Not opened for them: signing out and being handed a provider menu reads as the app
+            // arguing with the choice they just made.
+            offeringProviders = false
+        case .signIn:
+            offeringProviders = true
+        case .dismissProviders:
+            offeringProviders = false
+        }
+    }
+
+    /// Opens the browser. The task lives on `OmiAuth` and not on this view: the popover is
+    /// `.transient`, so macOS closes it — and destroys this view — the instant the browser takes
+    /// focus, which is a few milliseconds into the round trip. Everything downstream of an account
+    /// (`ConversationUploader`, `ListenSocket`, `ScreenActivityUploader`, `MCPKeyProvisioner`)
+    /// already subscribes to `OmiAuth.$isSignedIn`, so nothing here has to restart them.
+    private func begin(_ provider: OmiAuthProvider) {
+        offeringProviders = false
+        auth.beginSignIn(provider: provider)
     }
 
     private var uploadNote: String? {
