@@ -42559,6 +42559,7 @@
     },
     "/v1/mcp/screen-activity": {
       "get": {
+        "deprecated": true,
         "operationId": "get_screen_activity_v1_mcp_screen_activity_get",
         "parameters": [
           {

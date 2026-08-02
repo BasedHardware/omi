@@ -565,7 +565,7 @@ enum MemoryBankConnector {
     """
     <!-- \(marker) -->
     ## OMI memory (search FIRST)
-    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations`, `omi-memory__get_daily_summaries`, or `omi-memory__get_screen_activity` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
+    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations` or `omi-memory__get_daily_summaries` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
     <!-- /\(marker) -->
     """
   }
