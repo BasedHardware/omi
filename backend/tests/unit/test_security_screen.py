@@ -19,6 +19,7 @@ from utils.security.screen import (
     SourceKind,
     parse_security_screen_verdict,
     screen_chunks,
+    screen_labelled_chunks,
     screen_payload,
     unscreened_notice,
 )
@@ -204,6 +205,12 @@ async def test_the_policy_is_a_system_message_and_the_chunk_a_user_message():
     assert 'tool_result:get_gmail_messages_tool' in prompt
 
 
+def test_every_labelled_chunk_keeps_its_source():
+    chunks = screen_labelled_chunks(_tool_result('a' * (SCREEN_CHUNK_CHARS * 2)))
+    assert len(chunks) > 1
+    assert all('tool_result:get_gmail_messages_tool' in chunk for chunk in chunks)
+
+
 async def test_the_strictest_chunk_wins():
     screener, _ = _screener(['{"decision":"auto"}', '{"decision":"strict","reason":"exfiltration"}'] * 8)
     outcome = await screener.screen(_tool_result('a' * (SCREEN_CHUNK_CHARS * 2)))
@@ -241,6 +248,15 @@ async def test_a_raising_classifier_is_unavailable_not_an_exception():
     screener = SecurityScreener(classifier, retry_delays_seconds=FAST_RETRIES)
     outcome = await screener.screen(_tool_result('hello'))
     assert outcome.kind is ScreenOutcomeKind.UNAVAILABLE
+
+
+async def test_classifier_cancellation_propagates():
+    async def classifier(system, prompt, cancel):
+        raise asyncio.CancelledError
+
+    screener = SecurityScreener(classifier, retry_delays_seconds=FAST_RETRIES)
+    with pytest.raises(asyncio.CancelledError):
+        await screener.screen(_tool_result('hello'))
 
 
 async def test_a_hung_classifier_times_out_to_unavailable():
