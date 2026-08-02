@@ -33,7 +33,6 @@ SUPPORTED_SCOPES = [
     "action_items.write",
     "goals.read",
     "chat.read",
-    "screen_activity.read",
     "people.read",
 ]
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))

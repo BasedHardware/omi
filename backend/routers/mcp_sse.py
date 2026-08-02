@@ -19,7 +19,6 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from pydantic import BaseModel
 
 import firebase_admin.auth
-from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -36,7 +35,6 @@ import database.users as users_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.chat as chat_db
-import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
@@ -61,7 +59,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import clean_action_item, clean_chat_message, clean_person
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -124,7 +122,6 @@ ACTION_ITEMS_READ_SECURITY = [{"type": "oauth2", "scopes": ["action_items.read"]
 ACTION_ITEMS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["action_items.write"]}]
 GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
-SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 
 
@@ -255,7 +252,6 @@ TOOL_REQUIRED_SCOPE = {
     "get_goals": "goals.read",
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
-    "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
 }
 
@@ -268,7 +264,6 @@ SCOPE_PERMISSION_TEXT = {
     "action_items.write": "Create, update, and delete your Omi action items",
     "goals.read": "Read your Omi goals",
     "chat.read": "Read your Omi chat history",
-    "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
 }
 
@@ -648,34 +643,6 @@ MCP_TOOLS: List[Dict[str, Any]] = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "get_screen_activity",
-        "description": (
-            "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
-            "on-screen text, ordered by time. Pass summary=true for an aggregated per-app usage breakdown instead "
-            "of raw rows. High-signal context on what the user actually does day to day."
-        ),
-        "annotations": READ_ONLY_ANNOTATIONS,
-        "securitySchemes": SCREEN_ACTIVITY_READ_SECURITY,
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
-                "app": {"type": "string", "description": "Filter to a single app name"},
-                "summary": {
-                    "type": "boolean",
-                    "description": "Return an aggregated per-app usage summary instead of raw rows",
-                    "default": False,
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max raw rows to return (ignored when summary=true)",
-                    "default": 200,
-                },
-            },
-        },
-    },
-    {
         "name": "get_daily_summaries",
         "description": (
             "Retrieve Omi's per-day summaries of the user's life, newest first. A concise digest of what happened "
@@ -755,20 +722,6 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
     if exc.status_code in {403, 409, 503}:
         raise ToolExecutionError(str(exc.detail), code=-32009) from exc
     raise ToolExecutionError(str(exc.detail)) from exc
-
-
-def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
-    """Turn a missing-Firestore-index failure into a typed, actionable tool error.
-
-    The app-filtered screen activity query needs a composite index (appName +
-    timestamp). Without it Firestore raises FailedPrecondition, which otherwise
-    surfaces to the MCP client as an opaque 500 (see AGENTS.md gotcha #7).
-    """
-    raise ToolExecutionError(
-        "Screen activity isn't queryable right now — its search index is still being built. "
-        "Retry in a few minutes, or narrow the request by removing the app filter.",
-        code=-32009,
-    ) from exc
 
 
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
@@ -1341,31 +1294,6 @@ def execute_tool(
 
     elif tool_name == "get_people":
         return {"people": [clean_person(p) for p in users_db.get_people(user_id)]}
-
-    elif tool_name == "get_screen_activity":
-        start = _parse_mcp_date(arguments.get("start_date"), "start_date")
-        end = _parse_mcp_date(arguments.get("end_date"), "end_date")
-        app = arguments.get("app")
-        try:
-            summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
-        except ValueError as e:
-            raise ToolExecutionError(str(e), code=-32602)
-        if summary:
-            try:
-                return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
-            except FailedPrecondition as e:
-                _raise_screen_activity_index_error(e)
-        try:
-            limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
-        except ValueError as e:
-            raise ToolExecutionError(str(e), code=-32602)
-        try:
-            rows = screen_activity_db.get_screen_activity(
-                user_id, start_date=start, end_date=end, app_filter=app, limit=limit
-            )
-        except FailedPrecondition as e:
-            _raise_screen_activity_index_error(e)
-        return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
 
     elif tool_name == "get_daily_summaries":
         try:

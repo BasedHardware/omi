@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from utils.executors import db_executor, postprocess_executor
 
@@ -12,7 +12,6 @@ import database.users as users_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.chat as chat_db
-import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
 import database.phone_calls as phone_calls_db
@@ -51,7 +50,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import clean_action_item, clean_chat_message, clean_person
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -78,26 +77,6 @@ class McpStatusResponse(BaseModel):
 
 class McpOauthGrantsResponse(BaseModel):
     grants: List[Dict[str, Any]] = []
-
-
-class McpScreenActivityRow(BaseModel):
-    id: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    app_name: Optional[str] = None
-    window_title: Optional[str] = None
-    ocr_text: Optional[str] = None
-
-
-class McpScreenActivityAppSummary(BaseModel):
-    count: int = 0
-    first_seen: Optional[datetime] = None
-    last_seen: Optional[datetime] = None
-    window_titles: List[str] = []
-
-
-class McpScreenActivitySummaryResponse(BaseModel):
-    apps: Dict[str, McpScreenActivityAppSummary] = {}
-    total_screenshots: int = 0
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
@@ -771,34 +750,6 @@ class SimplePerson(BaseModel):
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
-
-
-# ---------------------------------------------------------------------------
-# Screen activity — desktop Rewind (app, window title, OCR text)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/v1/mcp/screen-activity",
-    tags=["mcp"],
-    response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
-)
-def get_screen_activity(
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    app: Optional[str] = None,
-    summary: bool = False,
-    limit: int = 200,
-    uid: str = Depends(get_uid_from_mcp_api_key),
-):
-    logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
-    if summary:
-        return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
-    limit = max(1, min(limit, 200))
-    rows = screen_activity_db.get_screen_activity(
-        uid, start_date=start_date, end_date=end_date, app_filter=app, limit=limit
-    )
-    return [clean_screen_activity_row(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------

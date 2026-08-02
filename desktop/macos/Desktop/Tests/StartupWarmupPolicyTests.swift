@@ -10,13 +10,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testScreenActivitySyncWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.screenActivitySyncInitialDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testCrispInitialPollWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.crispInitialPollDelay,
