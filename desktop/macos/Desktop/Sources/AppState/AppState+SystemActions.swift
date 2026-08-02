@@ -455,6 +455,22 @@ extension AppState {
       }
     }
   }
+
+  /// Stop the active session and wait until its microphone IOProc is physically gone.
+  /// Settings uses this boundary before reopening capture with changed preferences.
+  func prepareTranscriptionRestartAfterSettingsChange() async -> Bool {
+    guard isTranscribing else { return false }
+
+    let stoppedGeneration = recordingGeneration
+    let stoppedCapture = audioCaptureService
+    let stopCompletion = stopTranscription()
+    await stopCompletion?.value
+    await stoppedCapture?.waitForPhysicalStop()
+
+    // A user may have toggled listening while teardown was in flight. Never let
+    // this older settings change reopen capture over that newer decision.
+    return recordingGeneration == stoppedGeneration && !isTranscribing
+  }
 }
 
 // MARK: - System Event Notification Names
