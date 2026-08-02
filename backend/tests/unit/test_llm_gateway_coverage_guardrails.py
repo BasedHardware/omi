@@ -119,15 +119,15 @@ def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_su
     config = load_gateway_config(prod_mode=True)
 
     for feature in get_all_configured_features():
-        if get_provider(feature) == 'anthropic':
+        if get_provider(feature) == 'anthropic' and feature != 'chat_agent':
             lane = config.lanes[feature_lane_id(feature)]
-            if feature == 'chat_agent':
-                assert lane.surface == Surface.ANTHROPIC_MESSAGES
-                assert lane.capabilities.streaming is True
-                assert lane.capabilities.tools is True
-            else:
-                assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
-                assert lane.capabilities.streaming is False
+            assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+            assert lane.capabilities.streaming is False
+
+    chat_agent = config.lanes[feature_lane_id('chat_agent')]
+    assert chat_agent.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert chat_agent.capabilities.streaming is True
+    assert chat_agent.capabilities.tools is True
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():

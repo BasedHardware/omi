@@ -1,6 +1,7 @@
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from routers import desktop_chat
@@ -97,6 +98,48 @@ async def test_stream_emits_openai_terminal_event(monkeypatch):
     ]
     assert json.loads(events[1][6:])['choices'][0]['delta'] == {'content': 'hello'}
     assert events[-1] == 'data: [DONE]\n\n'
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {'x-omi-service-caller': 'backend'})
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, headers, json):
+            self.calls.append({'url': url, 'headers': headers, 'json': json})
+            return httpx.Response(
+                200,
+                json={'id': 'chat-1', 'choices': [{'message': {'content': 'hello'}}]},
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'client-model', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+
+    assert response.body == b'{"id":"chat-1","choices":[{"message":{"content":"hello"}}]}'
+    assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
+    assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
+
+
+async def _done():
+    return None
 
 
 @pytest.mark.asyncio
