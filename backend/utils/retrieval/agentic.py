@@ -12,8 +12,14 @@ import contextvars
 import os
 from typing import List, Optional, AsyncGenerator, Any, Tuple
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.callbacks import BaseCallbackHandler
+
+try:
+    from langgraph.prebuilt import create_react_agent
+except ImportError:
+    create_react_agent = None
 
 # Context variable to store config for tools
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
@@ -60,7 +66,7 @@ from utils.retrieval.safety import (
 )
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, num_tokens_from_string
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from database.redis_db import get_cached_user_geolocation
@@ -84,6 +90,13 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+CHAT_PROVIDER = os.getenv('CHAT_PROVIDER', 'anthropic').strip().lower()
+if CHAT_PROVIDER not in {'anthropic', 'openai'}:
+    logger.warning('Unsupported CHAT_PROVIDER=%s; falling back to anthropic', CHAT_PROVIDER)
+    CHAT_PROVIDER = 'anthropic'
+if CHAT_PROVIDER == 'openai':
+    logger.warning('CHAT_PROVIDER=openai: Anthropic-native web_search and tool_search are unavailable')
 
 
 def _positive_timeout_from_env(name: str, default: float) -> float:
@@ -701,6 +714,121 @@ async def _run_anthropic_agent_stream(
     await callback.end()
 
 
+def _messages_to_langchain(messages: List[Message], system_prompt: str) -> list:
+    result = [SystemMessage(content=system_prompt)]
+    for message in messages:
+        message_type = AIMessage if message.sender == 'ai' else HumanMessage
+        result.append(message_type(content=message.text))
+    return result
+
+
+def _coerce_tool_input_to_params(tool_input: Any) -> dict:
+    """Keep tool-call arguments visible to the safety guard."""
+    if isinstance(tool_input, dict):
+        return tool_input
+    if tool_input is None:
+        return {}
+    args = getattr(tool_input, 'args', None)
+    if isinstance(args, dict):
+        return args
+    for dumper in ('model_dump', 'dict'):
+        method = getattr(tool_input, dumper, None)
+        if callable(method):
+            try:
+                dumped = method()
+            except Exception:
+                continue
+            if isinstance(dumped, dict):
+                return dumped
+    return {'input': tool_input}
+
+
+def _chunk_text(content: Any) -> str:
+    """Extract text from both string and content-part LangChain chunks."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ''
+
+    parts = []
+    for part in content:
+        if isinstance(part, str):
+            parts.append(part)
+        elif isinstance(part, dict) and part.get('type', 'text') == 'text':
+            text = part.get('text')
+            if isinstance(text, str):
+                parts.append(text)
+    return ''.join(parts)
+
+
+async def _run_openai_agent_stream(
+    agent,
+    messages: list,
+    callback: AsyncStreamingCallback,
+    full_response: list,
+    safety_guard: AgentSafetyGuard,
+    configurable: dict,
+) -> Optional[str]:
+    """Run the OpenAI-compatible LangGraph agent through the shared stream contract."""
+    config = RunnableConfig(configurable=configurable)
+    try:
+        async for event in agent.astream_events({'messages': messages}, config=config, version='v2'):
+            kind = event.get('event')
+            event_data = event.get('data', {})
+
+            if kind == 'on_chat_model_stream':
+                token = _chunk_text(getattr(event_data.get('chunk'), 'content', None))
+                if token:
+                    full_response.append(token)
+                    await callback.put_data(token)
+            elif kind == 'on_tool_start':
+                tool_name = event.get('name', 'unknown')
+                guard_params = _coerce_tool_input_to_params(event_data.get('input'))
+                try:
+                    safety_guard.validate_tool_call(tool_name, guard_params)
+                    warning = safety_guard.should_warn_user()
+                    if warning:
+                        await callback.put_thought(warning)
+                except SafetyGuardError as error:
+                    await _put_answer_text(callback, full_response, f'\n\n{error}')
+                    logger.error('Safety Guard blocked tool call: %s', error)
+                    await callback.end()
+                    return None
+
+                tool_obj = next(
+                    (tool for tool in configurable['tools'] if getattr(tool, 'name', None) == tool_name), None
+                )
+                await callback.put_thought(
+                    get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name)
+                )
+            elif kind == 'on_tool_end':
+                tool_name = event.get('name', 'unknown')
+                raw_output = event_data.get('output', '')
+                output = str(getattr(raw_output, 'content', raw_output))
+                await _emit_calendar_status(callback, tool_name, output)
+                try:
+                    safety_guard.check_context_size(output)
+                except SafetyGuardError as error:
+                    await _put_answer_text(callback, full_response, f'\n\n{error}')
+                    logger.error('Safety Guard blocked due to context size: %s', error)
+                    await callback.end()
+                    return None
+            elif kind in {'on_tool_error', 'on_chain_error'}:
+                error = event_data.get('error')
+                logger.error('OpenAI agent event failed event=%s error_type=%s', kind, type(error).__name__)
+
+        logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
+        await callback.end()
+        return None
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:
+        await handle_llm_error_async(error, 'openai', feature='chat_agent')
+        await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+        await callback.end()
+        return f'provider_{type(error).__name__}'
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -767,7 +895,7 @@ def _consume_agent_task_exception(task: asyncio.Task) -> None:
         logger.error('Detached agent stream producer failed error_type=%s', type(error).__name__)
 
 
-@_traceable(name="chat.anthropic.stream", run_type="chain")
+@_traceable(name="chat.agentic.stream", run_type="chain")
 async def execute_agentic_chat_stream(
     uid: str,
     messages: List[Message],
@@ -847,14 +975,23 @@ async def execute_agentic_chat_stream(
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
         return
 
-    # Append app tool awareness to system prompt so Claude knows to search for them
+    # Append app tool awareness using the discovery mechanism available to the provider.
     if app_tools:
         app_names = set()
         for t in app_tools:
             # Tool names are prefixed with app_id; extract the human-readable app name from description
             app_names.add(t.name)
         app_tool_names = ", ".join(sorted(app_names))
-        system_prompt += f"""
+        if CHAT_PROVIDER == 'openai':
+            system_prompt += f"""
+
+<available_app_tools>
+You have access to additional tools from the user's connected apps. Use them when the user asks for actions or data from a matching external service.
+
+Available app tool names: {app_tool_names}
+</available_app_tools>"""
+        else:
+            system_prompt += f"""
 
 <available_app_tools>
 You have access to additional tools from the user's connected apps. These tools are discoverable via the tool_search_tool_regex tool. When the user asks you to do something related to an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.), search for the relevant tool using tool_search_tool_regex with a keyword like "github", "issue", "tweet", etc.
@@ -872,15 +1009,7 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    # Convert tools to Anthropic format (core = visible, app = defer_loading)
-    tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
-
-    # Convert messages to Anthropic format. The current datetime is injected into the user
-    # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
-    anthropic_messages = _messages_to_anthropic(messages)
-    anthropic_messages = _inject_current_datetime(
-        anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
-    )
+    datetime_block = current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
 
     callback = AsyncStreamingCallback()
 
@@ -915,19 +1044,45 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     full_response = []
     tool_usage_count = 0
 
-    # Start agent task
-    task = asyncio.create_task(
-        _run_anthropic_agent_stream(
-            system_prompt,
-            anthropic_messages,
-            tool_schemas,
-            tool_registry,
-            callback,
-            full_response,
-            safety_guard,
-            configurable,
+    if CHAT_PROVIDER == 'openai':
+        if create_react_agent is None:
+            logger.error('CHAT_PROVIDER=openai but langgraph is not installed')
+            if callback_data is not None:
+                callback_data['error'] = 'langgraph is not installed'
+            yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+            return
+
+        # This model is intentionally resolved per request so BYOK credentials are
+        # never captured in a process-global LangGraph agent.
+        openai_agent = create_react_agent(model=get_llm('chat_graph', streaming=True), tools=configurable['tools'])
+        openai_messages = _messages_to_langchain(messages, f'{system_prompt}\n\n{datetime_block}')
+        task = asyncio.create_task(
+            _run_openai_agent_stream(
+                openai_agent,
+                openai_messages,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+            )
         )
-    )
+    else:
+        # Convert messages to Anthropic format. The current datetime is injected
+        # into the user turn so the cacheable system prefix stays byte-stable.
+        anthropic_messages = _inject_current_datetime(_messages_to_anthropic(messages), datetime_block)
+        tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+        task = asyncio.create_task(
+            _run_anthropic_agent_stream(
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+            )
+        )
 
     def keep_streamed_answer() -> bool:
         """Preserve what already reached the user when the stream stops early.
