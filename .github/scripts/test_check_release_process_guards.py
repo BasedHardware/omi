@@ -21,11 +21,22 @@ REVIEWED_PARENT = "4e391ee726642d99abc2c61966dcd80a836e6c1c"
 RAW_SCANNER_PARENT = "11ac6d9e9d27677d06d513364f2e658f5ed99870"
 
 
-def _copy_contract_tree(tmp_path: Path, monkeypatch) -> Path:
-    shutil.copy2(REPO_ROOT / "codemagic.yaml", tmp_path / "codemagic.yaml")
+def _copy_contract_tree(tmp_path: Path, monkeypatch, revision: str | None = None) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    if revision is None:
+        shutil.copy2(REPO_ROOT / "codemagic.yaml", tmp_path / "codemagic.yaml")
+        fixture_bytes = (REPO_ROOT / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json").read_bytes()
+    else:
+        (tmp_path / "codemagic.yaml").write_bytes(
+            subprocess.check_output(["git", "show", f"{revision}:codemagic.yaml"], cwd=REPO_ROOT)
+        )
+        fixture_bytes = subprocess.check_output(
+            ["git", "show", f"{revision}:.github/scripts/fixtures/codemagic_workflow_contract/v1.json"],
+            cwd=REPO_ROOT,
+        )
     fixture = tmp_path / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
     fixture.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json", fixture)
+    fixture.write_bytes(fixture_bytes)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return tmp_path / "codemagic.yaml"
 
@@ -460,10 +471,14 @@ def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_r
     _append_unreviewed_workflow(codemagic, script)
     _restore_parent_preview_credential_shape(codemagic)
 
-    parent = _load_parent_guard(tmp_path)
-    parent.ROOT = tmp_path
+    parent_root = tmp_path / "reviewed-parent"
+    parent_codemagic = _copy_contract_tree(parent_root, monkeypatch, revision=REVIEWED_PARENT)
+    _append_unreviewed_workflow(parent_codemagic, script)
+    parent = _load_parent_guard(parent_root)
+    parent.ROOT = parent_root
     assert parent.check_codemagic_release_publishers() == [], script
 
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
@@ -477,10 +492,18 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
     )
     _restore_parent_preview_credential_shape(codemagic)
 
-    parent = _load_parent_guard(tmp_path)
-    parent.ROOT = tmp_path
+    parent_root = tmp_path / "reviewed-parent"
+    parent_codemagic = _copy_contract_tree(parent_root, monkeypatch, revision=REVIEWED_PARENT)
+    _append_unreviewed_workflow(
+        parent_codemagic,
+        'X=gh; $X release create "$CM_TAG"',
+        credential_group="unrecognized_release_authority",
+    )
+    parent = _load_parent_guard(parent_root)
+    parent.ROOT = parent_root
     assert parent.check_codemagic_release_publishers() == []
 
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
@@ -517,12 +540,17 @@ def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeyp
     if old == "&desktop_signed_artifact_steps":
         _mutate(codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
 
-    parent = _load_parent_guard(tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
-    parent.ROOT = tmp_path
+    parent_root = tmp_path / "reviewed-parent"
+    parent_codemagic = _copy_contract_tree(parent_root, monkeypatch, revision=REVIEWED_PARENT)
+    _mutate(parent_codemagic, old, new)
+    if old == "&desktop_signed_artifact_steps":
+        _mutate(parent_codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
+    parent = _load_parent_guard(parent_root)
+    parent.ROOT = parent_root
     parent_errors = parent.check_codemagic_release_publishers()
     assert (parent_errors == []) is parent_accepts, parent_errors
 
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
@@ -537,12 +565,20 @@ def test_global_document_raw_lock_rejects_semantically_equivalent_yaml_rewrite(t
     assert yaml.safe_load(codemagic.read_text(encoding="utf-8")) == yaml.safe_load(
         (REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8")
     )
-
-    parent = _load_parent_guard(tmp_path)
     _restore_parent_preview_credential_shape(codemagic)
-    parent.ROOT = tmp_path
+
+    parent_root = tmp_path / "reviewed-parent"
+    parent_codemagic = _copy_contract_tree(parent_root, monkeypatch, revision=REVIEWED_PARENT)
+    _mutate(
+        parent_codemagic,
+        "    name: Auto Deploy iOS to Internal TestFlight\n",
+        '    name: "Auto Deploy iOS to Internal TestFlight"\n',
+    )
+    parent = _load_parent_guard(parent_root)
+    parent.ROOT = parent_root
     assert parent.check_codemagic_release_publishers() == []
 
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     _mutate(
         codemagic,
         "        - desktop_preview_secrets\n",
