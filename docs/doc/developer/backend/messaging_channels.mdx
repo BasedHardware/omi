@@ -6,7 +6,7 @@ description: "Authentication, account linking, and core-chat delivery for Telegr
 
 ## Overview
 
-Telegram, iMessage, and SMS are thin adapters over the existing Omi core chat. Inbound messages are stored as external chat messages, sent through the normal retrieval and quota path, and returned through the originating provider.
+Telegram, iMessage, and SMS are thin adapters over the existing Omi core chat. Inbound messages are stored as external chat messages, sent through the normal retrieval and quota path, and returned through the originating provider. Telegram and Sendblue group conversations retain the provider group identity and participant attribution.
 
 The app remains the account authority. A channel never creates an Omi account from an inbound message and never receives a Firebase credential.
 
@@ -36,9 +36,9 @@ This is preferable to treating an SMS or call code as a chat password. It preser
 | POST | `/v1/channels/{channel}/claim` | Firebase ID token | Consume a first-message sign-in claim code |
 | GET | `/v1/channels` | Firebase ID token | List linked channels and phone-registration status |
 | DELETE | `/v1/channels/{channel}` | Firebase ID token | Revoke a channel binding |
-| POST | `/v1/webhooks/telegram` | Telegram secret-token header | Receive one-to-one Telegram messages |
-| POST | `/v1/webhooks/sendblue/{path_token}` | Sendblue secret header and path token | Receive one-to-one iMessage messages |
-| POST | `/v1/webhooks/twilio/sms` | Twilio signature | Receive one-to-one SMS messages |
+| POST | `/v1/webhooks/telegram` | Telegram secret-token header | Receive Telegram direct, group, and media messages |
+| POST | `/v1/webhooks/sendblue/{path_token}` | Sendblue secret header and path token | Receive iMessage direct, group, and media messages |
+| POST | `/v1/webhooks/twilio/sms` | Twilio signature | Receive Twilio SMS and MMS messages |
 
 Provider webhook setup is deployment configuration. The Telegram bot must point at `/v1/webhooks/telegram`; Sendblue must point at the path-token URL and send `sb-signing-secret`; Twilio must point the SMS-capable `TWILIO_SMS_NUMBER` messaging webhook at `/v1/webhooks/twilio/sms`.
 
@@ -46,6 +46,8 @@ Provider webhook setup is deployment configuration. The Telegram bot must point 
 
 Webhook events are claimed by provider event ID before processing. Duplicate events do not create another core-chat turn; a previously prepared reply may be redelivered. Replies are plain text and capped at Telegram's 4096-character limit, iMessage's 2000-character limit, or SMS's 1600-character limit.
 
-Each linked channel invokes `execute_chat_stream` with the normal ordered core-tool registry and deferred per-user app tools. This covers the text core-chat path, including retrieval, memories, actions, calendar, mail, channel management, phone verification, screen activity, and URL fetching. Provider transports do not currently provide file/media uploads, audio, or streamed partial replies.
+Each linked channel invokes `execute_chat_stream` with the normal ordered core-tool registry and deferred per-user app tools. This covers the text core-chat path, including retrieval, memories, actions, calendar, mail, channel management, phone verification, screen activity, and URL fetching. Telegram, Sendblue, and Twilio media is downloaded through provider-allowlisted HTTPS hosts, bounded by attachment size and count, and normalized into the core turn. Images use the existing vision description path, audio uses the existing pre-recorded transcription path, text files are included as bounded text, and other media is recorded as attachment metadata.
+
+Telegram and Sendblue group replies use the provider group identifier. A group link code binds the group conversation, not the sender, so other participants do not inherit a private one-to-one binding. Sendblue group messaging is a provider-beta capability and requires a plan with group access. A normal Twilio SMS/MMS number remains one-to-one; Twilio Conversations is required for SMS group rooms and is intentionally a separate adapter boundary.
 
 Local tests use fake Firestore and HTTP clients. A live acceptance check still needs deployed provider secrets, provider webhook registration, a Firebase-authenticated account, and one real inbound/outbound turn for each channel.

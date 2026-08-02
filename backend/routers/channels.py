@@ -118,17 +118,19 @@ async def revoke_channel(
     return {'status': 'ok', 'revoked': count}
 
 
-async def _send_and_record(channel: str, event_id: str, channel_chat_id: str, reply: str) -> None:
+async def _send_and_record(
+    channel: str, event_id: str, channel_chat_id: str, reply: str, *, is_group: bool = False
+) -> None:
     reply = sanitize_channel_reply(channel, reply)
     await run_blocking(
         db_executor,
         channels_db.update_webhook_event,
         channel,
         event_id,
-        {'status': 'ready', 'reply': reply, 'channel_chat_id': channel_chat_id},
+        {'status': 'ready', 'reply': reply, 'channel_chat_id': channel_chat_id, 'is_group': is_group},
     )
     try:
-        await send_channel_message(channel, channel_chat_id, reply)
+        await send_channel_message(channel, channel_chat_id, reply, is_group=is_group)
     except ChannelProviderError:
         raise HTTPException(status_code=503, detail='Channel delivery unavailable')
     await run_blocking(db_executor, channels_db.update_webhook_event, channel, event_id, {'status': 'delivered'})
@@ -137,19 +139,25 @@ async def _send_and_record(channel: str, event_id: str, channel_chat_id: str, re
 async def _duplicate_event_response(channel: str, event_id: str, event: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not event or event.get('status') != 'ready' or not event.get('reply') or not event.get('channel_chat_id'):
         return {'status': 'duplicate'}
-    await _send_and_record(channel, event_id, str(event['channel_chat_id']), str(event['reply']))
+    await _send_and_record(
+        channel,
+        event_id,
+        str(event['channel_chat_id']),
+        str(event['reply']),
+        is_group=bool(event.get('is_group')),
+    )
     return {'status': 'redelivered'}
 
 
-async def _channel_reply(channel: str, payload: Dict[str, str]) -> str:
+async def _channel_reply(channel: str, payload: Dict[str, Any]) -> str:
     channel_user_id = payload['channel_user_id']
     channel_chat_id = payload['channel_chat_id']
     text = payload['text']
-    if channel_chat_id != channel_user_id:
-        return 'Omi currently supports one-to-one channel chats only.'
+    is_group = channel_chat_id != channel_user_id
 
     command = parse_channel_command(text)
-    binding = await run_blocking(db_executor, channels_db.get_binding, channel, channel_user_id)
+    binding_args = (channel, channel_user_id, channel_chat_id) if is_group else (channel, channel_user_id)
+    binding = await run_blocking(db_executor, channels_db.get_binding, *binding_args)
     if command:
         name, argument = command
         if name in {'/help'}:
@@ -161,7 +169,8 @@ async def _channel_reply(channel: str, payload: Dict[str, str]) -> str:
         if name in {'/unlink', '/logout'}:
             if not binding:
                 return NOT_LINKED_TEXT
-            revoked = await run_blocking(db_executor, channels_db.revoke_binding, channel, channel_user_id)
+            revoke_args = (channel, channel_user_id, channel_chat_id) if is_group else (channel, channel_user_id)
+            revoked = await run_blocking(db_executor, channels_db.revoke_binding, *revoke_args)
             return 'This channel is disconnected.' if revoked else NOT_LINKED_TEXT
         if name in {'/start', '/link'} and argument:
             token = normalize_link_token(argument)
@@ -194,18 +203,33 @@ async def _channel_reply(channel: str, payload: Dict[str, str]) -> str:
         )
         return channel_sign_in_text(channel, token, expires_at)
     try:
-        return await generate_channel_reply(binding['uid'], channel, text)
+        sender_name = payload.get('sender_name')
+        prompt_text = text
+        if is_group:
+            prompt_text = f"{sender_name or channel_user_id}: {text}".strip()
+        return await generate_channel_reply(
+            binding['uid'],
+            channel,
+            prompt_text,
+            attachments=payload.get('attachments'),
+        )
     except Exception:
         return 'I could not complete that request. Please try again.'
 
 
-async def _handle_payload(channel: str, payload: Dict[str, str]) -> Dict[str, Any]:
+async def _handle_payload(channel: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     event_id = payload['event_id']
     created, existing = await run_blocking(db_executor, channels_db.claim_webhook_event, channel, event_id)
     if not created:
         return await _duplicate_event_response(channel, event_id, existing)
     reply = await _channel_reply(channel, payload)
-    await _send_and_record(channel, event_id, payload['channel_chat_id'], reply)
+    await _send_and_record(
+        channel,
+        event_id,
+        payload['channel_chat_id'],
+        reply,
+        is_group=payload['channel_chat_id'] != payload['channel_user_id'],
+    )
     return {'status': 'delivered'}
 
 

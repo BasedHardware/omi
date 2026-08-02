@@ -15,6 +15,7 @@ from utils.llm.usage_tracker import Features, reset_usage_context, set_usage_con
 from utils.retrieval.graph import execute_chat_stream
 from utils.subscription import enforce_chat_quota
 from utils.twilio_service import send_sms
+from services.channel_media import build_media_context
 
 CHANNEL_MAX_REPLY_LENGTH = {'telegram': 4096, 'imessage': 2000, 'sms': 1600}
 CHANNEL_MAX_INBOUND_LENGTH = 20000
@@ -74,7 +75,7 @@ def _safe_integer(value: Any) -> Optional[int]:
     return None
 
 
-def parse_telegram_update(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def parse_telegram_update(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     update_id = _safe_integer(body.get('update_id'))
     if update_id is None:
         raise ValueError('invalid Telegram update')
@@ -86,22 +87,70 @@ def parse_telegram_update(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
     chat = message.get('chat')
     chat_id = _safe_integer(chat.get('id')) if isinstance(chat, dict) else None
     user_id = _safe_integer(sender.get('id')) if isinstance(sender, dict) else None
-    text = message.get('text')
+    text = message.get('text') or message.get('caption')
+    attachments: List[Dict[str, Any]] = []
+    photo = message.get('photo')
+    if isinstance(photo, list) and photo:
+        photo_file = photo[-1] if isinstance(photo[-1], dict) else {}
+        if isinstance(photo_file.get('file_id'), str):
+            attachments.append(
+                {
+                    'source': 'telegram',
+                    'file_id': photo_file['file_id'],
+                    'filename': 'photo.jpg',
+                    'mime_type': 'image/jpeg',
+                }
+            )
+    for field, default_name, default_mime in (
+        ('document', 'document', 'application/octet-stream'),
+        ('video', 'video.mp4', 'video/mp4'),
+        ('audio', 'audio', 'audio/mpeg'),
+        ('voice', 'voice.ogg', 'audio/ogg'),
+        ('animation', 'animation.mp4', 'video/mp4'),
+        ('video_note', 'video-note.mp4', 'video/mp4'),
+    ):
+        media = message.get(field)
+        if isinstance(media, dict) and isinstance(media.get('file_id'), str):
+            attachments.append(
+                {
+                    'source': 'telegram',
+                    'file_id': media['file_id'],
+                    'filename': str(media.get('file_name') or default_name),
+                    'mime_type': str(media.get('mime_type') or default_mime),
+                }
+            )
     if message_id is None or chat_id is None or user_id is None or not isinstance(text, str):
-        return None
+        if message_id is None or chat_id is None or user_id is None or not attachments:
+            return None
+        text = ''
     text = text.strip()
-    if not text or len(text) > CHANNEL_MAX_INBOUND_LENGTH:
+    if not text and not attachments:
         return None
-    return {
+    if len(text) > CHANNEL_MAX_INBOUND_LENGTH:
+        return None
+    payload: Dict[str, Any] = {
         'event_id': str(update_id),
         'message_id': str(message_id),
         'channel_user_id': str(user_id),
         'channel_chat_id': str(chat_id),
         'text': text,
     }
+    if attachments:
+        payload['attachments'] = attachments
+    if str(chat.get('type') if isinstance(chat, dict) else '') in {'group', 'supergroup'}:
+        first_name = sender.get('first_name') if isinstance(sender, dict) else None
+        last_name = sender.get('last_name') if isinstance(sender, dict) else None
+        username = sender.get('username') if isinstance(sender, dict) else None
+        sender_name = ' '.join(
+            str(value).strip() for value in (first_name, last_name) if isinstance(value, str) and value.strip()
+        )
+        payload['sender_name'] = sender_name or (
+            f'@{username}' if isinstance(username, str) and username else str(user_id)
+        )
+    return payload
 
 
-def parse_sendblue_inbound(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def parse_sendblue_inbound(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if body.get('is_outbound') is True:
         return None
     message_handle = body.get('message_handle')
@@ -119,15 +168,25 @@ def parse_sendblue_inbound(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
         return None
     group_id = body.get('group_id')
     chat_id = group_id.strip() if isinstance(group_id, str) else ''
-    return {
+    payload: Dict[str, Any] = {
         'event_id': message_handle,
         'channel_user_id': sender,
         'channel_chat_id': chat_id or sender,
-        'text': text or 'I received an attachment, but I cannot read it yet.',
+        'text': text,
     }
+    if isinstance(media_url, str) and media_url.strip():
+        payload['attachments'] = [
+            {
+                'source': 'imessage',
+                'url': media_url.strip(),
+                'filename': 'attachment',
+                'mime_type': str(body.get('media_type') or 'application/octet-stream'),
+            }
+        ]
+    return payload
 
 
-def parse_twilio_sms_inbound(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def parse_twilio_sms_inbound(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     message_sid = body.get('MessageSid')
     sender = body.get('From')
     recipient = body.get('To')
@@ -140,17 +199,37 @@ def parse_twilio_sms_inbound(body: Dict[str, Any]) -> Optional[Dict[str, str]]:
         return None
     text = text.strip() if isinstance(text, str) else ''
     media_count = body.get('NumMedia')
-    if not text and media_count not in {'0', 0, None}:
-        text = 'I received an attachment, but I cannot read it yet.'
+    try:
+        media_count_value = max(0, min(10, int(media_count or 0)))
+    except (TypeError, ValueError):
+        media_count_value = 0
+    attachments = []
+    for index in range(media_count_value):
+        media_url = body.get(f'MediaUrl{index}')
+        if isinstance(media_url, str) and media_url.strip():
+            attachments.append(
+                {
+                    'source': 'twilio',
+                    'url': media_url.strip(),
+                    'filename': f'attachment-{index + 1}',
+                    'mime_type': str(body.get(f'MediaContentType{index}') or 'application/octet-stream'),
+                }
+            )
+    if not text and attachments:
+        text = ''
     if not text or len(text) > CHANNEL_MAX_INBOUND_LENGTH:
-        return None
-    return {
+        if not attachments:
+            return None
+    payload: Dict[str, Any] = {
         'event_id': message_sid,
         'message_id': message_sid,
         'channel_user_id': sender,
         'channel_chat_id': sender,
         'text': text,
     }
+    if attachments:
+        payload['attachments'] = attachments
+    return payload
 
 
 def parse_channel_command(text: str) -> Optional[Tuple[str, str]]:
@@ -229,7 +308,12 @@ def _persist_human_and_history(uid: str, channel: str, text: str) -> Tuple[List[
     return messages, chat_session, message.id
 
 
-async def generate_channel_reply(uid: str, channel: str, text: str) -> str:
+async def generate_channel_reply(
+    uid: str, channel: str, text: str, *, attachments: Optional[List[Dict[str, Any]]] = None
+) -> str:
+    media_context = await build_media_context(uid, attachments or [])
+    if media_context:
+        text = f'{text}\n\n{media_context}'.strip()
     await run_blocking(db_executor, enforce_chat_quota, uid, platform=channel)
     messages, chat_session, message_id = await run_blocking(db_executor, _persist_human_and_history, uid, channel, text)
     await run_blocking(
@@ -286,7 +370,7 @@ async def generate_channel_reply(uid: str, channel: str, text: str) -> str:
     return response
 
 
-async def send_channel_message(channel: str, channel_chat_id: str, text: str) -> None:
+async def send_channel_message(channel: str, channel_chat_id: str, text: str, *, is_group: bool = False) -> None:
     client = get_webhook_client()
     if channel == 'telegram':
         token = _setting('TELEGRAM_BOT_TOKEN')
@@ -300,14 +384,24 @@ async def send_channel_message(channel: str, channel_chat_id: str, text: str) ->
         from_number = _setting('SENDBLUE_NUMBER')
         if not key_id or not key_secret or not from_number:
             raise ChannelProviderError('Sendblue credentials are not configured')
+        endpoint = (
+            'https://api.sendblue.com/api/send-group-message'
+            if is_group
+            else 'https://api.sendblue.com/api/send-message'
+        )
+        body = (
+            {'group_id': channel_chat_id, 'from_number': from_number, 'content': text}
+            if is_group
+            else {'number': channel_chat_id, 'from_number': from_number, 'content': text}
+        )
         response = await client.post(
-            'https://api.sendblue.com/api/send-message',
+            endpoint,
             headers={
                 'sb-api-key-id': key_id,
                 'sb-api-secret-key': key_secret,
                 'content-type': 'application/json',
             },
-            json={'number': channel_chat_id, 'from_number': from_number, 'content': text},
+            json=body,
         )
     else:
         try:
