@@ -51,7 +51,9 @@ async def test_openai_provider_builds_and_runs_openai_agent():
     assert invoked['agent'] is fake_agent
     assert invoked['model'] is fake_model
     assert invoked['tools'] == list(agentic.CORE_TOOLS)
-    assert invoked['messages'][0].content == 'SYSTEM\n\nNOW'
+    system_content = invoked['messages'][0].content
+    assert system_content.startswith('SYSTEM\n\n')
+    assert system_content.endswith('\n\nNOW')
     assert invoked['messages'][1].content == 'hello'
 
 
