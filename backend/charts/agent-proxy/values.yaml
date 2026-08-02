@@ -1,0 +1,4 @@
+managedCertificate:
+  enabled: false
+  name: ""
+  domains: []

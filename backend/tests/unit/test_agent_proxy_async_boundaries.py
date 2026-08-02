@@ -209,7 +209,7 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
-        lambda _uid: ({"status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"}, "standard"),
+        lambda _uid: ({"status": "ready", "ip": "10.0.0.5", "authToken": "vm-token"}, "standard"),
     )
     monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
     monkeypatch.setattr(agent_proxy, "_fetch_chat_history", lambda *_args: [])
@@ -384,7 +384,12 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
     assert not agent_proxy._is_usable_vm_ip(agent_proxy.UNRESOLVED_VM_IP)
     assert not agent_proxy._is_usable_vm_ip("")
     assert not agent_proxy._is_usable_vm_ip(None)
-    assert agent_proxy._is_usable_vm_ip("34.121.9.4")
+    assert agent_proxy._is_usable_vm_ip("10.0.0.5")
+    assert not agent_proxy._is_usable_vm_ip("34.121.9.4")
+    assert not agent_proxy._is_usable_vm_ip("127.0.0.1")
+    assert not agent_proxy._is_usable_vm_ip("169.254.169.254")
+    assert not agent_proxy._is_usable_vm_ip("::1")
+    assert not agent_proxy._is_usable_vm_ip("fd00::5")
 
     # The placeholder is truthy — this is the property that made it dangerous.
     assert bool(agent_proxy.UNRESOLVED_VM_IP)
@@ -396,6 +401,32 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
 
 
 @pytest.mark.asyncio
+async def test_http_proxy_restarts_legacy_public_vm_record(agent_proxy, monkeypatch):
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    ensure_calls = []
+
+    async def ensure_vm(uid, vm, health_failed=False):
+        ensure_calls.append((uid, vm, health_failed))
+        return None
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: ({"status": "ready", "ip": "34.121.9.4", "authToken": "vm-token"}, "standard"),
+    )
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", ensure_vm)
+
+    with pytest.raises(agent_proxy.HTTPException) as error:
+        await agent_proxy._resolve_http_vm("user-1")
+
+    assert error.value.status_code == 503
+    assert ensure_calls == [("user-1", {"status": "ready", "ip": "34.121.9.4", "authToken": "vm-token"}, False)]
+
+
+@pytest.mark.asyncio
 async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkeypatch):
     class Response:
         status_code = 200
@@ -403,7 +434,7 @@ async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkey
         def json(self):
             return {
                 "status": "RUNNING",
-                "networkInterfaces": [{"accessConfigs": [{"natIP": "34.121.9.4"}]}],
+                "networkInterfaces": [{"networkIP": "10.0.0.5"}],
             }
 
     class Client:
@@ -433,7 +464,7 @@ async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkey
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
     monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", lambda **_kwargs: client)
 
-    assert await agent_proxy._start_vm_and_wait("omi-agent-test", "us-central1-a") == "34.121.9.4"
+    assert await agent_proxy._start_vm_and_wait("omi-agent-test", "us-central1-a") == "10.0.0.5"
     assert client.post_calls == 0
 
 

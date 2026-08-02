@@ -5,6 +5,8 @@ enum DesktopBackendEnvironment {
   static let productionRustBackendURL = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+  static let productionAgentProxyURL = "https://agent.omi.me/"
+  static let developmentAgentProxyURL = "https://agent.omiapi.com/"
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(
@@ -108,6 +110,10 @@ enum DesktopBackendEnvironment {
     }
 
     return developmentRustBackendURL
+  }
+
+  static func agentProxyURL(useDevelopmentBackends: Bool = shouldUseDevelopmentBackends) -> String {
+    useDevelopmentBackends ? developmentAgentProxyURL : productionAgentProxyURL
   }
 
   static func applyReleaseChannelDefaults() {

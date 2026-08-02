@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import routers.agent_tools as agent_tools
@@ -50,3 +51,37 @@ class TestListToolsIsolation:
             result = agent_tools.list_tools(uid="u1")
         assert any(t["name"] == "good" for t in result["tools"])
         assert fallback.call_count == 0
+
+
+def test_keepalive_refuses_public_vm_addresses():
+    async def run_blocking(_executor, function, *args):
+        return function(*args)
+
+    with (
+        patch.object(
+            agent_tools,
+            "get_agent_vm",
+            return_value={"status": "ready", "ip": "34.121.9.4", "authToken": "vm-token"},
+        ),
+        patch.object(agent_tools, "run_blocking", side_effect=run_blocking),
+    ):
+        result = asyncio.run(agent_tools.keepalive("user-1"))
+
+    assert result == {"ok": False, "reason": "missing_vm_info"}
+
+
+def test_keepalive_refuses_loopback_vm_addresses():
+    async def run_blocking(_executor, function, *args):
+        return function(*args)
+
+    with (
+        patch.object(
+            agent_tools,
+            "get_agent_vm",
+            return_value={"status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+        ),
+        patch.object(agent_tools, "run_blocking", side_effect=run_blocking),
+    ):
+        result = asyncio.run(agent_tools.keepalive("user-1"))
+
+    assert result == {"ok": False, "reason": "missing_vm_info"}

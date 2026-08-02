@@ -21,6 +21,10 @@ actor APIClient {
     return ""
   }
 
+  var agentProxyURL: String {
+    DesktopBackendEnvironment.agentProxyURL()
+  }
+
   let session: URLSession
   var transport: OmiHTTPTransport
 

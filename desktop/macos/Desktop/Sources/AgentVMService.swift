@@ -23,29 +23,27 @@ actor AgentVMService {
       // Check backend first
       do {
         let status = try await APIClient.shared.getAgentStatus()
-        if let status = status, status.status == "ready", let ip = status.ip {
-          log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
+        if let status = status, status.status == "ready" {
+          log("AgentVMService: VM already ready — vmName=\(status.vmName)")
           // Only upload if the VM doesn't have a database yet
-          if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-            _ = await uploadDatabase(vmIP: ip, authToken: status.authToken)
+          if await checkVMNeedsDatabase() {
+            _ = await uploadDatabase()
           } else {
             log("AgentVMService: VM already has database, skipping upload")
           }
-          await startIncrementalSync(vmIP: ip, authToken: status.authToken)
+          await startIncrementalSync()
           return
         }
         if let status = status,
           status.status == "provisioning" || status.status == "stopped"
         {
           log("AgentVMService: VM is \(status.status), polling until ready...")
-          if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
-            let ip = result.ip
-          {
-            log("AgentVMService: VM became ready — ip=\(ip)")
-            if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
-              _ = await uploadDatabase(vmIP: ip, authToken: result.authToken)
+          if await pollUntilReady(maxAttempts: 30, intervalSeconds: 5) != nil {
+            log("AgentVMService: VM became ready")
+            if await checkVMNeedsDatabase() {
+              _ = await uploadDatabase()
             }
-            await startIncrementalSync(vmIP: ip, authToken: result.authToken)
+            await startIncrementalSync()
           }
           return
         }
@@ -88,32 +86,30 @@ actor AgentVMService {
     }
 
     // Step 2: Poll until VM is ready with an IP
-    var vmIP = provisionResult.ip
-    var authToken = provisionResult.authToken
+    var agentReady = provisionResult.agentStatus == "ready"
 
-    if vmIP == nil || provisionResult.agentStatus == "provisioning" {
+    if !agentReady {
       log("AgentVMService: Waiting for VM to be ready...")
       let pollResult = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5)
       if let result = pollResult {
-        vmIP = result.ip
-        authToken = result.authToken
-        log("AgentVMService: VM ready — ip=\(vmIP ?? "none")")
+        agentReady = result.status == "ready"
+        log("AgentVMService: VM ready")
       } else {
         log("AgentVMService: VM did not become ready in time")
         return
       }
     }
 
-    guard let ip = vmIP else {
-      log("AgentVMService: No IP available after provisioning")
+    guard agentReady else {
+      log("AgentVMService: VM is not ready after provisioning")
       return
     }
 
     // Step 3: Check if DB exists and upload it
-    _ = await uploadDatabase(vmIP: ip, authToken: authToken)
+    _ = await uploadDatabase()
 
     // Step 4: Start incremental sync
-    await startIncrementalSync(vmIP: ip, authToken: authToken)
+    await startIncrementalSync()
   }
 
   /// Poll GET /v2/agent/status until status is "ready" and IP is available.
@@ -121,7 +117,7 @@ actor AgentVMService {
     for attempt in 1...maxAttempts {
       do {
         let status: APIClient.AgentStatusResponse? = try await APIClient.shared.getAgentStatus()
-        if let status = status, status.status == "ready", status.ip != nil {
+        if let status = status, status.status == "ready" {
           return status
         }
         if let status = status, status.status == "error" {
@@ -137,11 +133,23 @@ actor AgentVMService {
     return nil
   }
 
+  private func agentProxyURL(_ endpoint: String) async -> URL? {
+    let base = await APIClient.shared.agentProxyURL
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard normalized.hasPrefix("https://") else { return nil }
+    return URL(string: normalized + endpoint)
+  }
+
   /// Check if the VM needs a database upload by hitting its /health endpoint.
-  private func checkVMNeedsDatabase(vmIP: String, authToken: String) async -> Bool {
-    guard let healthURL = URL(string: "http://\(vmIP):8080/health") else { return true }
+  private func checkVMNeedsDatabase() async -> Bool {
+    guard let healthURL = await agentProxyURL("v1/agent/health") else { return true }
     var request = URLRequest(url: healthURL)
     request.timeoutInterval = 10
+    do {
+      request.setValue("Bearer \(try await AuthService.shared.getIdToken())", forHTTPHeaderField: "Authorization")
+    } catch {
+      return true
+    }
 
     do {
       let (data, _) = try await URLSession.shared.data(for: request)
@@ -161,7 +169,7 @@ actor AgentVMService {
   /// Called by AgentSyncService when it detects databaseReady: false on the VM.
   func reuploadDatabase(vmIP: String, authToken: String) async -> Bool {
     log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
-    return await uploadDatabase(vmIP: vmIP, authToken: authToken)
+    return await uploadDatabase()
   }
 
   /// Compression ratio as a whole-number percent. Guards against a zero
@@ -175,7 +183,7 @@ actor AgentVMService {
 
   /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
   /// Pauses AgentSync during upload to prevent competing for memory and network.
-  private func uploadDatabase(vmIP: String, authToken: String) async -> Bool {
+  private func uploadDatabase() async -> Bool {
     await AgentSyncService.shared.pause()
     defer { Task { await AgentSyncService.shared.resume() } }
     // Find the local database path
@@ -241,11 +249,10 @@ actor AgentVMService {
       return false
     }
 
-    log("AgentVMService: Uploading compressed database to \(vmIP)...")
+    log("AgentVMService: Uploading compressed database through agent proxy...")
 
-    // Send token both as query param (backward compat) and header (preferred)
-    guard let uploadURL = URL(string: "http://\(vmIP):8080/upload") else {
-      log("AgentVMService: Invalid upload URL for IP \(vmIP)")
+    guard let uploadURL = await agentProxyURL("v1/agent/upload") else {
+      log("AgentVMService: Invalid agent proxy URL")
       try? FileManager.default.removeItem(at: tempGzPath)
       return false
     }
@@ -253,7 +260,12 @@ actor AgentVMService {
     request.httpMethod = "POST"
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
     request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
-    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    do {
+      request.setValue("Bearer \(try await AuthService.shared.getIdToken())", forHTTPHeaderField: "Authorization")
+    } catch {
+      try? FileManager.default.removeItem(at: tempGzPath)
+      return false
+    }
     request.timeoutInterval = 600
 
     do {
@@ -288,22 +300,22 @@ actor AgentVMService {
   }
 
   /// Start incremental sync after VM is confirmed ready.
-  private func startIncrementalSync(vmIP: String, authToken: String) async {
-    await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+  private func startIncrementalSync() async {
+    await AgentSyncService.shared.start(vmIP: await APIClient.shared.agentProxyURL, authToken: "")
     // Send Firebase token so the VM can call backend tools
-    await sendFirebaseToken(vmIP: vmIP, authToken: authToken)
+    await sendFirebaseToken()
   }
 
   /// Send the user's Firebase ID token to the VM so it can call Python backend tools.
-  private func sendFirebaseToken(vmIP: String, authToken: String) async {
+  private func sendFirebaseToken() async {
     do {
       let idToken = try await AuthService.shared.getIdToken()
       // Send token both as query param (backward compat) and header (preferred)
-      guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
+      guard let url = await agentProxyURL("v1/agent/auth") else { return }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+      request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
       request.timeoutInterval = 15
 
       let body: [String: String] = ["firebaseToken": idToken]

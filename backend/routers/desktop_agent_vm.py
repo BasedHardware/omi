@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import os
 import uuid
@@ -79,6 +80,13 @@ def _gcs_bucket() -> str:
     return bucket
 
 
+def _backend_url() -> str:
+    backend_url = (os.getenv("AGENT_VM_BACKEND_URL") or "https://api.omi.me").strip().rstrip("/")
+    if not backend_url.startswith("https://"):
+        raise RuntimeError("AGENT_VM_BACKEND_URL must use HTTPS")
+    return backend_url
+
+
 def _get_vm(uid: str) -> dict[str, Any] | None:
     snapshot = get_firestore_client().collection("users").document(uid).get()
     if not snapshot.exists:
@@ -96,6 +104,10 @@ def _set_vm(
     ip: str | None = None,
     zone: str = _ZONE,
 ) -> None:
+    if status == "ready" and not _is_usable_vm_ip(ip):
+        raise ValueError(f"refusing to persist ready agentVm without usable ip for uid={uid}")
+    if ip is not None and not _is_usable_vm_ip(ip):
+        raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
     vm: dict[str, Any] = {
         "vmName": vm_name,
         "zone": zone,
@@ -150,11 +162,30 @@ async def _instance(project: str, zone: str, vm_name: str) -> tuple[str, dict[st
     return str(instance.get("status", "UNKNOWN")), instance
 
 
-def _ip(instance: dict[str, Any]) -> str:
+def _is_usable_vm_ip(ip: Any) -> bool:
+    if not isinstance(ip, str) or not ip:
+        return False
     try:
-        return str(instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"])
+        parsed = ipaddress.ip_address(ip)
+        return (
+            parsed.version == 4
+            and parsed.is_private
+            and not parsed.is_loopback
+            and not parsed.is_link_local
+            and not parsed.is_unspecified
+            and not parsed.is_multicast
+            and not parsed.is_reserved
+        )
+    except ValueError:
+        return False
+
+
+def _ip(instance: dict[str, Any]) -> str | None:
+    try:
+        ip = instance["networkInterfaces"][0]["networkIP"]
     except (KeyError, IndexError, TypeError):
-        return "unknown"
+        return None
+    return ip if _is_usable_vm_ip(ip) else None
 
 
 async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str, auth_token: str) -> str:
@@ -177,7 +208,6 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
         "networkInterfaces": [
             {
                 "network": "global/networks/default",
-                "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}],
             }
         ],
         "tags": {"items": ["omi-agent-vm"]},
@@ -185,6 +215,7 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
             "items": [
                 {"key": "startup-script", "value": startup},
                 {"key": "auth-token", "value": auth_token},
+                {"key": "backend-url", "value": _backend_url()},
                 {"key": "block-project-ssh-keys", "value": "TRUE"},
                 {"key": "enable-oslogin", "value": "TRUE"},
             ]
@@ -210,7 +241,10 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
     _, instance = await _instance(project, _ZONE, vm_name)
     if instance is None:
         raise RuntimeError("GCE created VM is unavailable")
-    return _ip(instance)
+    ip = _ip(instance)
+    if ip is None:
+        raise RuntimeError("GCE created VM did not report a usable private IP")
+    return ip
 
 
 async def _start_vm(project: str, vm_name: str, zone: str) -> str:
@@ -225,7 +259,10 @@ async def _start_vm(project: str, vm_name: str, zone: str) -> str:
     _, instance = await _instance(project, zone, vm_name)
     if instance is None:
         raise RuntimeError("GCE restarted VM is unavailable")
-    return _ip(instance)
+    ip = _ip(instance)
+    if ip is None:
+        raise RuntimeError("GCE restarted VM did not report a usable private IP")
+    return ip
 
 
 async def _provision_background(
@@ -251,7 +288,20 @@ async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> Non
         await run_blocking(db_executor, _set_vm, uid, vm_name, "error", auth_token, _now(), None, zone)
 
 
-async def _recover_background(uid: str, vm: dict[str, Any], ip: str) -> None:
+async def _recover_background(uid: str, vm: dict[str, Any], ip: str | None) -> None:
+    if not _is_usable_vm_ip(ip):
+        await run_blocking(
+            db_executor,
+            _set_vm,
+            uid,
+            str(vm["vmName"]),
+            "error",
+            str(vm.get("authToken") or ""),
+            _now(),
+            None,
+            str(vm.get("zone") or _ZONE),
+        )
+        return
     await run_blocking(
         db_executor,
         _set_vm,
@@ -269,9 +319,9 @@ def _response(vm: dict[str, Any]) -> AgentVmResponse:
     return AgentVmResponse(
         vmName=str(vm["vmName"]),
         zone=str(vm.get("zone") or _ZONE),
-        ip=vm.get("ip"),
+        ip=None,
         status=str(vm.get("status") or "provisioning"),
-        authToken=str(vm.get("authToken") or ""),
+        authToken="",
         createdAt=str(vm.get("createdAt") or ""),
         lastQueryAt=vm.get("lastQueryAt"),
     )
@@ -288,8 +338,8 @@ async def provision_agent_vm(
         return ProvisionAgentResponse(
             status="exists",
             vmName=str(vm["vmName"]),
-            ip=vm.get("ip"),
-            authToken=str(vm.get("authToken") or ""),
+            ip=None,
+            authToken="",
             agentStatus=str(vm.get("status") or "provisioning"),
         )
     try:
@@ -303,9 +353,7 @@ async def provision_agent_vm(
     created_at = _now()
     await run_blocking(db_executor, _set_vm, uid, vm_name, "provisioning", auth_token, created_at)
     background_tasks.add_task(_provision_background, uid, project, source_image, bucket, vm_name, auth_token)
-    return ProvisionAgentResponse(
-        status="provisioning", vmName=vm_name, authToken=auth_token, agentStatus="provisioning"
-    )
+    return ProvisionAgentResponse(status="provisioning", vmName=vm_name, authToken="", agentStatus="provisioning")
 
 
 @router.get("/v2/agent/status", response_model=AgentVmResponse | None)

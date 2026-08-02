@@ -158,6 +158,19 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(url, DesktopBackendEnvironment.developmentPythonAPIURL)
   }
 
+  func testAgentProxyUsesHTTPSForBothBackendEnvironments() {
+    XCTAssertEqual(
+      DesktopBackendEnvironment.agentProxyURL(useDevelopmentBackends: true),
+      DesktopBackendEnvironment.developmentAgentProxyURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.agentProxyURL(useDevelopmentBackends: false),
+      DesktopBackendEnvironment.productionAgentProxyURL
+    )
+    XCTAssertTrue(DesktopBackendEnvironment.developmentAgentProxyURL.hasPrefix("https://"))
+    XCTAssertTrue(DesktopBackendEnvironment.productionAgentProxyURL.hasPrefix("https://"))
+  }
+
   func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
     let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
     XCTAssertEqual(url, "https://api.omi.me/")

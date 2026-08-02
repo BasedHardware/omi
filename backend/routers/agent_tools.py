@@ -10,6 +10,7 @@ Endpoints:
 """
 
 import asyncio
+import ipaddress
 import logging
 from typing import Any
 
@@ -142,7 +143,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
             instance = inst_resp.json()
             try:
-                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                candidate = instance["networkInterfaces"][0]["networkIP"]
                 if candidate and candidate != "unknown":
                     ip = candidate
                     t_ip = time.monotonic() - t0
@@ -168,7 +169,21 @@ def _is_usable_vm_ip(ip) -> bool:
     `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
     `if ip:` reader while resolving to nothing.
     """
-    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
+    if not isinstance(ip, str) or not ip or ip == UNRESOLVED_VM_IP:
+        return False
+    try:
+        parsed = ipaddress.ip_address(ip)
+        return (
+            parsed.version == 4
+            and parsed.is_private
+            and not parsed.is_loopback
+            and not parsed.is_link_local
+            and not parsed.is_unspecified
+            and not parsed.is_multicast
+            and not parsed.is_reserved
+        )
+    except ValueError:
+        return False
 
 
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
@@ -294,7 +309,7 @@ async def keepalive(uid: str = Depends(get_current_user_uid)):
 
     vm_ip = vm.get("ip")
     auth_token = vm.get("authToken")
-    if not vm_ip or not auth_token:
+    if not _is_usable_vm_ip(vm_ip) or not auth_token:
         return {"ok": False, "reason": "missing_vm_info"}
 
     try:

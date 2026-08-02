@@ -35,7 +35,7 @@ if str(AGENT_PROXY_DIR) not in sys.path:
 
 from tests.unit.test_tools_agent_route_response_shape import _install_route_stubs  # noqa: E402
 
-READY_VM = {"vmName": "omi-agent-reaped", "zone": "us-central1-a", "status": "ready", "ip": "34.135.118.144"}
+READY_VM = {"vmName": "omi-agent-reaped", "zone": "us-central1-a", "status": "ready", "ip": "10.0.0.5"}
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def _stub_gce(agent_proxy, monkeypatch, instance_status_code: int, user_doc: _Fa
         status_code = instance_status_code
 
         def json(self):
-            return {"status": "RUNNING", "networkInterfaces": [{"accessConfigs": [{"natIP": "34.9.9.9"}]}]}
+            return {"status": "RUNNING", "networkInterfaces": [{"networkIP": "10.0.0.5"}]}
 
     class Client:
         def __init__(self):

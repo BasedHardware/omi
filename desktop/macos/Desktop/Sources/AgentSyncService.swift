@@ -467,7 +467,7 @@ actor AgentSyncService {
   /// record catches a partial upload that still reports `databaseReady: true`.
   private func checkAndTriggerRequiredSchemaRecovery(generation: UInt64) async {
     guard syncGeneration == generation else { return }
-    guard let vmIP = vmIP, let authToken = authToken else { return }
+    guard let vmIP = vmIP else { return }
     let ownerID = cursorOwnerID
     guard var recovery = requiredSchemaRecovery,
       recovery.generation == generation,
@@ -484,10 +484,11 @@ actor AgentSyncService {
       return
     }
 
-    guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
+    guard let url = proxyURL(vmIP, path: "v1/agent/health") else { return }
     do {
       var request = URLRequest(url: url)
       request.timeoutInterval = 15
+      request.setValue("Bearer \(try await networkHooks.fetchIDToken())", forHTTPHeaderField: "Authorization")
       let (data, response) = try await networkHooks.dataForRequest(request)
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
@@ -507,7 +508,7 @@ actor AgentSyncService {
       recovery.lastAttemptAt = networkHooks.now()
       recovery.attemptsInFailureStreak += 1
       requiredSchemaRecovery = recovery
-      let uploaded = await networkHooks.reuploadDatabase(vmIP, authToken)
+      let uploaded = await networkHooks.reuploadDatabase(vmIP, authToken ?? "")
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       if uploaded {
         clearRequiredSchemaRecovery(for: recovery.table, generation: generation, ownerID: ownerID, vmIP: vmIP)
@@ -523,18 +524,18 @@ actor AgentSyncService {
 
   private func refreshFirebaseToken(generation: UInt64) async {
     guard syncGeneration == generation else { return }
-    guard let vmIP = vmIP, let authToken = authToken else { return }
+    guard let vmIP = vmIP else { return }
     let ownerID = cursorOwnerID
 
     do {
       let idToken = try await networkHooks.fetchIDToken()
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       // Send token both as query param (backward compat) and header (preferred)
-      guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
+      guard let url = proxyURL(vmIP, path: "v1/agent/auth") else { return }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+      request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
       request.timeoutInterval = 15
 
       let body: [String: String] = ["firebaseToken": idToken]
@@ -733,6 +734,16 @@ actor AgentSyncService {
     case rateLimited(retryAfter: TimeInterval?)
   }
 
+  private func proxyURL(_ base: String, path: String) -> URL? {
+    let normalizedBase: String
+    if base.hasPrefix("https://") {
+      normalizedBase = base.hasSuffix("/") ? base : base + "/"
+    } else {
+      normalizedBase = "https://" + base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/"
+    }
+    return URL(string: normalizedBase + path)
+  }
+
   private func isCurrent(generation: UInt64, ownerID: String?, vmIP: String) -> Bool {
     syncGeneration == generation
       && cursorOwnerID == ownerID
@@ -788,18 +799,22 @@ actor AgentSyncService {
     ownerID: String?,
     vmIP: String
   ) async -> PushResult {
-    guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP), let authToken else { return .networkError }
+    guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return .networkError }
 
     // Send token both as query param (backward compat) and header (preferred)
-    guard let url = URL(string: "http://\(vmIP):8080/sync") else {
-      log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
+    guard let url = proxyURL(vmIP, path: "v1/agent/sync") else {
+      log("AgentSync: invalid agent proxy URL, skipping push")
       return .httpError
     }
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    do {
+      request.setValue("Bearer \(try await networkHooks.fetchIDToken())", forHTTPHeaderField: "Authorization")
+    } catch {
+      return .networkError
+    }
     request.timeoutInterval = 30
 
     let payload: [String: Any] = ["table": table, "rows": rows]

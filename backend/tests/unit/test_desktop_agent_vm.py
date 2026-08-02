@@ -31,8 +31,8 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     assert response.model_dump(by_alias=True) == {
         "status": "exists",
         "vmName": "omi-agent-user",
-        "ip": "1.2.3.4",
-        "authToken": "omi-token",
+        "ip": None,
+        "authToken": "",
         "agentStatus": "ready",
     }
     assert not tasks.tasks
@@ -65,6 +65,7 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
 
     assert response.status == "provisioning"
     assert response.ip is None
+    assert response.auth_token == ""
     assert writes[0][2] == "provisioning"
     assert len(tasks.tasks) == 1
 
@@ -82,6 +83,25 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 
     assert error.value.status_code == 402
     assert error.value.detail == "trial_expired"
+
+
+def test_agent_vm_backend_url_requires_https(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_BACKEND_URL", "http://api.example.test")
+
+    with pytest.raises(RuntimeError, match="must use HTTPS"):
+        desktop_agent_vm._backend_url()
+
+
+def test_agent_vm_ip_accepts_private_ipv4_only():
+    assert desktop_agent_vm._is_usable_vm_ip("10.0.0.5")
+    assert not desktop_agent_vm._is_usable_vm_ip("34.121.9.4")
+    assert not desktop_agent_vm._is_usable_vm_ip("127.0.0.1")
+    assert not desktop_agent_vm._is_usable_vm_ip("unknown")
+
+
+def test_agent_vm_writer_rejects_unusable_ip():
+    with pytest.raises(ValueError, match="unusable"):
+        desktop_agent_vm._set_vm("user", "omi-agent-user", "provisioning", "token", "now", "unknown")
 
 
 @pytest.mark.asyncio

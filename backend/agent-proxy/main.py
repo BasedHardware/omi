@@ -8,6 +8,7 @@ History: fetches last 10 agent messages from Firestore and prepends to prompt.
 
 import asyncio
 import base64
+import ipaddress
 import json
 import logging
 import os
@@ -26,7 +27,8 @@ import websockets
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import DELETE_FIELD, ArrayUnion
 from google.cloud.firestore_v1 import Increment, Query
@@ -230,7 +232,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
             instance = inst_resp.json()
             try:
-                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                candidate = instance["networkInterfaces"][0]["networkIP"]
                 if candidate and candidate != "unknown":
                     ip = candidate
                     t_ip = time.monotonic() - t0
@@ -256,7 +258,21 @@ def _is_usable_vm_ip(ip: Any) -> bool:
     `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
     `if ip:` reader on the connect path while resolving to nothing.
     """
-    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
+    if not isinstance(ip, str) or not ip or ip == UNRESOLVED_VM_IP:
+        return False
+    try:
+        parsed = ipaddress.ip_address(ip)
+        return (
+            parsed.version == 4
+            and parsed.is_private
+            and not parsed.is_loopback
+            and not parsed.is_link_local
+            and not parsed.is_unspecified
+            and not parsed.is_multicast
+            and not parsed.is_reserved
+        )
+    except ValueError:
+        return False
 
 
 def _update_firestore_vm(
@@ -429,6 +445,132 @@ async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120
                 pass
             await asyncio.sleep(3)
     return False
+
+
+def _vm_request_headers(request: Request, vm_token: str) -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {vm_token}"}
+    for name in ("content-type", "content-encoding", "content-length"):
+        value = request.headers.get(name)
+        if value:
+            headers[name] = value
+    return headers
+
+
+async def _require_http_uid(request: Request) -> str:
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = auth_header[7:].strip()
+    try:
+        decoded_token = await run_blocking(critical_executor, _verify_id_token, token)
+        return cast(str, decoded_token["uid"])
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+
+async def _resolve_http_vm(uid: str) -> tuple[str, str]:
+    vm, _ = await run_blocking(db_executor, _get_user_context, uid)
+    if not vm:
+        raise HTTPException(status_code=404, detail="No agent VM available")
+    vm_ip = vm.get("ip")
+    vm_token = vm.get("authToken")
+    if not isinstance(vm_token, str) or not vm_token:
+        raise HTTPException(status_code=503, detail="Agent VM credentials are unavailable")
+    if not isinstance(vm_ip, str) or not _is_usable_vm_ip(vm_ip):
+        vm = await _ensure_vm_running(uid, vm)
+        vm_ip = vm.get("ip") if vm else None
+        vm_token = vm.get("authToken") if vm else None
+    if not isinstance(vm_ip, str) or not _is_usable_vm_ip(vm_ip) or not isinstance(vm_token, str) or not vm_token:
+        raise HTTPException(status_code=503, detail="Agent VM is unavailable")
+    if not await _wait_for_vm_healthy(vm_ip, vm_token, timeout=5):
+        vm = await _ensure_vm_running(uid, vm, health_failed=True)
+        vm_ip = vm.get("ip") if vm else None
+        vm_token = vm.get("authToken") if vm else None
+        if not isinstance(vm_ip, str) or not _is_usable_vm_ip(vm_ip) or not isinstance(vm_token, str) or not vm_token:
+            raise HTTPException(status_code=503, detail="Agent VM is unavailable")
+        if not await _wait_for_vm_healthy(vm_ip, vm_token):
+            raise HTTPException(status_code=503, detail="Agent VM is not responding")
+    return vm_ip, vm_token
+
+
+async def _read_limited_request_body(request: Request, max_body_bytes: int) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+        if declared_length < 0:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared_length > max_body_bytes:
+            raise HTTPException(status_code=413, detail="Request body is too large")
+    chunks = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_body_bytes:
+            raise HTTPException(status_code=413, detail="Request body is too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _forward_vm_response(
+    request: Request, method: str, path: str, *, max_body_bytes: int | None = None
+) -> Response:
+    uid = await _require_http_uid(request)
+    vm_ip, vm_token = await _resolve_http_vm(uid)
+    body = await _read_limited_request_body(request, max_body_bytes or 64 * 1024)
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.request(
+            method,
+            f"http://{vm_ip}:8080/{path}",
+            headers=_vm_request_headers(request, vm_token),
+            content=body,
+        )
+    response_headers = {
+        name: response.headers[name] for name in ("content-type", "retry-after") if name in response.headers
+    }
+    return Response(response.content, status_code=response.status_code, headers=response_headers)
+
+
+@app.get("/v1/agent/health")
+async def proxy_health(request: Request) -> Response:
+    return await _forward_vm_response(request, "GET", "health")
+
+
+@app.post("/v1/agent/upload")
+async def proxy_upload(request: Request) -> Response:
+    uid = await _require_http_uid(request)
+    vm_ip, vm_token = await _resolve_http_vm(uid)
+    try:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+    if content_length > 10 * 1024 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Request body is too large")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10)) as client:
+        response = await client.post(
+            f"http://{vm_ip}:8080/upload",
+            headers=_vm_request_headers(request, vm_token),
+            content=request.stream(),
+        )
+    response_headers = {name: response.headers[name] for name in ("content-type",) if name in response.headers}
+    return Response(response.content, status_code=response.status_code, headers=response_headers)
+
+
+@app.post("/v1/agent/auth")
+async def proxy_auth(request: Request) -> Response:
+    return await _forward_vm_response(request, "POST", "auth", max_body_bytes=16 * 1024)
+
+
+@app.post("/v1/agent/ping")
+async def proxy_ping(request: Request) -> Response:
+    return await _forward_vm_response(request, "POST", "ping")
+
+
+@app.post("/v1/agent/sync")
+async def proxy_sync(request: Request) -> Response:
+    return await _forward_vm_response(request, "POST", "sync", max_body_bytes=2 * 1024 * 1024)
 
 
 async def _send_startup_event(websocket: WebSocket, uid: str, payload: Dict[str, Any]) -> bool:
@@ -652,7 +794,7 @@ async def agent_ws(websocket: WebSocket):
 
     # Fast path: if Firestore says ready with an IP, try connecting directly (skip GCE check).
     # Only fall back to GCE check + restart if the VM isn't reachable.
-    if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip):
+    if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip) and isinstance(vm_token, str) and vm_token:
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(f"http://{vm_ip}:8080/health")
@@ -663,7 +805,13 @@ async def agent_ws(websocket: WebSocket):
             logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
             await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
             vm = await _ensure_vm_running(uid, vm, health_failed=True)
-            if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+            if (
+                not vm
+                or vm.get("status") != "ready"
+                or not _is_usable_vm_ip(vm.get("ip"))
+                or not isinstance(vm.get("authToken"), str)
+                or not vm.get("authToken")
+            ):
                 await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
                 await _close_client(websocket, uid, 4002, "VM startup failed")
                 return
@@ -679,7 +827,13 @@ async def agent_ws(websocket: WebSocket):
         # No IP or not ready — must restart
         await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
         vm = await _ensure_vm_running(uid, vm)
-        if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+        if (
+            not vm
+            or vm.get("status") != "ready"
+            or not _is_usable_vm_ip(vm.get("ip"))
+            or not isinstance(vm.get("authToken"), str)
+            or not vm.get("authToken")
+        ):
             await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
             await _close_client(websocket, uid, 4002, "VM startup failed")
             return

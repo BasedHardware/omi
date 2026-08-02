@@ -219,6 +219,7 @@ jobs:
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
+            AGENT_VM_BACKEND_URL=https://api.omiapi.com
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
