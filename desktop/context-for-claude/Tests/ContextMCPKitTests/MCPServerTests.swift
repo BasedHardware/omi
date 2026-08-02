@@ -9,6 +9,13 @@ import XCTest
 /// answered, and a failing tool comes back as a *result* the model can read rather than an error the
 /// client swallows. Getting any of these wrong looks like "Omi is not connected" and nothing else.
 final class MCPServerTests: XCTestCase {
+    func testRejectsOversizedRequestFrames() {
+        let server = MCPServer(store: nil)
+        let response = server.handle(line: String(repeating: "x", count: 4 * 1024 * 1024 + 1))
+
+        XCTAssertTrue(response?.contains("Request too large") == true)
+    }
+
 
     // MARK: - Handshake
 

@@ -29,27 +29,22 @@ public struct LocalMemory: Sendable, Equatable {
 public final class OmiMemoryStore: @unchecked Sendable {
     public static let shared = OmiMemoryStore()
 
-    private let pool: DatabasePool?
+    private let databaseURLProvider: () -> URL?
+    private let state = PoolState()
 
-    private init() {
-        guard let url = ContextPaths.omiDatabaseURL else {
-            pool = nil
-            return
-        }
-        pool = try? DatabasePool(
-            path: url.path,
-            configuration: ContextStore.makeConfiguration(readOnly: true))
+    init(databaseURLProvider: @escaping () -> URL? = { ContextPaths.omiDatabaseURL }) {
+        self.databaseURLProvider = databaseURLProvider
     }
 
     /// True when the main Omi app's database was found and opened.
-    public var isAvailable: Bool { pool != nil }
+    public var isAvailable: Bool { currentPool != nil }
 
     /// Searches memories by substring, matching the main app's `content LIKE` pattern.
     ///
     /// `LIKE` wildcards in the query are escaped so user text is treated literally.
     /// Only non-deleted, non-dismissed memories are returned, newest first.
     public func searchMemories(query: String, limit: Int) -> [LocalMemory] {
-        guard let pool else { return [] }
+        guard let pool = currentPool else { return [] }
         let escaped = query
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "%", with: "\\%")
@@ -70,6 +65,33 @@ public final class OmiMemoryStore: @unchecked Sendable {
                 arguments: [pattern, clamped]
             )
         })?.compactMap { $0.toMemory() } ?? []
+    }
+
+    private var currentPool: DatabasePool? {
+        state.pool(for: databaseURLProvider())
+    }
+}
+
+private final class PoolState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var url: URL?
+    private var pool: DatabasePool?
+
+    func pool(for nextURL: URL?) -> DatabasePool? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let nextURL else {
+            url = nil
+            pool = nil
+            return nil
+        }
+        if url != nextURL {
+            url = nextURL
+            pool = try? DatabasePool(
+                path: nextURL.path,
+                configuration: ContextStore.makeConfiguration(readOnly: true))
+        }
+        return pool
     }
 }
 

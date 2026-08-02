@@ -26,6 +26,28 @@ import { atomicWriteFileSync } from './atomicWrite'
 const execFileAsync = promisify(execFile)
 const CLI_TIMEOUT_MS = 20_000
 const SOUL_MARKER = 'omi-memory-bank'
+const CLI_ENV_ALLOWLIST = [
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'HOME',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'ProgramData',
+  'ProgramFiles',
+  'ComSpec',
+  'SystemRoot',
+  'SystemDrive',
+  'WINDIR',
+  'TEMP',
+  'TMP',
+  'USERNAME',
+  'LANG',
+  'TZ'
+] as const
 
 export type CliConnectorId = 'codex' | 'openclaw' | 'hermes'
 
@@ -44,12 +66,20 @@ async function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promis
   try {
     const { stdout } = await execFileAsync(cmd, args, {
       timeout: CLI_TIMEOUT_MS,
-      env: env ?? process.env
+      env: env ?? buildCliEnvironment()
     })
     return stdout
   } catch (e) {
     throw new Error(sanitize((e as Error).message))
   }
+}
+
+export function buildCliEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const key of CLI_ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined) env[key] = process.env[key]
+  }
+  return { ...env, ...extra }
 }
 
 // --- detection --------------------------------------------------------------
@@ -169,10 +199,7 @@ export async function connectCli(
       await run(
         'codex',
         ['mcp', 'add', MCP_SERVER_KEY, '--', 'npx', '-y', 'mcp-remote', url, '--header', bearer],
-        {
-          ...process.env,
-          CODEX_HOME: join(home, '.codex')
-        }
+        buildCliEnvironment({ CODEX_HOME: join(home, '.codex') })
       )
       return
     case 'openclaw':
@@ -187,14 +214,36 @@ export async function connectCli(
   }
 }
 
-export async function disconnectCli(id: CliConnectorId): Promise<void> {
+export async function disconnectCli(id: CliConnectorId, home = homedir()): Promise<void> {
   try {
     if (id === 'codex') await run('codex', ['mcp', 'remove', MCP_SERVER_KEY])
     else if (id === 'openclaw') await run('openclaw', ['mcp', 'remove', MCP_SERVER_KEY])
     // Hermes has no remove CLI; leaving the YAML entry is harmless (best-effort).
+    else removeHermesConfig(join(home, '.hermes', 'config.yaml'))
   } catch {
     /* already gone / tool absent */
   }
+}
+
+function removeHermesConfig(path: string): void {
+  if (!existsSync(path)) return
+  const text = readFileSync(path, 'utf8')
+  const lines = text.split('\n')
+  const topIdx = lines.findIndex((line) => /^mcp_servers:\s*$/.test(line))
+  if (topIdx < 0) return
+  const startIdx = lines.findIndex(
+    (line, index) => index > topIdx && line === `  ${MCP_SERVER_KEY}:`
+  )
+  if (startIdx < 0) return
+  let endIdx = startIdx + 1
+  while (
+    endIdx < lines.length &&
+    (lines[endIdx].startsWith('    ') || lines[endIdx].trim() === '')
+  ) {
+    endIdx++
+  }
+  lines.splice(startIdx, endIdx - startIdx)
+  atomicWriteFileSync(path, lines.join('\n'))
 }
 
 // --- helpers: SOUL.md note + Hermes YAML upsert (pure, testable) -------------

@@ -1,4 +1,5 @@
 import ContextCore
+import CryptoKit
 import Foundation
 
 // MARK: - Key resolution
@@ -365,15 +366,38 @@ public final class OmiBackend: @unchecked Sendable {
     /// requests an hour.
     public static let historyProbeOffset = 500
 
-    private let credential: (key: String, source: OmiKeySource)?
+    private let credentialProvider: () -> (key: String, source: OmiKeySource)?
     private let session: URLSession
     private let cache = ResponseCache()
     private let seen = SeenRange()
+    private let credentialState = CredentialState()
 
     /// Deliberately not public: the credential never leaves this module, and no caller outside it
     /// can hand one in or read one back out.
-    init(credential: (key: String, source: OmiKeySource)? = OmiKeyResolver.resolve()) {
-        self.credential = credential
+    init() {
+        credentialProvider = OmiKeyResolver.resolve
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = Self.requestTimeout
+        configuration.timeoutIntervalForResource = Self.requestTimeout
+        configuration.waitsForConnectivity = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpShouldSetCookies = false
+        session = URLSession(configuration: configuration)
+    }
+
+    init(credential: (key: String, source: OmiKeySource)?) {
+        credentialProvider = { credential }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = Self.requestTimeout
+        configuration.timeoutIntervalForResource = Self.requestTimeout
+        configuration.waitsForConnectivity = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpShouldSetCookies = false
+        session = URLSession(configuration: configuration)
+    }
+
+    init(credentialProvider: @escaping () -> (key: String, source: OmiKeySource)?) {
+        self.credentialProvider = credentialProvider
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Self.requestTimeout
         configuration.timeoutIntervalForResource = Self.requestTimeout
@@ -384,14 +408,27 @@ public final class OmiBackend: @unchecked Sendable {
         session = URLSession(configuration: configuration)
     }
 
-    public var isConfigured: Bool { credential != nil }
+    public var isConfigured: Bool { activeCredential != nil }
 
     /// The *name* of the source, never the key.
-    public var keySourceLabel: String? { credential?.source.label }
+    public var keySourceLabel: String? { activeCredential?.source.label }
 
     /// Oldest / newest conversation start this process has seen from Omi, across every call made so
     /// far. Cheap extra evidence for `status` that costs no request.
     public var seenRange: (oldest: Double, newest: Double)? { seen.range }
+
+    private var activeCredential: ActiveCredential? {
+        let credential = credentialProvider()
+        let fingerprint = credential.map {
+            Data(SHA256.hash(data: Data($0.key.utf8))).base64EncodedString()
+        }
+        if credentialState.changed(to: fingerprint) {
+            cache.clear()
+            seen.reset()
+        }
+        guard let credential, let fingerprint else { return nil }
+        return ActiveCredential(key: credential.key, source: credential.source, fingerprint: fingerprint)
+    }
 
     /// The sentence every tool uses when there is no key at all, so the wording never drifts.
     ///
@@ -582,7 +619,7 @@ public final class OmiBackend: @unchecked Sendable {
         query: [URLQueryItem],
         ttl: TimeInterval
     ) -> OmiResult<T> {
-        guard let credential else { return .unavailable(.notConfigured) }
+        guard let activeCredential else { return .unavailable(.notConfigured) }
         guard var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
         else { return .unavailable(.malformedResponse("could not build a URL for \(path)")) }
         components.queryItems = query.isEmpty ? nil : query
@@ -590,7 +627,7 @@ public final class OmiBackend: @unchecked Sendable {
             return .unavailable(.malformedResponse("could not build a URL for \(path)"))
         }
 
-        let cacheKey = url.absoluteString
+        let cacheKey = "\(activeCredential.fingerprint):\(url.absoluteString)"
         if let cached = cache.lookup(cacheKey) {
             switch cached {
             case let .success(data): return decode(type, data, path: path)
@@ -601,7 +638,7 @@ public final class OmiBackend: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = Self.requestTimeout
-        request.setValue("Bearer \(credential.key)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(activeCredential.key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
 
@@ -718,6 +755,12 @@ private final class ResponseCache: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [String: Entry] = [:]
 
+    func clear() {
+        lock.lock()
+        entries.removeAll()
+        lock.unlock()
+    }
+
     func lookup(_ key: String) -> Result<Data, OmiBackendError>? {
         lock.lock()
         defer { lock.unlock() }
@@ -738,6 +781,25 @@ private final class ResponseCache: @unchecked Sendable {
     }
 }
 
+private struct ActiveCredential: Sendable {
+    let key: String
+    let source: OmiKeySource
+    let fingerprint: String
+}
+
+private final class CredentialState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fingerprint: String?
+
+    func changed(to next: String?) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard fingerprint != next else { return false }
+        fingerprint = next
+        return true
+    }
+}
+
 /// The span of Omi history this process has actually observed. Free evidence for `status`.
 private final class SeenRange: @unchecked Sendable {
     private let lock = NSLock()
@@ -752,6 +814,13 @@ private final class SeenRange: @unchecked Sendable {
             oldest = min(oldest ?? at, at)
             newest = max(newest ?? at, at)
         }
+    }
+
+    func reset() {
+        lock.lock()
+        oldest = nil
+        newest = nil
+        lock.unlock()
     }
 
     var range: (oldest: Double, newest: Double)? {

@@ -7,6 +7,8 @@ import Foundation
 /// line out. **The output handle carries the protocol** — nothing but response lines may ever reach
 /// it, so every diagnostic in this file goes to stderr.
 public final class MCPServer {
+    private static let maxFrameBytes = 4 * 1024 * 1024
+
     /// Server-level guidance, surfaced to the model once at connection time.
     ///
     /// Tool descriptions are only read when the model is already shopping for a tool. This is the
@@ -73,6 +75,11 @@ public final class MCPServer {
             let chunk = input.availableData
             if chunk.isEmpty { break } // EOF: the client closed the pipe.
             buffer.append(chunk)
+            if buffer.count > Self.maxFrameBytes && !buffer.contains(0x0A) {
+                write(RPC.error(id: nil, code: RPC.Code.parseError, message: "Request too large"), to: output)
+                buffer.removeAll(keepingCapacity: false)
+                continue
+            }
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = Data(buffer[buffer.startIndex..<newline])
                 buffer.removeSubrange(buffer.startIndex...newline)
@@ -86,6 +93,10 @@ public final class MCPServer {
     }
 
     private func respond(to lineData: Data, on output: FileHandle) {
+        guard lineData.count <= Self.maxFrameBytes else {
+            write(RPC.error(id: nil, code: RPC.Code.parseError, message: "Request too large"), to: output)
+            return
+        }
         guard let raw = String(data: lineData, encoding: .utf8) else {
             write(RPC.error(id: nil, code: RPC.Code.parseError, message: "Parse error: line is not UTF-8"),
                   to: output)
@@ -112,6 +123,9 @@ public final class MCPServer {
     public func handle(line: String) -> String? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
+        guard trimmed.utf8.count <= Self.maxFrameBytes else {
+            return RPC.error(id: nil, code: RPC.Code.parseError, message: "Request too large")
+        }
 
         guard let frame = RPC.json(line: trimmed) else {
             return RPC.error(id: nil, code: RPC.Code.parseError, message: "Parse error")

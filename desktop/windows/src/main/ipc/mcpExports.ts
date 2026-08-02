@@ -190,7 +190,11 @@ export function registerMcpExportsHandlers(): void {
   // clear inside db.ts wipeUserData — the renderer teardown calls this too, so an
   // early wipeUserData failure can't leave the prior account's key on disk.
   ipcMain.handle('mcp:clearKey', () => {
-    new McpKeyStore().clearAll()
+    removeClaudeMcpEntry()
+    return Promise.all(CLI_IDS.map((id) => disconnectCli(id))).then(() => {
+      new McpKeyStore().clearAll()
+      broadcastChanged()
+    })
   })
   ipcMain.handle('mcp:cloudInfo', () => cloudInfo())
   ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))

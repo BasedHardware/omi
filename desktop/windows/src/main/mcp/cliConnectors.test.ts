@@ -7,7 +7,9 @@ import {
   cliConnected,
   buildSetupCard,
   upsertHermesConfig,
-  appendSoulNote
+  appendSoulNote,
+  disconnectCli,
+  buildCliEnvironment
 } from './cliConnectors'
 import { mcpServerUrl } from '../../shared/mcpExports'
 
@@ -42,6 +44,19 @@ describe('probeCliConnector (presence gating, no shell)', () => {
     mkdirSync(join(home, '.hermes'), { recursive: true })
     writeFileSync(join(home, '.hermes', 'config.yaml'), 'mcp_servers: {}\n', 'utf8')
     expect(probeCliConnector('hermes', home).detected).toBe(true)
+  })
+})
+
+describe('buildCliEnvironment', () => {
+  it('does not forward an unrelated parent secret', () => {
+    const previous = process.env.CLI_CONNECTOR_TEST_SECRET
+    process.env.CLI_CONNECTOR_TEST_SECRET = 'secret'
+    try {
+      expect(buildCliEnvironment()).not.toHaveProperty('CLI_CONNECTOR_TEST_SECRET')
+    } finally {
+      if (previous === undefined) delete process.env.CLI_CONNECTOR_TEST_SECRET
+      else process.env.CLI_CONNECTOR_TEST_SECRET = previous
+    }
   })
 })
 
@@ -111,6 +126,23 @@ describe('upsertHermesConfig', () => {
     expect(text.match(/omi-memory:/g)?.length).toBe(1)
     expect(text).toContain('Bearer new-key')
     expect(text).not.toContain('Bearer old-key')
+  })
+})
+
+describe('disconnectCli', () => {
+  it('removes the Hermes Omi entry without touching sibling config', async () => {
+    const p = join(home, '.hermes', 'config.yaml')
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    writeFileSync(p, 'model: sonnet\nmcp_servers:\n  other:\n    command: keep\n', 'utf8')
+    upsertHermesConfig(p, URL, KEY)
+
+    await disconnectCli('hermes', home)
+
+    const text = readFileSync(p, 'utf8')
+    expect(text).toContain('model: sonnet')
+    expect(text).toContain('  other:')
+    expect(text).not.toContain('omi-memory')
+    expect(text).not.toContain(KEY)
   })
 })
 
