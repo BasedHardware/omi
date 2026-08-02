@@ -1,0 +1,34 @@
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_1833483671ebc5::t_21123fa300e164 2
+  s_1833483671ebc5::t_63c9b6197cfa2a 366-479
+  s_1833483671ebc5::t_4d405b6eef4aa1 480
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_1833483671ebc5::t_c6d9cc3a06917a 535-561
+  s_1833483671ebc5::t_2044b2bf632d15 403-409
+  s_1833483671ebc5::t_48b0a109a26e0d 470-475
+  s_1833483671ebc5::t_d2d795df6240fb 512-518
+  s_1833483671ebc5::t_cc06bc352b9173 583-586,588-589
+  s_1833483671ebc5::t_4b327e2340fd9e 653,655-656
+  s_1833483671ebc5::t_10e2e2f3292465 562-563
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeHandoffTests.swift
+  s_1833483671ebc5::t_9f1617977d4718 40-41,56-59
+  s_1833483671ebc5::t_e7c20f8ee5f431 66-69,71
+  s_1833483671ebc5::t_8b955f950fcab8 97-196
+  s_1833483671ebc5::t_a724fd3d549a62 197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "177afc2e318678375a2157745b411b6f45ecc1a1",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
