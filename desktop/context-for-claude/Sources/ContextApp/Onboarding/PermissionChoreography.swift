@@ -1180,4 +1180,3 @@ enum PermissionOverlay {
         }
     }
 }
-
