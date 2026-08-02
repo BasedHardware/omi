@@ -39,6 +39,21 @@ status: approved-for-minimum-slice
 - 行を選ぶと詳細で時系列順のtranscript textを表示する。
 - 設定無効・ネットワーク失敗は既存Omi会話一覧を壊さず、Cloudflare画面だけで明示する。
 
+## Diagrams
+
+### threat_model
+
+```mermaid
+flowchart LR
+    Defines["dart-defines: Worker URL and token"] --> Configuration["CloudflareTranscriptConfiguration"]
+    Configuration -->|"missing or invalid"| Disabled["Disabled: no Cloudflare request"]
+    Configuration -->|"configured"| ReadModule["Read-only list/detail module"]
+    ReadModule -->|"Bearer GET"| Worker["Cloudflare Worker runtime: unverified"]
+    ReadModule -->|"timeout, non-2xx, malformed JSON"| ScopedError["Scoped Cloudflare error and retry"]
+    ReadModule -.->|"never calls"| Writes["upload, ack, delete, WAL mutation"]
+    Worker -.->|"HTTP 200 or build alone is insufficient"| Evidence["New-base iPhone and Worker runtime evidence: unconfirmed"]
+```
+
 ## Slice alignment and release boundary
 
 - Story、Spec、ADR、local overlay runbookは同じ製品slice、すなわちCloudflare transcriptのread-only一覧/詳細とWAL no-op boundaryを正本として記述する。生成l10nはARBからの機械生成であり、独立した製品laneではない。
