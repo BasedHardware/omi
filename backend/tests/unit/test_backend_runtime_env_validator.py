@@ -164,6 +164,13 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', user
     """Minimal job contract for fixture manifests (keeps validator happy)."""
     return {
         'env': {
+            'OMI_LLM_GATEWAY_URL': {
+                'env_var': 'OMI_LLM_GATEWAY_URL',
+                'default': 'http://127.0.0.1:9',
+                'category': 'service_discovery',
+            },
+            'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway', 'category': 'rollout'},
+            'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
             'MEMORY_MODE': {'value': mode, 'category': 'memory_rollout'},
             'MEMORY_ENABLED_USERS': {'value': users, 'category': 'memory_rollout'},
             'MEMORY_V3_GET_ENABLED': {'value': 'false' if mode == 'off' else 'true', 'category': 'memory_rollout'},
@@ -173,6 +180,7 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', user
         'secrets': {
             'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
             'ENCRYPTION_SECRET': {'secret': 'ENCRYPTION_SECRET', 'version': 'latest'},
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN': {'secret': 'OMI_LLM_GATEWAY_SERVICE_TOKEN', 'version': 'latest'},
             'OPENAI_API_KEY': {'secret': 'OPENAI_API_KEY', 'version': 'latest'},
             'PINECONE_API_KEY': {'secret': 'PINECONE_API_KEY', 'version': 'latest'},
             'TYPESENSE_HOST': {'secret': 'TYPESENSE_HOST', 'version': 'latest'},
@@ -1843,6 +1851,50 @@ def test_memory_maintenance_job_contract_rejects_empty_surface_allowlist(tmp_pat
     assert any('must match memory-maintenance-job allowlist' in error.message for error in errors)
 
 
+def test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_enabled(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    for name in (
+        'OMI_LLM_GATEWAY_URL',
+        'OMI_LLM_GATEWAY_FEATURE_MODE',
+        'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
+    ):
+        del job['env'][name]
+    del job['secrets']['OMI_LLM_GATEWAY_SERVICE_TOKEN']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    messages = {error.message for error in errors}
+    assert {
+        'missing gateway env OMI_LLM_GATEWAY_URL while canonical maintenance is enabled',
+        'missing gateway env OMI_LLM_GATEWAY_FEATURE_MODE while canonical maintenance is enabled',
+        'missing gateway env OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION while canonical maintenance is enabled',
+        'missing gateway secret OMI_LLM_GATEWAY_SERVICE_TOKEN while canonical maintenance is enabled',
+    } <= messages
+
+
+def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_enabled(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['OMI_LLM_GATEWAY_URL'] = {'value': 'http://172.16.63.232', 'category': 'service_discovery'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     workflow = ROOT.parent / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
     text = workflow.read_text(encoding='utf-8')
@@ -1851,6 +1903,9 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
+    assert 'id: gateway-serving' in text
+    assert '--lane omi:auto:memory-l2' in text
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text
     assert (
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
