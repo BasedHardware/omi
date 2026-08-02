@@ -380,10 +380,15 @@ async def execute_tool(
 ):
     """Execute a named tool and return its result."""
     # Set up agent_config_context so tools can resolve the UID
+    configurable: dict[str, Any] = {
+        "user_id": uid,
+    }
+    if body.tool_name == "fetch_url_tool":
+        requested_url = body.params.get("url")
+        if isinstance(requested_url, str):
+            configurable["user_provided_urls"] = [requested_url]
     config = {
-        "configurable": {
-            "user_id": uid,
-        },
+        "configurable": configurable,
     }
     agent_config_context.set(config)
 

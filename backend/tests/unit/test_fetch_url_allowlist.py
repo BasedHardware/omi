@@ -129,11 +129,35 @@ class TestRuntimeEnforcement:
         allowlist = ['https://example.com/page']
         assert is_url_allowlisted('https://example.com/page.', allowlist)
 
+    def test_is_url_allowlisted_same_host_variants(self):
+        allowlist = ['http://example.com/page']
+        assert is_url_allowlisted('https://example.com/page/', allowlist)
+        assert is_url_allowlisted('https://www.example.com/canonical', allowlist)
+        assert is_url_allowlisted('https://Example.COM/other', allowlist)
+        assert not is_url_allowlisted('https://other.example/page', allowlist)
+
     def test_is_redirect_url_allowlisted_same_host_variants(self):
         allowlist = ['http://example.com/page']
         assert is_redirect_url_allowlisted('https://example.com/page/', allowlist)
         assert is_redirect_url_allowlisted('https://www.example.com/canonical', allowlist)
         assert not is_redirect_url_allowlisted('https://other.example/page', allowlist)
+
+    @pytest.mark.asyncio
+    async def test_allows_same_host_variant_of_allowlisted_url(self):
+        allowlist_url = 'http://example.com/page'
+        fetch_url = 'https://www.example.com/canonical'
+        config = RunnableConfig(configurable={'user_provided_urls': [allowlist_url]})
+
+        with patch(
+            'utils.retrieval.tools.web_tools._fetch_page',
+            new_callable=AsyncMock,
+            return_value=(200, 'text/html', '<html><body><p>Hello</p></body></html>'),
+        ) as mock_fetch:
+            result = await fetch_url_tool.ainvoke({'url': fetch_url}, config=config)
+
+        mock_fetch.assert_called_once()
+        assert 'Content from' in result
+        assert 'Hello' in result
 
     @pytest.mark.asyncio
     async def test_rejects_redirect_to_non_allowlisted_url(self):
