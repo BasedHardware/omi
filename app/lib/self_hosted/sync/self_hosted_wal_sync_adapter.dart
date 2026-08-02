@@ -1,3 +1,5 @@
+import '../cloudflare/cloudflare_transcript_configuration.dart';
+
 enum SelfHostedWalSyncResult { disabled, deferred }
 
 abstract interface class SelfHostedWalSyncAdapter {
@@ -14,8 +16,7 @@ class NoopSelfHostedWalSyncAdapter implements SelfHostedWalSyncAdapter {
 
   static bool get _environmentEnabled =>
       const bool.fromEnvironment('BRAINBASE_SELF_HOSTED_SYNC') &&
-      const String.fromEnvironment('BRAINBASE_SELF_HOSTED_WORKER_URL').isNotEmpty &&
-      const String.fromEnvironment('BRAINBASE_SELF_HOSTED_WORKER_TOKEN').isNotEmpty;
+      CloudflareTranscriptConfiguration.fromEnvironment().isConfigured;
 
   final bool _enabled;
 
