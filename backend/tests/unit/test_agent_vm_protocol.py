@@ -71,7 +71,7 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/upload", content=b"x").status_code == 401
         assert client.post("/auth", json={"firebaseToken": "firebase"}).status_code == 401
         assert client.post("/ping").status_code == 401
-        assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
+        assert client.post("/sync", json={"table": "local_kg_nodes", "rows": [{"id": "1"}]}).status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
 
@@ -157,7 +157,7 @@ def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
 def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
+    connection.execute("CREATE TABLE action_items (id TEXT PRIMARY KEY, title TEXT, status TEXT)")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
@@ -165,23 +165,23 @@ def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
         response = client.post(
             "/sync?token=test-token",
             json={
-                "table": "screenshots",
+                "table": "action_items",
                 "rows": [
-                    {"id": "one", "appName": "Safari"},
-                    {"id": "two", "appName": "Terminal", "ocrText": "build passed"},
+                    {"id": "one", "title": "First task"},
+                    {"id": "two", "title": "Second task", "status": "done"},
                     {},
                 ],
             },
         )
         rows = [
-            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM screenshots ORDER BY id")
+            tuple(row) for row in module.runtime.db.execute("SELECT id, title, status FROM action_items ORDER BY id")
         ]
 
     assert response.status_code == 200
-    assert response.json() == {"applied": 2, "table": "screenshots"}
+    assert response.json() == {"applied": 2, "table": "action_items"}
     assert rows == [
-        ("one", "Safari", None),
-        ("two", "Terminal", "build passed"),
+        ("one", "First task", None),
+        ("two", "Second task", "done"),
     ]
 
 
