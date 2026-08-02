@@ -60,8 +60,15 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
   final VoiceMessageTranscriber _transcribeVoiceMessage;
 
-  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber})
-      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
+  // Injected only by tests — ServiceManager is a singleton initialised from
+  // native plumbing, so the mic is resolved lazily at call time otherwise.
+  final IMicRecorderService? _micOverride;
+
+  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, IMicRecorderService? mic})
+      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage,
+        _micOverride = mic;
+
+  IMicRecorderService get _mic => _micOverride ?? ServiceManager.instance().mic;
 
   VoiceRecorderState get state => _state;
   String get transcript => _transcript;
@@ -142,64 +149,94 @@ class VoiceRecorderProvider extends ChangeNotifier {
       }
     });
 
-    await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        if (_state == VoiceRecorderState.recording) {
-          // Write to disk instead of accumulating in RAM
-          _pcmSink?.add(bytes);
-          _pcmBytesWritten += bytes.length;
+    try {
+      await _mic.start(
+        onByteReceived: (bytes) {
+          if (_state == VoiceRecorderState.recording) {
+            // Write to disk instead of accumulating in RAM
+            _pcmSink?.add(bytes);
+            _pcmBytesWritten += bytes.length;
 
-          // Update audio visualization based on actual audio levels
-          if (bytes.isNotEmpty) {
-            double rms = 0;
-            for (int i = 0; i < bytes.length - 1; i += 2) {
-              int sample = bytes[i] | (bytes[i + 1] << 8);
-              if (sample > 32767) {
-                sample = sample - 65536;
+            // Update audio visualization based on actual audio levels
+            if (bytes.isNotEmpty) {
+              double rms = 0;
+              for (int i = 0; i < bytes.length - 1; i += 2) {
+                int sample = bytes[i] | (bytes[i + 1] << 8);
+                if (sample > 32767) {
+                  sample = sample - 65536;
+                }
+                rms += sample * sample;
               }
-              rms += sample * sample;
-            }
 
-            int sampleCount = bytes.length ~/ 2;
-            if (sampleCount > 0) {
-              rms = math.sqrt(rms / sampleCount) / 32768.0;
-            } else {
-              rms = 0;
-            }
+              int sampleCount = bytes.length ~/ 2;
+              if (sampleCount > 0) {
+                rms = math.sqrt(rms / sampleCount) / 32768.0;
+              } else {
+                rms = 0;
+              }
 
-            // Wider dynamic range so quiet sections stay near zero and loud
-            // peaks reach the full bar height. The 0.5 exponent boosts mid
-            // levels so normal speech has visible amplitude.
-            final level = math.pow(rms, 0.5).toDouble().clamp(0.02, 1.0);
+              // Wider dynamic range so quiet sections stay near zero and loud
+              // peaks reach the full bar height. The 0.5 exponent boosts mid
+              // levels so normal speech has visible amplitude.
+              final level = math.pow(rms, 0.5).toDouble().clamp(0.02, 1.0);
 
-            for (int i = 0; i < _audioLevels.length - 1; i++) {
-              _audioLevels[i] = _audioLevels[i + 1];
+              for (int i = 0; i < _audioLevels.length - 1; i++) {
+                _audioLevels[i] = _audioLevels[i + 1];
+              }
+              _audioLevels[_audioLevels.length - 1] = level;
             }
-            _audioLevels[_audioLevels.length - 1] = level;
           }
-        }
-      },
-      onRecording: () {
-        Logger.debug('VoiceRecorderProvider: Recording started');
-        _state = VoiceRecorderState.recording;
-        // Reset audio levels
-        for (int i = 0; i < _audioLevels.length; i++) {
-          _audioLevels[i] = 0.1;
-        }
-        notifyListeners();
-      },
-      onStop: () {
-        Logger.debug('VoiceRecorderProvider: Recording stopped');
-      },
-      onInitializing: () {
-        Logger.debug('VoiceRecorderProvider: Initializing');
-      },
-    );
+        },
+        onRecording: () {
+          Logger.debug('VoiceRecorderProvider: Recording started');
+          _state = VoiceRecorderState.recording;
+          // Reset audio levels
+          for (int i = 0; i < _audioLevels.length; i++) {
+            _audioLevels[i] = 0.1;
+          }
+          notifyListeners();
+        },
+        onStop: () {
+          Logger.debug('VoiceRecorderProvider: Recording stopped');
+        },
+        onInitializing: () {
+          Logger.debug('VoiceRecorderProvider: Initializing');
+        },
+      );
+    } catch (e) {
+      // Mic contention (a conversation already holds the recorder) or a native
+      // start failure. Never rethrows: this runs from a fire-and-forget tap
+      // handler, so an escaping error is an unhandled async crash.
+      Logger.debug('VoiceRecorderProvider: failed to start recording: $e');
+      await _unwindFailedStart();
+    }
+  }
+
+  /// Undo everything [startRecording] armed before handing the mic over — the
+  /// waveform timer, the open PCM sink and its file — and return to idle so the
+  /// chat bar drops back to the text field instead of wedging in `recording`.
+  Future<void> _unwindFailedStart() async {
+    _waveformTimer?.cancel();
+    _waveformTimer = null;
+    try {
+      await _pcmSink?.close();
+    } catch (e) {
+      Logger.debug('Error closing PCM sink after failed start: $e');
+    }
+    _pcmSink = null;
+    await _cleanupPcmFile();
+    _pcmBytesWritten = 0;
+    _autoSendRequested = false;
+    _state = VoiceRecorderState.idle;
+    for (int i = 0; i < _audioLevels.length; i++) {
+      _audioLevels[i] = 0.1;
+    }
+    notifyListeners();
   }
 
   void stopRecording() {
     _waveformTimer?.cancel();
-    ServiceManager.instance().mic.stop();
+    _mic.stop();
   }
 
   Future<void> processRecording() async {
@@ -503,7 +540,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _waveformTimer?.cancel();
     _pcmSink?.close();
     if (_state == VoiceRecorderState.recording) {
-      ServiceManager.instance().mic.stop();
+      _mic.stop();
     }
     super.dispose();
   }
