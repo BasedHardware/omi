@@ -1,15 +1,11 @@
 """Pure task-intelligence entitlement decisions.
 
-Canonical-memory membership is the only eligibility input for real accounts.
-Workflow controls remain persisted generation fences and diagnostics, not
-rollout gates. The one exception is the code-owned What Matters Now smoke
-fixture, which is a single synthetic uid the deploy gate calls and which
-``is_development_smoke_fixture`` admits only when ``OMI_ENV_STAGE`` is ``dev``.
+Canonical-memory membership is the only eligibility input. Workflow controls
+remain persisted generation fences and diagnostics, not rollout gates.
 """
 
 # LIFECYCLE: permanent
 
-from config.what_matters_now_smoke_fixture import is_development_smoke_fixture
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
@@ -52,9 +48,7 @@ def resolve_task_intelligence_for_user(
 ) -> TaskIntelligenceRolloutDecision:
     """Compose workflow mode with the authoritative canonical-memory selector."""
 
-    memory_cohort_eligible = is_development_smoke_fixture(uid) or (
-        resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
-    )
+    memory_cohort_eligible = resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
     return resolve_task_intelligence_rollout(
         uid=uid,
         workflow_mode=workflow_mode,

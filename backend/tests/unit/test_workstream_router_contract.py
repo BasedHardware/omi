@@ -281,14 +281,11 @@ def test_dev_deploy_smoke_reaches_what_matters_now_through_the_real_entitlement_
     assert result is sentinel_projection
 
 
-def test_what_matters_now_smoke_uid_stays_unentitled_outside_a_dev_runtime(monkeypatch):
-    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+def test_what_matters_now_stays_hidden_for_a_uid_outside_the_cohort(monkeypatch):
     _stub_smoke_fixture_control(monkeypatch, object())
 
     with pytest.raises(HTTPException) as error:
-        task_recommendations_router.get_what_matters_now(
-            request_context=object(), device_id=None, uid=WHAT_MATTERS_NOW_SMOKE_UID
-        )
+        task_recommendations_router.get_what_matters_now(request_context=object(), device_id=None, uid='not-enrolled')
 
     assert error.value.status_code == 404
 
