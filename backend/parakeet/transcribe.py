@@ -16,6 +16,20 @@ BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3
 STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
 INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
+# Real-time (streaming/PTT) model allow-list. This mirrors
+# ``config.stt_provider_policy.APPROVED_STREAMING_PARAKEET_MODELS`` — the code-owned source of
+# truth — which this isolated GPU image cannot import (only ``backend/parakeet/`` is copied in).
+# ``test_stt_provider_policy.py`` guards the two sets against drift. The routing policy silently
+# falls back to the English-only default for an unrecognized value, so if this pod loaded the raw
+# env instead, routing would claim English while the pod attempted a model that does not exist —
+# a silent divergence. Reject an unapproved value at startup with a clear message instead.
+APPROVED_STREAM_MODELS: frozenset = frozenset(
+    {
+        "nvidia/parakeet-rnnt-1.1b",
+        "nvidia/parakeet-1-1b-rnnt-multilingual",
+    }
+)
+
 _stream_model: Optional[Any] = None
 _nim_url: Optional[str] = None
 _gpu_worker: Optional[Any] = None
@@ -126,11 +140,29 @@ def _load_nemo_model(model_name: str) -> Any:
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
+def _validate_stream_model(model_name: str) -> None:
+    """Fail fast on a configured-but-unapproved ``PARAKEET_STREAM_MODEL``.
+
+    Routing (``config.stt_provider_policy.streaming_parakeet_model``) maps an unrecognized value
+    to the English-only default, so serving the raw env unchecked would route English traffic to a
+    backend attempting a model that does not exist. Reject it here with a clear message rather than
+    surfacing an opaque model-load error deep in NeMo.
+    """
+    if model_name not in APPROVED_STREAM_MODELS:
+        raise ValueError(
+            f"PARAKEET_STREAM_MODEL={model_name!r} is not an approved streaming model "
+            f"(expected one of {sorted(APPROVED_STREAM_MODELS)}). Routing assumes the English-only "
+            "default is served, so an unapproved value would silently diverge from what this pod "
+            "loads — fix the deployment env."
+        )
+
+
 def _init_stream_model() -> None:
     global _stream_model
     if not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
         return
+    _validate_stream_model(STREAM_MODEL_NAME)
     _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
 
 

@@ -54,6 +54,7 @@ MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_
 PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
 PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
+VECTOR_STORE_BACKEND_ENV = "VECTOR_STORE_BACKEND"
 
 
 @dataclass(frozen=True)
@@ -169,9 +170,17 @@ def build_vector_repair_outbox_production_dependencies(
     Pinecone, embedding, or Firestore client singletons. Required secret/config
     env is validated before importing network clients so enabled misconfiguration
     fails deterministically before leasing any outbox record.
+
+    Secret validation follows the selected vector-store backend (ADR-0033): the default
+    ``pinecone`` backend requires its API key and index, while the neutral ``qdrant`` on-prem
+    backend must not demand unused Pinecone creds. The delete/upsert seams route through the
+    ``VectorStore`` port either way, so ``VECTOR_REPAIR_PINECONE_NAMESPACE`` is just the record
+    namespace, not a Pinecone-only dependency.
     """
-    pinecone_api_key = _required_dependency_env(env, PINECONE_API_KEY_ENV)
-    pinecone_index_name = _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
+    backend = (env.get(VECTOR_STORE_BACKEND_ENV) or "pinecone").strip().lower()
+    if backend == "pinecone":
+        _required_dependency_env(env, PINECONE_API_KEY_ENV)
+        _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
     _required_dependency_env(env, OPENAI_API_KEY_ENV)
 
     vector_module = module_loader("utils.vector")

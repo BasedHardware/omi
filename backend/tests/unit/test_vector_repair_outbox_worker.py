@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 import json
 
+import pytest
+
 from database.memory_vector_repair_pinecone_adapter import (
     VECTOR_REPAIR_PINECONE_NAMESPACE,
     VectorRepairNotReady,
@@ -999,6 +1001,46 @@ class TestEntrypoint:
                 "error": "PINECONE_API_KEY is required when memory vector repair worker is enabled",
             }
         ]
+
+    def test_dependency_builder_requires_pinecone_creds_only_for_pinecone_backend(self):
+        """Backend selection (ADR-0033) gates Pinecone secret validation.
+
+        Default/pinecone: Pinecone creds are mandatory. Neutral qdrant on-prem: the enabled
+        worker must build without unused Pinecone creds, wiring delete/upsert through the
+        VectorStore port instead.
+        """
+        from types import SimpleNamespace
+
+        class _FakeStore:
+            def delete_by_filter(self, namespace, filter):
+                return None
+
+            def upsert(self, namespace, vectors):
+                return None
+
+        fake_modules = {
+            "utils.vector": SimpleNamespace(get_vector_store=lambda: _FakeStore()),
+            "database._client": SimpleNamespace(db=SimpleNamespace()),
+            "utils.llm.clients": SimpleNamespace(embeddings=SimpleNamespace(embed_query=lambda text: [0.0])),
+        }
+
+        def _loader(name):
+            return fake_modules[name]
+
+        # pinecone backend (implicit default) still requires the Pinecone key.
+        with pytest.raises(ValueError, match="PINECONE_API_KEY is required"):
+            entrypoint.build_vector_repair_outbox_production_dependencies(
+                {"OPENAI_API_KEY": "x"}, module_loader=_loader
+            )
+
+        # qdrant backend builds without any Pinecone creds.
+        deps = entrypoint.build_vector_repair_outbox_production_dependencies(
+            {"VECTOR_STORE_BACKEND": "qdrant", "OPENAI_API_KEY": "x"},
+            module_loader=_loader,
+        )
+        assert deps.vector_deleter is not None
+        assert deps.vector_repairer is not None
+        assert deps.authoritative_item_loader is not None
 
     def test_http_shim_disabled_post_fails_closed_without_dependency_initialization(self):
         calls = []

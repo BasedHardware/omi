@@ -3,6 +3,9 @@ backend/google-credentials.json
 # --- self-host (WP0): slim down the monorepo build context ---
 # NB: do NOT exclude backend/, .github/scripts/, firestore.rules, firestore.indexes.json,
 # deploy/onprem/ — they are copied by the Dockerfiles (backend + emulator).
+# NB: do NOT exclude plugins/ — this root .dockerignore applies to EVERY build from the repo
+# root, and the plugins production image (.github/workflows/gcp_plugins.yml: `docker build -f
+# plugins/Dockerfile .`) COPYs plugins/ from that root context; excluding it breaks that build.
 .git/
 **/__pycache__/
 **/.venv/
@@ -13,6 +16,5 @@ web/
 omiGlass/
 desktop/
 sdks/
-plugins/
 mcp/
 omi/firmware/

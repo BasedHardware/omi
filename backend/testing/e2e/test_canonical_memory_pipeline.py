@@ -22,9 +22,11 @@ from models.product_memory import (
     MemoryTier,
     ProcessingState,
 )
+from database import document_store
+from database.store.adapters.firestore import FirestoreDocumentStore
+from tests.store_fakes import FakeDocumentStore
 from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from tests.unit.fixtures.memory_adapter_fakes import (
-    FirestoreFake,
     enabled_rollout_doc,
     memory_item,
     stored_item,
@@ -239,7 +241,7 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
         payload["category"] = MemoryCategory.system.value
         payload["subject_entity_id"] = "user"
         payload["subject_attribution"] = "user"
-        memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+        memory_id = write_canonical_extraction_memory(uid, payload)
         import database.conversations as conversations_db
 
         structured = conversation.structured.model_dump() if hasattr(conversation.structured, "model_dump") else {}
@@ -301,6 +303,9 @@ class TestCanonicalMemoryPipelineE2E:
         _enroll_canonical_pipeline(monkeypatch)
         fake_index, _embeddings = install_vector_search_fakes(monkeypatch, vector_db)
         db = fake_firestore
+        # Bind the neutral store port to the same fake Firestore the helpers seed/read (ADR-0028:
+        # the canonical-memory functions no longer take db_client — persistence flows through _store()).
+        monkeypatch.setattr(document_store, "_store", lambda: FirestoreDocumentStore(db))
         _seed_rollout_readiness(db, PIPELINE_UID, grant_consumer="omi_chat")
 
         memory_id = _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch, db=db)
@@ -311,7 +316,6 @@ class TestCanonicalMemoryPipelineE2E:
 
         maintenance = run_canonical_short_term_maintenance(
             PIPELINE_UID,
-            db_client=db,
             now=NOW,
             run_id="e2e-canonical-pipeline",
             llm_invoke=_scripted_consolidation_llm,
@@ -331,7 +335,6 @@ class TestCanonicalMemoryPipelineE2E:
         assert provider_id not in vectors, "canonical apply must not bypass the durable outbox"
         projection = _drain_canonical_outbox(
             PIPELINE_UID,
-            db_client=db,
             run_id="e2e-canonical-pipeline-projection",
             now=OUTBOX_DUE_AT,
         )
@@ -346,7 +349,7 @@ class TestCanonicalMemoryPipelineE2E:
 
         promoted_item = MemoryItem(**promoted)
         authoritative_items = {
-            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=PIPELINE_UID, db_client=db)
+            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=PIPELINE_UID)
         }
         assert memory_id in authoritative_items
         assert authoritative_items[memory_id].content == promoted_item.content
@@ -371,7 +374,7 @@ class TestCanonicalMemoryPipelineE2E:
         _seed_memory_item_doc(db, archive_item)
         _seed_memory_item_doc(db, visible_item)
 
-        service = MemoryService(db_client=db)
+        service = MemoryService()
         read_ids = {memory.id for memory in service.read(PIPELINE_UID, limit=50)}
         assert memory_id in read_ids
         assert "archive-hidden" not in read_ids
@@ -381,7 +384,6 @@ class TestCanonicalMemoryPipelineE2E:
             uid=PIPELINE_UID,
             query="visible",
             limit=10,
-            db_client=db,
             now=NOW,
         )
         assert chat_text is not None
@@ -396,7 +398,6 @@ class TestCanonicalMemoryPipelineE2E:
         product = fetch_default_product_memory_search(
             uid=PIPELINE_UID,
             query="visible",
-            db_client=db,
             policy=product_policy,
             now=NOW,
         )
@@ -404,7 +405,7 @@ class TestCanonicalMemoryPipelineE2E:
         assert "archive-hidden" not in product_ids
         assert "visible-long-term" in product_ids
 
-        delete_canonical_memory(PIPELINE_UID, memory_id, db_client=db)
+        delete_canonical_memory(PIPELINE_UID, memory_id)
         tombstoned = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
 
@@ -421,7 +422,6 @@ class TestCanonicalMemoryPipelineE2E:
 
         cleanup = _drain_canonical_outbox(
             PIPELINE_UID,
-            db_client=db,
             run_id="e2e-canonical-pipeline-delete",
             now=OUTBOX_DUE_AT,
         )
@@ -469,29 +469,30 @@ def _vector_store(fake_index, namespace: str = "ns2") -> dict:
 
 
 def _invoke_surface_reader(surface_name, *, uid, db, rollout, policy, now):
+    # Neutral-store API (ADR-0022): these read paths resolve the DocumentStore via the process
+    # port, no longer an injected ``db_client``. In this hermetic suite the port is the patched
+    # fake Firestore the surfaces seed into, so ``db_client`` is simply omitted.
     if surface_name == "chat_text":
-        return search_memory_default_chat_memories_text(uid=uid, query="coffee", limit=10, db_client=db, now=now)
+        return search_memory_default_chat_memories_text(uid=uid, query="coffee", limit=10, now=now)
     if surface_name == "chat_list":
-        return list_default_chat_memories_decision_text(uid=uid, limit=10, offset=0, db_client=db).text
+        return list_default_chat_memories_decision_text(uid=uid, limit=10, offset=0).text
     if surface_name == "developer":
         return search_memory_default_developer_memories(
             uid=uid,
             query="coffee",
             limit=10,
             offset=0,
-            db_client=db,
             rollout_decision=rollout,
             now=now,
         ).memories
     if surface_name == "agent_tools":
         return tool_memories_service.get_memories_text(uid=uid, limit=50, now=now)
     if surface_name == "mcp":
-        return MemoryService(db_client=db).search_mcp(uid, "coffee", limit=10)
+        return MemoryService().search_mcp(uid, "coffee", limit=10)
     if surface_name == "product_search":
         return fetch_default_product_memory_search(
             uid=uid,
             query="coffee",
-            db_client=db,
             policy=policy,
             now=now,
         )["items"]
@@ -527,12 +528,10 @@ class TestSurfaceDefaultAccessMatrix:
 
             install_vector_search_fakes(monkeypatch, vector_db)
         db = fake_firestore
-        if surface_name == "agent_tools":
-            # get_memories_text reads through the client this module captured at import
-            # time, so bind it explicitly here. Without this the case only passes when an
-            # earlier test's fixture happened to rebind it, and standalone it reaches for
-            # real Firestore (#10423).
-            monkeypatch.setattr(tool_memories_service, "firestore_db", db)
+        # Neutral-store API (ADR-0022): read surfaces resolve the DocumentStore via the process
+        # port instead of an injected db_client. This case does not spin up the patched backend
+        # app, so bind the port to the same fake ``db`` the seeds below write into.
+        monkeypatch.setattr(document_store, "_store", lambda: FirestoreDocumentStore(db))
         _seed_apply_control(db, uid)
         _seed_rollout_readiness(db, uid, grant_consumer=grant_consumer)
 
@@ -569,7 +568,7 @@ class TestSurfaceDefaultAccessMatrix:
             for item in (fresh_short, long_term):
                 upsert_canonical_memory_vector(item, projection_commit_id="projection-1")
 
-        rollout = read_default_read_rollout(uid=uid, db_client=db, consumer=grant_consumer)
+        rollout = read_default_read_rollout(uid=uid, consumer=grant_consumer)
         assert rollout.read_decision == MemoryReadDecision.USE_MEMORY
 
         policy = MemoryAccessPolicy(
@@ -608,15 +607,13 @@ class TestSurfaceDefaultAccessMatrix:
             assert "coffee archive memory" not in text
             assert "coffee fresh short term" in text or "coffee long term" in text
 
-        grantless_rollout = read_default_read_rollout(
-            uid=uid,
-            db_client=FirestoreFake(
-                {
-                    GLOBAL_READ_GATE_PATH: {"memory_reads_enabled": True, "kill_switch_active": False},
-                    f"users/{uid}/memory_control/state": enabled_rollout_doc(uid, grant_consumer=grant_consumer)
-                    | {"grants": {grant_consumer: {}}},
-                }
-            ),
-            consumer=grant_consumer,
-        )
+        # Neutral-store API: rebind the DocumentStore port (not an injected db_client) to a
+        # grantless state doc — an empty per-consumer grant must still DENY.
+        grantless_docs = {
+            GLOBAL_READ_GATE_PATH: {"memory_reads_enabled": True, "kill_switch_active": False},
+            f"users/{uid}/memory_control/state": enabled_rollout_doc(uid, grant_consumer=grant_consumer)
+            | {"grants": {grant_consumer: {}}},
+        }
+        monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=grantless_docs))
+        grantless_rollout = read_default_read_rollout(uid=uid, consumer=grant_consumer)
         assert grantless_rollout.read_decision == MemoryReadDecision.DENY_MEMORY

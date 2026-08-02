@@ -271,7 +271,12 @@ class _OpenAIEmbeddingsProxy:
 
     def _resolve(self) -> OpenAIEmbeddings:
         byok = get_byok_key('openai')
-        if byok:
+        # A configured on-prem endpoint pins every construction to itself: its own key
+        # (OMI_EMBEDDINGS_API_KEY) already lives in ``_ctor_kwargs['api_key']``. In that mode
+        # BYOK must not pass a second ``api_key`` — that raises "multiple values for keyword
+        # argument 'api_key'" — and there is no cloud egress to send a user key to anyway, so
+        # the endpoint credential wins and BYOK falls through to the pinned default client.
+        if byok and 'api_key' not in self._ctor_kwargs:
             cache_key = f"emb:{self._model}:{_hash_key(byok)}"
             inst = _openai_cache.get(cache_key)
             if inst is None:

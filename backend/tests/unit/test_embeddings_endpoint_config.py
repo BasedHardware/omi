@@ -46,6 +46,31 @@ def test_explicit_api_key_is_honoured(monkeypatch):
     assert clients._embeddings_ctor_kwargs()['api_key'] == 'secret-token'
 
 
+def test_local_endpoint_with_byok_openai_does_not_duplicate_api_key(monkeypatch):
+    """On-prem + a BYOK OpenAI key must not pass ``api_key`` twice.
+
+    The endpoint kwargs already carry ``api_key`` (OMI_EMBEDDINGS_API_KEY). Before the fix,
+    ``_resolve()`` also passed ``api_key=byok`` alongside ``**_ctor_kwargs``, so BYOK OpenAI
+    users' embeddings crashed with a duplicate-keyword ``TypeError``. On-prem pins every
+    construction to the local endpoint, so BYOK resolves to the pinned default client.
+    """
+    monkeypatch.setenv(clients.EMBEDDINGS_BASE_URL_ENV_VAR, 'http://ollama:11434/v1')
+    monkeypatch.setenv(clients.EMBEDDINGS_API_KEY_ENV_VAR, 'endpoint-key')
+    monkeypatch.setenv(clients.EMBEDDINGS_MODEL_ENV_VAR, 'nomic-embed-text')
+    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-user-byok' if provider == 'openai' else None)
+
+    proxy = clients._OpenAIEmbeddingsProxy(
+        model=clients._embeddings_model(),
+        default=None,
+        ctor_kwargs=clients._embeddings_ctor_kwargs(),
+    )
+    inst = proxy._resolve()  # must not raise TypeError: multiple values for 'api_key'
+    # Pinned to the local endpoint (BYOK fell through to the default client), not a per-key
+    # BYOK instance: a second _resolve() returns the very same cached default.
+    assert inst is proxy._resolve()
+    assert str(inst.openai_api_base).rstrip('/') == 'http://ollama:11434/v1'
+
+
 def test_screen_activity_query_uses_local_endpoint_no_google(monkeypatch):
     """When a local endpoint is set, gemini_embed_query must not touch Google."""
     monkeypatch.setenv(clients.EMBEDDINGS_BASE_URL_ENV_VAR, 'http://ollama:11434/v1')

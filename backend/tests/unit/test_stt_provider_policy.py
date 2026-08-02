@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from config.stt_provider_policy import (
+    APPROVED_STREAMING_PARAKEET_MODELS,
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
@@ -89,6 +90,20 @@ def test_unknown_stream_model_falls_back_to_english_only_default(monkeypatch):
     monkeypatch.setenv('PARAKEET_STREAM_MODEL', 'nvidia/not-a-real-model')
     assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
     assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
+
+
+def test_parakeet_serving_pod_stream_model_allow_list_matches_policy():
+    """Static drift guard: the isolated Parakeet image carries a mirror of the code-owned
+    streaming allow-list (it cannot import ``config``). The routing policy falls back silently
+    for an unrecognized value, so the pod fails fast on the same set to avoid serving a model
+    routing does not expect. Keep the two definitions identical."""
+    transcribe_py = (
+        Path(__file__).resolve().parents[2] / 'parakeet' / 'transcribe.py'
+    ).read_text(encoding='utf-8')
+    for model in APPROVED_STREAMING_PARAKEET_MODELS:
+        assert model in transcribe_py, f'{model} missing from parakeet/transcribe.py APPROVED_STREAM_MODELS'
+    # The mirror must not list a model the policy does not approve.
+    assert "APPROVED_STREAM_MODELS" in transcribe_py
 
 
 @pytest.mark.parametrize('values_path', PARAKEET_VALUES_FILES)
