@@ -18,6 +18,9 @@ set -euo pipefail
 FW=/omi/firmware
 NCS_VERSION=v2.9.0
 BOARD=omi/nrf5340/cpuapp
+: "${MCUBOOT_SIGNING_KEY_FILE:?MCUBOOT_SIGNING_KEY_FILE must point to an injected signing key}"
+test -f "$MCUBOOT_SIGNING_KEY_FILE"
+test ! -f "$FW/bootloader/mcuboot/root-rsa-2048.pem"
 
 # west/git operate on the bind-mounted tree owned by the host user; the
 # container runs as root, so tell git the checkout is trusted.
@@ -69,7 +72,7 @@ cp "$FW/omi/omi.conf" "$FW/omi/prj.conf"
 
 echo "Building $BOARD with sysbuild..."
 west build -b "$BOARD" "$FW/omi" --sysbuild -d build --pristine always \
-  -- -DBOARD_ROOT="$FW"
+  -- -DBOARD_ROOT="$FW" -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE="$MCUBOOT_SIGNING_KEY_FILE"
 
 # Fail loud if any expected artifact is missing (silent-drop prevention).
 test -s build/dfu_application.zip

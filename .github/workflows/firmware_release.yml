@@ -118,11 +118,21 @@ jobs:
             echo "::error::Failed to set CONFIG_BT_DIS_FW_REV_STR to $VER in $CONF"; exit 1; }
           echo "omi.conf now: $(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF")"
 
+      - name: Materialize MCUboot signing key
+        env:
+          MCUBOOT_SIGNING_KEY: ${{ secrets.MCUBOOT_SIGNING_KEY }}
+        run: |
+          test -n "$MCUBOOT_SIGNING_KEY" || { echo "::error::MCUBOOT_SIGNING_KEY is required"; exit 1; }
+          umask 077
+          printf '%s' "$MCUBOOT_SIGNING_KEY" > "$RUNNER_TEMP/mcuboot-signing-key.pem"
+
       - name: Build firmware (Docker)
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE/omi/firmware:/omi/firmware" \
+            -v "$RUNNER_TEMP/mcuboot-signing-key.pem:/run/secrets/mcuboot-signing-key.pem:ro" \
             -e CMAKE_PREFIX_PATH=/opt/toolchains \
+            -e MCUBOOT_SIGNING_KEY_FILE=/run/secrets/mcuboot-signing-key.pem \
             "$CI_IMAGE" \
             bash /omi/firmware/scripts/ci/build-cv1.sh
 
