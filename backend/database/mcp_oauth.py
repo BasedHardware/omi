@@ -693,7 +693,12 @@ def rotate_refresh_token(
             return None
         try:
             stored_scopes = sorted(set(data.get("scopes") or []).intersection(SUPPORTED_SCOPES))
-            requested_scope = " ".join(item for item in (scope or "").split(" ") if item and item not in RETIRED_SCOPES)
+            if not stored_scopes:
+                return None
+            requested_tokens = [item for item in (scope or "").split(" ") if item]
+            requested_scope = " ".join(item for item in requested_tokens if item not in RETIRED_SCOPES)
+            if scope and not requested_scope:
+                return None
             requested_scopes: List[str] = (
                 normalize_scopes(requested_scope, {"allowed_scopes": stored_scopes}) if scope else stored_scopes
             )

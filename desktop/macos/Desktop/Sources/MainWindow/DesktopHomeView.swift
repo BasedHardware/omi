@@ -695,14 +695,7 @@ struct DesktopHomeView: View {
   private var topBarSinceDate: Date {
     topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
   }
-
-  private func seedTopBarNewSince() {
-    let currentSince = topBarNewSinceRaw
-    if currentSince == 0 {
-      topBarNewSinceRaw = Date().timeIntervalSince1970
-    }
-  }
-
+  private func seedTopBarNewSince() { if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 } }
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
     if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
