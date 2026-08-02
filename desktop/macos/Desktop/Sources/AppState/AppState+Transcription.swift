@@ -282,6 +282,7 @@ extension AppState {
           if wasLocalSTT {
             await mic?.finish()
             await sys?.finish()
+            await self.flushTranscriptPersistence()
           }
           if let sessionId {
             try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
@@ -1031,14 +1032,13 @@ extension AppState {
     if sttSession.useLocalSTT {
       await localMicService?.finish()
       await localSystemService?.finish()
+      await flushTranscriptPersistence()
     } else {
       // Close the cloud stream before marking the old local session finished, so no late
       // WebSocket segments can be persisted after the finalization snapshot starts.
       transcriptionService?.stop()
       transcriptionService = nil
     }
-
-    await flushTranscriptPersistence()
 
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
@@ -1106,6 +1106,7 @@ extension AppState {
         if wasLocalSTT {
           await mic?.finish()
           await sys?.finish()
+          await self.flushTranscriptPersistence()
         }
         if let sessionId {
           try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
@@ -1443,9 +1444,7 @@ extension AppState {
       translations: nil
     )
     handleBackendSegments([segment])
-    if let sessionId = currentSessionId {
-      await persistBackendSegmentsToStorage([segment], sessionId: sessionId)
-    }
+    await flushTranscriptPersistence()
     return [
       "injected": trimmed,
       "session_id": currentSessionId.map { "\($0)" } ?? "",
@@ -1516,9 +1515,7 @@ extension AppState {
     }
 
     handleBackendSegments(backendSegments)
-    if let sessionId = currentSessionId {
-      await persistBackendSegmentsToStorage(backendSegments, sessionId: sessionId)
-    }
+    await flushTranscriptPersistence()
     let uniqueSpeakers = Set(speakerLabels).sorted().joined(separator: ",")
     return [
       "injected_count": "\(backendSegments.count)",
@@ -1561,6 +1558,7 @@ extension AppState {
     LiveNotesMonitor.shared.endSession()
 
     var finalizeError: String?
+    await flushTranscriptPersistence()
     if let sessionId {
       do {
         try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
