@@ -13,6 +13,7 @@ from routers import knowledge_graph as kg_router
 
 UID = "uid-kg-sync-merge"
 BASE = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+pytestmark = pytest.mark.integration
 
 
 class _Snapshot:
@@ -252,11 +253,10 @@ def test_enforce_caps_evicts_edges_beyond_get_name_prefix():
 def test_sync_route_delegates_to_merge(monkeypatch):
     captured: dict[str, Any] = {}
 
-    def fake_merge(uid, table, rows, *, db_client=None):
+    def fake_merge(uid, table, rows):
         captured["uid"] = uid
         captured["table"] = table
         captured["rows"] = rows
-        captured["db_client"] = db_client
         return {
             "table": table,
             "merged": len(rows),
@@ -275,7 +275,7 @@ def test_sync_route_delegates_to_merge(monkeypatch):
         uid=UID,
     )
 
-    assert captured == {"uid": UID, "table": "local_kg_nodes", "rows": rows, "db_client": kg_router.firestore_db}
+    assert captured == {"uid": UID, "table": "local_kg_nodes", "rows": rows}
     assert response.merged == 1
     assert response.table == "local_kg_nodes"
 
@@ -393,6 +393,38 @@ def test_merge_fails_edges_when_endpoints_missing():
     assert f"users/{UID}/knowledge_edges/edge-missing-target" not in db.docs
 
 
+def test_merge_validates_all_edges_before_writing_any():
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="A", updated_at=BASE),
+            f"users/{UID}/knowledge_nodes/node-b": _node_doc("node-b", label="B", updated_at=BASE),
+        }
+    )
+    rows = [
+        {
+            "edgeId": "edge-valid",
+            "sourceNodeId": "node-a",
+            "targetNodeId": "node-b",
+            "label": "related_to",
+        },
+        {
+            "edgeId": "edge-invalid",
+            "sourceNodeId": "node-a",
+            "targetNodeId": "node-missing",
+            "label": "related_to",
+        },
+    ]
+
+    with pytest.raises(kg_db.MissingKnowledgeGraphEndpointsError):
+        kg_db.merge_synced_local_kg_edges(UID, rows, db_client=db)
+    assert not any(path.endswith("/edge-valid") for path in db.docs)
+
+
+def test_merge_rejects_firestore_path_separator_in_ids():
+    with pytest.raises(kg_db.InvalidKnowledgeGraphDocumentIdError):
+        kg_db.merge_synced_local_kg_nodes(UID, [{"nodeId": "folder/node", "label": "Invalid"}], db_client=_FakeDb())
+
+
 def test_sync_route_returns_422_when_edge_endpoints_missing(monkeypatch):
     monkeypatch.setattr(kg_router, "_require_legacy_graph_mutation", lambda _uid: None)
 
@@ -431,3 +463,24 @@ def test_merge_keeps_fresher_cloud_updated_at():
     stored = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
     assert stored["updated_at"] == newer
     assert sorted(stored["aliases"]) == ["Based Hardware"]
+
+
+def test_merge_keeps_fresher_cloud_scalar_fields():
+    newer = BASE + timedelta(days=2)
+    db = _FakeDb(
+        {
+            f"users/{UID}/knowledge_nodes/node-a": _node_doc("node-a", label="Cloud label", updated_at=newer),
+        }
+    )
+    row = {
+        "nodeId": "node-a",
+        "label": "Stale local label",
+        "nodeType": "stale_type",
+        "updatedAt": BASE.isoformat().replace("+00:00", "Z"),
+    }
+
+    kg_db.merge_synced_local_kg_nodes(UID, [row], db_client=db)
+    stored = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
+    assert stored["label"] == "Cloud label"
+    assert stored["node_type"] == "concept"
+    assert stored["label_lower"] == "cloud label"

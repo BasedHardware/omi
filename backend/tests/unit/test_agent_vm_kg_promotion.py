@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "agent_vm"
+pytestmark = pytest.mark.integration
 
 
 def load_app(tmp_path: Path):
@@ -226,3 +227,40 @@ def test_promote_local_kg_skips_canonical_conflict(tmp_path, monkeypatch) -> Non
         )
     )
     assert result is None
+
+
+def test_promote_local_kg_preserves_backend_validation_error(tmp_path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    module.runtime.firebase_token = "firebase-token"
+    module.runtime.backend_url = "https://api.test"
+
+    class Response:
+        status_code = 422
+
+        def raise_for_status(self):
+            raise module.httpx.HTTPStatusError(
+                "validation",
+                request=module.httpx.Request("POST", "https://api.test/v1/knowledge-graph/sync"),
+                response=module.httpx.Response(422, json={"detail": "edge endpoint is missing"}),
+            )
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **_: Client())
+    with pytest.raises(module.HTTPException) as error:
+        asyncio.run(
+            module.promote_local_kg_to_backend(
+                "local_kg_edges",
+                [{"edgeId": "e1", "sourceNodeId": "a", "targetNodeId": "b", "label": "related_to"}],
+            )
+        )
+    assert error.value.status_code == 422
+    assert error.value.detail == "edge endpoint is missing"

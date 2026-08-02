@@ -157,7 +157,7 @@ def sync_local_knowledge_graph(
     """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
     _require_legacy_graph_mutation(uid)
     try:
-        result = kg_db.merge_synced_local_kg(uid, payload.table, payload.rows, db_client=firestore_db)
-    except kg_db.MissingKnowledgeGraphEndpointsError as exc:
+        result = kg_db.merge_synced_local_kg(uid, payload.table, payload.rows)
+    except (kg_db.MissingKnowledgeGraphEndpointsError, kg_db.InvalidKnowledgeGraphDocumentIdError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return LocalKgSyncResponse(**result)

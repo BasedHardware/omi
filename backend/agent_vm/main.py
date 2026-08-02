@@ -342,6 +342,18 @@ async def promote_local_kg_to_backend(table: str, rows: list[dict[str, Any]]) ->
     except httpx.HTTPStatusError as exc:
         if exc.response is not None and exc.response.status_code == 409:
             return None
+        if exc.response is not None and exc.response.status_code == 422:
+            detail = None
+            try:
+                response_body = exc.response.json()
+                if isinstance(response_body, dict) and isinstance(response_body.get("detail"), str):
+                    detail = response_body["detail"]
+            except ValueError:
+                pass
+            raise HTTPException(
+                status_code=422,
+                detail=detail or "Knowledge graph promotion rejected by backend validation",
+            ) from exc
         raise HTTPException(
             status_code=502,
             detail=f"Knowledge graph promotion failed: HTTP {exc.response.status_code}",
