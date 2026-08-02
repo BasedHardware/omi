@@ -970,23 +970,35 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        required = (
-            "    triggering:\n"
-            "      events:\n"
-            "        - push\n"
-            "      branch_patterns:\n"
-            "        - pattern: main\n"
-            "          include: true\n"
-            "      cancel_previous_builds: true\n"
-            "    when:\n"
-            "      changeset:\n"
-            "        includes:\n"
-            "          - 'app/**'"
-        )
-        if required not in body:
+        if "    when:\n      changeset:\n        includes:\n          - 'app/**'" not in body:
             errors.append(
-                f"{workflow_id} must natively trigger on main app/** pushes and cancel stale builds"
+                f"{workflow_id} must retain its app/** changeset guard"
             )
+
+    dispatcher = ROOT / ".github/workflows/mobile_internal_build.yml"
+    if not dispatcher.exists():
+        errors.append("mobile internal build dispatcher is missing")
+    else:
+        dispatcher_text = dispatcher.read_text(encoding="utf-8")
+        dispatcher_script = ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
+        dispatcher_source = dispatcher_text
+        if dispatcher_script.exists():
+            dispatcher_source += "\n" + dispatcher_script.read_text(encoding="utf-8")
+        required_dispatcher = (
+            "  push:\n"
+            "    branches: [main]\n"
+            "    paths: ['app/**']\n"
+            "  schedule:\n"
+            "    - cron: '0 */3 * * *'\n"
+            "  workflow_dispatch:\n"
+        )
+        if required_dispatcher not in dispatcher_text or "cancel-in-progress: true" not in dispatcher_text:
+            errors.append(
+                "mobile internal build dispatcher must trigger on main app/** pushes and cancel stale runs"
+            )
+        for workflow_id in ("ios-internal-auto", "android-internal-auto"):
+            if workflow_id not in dispatcher_source:
+                errors.append(f"mobile internal build dispatcher is missing {workflow_id}")
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")
