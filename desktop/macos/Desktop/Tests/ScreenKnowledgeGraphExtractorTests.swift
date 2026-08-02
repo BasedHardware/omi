@@ -4,6 +4,7 @@ import XCTest
 
 final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
   override func tearDown() async throws {
+    ChatToolExecutor.onKnowledgeGraphUpdated = nil
     await ScreenKnowledgeGraphExtractor.shared.reset()
     try await super.tearDown()
   }
@@ -184,8 +185,8 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       markExtractedForTesting: { ids in
         await marked.append(contentsOf: ids)
       },
-      fetchPendingForTesting: { limit in
-        await remaining.takePrefix(limit)
+      fetchPendingForTesting: { limit, afterID in
+        await remaining.takePrefix(limit, afterID: afterID)
       })
 
     await extractor.queueScreenshot(
@@ -270,13 +271,53 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     await markShouldFail.set(false)
     await extractor.flushPendingExtractions()
     XCTAssertEqual(await marked.value, [1])
+    XCTAssertEqual(
+      await extractCount.value, 1, "mark-only retry must not re-call the extraction backend")
 
     await extractor.queueScreenshot(id: 2, ocrText: text, appName: "Docs", windowTitle: nil)
     XCTAssertEqual(await extractCount.value, 1, "hash dedup only after successful mark")
     XCTAssertEqual(await marked.value, [1, 2])
   }
 
-  func testBackfillStopsWithoutCountingWhenFlushStalls() async {
+  func testMarkFailureAfterMergeDoesNotReextract() async {
+    let markShouldFail = LockedBox(true)
+    let extractCount = LockedBox(0)
+    let mergeCount = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let text = String(repeating: "merged then mark fails ", count: 3)
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await extractCount.increment()
+        return """
+          {"nodes":[{"id":"n1","label":"Acme","node_type":"organization"}],"edges":[]}
+          """
+      },
+      markExtractedForTesting: { ids in
+        if await markShouldFail.value {
+          throw NSError(domain: "ScreenKGTest", code: 2)
+        }
+        await marked.append(contentsOf: ids)
+      },
+      mergeGraphForTesting: { _, _, _ in
+        await mergeCount.increment()
+      },
+      ownerMatchesForTesting: { _ in true })
+
+    await extractor.queueScreenshot(id: 3, ocrText: text, appName: "Docs", windowTitle: nil)
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractCount.value, 1)
+    XCTAssertEqual(await mergeCount.value, 1)
+    XCTAssertEqual(await extractor.pendingCount, 1)
+
+    await markShouldFail.set(false)
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractCount.value, 1, "successful merge must not re-extract on mark retry")
+    XCTAssertEqual(await mergeCount.value, 1, "successful merge must not re-merge on mark retry")
+    XCTAssertEqual(await marked.value, [3])
+  }
+
+  func testBackfillAdvancesPastStalledFlushWindow() async {
     let fetchCalls = LockedBox(0)
     let remaining = LockedBox(
       (1...80).map { id -> (id: Int64, ocrText: String, appName: String, windowTitle: String?) in
@@ -293,16 +334,17 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
         "not-json{{{broken"
       },
       markExtractedForTesting: { _ in },
-      fetchPendingForTesting: { limit in
+      fetchPendingForTesting: { limit, afterID in
         await fetchCalls.increment()
-        return await remaining.takePrefix(limit)
+        return await remaining.takePrefix(limit, afterID: afterID)
       })
 
     await extractor.scheduleBackfillIfNeeded()
 
     let calls = await fetchCalls.value
-    XCTAssertEqual(calls, 1, "stalled flush must not keep refetching the same pending rows")
-    XCTAssertEqual(await remaining.value.count, 30)
+    XCTAssertGreaterThanOrEqual(
+      calls, 2, "stalled flush must advance the DB cursor and continue backfill")
+    XCTAssertEqual(await remaining.value.count, 0, "entire pending backlog must be fetched")
   }
 
   func testResetAllowsBackfillToBeRescheduled() async {
@@ -310,7 +352,7 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     let extractor = ScreenKnowledgeGraphExtractor(
       extractEntitiesForTesting: { _ in "{\"nodes\":[],\"edges\":[]}" },
       markExtractedForTesting: { _ in },
-      fetchPendingForTesting: { _ in
+      fetchPendingForTesting: { _, _ in
         await fetchCalls.increment()
         return []
       })
@@ -383,9 +425,9 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
       markExtractedForTesting: { ids in
         await marked.append(contentsOf: ids)
       },
-      fetchPendingForTesting: { limit in
+      fetchPendingForTesting: { limit, afterID in
         await fetchCalls.increment()
-        return await remaining.takePrefix(limit)
+        return await remaining.takePrefix(limit, afterID: afterID)
       })
 
     await extractor.scheduleBackfillIfNeeded()
@@ -453,6 +495,117 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     let ids = await marked.value
     XCTAssertEqual(ids, [1, 2])
   }
+
+  func testResetDuringInFlightMergeDropsStaleWrite() async {
+    let mergeSuspended = AsyncGate()
+    let releaseMerge = AsyncGate()
+    let merges = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let allowedOwner = SyncBox("owner-a")
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        """
+        {"nodes":[{"id":"n1","label":"Secret","node_type":"concept"}],"edges":[]}
+        """
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      activeOwnerIDForTesting: { allowedOwner.value },
+      mergeGraphForTesting: { _, _, authorization in
+        await mergeSuspended.open()
+        await releaseMerge.wait()
+        try authorization.require()
+        await merges.increment()
+      },
+      ownerMatchesForTesting: { expected in
+        allowedOwner.value == expected
+      })
+
+    await extractor.queueScreenshot(
+      id: 500,
+      ocrText: String(repeating: "previous owner private text ", count: 3),
+      appName: "Notes",
+      windowTitle: nil,
+      expectedOwnerID: "owner-a")
+
+    let flush = Task { await extractor.flushPendingExtractions() }
+    await mergeSuspended.wait()
+    allowedOwner.value = "owner-b"
+    await extractor.reset()
+    await releaseMerge.open()
+    await flush.value
+
+    XCTAssertEqual(await merges.value, 0, "retarget mid-merge must revoke the commit lease")
+    XCTAssertTrue(await marked.value.isEmpty)
+    XCTAssertEqual(await extractor.pendingCount, 0, "stale item must not re-queue after reset")
+  }
+
+  func testResetDuringBackfillDropsStaleRows() async {
+    let fetchSuspended = AsyncGate()
+    let releaseFetch = AsyncGate()
+    let marked = LockedBox<[Int64]>([])
+    let queued = LockedBox(0)
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await queued.increment()
+        return "{\"nodes\":[],\"edges\":[]}"
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      fetchPendingForTesting: { _, _ in
+        await fetchSuspended.open()
+        await releaseFetch.wait()
+        return [
+          (
+            id: Int64(77),
+            ocrText: String(repeating: "previous account ocr ", count: 3),
+            appName: "Mail",
+            windowTitle: nil as String?
+          )
+        ]
+      },
+      activeOwnerIDForTesting: { "owner-b" })
+
+    let backfill = Task { await extractor.scheduleBackfillIfNeeded() }
+    await fetchSuspended.wait()
+    await extractor.reset()
+    await releaseFetch.open()
+    await backfill.value
+
+    XCTAssertEqual(await queued.value, 0, "stale backfill rows must not extract after reset")
+    XCTAssertTrue(await marked.value.isEmpty)
+    XCTAssertEqual(await extractor.pendingCount, 0)
+  }
+
+  func testSuccessfulMergeNotifiesKnowledgeGraphUI() async {
+    let updates = SyncBox(0)
+    ChatToolExecutor.onKnowledgeGraphUpdated = {
+      updates.value += 1
+    }
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        """
+        {"nodes":[{"id":"n1","label":"Acme","node_type":"organization"}],"edges":[]}
+        """
+      },
+      markExtractedForTesting: { _ in },
+      mergeGraphForTesting: { _, _, _ in },
+      ownerMatchesForTesting: { _ in true })
+
+    await extractor.queueScreenshot(
+      id: 12,
+      ocrText: String(repeating: "ui refresh payload ", count: 3),
+      appName: "Safari",
+      windowTitle: nil)
+    await extractor.flushPendingExtractions()
+
+    XCTAssertEqual(updates.value, 1, "screen OCR merge must refresh an open knowledge-graph view")
+  }
 }
 
 private enum RewindIndexerSourcePath {
@@ -491,9 +644,52 @@ private actor LockedBox<T> {
     value += 1
   }
 
-  func takePrefix(_ limit: Int) -> T where T == [(id: Int64, ocrText: String, appName: String, windowTitle: String?)] {
+  func takePrefix(_ limit: Int, afterID: Int64) -> T
+  where T == [(id: Int64, ocrText: String, appName: String, windowTitle: String?)] {
+    value = value.filter { $0.id > afterID }
     let batch = Array(value.prefix(limit))
     value.removeFirst(batch.count)
     return batch
+  }
+}
+
+/// One-shot async gate: `wait()` suspends until the first `open()`.
+private actor AsyncGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func open() {
+    guard !isOpen else { return }
+    isOpen = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending { waiter.resume() }
+  }
+
+  func wait() async {
+    if isOpen { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+}
+
+private final class SyncBox<T>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var _value: T
+
+  init(_ value: T) {
+    _value = value
+  }
+
+  var value: T {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return _value
+    }
+    set {
+      lock.lock()
+      defer { lock.unlock() }
+      _value = newValue
+    }
   }
 }
