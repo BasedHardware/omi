@@ -4,6 +4,7 @@ import base64
 import json
 import time
 from collections.abc import AsyncIterator, Mapping
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -28,6 +29,7 @@ from utils.llm.gateway_client import (
     llm_gateway_headers,
     should_route_features_through_gateway,
 )
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
 
@@ -112,6 +114,42 @@ def _user_content(content: object) -> object:
                     raise ValueError('image_url must contain valid base64 data') from exc
                 blocks.append({'type': 'image', 'source': {'type': 'base64', 'media_type': media_type, 'data': data}})
     return blocks or ''
+
+
+def _gateway_user_content(content: object) -> object:
+    if not isinstance(content, list):
+        return content if isinstance(content, str) else ''
+    blocks: list[dict[str, object]] = []
+    for block in content:
+        if not isinstance(block, Mapping):
+            continue
+        if block.get('type') == 'text' and isinstance(block.get('text'), str):
+            blocks.append({'type': 'text', 'text': block['text']})
+        elif block.get('type') == 'image_url' and isinstance(block.get('image_url'), Mapping):
+            url = block['image_url'].get('url')
+            if isinstance(url, str) and url.startswith('data:') and ';base64,' in url:
+                _, data = url[5:].split(';base64,', 1)
+                try:
+                    base64.b64decode(data, validate=True)
+                except ValueError as exc:
+                    raise ValueError('image_url must contain valid base64 data') from exc
+                blocks.append({'type': 'image_url', 'image_url': {'url': url}})
+    return blocks or ''
+
+
+def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
+    messages = body.get('messages')
+    if not isinstance(messages, list):
+        raise ValueError('messages must be an array')
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
+            raise ValueError('messages must contain role objects')
+        updated = dict(message)
+        if message['role'] == 'user':
+            updated['content'] = _gateway_user_content(message.get('content', ''))
+        translated.append(updated)
+    return {**dict(body), 'model': CHAT_AGENT_AUTO_LANE_ID, 'messages': translated}
 
 
 def _tool_choice(choice: object) -> dict[str, str] | None:
@@ -272,6 +310,28 @@ def _usage_values(usage: object) -> tuple[int, int, int, int]:
     )
 
 
+def _openai_usage_as_anthropic(usage: object) -> SimpleNamespace:
+    if not isinstance(usage, Mapping):
+        return SimpleNamespace(
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
+    details = usage.get('prompt_tokens_details')
+    cached_tokens = (
+        int(details.get('cached_tokens', 0))
+        if isinstance(details, Mapping) and isinstance(details.get('cached_tokens'), int)
+        else 0
+    )
+    return SimpleNamespace(
+        input_tokens=int(usage.get('prompt_tokens', 0) or 0),
+        output_tokens=int(usage.get('completion_tokens', 0) or 0),
+        cache_read_input_tokens=cached_tokens,
+        cache_creation_input_tokens=0,
+    )
+
+
 async def _record_usage(uid: str, usage: object) -> None:
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
     await run_blocking(
@@ -396,18 +456,29 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
     yield 'data: [DONE]\n\n'
 
 
-async def _stream_gateway(body: dict[str, object]) -> AsyncIterator[bytes]:
-    gateway_payload = dict(body)
-    gateway_payload['model'] = CHAT_AGENT_AUTO_LANE_ID
-    async with get_llm_gateway_client().stream(
-        'POST',
-        f'{get_llm_gateway_base_url()}/v1/chat/completions',
-        headers=llm_gateway_headers(feature='chat_agent'),
-        json=gateway_payload,
-    ) as response:
-        async for chunk in response.aiter_bytes():
-            if chunk:
-                yield chunk
+async def _stream_gateway(gateway_payload: dict[str, object], uid: str) -> AsyncIterator[bytes]:
+    usage_token = set_usage_context(uid, 'chat_agent')
+    try:
+        async with get_llm_gateway_client().stream(
+            'POST',
+            f'{get_llm_gateway_base_url()}/v1/chat/completions',
+            headers=llm_gateway_headers(feature='chat_agent'),
+            json=gateway_payload,
+        ) as response:
+            if response.status_code >= 400:
+                yield _sse(
+                    {'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}
+                ).encode()
+                yield b'data: [DONE]\n\n'
+                return
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    yield chunk
+    except Exception:
+        yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
+        yield b'data: [DONE]\n\n'
+    finally:
+        reset_usage_context(usage_token)
 
 
 def _sse(value: dict[str, object]) -> str:
@@ -457,17 +528,21 @@ async def chat_completions(
                 headers=stub_headers,
             )
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
-    gateway_mode = should_route_features_through_gateway()
     payload: dict[str, object] = {}
     try:
+        gateway_mode = should_route_features_through_gateway()
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
         if gateway_mode:
             public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)
+            gateway_payload = _gateway_body(body)
         else:
             public_model, payload = _request(body)
+            gateway_payload = {}
     except HTTPException:
         raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await run_blocking(
@@ -481,7 +556,7 @@ async def chat_completions(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(body),
+                _stream_gateway(gateway_payload, uid),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -499,22 +574,29 @@ async def chat_completions(
             },
         )
     if gateway_mode:
+        usage_token = set_usage_context(uid, 'chat_agent')
         try:
             response = await get_llm_gateway_client().post(
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
                 headers=llm_gateway_headers(feature='chat_agent'),
-                json={**body, 'model': CHAT_AGENT_AUTO_LANE_ID},
+                json=gateway_payload,
             )
             response.raise_for_status()
+            response_body = response.json()
+            await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
             return JSONResponse(
-                response.json(),
+                response_body,
                 headers={
                     'X-Omi-Chat-Contract-Version': '1',
                     'X-Request-Id': request_id,
                 },
             )
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=502, detail='Upstream provider error') from exc
+        finally:
+            reset_usage_context(usage_token)
     try:
         message = await anthropic_client.messages.create(**payload)
     except Exception as exc:

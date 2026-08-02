@@ -95,6 +95,25 @@ def test_chat_agent_provider_request_includes_omi_luna_personality():
     assert provider_request['messages'][1] == {'role': 'user', 'content': 'Hello.'}
 
 
+def test_chat_agent_personality_preserves_array_system_text():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': [{'type': 'text', 'text': 'Use the user context.'}]},
+            {'role': 'user', 'content': 'Hello.'},
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    system_message = provider_request['messages'][0]
+    assert system_message['role'] == 'system'
+    assert system_message['content'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'].endswith('Use the user context.')
+
+
 @pytest.mark.asyncio
 async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
     active_route = active_route_with_fallbacks([]).model_copy(

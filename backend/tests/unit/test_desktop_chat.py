@@ -108,7 +108,12 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {'x-omi-service-caller': 'backend'})
+    recorded = []
+
+    async def record_usage(uid, usage):
+        recorded.append((uid, usage))
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
 
     class GatewayClient:
         def __init__(self):
@@ -116,9 +121,15 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
 
         async def post(self, url, *, headers, json):
             self.calls.append({'url': url, 'headers': headers, 'json': json})
+            assert headers.get('X-Omi-User-Uid') == 'user-1'
+            assert headers.get('X-Omi-LLM-Feature') == 'chat_agent'
             return httpx.Response(
                 200,
-                json={'id': 'chat-1', 'choices': [{'message': {'content': 'hello'}}]},
+                json={
+                    'id': 'chat-1',
+                    'choices': [{'message': {'content': 'hello'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
                 request=httpx.Request('POST', url),
             )
 
@@ -133,9 +144,80 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
         x_omi_request_id=None,
     )
 
-    assert response.body == b'{"id":"chat-1","choices":[{"message":{"content":"hello"}}]}'
+    assert b'"id":"chat-1"' in response.body
     assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
     assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
+    assert recorded and recorded[0][0] == 'user-1'
+    assert recorded[0][1].input_tokens == 3
+    assert recorded[0][1].output_tokens == 2
+
+
+def test_gateway_body_preserves_validated_image_url():
+    png = 'iVBORw0KGgo='
+    body = desktop_chat._gateway_body(
+        {
+            'model': 'client-model',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': 'look'},
+                        {'type': 'image_url', 'image_url': {'url': f'data:image/png;base64,{png}'}},
+                    ],
+                }
+            ],
+        }
+    )
+    assert body['model'] == 'omi:auto:chat-agent'
+    assert body['messages'][0]['content'][1]['type'] == 'image_url'
+
+
+@pytest.mark.asyncio
+async def test_stream_gateway_emits_sse_error_on_http_failure(monkeypatch):
+    class StreamResponse:
+        status_code = 503
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def aiter_bytes(self):
+            if False:
+                yield b''
+
+    class GatewayClient:
+        def stream(self, *_args, **_kwargs):
+            return StreamResponse()
+
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {})
+
+    events = [chunk async for chunk in desktop_chat._stream_gateway({'model': 'x', 'messages': []}, 'user-1')]
+    assert b'Upstream provider error' in events[0]
+    assert events[-1] == b'data: [DONE]\n\n'
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_gateway_config_error_is_http_503(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+
+    def raise_config_error():
+        raise RuntimeError('OMI_LLM_GATEWAY_URL required')
+
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', raise_config_error)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'model': 'client-model', 'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+    assert error.value.status_code == 503
 
 
 async def _done():

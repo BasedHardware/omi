@@ -95,11 +95,17 @@ def _validate_text_content(content: object, *, param: str) -> None:
     if (
         isinstance(content, list)
         and content
-        and all(_is_text_content_part(part) for part in cast(list[object], content))
+        and all(_is_supported_content_part(part) for part in cast(list[object], content))
     ):
         return
 
-    raise GatewayCapabilityMismatchError('only text message content is supported for this lane', param=param)
+    raise GatewayCapabilityMismatchError(
+        'only text or image_url message content is supported for this lane', param=param
+    )
+
+
+def _is_supported_content_part(part: object) -> bool:
+    return _is_text_content_part(part) or _is_image_url_content_part(part)
 
 
 def _is_text_content_part(part: object) -> bool:
@@ -111,6 +117,16 @@ def _is_text_content_part(part: object) -> bool:
     if 'prompt_cache_breakpoint' in typed_part:
         _validate_prompt_cache_breakpoint(typed_part['prompt_cache_breakpoint'])
     return True
+
+
+def _is_image_url_content_part(part: object) -> bool:
+    if not isinstance(part, Mapping):
+        return False
+    typed_part = cast(Mapping[str, object], part)
+    if typed_part.get('type') != 'image_url':
+        return False
+    image_url = typed_part.get('image_url')
+    return isinstance(image_url, Mapping) and isinstance(cast(Mapping[str, object], image_url).get('url'), str)
 
 
 def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, Any] | None:

@@ -155,15 +155,32 @@ def test_rejects_invalid_messages():
         validate_chat_completion_request(request, lane)
 
 
-def test_rejects_non_text_message_content():
+def test_accepts_image_url_message_content():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(
         messages=[
-            {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}}]}
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'describe'},
+                    {'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}},
+                ],
+            }
         ]
     )
 
-    with pytest.raises(GatewayCapabilityMismatchError, match='text message content'):
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages[0]['content'][1]['type'] == 'image_url'
+
+
+def test_rejects_unsupported_message_content_parts():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        messages=[{'role': 'user', 'content': [{'type': 'input_audio', 'input_audio': {'data': 'abc'}}]}]
+    )
+
+    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
         validate_chat_completion_request(request, lane)
 
 

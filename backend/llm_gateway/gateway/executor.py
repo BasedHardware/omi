@@ -396,13 +396,24 @@ def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
             continue
         enriched_message = dict(message)
         content = enriched_message.get('content')
+        existing_text = _personality_content_text(content)
         enriched_message['content'] = (
-            f'{CHAT_AGENT_PERSONALITY_PROMPT}\n\n{content}'
-            if isinstance(content, str) and content
-            else CHAT_AGENT_PERSONALITY_PROMPT
+            f'{CHAT_AGENT_PERSONALITY_PROMPT}\n\n{existing_text}' if existing_text else CHAT_AGENT_PERSONALITY_PROMPT
         )
         return [*messages[:index], enriched_message, *messages[index + 1 :]]
     return [{'role': 'system', 'content': CHAT_AGENT_PERSONALITY_PROMPT}, *messages]
+
+
+def _personality_content_text(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ''
+    return ''.join(
+        part['text']
+        for part in content
+        if isinstance(part, Mapping) and part.get('type') == 'text' and isinstance(part.get('text'), str)
+    )
 
 
 def _remove_gpt56_cache_fields(provider_request: dict[str, Any]) -> None:
