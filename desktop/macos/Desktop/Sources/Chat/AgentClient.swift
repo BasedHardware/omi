@@ -99,11 +99,21 @@ enum AgentClient {
   /// Long-lived bridge session for main chat and other streaming surfaces.
   actor Session {
     private var bridge: AgentBridge
+    /// The bridge actor is reentrant while waiting on Node. Keep projection
+    /// writers and admission in one FIFO critical section so one context
+    /// advance cannot land between the refresh and bounded retry.
+    private let contextAdmissionGate = AgentContextAdmissionGate()
     private(set) var harnessMode: String
 
     init(harnessMode: String) {
       self.harnessMode = harnessMode
       self.bridge = AgentBridge(harnessMode: harnessMode)
+    }
+
+    private func withContextAdmissionAccess<Result: Sendable>(
+      _ operation: @escaping @Sendable () async throws -> Result
+    ) async rethrows -> Result {
+      try await contextAdmissionGate.withExclusiveAccess(operation)
     }
 
     var isAlive: Bool {
@@ -167,12 +177,15 @@ enum AgentClient {
       creationProfile: AgentSessionCreationProfile? = nil,
       chatFirstCapability: ChatFirstCapabilityProjection? = nil
     ) async throws -> AgentSurfaceSession {
-      try await bridge.resolveSurfaceSession(
-        surface,
-        title: title,
-        creationProfile: creationProfile,
-        chatFirstCapability: chatFirstCapability
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.resolveSurfaceSession(
+          surface,
+          title: title,
+          creationProfile: creationProfile,
+          chatFirstCapability: chatFirstCapability
+        )
+      }
     }
 
     func migrateSessionExecutionProfile(
@@ -182,17 +195,23 @@ enum AgentClient {
       modelProfile: String?,
       workingDirectory: String
     ) async throws -> AgentSessionProfileMigration {
-      try await bridge.migrateSessionExecutionProfile(
-        sessionId: sessionId,
-        expectedProfileGeneration: expectedProfileGeneration,
-        adapterId: adapterId,
-        modelProfile: modelProfile,
-        workingDirectory: workingDirectory
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.migrateSessionExecutionProfile(
+          sessionId: sessionId,
+          expectedProfileGeneration: expectedProfileGeneration,
+          adapterId: adapterId,
+          modelProfile: modelProfile,
+          workingDirectory: workingDirectory
+        )
+      }
     }
 
     func warmupSession(_ session: AgentSurfaceSession) async {
-      await bridge.warmupSession(session)
+      let bridge = bridge
+      await withContextAdmissionAccess {
+        await bridge.warmupSession(session)
+      }
     }
 
     func updateContextSource(
@@ -205,20 +224,26 @@ enum AgentClient {
       expiresAtMs: Int? = nil,
       payload: RuntimeJSONPayloadBox
     ) async throws -> AgentContextSourceUpdateReceipt {
-      try await bridge.updateContextSource(
-        sessionId: sessionId,
-        surfaceKind: surfaceKind,
-        source: source,
-        sourceRevision: sourceRevision,
-        outcome: outcome,
-        capturedAtMs: capturedAtMs,
-        expiresAtMs: expiresAtMs,
-        payload: payload
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.updateContextSource(
+          sessionId: sessionId,
+          surfaceKind: surfaceKind,
+          source: source,
+          sourceRevision: sourceRevision,
+          outcome: outcome,
+          capturedAtMs: capturedAtMs,
+          expiresAtMs: expiresAtMs,
+          payload: payload
+        )
+      }
     }
 
     func getContextSnapshot(sessionId: String, surfaceKind: String) async throws -> AgentContextSnapshot {
-      try await bridge.getContextSnapshot(sessionId: sessionId, surfaceKind: surfaceKind)
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.getContextSnapshot(sessionId: sessionId, surfaceKind: surfaceKind)
+      }
     }
 
     func recordJournalTurn(
@@ -226,7 +251,10 @@ enum AgentClient {
       ownerID: String? = nil,
       turn: KernelJournalTurnWrite
     ) async throws -> KernelJournalTurn {
-      try await bridge.recordJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.recordJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+      }
     }
 
     func recordJournalExchange(
@@ -234,11 +262,14 @@ enum AgentClient {
       ownerID: String,
       turns: [KernelJournalTurnWrite]
     ) async throws -> AgentRuntimeProcess.JournalOperationResult {
-      try await bridge.recordJournalExchange(
-        surface: surface,
-        ownerID: ownerID,
-        turns: turns
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.recordJournalExchange(
+          surface: surface,
+          ownerID: ownerID,
+          turns: turns
+        )
+      }
     }
 
     func recordQuestionInteractionReply(
@@ -249,14 +280,17 @@ enum AgentClient {
       optionID: String,
       controlGeneration: Int
     ) async throws -> AgentRuntimeProcess.QuestionInteractionReply {
-      try await bridge.recordQuestionInteractionReply(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        questionID: questionID,
-        optionID: optionID,
-        controlGeneration: controlGeneration
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.recordQuestionInteractionReply(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          questionID: questionID,
+          optionID: optionID,
+          controlGeneration: controlGeneration
+        )
+      }
     }
 
     func materializeChatFirstIntents(
@@ -266,13 +300,16 @@ enum AgentClient {
       controlGeneration: Int,
       intentsJSON: String
     ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
-      try await bridge.materializeChatFirstIntents(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        controlGeneration: controlGeneration,
-        intentsJSON: intentsJSON
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.materializeChatFirstIntents(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          controlGeneration: controlGeneration,
+          intentsJSON: intentsJSON
+        )
+      }
     }
 
     func listChatFirstMaterializationReceipts(
@@ -325,7 +362,10 @@ enum AgentClient {
       ownerID: String? = nil,
       update: KernelJournalTurnUpdate
     ) async throws -> KernelJournalTurn {
-      try await bridge.updateJournalTurn(surface: surface, ownerID: ownerID, update: update)
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.updateJournalTurn(surface: surface, ownerID: ownerID, update: update)
+      }
     }
 
     func terminalizeJournalTurn(
@@ -333,11 +373,14 @@ enum AgentClient {
       ownerID: String,
       terminalization: KernelJournalTurnTerminalization
     ) async throws -> KernelJournalTurn {
-      try await bridge.terminalizeJournalTurn(
-        surface: surface,
-        ownerID: ownerID,
-        terminalization: terminalization
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.terminalizeJournalTurn(
+          surface: surface,
+          ownerID: ownerID,
+          terminalization: terminalization
+        )
+      }
     }
 
     func repairJournalTurns(
@@ -345,11 +388,14 @@ enum AgentClient {
       ownerID: String,
       turnIDs: [String]
     ) async throws -> [KernelJournalTurn] {
-      try await bridge.repairJournalTurns(
-        surface: surface,
-        ownerID: ownerID,
-        turnIDs: turnIDs
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.repairJournalTurns(
+          surface: surface,
+          ownerID: ownerID,
+          turnIDs: turnIDs
+        )
+      }
     }
 
     func listJournalTurns(
@@ -385,7 +431,10 @@ enum AgentClient {
       ownerID: String? = nil,
       turn: KernelJournalRemoteTurn
     ) async throws -> KernelJournalTurn {
-      try await bridge.importRemoteJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.importRemoteJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+      }
     }
 
     func clearJournalTurns(
@@ -394,12 +443,15 @@ enum AgentClient {
       expectedGeneration: Int? = nil,
       deleteBackend: Bool = true
     ) async throws -> Int {
-      try await bridge.clearJournalTurns(
-        surface: surface,
-        ownerID: ownerID,
-        expectedGeneration: expectedGeneration,
-        deleteBackend: deleteBackend
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.clearJournalTurns(
+          surface: surface,
+          ownerID: ownerID,
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
+        )
+      }
     }
 
     func clearJournalTurnsForControl(
@@ -408,12 +460,15 @@ enum AgentClient {
       expectedGeneration: Int? = nil,
       deleteBackend: Bool = true
     ) async throws -> Int {
-      try await bridge.clearJournalTurnsForControl(
-        surface: surface,
-        ownerID: ownerID,
-        expectedGeneration: expectedGeneration,
-        deleteBackend: deleteBackend
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.clearJournalTurnsForControl(
+          surface: surface,
+          ownerID: ownerID,
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
+        )
+      }
     }
 
     func testPlaywrightConnection() async throws -> Bool {
@@ -440,22 +495,26 @@ enum AgentClient {
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
-      let result = try await bridge.query(
-        prompt: prompt,
-        surface: surface,
-        mode: mode,
-        imageData: imageData,
-        attachments: attachments,
-        producingTurnId: producingTurnId,
-        expectedContext: expectedContext,
-        reasoningEffort: reasoningEffort,
-        onTextDelta: onTextDelta,
-        onToolActivity: onToolActivity,
-        onThinkingDelta: onThinkingDelta,
-        onToolResultDisplay: onToolResultDisplay,
-        onAuthRequired: onAuthRequired,
-        onAuthSuccess: onAuthSuccess
-      )
+      let bridge = bridge
+      let result = try await withContextAdmissionAccess {
+        try Task.checkCancellation()
+        return try await bridge.query(
+          prompt: prompt,
+          surface: surface,
+          mode: mode,
+          imageData: imageData,
+          attachments: attachments,
+          producingTurnId: producingTurnId,
+          expectedContext: expectedContext,
+          reasoningEffort: reasoningEffort,
+          onTextDelta: onTextDelta,
+          onToolActivity: onToolActivity,
+          onThinkingDelta: onThinkingDelta,
+          onToolResultDisplay: onToolResultDisplay,
+          onAuthRequired: onAuthRequired,
+          onAuthSuccess: onAuthSuccess
+        )
+      }
       return QueryResult(result)
     }
 
@@ -477,35 +536,38 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
-      return QueryResult(
-        try await AgentContextAdmissionRetry.run(
-          expectedContext: expectedContext,
-          refresh: {
-            try await bridge.getContextSnapshot(
-              sessionId: session.sessionId,
-              surfaceKind: surface.surfaceKind
-            ).freshness
-          },
-          attempt: { admittedContext in
-            try await bridge.query(
-              prompt: prompt,
-              session: session,
-              surface: surface,
-              mode: mode,
-              imageData: imageData,
-              attachments: attachments,
-              producingTurnId: producingTurnId,
-              expectedContext: admittedContext,
-              reasoningEffort: reasoningEffort,
-              onTextDelta: onTextDelta,
-              onToolActivity: onToolActivity,
-              onThinkingDelta: onThinkingDelta,
-              onToolResultDisplay: onToolResultDisplay,
-              onAuthRequired: onAuthRequired,
-              onAuthSuccess: onAuthSuccess
-            )
-          }
-        ))
+      return try await withContextAdmissionAccess {
+        try Task.checkCancellation()
+        return QueryResult(
+          try await AgentContextAdmissionRetry.run(
+            expectedContext: expectedContext,
+            refresh: {
+              try await bridge.getContextSnapshot(
+                sessionId: session.sessionId,
+                surfaceKind: surface.surfaceKind
+              ).freshness
+            },
+            attempt: { admittedContext in
+              try await bridge.query(
+                prompt: prompt,
+                session: session,
+                surface: surface,
+                mode: mode,
+                imageData: imageData,
+                attachments: attachments,
+                producingTurnId: producingTurnId,
+                expectedContext: admittedContext,
+                reasoningEffort: reasoningEffort,
+                onTextDelta: onTextDelta,
+                onToolActivity: onToolActivity,
+                onThinkingDelta: onThinkingDelta,
+                onToolResultDisplay: onToolResultDisplay,
+                onAuthRequired: onAuthRequired,
+                onAuthSuccess: onAuthSuccess
+              )
+            }
+          ))
+      }
     }
   }
 

@@ -975,10 +975,12 @@ import XCTest
 
     XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
     // omi-test-quality: source-inspection -- static contract: startup history
-    // has one deferred restore; its behavioral counterpart asserts one atomic
-    // journal snapshot in KernelTurnRecordedProjectionTests.
-    XCTAssertTrue(source.contains("isInitialRestorePending = true"))
-    XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)"))
+    // uses a retryable staged bottom restore; its behavioral counterpart asserts
+    // one atomic journal snapshot in KernelTurnRecordedProjectionTests.
+    XCTAssertTrue(source.contains("initialRestoreState = .pending"))
+    XCTAssertTrue(source.contains("completesInitialRestore"))
+    XCTAssertTrue(source.contains("initialRestoreState = .completed"))
+    XCTAssertTrue(source.contains(".defaultScrollAnchor(.bottom)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertFalse(

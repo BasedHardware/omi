@@ -5,6 +5,9 @@ description: Knowledge graph API counts after memory seed (no SceneKit)
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  # The graph snapshot action uses the paged canonical fetch and its
+  # compatibility fallback owned by APIClient+Settings.
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
 preconditions:
   - automation_bridge_ready
 

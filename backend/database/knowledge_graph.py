@@ -305,7 +305,7 @@ def _string_values(value: Any) -> List[str]:
     return sorted({item.strip() for item in cast(List[Any], value) if isinstance(item, str) and item.strip()})
 
 
-def _assertion_matches_active_item(
+def assertion_matches_active_item(
     uid: str,
     assertion: MemoryGraphAssertion,
     item: Dict[str, Any],
@@ -411,7 +411,7 @@ def _load_active_memory_graph_assertions(
         [
             assertion
             for memory_id, assertion in sorted(candidates.items())
-            if _assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
+            if assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
         ],
         truncated,
     )

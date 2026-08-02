@@ -36,14 +36,13 @@ enum ChatMessageDeduplicator {
   }
 }
 
-/// Pure decision for the conversation-switch scroll-state reset. Extracted from
-/// the (generic) view so it is unit-testable and so switching between two
-/// conversations through a transient empty timeline (A -> nil -> B) still
-/// resets session-scoped scroll state for B.
+/// Pure decision for the conversation-switch scroll-state reset. Callers pass
+/// the stable conversation/session identity; message IDs are not identities
+/// because prepending history changes the first message in the same chat.
 enum ChatConversationSwitch {
   /// - Parameters:
   ///   - tracked: the conversation id currently being tracked.
-  ///   - newId: the incoming `messages.first?.id` (nil while empty/loading).
+  ///   - newId: the incoming stable conversation/session identity.
   /// - Returns: the id to track next, and whether to reset session state.
   ///   A nil incoming id keeps tracking the previous conversation (so the
   ///   reset fires when the real conversation arrives) and never resets;
@@ -54,6 +53,33 @@ enum ChatConversationSwitch {
   {
     guard let newId, newId != tracked else { return (tracked, false) }
     return (newId, tracked != nil)
+  }
+}
+
+/// Lifecycle state for the one-shot launch placement. A pending placement may
+/// be retried if SwiftUI removes the chat surface during Home's launch
+/// transition; explicit reader input permanently wins for this view lifetime.
+enum ChatInitialRestoreState: Equatable {
+  case waiting
+  case pending
+  case completed
+  case userInterrupted
+
+  var canStart: Bool {
+    self == .waiting
+  }
+
+  static func afterDisappear(_ state: Self) -> Self {
+    state == .pending ? .waiting : state
+  }
+
+  static func afterUserInteraction(_ state: Self) -> Self {
+    switch state {
+    case .waiting, .pending:
+      return .userInterrupted
+    case .completed, .userInterrupted:
+      return state
+    }
   }
 }
 
@@ -89,6 +115,7 @@ enum ChatTranscriptWindow {
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
   let messages: [ChatMessage]
+  let conversationIdentity: String
   let isSending: Bool
   let hasMoreMessages: Bool
   let isLoadingMoreMessages: Bool
@@ -168,14 +195,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   // MARK: - Saved Restore
 
-  /// Whether the initial history load for this conversation has been handled.
-  /// Prevents repeated initial bottom settling on subsequent messages.count changes.
-  @State private var initialRestoreHandled = false
-  /// The one deferred initial restore waits for the first transcript layout.
-  /// Geometry changes during that interval must not introduce additional
-  /// bottom-scroll commands, or saved history visibly flies through the view.
-  @State private var isInitialRestorePending = false
-  @State private var initialRestoreWorkItem: DispatchWorkItem?
+  /// Launch placement is bottom-first, unless the reader explicitly scrolls
+  /// before it settles. A pending placement is retried after a transient view
+  /// disappearance; completed/user-interrupted state preserves scroll position.
+  @State private var initialRestoreState: ChatInitialRestoreState = .waiting
 
   // MARK: - Prepend Preservation (Load Earlier Messages)
 
@@ -226,7 +249,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// A direct timeline choice leaves live-follow mode and places the selected
   /// prompt at the top of the viewport.
   private func jumpToPrompt(_ markID: String, proxy: ScrollViewProxy) {
-    cancelAllPendingScrolls()
+    cancelPendingScrollsForUserInteraction()
     userIsScrolling = false
     scrollMode = .freeScrolling
     hasActivityBelow = false
@@ -272,6 +295,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // re-enter SwiftUI's AttributeGraph layout pass indefinitely on long
     // histories.
     .scrollIndicators(.hidden)
+    .defaultScrollAnchor(.bottom)
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
@@ -310,7 +334,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - React to isSending (send started)
     .onChange(of: isSending) { oldValue, newValue in
       if newValue && !oldValue && localSendToken == nil {
-        cancelAllPendingScrolls()
+        cancelPendingScrollsForUserInteraction()
         userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
@@ -328,9 +352,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     // MARK: - Reset session state on conversation switch
-    .onChange(of: messages.first?.id) { _, newId in
-      // When the first message ID changes, the user switched to a
-      // different conversation (or a new one was loaded). Reset all
+    .onChange(of: conversationIdentity) { _, newId in
+      // When the stable conversation identity changes, reset all
       // session-scoped @State so stale tracking doesn't leak across.
       // The decision is delegated to a pure helper so the switch-through-
       // empty transition (A -> nil -> B) is unit-testable and no longer
@@ -339,7 +362,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
-        initialRestoreHandled = false
+        initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil
         hasActivityBelow = false
@@ -347,15 +370,20 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         userIsScrolling = false
         transcriptGeometry.reset()
         transcriptGeometry.setMessages(visibleTranscriptMessages)
+        if !isLoadingInitial, !messages.isEmpty {
+          handleInitialRestore(proxy: proxy)
+        }
       }
     }
     .onAppear {
+      trackedConversationId = conversationIdentity
       transcriptGeometry.setMessages(visibleTranscriptMessages)
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
     }
     .onDisappear {
+      initialRestoreState = ChatInitialRestoreState.afterDisappear(initialRestoreState)
       cancelAllPendingScrolls()
     }
   }
@@ -411,28 +439,23 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Chat surfaces should open at the live edge; if the reader wants older
   /// context, explicit scroll input switches the mode to free-scrolling.
   private func handleInitialRestore(proxy: ScrollViewProxy) {
-    guard !initialRestoreHandled else { return }
-    initialRestoreHandled = true
+    guard initialRestoreState.canStart else { return }
 
     scrollMode = .followingBottom
     hasActivityBelow = false
-    isInitialRestorePending = true
+    initialRestoreState = .pending
 
-    let work = DispatchWorkItem { [self] in
-      defer {
-        isInitialRestorePending = false
-        initialRestoreWorkItem = nil
-      }
-      guard scrollMode == .followingBottom, !userIsScrolling else { return }
-      scrollToBottom(proxy: proxy)
-    }
-    initialRestoreWorkItem = work
     let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
-    if let firstDelay = delays.first {
-      DispatchQueue.main.asyncAfter(deadline: .now() + firstDelay, execute: work)
-      for delay in delays.dropFirst() {
-        scheduleInitialScroll(proxy: proxy, delay: delay)
-      }
+    guard !delays.isEmpty else {
+      initialRestoreState = .completed
+      return
+    }
+    for (index, delay) in delays.enumerated() {
+      scheduleInitialScroll(
+        proxy: proxy,
+        delay: delay,
+        completesInitialRestore: index == delays.index(before: delays.endIndex)
+      )
     }
   }
 
@@ -444,7 +467,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   private func handleLocalSend(proxy: ScrollViewProxy) {
     guard !messages.isEmpty else { return }
 
-    cancelAllPendingScrolls()
+    cancelPendingScrollsForUserInteraction()
     scrollMode = .followingBottom
     hasActivityBelow = false
     userIsScrolling = false
@@ -486,12 +509,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   // MARK: - Scheduled Scrolls
 
   /// Schedules a delayed bottom scroll that is mode-aware and cancelable.
-  private func scheduleInitialScroll(proxy: ScrollViewProxy, delay: TimeInterval) {
+  private func scheduleInitialScroll(
+    proxy: ScrollViewProxy,
+    delay: TimeInterval,
+    completesInitialRestore: Bool = false
+  ) {
     var workItem: DispatchWorkItem?
     workItem = DispatchWorkItem { [self] in
       // Only fire if still following — user may have scrolled during settling
       if scrollMode == .followingBottom {
         scrollToBottom(proxy: proxy)
+        if completesInitialRestore, initialRestoreState == .pending {
+          initialRestoreState = .completed
+        }
       }
       if let workItem {
         initialScrollWorkItems.removeAll { $0 === workItem }
@@ -509,13 +539,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollThrottleWorkItem = nil
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
-    initialRestoreWorkItem?.cancel()
-    initialRestoreWorkItem = nil
-    isInitialRestorePending = false
     for item in initialScrollWorkItems {
       item.cancel()
     }
     initialScrollWorkItems.removeAll()
+  }
+
+  /// Explicit reader input cancels launch placement and makes the current
+  /// viewport authoritative until the conversation changes.
+  private func cancelPendingScrollsForUserInteraction() {
+    initialRestoreState = ChatInitialRestoreState.afterUserInteraction(initialRestoreState)
+    cancelAllPendingScrolls()
   }
 
   // MARK: - Subviews
@@ -643,7 +677,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         hasActivityBelow = false
         transcriptGeometry.setFollowingLiveEdge(false)
         transcriptGeometry.releaseSelection()
-        cancelAllPendingScrolls()
+        cancelPendingScrollsForUserInteraction()
         let endWork = DispatchWorkItem {
           userIsScrolling = false
         }
@@ -672,7 +706,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // activity below or we're in a non-following mode.
     if scrollMode == .freeScrolling && !messages.isEmpty {
       Button {
-        cancelAllPendingScrolls()
+        cancelPendingScrollsForUserInteraction()
         userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false

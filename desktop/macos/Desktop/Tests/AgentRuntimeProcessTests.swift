@@ -99,6 +99,50 @@ private actor GatedRuntimeStartupHarness {
   func launches() -> Int { launchCount }
 }
 
+private actor ContextProjectionRaceHarness {
+  private var generation = 1
+  private var events: [String] = []
+  private var admissionAttempts = 0
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+
+  func advance(_ event: String) {
+    generation += 1
+    events.append(event)
+  }
+
+  func freshness() -> AgentContextFreshness {
+    AgentContextFreshness(
+      version: "snapshot-v\(generation)",
+      generation: generation,
+      rendererFingerprint: "renderer-v\(generation)",
+      capabilityVersion: "capabilities-v\(generation)"
+    )
+  }
+
+  func recordAdmissionAttempt() -> Int {
+    admissionAttempts += 1
+    events.append("admission_attempt_\(admissionAttempts)")
+    return admissionAttempts
+  }
+
+  func snapshot() -> [String] { events }
+}
+
+private actor ContextProjectionTaskBox {
+  private var task: Task<Void, Never>?
+
+  func store(_ task: Task<Void, Never>) {
+    self.task = task
+  }
+
+  func wait() async {
+    await task?.value
+  }
+}
+
 private enum CredentialRefreshShouldNotRun: Error {
   case invoked
 }
@@ -1426,6 +1470,58 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(result, "admitted")
     XCTAssertEqual(refreshCount, 1)
     XCTAssertEqual(attempts, [initial, refreshed])
+  }
+
+  func testContextAdmissionGateConvergesAfterWarmupContextAdvance() async throws {
+    let harness = ContextProjectionRaceHarness()
+    await harness.record("warmup")
+    let warmupContext = await harness.freshness()
+    await harness.advance("context_advanced_between_warmup_and_admission")
+
+    let gate = AgentContextAdmissionGate()
+    let queuedAdvance = ContextProjectionTaskBox()
+    let admission = Task {
+      try await gate.withExclusiveAccess {
+        await queuedAdvance.store(
+          Task {
+            await gate.withExclusiveAccess {
+              await harness.advance("context_advanced_during_admission")
+            }
+          })
+        await Task.yield()
+
+        let result: String = try await AgentContextAdmissionRetry.run(
+          expectedContext: warmupContext,
+          refresh: { await harness.freshness() },
+          attempt: { candidate in
+            _ = await harness.recordAdmissionAttempt()
+            let currentContext = await harness.freshness()
+            guard candidate == currentContext else {
+              throw BridgeError.agentError("context_snapshot_projection_mismatch")
+            }
+            return "admitted"
+          }
+        )
+        return (result, await harness.snapshot())
+      }
+    }
+
+    let (result, eventsInsideAdmission) = try await admission.value
+    await queuedAdvance.wait()
+
+    XCTAssertEqual(result, "admitted")
+    XCTAssertEqual(
+      eventsInsideAdmission,
+      [
+        "warmup",
+        "context_advanced_between_warmup_and_admission",
+        "admission_attempt_1",
+        "admission_attempt_2",
+      ],
+      "a queued context writer must not advance the projection between refresh and the bounded retry"
+    )
+    let finalEvents = await harness.snapshot()
+    XCTAssertEqual(finalEvents.last, "context_advanced_during_admission")
   }
 
   func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {

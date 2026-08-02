@@ -325,6 +325,34 @@ actor ActionItemStorage {
     }
   }
 
+  /// Read the bounded incomplete-task surface used by the Tasks page.
+  ///
+  /// Dated rows are complete because Today/Tomorrow/Later are not pageable.
+  /// No Deadline rows are independently paged so this method never loads the
+  /// entire undated local universe merely to render the first page.
+  func getIncompleteTaskSurface(
+    noDeadlineLimit: Int = 100,
+    noDeadlineOffset: Int = 0
+  ) async throws -> (dated: [TaskActionItem], noDeadline: [TaskActionItem], hasMoreNoDeadline: Bool) {
+    let dated = try await getFilteredActionItems(
+      limit: Int.max,
+      offset: 0,
+      completedStates: [false],
+      dueDateIsNull: false
+    )
+    let noDeadlineLookahead = try await getFilteredActionItems(
+      limit: noDeadlineLimit + 1,
+      offset: noDeadlineOffset,
+      completedStates: [false],
+      dueDateIsNull: true
+    )
+    return (
+      dated: dated,
+      noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
+      hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
+    )
+  }
+
   /// Search action items by description text (case-insensitive)
   /// Queries SQLite directly for efficient full-database search
   func searchLocalActionItems(
