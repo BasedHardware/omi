@@ -50,6 +50,14 @@ def _get_client() -> Client:
     return _client
 
 
+def send_sms(to_number: str, body: str) -> str:
+    sender = os.getenv('TWILIO_SMS_NUMBER', '').strip()
+    if not sender:
+        raise ValueError('TWILIO_SMS_NUMBER must be set')
+    message = _get_client().messages.create(body=body, from_=sender, to=to_number)
+    return str(message.sid)
+
+
 def generate_access_token(uid: str, ttl: int = 3600) -> Dict[str, Any]:
     """
     Generate a Twilio Access Token with Voice grant for the given user.
