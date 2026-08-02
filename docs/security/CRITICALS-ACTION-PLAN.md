@@ -1,7 +1,7 @@
 # CRITICALs Action Plan — Human Decisions Required
 
-**Branch:** `docs/security-criticals-action-plan` (from `arch/local-first-agent`)  
-**Audit source:** `HANDOFF.md` Part A2, cross-checked against `origin/security/transport-and-secrets-hardening`  
+**Branch:** `docs/security-criticals-action-plan` (from `arch/local-first-agent`)
+**Audit source:** `HANDOFF.md` Part A2, cross-checked against `origin/security/transport-and-secrets-hardening`
 **Date:** 2026-08-01
 
 This document covers the six CRITICAL findings that still need a human decision or operational action after the security hardening branch. It also lists secret rotation items and deploy-ordering prerequisites from the audit.
