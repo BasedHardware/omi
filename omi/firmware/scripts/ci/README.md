@@ -64,4 +64,4 @@ from any branch). The publish step also refuses to overwrite an existing
 - The build is heavy: ~1.5 GB NCS download + ~20-30 min on a cold cache.
 - DK2 / OmiGlass are **not** automated here yet. DK2 can be added as a second job
   (NCS 2.7.0 + `adafruit-nrfutil`); OmiGlass uses a separate ESP32/PlatformIO toolchain.
-- MCUboot signing uses the committed key `omi/firmware/bootloader/mcuboot/root-rsa-2048.pem`.
+- MCUboot signing requires the out-of-tree `MCUBOOT_SIGNING_KEY_FILE` environment variable; release CI injects `MCUBOOT_SIGNING_KEY` from GitHub Secrets.
