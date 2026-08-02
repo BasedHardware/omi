@@ -85,6 +85,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     case "insight": return .more(.insight)
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
+    case "people": return .more(.people)
     case "permissions": return .more(.permissions)
     case "help": return .more(.help)
     case "settings": return .more(.settings)
@@ -99,6 +100,7 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   case insight
   case rewind
   case apps
+  case people
   case permissions
   case help
   case settings
@@ -112,6 +114,7 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
     case .insight: return "Insights"
     case .rewind: return "Rewind"
     case .apps: return "Apps"
+    case .people: return "People"
     case .permissions: return "Permissions"
     case .help: return "Help from Founder"
     case .settings: return "Settings"
@@ -125,6 +128,7 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
     case .insight: return "lightbulb.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
+    case .people: return "person.2.fill"
     case .permissions: return "exclamationmark.triangle.fill"
     case .help: return "bubble.left.fill"
     case .settings: return "gearshape.fill"
@@ -371,6 +375,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     case .apps: selectMore(.apps)
     case .settings: selectMore(.settings)
     case .permissions: selectMore(.permissions)
+    case .people: selectMore(.people)
     case .help: selectMore(.help)
     }
   }
