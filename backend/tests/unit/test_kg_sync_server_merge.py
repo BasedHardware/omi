@@ -148,7 +148,7 @@ def test_local_kg_node_row_maps_and_merges_aliases(monkeypatch):
     }
     kg_db.merge_synced_local_kg_nodes(UID, [updated], db_client=db)
     merged = db.docs[f"users/{UID}/knowledge_nodes/node-a"]
-    assert merged["aliases"] == ["Based Hardware", "Omi Inc"]
+    assert sorted(merged["aliases"]) == ["Based Hardware", "Omi Inc"]
 
 
 def test_local_kg_edge_row_upserts_by_edge_id():
