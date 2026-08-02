@@ -21,6 +21,13 @@ from utils.llm.desktop_llm_stub import (
     stub_chat_completions_json,
     stub_chat_completions_stream,
 )
+from utils.llm.gateway_client import (
+    CHAT_AGENT_AUTO_LANE_ID,
+    get_llm_gateway_base_url,
+    get_llm_gateway_client,
+    llm_gateway_headers,
+    should_route_features_through_gateway,
+)
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
 
@@ -389,6 +396,20 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
     yield 'data: [DONE]\n\n'
 
 
+async def _stream_gateway(body: dict[str, object]) -> AsyncIterator[bytes]:
+    gateway_payload = dict(body)
+    gateway_payload['model'] = CHAT_AGENT_AUTO_LANE_ID
+    async with get_llm_gateway_client().stream(
+        'POST',
+        f'{get_llm_gateway_base_url()}/v1/chat/completions',
+        headers=llm_gateway_headers(feature='chat_agent'),
+        json=gateway_payload,
+    ) as response:
+        async for chunk in response.aiter_bytes():
+            if chunk:
+                yield chunk
+
+
 def _sse(value: dict[str, object]) -> str:
     return f'data: {json.dumps(value, separators=(",", ":"))}\n\n'
 
@@ -436,10 +457,15 @@ async def chat_completions(
                 headers=stub_headers,
             )
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
+    gateway_mode = should_route_features_through_gateway()
+    payload: dict[str, object] = {}
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
-        public_model, payload = _request(body)
+        if gateway_mode:
+            public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)
+        else:
+            public_model, payload = _request(body)
     except HTTPException:
         raise
     except ValueError as exc:
@@ -453,6 +479,16 @@ async def chat_completions(
         platform=x_app_platform,
     )
     if body.get('stream') is True:
+        if gateway_mode:
+            return StreamingResponse(
+                _stream_gateway(body),
+                media_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Omi-Chat-Contract-Version': '1',
+                    'X-Request-Id': request_id,
+                },
+            )
         return StreamingResponse(
             _stream(payload, public_model, uid),
             media_type='text/event-stream',
@@ -462,6 +498,23 @@ async def chat_completions(
                 'X-Request-Id': request_id,
             },
         )
+    if gateway_mode:
+        try:
+            response = await get_llm_gateway_client().post(
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=llm_gateway_headers(feature='chat_agent'),
+                json={**body, 'model': CHAT_AGENT_AUTO_LANE_ID},
+            )
+            response.raise_for_status()
+            return JSONResponse(
+                response.json(),
+                headers={
+                    'X-Omi-Chat-Contract-Version': '1',
+                    'X-Request-Id': request_id,
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail='Upstream provider error') from exc
     try:
         message = await anthropic_client.messages.create(**payload)
     except Exception as exc:
