@@ -82,11 +82,11 @@ final class PermissionsCardLayoutTests: XCTestCase {
 
         // The longest preamble on the card: the one shown before anything has been asked, which is
         // also the card's resting state now that nothing is asked for until a row is clicked.
-        let opening = """
-            Nothing is asked until you click it. Read these, then click whichever you’re ready for — \
-            macOS asks separately for each, and I take them one at a time. Window text is the odd one: \
-            it has no dialog at all, so clicking it opens System Settings and I’ll show you the switch.
-            """
+        // It used to be the *longest* preamble here — three sentences explaining that macOS asks
+        // separately, that we take them one at a time, and that Accessibility has no dialog. One
+        // sentence now ("don't explain so much"), so the tallest state on this card is a gate caption
+        // rather than the opening; the measurements below cover both either way.
+        let opening = "Click one when you’re ready. Nothing is asked until you do."
         // `PermissionGate.caption`, in the phases the card draws a panel for.
         let explaining = "One at a time. I’ll ask, and I’ll wait for your answer before the next one."
         let prompting = "macOS is asking. I’ll wait."

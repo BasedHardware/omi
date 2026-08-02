@@ -487,21 +487,20 @@ struct OnboardingView: View {
     ///
     /// Standing still it is an instruction; mid-episode it is the gate's caption for the phase.
     ///
-    /// The resting copy is the part that changed, and it changed because the behaviour did. It used
-    /// to open "macOS will ask three times", which was a promise the card kept the moment it
-    /// appeared — three dialogs, on a timer, over this sentence. Nothing is asked now until a row is
-    /// clicked, so the sentence has to say that: it is the only thing telling the reader that the
-    /// card is waiting for them rather than the other way round. Accessibility is named here as the
-    /// one with no dialog rather than discovered later as an unaskable fourth row.
+    /// **One sentence.** It carried three, explaining that macOS asks separately, that we take them
+    /// one at a time, and that Accessibility has no dialog. All true, all unread: the four rows below
+    /// already say what each permission is, and a paragraph above them is a wall to get past rather
+    /// than a thing anyone reads. Reported as "don't explain so much."
+    ///
+    /// What survives is the only claim the rows cannot make for themselves — that the card is waiting
+    /// on the reader rather than the other way round. Accessibility's missing dialog is no longer
+    /// pre-announced; its own row says "Open Settings", which is the same fact delivered at the moment
+    /// it matters instead of three rows early.
     private var setupPreamble: String {
         // The gate says where the episode is, including the sentence that has to be on screen while
         // the user is standing in System Settings deciding.
         if let caption = invitations.caption { return caption }
-        return """
-        Nothing is asked until you click it. Read these, then click whichever you’re ready for — \
-        macOS asks separately for each, and I take them one at a time. Window text is the odd one: \
-        it has no dialog at all, so clicking it opens System Settings and I’ll show you the switch.
-        """
+        return "Click one when you’re ready. Nothing is asked until you do."
     }
 
     private var setupTitle: String {
