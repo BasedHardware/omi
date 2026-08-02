@@ -117,6 +117,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published private(set) var gmailInsightsFinished = false
   @Published private(set) var calendarInsightsFinished = false
   @Published private(set) var appleNotesInsightsFinished = false
+  @Published private(set) var gmailInsightsDeferred = false
+  @Published private(set) var calendarInsightsDeferred = false
   @Published private(set) var gmailInsightsFailed = false
   @Published private(set) var calendarInsightsFailed = false
   @Published private(set) var appleNotesInsightsFailed = false
@@ -411,7 +413,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     defer { isSyncingAppleNotes = false }
 
     do {
-      let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+      let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+        maxResults: 250,
+        userInitiated: true
+      )
       if notes.isEmpty {
         appleNotesInsightCount = 0
         appleNotesSummary = ""
@@ -626,8 +631,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
-    // Start Gmail/Calendar/web research in parallel with the file scan
-    // so insights are ready by the time the user reaches the research step.
+    // Start local/web enrichment in parallel with the file scan. Connected
+    // account imports stay behind an explicit Apps/Settings action.
     // Must use Task.detached to avoid @MainActor serialization with the scan.
     Task.detached { await self.startBackgroundInsightsIfNeeded() }
 
@@ -842,19 +847,40 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
-  func startBackgroundInsightsIfNeeded() async {
+  func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {
     guard !insightsStarted else { return }
     insightsStarted = true
     isLoadingInsights = true
     isResearchComplete = false
-    insightStatusText = "Reading Gmail, calendar, and Apple Notes..."
+    insightStatusText =
+      userInitiated
+      ? "Reading the selected data sources..."
+      : "Preparing your local profile..."
     gmailInsightsFinished = false
     calendarInsightsFinished = false
     appleNotesInsightsFinished = false
+    gmailInsightsDeferred = false
+    calendarInsightsDeferred = false
     gmailInsightsFailed = false
     calendarInsightsFailed = false
     appleNotesInsightsFailed = false
     webResearchSummary = ""
+
+    // Onboarding itself is not consent to read connected accounts. In
+    // particular, an existing browser Safe Storage grant must not turn a
+    // passive scan into a year-long Gmail/Calendar import. The Apps/Settings
+    // connectors own explicit imports; mark these sources complete so the
+    // local onboarding flow can continue without touching their data.
+    guard userInitiated else {
+      gmailInsightsDeferred = true
+      calendarInsightsDeferred = true
+      gmailInsightsFinished = true
+      calendarInsightsFinished = true
+      appleNotesInsightsFinished = true
+      insightStatusText = "Connect data sources from Apps when you are ready."
+      await maybeStartWebResearch()
+      return
+    }
 
     // Calendar and Gmail read the same browser Safe Storage item. Keep the
     // first consent/request singular; BrowserKeychainCache still coalesces
@@ -1000,7 +1026,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
 
       do {
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+          maxResults: 250,
+          userInitiated: false
+        )
         guard !Task.isCancelled else { return }
 
         if notes.isEmpty {

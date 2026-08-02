@@ -16,7 +16,7 @@ from database import llm_usage as llm_usage_db
 from database import redis_db
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
-from utils.llm.clients import anthropic_client
+from utils.llm.clients import anthropic_client, get_direct_anthropic_client
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_chat_completions_json,
@@ -80,7 +80,31 @@ _MODEL_ROUTES = {
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
     'claude-haiku-4-5': 'claude-haiku-4-5',
 }
+_MANAGED_CHAT_ALIASES = {
+    'omi-sonnet',
+    'claude-sonnet-4-6',
+    'claude-sonnet-4-20250514',
+}
 _MAX_TOKENS = 16_384
+
+
+def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
+    """Route conversational Sonnet traffic to Luna, but preserve specialist calls.
+
+    Desktop conversational traffic uses the managed Luna chat agent only for
+    the supported Sonnet aliases. Extraction jobs use Haiku and some callers
+    explicitly request Opus; those legacy Anthropic calls must not inherit the
+    chat-agent personality/system prompt or have their requested model rewritten
+    to Luna. Unknown models retain the historical managed-chat behavior for
+    clients that omit a model alias.
+    """
+    model = body.get('model')
+    if not isinstance(model, str):
+        return True
+    normalized = model.lower()
+    if normalized in _MODEL_ROUTES:
+        return normalized in _MANAGED_CHAT_ALIASES
+    return True
 
 
 def _text(content: object) -> str:
@@ -134,6 +158,10 @@ def _gateway_user_content(content: object) -> object:
                 except ValueError as exc:
                     raise ValueError('image_url must contain valid base64 data') from exc
                 blocks.append({'type': 'image_url', 'image_url': {'url': url}})
+            elif isinstance(url, str) and url.startswith('https://'):
+                blocks.append({'type': 'image_url', 'image_url': {'url': url}})
+            else:
+                raise ValueError('image_url must be a data URL or an HTTPS URL')
     return blocks or ''
 
 
@@ -352,7 +380,13 @@ async def _record_usage(uid: str, usage: object) -> None:
     )
 
 
-async def _stream(payload: dict[str, object], public_model: str, uid: str) -> AsyncIterator[str]:
+async def _stream(
+    payload: dict[str, object],
+    public_model: str,
+    uid: str,
+    *,
+    client: Any | None = None,
+) -> AsyncIterator[str]:
     stream_id = f'chatcmpl-{uuid4()}'
     created = int(time.time())
     yield _sse(
@@ -365,7 +399,8 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
         }
     )
     try:
-        async with anthropic_client.messages.stream(**payload) as stream:
+        stream_client = client or anthropic_client
+        async with stream_client.messages.stream(**payload) as stream:
             async for event in stream:
                 event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
@@ -568,8 +603,8 @@ async def chat_completions(
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
     payload: dict[str, object] = {}
     try:
-        gateway_mode = should_route_features_through_gateway()
-        if gateway_mode and (get_byok_key('openai') or get_byok_key('anthropic')):
+        gateway_mode = should_route_features_through_gateway() and _uses_managed_chat_agent(body)
+        if gateway_mode and get_byok_key('anthropic'):
             gateway_mode = False
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
@@ -605,7 +640,12 @@ async def chat_completions(
                 },
             )
         return StreamingResponse(
-            _stream(payload, public_model, uid),
+            _stream(
+                payload,
+                public_model,
+                uid,
+                client=get_direct_anthropic_client(byok_api_key=get_byok_key('anthropic')),
+            ),
             media_type='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
@@ -638,7 +678,11 @@ async def chat_completions(
         finally:
             reset_usage_context(usage_token)
     try:
-        message = await anthropic_client.messages.create(**payload)
+        # The Anthropic SDK overloads do not accept this compatibility payload
+        # typed as dict[str, object]; the request has already been normalized
+        # and validated above, so keep the SDK boundary dynamic like _stream.
+        direct_client: Any = get_direct_anthropic_client(byok_api_key=get_byok_key('anthropic'))
+        message = await direct_client.messages.create(**payload)
     except Exception as exc:
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
     await _record_usage(uid, getattr(message, 'usage', None))

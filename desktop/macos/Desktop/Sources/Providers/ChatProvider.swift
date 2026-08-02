@@ -2260,7 +2260,12 @@ class ChatProvider: ObservableObject {
     previousAuthURL != nextAuthURL
   }
 
-  /// Check whether a cached Claude OAuth token exists (config file or Keychain)
+  /// Check whether a cached Claude OAuth token exists in the local config.
+  ///
+  /// This is a passive settings refresh. Claude Code's Keychain item belongs to
+  /// another application, so probing it with `/usr/bin/security` here can show
+  /// a login-keychain password sheet as soon as Settings appears. An explicit
+  /// connect flow owns any credential request instead.
   func checkClaudeConnectionStatus() {
     // Check config file
     let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
@@ -2272,20 +2277,7 @@ class ChatProvider: ObservableObject {
       isClaudeConnected = true
       return
     }
-
-    // Check Keychain via security CLI (Keychain item owned by Claude Desktop)
-    let secProcess = Process()
-    secProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-    secProcess.arguments = ["find-generic-password", "-s", "Claude Code-credentials"]
-    secProcess.standardOutput = FileHandle.nullDevice
-    secProcess.standardError = FileHandle.nullDevice
-    do {
-      try secProcess.run()
-      secProcess.waitUntilExit()
-      isClaudeConnected = (secProcess.terminationStatus == 0)
-    } catch {
-      isClaudeConnected = false
-    }
+    isClaudeConnected = false
   }
 
   /// Disconnect from Claude: clear OAuth token, switch back to free mode via serialized path
@@ -2303,7 +2295,9 @@ class ChatProvider: ObservableObject {
       }
     }
 
-    // 2. Clear OAuth credentials from macOS Keychain
+    // 2. Clear OAuth credentials from macOS Keychain. This is an explicit
+    // user-requested disconnect, so the owning CLI is allowed to perform the
+    // deletion even though passive status checks never query this item.
     //    The Keychain item is owned by Claude Desktop/CLI, so SecItemDelete fails
     //    with errSecInvalidOwnerEdit. Use the `security` CLI which runs as the user.
     let secProcess = Process()

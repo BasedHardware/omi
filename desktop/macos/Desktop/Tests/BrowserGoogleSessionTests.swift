@@ -77,6 +77,29 @@ final class BrowserGoogleSessionTests: XCTestCase {
     XCTAssertEqual(query[kSecReturnData as String] as? Bool, true)
   }
 
+  func testBackgroundSafeStorageReadDisallowsInteraction() {
+    let backgroundQuery = BrowserKeychainCache.safeStorageQuery(
+      service: "Chrome Safe Storage",
+      account: "Chrome",
+      userInitiated: false
+    )
+    let userInitiatedQuery = BrowserKeychainCache.safeStorageQuery(
+      service: "Chrome Safe Storage",
+      account: "Chrome",
+      userInitiated: true
+    )
+
+    XCTAssertNotNil(backgroundQuery[kSecUseAuthenticationContext as String])
+    XCTAssertTrue(
+      CFEqual(
+        backgroundQuery[kSecUseAuthenticationUI as String] as CFTypeRef,
+        kSecUseAuthenticationUISkip
+      )
+    )
+    XCTAssertNil(userInitiatedQuery[kSecUseAuthenticationContext as String])
+    XCTAssertNil(userInitiatedQuery[kSecUseAuthenticationUI as String])
+  }
+
   func testSuccessfulSharedSafeStorageGrantIsReadOnceAcrossGoogleConsumers() {
     // This is the exact shared Chrome Safe Storage identity Calendar and Gmail
     // derive through `BrowserKeychainCache.password(for:account:)`; prefix it
@@ -98,6 +121,33 @@ final class BrowserGoogleSessionTests: XCTestCase {
     // A second loader would be a second Keychain authorization request. Both
     // consumers must reuse the original successful grant and exact secret.
     XCTAssertEqual(keychainReads, 1)
+    BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
+  }
+
+  func testDeniedSafeStorageReadIsScopedToOneExplicitOperation() {
+    let cacheKey = "BrowserGoogleSessionTests.denied.\(UUID().uuidString)"
+    var keychainReads = 0
+
+    BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    XCTAssertNil(
+      BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) {
+        keychainReads += 1
+        return nil
+      })
+    XCTAssertNil(
+      BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) {
+        keychainReads += 1
+        return nil
+      })
+    XCTAssertEqual(keychainReads, 1)
+
+    BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    XCTAssertNil(
+      BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) {
+        keychainReads += 1
+        return nil
+      })
+    XCTAssertEqual(keychainReads, 2)
     BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
   }
 

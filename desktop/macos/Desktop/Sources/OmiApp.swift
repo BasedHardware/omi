@@ -368,7 +368,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
-    NotificationRegistrationRepair.repairOnceForCurrentVersion(reason: "startup_version_registration")
+    // Notification registration repair is deliberately user-triggered from
+    // Settings. Launch must not restart usernoted/NotificationCenter or alter
+    // notification registration as a passive side effect.
 
     // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"

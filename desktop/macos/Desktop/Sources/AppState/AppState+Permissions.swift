@@ -320,27 +320,15 @@ extension AppState {
       defer { Task { @MainActor in self.isCheckingAutomationPermission = false } }
       let status = Self.queryAutomationPermissionStatus()
 
-      // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, -1744 = not determined
-      // -600 (procNotFound) = System Events not running — try to launch it and retry
+      // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied,
+      // -1744 = not determined, -600 = target not running. A status refresh is
+      // observational only: do not launch System Events or send an Apple Event
+      // just to improve a badge on startup.
       if status == -600 {
-        log("AUTOMATION_CHECK: status=-600 (procNotFound), launching System Events and retrying...")
-        // NSAppleScript is main-thread-only — build+execute on the main actor.
+        log("AUTOMATION_CHECK: status=-600 (procNotFound); leaving System Events stopped")
         await MainActor.run {
-          let launchScript = NSAppleScript(source: "launch application \"System Events\"")
-          var launchError: NSDictionary?
-          launchScript?.executeAndReturnError(&launchError)
-        }
-
-        // Wait for System Events to initialize
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-
-        let retryStatus = Self.queryAutomationPermissionStatus()
-        let hasPermission = retryStatus == noErr
-        log("AUTOMATION_CHECK: retry status=\(retryStatus), hasPermission=\(hasPermission)")
-
-        await MainActor.run {
-          self.hasAutomationPermission = hasPermission
-          self.automationPermissionError = hasPermission ? 0 : retryStatus
+          self.hasAutomationPermission = false
+          self.automationPermissionError = 0
         }
       } else {
         let hasPermission = status == noErr

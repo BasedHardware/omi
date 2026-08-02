@@ -107,6 +107,11 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_byok_key',
+        lambda provider: 'sk-openai' if provider == 'openai' else None,
+    )
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     recorded = []
 
@@ -170,6 +175,43 @@ def test_gateway_body_preserves_validated_image_url():
     )
     assert body['model'] == 'omi:auto:chat-agent'
     assert body['messages'][0]['content'][1]['type'] == 'image_url'
+
+
+def test_gateway_body_preserves_https_image_url():
+    body = desktop_chat._gateway_body(
+        {
+            'model': 'client-model',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}}],
+                }
+            ],
+        }
+    )
+    assert body['messages'][0]['content'][0]['image_url']['url'] == 'https://example.com/image.png'
+
+
+def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
+    with pytest.raises(ValueError, match='data URL or an HTTPS URL'):
+        desktop_chat._gateway_body(
+            {
+                'model': 'client-model',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': [{'type': 'image_url', 'image_url': {'url': 'file:///tmp/image.png'}}],
+                    }
+                ],
+            }
+        )
+
+
+def test_specialist_haiku_requests_bypass_managed_chat_agent():
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -312,7 +354,11 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
             gateway_calls.append((args, kwargs))
             raise AssertionError('BYOK must not use managed gateway lane')
 
-    monkeypatch.setattr(desktop_chat, 'anthropic_client', SimpleNamespace(messages=Messages()))
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=Messages()),
+    )
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
 
     response = await desktop_chat.chat_completions(
@@ -329,6 +375,64 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
     assert gateway_calls == []
     assert b'"content":"legacy"' in response.body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('requested_model', 'translated_model'),
+    [
+        ('claude-haiku-4-5-20251001', 'claude-haiku-4-5'),
+        ('omi-opus', 'claude-opus-4-6'),
+    ],
+)
+async def test_chat_completions_specialist_models_bypass_managed_gateway(
+    monkeypatch, requested_model, translated_model
+):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+
+    class Messages:
+        async def create(self, **payload):
+            assert payload['model'] == translated_model
+            return SimpleNamespace(
+                id='msg_haiku',
+                content=[SimpleNamespace(type='text', text='specialist')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=Messages()),
+    )
+
+    class GatewayClient:
+        async def post(self, *args, **kwargs):
+            raise AssertionError('specialist Haiku requests must not use managed gateway lane')
+
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+
+    response = await desktop_chat.chat_completions(
+        {
+            'model': requested_model,
+            'messages': [{'role': 'user', 'content': 'extract this'}],
+            'max_tokens': 16,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+
+    assert b'"content":"specialist"' in response.body
 
 
 @pytest.mark.asyncio

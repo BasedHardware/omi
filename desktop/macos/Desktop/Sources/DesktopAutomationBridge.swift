@@ -2092,7 +2092,8 @@ final class DesktopAutomationActionRegistry {
 
         let status = await AppleNotesReaderService.shared.connectionStatus(
           maxResults: maxResults,
-          selectedFolderPath: selectedFolderPath
+          selectedFolderPath: selectedFolderPath,
+          userInitiated: true
         )
         switch status {
         case .connected(let noteCount, _):

@@ -1138,33 +1138,8 @@ final class ImportConnectorStatusStore: ObservableObject {
   }
 
   private func refreshAppleNotesMetrics() async {
-    let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
-    switch status {
-    case .connected(let noteCount, _):
-      var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-      metrics.sourceCount = noteCount
-      defaults.set(
-        noteCount,
-        forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "apple-notes")
-      )
-      if metrics.lastSyncedAt == nil {
-        let syncedAt = Date()
-        metrics.lastSyncedAt = syncedAt
-        defaults.set(
-          syncedAt.timeIntervalSince1970,
-          forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "apple-notes")
-        )
-      }
-      metrics.availabilityText = "Private notes accessible"
-      defaults.set(
-        "Private notes accessible",
-        forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "apple-notes")
-      )
-      metricsByID["apple-notes"] = metrics
-    case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
-      log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
-      clearStoredMetrics(for: "apple-notes")
-    }
+    // Apple Notes metrics are loaded from persisted connector state. Reading
+    // NoteStore.sqlite is reserved for the explicit Connect/Import action.
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {

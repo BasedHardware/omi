@@ -29,6 +29,7 @@ def test_ready_validates_gateway_config(monkeypatch):
     assert len(response.json()['lanes']) >= len(get_all_configured_features())
     assert response.json()['route_artifact_count'] >= len(get_all_configured_features()) + 2
     assert response.json()['managed_messages_provider'] == 'none'
+    assert response.json()['managed_chat_provider'] == 'openai'
 
 
 def test_ready_does_not_require_anthropic_key_after_chat_agent_migration(monkeypatch):
@@ -39,6 +40,17 @@ def test_ready_does_not_require_anthropic_key_after_chat_agent_migration(monkeyp
 
     assert response.status_code == 200
     assert response.json()['managed_messages_provider'] == 'none'
+    assert response.json()['managed_chat_provider'] == 'openai'
+
+
+def test_ready_fails_closed_when_managed_openai_key_is_missing(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+
+    response = TestClient(app).get('/ready', headers=auth_headers())
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'llm gateway managed chat provider is not configured'
 
 
 def test_ready_fails_closed_on_invalid_gateway_config(monkeypatch):
