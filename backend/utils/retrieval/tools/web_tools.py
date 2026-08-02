@@ -34,6 +34,23 @@ def normalize_user_url(url: str) -> str:
     return (url or '').strip().rstrip(USER_URL_TRAILING_PUNCTUATION)
 
 
+def _canonical_user_url(url: str) -> Optional[Tuple[str, str, str, str, str]]:
+    normalized = normalize_user_url(url)
+    if not normalized:
+        return None
+    parsed = urlparse(normalized)
+    if parsed.scheme.lower() not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    hostname = parsed.hostname.rstrip('.').lower()
+    default_port = 443 if parsed.scheme.lower() == 'https' else 80
+    effective_port = '' if port in (None, default_port) else str(port)
+    return parsed.scheme.lower(), hostname, effective_port, parsed.path or '/', parsed.query
+
+
 def extract_urls_from_text(text: str) -> List[str]:
     """Return http(s) URLs found in *text*, preserving order and dropping duplicates."""
     urls: List[str] = []
@@ -80,17 +97,24 @@ def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
     """Return True when *url* matches an allowlist entry."""
     if not allowlist:
         return False
-    normalized = normalize_user_url(url)
-    if not normalized:
+    canonical = _canonical_user_url(url)
+    if canonical is None:
         return False
-    if any(normalize_user_url(entry) == normalized for entry in allowlist):
-        return True
-    return False
+    return any(_canonical_user_url(entry) == canonical for entry in allowlist)
 
 
 def is_redirect_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
-    """Allow exact allowlist matches for redirect targets."""
-    return is_url_allowlisted(url, allowlist)
+    """Allow exact matches or same-origin redirect targets from the user allowlist."""
+    if is_url_allowlisted(url, allowlist):
+        return True
+    target = _canonical_user_url(url)
+    if target is None or not allowlist:
+        return False
+    target_origin = target[:3]
+    return any(
+        (entry_origin := _canonical_user_url(entry)) is not None and entry_origin[:3] == target_origin
+        for entry in allowlist
+    )
 
 
 try:
@@ -396,11 +420,12 @@ async def fetch_url_tool(url: str, config: RunnableConfig = None) -> str:  # typ
     """
     logger.info(f"fetch_url_tool called - url: {sanitize(url)}")
 
-    if not url.startswith(('http://', 'https://')):
+    normalized_url = normalize_user_url(url)
+    if urlparse(normalized_url).scheme.lower() not in {'http', 'https'}:
         return 'Error: URL must start with http:// or https://'
 
     allowlist = _user_provided_urls_from_config(config)
-    if not is_url_allowlisted(url, allowlist):
+    if not is_url_allowlisted(normalized_url, allowlist):
         logger.warning(f"fetch_url_tool blocked - URL not in user allowlist: {sanitize(url)}")
         return URL_NOT_ALLOWLISTED_MESSAGE
 
@@ -411,7 +436,7 @@ async def fetch_url_tool(url: str, config: RunnableConfig = None) -> str:  # typ
     }
 
     try:
-        status, content_type, body = await _fetch_page(url, headers, allowlist)
+        status, content_type, body = await _fetch_page(normalized_url, headers, allowlist)
     except ValueError as e:
         logger.warning(f"fetch_url_tool blocked - {sanitize(str(e))}")
         return f'Error: {sanitize(str(e))}'
@@ -437,4 +462,4 @@ async def fetch_url_tool(url: str, config: RunnableConfig = None) -> str:  # typ
         text = text[:_MAX_CONTENT_CHARS] + f'\n\n[Content truncated — {len(text)} total characters]'
 
     logger.info(f"fetch_url_tool - fetched {len(text)} chars from {sanitize(url)}")
-    return f'Content from {url}:\n\n{text}'
+    return f'Content from {normalized_url}:\n\n{text}'
