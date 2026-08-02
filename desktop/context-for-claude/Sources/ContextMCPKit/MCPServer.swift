@@ -1,0 +1,223 @@
+import ContextCore
+import Foundation
+
+/// The stdio MCP server Claude Code and Claude Desktop talk to.
+///
+/// Transport is line-delimited JSON-RPC 2.0: one request object per line in, one response object per
+/// line out. **The output handle carries the protocol** — nothing but response lines may ever reach
+/// it, so every diagnostic in this file goes to stderr.
+public final class MCPServer {
+    /// Server-level guidance, surfaced to the model once at connection time.
+    ///
+    /// Tool descriptions are only read when the model is already shopping for a tool. This is the
+    /// earlier lever: it is in front of the model before the first question, and it is where the
+    /// habit gets set — check what the user has already lived through *before* asking them to
+    /// explain it. Without it the connector sits idle, advertised and never called, which is
+    /// exactly what happened in practice.
+    public static let instructions = """
+    This server holds a continuous record of what this user has said, heard, and had on screen — \
+    their real life on this Mac, plus their full Omi history going back months.
+
+    Consult it early, not as a last resort. Before asking the user to explain who someone is, what \
+    a project is, what was decided, when something happened, or what they are working on, search \
+    here first — the answer is very often already on record, and asking them to repeat it is the \
+    thing this server exists to prevent. A good default at the start of a task is `recall` for the \
+    people and topics named in the request, and `recent` when the request assumes context you were \
+    not given ("this", "that email", "help me with this").
+
+    Two rules for reading the results honestly. Hits marked as captured live on this Mac are exact \
+    full-text matches. Hits from Omi's history are a semantic search with no relevance floor — it \
+    always returns its nearest neighbours, even when nothing genuinely matches — so treat those as \
+    leads to confirm rather than as evidence something was said. And before telling the user that \
+    something never happened, call `status`: it reports exactly which windows of time were \
+    recorded, which is what separates "did not happen" from "was not captured".
+    """
+
+    public static let protocolVersion = "2024-11-05"
+    /// What Claude sees this connector called.
+    ///
+    /// Not the product name. A model picking between connectors reads the name before it reads any
+    /// description, and "context-for-claude" says nothing about what is behind it — the tools went unreached
+    /// with the server connected and all seven advertised. This says what it is.
+    public static let serverName = "context-for-claude"
+    public static let serverVersion = "1.0.0"
+
+    private let store: ContextStore?
+    private let openError: Error?
+    /// Where a served tool call is recorded so the app can prove Claude reached us.
+    private let queryStampURL: URL
+
+    /// `store` is nil when nothing has been captured yet; the tools explain that in prose.
+    ///
+    /// `queryStampURL` defaults to the stamp beside the database this server opened, falling back to
+    /// the standard location when there is no database yet. Both resolve to the same file in a real
+    /// install; deriving it from the store keeps a server that was pointed at another data directory
+    /// from reporting its calls into the default one.
+    public init(store: ContextStore?, openError: Error? = nil, queryStampURL: URL? = nil) {
+        self.store = store
+        self.openError = openError
+        self.queryStampURL = queryStampURL
+            ?? store.map { ContextPaths.queryStampURL(besideDatabaseAt: $0.databaseURL) }
+            ?? ContextPaths.queryStampURL
+    }
+
+    // MARK: - Transport
+
+    /// Reads lines from `input`, writes response lines to `output`. Returns when input closes.
+    ///
+    /// Reads incrementally through the handle rather than `readLine()`, which would bind this loop to
+    /// the process's own stdin and make the class untestable with a pipe.
+    public func run(input: FileHandle = .standardInput, output: FileHandle = .standardOutput) {
+        var buffer = Data()
+        while true {
+            let chunk = input.availableData
+            if chunk.isEmpty { break } // EOF: the client closed the pipe.
+            buffer.append(chunk)
+            while let newline = buffer.firstIndex(of: 0x0A) {
+                let line = Data(buffer[buffer.startIndex..<newline])
+                buffer.removeSubrange(buffer.startIndex...newline)
+                respond(to: line, on: output)
+            }
+        }
+        // A final frame with no trailing newline still deserves an answer.
+        if !buffer.isEmpty {
+            respond(to: buffer, on: output)
+        }
+    }
+
+    private func respond(to lineData: Data, on output: FileHandle) {
+        guard let raw = String(data: lineData, encoding: .utf8) else {
+            write(RPC.error(id: nil, code: RPC.Code.parseError, message: "Parse error: line is not UTF-8"),
+                  to: output)
+            return
+        }
+        guard let response = handle(line: raw) else { return }
+        write(response, to: output)
+    }
+
+    private func write(_ response: String, to output: FileHandle) {
+        guard let data = (response + "\n").data(using: .utf8) else { return }
+        do {
+            try output.write(contentsOf: data)
+        } catch {
+            // A closed pipe is the client going away, not a crash.
+            Self.note("write failed: \(error)")
+        }
+    }
+
+    // MARK: - Dispatch
+
+    /// Testable single-message path. Returns the response line, or nil for a notification.
+    /// Never throws: a tool failure is reported to the model as a result, not as a crash.
+    public func handle(line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+
+        guard let frame = RPC.json(line: trimmed) else {
+            return RPC.error(id: nil, code: RPC.Code.parseError, message: "Parse error")
+        }
+        guard let request = RPC.request(from: frame) else {
+            return RPC.error(id: frame["id"], code: RPC.Code.invalidRequest, message: "Invalid Request")
+        }
+        // Notifications carry no id and take no reply — answering one desynchronizes the client.
+        if request.isNotification || request.method.hasPrefix("notifications/") { return nil }
+
+        switch request.method {
+        case "initialize":
+            return RPC.result(id: request.id, [
+                "protocolVersion": .string(Self.protocolVersion),
+                "capabilities": ["tools": [:]],
+                "serverInfo": ["name": .string(Self.serverName), "version": .string(Self.serverVersion)],
+                "instructions": .string(Self.instructions),
+            ])
+
+        case "ping":
+            return RPC.result(id: request.id, [:])
+
+        case "tools/list":
+            let tools = Tools.all.map { tool in
+                JSONValue.object([
+                    "name": .string(tool.name),
+                    "description": .string(tool.description),
+                    "inputSchema": tool.inputSchema,
+                ])
+            }
+            return RPC.result(id: request.id, ["tools": .array(tools)])
+
+        case "tools/call":
+            return callTool(request)
+
+        default:
+            return RPC.error(id: request.id,
+                             code: RPC.Code.methodNotFound,
+                             message: "Method not found: \(request.method)")
+        }
+    }
+
+    private func callTool(_ request: RPCRequest) -> String {
+        guard let name = request.params?["name"]?.stringValue else {
+            return RPC.error(id: request.id,
+                             code: RPC.Code.invalidParams,
+                             message: "tools/call requires a string \"name\"")
+        }
+        // Only a tool this server advertises is proof that Claude reached *us*. An unknown name is
+        // the model guessing, or another connector's tool arriving here by mistake, and must not
+        // light up the tutorial's payoff beat.
+        let isOurTool = Tools.all.contains { $0.name == name }
+        // Fires on the failure path too: a `recall` that threw still proves Claude called us, and a
+        // tool that only leaves a trace when it succeeds would make the beat depend on the answer
+        // rather than on the connection.
+        defer { if isOurTool { recordServedCall(name) } }
+        do {
+            let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store, openError: openError)
+            return RPC.result(id: request.id, Self.content(text, isError: false))
+        } catch {
+            // MCP models a tool failure as a *result* so the model can read the reason and recover;
+            // a JSON-RPC error would be swallowed by the client instead.
+            Self.note("tool \(name) failed: \(error)")
+            return RPC.result(id: request.id, Self.content(Self.describe(error), isError: true))
+        }
+    }
+
+    /// Leaves the durable trace the app watches for, so the first-run tutorial's "found it" fires
+    /// only when Claude has genuinely called one of our tools.
+    ///
+    /// **Only the tool name and the time are recorded, and that must stay true.** Never add the
+    /// query, the arguments, or the result: this is a plaintext file whose entire purpose is a UI
+    /// animation, and putting the user's questions — and so the private context behind them — on
+    /// disk to earn an animation is the wrong trade. `QueryStamp` has no field for them, and
+    /// `QueryStampRecordingTests.testTheStampNeverContainsTheQueryText` fails if that changes.
+    ///
+    /// A failure here is noted and dropped. The stamp is a nicety; the tool result is the contract,
+    /// and an unwritable data directory must not turn an answered question into an error.
+    private func recordServedCall(_ tool: String) {
+        do {
+            try QueryStamp.record(tool: tool, to: queryStampURL)
+        } catch {
+            Self.note("could not record the query stamp: \(error)")
+        }
+    }
+
+    private static func content(_ text: String, isError: Bool) -> JSONValue {
+        [
+            "content": [["type": "text", "text": .string(text)]],
+            "isError": .bool(isError),
+        ]
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        // `localizedDescription` on a bare Swift error is the useless "operation couldn't be
+        // completed" boilerplate; the case name is what the model can actually act on.
+        return String(describing: error)
+    }
+
+    /// Diagnostics go to stderr only. Anything printed to stdout corrupts the protocol stream and
+    /// Claude drops the connection.
+    static func note(_ message: String) {
+        guard let data = "context-for-claude: \(message)\n".data(using: .utf8) else { return }
+        try? FileHandle.standardError.write(contentsOf: data)
+    }
+}

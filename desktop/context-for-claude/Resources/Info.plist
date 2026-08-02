@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIconFile</key>
+	<string>ContextForClaude</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.omi.context-for-claude</string>
+	<key>CFBundleName</key>
+	<string>Context for Claude</string>
+	<key>CFBundleDisplayName</key>
+	<string>Context for Claude</string>
+	<key>CFBundleExecutable</key>
+	<string>Context for Claude</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.4</string>
+	<!-- Menu-bar only: no dock icon, no main window. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- macOS shows these verbatim in the TCC prompt, so they are written as the app speaking. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>I listen to your microphone so I can hear what you talk about and give Claude that context later.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>I record system audio so I can catch the other side of your calls, not just your half.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>I take an occasional snapshot of your screen so I can see what you are working on and tell Claude about it.</string>
+</dict>
+</plist>

@@ -66,7 +66,13 @@ class FailureClassCliTests(unittest.TestCase):
                 artifact.touch()
 
     def tearDown(self) -> None:
-        self.temp_directory.cleanup()
+        # Each test seeds a real git repository inside this directory, and git can
+        # still be writing into `.git` (index.lock, gc, fsmonitor) when the test
+        # body returns. `TemporaryDirectory.cleanup()` walks the tree and raises
+        # OSError(66, "Directory not empty") when it does, failing a test whose
+        # assertions all passed. Cleanup is best-effort housekeeping, not the thing
+        # under test, so it must never decide the verdict.
+        shutil.rmtree(self.temp_directory.name, ignore_errors=True)
 
     def git(self, *args: str) -> str:
         result = run(["git", *args], self.root)

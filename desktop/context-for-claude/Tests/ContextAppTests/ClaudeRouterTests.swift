@@ -1,0 +1,205 @@
+import AppKit
+import XCTest
+@testable import ContextApp
+
+/// The routing layer, asserted where it is deterministic: the URL, the truncation, the launcher
+/// script, and which binary gets picked.
+///
+/// The parts that talk to LaunchServices are exercised through `Probe`, so the suite says nothing
+/// about whether Claude happens to be installed on the machine running it.
+final class ClaudeRouterTests: XCTestCase {
+
+    // MARK: - The deep link
+
+    /// This is the whole product claim — "opens a Claude Code tab with the prompt pre-filled" — and
+    /// it rests on this exact host, path, and parameter name.
+    func testThePrefillURLIsTheDeepLinkClaudeActuallyRoutes() throws {
+        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: "what was I working on today?"))
+        XCTAssertEqual(url.scheme, "claude")
+        XCTAssertEqual(url.host, "code")
+        XCTAssertEqual(url.path, "/new")
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "q", value: "what was I working on today?")])
+    }
+
+    /// A question with a `&`, a `#`, or a `+` in it has to survive the trip intact — a fragment in
+    /// particular is dropped on the far side, so an unescaped `#` would silently truncate the prompt.
+    func testCharactersThatWouldBreakAURLArePercentEncoded() throws {
+        let query = "ship it? A&B #1 + 2 = 3 / 100%"
+        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query))
+        XCTAssertNil(url.fragment)
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems?.first?.value, query)
+    }
+
+    func testAnEmptyOrBlankQueryProducesNoURL() {
+        XCTAssertNil(ClaudeRouter.prefillURL(for: ""))
+        XCTAssertNil(ClaudeRouter.prefillURL(for: "   \n\t "))
+    }
+
+    /// Claude cuts the prompt at 14 336 characters before it reaches the composer, so we cut it at the
+    /// same number and say we did rather than handing over a string we know gets clipped.
+    func testAnOverlongQueryIsTruncatedToTheLimitClaudeAccepts() throws {
+        XCTAssertEqual(ClaudeRouter.promptLimit, 14_336)
+        let query = String(repeating: "a", count: ClaudeRouter.promptLimit + 500)
+        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: query))
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems?.first?.value?.count, ClaudeRouter.promptLimit)
+    }
+
+    // MARK: - Finding the CLI
+
+    /// A GUI app inherits almost no `PATH`, so the candidate list is the whole mechanism — and the
+    /// place `claude` actually installs itself has to be on it.
+    func testTheCandidateListCoversWhereClaudeInstallsItself() {
+        let candidates = ClaudeRouter.defaultCLICandidates(home: "/Users/example")
+        XCTAssertTrue(candidates.contains("/Users/example/.local/bin/claude"), "\(candidates)")
+        XCTAssertTrue(candidates.contains("/Users/example/.claude/local/claude"), "\(candidates)")
+        XCTAssertTrue(candidates.contains("/opt/homebrew/bin/claude"), "\(candidates)")
+        XCTAssertTrue(candidates.contains("/usr/local/bin/claude"), "\(candidates)")
+    }
+
+    func testTheFirstExecutableCandidateWins() {
+        let candidates = ["/a/claude", "/b/claude", "/c/claude"]
+        XCTAssertEqual(
+            ClaudeRouter.claudeCLIPath(candidates: candidates, isExecutable: { $0 != "/a/claude" }),
+            "/b/claude")
+        XCTAssertNil(ClaudeRouter.claudeCLIPath(candidates: candidates, isExecutable: { _ in false }))
+    }
+
+    // MARK: - Availability
+
+    private func probe(
+        claudeHandler: URL? = nil, terminalHandler: URL? = nil, executable: @escaping (String) -> Bool = { _ in false }
+    ) -> ClaudeRouter.Probe {
+        ClaudeRouter.Probe(
+            handlerForClaudeScheme: { claudeHandler },
+            handlerForCommandFiles: { terminalHandler },
+            isExecutable: { executable($0) },
+            claudeCLICandidates: ["/opt/fake/claude"])
+    }
+
+    /// The row names the app that will actually open, not "Claude" — if something else claimed the
+    /// scheme, saying "Claude" would be a lie.
+    func testTheClaudeAppRowNamesTheAppThatWillOpen() {
+        let availability = ClaudeRouter.availability(
+            of: .claudeApp, probe: probe(claudeHandler: URL(fileURLWithPath: "/Applications/Claude.app")))
+        XCTAssertTrue(availability.isAvailable)
+        XCTAssertTrue(availability.detail.contains("Claude"), availability.detail)
+        XCTAssertTrue(availability.detail.contains("prompt"), availability.detail)
+    }
+
+    /// With no handler the row says so *and* says what would happen instead. A dropdown option that
+    /// silently degrades to the clipboard is the dishonest version of this.
+    func testWithNoSchemeHandlerTheRowAdmitsItWouldUseTheClipboard() {
+        let availability = ClaudeRouter.availability(of: .claudeApp, probe: probe())
+        XCTAssertFalse(availability.isAvailable)
+        XCTAssertTrue(availability.detail.contains("clipboard"), availability.detail)
+    }
+
+    func testTheTerminalRowIsMissingWhenTheCLIIsNotOnDisk() {
+        let availability = ClaudeRouter.availability(of: .terminal, probe: probe())
+        XCTAssertFalse(availability.isAvailable)
+        XCTAssertTrue(availability.detail.contains("claude command"), availability.detail)
+    }
+
+    /// It names the terminal the user actually chose for `.command` files, not Terminal.app by fiat.
+    func testTheTerminalRowNamesWhicheverTerminalOwnsCommandFiles() {
+        let availability = ClaudeRouter.availability(
+            of: .terminal,
+            probe: probe(
+                terminalHandler: URL(fileURLWithPath: "/Applications/Ghostty.app"), executable: { _ in true }))
+        XCTAssertTrue(availability.isAvailable)
+        XCTAssertTrue(availability.detail.contains("Ghostty"), availability.detail)
+    }
+
+    @MainActor
+    func testRoutingAnEmptyQueryFailsBeforeItTouchesAnything() {
+        XCTAssertEqual(ClaudeRouter.route("  ", to: .claudeApp, probe: probe()), .failure(.emptyQuery))
+    }
+
+    @MainActor
+    func testRoutingToTerminalWithoutTheCLIFailsWithAnHonestSentence() {
+        let result = ClaudeRouter.route("hello", to: .terminal, probe: probe())
+        guard case .failure(.unavailable(let sentence)) = result else {
+            return XCTFail("expected an unavailable failure, got \(result)")
+        }
+        XCTAssertTrue(sentence.contains("claude command"), sentence)
+    }
+
+    // MARK: - The launcher
+
+    /// The one place a query becomes something a shell will evaluate. A question containing a backtick
+    /// or a `;` must stay a question.
+    func testQuotingNeutralisesEverythingAShellWouldActOn() {
+        XCTAssertEqual(ClaudeRouter.shellQuoted("plain"), "'plain'")
+        XCTAssertEqual(ClaudeRouter.shellQuoted("it's"), "'it'\\''s'")
+        XCTAssertEqual(
+            ClaudeRouter.shellQuoted("`whoami`; rm -rf ~ && echo $HOME"),
+            "'`whoami`; rm -rf ~ && echo $HOME'")
+    }
+
+    /// Asserted through a real shell, because "the string looks escaped" is not the property that
+    /// matters — "`sh` sees exactly one argument, and it is the question" is.
+    ///
+    /// A single quote is the one character that can end the quoting, so every case here is built out
+    /// of one. Hermetic: `/bin/sh` and nothing else.
+    func testAShellSeesTheQueryAsOneArgumentWhateverIsInIt() throws {
+        for query in [
+            "'; touch /tmp/context-pwned; echo '",
+            "what's up",
+            "`whoami`",
+            "$(id) ${HOME} $HOME",
+            "a && b || c ; d | e > f",
+            "newline\nand\ttab",
+        ] {
+            let quoted = ClaudeRouter.shellQuoted(query)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            // The quoted form goes inside `-c` so the shell is the thing that parses it — passing it
+            // as an argv element instead would prove nothing at all. `$#` then says it survived as one
+            // argument, and `$1` says it survived unchanged.
+            process.arguments = ["-c", "set -- \(quoted); printf '%s|%s' \"$#\" \"$1\""]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            XCTAssertEqual(String(decoding: data, as: UTF8.self), "1|\(query)", "for \(query.debugDescription)")
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: "/tmp/context-pwned"),
+                "the quoting let a command through")
+        }
+    }
+
+    /// The file holds what the user typed, so it must not outlive the window it opens.
+    func testTheLauncherDeletesItselfBeforeItRunsAnything() {
+        let script = ClaudeRouter.launcherScript(cli: "/bin/claude", query: "hello")
+        let lines = script.split(separator: "\n").map(String.init)
+        let removeIndex = try? XCTUnwrap(lines.firstIndex { $0.hasPrefix("rm -f") })
+        let execIndex = try? XCTUnwrap(lines.firstIndex { $0.hasPrefix("exec ") })
+        XCTAssertNotNil(removeIndex)
+        XCTAssertNotNil(execIndex)
+        if let removeIndex, let execIndex { XCTAssertLessThan(removeIndex, execIndex) }
+        XCTAssertTrue(script.hasPrefix("#!/bin/sh"), script)
+        XCTAssertTrue(script.contains("exec '/bin/claude' 'hello'"), script)
+    }
+
+    /// `claude` needs a working directory; home is the honest neutral choice, and an unset `$HOME` must
+    /// not leave it running somewhere arbitrary.
+    func testTheLauncherRunsFromHomeOrNotAtAll() {
+        let script = ClaudeRouter.launcherScript(cli: "/bin/claude", query: "hello")
+        XCTAssertTrue(script.contains(#"cd "$HOME" || exit 1"#), script)
+    }
+
+    // MARK: - Copy
+
+    /// Every mechanism has a sentence, and none of them claims a pre-fill that did not happen.
+    func testTheClipboardFallbackSaysWhatItActuallyDid() {
+        XCTAssertTrue(ClaudeRouter.Mechanism.clipboard.note.contains("copied"), ClaudeRouter.Mechanism.clipboard.note)
+        XCTAssertTrue(ClaudeRouter.Mechanism.clipboard.note.contains("paste"), ClaudeRouter.Mechanism.clipboard.note)
+        let prefilled = ClaudeRouter.Mechanism.prefilledTab(URL(string: "claude://code/new?q=x")!)
+        XCTAssertTrue(prefilled.note.contains("prompt"), prefilled.note)
+        XCTAssertFalse(prefilled.note.contains("clipboard"), prefilled.note)
+    }
+}

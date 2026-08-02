@@ -1,0 +1,470 @@
+import AppKit
+import ContextCore
+import SwiftUI
+
+/// The timeline track: a horizontal bar of per-app coloured segments with app-icon badges pinned
+/// along it, and a playhead handle.
+///
+/// **The track is time-linear, and that is the substantive change from the implementation this was
+/// ported from.** Theirs maps a pixel to an *array index* — `frameXPositions` is filled by walking
+/// the screenshot array and spacing entries evenly across the bar — so a three-hour gap between two
+/// consecutive rows occupies exactly the same width as a three-second one. Every consequence of that
+/// is a bug the user can see: "scroll left to go back in time" is not true, because how far back a
+/// pixel travels depends on how densely that stretch happened to be captured; a lunch break is
+/// invisible; and two frames either side of an overnight gap sit adjacent. Here x maps to
+/// `capturedAt` over the visible window and the frame is found by binary search
+/// (`Array<RewindFrame>.nearestIndex(to:)`), which makes the track an honest picture of a day and
+/// makes "zoom" mean the one obvious thing: the width of the visible time window.
+///
+/// It is drawn in AppKit rather than SwiftUI for three reasons that are all about the pointer:
+/// pixel-exact hit testing during a drag, a scroll wheel that pans, and a hover tooltip that has to
+/// be able to escape the window's rounded bounds without being clipped. The last of those is why
+/// there is a floating tooltip window here at all, and why the teardown below matters.
+final class RewindTrackView: NSView {
+
+    /// Total height of the control: the bar, plus room for the badges that straddle it and the hour
+    /// labels beneath.
+    static let height: CGFloat = 56
+    private static let barHeight: CGFloat = 26
+    private static let badgeSize: CGFloat = 18
+    /// The narrowest visible segment that may still carry a badge.
+    ///
+    /// Deliberately smaller than `badgeSize`: the badge is allowed to overhang its own segment,
+    /// because at day zoom almost every segment is narrower than 18 points and requiring containment
+    /// is what reduced a whole day to one badge. Overlap between *badges* is what actually has to be
+    /// prevented, and `badgePlacements()` does that directly.
+    ///
+    /// Tuned against a real day rather than reasoned about: 22 points drew **1** badge for a full day
+    /// of capture, 8 points drew **4**, and 4 points fills the row. A floor still exists so a segment
+    /// that is a rounding error wide cannot take a slot from a real one — and because placement is
+    /// longest-first, the slots go to the stretches worth recognising whatever this value is.
+    private static let minimumBadgeWidth: CGFloat = 4
+    private static let cornerRadius: CGFloat = 6
+
+    // MARK: - Input
+
+    var blocks: [ActivityBlock] = []
+    var frames: [RewindFrame] = []
+    var trackStart: Double = 0
+    var trackSpan: Double = 1
+    var playheadAt: Double?
+
+    /// Called with an instant when the user scrubs. The model turns it into a frame.
+    var onScrub: ((Double) -> Void)?
+    /// Called with a signed number of seconds when the user scrolls.
+    var onPan: ((Double) -> Void)?
+
+    private var tooltipWindow: NSWindow?
+    private var trackingAreaAdded: NSTrackingArea?
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Pushes new state in and redraws. One entry point so the representable cannot set half of it.
+    func apply(
+        blocks: [ActivityBlock],
+        frames: [RewindFrame],
+        trackStart: Double,
+        trackSpan: Double,
+        playheadAt: Double?
+    ) {
+        self.blocks = blocks
+        self.frames = frames
+        self.trackStart = trackStart
+        self.trackSpan = max(1, trackSpan)
+        self.playheadAt = playheadAt
+        needsDisplay = true
+    }
+
+    // MARK: - Geometry
+
+    private var barRect: NSRect {
+        NSRect(
+            x: 0,
+            y: (Self.height - Self.barHeight) / 2 - 6,
+            width: bounds.width,
+            height: Self.barHeight)
+    }
+
+    private func x(for instant: Double) -> CGFloat {
+        guard trackSpan > 0 else { return 0 }
+        return CGFloat((instant - trackStart) / trackSpan) * bounds.width
+    }
+
+    private func instant(atX x: CGFloat) -> Double {
+        guard bounds.width > 0 else { return trackStart }
+        let clamped = min(max(0, x), bounds.width)
+        return trackStart + Double(clamped / bounds.width) * trackSpan
+    }
+
+    // MARK: - Drawing
+
+    override func draw(_ dirtyRect: NSRect) {
+        let bar = barRect
+        let shape = NSBezierPath(
+            roundedRect: bar, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
+
+        // The empty channel. `quaternaryLabelColor` rather than a fixed grey: it is a faint wash of
+        // the label colour, so it darkens a light window and lightens a dark one — a track with no
+        // capture in it must read as empty in both appearances.
+        NSColor.quaternaryLabelColor.setFill()
+        shape.fill()
+
+        drawHourTicks(in: bar)
+
+        NSGraphicsContext.saveGraphicsState()
+        shape.addClip()
+        for block in blocks { draw(block, in: bar) }
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor.separatorColor.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+
+        for placement in badgePlacements() { drawBadge(placement, in: bar) }
+        drawPlayhead(in: bar)
+    }
+
+    /// Which blocks get a badge, and where.
+    ///
+    /// Placement is by descending duration with overlap rejection, rather than "every block wide
+    /// enough to hold one". The naive rule collapses at day zoom, where a 24-hour window over ~1,180
+    /// points makes even a twenty-minute stretch about 16 points wide: measured on the real database
+    /// it drew exactly **one** badge for a full day of capture, which is not the "app-icon badges
+    /// pinned at their positions along the track" the spec asks for. Longest-first is the right
+    /// priority because the stretches worth recognising at a glance are the long ones, and rejecting
+    /// a badge that would collide with one already placed keeps the row legible at every zoom
+    /// without hiding the segments themselves — a segment is always drawn, whether or not it earned
+    /// a badge.
+    private func badgePlacements() -> [(block: ActivityBlock, centreX: CGFloat)] {
+        let ordered = blocks.enumerated().sorted { lhs, rhs in
+            if lhs.element.durationSeconds != rhs.element.durationSeconds {
+                return lhs.element.durationSeconds > rhs.element.durationSeconds
+            }
+            // Stable tiebreak, so the badge row does not reshuffle between redraws.
+            return lhs.offset < rhs.offset
+        }
+
+        let spacing = Self.badgeSize + 5
+        var placed: [(block: ActivityBlock, centreX: CGFloat)] = []
+        for (_, block) in ordered {
+            let left = x(for: block.startedAt)
+            let right = x(for: block.endedAt)
+            // Off-screen entirely.
+            guard right >= 0, left <= bounds.width else { continue }
+            let visibleLeft = max(0, left)
+            let visibleRight = min(bounds.width, right)
+            guard visibleRight - visibleLeft >= Self.minimumBadgeWidth else { continue }
+
+            // Centred on the visible part, then pulled inside the track's ends so a badge on the
+            // first or last segment is not half cut off.
+            let centre = min(
+                max((visibleLeft + visibleRight) / 2, Self.badgeSize / 2 + 1),
+                bounds.width - Self.badgeSize / 2 - 1)
+            guard !placed.contains(where: { abs($0.centreX - centre) < spacing }) else { continue }
+            placed.append((block, centre))
+        }
+        return placed
+    }
+
+    private func draw(_ block: ActivityBlock, in bar: NSRect) {
+        let left = x(for: block.startedAt)
+        let right = x(for: block.endedAt)
+        guard right >= 0, left <= bounds.width else { return }
+        let clippedLeft = max(0, left)
+        // A sub-pixel block still happened; give it a visible sliver rather than nothing.
+        let width = max(2, min(bounds.width, right) - clippedLeft)
+        let rect = NSRect(x: clippedLeft, y: bar.minY, width: width, height: bar.height)
+        RewindPalette.nsColor(forApp: block.app).setFill()
+        rect.fill()
+    }
+
+    private func drawBadge(_ placement: (block: ActivityBlock, centreX: CGFloat), in bar: NSRect) {
+        let block = placement.block
+        let size = Self.badgeSize
+        let rect = NSRect(
+            x: placement.centreX - size / 2, y: bar.midY - size / 2, width: size, height: size)
+
+        // A ring in the window's own background colour, so the badge reads as sitting *on* the track
+        // rather than punched through it, and so a dark icon stays visible over a dark segment.
+        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: -1.5, dy: -1.5))
+        NSColor.controlBackgroundColor.setFill()
+        ring.fill()
+
+        let icon = MainActor.assumeIsolated {
+            AppIconCache.shared.icon(appName: block.app)
+        }
+        if let icon {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(ovalIn: rect).addClip()
+            icon.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            // The monogram fallback, in the app's own track colour so the badge still agrees with
+            // its segment.
+            RewindPalette.nsColor(forApp: block.app).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            let letter = String(block.app.prefix(1)).uppercased()
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: size * 0.55, weight: .semibold),
+                .foregroundColor: NSColor.white,
+            ]
+            let text = NSAttributedString(string: letter, attributes: attributes)
+            let textSize = text.size()
+            text.draw(
+                at: NSPoint(
+                    x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2))
+        }
+    }
+
+    /// Hour marks, which are what make the time-linearity legible: evenly spaced ticks prove the axis
+    /// is time, and a wide empty stretch between two segments is visibly a gap of a known length.
+    private func drawHourTicks(in bar: NSRect) {
+        let step = tickInterval
+        guard step > 0 else { return }
+        let first = (trackStart / step).rounded(.up) * step
+        var instant = first
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: .regular),
+            .foregroundColor: NSColor.tertiaryLabelColor,
+        ]
+        while instant <= trackStart + trackSpan {
+            let tickX = x(for: instant)
+            NSColor.separatorColor.setFill()
+            NSRect(x: tickX, y: bar.maxY, width: 1, height: 4).fill()
+
+            let label = NSAttributedString(
+                string: Self.tickFormatter.string(from: Date(timeIntervalSince1970: instant)),
+                attributes: attributes)
+            let size = label.size()
+            // Only when it fits without colliding with the view's edge.
+            if tickX - size.width / 2 >= 0, tickX + size.width / 2 <= bounds.width {
+                label.draw(at: NSPoint(x: tickX - size.width / 2, y: bar.maxY + 5))
+            }
+            instant += step
+        }
+    }
+
+    /// A tick spacing that yields roughly six to twelve marks at the current zoom, chosen from a
+    /// ladder of intervals a person actually thinks in.
+    private var tickInterval: Double {
+        let candidates: [Double] = [
+            60, 300, 600, 900, 1800, 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600,
+        ]
+        return candidates.first { trackSpan / $0 <= 12 } ?? 24 * 3600
+    }
+
+    private static let tickFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        return formatter
+    }()
+
+    private func drawPlayhead(in bar: NSRect) {
+        guard let playheadAt else { return }
+        let position = x(for: playheadAt)
+        guard position >= -1, position <= bounds.width + 1 else { return }
+
+        let width: CGFloat = 3
+        let rect = NSRect(
+            x: position - width / 2, y: bar.minY - 4, width: width, height: bar.height + 8)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 1.5, yRadius: 1.5)
+        // `labelColor` inverts with the appearance, which is what a handle over arbitrary segment
+        // colours needs — the original drew it as white at 50% and disappears on a light window.
+        NSColor.labelColor.setFill()
+        path.fill()
+        NSColor.controlBackgroundColor.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    // MARK: - Pointer
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaAdded { removeTrackingArea(trackingAreaAdded) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaAdded = area
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        scrub(to: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        scrub(to: event)
+        showTooltip(for: event)
+    }
+
+    private func scrub(to event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        onScrub?(instant(atX: point.x))
+    }
+
+    /// Scrolling left moves back in time, which the spec asks for explicitly and which is only
+    /// meaningful because the axis is time rather than an array index.
+    override func scrollWheel(with event: NSEvent) {
+        guard bounds.width > 0 else { return }
+        let deltaX = event.scrollingDeltaX
+        let deltaY = event.scrollingDeltaY
+        // Horizontal intent wins; a vertical wheel on a horizontal track still pans, because a mouse
+        // with no horizontal wheel would otherwise be unable to move at all.
+        let travel = abs(deltaX) >= abs(deltaY) ? -deltaX : -deltaY
+        let seconds = Double(travel / bounds.width) * trackSpan
+        onPan?(seconds)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        showTooltip(for: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hideTooltip()
+    }
+
+    // MARK: - Tooltip
+
+    /// The frame under the pointer, by the same time-linear mapping the scrub uses — so the tooltip
+    /// can never disagree with what a click would select.
+    private func frame(under event: NSEvent) -> RewindFrame? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = frames.nearestIndex(to: instant(atX: point.x)) else { return nil }
+        return frames[index]
+    }
+
+    private func showTooltip(for event: NSEvent) {
+        guard let frame = frame(under: event), let window else {
+            hideTooltip()
+            return
+        }
+
+        let label = "\(frame.appName)  ·  \(RewindTrackView.tooltipFormatter.string(from: Date(timeIntervalSince1970: frame.capturedAt)))"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        let text = NSAttributedString(string: label, attributes: attributes)
+        let padding = NSSize(width: 18, height: 10)
+        let size = NSSize(
+            width: text.size().width + padding.width, height: text.size().height + padding.height)
+
+        let onScreen = window.convertPoint(toScreen: event.locationInWindow)
+        let origin = NSPoint(x: onScreen.x - size.width / 2, y: onScreen.y + 26)
+
+        if let tooltipWindow {
+            tooltipWindow.setFrame(NSRect(origin: origin, size: size), display: true)
+            (tooltipWindow.contentView as? TooltipContentView)?.update(text)
+            return
+        }
+
+        let container = TooltipContentView(frame: NSRect(origin: .zero, size: size))
+        container.update(text)
+
+        let tooltip = NSWindow(
+            contentRect: NSRect(origin: origin, size: size),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false)
+        tooltip.animationBehavior = .none
+        tooltip.backgroundColor = .clear
+        tooltip.isOpaque = false
+        tooltip.level = .floating
+        tooltip.ignoresMouseEvents = true
+        tooltip.isReleasedWhenClosed = false
+        tooltip.contentView = container
+        tooltip.orderFront(nil)
+        tooltipWindow = tooltip
+    }
+
+    private func hideTooltip() {
+        tooltipWindow?.orderOut(nil)
+        tooltipWindow = nil
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        // If this view is removed from its window (e.g. the user navigates away)
+        // while a tooltip is showing, mouse-exit never fires, so the borderless
+        // floating tooltip window would be orphaned on screen. Tear it down here.
+        if newWindow == nil {
+            hideTooltip()
+        }
+    }
+
+    private static let tooltipFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm:ss a"
+        return formatter
+    }()
+}
+
+/// The tooltip's own content view. A plain `NSView` drawing a material-backed capsule rather than an
+/// `NSHostingView`, so the tooltip window has no SwiftUI in it at all — see the container-view note
+/// in `RewindWindow`.
+private final class TooltipContentView: NSView {
+    private var text = NSAttributedString()
+
+    override var isFlipped: Bool { true }
+
+    func update(_ text: NSAttributedString) {
+        self.text = text
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7)
+        NSColor.controlBackgroundColor.setFill()
+        shape.fill()
+        NSColor.separatorColor.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let size = text.size()
+        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
+    }
+}
+
+// MARK: - SwiftUI bridge
+
+/// Hosts `RewindTrackView` inside the SwiftUI chrome.
+struct RewindTrack: NSViewRepresentable {
+    let blocks: [ActivityBlock]
+    let frames: [RewindFrame]
+    let trackStart: Double
+    let trackSpan: Double
+    let playheadAt: Double?
+    let onScrub: (Double) -> Void
+    let onPan: (Double) -> Void
+
+    func makeNSView(context: Context) -> RewindTrackView {
+        let view = RewindTrackView()
+        view.onScrub = onScrub
+        view.onPan = onPan
+        return view
+    }
+
+    func updateNSView(_ view: RewindTrackView, context: Context) {
+        // Reassigned every update: the closures capture the model, and a stale one would scrub a
+        // model that is no longer the window's.
+        view.onScrub = onScrub
+        view.onPan = onPan
+        view.apply(
+            blocks: blocks,
+            frames: frames,
+            trackStart: trackStart,
+            trackSpan: trackSpan,
+            playheadAt: playheadAt)
+    }
+}

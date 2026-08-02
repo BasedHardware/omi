@@ -139,12 +139,19 @@ git init -q --bare "$TMPDIR/fallback-bare.git"
 # This contract also runs beneath `make preflight`; suppress nested Make's
 # directory banner so stdout remains the resolver value under both entrypoints.
 out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
-# Resolve the physical path because Git Bash exposes /tmp as a logical mount
-# while BASH_SOURCE resolves the same directory through its Windows path.
+# Both sides are compared as physical paths, because each platform hands back a different
+# *name* for the same directory: Git Bash exposes /tmp as a logical mount while BASH_SOURCE
+# resolves it through a Windows path, and macOS puts TMPDIR under /var, a symlink to
+# /private/var. Canonicalising only the expectation is what made this fail on every machine
+# where the resolver answered with the short name — the two strings named one file, and a
+# string compare cannot tell.
 expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
-if [ "$out" != "$expected" ]; then
+actual_path="${out#PYTHON=}"
+actual_dir="$(cd "$(dirname "$actual_path")" 2>/dev/null && pwd -P || true)"
+actual="PYTHON=${actual_dir:-$(dirname "$actual_path")}/$(basename "$actual_path")"
+if [ "$actual" != "$expected" ]; then
   echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
-  printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
+  printf 'Expected: %s\nGot:      %s (raw: %s)\n' "$expected" "$actual" "$out" >&2
   exit 1
 fi
 echo "linked-worktree repo-root fallback test passed."
