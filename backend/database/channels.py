@@ -33,8 +33,9 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
-def _binding_id(channel: str, channel_user_id: str) -> str:
-    return hashlib.sha256(f'{channel}\0{channel_user_id}'.encode('utf-8')).hexdigest()
+def _binding_id(channel: str, channel_user_id: str, channel_chat_id: Optional[str] = None) -> str:
+    identity = channel_chat_id or channel_user_id
+    return hashlib.sha256(f'{channel}\0{identity}'.encode('utf-8')).hexdigest()
 
 
 def _event_id(channel: str, provider_event_id: str) -> str:
@@ -126,7 +127,7 @@ def consume_link_token(
     consumed_at = now or datetime.now(timezone.utc)
     client = _client(firestore_client)
     token_ref = client.collection('channel_link_tokens').document(_token_hash(token))
-    binding_ref = client.collection('channel_bindings').document(_binding_id(channel, channel_user_id))
+    binding_ref = client.collection('channel_bindings').document(_binding_id(channel, channel_user_id, channel_chat_id))
 
     @firestore.transactional
     def apply(transaction: Any) -> Dict[str, Any]:
@@ -200,7 +201,9 @@ def claim_link_token(
         if not isinstance(expires_at, datetime) or expires_at <= claimed_at:
             raise ChannelLinkError('expired link token')
 
-        binding_ref = client.collection('channel_bindings').document(_binding_id(channel, channel_user_id))
+        binding_ref = client.collection('channel_bindings').document(
+            _binding_id(channel, channel_user_id, channel_chat_id)
+        )
         existing_snapshot = binding_ref.get(transaction=transaction)
         if existing_snapshot.exists:
             existing = _typed_doc(existing_snapshot)
@@ -225,19 +228,28 @@ def claim_link_token(
 def get_binding(
     channel: str,
     channel_user_id: str,
+    channel_chat_id: Optional[str] = None,
     *,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     if channel not in CHANNELS:
         return None
-    ref = _client(firestore_client).collection('channel_bindings').document(_binding_id(channel, channel_user_id))
-    snapshot = ref.get()
-    if not snapshot.exists:
-        return None
-    binding = _typed_doc(snapshot)
-    if binding.get('revoked_at') is not None:
-        return None
-    return binding
+    identities = (
+        [channel_chat_id, channel_user_id]
+        if channel_chat_id and channel_chat_id != channel_user_id
+        else [channel_user_id]
+    )
+    collection = _client(firestore_client).collection('channel_bindings')
+    for identity in identities:
+        if not identity:
+            continue
+        snapshot = collection.document(_binding_id(channel, channel_user_id, identity)).get()
+        if not snapshot.exists:
+            continue
+        binding = _typed_doc(snapshot)
+        if binding.get('revoked_at') is None:
+            return binding
+    return None
 
 
 def list_bindings(uid: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
@@ -268,14 +280,16 @@ def revoke_channel(uid: str, channel: str, *, now: Optional[datetime] = None, fi
 def revoke_binding(
     channel: str,
     channel_user_id: str,
+    channel_chat_id: Optional[str] = None,
     *,
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> bool:
-    binding = get_binding(channel, channel_user_id, firestore_client=firestore_client)
+    binding = get_binding(channel, channel_user_id, channel_chat_id, firestore_client=firestore_client)
     if not binding:
         return False
-    ref = _client(firestore_client).collection('channel_bindings').document(_binding_id(channel, channel_user_id))
+    binding_identity = binding.get('channel_chat_id') or channel_user_id
+    ref = _client(firestore_client).collection('channel_bindings').document(_binding_id(channel, binding_identity))
     ref.update({'revoked_at': now or datetime.now(timezone.utc)})
     return True
 
