@@ -562,6 +562,8 @@ async def _resolve_http_vm(uid: str) -> tuple[str, str]:
         raise HTTPException(status_code=503, detail="Agent VM credentials are unavailable")
     if not isinstance(vm_ip, str) or not _is_usable_vm_ip(vm_ip):
         vm = await _ensure_vm_running(uid, vm)
+        if vm is None:
+            raise HTTPException(status_code=503, detail="Agent VM is unavailable")
         vm_ip = vm.get("ip") if vm else None
         vm_token = vm.get("authToken") if vm else None
     if not isinstance(vm_ip, str) or not _is_usable_vm_ip(vm_ip) or not isinstance(vm_token, str) or not vm_token:
