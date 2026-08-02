@@ -369,9 +369,23 @@ struct CinematicGate {
 
     /// Read at the moment it is asked, not at construction: the flag is written by the flow this
     /// gates, and a value cached in an initialiser would be the wrong one by the time it mattered.
+    ///
+    /// **A resumed run is not a first run.** Screen Recording only applies to a process that already
+    /// had it at launch, so onboarding restarts the app on purpose — and the process that comes back
+    /// still has `context.onboarded` unset, because the flow it is resuming has not finished. Reading
+    /// that flag alone, this gate saw a fresh install and replayed the eight-second intro over a user
+    /// who was four cards in: *"it goes to the initial cinematic intro and everything, and I have to
+    /// go through everything again."*
+    ///
+    /// `OnboardingResume` is the other half of the same question, so it is asked here rather than
+    /// left to the caller. "Has this install been onboarded" and "is a run already under way" are
+    /// both reasons not to play, and a gate that knows only one of them is wrong every time the other
+    /// applies.
     var shouldPlay: Bool {
         if let resolved { return !resolved }
-        return !(defaults?.bool(forKey: Self.onboardedKey) ?? false)
+        guard let defaults else { return true }
+        guard !defaults.bool(forKey: Self.onboardedKey) else { return false }
+        return OnboardingResume(defaults: defaults).step == nil
     }
 }
 

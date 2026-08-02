@@ -117,8 +117,14 @@ struct OnboardingView: View {
     /// Not a shortcut for its own sake: the choreography sits behind sign-in, and the account state of
     /// the machine a build is being checked on is not something a self-test should have to change. It
     /// only ever *skips forward past* cards, and only when the environment variable is set.
+    /// A relaunch mid-flow resumes on the card it left; only a genuine first run starts at
+    /// `.welcome`. See `OnboardingResume` for why that record has to exist at all — granting Screen
+    /// Recording ends this process *by design*, so "the app restarted" is an ordinary event in the
+    /// middle of onboarding rather than a crash to recover from.
     @State private var step: OnboardingStep =
-        PermissionChoreography.probedCapability == nil ? .welcome : .permissions
+        PermissionChoreography.probedCapability == nil
+        ? (OnboardingResume().step ?? .welcome)
+        : .permissions
 
     /// Who asks, when the user says to, and who decides whether this card may be left. Not the view,
     /// and not a clock: an answer is terminal only when the user authored it — a grant, or an
@@ -850,6 +856,11 @@ struct OnboardingView: View {
         // Chrome, and gated as chrome: `Sound` already honours the system UI-sound setting for this
         // cue, and a failure to play it can never stop the card from changing.
         Sound.effect(.click)
+        // Written *before* the card changes, and on the transition rather than on arrival. Screen
+        // Recording ends this process to take effect, so the very next thing after some of these
+        // transitions is a relaunch — a resume point recorded afterwards would be recorded by a
+        // process that is already gone.
+        OnboardingResume().record(next)
         withAnimation(stepAnimation) { step = next }
         beginStep()
     }
@@ -984,6 +995,10 @@ struct OnboardingView: View {
             ContextLog.error("could not register as a login item", "onboarding")
         }
         UserDefaults.standard.set(true, forKey: "context.onboarded")
+        // The run is over, so the resume point is spent. Left behind it would reopen this card over
+        // a user who has finished — and `ContextApp` presents the window on *either* signal, so a
+        // stale one outlives the flag that was supposed to close the flow.
+        OnboardingResume().clear()
         // The bed is the cinematic's, and the cinematic is over. Fades rather than cuts; a stop with
         // no music playing is a no-op, so this is safe however the run got here.
         Sound.music.stop()

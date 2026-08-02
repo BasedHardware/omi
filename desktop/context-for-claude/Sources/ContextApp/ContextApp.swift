@@ -106,7 +106,14 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // writes through, which is what makes a rebind take effect without a relaunch.
             SettingsWindow.shortcutProvider = LiveShortcutBindings()
 
-            if !UserDefaults.standard.bool(forKey: Self.onboardedKey) {
+            // Two reasons to open the card, and the second exists only because onboarding can end
+            // this process on purpose: granting Screen Recording applies to the *next* launch, so
+            // the flow restarts the app mid-run. The replacement has `context.onboarded` unset — the
+            // run never finished — so the flag alone would have reopened it anyway; the resume point
+            // is what stops it reopening at the cinematic, and it is consulted here too so a run in
+            // progress is restored even if the flag had already been set.
+            let onboarded = UserDefaults.standard.bool(forKey: Self.onboardedKey)
+            if !onboarded || OnboardingResume().step != nil {
                 OnboardingWindow.present()
             }
         }
