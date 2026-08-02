@@ -89,7 +89,8 @@ if [[ "$*" == *"swift test"* ]]; then
     echo "suite missing isolated scratch path" >&2
     exit 64
   fi
-  printf '%s\t%s\n' "$suite" "$scratch_path" >>"$FAKE_XCRUN_SCRATCH_LOG"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$suite" "$scratch_path" "$HOME" "$CFFIXED_USER_HOME" "$TMPDIR" \
+    >>"$FAKE_XCRUN_SCRATCH_LOG"
   active_dir="$FAKE_XCRUN_SYNC_DIR/active"
   mkdir -p "$active_dir"
   active_marker="$active_dir/$$"
@@ -164,6 +165,14 @@ fi
 scratch_paths="$(awk -F '\t' '{print $2}' "$FAKE_XCRUN_SCRATCH_LOG" | sort -u | wc -l | tr -d ' ')"
 if [ "$scratch_paths" -lt 2 ]; then
   fail "parallel suites did not receive distinct SwiftPM scratch directories"
+fi
+runtime_homes="$(awk -F '\t' '{print $4}' "$FAKE_XCRUN_SCRATCH_LOG" | sort -u | wc -l | tr -d ' ')"
+if [ "$runtime_homes" -lt 2 ]; then
+  fail "parallel suites did not receive distinct Foundation runtime homes"
+fi
+if ! awk -F '\t' '{ expected = $4; sub(/\/home$/, "/tmp", expected); if ($5 != expected) exit 1 }' \
+  "$FAKE_XCRUN_SCRATCH_LOG"; then
+  fail "runner did not isolate CoreFoundation preferences and temporary files per worker"
 fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
