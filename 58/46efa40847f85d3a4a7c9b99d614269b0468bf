@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppReader.swift
+  s_525e97d8f6425e::t_e4958e52c3c4ba 281-382
+  s_525e97d8f6425e::t_6d47ed2ffe9245 383-384
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_525e97d8f6425e::t_fa6ab24d9e3a8e 314-317
+  s_525e97d8f6425e::t_07d992897b4a69 367,369
+  s_525e97d8f6425e::t_e5850c87dcd536 173-179,188
+  s_525e97d8f6425e::t_3c610b9acc2d7c 84-90,93-95,97,99,105-106
+  s_525e97d8f6425e::t_1be17220ee608c 431-432
+  s_525e97d8f6425e::t_c1f74547a26d68 307-313,318-361,363-366
+desktop/macos/Desktop/Tests/PeopleThreadIngestTests.swift
+  s_525e97d8f6425e::t_83c682d3e5181f 216-218
+  s_525e97d8f6425e::t_641d33cd5c24e1 223-227
+  s_525e97d8f6425e::t_afea7be9a20edc 188-215,219-222,228-237
+  s_525e97d8f6425e::t_78ae3dd33de14b 238-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5846efa40847f85d3a4a7c9b99d614269b0468bf",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

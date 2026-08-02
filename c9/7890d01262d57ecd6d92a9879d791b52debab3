@@ -1,0 +1,52 @@
+desktop/macos/Desktop/Tests/PeopleOverridesApplyTests.swift
+  s_525e97d8f6425e::t_1a9ab18c4fdb08 1-176,195-210
+  s_525e97d8f6425e::t_3105ebce0e859e 177-194
+desktop/macos/Desktop/Tests/PeopleMemoryWriterTests.swift
+  s_525e97d8f6425e::t_e51e63d923584b 1-150
+  s_525e97d8f6425e::t_e34d3ffcb8b25a 151-152
+desktop/macos/changelog/unreleased/20260727-people-relationship-memories.json
+  s_525e97d8f6425e::t_e3d981a24d4b04 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
+  s_525e97d8f6425e::t_aa7df8b7a1489a 1-196
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_525e97d8f6425e::t_581a26d9766e85 757-758
+  s_525e97d8f6425e::t_2a1c3de6554b74 807-845
+  s_525e97d8f6425e::t_1d5455325a3748 43-46
+  s_525e97d8f6425e::t_cd41dae942a1a1 657-658,663-667,669-671,675,679-680
+  s_525e97d8f6425e::t_8284402e1c6162 732-756,759-806,846-1018
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_525e97d8f6425e::t_361116eaef7e96 1025-1026
+  s_525e97d8f6425e::t_bdfac08b647481 197-201,207,230-231
+  s_525e97d8f6425e::t_be46504d674a6d 1451-1467
+  s_525e97d8f6425e::t_3c95dc1ad4aabe 19-21,27,35
+  s_525e97d8f6425e::t_8e88262e1b8d8a 1144
+  s_525e97d8f6425e::t_355a97e37af960 698-699,714-720,736-782
+  s_525e97d8f6425e::t_9bc56208d39975 497-498,783,1600-1763
+  s_525e97d8f6425e::t_8d7f8a60985041 351-352,356
+  s_525e97d8f6425e::t_325529bd9a644f 1192
+  s_525e97d8f6425e::t_0389e46ffdb080 420,428,434-496
+  s_525e97d8f6425e::t_42c6ba6d3d986f 1316,1327-1347
+  s_525e97d8f6425e::t_8d4e44b007cb29 357,499
+desktop/macos/Desktop/Sources/DefaultsKey.swift
+  s_525e97d8f6425e::t_d2de502e1a6cc7 75-78
+desktop/macos/changelog/unreleased/20260727-people-review-confirm-correct.json
+  s_525e97d8f6425e::t_d5f3fb31bde14d 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleMemoryWriter.swift
+  s_525e97d8f6425e::t_1a9b3a6a643a93 1-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c97890d01262d57ecd6d92a9879d791b52debab3",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

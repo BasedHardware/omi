@@ -1,0 +1,53 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppReader.swift
+  s_525e97d8f6425e::t_edcabd38333003 1-432
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageText.swift
+  s_525e97d8f6425e::t_5893434c812026 1-119
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_525e97d8f6425e::t_11f051b4d5c7f0 865-885,889-893
+desktop/macos/Desktop/Sources/DefaultsKey.swift
+  s_525e97d8f6425e::t_f836dc73577292 75-79
+desktop/macos/Desktop/Tests/IMessageTextTests.swift
+  s_525e97d8f6425e::t_e1901e2b27988e 130-132
+  s_525e97d8f6425e::t_100a77779cb7ee 1-18,22-24,28-30,37-40,44-129,133-137
+  s_525e97d8f6425e::t_fd2a7a94e4cd9f 19-21,25-27,31-36,41-43
+desktop/macos/Desktop/Tests/WhatsAppReaderTests.swift
+  s_525e97d8f6425e::t_290e439ac2793c 1-182
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_525e97d8f6425e::t_e8c927c14f4e9e 323-327,334
+  s_525e97d8f6425e::t_6242eeb3a22756 386-388
+  s_525e97d8f6425e::t_4ec0c15b1e475d 369-372,376,380,389
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_525e97d8f6425e::t_98e45892e217a2 251-268
+  s_525e97d8f6425e::t_aa92c68dc7c82d 465,476,485-487
+  s_525e97d8f6425e::t_7083ec295b3ebf 677
+  s_525e97d8f6425e::t_73e9ad61ac5dd6 634
+  s_525e97d8f6425e::t_f84608877b987d 543
+  s_525e97d8f6425e::t_49bde3070580a5 42-44
+  s_525e97d8f6425e::t_28cdfc2dfa1c3b 277-281
+  s_525e97d8f6425e::t_e2081b32f0b744 314-315,320-321,330-336,339,341-342,346,350-351,355,362-364,368,376-379,388-391,395-396,406-408,415-417
+  s_525e97d8f6425e::t_b467a0bcc81f68 713-721,723-726,731-742,748,753-757
+  s_525e97d8f6425e::t_2b32b14d4de872 160-165,172-175,193-198,205-207,221-225
+  s_525e97d8f6425e::t_ba635d579fe178 103-110,113
+  s_525e97d8f6425e::t_dff5d99459abdb 441-443
+  s_525e97d8f6425e::t_ed98456322bbec 226
+desktop/macos/changelog/unreleased/20260727-people-whatsapp-graph.json
+  s_525e97d8f6425e::t_59835b96545eb7 1-3
+desktop/macos/e2e/flows/people.yaml
+  s_525e97d8f6425e::t_b7ec1fc3e58615 13-14,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d61ecff0f022ab24642efb6417b1777ce1cf661a",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

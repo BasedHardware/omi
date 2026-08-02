@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_0e9ad3a205d861::t_b5b83cfb113141 151-152,159-162,164-167,180-185
+  s_0e9ad3a205d861::t_9d8a261aec9c1b 46-66
+desktop/macos/Desktop/Tests/PeopleThreadIngestTests.swift
+  s_0e9ad3a205d861::t_cb8e41ce1880e8 167-186
+desktop/macos/Desktop/Tests/PeopleGraphBuilderTests.swift
+  s_0e9ad3a205d861::t_80975b099b2678 146-172
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_0e9ad3a205d861::t_5c9cc37e8b9f03 90-95,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0de8a8448fe96ef5004edb76e3d78883de1e69a2",
+  "prompts": {},
+  "sessions": {
+    "s_0e9ad3a205d861": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d0f6918-e135-41f2-b66f-fd3775f34b29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

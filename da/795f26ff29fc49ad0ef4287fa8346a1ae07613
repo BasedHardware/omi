@@ -1,0 +1,26 @@
+backend/routers/mcp_sse.py
+  s_525e97d8f6425e::t_fec816a8124fea 927-931
+  s_525e97d8f6425e::t_ca83a0ce089b30 997-999
+backend/tests/unit/test_mcp_action_item_writes.py
+  s_525e97d8f6425e::t_2cb8777d61b2d8 159-162
+  s_525e97d8f6425e::t_a6640ffcd9b4a1 14
+  s_525e97d8f6425e::t_e382fdeea32776 488-609
+desktop/macos/e2e/flows/people.yaml
+  s_525e97d8f6425e::t_03c1215f32cd33 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "da795f26ff29fc49ad0ef4287fa8346a1ae07613",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageExporter.swift
+  s_525e97d8f6425e::t_8d5bda44ac95f4 49
+  s_525e97d8f6425e::t_b3066cbe37bf04 74-76
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_525e97d8f6425e::t_7c9fd951e3db4c 232
+  s_525e97d8f6425e::t_46cfd4116b757c 1-231,233-458
+  s_525e97d8f6425e::t_08075527642e96 459-460
+desktop/macos/Desktop/Tests/PeopleThreadIngestTests.swift
+  s_525e97d8f6425e::t_9472bc701ddff7 1-188
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_525e97d8f6425e::t_5f5dbf80974d8e 43-45,47-52
+  s_525e97d8f6425e::t_e0229149be69f3 1047-1048
+desktop/macos/Desktop/Sources/DefaultsKey.swift
+  s_525e97d8f6425e::t_b6b1366926d0a6 79-82
+desktop/macos/changelog/unreleased/20260727-people-thread-understanding.json
+  s_525e97d8f6425e::t_e05d97d1844bd2 1-3
+desktop/macos/e2e/flows/people.yaml
+  s_525e97d8f6425e::t_9ef429ee964e26 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "bccee3949dee53f59b0ed437d381eed8bb037662",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
