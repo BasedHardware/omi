@@ -145,14 +145,17 @@ jobs:
             ~/.cache/omi-swiftlint
           key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
-      - name: Restore SwiftPM build products
+      # A Desktop/.build archive is about 5.3 GB. GitHub scopes those archives
+      # to a PR ref, so they miss for normal new commits and spend over a minute
+      # uploading without reducing a subsequent run. Retain only SwiftPM's
+      # dependency cache, which is small and reusable when the manifest matches.
+      - name: Restore SwiftPM dependency cache
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: swiftpm-cache
         uses: actions/cache/restore@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode164-
@@ -198,16 +201,15 @@ jobs:
         working-directory: desktop/macos
         run: ./scripts/run-swift-ci.sh --release-notification-regression
 
-      # SwiftPM validates cached incremental state before using it. Saving after
-      # a failed test command makes the next diagnostic run reuse completed
-      # dependency and module work instead of recompiling the same test bundle.
-      - name: Save SwiftPM build products after test attempt
+      # Preserve resolved dependency downloads after a failed test command, but
+      # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
+      # ordinary new-commit runs and increases billed macOS time on every save.
+      - name: Save SwiftPM dependency cache after test attempt
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
 
       - name: Require independent macOS phase verdicts
