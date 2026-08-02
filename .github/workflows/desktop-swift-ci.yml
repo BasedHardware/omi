@@ -184,11 +184,11 @@ jobs:
         id: desktop_swift_tests
         working-directory: desktop/macos
         env:
-          # Every filtered `swift test --skip-build` process shares Desktop/.build.
-          # Parallel SwiftPM processes wait on that lock, which can exhaust the
-          # per-suite watchdog and report false test failures. Keep CI serial;
-          # local diagnosis can still opt into the faster four-worker default.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "1"
+          # Each isolated worker receives a copy-on-write clone of the prebuilt
+          # SwiftPM scratch directory, so filtered suites do not contend on the
+          # shared Desktop/.build lock. Two workers are a measured first step;
+          # do not increase without macOS-runner evidence.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
 

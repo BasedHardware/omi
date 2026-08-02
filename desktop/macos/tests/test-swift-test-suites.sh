@@ -17,6 +17,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$TMPDIR/tests" "$TMPDIR/bin"
+mkdir -p "$TMPDIR/package/.build/debug"
+touch "$TMPDIR/package/.build/debug/test-bundle-placeholder"
 cat >"$TMPDIR/tests/AlphaTests.swift" <<'SWIFT'
 import XCTest
 final class AlphaTests: XCTestCase {
@@ -72,7 +74,22 @@ for arg in "$@"; do
 done
 suite="${filter%/}"
 
+scratch_path=""
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "--scratch-path" ]; then
+    scratch_path="$arg"
+    break
+  fi
+  previous="$arg"
+done
+
 if [[ "$*" == *"swift test"* ]]; then
+  if [ -z "$scratch_path" ]; then
+    echo "suite missing isolated scratch path" >&2
+    exit 64
+  fi
+  printf '%s\t%s\n' "$suite" "$scratch_path" >>"$FAKE_XCRUN_SCRATCH_LOG"
   active_dir="$FAKE_XCRUN_SYNC_DIR/active"
   mkdir -p "$active_dir"
   active_marker="$active_dir/$$"
@@ -118,6 +135,7 @@ chmod +x "$TMPDIR/bin/xcrun"
 
 export PATH="$TMPDIR/bin:$PATH"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
+export FAKE_XCRUN_SCRATCH_LOG="$TMPDIR/xcrun-scratch.log"
 export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
@@ -142,6 +160,10 @@ if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner
 fi
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
+fi
+scratch_paths="$(awk -F '\t' '{print $2}' "$FAKE_XCRUN_SCRATCH_LOG" | sort -u | wc -l | tr -d ' ')"
+if [ "$scratch_paths" -lt 2 ]; then
+  fail "parallel suites did not receive distinct SwiftPM scratch directories"
 fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
