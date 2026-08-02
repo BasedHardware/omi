@@ -268,7 +268,7 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
     assert response.is_error is False
 
 
-def test_execute_tool_supplies_fetch_url_allowlist_from_requested_url(loaded_route_modules):
+def test_execute_tool_does_not_self_allowlist_fetch_url(loaded_route_modules):
     _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
     captured = {}
 
@@ -299,7 +299,7 @@ def test_execute_tool_supplies_fetch_url_allowlist_from_requested_url(loaded_rou
     agentic.agent_config_context.set.assert_called()
     config = agentic.agent_config_context.set.call_args.args[0]
     assert config['configurable']['user_id'] == 'uid-route'
-    assert config['configurable']['user_provided_urls'] == [requested]
+    assert 'user_provided_urls' not in config['configurable']
     assert captured['url'] == requested
 
 
