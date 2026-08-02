@@ -311,20 +311,26 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   private func processItem(_ item: PendingItem, generation: Int) async {
-    guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+    guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else {
+      requeueIfCurrentGeneration(item, mergeCompleted: item.mergeCompleted, generation: generation)
+      return
+    }
 
     var mergeCompleted = item.mergeCompleted
     do {
       if !mergeCompleted {
         let jsonText = try await extractEntities(item.input)
         guard generation == ownerGeneration else { return }
-        guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+        guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else {
+          requeueIfCurrentGeneration(item, mergeCompleted: false, generation: generation)
+          return
+        }
 
         guard let parsed = KnowledgeGraphRecordBuilder.parseExtractionJSON(jsonText) else {
           log(
             "ScreenKnowledgeGraphExtractor: invalid extraction JSON for screenshot \(item.id) — will retry"
           )
-          pendingItems.append(item)
+          requeueIfCurrentGeneration(item, mergeCompleted: false, generation: generation)
           return
         }
 
@@ -335,15 +341,22 @@ actor ScreenKnowledgeGraphExtractor {
             edges: records.edges,
             expectedOwnerID: item.ownerID,
             generation: generation)
+          mergeCompleted = true
           guard generation == ownerGeneration else { return }
-          guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+          guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else {
+            requeueIfCurrentGeneration(item, mergeCompleted: true, generation: generation)
+            return
+          }
           ChatToolExecutor.onKnowledgeGraphUpdated?()
         }
         mergeCompleted = true
       }
 
       guard generation == ownerGeneration else { return }
-      guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else { return }
+      guard await resolvedOwnerID(expectedOwnerID: item.ownerID) != nil else {
+        requeueIfCurrentGeneration(item, mergeCompleted: mergeCompleted, generation: generation)
+        return
+      }
       try await markExtracted([item.id])
       guard generation == ownerGeneration else { return }
       recentHashes.insert(item.contentHash)
@@ -362,14 +375,23 @@ actor ScreenKnowledgeGraphExtractor {
         return
       }
       log("ScreenKnowledgeGraphExtractor: extraction failed for screenshot \(item.id): \(error.localizedDescription)")
-      pendingItems.append(
-        PendingItem(
-          id: item.id,
-          input: item.input,
-          contentHash: item.contentHash,
-          ownerID: item.ownerID,
-          mergeCompleted: mergeCompleted))
+      requeueIfCurrentGeneration(item, mergeCompleted: mergeCompleted, generation: generation)
     }
+  }
+
+  private func requeueIfCurrentGeneration(
+    _ item: PendingItem,
+    mergeCompleted: Bool,
+    generation: Int
+  ) {
+    guard generation == ownerGeneration else { return }
+    pendingItems.append(
+      PendingItem(
+        id: item.id,
+        input: item.input,
+        contentHash: item.contentHash,
+        ownerID: item.ownerID,
+        mergeCompleted: mergeCompleted))
   }
 
   private func mergeGraph(

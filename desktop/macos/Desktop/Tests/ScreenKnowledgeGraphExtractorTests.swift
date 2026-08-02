@@ -317,6 +317,51 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertEqual(await marked.value, [3])
   }
 
+  func testOwnerGuardAfterMergeRequeuesMarkOnlyRetry() async {
+    let owner = LockedBox<String?>("owner-a")
+    let extractCount = LockedBox(0)
+    let mergeCount = LockedBox(0)
+    let marked = LockedBox<[Int64]>([])
+    let text = String(repeating: "merged then owner blip ", count: 3)
+
+    let extractor = ScreenKnowledgeGraphExtractor(
+      extractEntitiesForTesting: { _ in
+        await extractCount.increment()
+        return """
+          {"nodes":[{"id":"n1","label":"Acme","node_type":"organization"}],"edges":[]}
+          """
+      },
+      markExtractedForTesting: { ids in
+        await marked.append(contentsOf: ids)
+      },
+      activeOwnerIDForTesting: { await owner.value },
+      mergeGraphForTesting: { _, _, _ in
+        await mergeCount.increment()
+        await owner.set(nil)
+      },
+      ownerMatchesForTesting: { _ in true })
+
+    await extractor.queueScreenshot(
+      id: 4,
+      ocrText: text,
+      appName: "Docs",
+      windowTitle: nil,
+      expectedOwnerID: "owner-a")
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractCount.value, 1)
+    XCTAssertEqual(await mergeCount.value, 1)
+    XCTAssertTrue(await marked.value.isEmpty)
+    XCTAssertEqual(
+      await extractor.pendingCount, 1, "owner guard after merge must re-queue for mark retry")
+
+    await owner.set("owner-a")
+    await extractor.flushPendingExtractions()
+    XCTAssertEqual(await extractCount.value, 1, "re-queue after merge must not re-extract")
+    XCTAssertEqual(await mergeCount.value, 1, "re-queue after merge must not re-merge")
+    XCTAssertEqual(await marked.value, [4])
+    XCTAssertEqual(await extractor.pendingCount, 0)
+  }
+
   func testBackfillAdvancesPastStalledFlushWindow() async {
     let fetchCalls = LockedBox(0)
     let remaining = LockedBox(
