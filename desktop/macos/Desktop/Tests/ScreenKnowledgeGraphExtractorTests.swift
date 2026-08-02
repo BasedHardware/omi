@@ -626,6 +626,7 @@ final class ScreenKnowledgeGraphExtractorTests: XCTestCase {
     XCTAssertEqual(await extractor.pendingCount, 0)
   }
 
+  @MainActor
   func testSuccessfulMergeNotifiesKnowledgeGraphUI() async {
     let updates = SyncBox(0)
     ChatToolExecutor.onKnowledgeGraphUpdated = {

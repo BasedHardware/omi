@@ -347,7 +347,9 @@ actor ScreenKnowledgeGraphExtractor {
             requeueIfCurrentGeneration(item, mergeCompleted: true, generation: generation)
             return
           }
-          ChatToolExecutor.onKnowledgeGraphUpdated?()
+          await MainActor.run {
+            ChatToolExecutor.onKnowledgeGraphUpdated?()
+          }
         }
         mergeCompleted = true
       }
