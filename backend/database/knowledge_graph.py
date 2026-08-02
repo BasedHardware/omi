@@ -41,6 +41,19 @@ class MissingKnowledgeGraphEndpointsError(ValueError):
     """Raised when synced edges reference node ids that are not in Firestore yet."""
 
 
+class InvalidKnowledgeGraphDocumentIdError(ValueError):
+    """Raised when a synced knowledge-graph id cannot be used as a Firestore document id."""
+
+
+def _validated_document_id(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} must be a non-empty string")
+    normalized = value.strip()
+    if normalized in {".", ".."} or "/" in normalized or "\x00" in normalized or len(normalized.encode("utf-8")) > 1500:
+        raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} is not a valid Firestore document id")
+    return normalized
+
+
 def delete_memory_graph_assertion(uid: str, memory_id: str, *, db_client: Any = None) -> None:
     """Delete one derived assertion after its authoritative memory is fenced."""
     if not uid.strip() or not memory_id.strip():
@@ -209,6 +222,8 @@ def upsert_knowledge_node(
             node_id = str(uuid.uuid4())
         node_data['id'] = node_id
 
+    node_id = _validated_document_id(node_id, "node id")
+    node_data["id"] = node_id
     node_ref = nodes_ref.document(node_id)
     existing = node_ref.get()
 
@@ -219,6 +234,10 @@ def upsert_knowledge_node(
             node_data['id'] = node_id
             node_ref = nodes_ref.document(node_id)
             existing = node_ref.get()
+
+    node_id = _validated_document_id(node_id, "node id")
+    node_data["id"] = node_id
+    node_ref = nodes_ref.document(node_id)
 
     if existing.exists:
         existing_data: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(existing))
@@ -241,6 +260,10 @@ def upsert_knowledge_node(
                 and _as_utc(existing_updated) > _as_utc(incoming_updated)
             ):
                 node_data['updated_at'] = existing_updated
+                if 'label' in existing_data:
+                    node_data['label'] = existing_data['label']
+                if 'node_type' in existing_data:
+                    node_data['node_type'] = existing_data['node_type']
             else:
                 node_data['updated_at'] = incoming_updated
         else:
@@ -304,7 +327,7 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     edge_id = edge_data.get('id')
     if not edge_id:
         edge_id = f"{edge_data['source_id']}_{edge_data['label']}_{edge_data['target_id']}"
-    edge_id = edge_id.replace('/', '_')
+    edge_id = _validated_document_id(edge_id, "edge id")
     edge_data['id'] = edge_id
 
     edge_ref = edges_ref.document(edge_id)
@@ -903,7 +926,7 @@ def _local_kg_node_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     node_type = row.get("nodeType") or row.get("node_type") or "concept"
     aliases = _parse_aliases_json(row.get("aliasesJson") if "aliasesJson" in row else row.get("aliases_json"))
     node_data: Dict[str, Any] = {
-        "id": node_id.strip(),
+        "id": _validated_document_id(node_id, "node id"),
         "label": label.strip(),
         "node_type": node_type if isinstance(node_type, str) and node_type.strip() else "concept",
         "aliases": aliases,
@@ -935,9 +958,9 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     ):
         return None
     edge_data: Dict[str, Any] = {
-        "id": edge_id.strip(),
-        "source_id": source_id.strip(),
-        "target_id": target_id.strip(),
+        "id": _validated_document_id(edge_id, "edge id"),
+        "source_id": _validated_document_id(source_id, "source node id"),
+        "target_id": _validated_document_id(target_id, "target node id"),
         "label": label.strip(),
         "memory_ids": [],
     }
@@ -1024,6 +1047,7 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any
     merged = 0
     skipped = 0
     missing_endpoints = 0
+    pending_edges: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
             skipped += 1
@@ -1037,12 +1061,14 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Any], *, db_client: Any
         if not _knowledge_graph_endpoint_ids_exist(uid, source_id, target_id, db_client=db_client):
             missing_endpoints += 1
             continue
-        upsert_knowledge_edge(uid, edge_data, db_client=db_client)
-        merged += 1
+        pending_edges.append(edge_data)
     if missing_endpoints:
         raise MissingKnowledgeGraphEndpointsError(
             f"{missing_endpoints} local_kg edge(s) reference missing endpoint nodes"
         )
+    for edge_data in pending_edges:
+        upsert_knowledge_edge(uid, edge_data, db_client=db_client)
+        merged += 1
     eviction = enforce_knowledge_graph_caps(uid, db_client=db_client)
     return {"table": "local_kg_edges", "merged": merged, "skipped": skipped, **eviction}
 
