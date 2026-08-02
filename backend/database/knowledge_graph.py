@@ -812,7 +812,16 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any]) -> Optional[Dict[str, Any]]
     source_id = row.get("sourceNodeId") or row.get("source_node_id")
     target_id = row.get("targetNodeId") or row.get("target_node_id")
     label = row.get("label")
-    if not all(isinstance(value, str) and value.strip() for value in (edge_id, source_id, target_id, label)):
+    if (
+        not isinstance(edge_id, str)
+        or not edge_id.strip()
+        or not isinstance(source_id, str)
+        or not source_id.strip()
+        or not isinstance(target_id, str)
+        or not target_id.strip()
+        or not isinstance(label, str)
+        or not label.strip()
+    ):
         return None
     edge_data: Dict[str, Any] = {
         "id": edge_id.strip(),
@@ -872,9 +881,6 @@ def merge_synced_local_kg_nodes(uid: str, rows: Iterable[Dict[str, Any]], *, db_
     merged = 0
     skipped = 0
     for row in rows:
-        if not isinstance(row, dict):
-            skipped += 1
-            continue
         node_data = _local_kg_node_to_firestore(row)
         if node_data is None:
             skipped += 1
@@ -889,9 +895,6 @@ def merge_synced_local_kg_edges(uid: str, rows: Iterable[Dict[str, Any]], *, db_
     merged = 0
     skipped = 0
     for row in rows:
-        if not isinstance(row, dict):
-            skipped += 1
-            continue
         edge_data = _local_kg_edge_to_firestore(row)
         if edge_data is None:
             skipped += 1
