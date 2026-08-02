@@ -1,0 +1,49 @@
+desktop/context-for-claude/Tests/ContextAppTests/RewindTrackRenderHarness.swift
+  s_56918216f0e901::t_f122df76ab47fb 1-325
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindPalette.swift
+  s_56918216f0e901::t_8475a71fa82688 74-75,77-85,87-103,105-109
+  s_56918216f0e901::t_68aa9b13b9a582 203-205,208-210
+  s_56918216f0e901::t_a355e036212a9b 12,20,24-28,31-73,86,104,110-122,133,136-137,140,143-150,154-155,158-159,171-172,176,179,181,184-198,201-202,211-216,219-227,229-230,233
+  s_56918216f0e901::t_5a5112383ddd96 76
+  s_56918216f0e901::t_d84dc639c89866 234-235,237-239
+desktop/context-for-claude/Sources/ContextApp/Rewind/AppIcon.swift
+  s_56918216f0e901::t_c4ce3ccd69bd88 68-80
+  s_56918216f0e901::t_f7977199f1ab95 116-124
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindTrack.swift
+  s_56918216f0e901::t_23033d8ae1bd01 219
+  s_56918216f0e901::t_e480afd3efee5b 239-264
+  s_56918216f0e901::t_2b0ce752973925 265-266
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_56918216f0e901::t_ee2a3b885de6ed 188-189,193-196,199-201
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_56918216f0e901::t_383aadb6c4ffc7 432-434,448
+  s_56918216f0e901::t_58609f1349052e 490-492
+  s_56918216f0e901::t_35cffc61af9e68 112-115,118,120-157
+  s_56918216f0e901::t_a43f9ec75c75fe 160,162-165,167-172,174-178,183,186,191-193,195-203,209-212,214,217
+  s_56918216f0e901::t_f575951ffe8b4a 283-287
+  s_56918216f0e901::t_6a24560920e9b0 306-319,321-322
+  s_56918216f0e901::t_84a7e0d2c4799f 383
+  s_56918216f0e901::t_57e29b64a8fabf 436-440,442-444,449
+  s_56918216f0e901::t_e312fc314b4db2 471-489,493
+  s_56918216f0e901::t_1c03a3f62d36a2 370,536,538-539,541,551-555,558-563,565-567,569,571-572,574-575,577-582,584-587,589-594,597
+  s_56918216f0e901::t_3e2b7763febd3b 72-79,82,84-111,116-117,119,158-159,161,166,173,179-182,184-185,187-190,194,204-208,213,215-216,218-274
+  s_56918216f0e901::t_360e3f0099cff2 275,323,402-431,435,441,445-447,450-470,494-535,537,540,542-550,556-557,564,568,570,573,576,583,588,595-596,598
+  s_56918216f0e901::t_fda0e4b96c4d75 376-382,384-400
+  s_56918216f0e901::t_0ce347f57fd2f9 288,401,599-601
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "44e7ea6219d9fca2d52b0118ad0943e2c033eaf7",
+  "prompts": {},
+  "sessions": {
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
