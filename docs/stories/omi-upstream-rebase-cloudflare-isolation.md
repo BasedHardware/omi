@@ -4,6 +4,11 @@ title: Omi OSS最新版への再ベースとCloudflareセルフホスト差分�
 period: 2026-08
 status: active
 source_of_truth: user-approved implementation request
+pr_scope_strategy: atomic_single_pr
+pr_scope_reason: >-
+  requirements-ssot、runtime-behavior、misc-follow-upは同じread-only縦スライスの契約と接続点を検証するため不可分である。生成l10nはARB由来の派生物、overlay docは設定境界であり、これらを分割すると契約と実装の原子性が失われる。
+pr_scope_review_facets: requirements-ssot, runtime-behavior, misc-follow-up
+pr_scope_dependency_boundaries: requirements-ssot->runtime-behavior, runtime-behavior->misc-follow-up
 ---
 
 # Story: Omi OSS最新版への再ベースとCloudflareセルフホスト差分の隔離
@@ -30,6 +35,33 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 6. UI表示文言はARB正本で管理し、生成Dartはコピー移植せず `flutter gen-l10n` で再生成する。
 7. 証拠はこの新baseでのコード/テストと、旧スパイクに存在する実機・Worker・デプロイ証拠を明確に分離する。旧証拠は新baseの成功証拠にしない。
 8. Story、Spec、ADR、local overlay runbookは同一のread-only製品sliceを表す。生成l10nはARBからの機械生成物であり、独立した製品laneではない。
+
+## Delivery record
+
+### current_reality
+
+- Cloudflareへの接続は、Workerのlist/detailを読むだけの薄いUIモジュールとして実装する。コードとfocused testはローカルで確認するが、Worker deploy、iPhone実機E2E、WALのupload-ack-deleteは未確認かつ本PRの対象外である。
+
+### invariants
+
+- URLまたはtokenが未設定・不正なら接続はdisabledとし、Cloudflare requestを送らない。
+- operator actionはdart-definesでWorker URLとtokenを設定することだけであり、既存Omi機能の振る舞いは変えない。
+- 生成l10nはARB由来の派生物、local overlay documentは設定境界として扱い、Cloudflare側のデータ書込み経路を追加しない。
+
+### boundaries
+
+- Workerのdeploy、Cloudflare runtimeの稼働確認、iPhone実機E2E、WAL upload-ack-deleteの確認は、このread-only縦スライスの完了条件に含めない。
+- URL/tokenの実値、Cloudflareの運用権限、production telemetryはStoryの証拠範囲外とする。
+
+### failure_modes
+
+- URL/tokenがない場合はdisabledのままとし、既存Omi画面やデータ経路に影響を与えない。
+- timeout、non-2xx、malformed JSON、認可拒否はscoped UI errorとして当該画面に限定し、retry以外の書込み・WAL mutationを行わない。
+
+### done_evidence
+
+- current-headに束縛したVibePro artifactsとfocused test logsで、設定無効時のno request、read-only list/detail、失敗時のscoped UI errorを確認する。
+- build、HTTP 200、process起動だけではruntimeまたはiPhone E2Eの証拠にしない。Worker deploy、iPhone実機E2E、WAL upload-ack-deleteは未確認のまま残す。
 
 ## KPI と証拠境界
 
@@ -60,8 +92,27 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 - 含まない: `POST` upload、chunk/finalize、ack、ローカルWAL削除、新base iPhone E2E。これらは後続sliceでWorker idempotency契約と実機証跡を揃えて受け入れる。
 - 旧スパイクの成功記録は新baseの成功証拠へ混ぜない。
 
-## Release・rollback・observability
+## Product invariants affected
 
-- Worker deployはこのPRの対象外である。URL/tokenのdart-definesが未設定ならCloudflare機能は無効で、既存Omi会話を変更せずread requestもdata writeも行わない。
-- HTTP非2xx、timeout、不正response shapeはCloudflare read moduleのscoped errorであり、WAL upload、ack、deleteへ進まない。rollbackはdefinesを除去するか、Provider/Conversationsの薄い接続点をrevertする。
-- focused tests、analyzer、HTTP 200、buildは局所証拠にすぎない。新baseのWorker runtimeとiPhone E2Eは別途必要で、ともに `未確認` のまま維持する。
+- INV-DATA-1
+
+この不変条件は、既存データの書込み経路を変えず、Cloudflare連携を設定で無効化できるread-only境界に保つことで維持する。
+
+## Release and operations
+
+### release_note
+
+- Cloudflare連携は設定済みの場合だけ表示するread-only list/detailである。Worker deployやiPhone実機E2Eを完了として告知せず、WAL upload-ack-deleteを含む書込み機能は提供しない。
+
+### rollout_plan
+
+- operatorはdart-definesでWorker URLとtokenを設定するだけである。URL/token未設定時はdisabledとなり、既存Omi機能に影響しない。Workerのdeployやproduction rolloutはこのStoryの実行手順ではない。
+
+### rollback_instruction
+
+- dart-definesからWorker URLまたはtokenを外してdisabledへ戻す。read-only UIを外す場合も既存Omiのデータ経路を変更せず、Cloudflareへのupload、ack、deleteを実行しない。
+
+### observability_evidence
+
+- 観測証拠はscoped UI errorと、検証時のcurrent-headにbindしたVibePro artifacts/test logsに限定する。docs変更後は新HEADで再検証してbindし直すまで、既存artifactをruntime証明へ昇格させない。
+- production telemetry、Worker runtime、iPhone実機E2E、WAL upload-ack-deleteの観測は主張しない。
