@@ -181,10 +181,6 @@ void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
 
-    if (unpair_armed && (k_uptime_get() - unpair_arm_uptime_ms) > UNPAIR_ARM_WINDOW_MS) {
-        unpair_armed = false;
-    }
-
     u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
 
     ButtonEvent event = BUTTON_EVENT_NONE;
@@ -213,6 +209,11 @@ void check_button_level(struct k_work *work_item)
                 btn_last_tap_time = current_time;
             }
         }
+    }
+
+    if (unpair_armed && !btn_is_pressed &&
+        (k_uptime_get() - unpair_arm_uptime_ms) > UNPAIR_ARM_WINDOW_MS) {
+        unpair_armed = false;
     }
 
     // Check for single tap
