@@ -597,7 +597,7 @@ const omi: OmiBridgeApi = {
   signLanguageSetEnabled: (enabled: boolean) =>
     ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
   signLanguageGetEnabled: (): Promise<boolean> =>
-    ipcRenderer.invoke('integrations:signLanguage:getEnabled')
+    ipcRenderer.invoke('integrations:signLanguage:getEnabled'),
   // --- Bar chat bridge (main-window side) ---
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
     const listener = (
