@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  s_0c099cae24c74c::t_377550d1cb4452 199-200
+  s_0c099cae24c74c::t_95ab932ef2214a 242
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  s_0c099cae24c74c::t_f140afd02a0c6a 131
+  s_0c099cae24c74c::t_9616b511811775 117
+  s_0c099cae24c74c::t_ab99fb9a9e47a2 378
+  s_0c099cae24c74c::t_7ccab652c85aa7 103
+  s_0c099cae24c74c::t_1def05bab448b6 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "30f50db6e9feba1e63110914263d30990c58b04c",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
