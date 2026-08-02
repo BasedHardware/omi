@@ -1,0 +1,172 @@
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_1833483671ebc5::t_5a158896a2434c 137
+  s_1833483671ebc5::t_f34dcb71d1f825 169-171
+  s_1833483671ebc5::t_6d22455f02cfab 90
+  s_1833483671ebc5::t_6b1de0fc511287 139
+  s_1833483671ebc5::t_19f976f24100b6 216-227
+  s_1833483671ebc5::t_1197228be0fc3c 184
+  s_1833483671ebc5::t_871e37eca26aef 148
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsCapturePane.swift
+  s_1833483671ebc5::t_211ee117ac6673 37-42
+  s_1833483671ebc5::t_aa8076463231bb 43-45
+  s_5a5f9595491a28::t_ad7191ca5187fd 46-49,102-105
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/ShortcutKeyLabel.swift
+  s_1833483671ebc5::t_36e42904258c25 1-86
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutBindingsTests.swift
+  s_1833483671ebc5::t_00e40b8d6f673c 1-145,148-275,294-295,298-301,327-353,367
+  s_1833483671ebc5::t_ccb84bd6e35f99 302-326
+  s_1833483671ebc5::t_88034472f07433 146-147
+  s_1833483671ebc5::t_b2f2287439c769 276-293,296-297
+  s_1833483671ebc5::t_2b787921862cea 354-366
+  s_1833483671ebc5::t_cf9d227473e297 368-370
+  s_bae7028f52850b::t_af09fdaff9bf5f 371-444
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/LiveShortcutBindings.swift
+  s_1833483671ebc5::t_b796ef2977361f 91-101
+  s_1833483671ebc5::t_9aa118e019a0ff 62-74
+  s_1833483671ebc5::t_5cfed0749a2fe2 88
+  s_1833483671ebc5::t_6ee1fef8fb2dd9 209-213
+  s_1833483671ebc5::t_431b9a01e35c18 75-77,79
+  s_1833483671ebc5::t_f059c1c080794a 1-61,78,80-87,89-90,102-176,185-208,214-260
+  s_1833483671ebc5::t_477a5ee373b4c6 177-184
+  s_1833483671ebc5::t_e2554ccdd2c529 261-263
+  s_bae7028f52850b::t_f14347af36b215 264-300
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsExclusionsPane.swift
+  s_1833483671ebc5::t_370f8bd4af5d8e 154,165
+  s_1833483671ebc5::t_a0becf1a88059d 247-251,257
+  s_1833483671ebc5::t_58a0e8f0634e33 73-82
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/GlobalShortcuts.swift
+  s_1833483671ebc5::t_053338914df735 658,663-670,672-675,677,680
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_1833483671ebc5::t_ce351f8abe9d9b 101-108
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutBinding.swift
+  s_1833483671ebc5::t_c6e2004e69af2b 220-221,225-231
+  s_1833483671ebc5::t_867100b177b053 73-76,81-83,86-94
+  s_1833483671ebc5::t_6c04d5c30824f7 149-168,176-178
+  s_1833483671ebc5::t_f71a661e8019c9 36-47,51,58-59,62-66,69
+  s_1833483671ebc5::t_7f84d08071a5a0 254
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsRows.swift
+  s_1833483671ebc5::t_ab0df8e9be62ab 305-306
+  s_1833483671ebc5::t_6a497366041022 103,220,400,423
+  s_1833483671ebc5::t_54aa2bd59d7dbe 246-252,258-259,271,279-290,292-295,312-328,334,338-339
+  s_1833483671ebc5::t_35562145912729 424-426
+  s_818408d2c07349::t_c4e6b460f634fd 363-370,427-428,430-437,446-459
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAgentsPane.swift
+  s_1833483671ebc5::t_63c61ccf83b742 166,194,198-203
+  s_1833483671ebc5::t_1f2858ce6fbfbe 71-74,80,92-95,97-99
+  s_1833483671ebc5::t_cef2ac51b1803c 26
+  s_1833483671ebc5::t_a46ba89c07dff3 129-133,136-146,210
+  s_1833483671ebc5::t_f79d78cc4c8035 167-169
+  s_1833483671ebc5::t_eba18f3f99f9b0 5-6,13-16,20-25,28-29,36-41
+  s_1833483671ebc5::t_a3f00f65dea60c 42
+  s_1833483671ebc5::t_6495374779ffbd 191-193
+  s_1833483671ebc5::t_4cc89da2bdda34 204-209
+  s_1833483671ebc5::t_1738d4235476db 211-213
+  s_5a5f9595491a28::t_0db8d2f06e4e96 177-190,235,248,264,271
+desktop/context-for-claude/Sources/ContextApp/Settings/ExclusionsPaneModel.swift
+  s_1833483671ebc5::t_deff06353c0593 153-157,160-162
+  s_1833483671ebc5::t_be47c1084211c5 119-122,124-152,158-159,163-169,174
+  s_1833483671ebc5::t_8ad0db9c86c22e 170-173
+  s_1833483671ebc5::t_9a60af69741aab 175-177
+  s_5a5f9595491a28::t_f0acbb15c6162b 178-184
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_1833483671ebc5::t_d311690a8181f6 110-123,135
+  s_1833483671ebc5::t_f1b4c7776ea870 124-126
+  s_5a5f9595491a28::t_4639313ad08329 20-30,127-131,260,278
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_1833483671ebc5::t_b3a689911b0196 300,338
+  s_1833483671ebc5::t_a4482df90b16a6 5,11-17
+desktop/context-for-claude/Tests/ContextAppTests/SettingsTests.swift
+  s_1833483671ebc5::t_65f31c7884c00f 93-97
+  s_1833483671ebc5::t_e3da4a50f49405 62,64,66-74,81-88,90
+  s_1833483671ebc5::t_fed4f81ba8dbe1 313-315,318,320,322-329,335,339
+  s_1833483671ebc5::t_cb75ba684685e3 11-20
+  s_1833483671ebc5::t_3106d9ffafa858 263-269,271-273,282-312,319,330-334,336-337,340-385,687,765
+  s_1833483671ebc5::t_d1949e1ff0fddc 316-317,321,338
+  s_1833483671ebc5::t_823f7248cc10c5 189,205,214,217,612-613,616-618,626-673,676,681,701,763,783,789-790
+  s_1833483671ebc5::t_009783f32b518d 98
+  s_1833483671ebc5::t_1997335601182e 186-188
+  s_1833483671ebc5::t_166269b92a0fee 190-192,202-204
+  s_1833483671ebc5::t_b5769962dd21b9 206-208,211-213
+  s_1833483671ebc5::t_9f737be3f2c8f6 215-216
+  s_1833483671ebc5::t_23bf9c8c4e7d70 218-220
+  s_1833483671ebc5::t_f79ce539b1d2c6 386-387
+  s_1833483671ebc5::t_6b21ef16e66f86 674-675
+  s_1833483671ebc5::t_f264d6dbe3e457 677-680
+  s_1833483671ebc5::t_26de3d4471ec55 682-686
+  s_1833483671ebc5::t_d197edc7997437 688-690,698-700
+  s_1833483671ebc5::t_f934fe86287abf 702-704
+  s_1833483671ebc5::t_b05c268d14defb 760-762
+  s_1833483671ebc5::t_ebee02ddd6be5e 764
+  s_1833483671ebc5::t_82dfbe55d66cb9 766-768,780-782
+  s_1833483671ebc5::t_b058f8e41e66f6 784-788
+  s_5a5f9595491a28::t_c28f55dfa14887 158-169,193-201,209-210,221-228,691-697,705,755-759,769-779
+desktop/context-for-claude/docs/rewind-and-settings.md
+  s_1833483671ebc5::t_d6dc9f16bb3dee 79,83-97
+  s_1833483671ebc5::t_7e4549c1320e48 98
+  s_1833483671ebc5::t_981624526a7473 99-101
+  s_5a5f9595491a28::t_595a93a23748c8 102-109,170-188,228-238
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsStoragePane.swift
+  s_1833483671ebc5::t_2dc273a9bc5b10 207
+  s_1833483671ebc5::t_5609948496c1b7 195
+  s_1833483671ebc5::t_2b97b89b7aa7c2 177-180
+  s_1833483671ebc5::t_0de036bfa9bff2 12-20
+  s_1833483671ebc5::t_b7bd7032c0a7ca 71-73
+  s_1833483671ebc5::t_e979c484eb7961 145-146
+  s_1833483671ebc5::t_4187bc3093c673 182-184,189-194,198-202
+  s_1833483671ebc5::t_ab8397b0d52463 114,127-144
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_1833483671ebc5::t_c886275f404e85 379-385
+  s_1833483671ebc5::t_330ba21140b52f 203,528,537,543,547,593-595,599-601
+  s_1833483671ebc5::t_3084b41d5db9c2 204,352-362
+  s_1833483671ebc5::t_f9b89149ca7410 44-53
+  s_1833483671ebc5::t_034c9fac5145e8 196-197,202,229-237,251-254,258-260,273-274,278
+  s_1833483671ebc5::t_3e1b7febc59d82 198-201
+  s_1833483671ebc5::t_fd858c18cfa378 205-207
+  s_1833483671ebc5::t_4ee8ca1907dabb 363
+  s_1833483671ebc5::t_9d310b36390c1b 526-527
+  s_1833483671ebc5::t_9bcb1d23e57184 529-531,534-536
+  s_1833483671ebc5::t_7fed31ae2e3485 538-542
+  s_1833483671ebc5::t_e92329534ad184 544-546
+  s_1833483671ebc5::t_9705b3aa0584bd 548-549
+  s_5a5f9595491a28::t_f46dd26bfa45fc 208-210,213-216,532-533
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "0107547fb87b2b55e04ff43a3e2ec0d7ee987427",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_5a5f9595491a28": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a14311cc3f67c162d",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_818408d2c07349": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0989b10c20341d26",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_bae7028f52850b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a2ddb8a3140f095d0",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
