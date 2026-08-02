@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_0c099cae24c74c::t_b87495424f15b4 110
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_0c099cae24c74c::t_b5f0b63ef9ea22 396
+desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
+  s_0c099cae24c74c::t_38e72bcc7f470d 46
+  s_0c099cae24c74c::t_4e307e69e6a568 65
+  s_0c099cae24c74c::t_3f10e7831d86a6 14
+  s_0c099cae24c74c::t_e1e4b28545255f 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "78937279e4454b6d9a63208a15be1638ad82be36",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
