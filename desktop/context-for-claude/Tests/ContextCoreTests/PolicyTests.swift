@@ -97,6 +97,7 @@ final class PolicyTests: XCTestCase {
     func testInt16EncodingIsLittleEndianAndClamped() {
         // 0.5 * 32767 rounds to 16384 == 0x4000, low byte first.
         XCTAssertEqual(Array(PCM.int16LE(from: [0.5])), [0x00, 0x40])
+        XCTAssertEqual(Array(PCM.int16LE(from: [Float(16382.5 / 32767)])), [0xFF, 0x3F])
         XCTAssertEqual(Array(PCM.int16LE(from: [0])), [0x00, 0x00])
 
         // Out of range clamps rather than wrapping: a wrapped sample is a full-scale sign flip, an
