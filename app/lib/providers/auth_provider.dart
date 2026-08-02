@@ -56,10 +56,29 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void _initializeAuthListeners() {
-    // OIDC (ADR-0038): there is no Firebase session. Attaching these listeners
-    // would clear the stored OIDC token on the perpetual `user==null` branch of
-    // idTokenChanges, forcing re-login on every restart. The OIDC session lives
-    // in SharedPreferences (OidcAuthService) and refreshes via getAuthHeader.
+    // The session-expiration subscription is auth-backend agnostic and must run
+    // in BOTH modes. An OIDC session rejected after refresh (backend 401 that
+    // could not be recovered) fires the same expiration event as Firebase; if we
+    // skipped it under OIDC the home shell + in-memory user data would stay
+    // active on a dead session. Only the Firebase auth/id-token STREAM listeners
+    // below are Firebase-specific and skipped under OIDC.
+    _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
+      _requiresReauthentication = true;
+      _sessionExpirationGeneration++;
+      user = null;
+      authToken = null;
+      final rootContext = globalNavigatorKey.currentContext;
+      if (rootContext != null && rootContext.mounted) {
+        clearAllUserState(rootContext);
+      }
+      notifyListeners();
+    });
+
+    // OIDC (ADR-0038): there is no Firebase session. Attaching the Firebase
+    // auth/id-token stream listeners would clear the stored OIDC token on the
+    // perpetual `user==null` branch of idTokenChanges, forcing re-login on every
+    // restart. The OIDC session lives in SharedPreferences (OidcAuthService) and
+    // refreshes via getAuthHeader.
     if (Env.useOidc) return;
     // DEBUG: Log initial state
     Logger.debug(
@@ -104,17 +123,6 @@ class AuthenticationProvider extends BaseProvider {
             authToken = null;
             Logger.debug('Failed to get token: $e');
           }
-        }
-        notifyListeners();
-      });
-      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
-        _requiresReauthentication = true;
-        _sessionExpirationGeneration++;
-        user = null;
-        authToken = null;
-        final rootContext = globalNavigatorKey.currentContext;
-        if (rootContext != null && rootContext.mounted) {
-          clearAllUserState(rootContext);
         }
         notifyListeners();
       });
@@ -211,6 +219,10 @@ class AuthenticationProvider extends BaseProvider {
     try {
       final outcome = await OidcAuthService.instance.login();
       if (outcome.ok) {
+        // Reset AuthService's expired/refresh state. If a previous OIDC session
+        // expired, `_sessionExpired` is still latched and refreshIdToken() would
+        // short-circuit to MissingUser, leaving this fresh login unusable.
+        AuthService.instance.markAuthenticatedUser(outcome.uid!);
         authToken = SharedPreferencesUtil().authToken;
         _requiresReauthentication = false;
         NotificationService.instance.saveNotificationToken();

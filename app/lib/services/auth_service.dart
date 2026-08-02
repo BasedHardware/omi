@@ -317,7 +317,11 @@ class AuthService {
     return null;
   }
 
-  Future<AuthTokenResult> refreshIdToken() {
+  /// [forceRefresh] forces a new token from the auth backend even if the cached
+  /// one is not yet expired. Used for 401 recovery, where the backend rejected a
+  /// still-valid-looking token and replaying it would 401 again. The Firebase
+  /// path already always force-refreshes; the flag only affects the OIDC path.
+  Future<AuthTokenResult> refreshIdToken({bool forceRefresh = false}) {
     if (_sessionExpired) {
       return Future<AuthTokenResult>.value(const AuthTokenMissingUser());
     }
@@ -325,7 +329,7 @@ class AuthService {
     // MissingUser (there is no Firebase user) — the 401-recovery/getIdToken paths
     // would treat it as terminal and expire+clear the session on every restart.
     if (Env.useOidc) {
-      return OidcAuthService.instance.refresh().then<AuthTokenResult>((o) {
+      return OidcAuthService.instance.refresh(forceRefresh: forceRefresh).then<AuthTokenResult>((o) {
         final prefs = SharedPreferencesUtil();
         if (o.ok && prefs.authToken.isNotEmpty) {
           return AuthTokenSuccess(

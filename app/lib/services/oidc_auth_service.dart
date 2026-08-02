@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -25,7 +26,45 @@ class OidcAuthService {
 
   static const List<String> _scopes = <String>['openid', 'profile', 'email', 'offline_access'];
 
+  /// A stored access token counts as "fresh" only while it has at least this
+  /// much validity left. Kept in lockstep with the 5-minute renewal window the
+  /// HTTP layer enforces in `getAuthHeader` (backend/http/shared.dart): a token
+  /// the caller already considers stale must actually be refreshed here, not
+  /// returned unchanged. A forced refresh (401 recovery) bypasses this entirely.
+  static const Duration tokenValidityFloor = Duration(minutes: 5);
+
   final FlutterAppAuth _appAuth = const FlutterAppAuth();
+
+  // The long-lived `offline_access` refresh token is a replay credential: it lives in
+  // platform secure storage (iOS Keychain / Android Keystore-backed EncryptedSharedPreferences),
+  // never in ordinary SharedPreferences. Only non-secret session state (uid, access token,
+  // expiry) stays in prefs — `hasStoredSession()` reads those, so it stays synchronous.
+  static const String _refreshTokenKey = 'oidcRefreshToken';
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  Future<String> _readRefreshToken() async {
+    final secure = await _secureStorage.read(key: _refreshTokenKey);
+    if (secure != null && secure.isNotEmpty) return secure;
+    // One-time migration: an existing session may still hold the token in plaintext prefs.
+    final legacy = SharedPreferencesUtil().oidcRefreshToken;
+    if (legacy.isNotEmpty) {
+      await _secureStorage.write(key: _refreshTokenKey, value: legacy);
+      SharedPreferencesUtil().oidcRefreshToken = '';
+    }
+    return legacy;
+  }
+
+  Future<void> _writeRefreshToken(String token) async {
+    await _secureStorage.write(key: _refreshTokenKey, value: token);
+    SharedPreferencesUtil().oidcRefreshToken = ''; // scrub any legacy plaintext copy
+  }
+
+  Future<void> _deleteRefreshToken() async {
+    await _secureStorage.delete(key: _refreshTokenKey);
+    SharedPreferencesUtil().oidcRefreshToken = '';
+  }
 
   // flutter_appauth rejects concurrent token operations ("Concurrent operations
   // detected"). Serialize login/refresh so a getAuthHeader-triggered refresh
@@ -48,9 +87,19 @@ class OidcAuthService {
   /// Redirect URI registered on the OIDC client, derived from the custom scheme.
   String get _redirectUrl => '${Env.oidcRedirectScheme}:/oidc-callback';
 
-  /// AppAuth refuses cleartext by default. Permit it only when the issuer is
-  /// explicitly http:// (on-prem LAN/dev); https issuers stay strict.
-  bool get _allowInsecureConnections => (Env.oidcIssuer ?? '').startsWith('http://');
+  /// AppAuth refuses cleartext by default. A deployed issuer — including on-prem
+  /// — must use HTTPS: sending auth traffic (codes, tokens, the long-lived
+  /// refresh token) over http:// exposes it on the wire. Cleartext is permitted
+  /// ONLY for a loopback issuer (localhost/127.0.0.1/::1) in a debug build, i.e.
+  /// a developer running Keycloak on the same machine. A non-loopback http://
+  /// issuer stays strict and the AppAuth request fails closed.
+  bool get _allowInsecureConnections {
+    final issuer = Env.oidcIssuer ?? '';
+    if (!issuer.startsWith('http://')) return false;
+    final host = Uri.tryParse(issuer)?.host ?? '';
+    final isLoopback = host == 'localhost' || host == '127.0.0.1' || host == '::1';
+    return kDebugMode && isLoopback;
+  }
 
   /// Whether a usable OIDC session is currently stored. OIDC-aware replacement
   /// for the Firebase `currentUser` check, to be wired into `isSignedIn()` (S2).
@@ -77,7 +126,7 @@ class OidcAuthService {
             allowInsecureConnections: _allowInsecureConnections,
           ),
         );
-        return _persist(
+        return await _persist(
           accessToken: response.accessToken,
           idToken: response.idToken,
           refreshToken: response.refreshToken,
@@ -91,18 +140,27 @@ class OidcAuthService {
   }
 
   /// Refreshes the stored session using the OIDC refresh token.
-  Future<OidcLoginOutcome> refresh() {
+  ///
+  /// [forceRefresh] skips the "already fresh" fast-path and always hits the
+  /// provider. The HTTP layer uses it for 401 recovery: the backend rejected a
+  /// token that has not yet expired locally, so replaying the cached token would
+  /// just 401 again — a new token must be minted.
+  Future<OidcLoginOutcome> refresh({bool forceRefresh = false}) {
     if (!isConfigured) {
       return Future.value(const OidcLoginOutcome.failure('No OIDC refresh token available.'));
     }
     return _synchronized(() async {
       final prefs = SharedPreferencesUtil();
       // A concurrent login (e.g. during the redirect) may have already written a
-      // fresh token — skip the redundant refresh instead of racing AppAuth.
-      if (prefs.authToken.isNotEmpty && prefs.tokenExpirationTime > DateTime.now().millisecondsSinceEpoch + 5000) {
+      // fresh token — skip the redundant refresh instead of racing AppAuth. The
+      // freshness bar matches getAuthHeader's renewal window (tokenValidityFloor)
+      // so a token inside the 5-minute window is refreshed here, not returned
+      // stale. A forced refresh (401 recovery) always bypasses the shortcut.
+      final freshUntil = DateTime.now().add(tokenValidityFloor).millisecondsSinceEpoch;
+      if (!forceRefresh && prefs.authToken.isNotEmpty && prefs.tokenExpirationTime > freshUntil) {
         return OidcLoginOutcome.success(prefs.uid);
       }
-      final refreshToken = prefs.oidcRefreshToken;
+      final refreshToken = await _readRefreshToken();
       if (refreshToken.isEmpty) {
         return const OidcLoginOutcome.failure('No OIDC refresh token available.');
       }
@@ -117,7 +175,7 @@ class OidcAuthService {
             allowInsecureConnections: _allowInsecureConnections,
           ),
         );
-        return _persist(
+        return await _persist(
           accessToken: response.accessToken,
           idToken: response.idToken,
           refreshToken: response.refreshToken ?? refreshToken,
@@ -131,34 +189,42 @@ class OidcAuthService {
   }
 
   /// Clears the OIDC session locally (best-effort provider end-session).
-  Future<void> logout() async {
-    final idToken = _lastIdToken;
-    _lastIdToken = null;
-    if (isConfigured && idToken != null) {
-      try {
-        await _appAuth.endSession(
-          EndSessionRequest(
-            idTokenHint: idToken,
-            issuer: Env.oidcIssuer,
-            postLogoutRedirectUrl: _redirectUrl,
-            allowInsecureConnections: _allowInsecureConnections,
-          ),
-        );
-      } catch (e) {
-        debugPrint('OIDC endSession failed (ignored): $e');
+  ///
+  /// Serialized through the same token lock as login/refresh so that clearing
+  /// preferences is ordered AFTER any in-flight refresh. Without this a refresh
+  /// that completes after logout could re-persist a token (via [_persist]) and
+  /// leave the user signed in.
+  Future<void> logout() {
+    return _synchronized(() async {
+      final idToken = _lastIdToken;
+      _lastIdToken = null;
+      if (isConfigured && idToken != null) {
+        try {
+          await _appAuth.endSession(
+            EndSessionRequest(
+              idTokenHint: idToken,
+              issuer: Env.oidcIssuer,
+              postLogoutRedirectUrl: _redirectUrl,
+              allowInsecureConnections: _allowInsecureConnections,
+            ),
+          );
+        } catch (e) {
+          debugPrint('OIDC endSession failed (ignored): $e');
+        }
       }
-    }
-    SharedPreferencesUtil().clearUserDisplayCache();
+      await _deleteRefreshToken();
+      SharedPreferencesUtil().clearUserDisplayCache();
+    });
   }
 
   String? _lastIdToken;
 
-  OidcLoginOutcome _persist({
+  Future<OidcLoginOutcome> _persist({
     required String? accessToken,
     required String? idToken,
     required String? refreshToken,
     required DateTime? expiration,
-  }) {
+  }) async {
     if (accessToken == null || accessToken.isEmpty) {
       return const OidcLoginOutcome.failure('OIDC provider returned no access token.');
     }
@@ -171,7 +237,7 @@ class OidcAuthService {
     final prefs = SharedPreferencesUtil();
     prefs.uid = sub;
     prefs.authToken = accessToken;
-    prefs.oidcRefreshToken = refreshToken ?? '';
+    await _writeRefreshToken(refreshToken ?? '');
     prefs.tokenExpirationTime = expiration?.millisecondsSinceEpoch ?? 0;
     if (prefs.email.isEmpty) {
       prefs.email = claims['email']?.toString() ?? '';

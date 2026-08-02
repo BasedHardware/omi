@@ -108,6 +108,20 @@
 				<string>omirayban</string>
 			</array>
 		</dict>
+		<!-- flutter_appauth OIDC redirect (ADR-0038). Must match Android's
+		     appAuthRedirectScheme (android/app/build.gradle) and OIDC_REDIRECT_SCHEME
+		     in the env. Distinct from the `omi` scheme used by the Firebase OAuth
+		     callback (omi://auth/callback). -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>omi.oidc.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>omiauth</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>

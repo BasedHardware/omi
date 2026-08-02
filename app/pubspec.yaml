@@ -49,6 +49,7 @@ dependencies:
   sign_in_with_apple: ^6.1.1
   # OIDC client (ADR-0038) — additive; active only when AUTH_BACKEND=oidc.
   flutter_appauth: ^8.0.1
+  flutter_secure_storage: ^9.2.2
 
   # Analytics and Support
   intercom_flutter: 9.4.22

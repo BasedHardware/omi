@@ -227,7 +227,10 @@ Future<T> refreshAndReplayAfter401<T>({
 }) async {
   final service = authService ?? AuthService.instance;
   await disposeUnauthorizedResponse?.call(firstResponse);
-  final refresh = await service.refreshIdToken();
+  // 401 recovery: the backend rejected the token we just sent. Force a brand-new
+  // token — a cached-token fast-path would replay the rejected token and 401
+  // again. (Firebase already force-refreshes; this makes OIDC do the same.)
+  final refresh = await service.refreshIdToken(forceRefresh: true);
   switch (refresh) {
     case AuthTokenSuccess():
       late T replayed;
