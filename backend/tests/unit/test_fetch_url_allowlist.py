@@ -11,14 +11,14 @@ from utils.retrieval.agentic import (
     AGENT_SAFETY_INSTRUCTIONS,
     _inject_user_url_allowlist,
 )
-from utils.retrieval.fetch_url_allowlist import (
+from utils.retrieval.tools.web_tools import (
     URL_NOT_ALLOWLISTED_MESSAGE,
     extract_urls_from_text,
     extract_user_turn_urls,
+    fetch_url_tool,
     is_url_allowlisted,
     user_url_allowlist_block,
 )
-from utils.retrieval.tools.web_tools import fetch_url_tool
 
 
 def _message(text: str, sender: MessageSender = MessageSender.human) -> Message:
