@@ -1,0 +1,3 @@
+{
+  "change": "Agent sync now transmits knowledge graph data only; screenshots, OCR text, and screen embeddings no longer leave this Mac"
+}
