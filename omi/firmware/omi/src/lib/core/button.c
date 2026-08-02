@@ -111,12 +111,11 @@ static bool btn_is_pressed;
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
 static bool unpair_armed = false;
-static uint32_t unpair_arm_time = 0;
+static int64_t unpair_arm_uptime_ms = 0;
 
 static void clear_ble_bonds(void)
 {
     LOG_INF("User requested BLE bond clear");
-    notify_long_tap();
 
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     play_haptic_milli(100);
@@ -149,7 +148,7 @@ void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
 
-    if (unpair_armed && (current_time - unpair_arm_time) * BUTTON_CHECK_INTERVAL > UNPAIR_ARM_WINDOW_MS) {
+    if (unpair_armed && (k_uptime_get() - unpair_arm_uptime_ms) > UNPAIR_ARM_WINDOW_MS) {
         unpair_armed = false;
     }
 
@@ -209,7 +208,7 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("double tap detected\n");
         btn_last_event = event;
         unpair_armed = true;
-        unpair_arm_time = current_time;
+        unpair_arm_uptime_ms = k_uptime_get();
         notify_double_tap();
     }
 

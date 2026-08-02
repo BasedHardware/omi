@@ -1277,6 +1277,7 @@ static int restart_advertising(void)
 int transport_clear_bonds(void)
 {
     int err;
+    int adv_err = 0;
 
     LOG_INF("Clearing all BLE bonds");
 
@@ -1285,7 +1286,9 @@ int transport_clear_bonds(void)
         if (err && err != -ENOTCONN) {
             LOG_WRN("Disconnect before unpair failed (err %d)", err);
         }
-        k_sleep(K_MSEC(150));
+        for (int i = 0; i < 10 && current_connection != NULL; i++) {
+            k_sleep(K_MSEC(50));
+        }
     }
 
     err = bt_unpair(BT_ID_DEFAULT, NULL);
@@ -1296,7 +1299,16 @@ int transport_clear_bonds(void)
 
     LOG_INF("BLE bonds cleared");
 
-    return restart_advertising();
+    for (int i = 0; i < 5; i++) {
+        adv_err = restart_advertising();
+        if (!adv_err) {
+            return 0;
+        }
+        k_sleep(K_MSEC(100));
+    }
+
+    LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
+    return 0;
 }
 
 int transport_off()
