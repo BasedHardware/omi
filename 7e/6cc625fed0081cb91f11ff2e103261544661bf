@@ -1,0 +1,98 @@
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_1833483671ebc5::t_4aafab3ec5343e 139-170
+  s_1833483671ebc5::t_75d5cee0bcdb93 107-108
+  s_1833483671ebc5::t_2c19359b0d309a 171-172
+desktop/context-for-claude/Sources/ContextCore/ScreenSearchQueries.swift
+  s_1833483671ebc5::t_0cc4aa3214737d 227
+  s_1833483671ebc5::t_4e93f0c3c629a9 1-226,228-265
+desktop/context-for-claude/Tests/ContextAppTests/SearchRenderHarness.swift
+  s_1833483671ebc5::t_4c777f40c6f50b 61-64
+  s_1833483671ebc5::t_c394ca4011c82f 596-635
+  s_1833483671ebc5::t_902021965e8932 636
+  s_b860557b5c39e0::t_3546cb43ed39f1 71,82,98,501
+desktop/context-for-claude/Tests/ContextAppTests/SearchSurfaceTests.swift
+  s_1833483671ebc5::t_cba9372a8ae1a9 500,636-750,755,757,759-820,828,831,833-1017
+  s_1833483671ebc5::t_b551ebd72a3786 751-754,756,758
+  s_1833483671ebc5::t_421c830011e9c8 821-827,829-830,832
+  s_1833483671ebc5::t_e6d86fbca597d2 1087,1095-1121
+  s_b860557b5c39e0::t_1d53867271924e 286,307,515,583
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsView.swift
+  s_1833483671ebc5::t_675e1228f3dd88 578-630
+  s_1833483671ebc5::t_acccda6b6b7854 709-719,721-723
+  s_1833483671ebc5::t_8796f2c7453c14 469-474,478-485,488-503,507-509
+  s_1833483671ebc5::t_7eac489b123003 689
+  s_1833483671ebc5::t_b2e135ac55919f 53-86
+  s_1833483671ebc5::t_a8ee2699af12b9 504-506
+  s_1833483671ebc5::t_8462d48cd5b278 232-242
+  s_1833483671ebc5::t_c13e2e0c81f24d 27-33
+  s_1833483671ebc5::t_2ebe21e6033789 567
+  s_1833483671ebc5::t_c6af4ca0ec926b 133-134
+  s_1833483671ebc5::t_e0032a2290fd29 682-688
+  s_1833483671ebc5::t_417c1775867834 462-468,511,519,533-566,568-577,631-670
+desktop/context-for-claude/Sources/ContextApp/Search/SearchRanking.swift
+  s_1833483671ebc5::t_be94a0995f3eb6 90
+  s_1833483671ebc5::t_21c876fecb9265 1-89,91-191
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_1833483671ebc5::t_f5a7ad0ac7db5f 219-220
+  s_1833483671ebc5::t_562b355333a5d7 243-245
+  s_1833483671ebc5::t_ec0f2b9905f3cd 34-40,49-50,55
+  s_1833483671ebc5::t_a80f88b09a1576 122
+  s_1833483671ebc5::t_e2e8ebb258f6e8 110-116
+  s_1833483671ebc5::t_06e1ae3560ce0d 94,96
+  s_1833483671ebc5::t_db3fd0b44c22d0 71-75
+  s_1833483671ebc5::t_9f5e18bcd3b29d 301
+  s_1833483671ebc5::t_2eed93464327cb 310
+  s_1833483671ebc5::t_369774baf13469 121
+  s_1833483671ebc5::t_fe4c648b5105d5 15-26
+  s_1833483671ebc5::t_4c6546860587fb 145,150-154,158-159,164-165,168,170-173,190-192
+  s_1833483671ebc5::t_980fca17b78683 317-318,325-332,336
+  s_1833483671ebc5::t_e055d3b9ffeb7f 180-185,187-189,195-200
+  s_1833483671ebc5::t_e0338009e2acff 130-131
+  s_1833483671ebc5::t_cd5da3ff024438 80
+  s_1833483671ebc5::t_7da170263cd5e6 270-275
+  s_1833483671ebc5::t_efd1a7dc09060d 357-365
+desktop/context-for-claude/Sources/ContextApp/Search/SearchSurface.swift
+  s_1833483671ebc5::t_93acbe3c5b1e0c 396-405,407-423,425,427-430,436-437,439-464,467,473-476,478-479,486-487,491-494,497,503-504,506-542,544-546
+  s_1833483671ebc5::t_4dc71ff7508d15 389
+  s_1833483671ebc5::t_a576d32e6a7a03 380-388
+  s_1833483671ebc5::t_337d6db4b49d61 278-284
+  s_1833483671ebc5::t_cf0abde2fdf76a 505
+  s_1833483671ebc5::t_439d1dc272706a 31
+  s_1833483671ebc5::t_1329b42cd30d1b 773
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_1833483671ebc5::t_74923120bd0d88 263,269-273,278,281-293,299-300,304-308,310-312
+  s_1833483671ebc5::t_f9b5cb0212ffcb 126-137
+  s_1833483671ebc5::t_8c9e98b724723a 104-111
+  s_1833483671ebc5::t_4d9b294bbe6644 226-259
+  s_1833483671ebc5::t_edaac85824a09a 184,187-198
+  s_1833483671ebc5::t_afdf99ccf54ec1 313-317
+  s_1833483671ebc5::t_225460be07f527 9-15
+  s_1833483671ebc5::t_f06a3cbcf72e61 324
+  s_1833483671ebc5::t_b0e8cbcb350896 325-331
+  s_1833483671ebc5::t_247119c194c4b3 138
+  s_1833483671ebc5::t_c4b9cc4d5e95b6 260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "7e6cc625fed0081cb91f11ff2e103261544661bf",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_b860557b5c39e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a8c5640982b3e14ac",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
