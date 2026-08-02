@@ -58,6 +58,8 @@ env:
     value: "/secrets/google-credentials.json"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: AGENT_VM_BACKEND_URL
+    value: "https://api.omi.me"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:

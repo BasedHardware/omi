@@ -359,7 +359,7 @@ def test_static_all_async_gce_refreshes_use_the_critical_executor():
                 wrapped_refresh_calls.append(call)
 
     assert direct_refresh_calls == []
-    assert len(wrapped_refresh_calls) == 6
+    assert len(wrapped_refresh_calls) == 9
 
 
 def test_static_agent_proxy_uses_managed_blocking_and_named_lifetime_tasks():
@@ -435,6 +435,10 @@ async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkey
             return {
                 "status": "RUNNING",
                 "networkInterfaces": [{"networkIP": "10.0.0.5"}],
+                "metadata": {
+                    "fingerprint": "fingerprint",
+                    "items": [{"key": "backend-url", "value": "https://api.omi.me"}],
+                },
             }
 
     class Client:

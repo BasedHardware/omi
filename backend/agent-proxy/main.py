@@ -32,6 +32,7 @@ from fastapi.responses import Response
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import DELETE_FIELD, ArrayUnion
 from google.cloud.firestore_v1 import Increment, Query
+from utils.agent_vm_metadata import backend_url_metadata, validate_agent_vm_backend_url
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -163,6 +164,61 @@ def _get_gce_access_token() -> str:
     return cast(str, creds.token)
 
 
+def _agent_vm_backend_url() -> str:
+    return validate_agent_vm_backend_url(os.getenv("AGENT_VM_BACKEND_URL") or "https://api.omi.me")
+
+
+async def _wait_gce_operation(client: httpx.AsyncClient, url: str) -> None:
+    for _ in range(24):
+        await asyncio.sleep(5)
+        token = await run_blocking(critical_executor, _get_gce_access_token)
+        response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        response.raise_for_status()
+        result = response.json()
+        if result.get("status") == "DONE":
+            if result.get("error"):
+                raise RuntimeError(f"GCE operation failed: {result['error']}")
+            return
+    raise RuntimeError("GCE operation timed out")
+
+
+async def _update_backend_url_metadata(
+    client: httpx.AsyncClient, vm_name: str, zone: str, instance: Dict[str, Any]
+) -> bool:
+    body = backend_url_metadata(instance, _agent_vm_backend_url())
+    if body is None:
+        return False
+    token = await run_blocking(critical_executor, _get_gce_access_token)
+    url = (
+        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/setMetadata"
+    )
+    response = await client.post(url, headers={"Authorization": f"Bearer {token}"}, json=body)
+    if response.status_code not in (200, 204):
+        raise RuntimeError(f"GCE metadata update failed: {response.status_code} {response.text}")
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE metadata update response omitted operation name")
+    operation_url = (
+        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{operation}"
+    )
+    await _wait_gce_operation(client, operation_url)
+    return True
+
+
+async def _migrate_running_vm(vm_name: str, zone: str) -> bool:
+    token = await run_blocking(critical_executor, _get_gce_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if response.status_code == 404:
+            raise VmNotFoundError(vm_name)
+        response.raise_for_status()
+        instance = response.json()
+        if instance.get("status") != "RUNNING":
+            return False
+        return await _update_backend_url_metadata(client, vm_name, zone, instance)
+
+
 async def _check_gce_status(vm_name: str, zone: str) -> str:
     """Check the actual GCE instance status.
 
@@ -196,8 +252,14 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         instance_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
         if instance_resp.status_code == 404:
             raise VmNotFoundError(vm_name)
-        already_running = instance_resp.status_code == 200 and instance_resp.json().get("status") == "RUNNING"
+        instance = instance_resp.json() if instance_resp.status_code == 200 else {}
+        already_running = instance.get("status") == "RUNNING"
+        metadata_changed = False
+        if already_running or instance:
+            metadata_changed = await _update_backend_url_metadata(client, vm_name, zone, instance)
         if already_running:
+            if metadata_changed:
+                await _reset_vm(vm_name, zone)
             logger.info(f"[vm-start] {vm_name} is already RUNNING; resolving its external IP")
         else:
             resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
@@ -393,6 +455,28 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
             return None
 
         if gce_status == "RUNNING":
+            try:
+                metadata_changed = await _migrate_running_vm(vm_name, zone)
+            except VmNotFoundError:
+                await run_blocking(db_executor, _clear_agent_vm, uid)
+                return None
+            except Exception:
+                logger.error(f"[agent-proxy] Failed to migrate VM {vm_name} metadata", exc_info=True)
+                return None
+            if metadata_changed:
+                await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
+                try:
+                    await _reset_vm(vm_name, zone)
+                    await run_blocking(
+                        db_executor, lambda: _update_firestore_vm(uid, vm.get("ip"), "ready", restart_succeeded=True)
+                    )
+                    return await run_blocking(db_executor, _refresh_vm, uid)
+                except Exception:
+                    logger.error(f"[agent-proxy] Failed to restart migrated VM {vm_name}", exc_info=True)
+                    await run_blocking(
+                        db_executor, lambda: _update_firestore_vm(uid, None, "error", restart_failed=True)
+                    )
+                    return None
             if health_failed:
                 # VM is RUNNING but agent process is dead — hard reset
                 logger.info(f"[agent-proxy] VM {vm_name} is RUNNING but unhealthy, resetting...")

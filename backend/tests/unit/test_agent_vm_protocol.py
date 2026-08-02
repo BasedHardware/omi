@@ -9,6 +9,7 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -25,6 +26,13 @@ def load_app(tmp_path: Path):
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
     return module.app, module
+
+
+def test_runtime_rejects_untrusted_backend_origin(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BACKEND_URL", "https://attacker.example")
+
+    with pytest.raises(RuntimeError, match="not an allowed backend"):
+        load_app(tmp_path)
 
 
 def test_signed_update_manifest_requires_valid_signature_and_content_hash(tmp_path: Path, monkeypatch) -> None:

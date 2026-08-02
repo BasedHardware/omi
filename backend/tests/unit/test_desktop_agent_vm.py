@@ -9,7 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault("ENCRYPTION_SECRET", "test-encryption-secret-for-ci-only-32chars!")
 
 from routers import desktop_agent_vm
 
@@ -88,7 +88,14 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 def test_agent_vm_backend_url_requires_https(monkeypatch):
     monkeypatch.setenv("AGENT_VM_BACKEND_URL", "http://api.example.test")
 
-    with pytest.raises(RuntimeError, match="must use HTTPS"):
+    with pytest.raises(RuntimeError, match="not an allowed backend"):
+        desktop_agent_vm._backend_url()
+
+
+def test_agent_vm_backend_url_rejects_untrusted_https_origin(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_BACKEND_URL", "https://attacker.example")
+
+    with pytest.raises(RuntimeError, match="not an allowed backend"):
         desktop_agent_vm._backend_url()
 
 
@@ -138,6 +145,50 @@ async def test_provision_names_vms_by_full_width_uid_hash(monkeypatch):
     assert first.vm_name != second.vm_name
     assert len(first.vm_name) == len("omi-agent-") + 32 <= 63
     assert names == [first.vm_name, second.vm_name]
+
+
+@pytest.mark.asyncio
+async def test_create_vm_uses_private_network_without_public_interface(monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"name": "operation"}
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def gce_request(method, url, token, body=None):
+        captured.update({"method": method, "url": url, "body": body})
+        return Response()
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_access_token", lambda: "gce-token")
+    monkeypatch.setattr(desktop_agent_vm, "_gce_request", gce_request)
+
+    async def operation(*args):
+        return None
+
+    monkeypatch.setattr(desktop_agent_vm, "_operation", operation)
+
+    async def instance(*args):
+        return "RUNNING", {"networkInterfaces": [{"networkIP": "10.0.0.5"}]}
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", instance)
+
+    ip = await desktop_agent_vm._create_vm("project", "image", "bucket", "omi-agent-user", "token")
+
+    network_interface = captured["body"]["networkInterfaces"][0]
+    assert ip == "10.0.0.5"
+    assert network_interface == {"network": "global/networks/default"}
+    assert "accessConfigs" not in network_interface
+    assert {item["key"] for item in captured["body"]["metadata"]["items"]} >= {
+        "backend-url",
+        "auth-token",
+    }
 
 
 async def _stopped_instance():

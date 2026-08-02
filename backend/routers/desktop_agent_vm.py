@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
+from utils.agent_vm_metadata import backend_url_metadata, validate_agent_vm_backend_url
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
@@ -81,10 +82,7 @@ def _gcs_bucket() -> str:
 
 
 def _backend_url() -> str:
-    backend_url = (os.getenv("AGENT_VM_BACKEND_URL") or "https://api.omi.me").strip().rstrip("/")
-    if not backend_url.startswith("https://"):
-        raise RuntimeError("AGENT_VM_BACKEND_URL must use HTTPS")
-    return backend_url
+    return validate_agent_vm_backend_url(os.getenv("AGENT_VM_BACKEND_URL") or "https://api.omi.me")
 
 
 def _get_vm(uid: str) -> dict[str, Any] | None:
@@ -160,6 +158,31 @@ async def _instance(project: str, zone: str, vm_name: str) -> tuple[str, dict[st
     response.raise_for_status()
     instance = response.json()
     return str(instance.get("status", "UNKNOWN")), instance
+
+
+async def _ensure_backend_url_metadata(project: str, zone: str, vm_name: str, instance: dict[str, Any]) -> None:
+    body = backend_url_metadata(instance, _backend_url())
+    if body is None:
+        return
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/setMetadata"
+    response = await _gce_request("POST", url, token, body)
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE metadata update response omitted operation name")
+    await _operation(project, zone, operation)
+
+
+async def _reset_vm(project: str, vm_name: str, zone: str) -> None:
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/reset"
+    response = await _gce_request("POST", url, token)
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE reset response omitted operation name")
+    await _operation(project, zone, operation)
 
 
 def _is_usable_vm_ip(ip: Any) -> bool:
@@ -248,6 +271,12 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
 
 
 async def _start_vm(project: str, vm_name: str, zone: str) -> str:
+    status, instance = await _instance(project, zone, vm_name)
+    if instance is None:
+        raise RuntimeError("GCE VM is unavailable")
+    if status not in {"TERMINATED", "STOPPED"}:
+        raise RuntimeError(f"GCE VM cannot be started from status {status}")
+    await _ensure_backend_url_metadata(project, zone, vm_name, instance)
     token = await run_blocking(db_executor, _get_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/start"
     response = await _gce_request("POST", url, token)
@@ -263,6 +292,23 @@ async def _start_vm(project: str, vm_name: str, zone: str) -> str:
     if ip is None:
         raise RuntimeError("GCE restarted VM did not report a usable private IP")
     return ip
+
+
+async def _restart_vm(project: str, vm_name: str, zone: str) -> str:
+    status, instance = await _instance(project, zone, vm_name)
+    if instance is None:
+        raise RuntimeError("GCE VM is unavailable")
+    if status == "RUNNING":
+        await _ensure_backend_url_metadata(project, zone, vm_name, instance)
+        await _reset_vm(project, vm_name, zone)
+        _, instance = await _instance(project, zone, vm_name)
+        if instance is None:
+            raise RuntimeError("GCE reset VM is unavailable")
+        ip = _ip(instance)
+        if ip is None:
+            raise RuntimeError("GCE reset VM did not report a usable private IP")
+        return ip
+    return await _start_vm(project, vm_name, zone)
 
 
 async def _provision_background(
@@ -281,7 +327,7 @@ async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> Non
     zone = str(vm.get("zone") or _ZONE)
     auth_token = str(vm.get("authToken") or "")
     try:
-        ip = await _start_vm(project, vm_name, zone)
+        ip = await _restart_vm(project, vm_name, zone)
         await run_blocking(db_executor, _set_vm, uid, vm_name, "ready", auth_token, _now(), ip, zone)
     except Exception as exc:
         logger.error("Agent VM restart failed for uid=%s: %s", uid, exc)
@@ -392,8 +438,29 @@ async def get_agent_status(
         )
         background_tasks.add_task(_restart_background, uid, project, vm)
         return _response(pending)
-    if gce_status == "RUNNING" and status in {"error", "stopped"} and instance is not None:
-        pending = {**vm, "status": "provisioning", "ip": None}
-        background_tasks.add_task(_recover_background, uid, vm, _ip(instance))
-        return _response(pending)
+    if gce_status == "RUNNING" and instance is not None:
+        try:
+            needs_migration = backend_url_metadata(instance, _backend_url()) is not None
+        except RuntimeError as exc:
+            logger.warning("Agent VM metadata check failed for uid=%s: %s", uid, exc)
+            return _response(vm)
+        if needs_migration:
+            pending = {**vm, "status": "provisioning", "ip": None}
+            await run_blocking(
+                db_executor,
+                _set_vm,
+                uid,
+                str(vm["vmName"]),
+                "provisioning",
+                str(vm.get("authToken") or ""),
+                _now(),
+                None,
+                str(vm.get("zone") or _ZONE),
+            )
+            background_tasks.add_task(_restart_background, uid, project, vm)
+            return _response(pending)
+        if status in {"error", "stopped"}:
+            pending = {**vm, "status": "provisioning", "ip": None}
+            background_tasks.add_task(_recover_background, uid, vm, _ip(instance))
+            return _response(pending)
     return _response(vm)

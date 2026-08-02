@@ -52,7 +52,9 @@ class Runtime:
     def __init__(self) -> None:
         self.db_path = Path(os.environ.get("DB_PATH", str(Path.home() / "omi-agent/data/omi.db")))
         self.auth_token = os.environ.get("AUTH_TOKEN", "")
-        self.backend_url = os.environ.get("BACKEND_URL", "https://api.omi.me")
+        self.backend_url = os.environ.get("BACKEND_URL", "https://api.omi.me").strip().rstrip("/")
+        if self.backend_url not in {"https://api.omi.me", "https://api.omiapi.com"}:
+            raise RuntimeError("BACKEND_URL is not an allowed backend")
         self.db: sqlite3.Connection | None = None
         self.firebase_token: str | None = None
         self.backend_tools: list[dict[str, Any]] = []
