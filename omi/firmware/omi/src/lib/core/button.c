@@ -113,6 +113,10 @@ static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 static bool unpair_armed = false;
 static int64_t unpair_arm_uptime_ms = 0;
 
+K_THREAD_STACK_DEFINE(bond_clear_stack, 2048);
+static struct k_work_q bond_clear_work_q;
+static bool bond_clear_work_q_started;
+
 static void clear_ble_bonds(void)
 {
     LOG_INF("User requested BLE bond clear");
@@ -142,6 +146,35 @@ static void clear_ble_bonds(void)
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     play_haptic_milli(50);
 #endif
+}
+
+static void clear_ble_bonds_work(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    clear_ble_bonds();
+}
+
+static K_WORK_DEFINE(bond_clear_work, clear_ble_bonds_work);
+
+static void schedule_clear_ble_bonds(void)
+{
+    if (!bond_clear_work_q_started) {
+        k_work_queue_init(&bond_clear_work_q);
+        k_work_queue_start(&bond_clear_work_q,
+                           bond_clear_stack,
+                           K_THREAD_STACK_SIZEOF(bond_clear_stack),
+                           K_PRIO_PREEMPT(8),
+                           NULL);
+        k_thread_name_set(&bond_clear_work_q.thread, "bond_clear");
+        bond_clear_work_q_started = true;
+    }
+
+    if (k_work_busy_get(&bond_clear_work) != 0) {
+        LOG_WRN("Bond clear already in progress");
+        return;
+    }
+
+    (void) k_work_submit_to_queue(&bond_clear_work_q, &bond_clear_work);
 }
 
 void check_button_level(struct k_work *work_item)
@@ -223,7 +256,7 @@ void check_button_level(struct k_work *work_item)
         btn_last_event = event;
         if (unpair_armed) {
             unpair_armed = false;
-            clear_ble_bonds();
+            schedule_clear_ble_bonds();
         } else {
             turnoff_all();
         }

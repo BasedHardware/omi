@@ -1285,10 +1285,12 @@ static void transport_stop_pusher(void)
 {
     atomic_set(&pusher_stop_flag, 1);
     k_sem_give(&tx_queue_sem);
+    k_sem_give(&audio_tx_sem);
     int ret = k_thread_join(&pusher_thread, K_MSEC(500));
     if (ret != 0) {
         LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
         k_thread_abort(&pusher_thread);
+        (void) k_thread_join(&pusher_thread, K_FOREVER);
         LOG_WRN("Pusher thread aborted");
     }
 }
@@ -1361,7 +1363,14 @@ int transport_clear_bonds(void)
         LOG_ERR("Advertising restart failed after bond clear (err %d)", adv_err);
     }
 
-    pusher_err = transport_start_pusher();
+    pusher_err = -ESRCH;
+    for (int i = 0; i < 3; i++) {
+        pusher_err = transport_start_pusher();
+        if (!pusher_err) {
+            break;
+        }
+        k_sleep(K_MSEC(50));
+    }
     if (pusher_err) {
         LOG_ERR("Failed to restart pusher after bond clear (err %d)", pusher_err);
         return unpair_err ? unpair_err : pusher_err;
