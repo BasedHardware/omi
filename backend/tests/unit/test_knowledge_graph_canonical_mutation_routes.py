@@ -22,6 +22,29 @@ def test_canonical_delete_route_returns_conflict_without_deleting_projection(mon
     assert delete_calls == []
 
 
+def test_canonical_sync_route_returns_conflict_without_merging(monkeypatch):
+    merge_calls: list[tuple] = []
+    monkeypatch.setattr(kg_router, "pin_memory_system", lambda *_args, **_kwargs: MemorySystem.CANONICAL)
+    monkeypatch.setattr(
+        kg_router.kg_db,
+        "merge_synced_local_kg",
+        lambda *args, **kwargs: merge_calls.append((args, kwargs)) or {},
+    )
+
+    with pytest.raises(HTTPException) as error:
+        kg_router.sync_local_knowledge_graph(
+            payload=kg_router.LocalKgSyncRequest(
+                table="local_kg_nodes",
+                rows=[{"nodeId": "n1", "label": "Test"}],
+            ),
+            uid=UID,
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail == kg_router.CANONICAL_GRAPH_MUTATION_CONFLICT
+    assert merge_calls == []
+
+
 def test_canonical_rebuild_route_returns_conflict_without_deleting_or_scheduling(monkeypatch):
     delete_calls: list[str] = []
     user_name_calls: list[str] = []
