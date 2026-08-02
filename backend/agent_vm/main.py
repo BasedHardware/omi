@@ -23,15 +23,15 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 SYNC_TABLES = frozenset(
     {
-        "screenshots",
         "action_items",
         "transcription_sessions",
         "transcription_segments",
         "memories",
         "staged_tasks",
         "focus_sessions",
-        "observations",
         "live_notes",
+        "local_kg_nodes",
+        "local_kg_edges",
         "ai_user_profiles",
         "task_dedup_log",
     }

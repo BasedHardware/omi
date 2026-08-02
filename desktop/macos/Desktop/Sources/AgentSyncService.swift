@@ -17,8 +17,8 @@ private struct AgentSyncRowsPayload: @unchecked Sendable {
 /// POSTs them to the cloud agent VM's `/sync` endpoint.
 ///
 /// Cursor strategy:
-/// - Append-only tables (screenshots, transcription_segments, …): track `lastSyncedId`
-/// - Mutable tables (action_items, memories, …): track `lastSyncedUpdatedAt`
+/// - Append-only tables (transcription_segments, local_kg_edges, …): track `lastSyncedId`
+/// - Mutable tables (action_items, memories, local_kg_nodes, …): track `lastSyncedUpdatedAt`
 ///
 /// Cursors are persisted in UserDefaults so sync resumes after restart.
 actor AgentSyncService {
@@ -72,11 +72,44 @@ actor AgentSyncService {
     var lastUpdatedAt: String  // ISO-8601
   }
 
-  private struct TableSpec {
+  struct TableSpec {
     let name: String
     let appendOnly: Bool  // true = cursor by id, false = cursor by updatedAt
+    /// Explicit allow-list. When non-empty, only these columns sync.
+    /// When empty, all schema columns sync except those in `excludedColumns`.
+    let includedColumns: [String]
     let excludedColumns: Set<String>
   }
+
+  /// Resolve which columns to include in a sync payload for a table.
+  static func resolveSyncColumns(spec: TableSpec, schemaColumns: [String]) -> [String] {
+    if !spec.includedColumns.isEmpty {
+      let schema = Set(schemaColumns)
+      return spec.includedColumns.filter { schema.contains($0) }
+    }
+    return schemaColumns.filter { !spec.excludedColumns.contains($0) }
+  }
+
+  /// Screen-capture fields that must never appear in agent-VM sync payloads.
+  static let forbiddenSyncFieldNames: Set<String> = [
+    "ocrText", "ocrDataJson", "imagePath", "videoChunkPath", "embedding",
+  ]
+
+  static var syncedTableNames: [String] { tableSpecs.map(\.name) }
+
+  /// Tables with an explicit column allow-list (new columns never sync by default).
+  static var graphSyncTableNames: [String] {
+    tableSpecs.filter { !$0.includedColumns.isEmpty }.map(\.name)
+  }
+
+  static func resolvedColumnsForTable(_ name: String, schemaColumns: [String]) -> [String]? {
+    guard let spec = tableSpecs.first(where: { $0.name == name }) else { return nil }
+    return resolveSyncColumns(spec: spec, schemaColumns: schemaColumns)
+  }
+
+  #if DEBUG
+    static var tableSpecsForTesting: [TableSpec] { tableSpecs }
+  #endif
 
   /// Recovery state belongs to the effective owner, not to a particular loop
   /// task or aggregate sync result. A missing required table has its own
@@ -139,26 +172,35 @@ actor AgentSyncService {
 
   private static let tableSpecs: [TableSpec] = [
     // Mutable (cursor by updatedAt) — sessions before segments (FK dependency)
-    TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
+    TableSpec(name: "transcription_sessions", appendOnly: false, includedColumns: [], excludedColumns: []),
     TableSpec(
       name: "action_items", appendOnly: false,
+      includedColumns: [],
       excludedColumns: [
         "agentStatus", "agentSessionName", "agentPrompt", "agentPlan",
         "agentStartedAt", "agentCompletedAt", "agentEditedFilesJson",
         "chatSessionId",
       ]),
-    TableSpec(name: "memories", appendOnly: false, excludedColumns: []),
-    TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
-    TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
+    TableSpec(name: "memories", appendOnly: false, includedColumns: [], excludedColumns: []),
+    TableSpec(name: "staged_tasks", appendOnly: false, includedColumns: [], excludedColumns: []),
+    TableSpec(name: "live_notes", appendOnly: false, includedColumns: [], excludedColumns: []),
     // Append-only (cursor by id) — segments after sessions
+    TableSpec(name: "transcription_segments", appendOnly: true, includedColumns: [], excludedColumns: []),
+    TableSpec(name: "focus_sessions", appendOnly: true, includedColumns: [], excludedColumns: []),
+    // Memory graph — derived facts only; no screenshots/OCR/images (see HANDOFF.md Path 1)
     TableSpec(
-      name: "screenshots", appendOnly: true,
-      excludedColumns: [
-        "ocrDataJson"
-      ]),
-    TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
+      name: "local_kg_nodes", appendOnly: false,
+      includedColumns: [
+        "id", "nodeId", "label", "nodeType", "aliasesJson", "sourceFileIds",
+        "createdAt", "updatedAt",
+      ],
+      excludedColumns: []),
+    TableSpec(
+      name: "local_kg_edges", appendOnly: true,
+      includedColumns: [
+        "id", "edgeId", "sourceNodeId", "targetNodeId", "label", "createdAt",
+      ],
+      excludedColumns: []),
   ]
 
   private let tables = AgentSyncService.tableSpecs
@@ -562,7 +604,7 @@ actor AgentSyncService {
         let fetched: [String] = try await dbPool.read { db in
           let columnInfos = try Row.fetchAll(db, sql: "PRAGMA table_info('\(spec.name)')")
           let allColumns = columnInfos.compactMap { $0["name"] as? String }
-          return allColumns.filter { !spec.excludedColumns.contains($0) }
+          return Self.resolveSyncColumns(spec: spec, schemaColumns: allColumns)
         }
         await RewindDatabase.shared.reportQuerySuccess()
         guard syncGeneration == generation else { return 0 }

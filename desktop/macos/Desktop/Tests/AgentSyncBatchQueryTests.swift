@@ -378,7 +378,7 @@ final class AgentSyncBatchQueryTests: XCTestCase {
 
   func testAppendOnlyTablePagesById() {
     let (sql, args) = AgentSyncService.buildBatchQuery(
-      tableName: "screenshots",
+      tableName: "local_kg_edges",
       selectCols: "\"id\"",
       appendOnly: true,
       lastId: 7,
@@ -389,6 +389,35 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     XCTAssertTrue(sql.contains("WHERE id > ? ORDER BY id ASC"), sql)
     XCTAssertFalse(sql.contains("updatedAt"), sql)
     XCTAssertEqual(args, [.int(7), .int(100)])
+  }
+
+  func testSyncedTablesExcludeScreenCaptureTables() {
+    let synced = Set(AgentSyncService.syncedTableNames)
+    XCTAssertFalse(synced.contains("screenshots"), "screenshots must not sync — OCR/images/embeddings stay local")
+    XCTAssertFalse(synced.contains("observations"), "observations must not sync — screen context stays local")
+    XCTAssertTrue(synced.contains("local_kg_nodes"))
+    XCTAssertTrue(synced.contains("local_kg_edges"))
+  }
+
+  func testGraphTableSpecsUseExplicitAllowList() {
+    XCTAssertEqual(
+      Set(AgentSyncService.graphSyncTableNames),
+      Set(["local_kg_nodes", "local_kg_edges"]))
+  }
+
+  func testResolvedSyncColumnsExcludeForbiddenScreenFields() {
+    let poisonSchema = [
+      "id", "ocrText", "ocrDataJson", "imagePath", "videoChunkPath", "embedding",
+      "updatedAt", "createdAt", "description", "nodeId", "label",
+    ]
+    for table in AgentSyncService.graphSyncTableNames {
+      let resolved = Set(AgentSyncService.resolvedColumnsForTable(table, schemaColumns: poisonSchema) ?? [])
+      for forbidden in AgentSyncService.forbiddenSyncFieldNames {
+        XCTAssertFalse(
+          resolved.contains(forbidden),
+          "Table \(table) must not sync column \(forbidden)")
+      }
+    }
   }
 
   @MainActor
@@ -422,6 +451,146 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     XCTAssertEqual(requestURLs.first?.path, "/auth")
   }
 }
+
+#if DEBUG
+  private final class AgentSyncEgressProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var payloads: [[String: Any]] = []
+
+    func respond(to request: URLRequest) throws -> (Data, URLResponse) {
+      let url = try XCTUnwrap(request.url)
+      switch url.path {
+      case "/auth":
+        return (Data(), response(url, status: 200))
+      case "/sync":
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        lock.withLock { payloads.append(json) }
+        return (Data(), response(url, status: 200))
+      default:
+        return (Data(), response(url, status: 404))
+      }
+    }
+
+    func capturedPayloads() -> [[String: Any]] {
+      lock.withLock { payloads }
+    }
+
+    private func response(_ url: URL, status: Int) -> URLResponse {
+      HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+        ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+    }
+  }
+
+  /// Integration guard: even when screenshots/observations rows exist locally,
+  /// agent-VM sync must never POST OCR, image paths, or embedding blobs.
+  final class AgentSyncEgressTests: XCTestCase {
+    private var storageFixture: RewindStorageTestIsolation.Fixture?
+    private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+
+    override func setUp() async throws {
+      try await super.setUp()
+      let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-egress")
+      storageFixture = fixture
+      authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
+      await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
+      try await insertLocalScreenCaptureRows()
+      try await insertGraphRows()
+    }
+
+    override func tearDown() async throws {
+      if let authSnapshot {
+        await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+      }
+      await RewindStorageTestIsolation.tearDown(userDir: storageFixture?.userDir)
+      try await super.tearDown()
+    }
+
+    func testSyncPayloadExcludesScreenCaptureFields() async {
+      let probe = AgentSyncEgressProbe()
+      let service = AgentSyncService(
+        networkHooks: AgentSyncService.NetworkHooks(
+          fetchIDToken: { "test-firebase-token" },
+          dataForRequest: { request in try probe.respond(to: request) },
+          reuploadDatabase: { _, _ in true },
+          now: Date.init,
+          tableSyncEnabled: true))
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.stop(flushPendingChanges: false)
+
+      let payloads = probe.capturedPayloads()
+      XCTAssertFalse(payloads.isEmpty, "Sync tick should POST at least one table")
+
+      let syncedTables = Set(payloads.compactMap { $0["table"] as? String })
+      XCTAssertFalse(syncedTables.contains("screenshots"))
+      XCTAssertFalse(syncedTables.contains("observations"))
+
+      let forbidden = AgentSyncService.forbiddenSyncFieldNames
+      for payload in payloads {
+        let table = payload["table"] as? String ?? "<unknown>"
+        let rows = payload["rows"] as? [[String: Any]] ?? []
+        for row in rows {
+          for key in row.keys {
+            XCTAssertFalse(
+              forbidden.contains(key),
+              "Sync payload for \(table) must not include forbidden field \(key)")
+          }
+        }
+      }
+    }
+
+    private func insertLocalScreenCaptureRows() async throws {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return XCTFail("Rewind database should be initialized")
+      }
+      let now = Date(timeIntervalSince1970: 1_700_000_000)
+      let fakeEmbedding = Data(repeating: 0xAB, count: 12_288)
+      try await dbQueue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO screenshots (
+              timestamp, appName, windowTitle, imagePath, ocrText, ocrDataJson, isIndexed, embedding
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+          arguments: [
+            now, "Safari", "Secret Page", "/tmp/leak.jpg", "CONFIDENTIAL OCR TEXT",
+            "{\"lines\":[]}", false, fakeEmbedding,
+          ])
+        try db.execute(
+          sql: """
+            INSERT INTO observations (
+              screenshotId, appName, contextSummary, currentActivity, hasTask, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+          arguments: [1, "Safari", "Reading docs", "Browsing", false, now])
+      }
+    }
+
+    private func insertGraphRows() async throws {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return XCTFail("Rewind database should be initialized")
+      }
+      let now = Date(timeIntervalSince1970: 1_700_000_000)
+      try await dbQueue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO local_kg_nodes (
+              nodeId, label, nodeType, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+          arguments: ["node-1", "Example Entity", "concept", now, now])
+        try db.execute(
+          sql: """
+            INSERT INTO local_kg_edges (
+              edgeId, sourceNodeId, targetNodeId, label, createdAt
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+          arguments: ["edge-1", "node-1", "node-2", "related_to", now])
+      }
+    }
+  }
+#endif
 
 #if DEBUG
   // omi-release-compile: this suite drives AgentSyncService's DEBUG-only
