@@ -422,10 +422,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     // Reconciles a persisted fair-use cooldown the server may already have
     // lifted; without it a stale local deadline outlives the restriction.
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return const RecordingTransferDrainResult.skipped();
-    }
+    // Deliberately does not gate the drain: pulling audio off the device
+    // consumes no upload quota, and the upload phases carry their own guard.
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return const RecordingTransferDrainResult.contended();
 
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -514,10 +514,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> _syncWalsDirect() async {
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return;
-    }
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -534,10 +532,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return;
-    }
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),

@@ -618,6 +618,10 @@ class LocalWalSyncImpl implements LocalWalSync {
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
+    // A conversation whose first batch uploaded unclaimed stays unclaimable for
+    // the rest of the drain: the manifest is immutable per conversation, so a
+    // later remainder must not claim one covering only part of it.
+    final unclaimableConversationIds = <String>{};
     while (true) {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
@@ -633,11 +637,16 @@ class LocalWalSyncImpl implements LocalWalSync {
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
-      final claimLiveCapture = canClaimLiveCapture(
-        batch,
-        candidates.where((wal) => wal.conversationId == batch.first.conversationId).toList(),
-        batchNowSeconds,
-      );
+      final batchConversationId = batch.first.conversationId;
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+          canClaimLiveCapture(
+            batch,
+            candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
+            batchNowSeconds,
+          );
+      if (!claimLiveCapture && batchConversationId != null) {
+        unclaimableConversationIds.add(batchConversationId);
+      }
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {
