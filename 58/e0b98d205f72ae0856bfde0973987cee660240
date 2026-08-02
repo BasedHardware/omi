@@ -1,0 +1,39 @@
+desktop/context-for-claude/Tests/ContextAppTests/SearchRenderHarness.swift
+  s_56918216f0e901::t_5fe3f84036b3f9 65-72,549-566
+desktop/context-for-claude/Tests/ContextAppTests/SearchSurfaceTests.swift
+  s_56918216f0e901::t_b217cf4ff94ee0 137,143-148,151-155,166-373
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_56918216f0e901::t_086bea6133d117 122,223-224,249,274-283,321,329,336,342,347,372,374-383
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_4f9ecb5b809719::t_d84d827d244e92 92-107,138-155,260-276,285-294,296-326,330-335,338-364
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsView.swift
+  s_4f9ecb5b809719::t_e256eee061ec97 95-99,102-128,140-148,175-184,266-272,275-296,298-301
+desktop/context-for-claude/Sources/ContextApp/Search/SearchSurface.swift
+  s_4f9ecb5b809719::t_a0ef76ffd6a2dc 754-774
+desktop/context-for-claude/Tests/ContextAppTests/TimelineHandoffTests.swift
+  s_4f9ecb5b809719::t_94310bb59fe0c9 375,379-386,389,397,400-402,404,407,411-414,418,423,456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "58e0b98d205f72ae0856bfde0973987cee660240",
+  "prompts": {},
+  "sessions": {
+    "s_4f9ecb5b809719": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a650996b04255b59f",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
