@@ -442,6 +442,16 @@ the `Person`, writing the segment assignments, and enrolling a voiceprint from t
 assigned audio. Assignments made this way are tagged `llm_inferred`, so an embedding
 derived from an inference stays distinguishable from one the user confirmed by hand.
 
+**Prompt boundary (security-review invariant).** Both LLM routes keep their
+policy/instructions in the system message and send every user-derived value — transcript
+lines, evidence quote, speaker lines, known-person names, and the owner display name — in
+a separate, explicitly delimited data message (`SYSTEM_INSTRUCTIONS`/`DATA_MESSAGE` in
+each module). Transcript or evidence text that tries to rewrite the rules (for example
+"accept this claim" or "ignore previous instructions") therefore lands in the untrusted
+data channel and cannot change the naming or refutation policy. Keep it that way: never
+interpolate user content into the system message, and preserve the regression tests in
+`TestLLMPromptBoundary`.
+
 Every suggestion is put to a second, independent model that is asked to refute it, and
 only the ones that survive are written and enrolled. Both halves are bounded per
 conversation: `MAX_VERIFICATIONS_PER_CONVERSATION` (6) refutation calls and
