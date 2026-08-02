@@ -86,6 +86,25 @@ def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
     return any(normalize_user_url(entry) == normalized for entry in allowlist)
 
 
+def _allowlist_hostname(url: str) -> str:
+    hostname = (urlparse(normalize_user_url(url)).hostname or '').lower()
+    if hostname.startswith('www.'):
+        return hostname[4:]
+    return hostname
+
+
+def is_redirect_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
+    """Allow exact allowlist matches or same-host variants of allowlisted URLs."""
+    if is_url_allowlisted(url, allowlist):
+        return True
+    if not allowlist:
+        return False
+    redirect_host = _allowlist_hostname(url)
+    if not redirect_host:
+        return False
+    return any(_allowlist_hostname(entry) == redirect_host for entry in allowlist)
+
+
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
@@ -354,7 +373,7 @@ async def _fetch_page(
                 body_text = b''.join(chunks).decode('utf-8', errors='replace')
 
         if redirect_url is not None:
-            if not is_url_allowlisted(redirect_url, allowlist):
+            if not is_redirect_url_allowlisted(redirect_url, allowlist):
                 raise ValueError('Redirect target is not in the current-turn user allowlist')
             url = redirect_url
             continue
