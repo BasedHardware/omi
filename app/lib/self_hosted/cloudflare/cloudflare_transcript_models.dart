@@ -13,7 +13,7 @@ class CloudflareTranscriptSession {
       status: json['status'] as String? ?? 'unknown',
       createdAt: _parseDate(json['created_at']),
       recordedAt: _parseDate(json['recorded_at']),
-      characterCount: _parseInt(json['character_count']),
+      characterCount: _parseInt(json['transcript_char_count']) ?? _parseInt(json['character_count']),
     );
   }
 

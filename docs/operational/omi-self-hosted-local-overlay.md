@@ -8,3 +8,9 @@
 - 追跡対象に追加するのは設定キーの契約とテストのみで、値・bundle id・チームID・証明書・entitlementの実体は含めない。
 
 実機overlayの準備、Worker認証、デプロイはこのrepositoryのテスト成功と別の証拠として扱う。
+
+## Current Cloudflare transcript slice boundary
+
+- このPRはCloudflare Workerのread-only transcript一覧・詳細と、将来のWAL接続のno-op boundaryだけを扱う。
+- 音声upload、chunk/finalize、ack、ローカルWAL削除、新base iPhone E2Eは後続sliceであり、この文書または本PRのテスト成功から完了を主張しない。
+- 旧スパイクの端末/Worker成功は新baseの証拠ではない。新baseで同じ実機経路を再実行するまで `未確認` とする。

@@ -22,12 +22,10 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/self_hosted/cloudflare/cloudflare_transcript_provider.dart';
-import 'package:omi/self_hosted/cloudflare/cloudflare_transcripts_page.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/conversations_section_header.dart';
 import 'widgets/empty_conversations.dart';
 
 class ConversationsPage extends StatefulWidget {
@@ -327,46 +325,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 },
               ),
 
-              // Section header - show "Daily Recaps" or "Conversations" with optional recording pill.
-              // Hidden entirely when the user has zero non-discarded
-              // conversations (and isn't on the Daily Recaps view) — those
-              // users get the empty-state hero below instead.
-              if (convoProvider.showDailySummaries ||
-                  _nonDiscardedConversationCount(convoProvider) > 0 ||
-                  convoProvider.isLoadingConversations ||
-                  convoProvider.isFetchingConversations ||
-                  _hasActiveFilter(convoProvider))
-                SliverToBoxAdapter(
-                  child: Builder(
-                    builder: (context) => Padding(
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 16, bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                          if (!convoProvider.showDailySummaries)
-                            Consumer<CloudflareTranscriptProvider>(
-                              builder: (context, provider, _) {
-                                if (!provider.enabled) return const SizedBox.shrink();
-                                return IconButton(
-                                  key: const Key('cloudflare_transcripts_entry'),
-                                  tooltip: context.l10n.transcriptTab,
-                                  icon: const Icon(Icons.subject_outlined),
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute<void>(builder: (_) => const CloudflareTranscriptsPage()),
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+              // Keep the Cloudflare entry available even before Omi has a
+              // conversation. With Cloudflare disabled, this remains hidden
+              // for the original zero-conversation empty state.
+              SliverToBoxAdapter(
+                child: ConversationsSectionHeader(
+                  showDailySummaries: convoProvider.showDailySummaries,
+                  hasOmiConversationState: _nonDiscardedConversationCount(convoProvider) > 0 ||
+                      convoProvider.isLoadingConversations ||
+                      convoProvider.isFetchingConversations ||
+                      _hasActiveFilter(convoProvider),
                 ),
+              ),
 
               // Folder tabs - hide when showing daily recaps OR when the user
               // has no conversations yet (matches the title). Keep chips

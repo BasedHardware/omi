@@ -38,4 +38,4 @@ Graphifyでは `ConversationsPage`、`LocalWalSyncImpl`、`CaptureController`、
 
 ## Current slice status
 
-Cloudflare transcriptのread moduleとConversations入口だけを実装する。WAL adapterは設定無効時を含むcontract/test seamであり、`LocalWalSyncImpl` からの呼出し、Worker upload、ack、削除は未実装である。
+Cloudflare transcriptのread moduleとConversations入口だけを実装する。WAL adapterは設定無効時を含むcontract/test seamであり、`LocalWalSyncImpl` からの呼出し、Worker upload、ack、削除は未実装である。新baseのiPhone E2Eも未実施で、このPRの受入条件ではない。旧スパイクの端末またはWorker証拠は設計参照に限り、新baseの成功として扱わない。

@@ -34,6 +34,25 @@ void main() {
     expect(requests.first.headers['authorization'], 'Bearer $token');
   });
 
+  test('maps the Worker list fixture transcript_char_count and keeps the legacy fallback explicit', () async {
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient(
+        (_) async => http.Response(
+          '{"sessions":['
+          '{"id":"worker-canonical","status":"transcribed","transcript_char_count":42},'
+          '{"id":"legacy-fallback","status":"ready","character_count":7}'
+          ']}',
+          200,
+        ),
+      ),
+    );
+
+    final sessions = await api.listSessions();
+
+    expect(sessions.map((session) => session.characterCount), [42, 7]);
+  });
+
   test('sorts transcript chunks by sequence', () async {
     final api = CloudflareTranscriptHttpApi(
       configuration: configuration,
