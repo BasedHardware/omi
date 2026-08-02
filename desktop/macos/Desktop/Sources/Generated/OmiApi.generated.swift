@@ -10229,6 +10229,43 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getScreenActivityV1McpScreenActivityGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, app: String? = nil, summary: Bool? = nil, limit: Int? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/mcp/screen-activity"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let startDate {
+      queryItems.append(URLQueryItem(name: "start_date", value: String(startDate)))
+    }
+    if let endDate {
+      queryItems.append(URLQueryItem(name: "end_date", value: String(endDate)))
+    }
+    if let app {
+      queryItems.append(URLQueryItem(name: "app", value: String(app)))
+    }
+    if let summary {
+      queryItems.append(URLQueryItem(name: "summary", value: String(summary)))
+    }
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func mcpSseGetV1McpSseGet(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil) async throws -> Void {
     let _path = "/v1/mcp/sse"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -14531,5 +14568,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 390 Swift client methods generated.
+  // Total: 391 Swift client methods generated.
 }

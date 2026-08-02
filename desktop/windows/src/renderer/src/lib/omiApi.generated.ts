@@ -2169,6 +2169,26 @@ export interface McpRefreshToolsResponse {
   tools_count: number;
 }
 
+export interface McpScreenActivityAppSummary {
+  count?: number;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  window_titles?: Array<string>;
+}
+
+export interface McpScreenActivityRow {
+  app_name?: string | null;
+  id?: string | null;
+  ocr_text?: string | null;
+  timestamp?: string | null;
+  window_title?: string | null;
+}
+
+export interface McpScreenActivitySummaryResponse {
+  apps?: Record<string, McpScreenActivityAppSummary>;
+  total_screenshots?: number;
+}
+
 export interface McpServerRequest {
   description?: string | null;
   mcp_server_url: string;
@@ -4137,6 +4157,9 @@ export interface OmiApiSchemas {
   "McpCreateActionItem": McpCreateActionItem;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
+  "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
+  "McpScreenActivityRow": McpScreenActivityRow;
+  "McpScreenActivitySummaryResponse": McpScreenActivitySummaryResponse;
   "McpServerRequest": McpServerRequest;
   "McpSseAuthMethodResponse": McpSseAuthMethodResponse;
   "McpSseAuthenticationResponse": McpSseAuthenticationResponse;
@@ -6608,6 +6631,16 @@ export interface OmiApiPaths {
       responses: {
         "200": UserProfile;
         "401": void;
+      };
+    };
+  };
+  "/v1/mcp/screen-activity": {
+    get: {
+      operationId: "get_screen_activity_v1_mcp_screen_activity_get";
+      responses: {
+        "200": Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -12647,6 +12680,24 @@ export async function get_user_profile_v1_mcp_profile_get(init?: OmiApiClientIni
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_screen_activity_v1_mcp_screen_activity_get(query: { start_date?: string | null, end_date?: string | null, app?: string | null, summary?: boolean, limit?: number }, init?: OmiApiClientInit): Promise<Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/screen-activity`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function mcp_sse_get_v1_mcp_sse_get(header: { Authorization?: string | null, Mcp_Session_Id?: string | null }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/sse`;
@@ -15989,4 +16040,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 390 client methods generated.
+// Total: 391 client methods generated.
