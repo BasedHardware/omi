@@ -543,7 +543,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
-    await setConnectedDevice(device);
+    final deviceSetup = setConnectedDevice(device);
+    final connectionSession = _firmwareUpdateCheckSessionGuard.capture();
+    await deviceSetup;
+    if (connectionSession == null || !_isCurrentDeviceSession(connectionSession)) {
+      Logger.debug('Discarding device setup continuation from a stale connection session');
+      return;
+    }
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(device);
@@ -760,10 +766,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   bool _isCurrentFirmwareCheckSession(FirmwareUpdateCheckSession session) {
+    return _isCurrentDeviceSession(session) && isConnected;
+  }
+
+  bool _isCurrentDeviceSession(FirmwareUpdateCheckSession session) {
     return _firmwareUpdateCheckSessionGuard.isCurrent(session) &&
         connectedDevice?.id == session.deviceId &&
-        pairedDevice?.id == session.deviceId &&
-        isConnected;
+        pairedDevice?.id == session.deviceId;
   }
 
   bool get _isOmiGlassDevice => FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(pairedDevice);

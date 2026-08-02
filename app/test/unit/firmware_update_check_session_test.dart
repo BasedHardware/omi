@@ -24,4 +24,20 @@ void main() {
     expect(await canApplyResult, isFalse);
     expect(guard.isCurrent(guard.capture()!), isTrue);
   });
+
+  test('disconnect while device setup awaits rejects its continuation', () async {
+    final guard = FirmwareUpdateCheckSessionGuard()..start('device-a');
+    final setupSession = guard.capture()!;
+    final setupReady = Completer<void>();
+
+    final canContinueSetup = () async {
+      await setupReady.future;
+      return guard.isCurrent(setupSession);
+    }();
+
+    guard.invalidate();
+    setupReady.complete();
+
+    expect(await canContinueSetup, isFalse);
+  });
 }
