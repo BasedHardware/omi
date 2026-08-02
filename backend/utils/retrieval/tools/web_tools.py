@@ -76,15 +76,8 @@ def user_url_allowlist_block(urls: Sequence[str]) -> str:
     )
 
 
-def _allowlist_hostname(url: str) -> str:
-    hostname = (urlparse(normalize_user_url(url)).hostname or '').lower()
-    if hostname.startswith('www.'):
-        return hostname[4:]
-    return hostname
-
-
 def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
-    """Return True when *url* matches an allowlist entry or a same-host variant."""
+    """Return True when *url* matches an allowlist entry."""
     if not allowlist:
         return False
     normalized = normalize_user_url(url)
@@ -92,14 +85,11 @@ def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
         return False
     if any(normalize_user_url(entry) == normalized for entry in allowlist):
         return True
-    host = _allowlist_hostname(url)
-    if not host:
-        return False
-    return any(_allowlist_hostname(entry) == host for entry in allowlist)
+    return False
 
 
 def is_redirect_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
-    """Allow exact allowlist matches or same-host variants of allowlisted URLs."""
+    """Allow exact allowlist matches for redirect targets."""
     return is_url_allowlisted(url, allowlist)
 
 
