@@ -634,7 +634,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           height: position.documentHeight,
           scrollTop: position.scrollTop
         )
-        if position.isAtBottom {
+        if ChatScrollLiveEdge.canResumeFollowing(
+          isAtBottom: position.isAtBottom,
+          userIsScrolling: userIsScrolling
+        ) {
           transcriptGeometry.setFollowingLiveEdge(true)
         }
         // Resume live following when the reader scrolls back to the
@@ -642,7 +645,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         // again; only atBottom == false is ambiguous (it can be a
         // geometry/layout change, not user intent) and must NOT switch
         // to .freeScrolling on its own.
-        if position.isAtBottom && scrollMode == .freeScrolling {
+        if ChatScrollLiveEdge.canResumeFollowing(
+          isAtBottom: position.isAtBottom,
+          userIsScrolling: userIsScrolling
+        ) && scrollMode == .freeScrolling {
           cancelAllPendingScrolls()
           userIsScrolling = false
           scrollMode = .followingBottom
@@ -662,7 +668,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         userScrollEndWorkItem = endWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
       } onScrollSettledAtBottom: {
-        guard scrollMode == .freeScrolling else { return }
+        guard
+          ChatScrollLiveEdge.canResumeFollowing(
+            isAtBottom: true,
+            userIsScrolling: userIsScrolling
+          ), scrollMode == .freeScrolling
+        else { return }
         cancelAllPendingScrolls()
         userIsScrolling = false
         scrollMode = .followingBottom

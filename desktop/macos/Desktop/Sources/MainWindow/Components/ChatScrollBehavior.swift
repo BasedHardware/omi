@@ -20,6 +20,13 @@ enum ChatScrollLiveEdge {
   static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
     visibleMaxY >= documentHeight - intentEpsilon
   }
+
+  /// A stale AppKit sample can still report the live edge after physical input
+  /// has started. Never let that passive sample take ownership back from the
+  /// user's active gesture.
+  static func canResumeFollowing(isAtBottom: Bool, userIsScrolling: Bool) -> Bool {
+    isAtBottom && !userIsScrolling
+  }
 }
 
 /// Detects scroll position changes by observing the underlying NSScrollView.
@@ -118,7 +125,11 @@ struct ScrollPositionDetector: NSViewRepresentable {
         }
         coalesceWorkItem = workItem
         pendingPosition = position
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
+        // Coalesce onto the next main-run-loop turn, but do not trailing-debounce
+        // delivery. Trackpad and wheel notifications continue during a gesture;
+        // a trailing debounce cancels every pending update until the gesture
+        // ends, leaving the prompt rail visibly behind the reader.
+        DispatchQueue.main.async(execute: workItem)
       }
     }
 
@@ -283,6 +294,9 @@ struct UserScrollDetector: NSViewRepresentable {
     let onUserScroll: () -> Void
     let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
+    private var settleWorkItem: DispatchWorkItem?
+
+    private static let settledBottomDelay: TimeInterval = 0.36
 
     private static let scrollNavigationKeyCodes: Set<UInt16> = [
       125,  // Down arrow
@@ -346,12 +360,21 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
-      for delay in [0.12, 0.36] {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak scrollView] in
-          guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
-          self.onScrollSettledAtBottom()
-        }
+      // A check from an earlier wheel event must not survive into a later
+      // gesture. The old pair of independent timers could observe a transient
+      // live-edge position and re-enable follow mode after the reader had
+      // already started scrolling away.
+      settleWorkItem?.cancel()
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
       }
+      settleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Self.settledBottomDelay,
+        execute: workItem
+      )
     }
 
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
@@ -368,6 +391,7 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     deinit {
+      settleWorkItem?.cancel()
       if let monitor {
         NSEvent.removeMonitor(monitor)
       }
@@ -460,7 +484,10 @@ struct ChatScrollContainer<Content: View>: View {
   private var scrollDetectors: some View {
     ZStack {
       ScrollPositionDetector { position in
-        if position.isAtBottom && scrollMode == .freeScrolling {
+        if ChatScrollLiveEdge.canResumeFollowing(
+          isAtBottom: position.isAtBottom,
+          userIsScrolling: userIsScrolling
+        ) && scrollMode == .freeScrolling {
           cancelAllPendingScrolls()
           userIsScrolling = false
           scrollMode = .followingBottom
@@ -478,7 +505,12 @@ struct ChatScrollContainer<Content: View>: View {
         userScrollEndWorkItem = endWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
       } onScrollSettledAtBottom: {
-        guard scrollMode == .freeScrolling else { return }
+        guard
+          ChatScrollLiveEdge.canResumeFollowing(
+            isAtBottom: true,
+            userIsScrolling: userIsScrolling
+          ), scrollMode == .freeScrolling
+        else { return }
         cancelAllPendingScrolls()
         userIsScrolling = false
         scrollMode = .followingBottom

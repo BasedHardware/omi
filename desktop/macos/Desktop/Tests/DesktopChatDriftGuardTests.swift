@@ -63,6 +63,36 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertFalse(timelineSource.contains("onVisibilityChange"))
   }
 
+  func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+
+    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn; a trailing debounce starves the active rail until scrolling stops.
+    XCTAssertTrue(scrollSource.contains("DispatchQueue.main.async(execute: workItem)"))
+    XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
+  }
+
+  func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+
+    // omi-test-quality: source-inspection -- passive position updates and
+    // settled checks must both use the active-gesture fence before restoring
+    // live following.
+    XCTAssertTrue(scrollSource.contains("private var settleWorkItem: DispatchWorkItem?"))
+    XCTAssertFalse(scrollSource.contains("for delay in [0.12, 0.36]"))
+    XCTAssertTrue(scrollSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
+    XCTAssertTrue(messagesSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
+  }
+
+  func testChatFirstShellUsesModernTopNavigation() throws {
+    let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
+
+    // omi-test-quality: source-inspection -- the cohort shell must share the
+    // modern top-navigation surface and must not resurrect its retired rail.
+    XCTAssertTrue(shellSource.contains("DesktopTopBar("))
+    XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
+  }
+
   func testMainAndNotchChatShareTheTranscriptFade() throws {
     let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")
