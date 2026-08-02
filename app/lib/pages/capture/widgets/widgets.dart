@@ -215,6 +215,11 @@ getTranscriptWidget(
   bool followLatest = false,
   TranscriptScrollState? scrollState,
   double jumpToLatestButtonBottom = 16,
+  int contentVersion = 0,
+  String layoutIdentity = 'transcript',
+  List<Widget> leadingItems = const [],
+  List<String> leadingItemIds = const [],
+  TranscriptSegmentBuilder? segmentBuilder,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -251,6 +256,11 @@ getTranscriptWidget(
       followLatest: followLatest,
       scrollState: scrollState,
       jumpToLatestButtonBottom: jumpToLatestButtonBottom,
+      contentVersion: contentVersion,
+      layoutIdentity: layoutIdentity,
+      leadingItems: leadingItems,
+      leadingItemIds: leadingItemIds,
+      segmentBuilder: segmentBuilder,
     );
   }
 

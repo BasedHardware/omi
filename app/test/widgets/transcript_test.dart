@@ -141,8 +141,12 @@ void main() {
     late ScrollController controller;
     late TranscriptScrollState scrollState;
     late List<TranscriptSegment> segments;
+    late int contentVersion;
+    late String layoutIdentity;
+    late List<Widget> leadingItems;
+    late List<String> leadingItemIds;
 
-    Future<void> pumpTranscript(WidgetTester tester) async {
+    Future<void> pumpTranscript(WidgetTester tester, {bool settle = true}) async {
       await tester.pumpWidget(
         MaterialApp(
           localizationsDelegates: const [
@@ -156,22 +160,31 @@ void main() {
             body: SizedBox(
               height: 320,
               child: TranscriptWidget(
+                key: const ValueKey('live-transcript-test-session'),
                 segments: segments,
                 bottomMargin: 0,
                 followLatest: true,
                 scrollState: scrollState,
                 jumpToLatestButtonBottom: 84,
                 onScrollControllerReady: (value) => controller = value,
+                contentVersion: contentVersion,
+                layoutIdentity: layoutIdentity,
+                leadingItems: leadingItems,
+                leadingItemIds: leadingItemIds,
               ),
             ),
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      if (settle) await tester.pumpAndSettle();
     }
 
     setUp(() {
       scrollState = TranscriptScrollState();
+      contentVersion = 0;
+      layoutIdentity = 'transcript';
+      leadingItems = [];
+      leadingItemIds = [];
       segments = List.generate(
         30,
         (index) => TranscriptSegment(
@@ -222,6 +235,120 @@ void main() {
       expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
       expect(scrollState.isAtBottom, isTrue);
       expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+    });
+
+    testWidgets('same-ID transcript growth keeps following the live edge', (tester) async {
+      await pumpTranscript(tester);
+
+      final last = segments.last;
+      segments = [
+        ...segments.take(segments.length - 1),
+        TranscriptSegment(
+          id: last.id,
+          text: List.filled(80, 'revised transcript text').join(' '),
+          speaker: last.speaker,
+          isUser: last.isUser,
+          personId: last.personId,
+          start: last.start,
+          end: last.end,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+    });
+
+    testWidgets('growth inside an existing photo group keeps following the live edge', (tester) async {
+      layoutIdentity = 'photo-timeline';
+      leadingItemIds = ['photo-group-1'];
+      leadingItems = const [SizedBox(height: 80)];
+      await pumpTranscript(tester);
+
+      leadingItems = const [SizedBox(height: 280)];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+    });
+
+    testWidgets('overlapping live updates coalesce into one settled bottom follow', (tester) async {
+      await pumpTranscript(tester);
+
+      for (var update = 0; update < 3; update++) {
+        segments = [
+          ...segments,
+          TranscriptSegment(
+            id: 'overlap-$update',
+            text: List.filled(12, 'new live words').join(' '),
+            speaker: 'SPEAKER_00',
+            isUser: false,
+            personId: null,
+            start: segments.length.toDouble(),
+            end: segments.length + 1.0,
+            translations: const [],
+          ),
+        ];
+        contentVersion++;
+        await pumpTranscript(tester, settle: false);
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+    });
+
+    testWidgets('layout changes restore the same transcript anchor instead of a raw offset', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      final anchorId = scrollState.anchorSegmentId;
+      expect(anchorId, isNotNull);
+      final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
+
+      layoutIdentity = 'photo-timeline';
+      leadingItemIds = ['new-photo-group'];
+      leadingItems = const [SizedBox(height: 240)];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(scrollState.anchorSegmentId, anchorId);
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      // Sliver layout may round the restored edge by the four-point separator,
+      // but it must keep the same segment at the same reading position.
+      expect(restoredTop, closeTo(anchorTop, 5));
+      expect(scrollState.isAtBottom, isFalse);
+    });
+
+    testWidgets('deleting the first segment preserves a later reading anchor', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      final anchorId = scrollState.anchorSegmentId;
+      expect(anchorId, isNotNull);
+      final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
+
+      segments = segments.skip(1).toList();
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(scrollState.anchorSegmentId, anchorId);
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      // Sliver layout may round the restored edge by the four-point separator,
+      // but it must keep the same segment at the same reading position.
+      expect(restoredTop, closeTo(anchorTop, 5));
+      expect(scrollState.isAtBottom, isFalse);
     });
 
     testWidgets('live controls reserve only the standard 120 point footer', (tester) async {
