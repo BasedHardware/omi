@@ -16,16 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, cast
 
-from google.cloud import firestore
-from google.cloud.firestore_v1 import transactional
-
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
-from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
 from models.memory_state_head import (
     trusted_memory_state_head_fields_from_control,
     trusted_memory_state_head_fields_from_state,
@@ -84,54 +80,40 @@ def build_state_head_repair_plan(
     )
 
 
-def inspect_state_head_repair(db_client: Any, *, uid: str) -> StateHeadRepairPlan:
+def inspect_state_head_repair(store: Any, *, uid: str) -> StateHeadRepairPlan:
     collections = MemoryCollections(uid=uid)
-    head = _snapshot_data(db_client.document(collections.memory_state_head).get())
-    control = _snapshot_data(db_client.document(collections.memory_apply_control_state).get())
+    head = _snapshot_data(store.get(collections.memory_state_head))
+    control = _snapshot_data(store.get(collections.memory_apply_control_state))
     return build_state_head_repair_plan(uid=uid, head=head, control=control)
 
 
-def _apply_state_head_repair_transaction_body(transaction: Any, db_client: Any, *, uid: str) -> StateHeadRepairPlan:
+def _apply_state_head_repair_transaction_body(transaction: Any, *, uid: str) -> StateHeadRepairPlan:
     """Read both authoritative documents before writing the minimal trusted patch."""
     collections = MemoryCollections(uid=uid)
-    head_ref = db_client.document(collections.memory_state_head)
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    head = _snapshot_data(head_ref.get(transaction=transaction))
-    control = _snapshot_data(control_ref.get(transaction=transaction))
+    head_path = collections.memory_state_head
+    head = _snapshot_data(transaction.get(head_path))
+    control = _snapshot_data(transaction.get(collections.memory_apply_control_state))
     plan = build_state_head_repair_plan(uid=uid, head=head, control=control)
     if plan.status != "repair_required":
         return plan
 
     assert plan.trusted_fields is not None
     if plan.write_mode == "create":
-        transaction.set(head_ref, plan.trusted_fields)
+        transaction.set(head_path, plan.trusted_fields)
     else:
-        transaction.update(head_ref, plan.trusted_fields)
+        transaction.update(head_path, plan.trusted_fields)
     return plan
 
 
-@transactional
-def _apply_state_head_repair_transaction(transaction: Any, db_client: Any, *, uid: str) -> StateHeadRepairPlan:
-    return _apply_state_head_repair_transaction_body(transaction, db_client, uid=uid)
-
-
-def apply_state_head_repair(db_client: Any, *, uid: str) -> StateHeadRepairPlan:
-    return run_with_transaction_contention_retry(
-        db_client.transaction,
-        lambda transaction: _apply_state_head_repair_transaction(transaction, db_client, uid=uid),
-        operation_name="repair_memory_state_head",
-    )
-
-
-def _load_firestore_client(*, firestore_project: str):
-    prepare_google_credentials()
-    return firestore.Client(project=firestore_project)
+def apply_state_head_repair(store: Any, *, uid: str) -> StateHeadRepairPlan:
+    # The port's ``run_transaction`` already performs contention retry, so a single call is enough:
+    # no explicit retry wrapper or decorator is needed around the read-modify-write body.
+    return store.run_transaction(lambda transaction: _apply_state_head_repair_transaction_body(transaction, uid=uid))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Repair trusted V3 memory state-head metadata for one UID.")
     parser.add_argument("--uid", required=True)
-    parser.add_argument("--firestore-project", required=True, help="Explicit Firestore project, e.g. based-hardware.")
     parser.add_argument("--apply", action="store_true", help="Write the minimal trusted state-head field patch.")
     parser.add_argument("--confirm-uid", help="Required with --apply; must exactly match --uid.")
     return parser.parse_args()
@@ -142,11 +124,11 @@ def main() -> int:
     if args.apply and args.confirm_uid != args.uid:
         raise SystemExit("--confirm-uid must exactly match --uid when --apply is used")
 
-    db_client = _load_firestore_client(firestore_project=args.firestore_project)
+    store = get_document_store()
     plan = (
-        apply_state_head_repair(db_client, uid=args.uid)
+        apply_state_head_repair(store, uid=args.uid)
         if args.apply
-        else inspect_state_head_repair(db_client, uid=args.uid)
+        else inspect_state_head_repair(store, uid=args.uid)
     )
     if args.apply and plan.status not in {"repair_required", "already_trusted"}:
         raise RuntimeError(f"state-head repair blocked: {plan.status}")
@@ -163,7 +145,6 @@ def main() -> int:
             {
                 "artifact": "memory_state_head_repair",
                 "uid": args.uid,
-                "firestore_project": args.firestore_project,
                 "dry_run": not args.apply,
                 "repair": plan.report(applied=args.apply and plan.status == "repair_required"),
                 "v3_state_head_valid_after_apply": trusted_after_apply is not None,

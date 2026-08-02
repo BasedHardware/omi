@@ -185,11 +185,15 @@ after the backend containing it is deployed. It reads the canonical
 metadata fields; it does not read or write memory content, projection items,
 rollout gates, or vectors.
 
+The script targets the store selected by `STORAGE_BACKEND` (the same env the
+backend uses); for a specific cloud Firestore project export
+`GOOGLE_CLOUD_PROJECT` as below (no `--firestore-project` flag anymore).
+
 ```bash
 cd backend
+GOOGLE_CLOUD_PROJECT=based-hardware \
 python3 scripts/repair_memory_state_head.py \
-  --uid <uid> \
-  --firestore-project based-hardware
+  --uid <uid>
 ```
 
 The default command is a dry run. Confirm that it reports `repair_required`,
@@ -197,9 +201,9 @@ then use the explicit confirmation to apply and revalidate the V3 trust
 contract:
 
 ```bash
+GOOGLE_CLOUD_PROJECT=based-hardware \
 python3 scripts/repair_memory_state_head.py \
   --uid <uid> \
-  --firestore-project based-hardware \
   --apply \
   --confirm-uid <uid>
 ```

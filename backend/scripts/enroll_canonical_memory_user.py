@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Prepare or apply canonical-memory rollout Firestore docs for explicit UIDs.
+"""Prepare or apply canonical-memory rollout control docs for explicit UIDs.
 
-Dry-run is the default. Applying writes requires an explicit Firestore project,
-UID confirmation, and an existing-doc update acknowledgement. The script writes
-only rollout control documents; it validates v3 read-proof prerequisites instead
-of fabricating projection data.
+Dry-run is the default. Applying writes requires UID confirmation and an
+existing-doc update acknowledgement. The storage backend is selected by
+``STORAGE_BACKEND`` (env). The script writes only rollout control documents; it
+validates v3 read-proof prerequisites instead of fabricating projection data.
 """
 
 from __future__ import annotations
@@ -16,15 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from google.cloud import firestore
-
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from config.memory_rollout import MemoryRolloutMode, PASSED
-from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
@@ -144,21 +142,19 @@ def _snapshot_data(snapshot: Any) -> dict[str, Any] | None:
     return cast(dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
-def inspect_existing_docs(db_client: Any, documents: list[RolloutDocumentPlan]) -> dict[str, Any]:
+def inspect_existing_docs(store: Any, documents: list[RolloutDocumentPlan]) -> dict[str, Any]:
     existing: dict[str, Any] = {}
     for document in documents:
-        existing[document.path] = _snapshot_data(db_client.document(document.path).get())
+        existing[document.path] = _snapshot_data(store.get(document.path))
     return existing
 
 
-def inspect_v3_read_prerequisites(db_client: Any, *, uid: str) -> dict[str, bool]:
+def inspect_v3_read_prerequisites(store: Any, *, uid: str) -> dict[str, bool]:
     paths = MemoryCollections(uid=uid)
     trusted_head = read_memory_v3_trusted_account_generation(uid=uid)
     return {
         paths.memory_state_head: trusted_head.read_error_reason is None,
-        paths.v3_compatibility_projection_state: _snapshot_data(
-            db_client.document(paths.v3_compatibility_projection_state).get()
-        )
+        paths.v3_compatibility_projection_state: _snapshot_data(store.get(paths.v3_compatibility_projection_state))
         is not None,
     }
 
@@ -170,12 +166,12 @@ def assert_v3_read_prerequisites_ready(prerequisites: dict[str, bool]) -> None:
 
 
 def apply_documents(
-    db_client: Any,
+    store: Any,
     documents: list[RolloutDocumentPlan],
     *,
     allow_existing_update: bool,
 ) -> dict[str, Any]:
-    existing = inspect_existing_docs(db_client, documents)
+    existing = inspect_existing_docs(store, documents)
     changed_existing = [
         path
         for path, current in existing.items()
@@ -187,7 +183,7 @@ def apply_documents(
         )
 
     for document in documents:
-        db_client.document(document.path).set(document.payload, merge=True)
+        store.set(document.path, document.payload, merge=True)
     return {
         "written_paths": [document.path for document in documents],
         "updated_existing_paths": changed_existing,
@@ -203,7 +199,6 @@ def build_report(
     uid: str,
     stage: str,
     account_generation: int,
-    firestore_project: str | None,
     documents: list[RolloutDocumentPlan],
     existing_docs: dict[str, Any] | None = None,
     v3_read_prerequisites: dict[str, bool] | None = None,
@@ -214,7 +209,6 @@ def build_report(
         "uid": uid,
         "stage": stage,
         "account_generation": account_generation,
-        "firestore_project": firestore_project,
         "dry_run": writes is None,
         "document_count": len(documents),
         "documents": _payload_by_path(documents),
@@ -225,24 +219,16 @@ def build_report(
             "This script writes only rollout control docs when --apply is supplied.",
             "It does not add users to CANONICAL_MEMORY_USERS or MEMORY_ENABLED_USERS.",
             "It does not fabricate memory_state/head or v3 compatibility projection data.",
-            "For first-user dev launch, target Firestore project is based-hardware.",
+            "The storage backend is selected by STORAGE_BACKEND (env); on-prem uses mongo.",
         ],
     }
 
 
-def _load_firestore_client(*, firestore_project: str):
-    prepare_google_credentials()
-    return firestore.Client(project=firestore_project)
-
-
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prepare/apply canonical memory rollout Firestore docs for a UID.")
+    parser = argparse.ArgumentParser(description="Prepare/apply canonical memory rollout control docs for a UID.")
     parser.add_argument("--uid", required=True)
     parser.add_argument("--stage", choices=("off", "write", "read"), default="write")
     parser.add_argument("--account-generation", type=int, default=1)
-    parser.add_argument(
-        "--firestore-project", help="Explicit Firestore project for inspection/apply, e.g. based-hardware."
-    )
     parser.add_argument(
         "--default-memory-grant", action="store_true", help="Force grants.omi_chat.default_memory=true."
     )
@@ -281,23 +267,21 @@ def main() -> int:
     existing_docs = None
     v3_read_prerequisites = None
     writes = None
-    db_client = None
-    needs_firestore = args.inspect_existing or args.check_v3_read_prereqs or args.apply
-    if needs_firestore:
-        if not args.firestore_project:
-            raise SystemExit("--firestore-project is required for inspection or apply")
-        db_client = _load_firestore_client(firestore_project=args.firestore_project)
+    store = None
+    needs_store = args.inspect_existing or args.check_v3_read_prereqs or args.apply
+    if needs_store:
+        store = get_document_store()
     if args.inspect_existing or args.apply:
-        existing_docs = inspect_existing_docs(db_client, documents)
+        existing_docs = inspect_existing_docs(store, documents)
     if args.check_v3_read_prereqs or (args.apply and args.stage == "read"):
-        v3_read_prerequisites = inspect_v3_read_prerequisites(db_client, uid=args.uid)
+        v3_read_prerequisites = inspect_v3_read_prerequisites(store, uid=args.uid)
 
     if args.apply:
         if args.confirm_uid != args.uid:
             raise SystemExit("--confirm-uid must exactly match --uid when --apply is used")
         if args.stage == "read":
             assert_v3_read_prerequisites_ready(v3_read_prerequisites or {})
-        writes = apply_documents(db_client, documents, allow_existing_update=args.allow_existing_update)
+        writes = apply_documents(store, documents, allow_existing_update=args.allow_existing_update)
 
     print(
         json.dumps(
@@ -305,7 +289,6 @@ def main() -> int:
                 uid=args.uid,
                 stage=args.stage,
                 account_generation=args.account_generation,
-                firestore_project=args.firestore_project,
                 documents=documents,
                 existing_docs=existing_docs,
                 v3_read_prerequisites=v3_read_prerequisites,
