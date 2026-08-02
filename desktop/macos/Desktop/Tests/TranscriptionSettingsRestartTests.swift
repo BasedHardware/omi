@@ -58,7 +58,7 @@ final class TranscriptionSettingsRestartTests: XCTestCase {
     XCTAssertEqual(events, ["start"])
   }
 
-  func testSettingsRestartDoesNotReopenAfterANewerRecordingStarts() async {
+  func testSettingsRestartDoesNotReopenAfterUserStopsAgainDuringTeardown() async {
     let state = AppState()
     let capture = SuspendedPhysicalStopCapture()
     state.audioCaptureService = capture
@@ -73,7 +73,8 @@ final class TranscriptionSettingsRestartTests: XCTestCase {
     }
 
     await capture.waitUntilPhysicalStopIsAwaited()
-    state.recordingGeneration += 1
+    let userStop = state.stopTranscription()
+    await userStop?.value
     await capture.finishPhysicalStop()
     await restart.value
 

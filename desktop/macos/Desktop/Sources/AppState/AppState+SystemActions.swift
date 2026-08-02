@@ -461,15 +461,15 @@ extension AppState {
   func prepareTranscriptionRestartAfterSettingsChange() async -> Bool {
     guard isTranscribing else { return false }
 
-    let stoppedGeneration = recordingGeneration
     let stoppedCapture = audioCaptureService
     let stopCompletion = stopTranscription()
+    let restartGeneration = recordingGeneration
     await stopCompletion?.value
     await stoppedCapture?.waitForPhysicalStop()
 
     // A user may have toggled listening while teardown was in flight. Never let
     // this older settings change reopen capture over that newer decision.
-    return recordingGeneration == stoppedGeneration && !isTranscribing
+    return recordingGeneration == restartGeneration && !isTranscribing
   }
 }
 
