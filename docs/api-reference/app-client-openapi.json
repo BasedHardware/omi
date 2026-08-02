@@ -12629,6 +12629,7 @@
               "additionalProperties": true,
               "type": "object"
             },
+            "maxItems": 200,
             "minItems": 1,
             "title": "Rows",
             "type": "array"
@@ -24444,6 +24445,30 @@
         "tags": [
           "action-items"
         ]
+      }
+    },
+    "/v1/agent/anthropic/v1/messages": {
+      "post": {
+        "operationId": "agent_anthropic_messages_v1_agent_anthropic_v1_messages_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Agent Anthropic Messages"
       }
     },
     "/v1/agent/execute-tool": {
