@@ -226,14 +226,6 @@ public enum TranscriptFilter {
 /// buffer that always starts at the slice's own first byte. The buffer is also not guaranteed to be
 /// two-byte aligned, so every 16-bit read goes through `loadUnaligned`.
 public enum PCM {
-    /// Int16 full scale. Dividing by 32768 rather than 32767 is what makes `Int16.min` map to
-    /// exactly -1.0, so a normalized magnitude can never exceed 1.
-    private static let fullScale: Float = 32768
-
-    /// Encoding peak. Scaling by 32767 keeps +1.0 inside `Int16.max`; the resulting asymmetry with
-    /// `fullScale` costs one LSB on a round trip and avoids a wrap that would sound like a click.
-    private static let peakAmplitude: Float = 32767
-
     /// Root-mean-square level of a chunk, normalised to 0...1.
     ///
     /// This is the number the silence gate and the menu-bar level meter both read, which is why it
@@ -267,14 +259,13 @@ public enum PCM {
         let frameCount = samples.count / channels
         guard frameCount > 0 else { return [] }
 
-        let scale = 1 / Float(channels)
         var mono = [Float](repeating: 0, count: frameCount)
-        for frame in 0..<frameCount {
-            let base = frame * channels
-            var sum: Float = 0
-            for channel in 0..<channels { sum += samples[base + channel] }
-            mono[frame] = sum * scale
+        let written = samples.withUnsafeBufferPointer { input in
+            mono.withUnsafeMutableBufferPointer { output in
+                ctx_pcm_downmix_mono(input.baseAddress, samples.count, Int32(channels), output.baseAddress)
+            }
         }
+        if written < mono.count { mono.removeLast(mono.count - written) }
         return mono
     }
 
@@ -290,12 +281,12 @@ public enum PCM {
     /// floor and wakes the model for nothing.
     public static func int16LE(from samples: [Float]) -> Data {
         var bytes = [UInt8](repeating: 0, count: samples.count * 2)
-        for (index, sample) in samples.enumerated() {
-            let scaled = Int16((clampedToUnit(sample) * peakAmplitude).rounded())
-            let pattern = UInt16(bitPattern: scaled)
-            bytes[index * 2] = UInt8(truncatingIfNeeded: pattern)
-            bytes[index * 2 + 1] = UInt8(truncatingIfNeeded: pattern >> 8)
+        let written = samples.withUnsafeBufferPointer { input in
+            bytes.withUnsafeMutableBufferPointer { output in
+                ctx_pcm_encode_int16le(input.baseAddress, samples.count, output.baseAddress)
+            }
         }
+        if written < bytes.count { bytes.removeLast(bytes.count - written) }
         return Data(bytes)
     }
 
@@ -311,29 +302,15 @@ public enum PCM {
         return data.withUnsafeBytes { raw -> [Float] in
             let count = raw.count / 2
             var samples = [Float](repeating: 0, count: count)
-            for index in 0..<count {
-                samples[index] = Float(loadSample(raw, at: index)) / fullScale
+            let written = samples.withUnsafeMutableBufferPointer { output in
+                ctx_pcm_decode_int16le(
+                    raw.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                    raw.count,
+                    output.baseAddress
+                )
             }
+            if written < samples.count { samples.removeLast(samples.count - written) }
             return samples
         }
-    }
-
-    /// Reads one little-endian sample, tolerating a buffer that is not two-byte aligned.
-    ///
-    /// `load(fromByteOffset:as:)` would trap on an odd base address, which is exactly what a sliced
-    /// `Data` can hand us. `Int16(littleEndian:)` reinterprets the loaded bit pattern, so this is
-    /// correct on a big-endian host too.
-    private static func loadSample(_ raw: UnsafeRawBufferPointer, at index: Int) -> Int16 {
-        Int16(littleEndian: raw.loadUnaligned(fromByteOffset: index * 2, as: Int16.self))
-    }
-
-    /// Clamps to -1...1, mapping NaN to silence.
-    ///
-    /// Written as a guard rather than nested `min`/`max` because the obvious spelling of that,
-    /// `min(max(value, -1), 1)`, propagates NaN straight through to an `Int16` conversion that traps.
-    /// A NaN sample is an upstream bug; the capture stack should not die of it mid-conversation.
-    private static func clampedToUnit(_ value: Float) -> Float {
-        if value.isNaN { return 0 }
-        return min(max(value, -1), 1)
     }
 }
