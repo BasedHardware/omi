@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from utils.executors import db_executor, postprocess_executor
 
@@ -77,6 +77,26 @@ class McpStatusResponse(BaseModel):
 
 class McpOauthGrantsResponse(BaseModel):
     grants: List[Dict[str, Any]] = []
+
+
+class McpScreenActivityRow(BaseModel):
+    id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    app_name: Optional[str] = None
+    window_title: Optional[str] = None
+    ocr_text: Optional[str] = None
+
+
+class McpScreenActivityAppSummary(BaseModel):
+    count: int = 0
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    window_titles: List[str] = []
+
+
+class McpScreenActivitySummaryResponse(BaseModel):
+    apps: Dict[str, McpScreenActivityAppSummary] = {}
+    total_screenshots: int = 0
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
@@ -748,6 +768,26 @@ class SimplePerson(BaseModel):
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
+
+
+@router.get(
+    "/v1/mcp/screen-activity",
+    tags=["mcp"],
+    response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
+    deprecated=True,
+)
+def get_screen_activity(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    app: Optional[str] = None,
+    summary: bool = False,
+    limit: int = 200,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit} (deprecated empty)")
+    if summary:
+        return McpScreenActivitySummaryResponse()
+    return []
 
 
 # ---------------------------------------------------------------------------
