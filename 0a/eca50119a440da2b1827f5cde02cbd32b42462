@@ -1,0 +1,54 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppReader.swift
+  s_0c099cae24c74c::t_739cdbf9a4b158 42
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_0c099cae24c74c::t_40ad4dcb7313d2 1260
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonHandleResolver.swift
+  s_0c099cae24c74c::t_a074c0a5474f6d 1-237
+desktop/macos/Desktop/Sources/ViewExporter.swift
+  s_0c099cae24c74c::t_4423da5b9411ac 743-749,751-753,756
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonMessageHistory.swift
+  s_0c099cae24c74c::t_e2f284458f2c0e 1-192,194-655
+  s_0c099cae24c74c::t_85c7f5ba4c42dc 193
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfileShare.swift
+  s_0c099cae24c74c::t_a12cb5569908a2 1-87
+desktop/macos/Desktop/Tests/PersonProfileShareTests.swift
+  s_0c099cae24c74c::t_d5241873ec88bd 1-373
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_0c099cae24c74c::t_ba542c874ee35c 702-712
+  s_0c099cae24c74c::t_6be03d8800d3b2 740-767,769
+  s_0c099cae24c74c::t_b72e3bf30d57c9 768,770,774,1130,1175-1176
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfileExtras.swift
+  s_0c099cae24c74c::t_726877d5bdd18e 1-214
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfileRenderer.swift
+  s_0c099cae24c74c::t_61ca6586281305 111-117
+  s_0c099cae24c74c::t_ae514fdbb08bbe 1-110,118-146
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
+  s_0c099cae24c74c::t_345ea72445a7ca 196-205
+desktop/macos/Desktop/Tests/PersonMessageHistoryTests.swift
+  s_0c099cae24c74c::t_675aef53a6cf2b 1-292
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfilePage.swift
+  s_0c099cae24c74c::t_26ceabc36649fd 37-39
+  s_0c099cae24c74c::t_55f01d40c383db 211-213,215
+  s_0c099cae24c74c::t_4686781590b97b 1-36,40-73,78-210,214,216-878
+  s_0c099cae24c74c::t_91b7f3a5bd83ce 74-77
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_0c099cae24c74c::t_33e4d72866d7df 10,21,24
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleRowComponents.swift
+  s_0c099cae24c74c::t_9c4422abe7dfe2 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "0aeca50119a440da2b1827f5cde02cbd32b42462",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
