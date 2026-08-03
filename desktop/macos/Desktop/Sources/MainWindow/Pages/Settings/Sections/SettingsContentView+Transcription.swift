@@ -318,17 +318,31 @@ extension SettingsContentView {
   func restartTranscriptionIfNeeded() {
     guard appState.isTranscribing else { return }
 
-    // Stop and restart to apply new language settings
-    appState.stopTranscription()
-
-    // Wait a moment for cleanup, then restart
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      self.appState.startTranscription()
-    }
+    let capture = appState.audioCaptureService
+    _ = TranscriptionRestartCoordinator.restart(
+      stop: { self.appState.stopTranscription() },
+      waitForPhysicalStop: { await capture?.waitForPhysicalStop() },
+      start: { self.appState.startTranscription() })
   }
 
   // MARK: - Notifications Section
 
+}
+
+@MainActor
+enum TranscriptionRestartCoordinator {
+  @discardableResult
+  static func restart(
+    stop: @escaping @MainActor () -> Void,
+    waitForPhysicalStop: @escaping () async -> Void,
+    start: @escaping @MainActor () -> Void
+  ) -> Task<Void, Never> {
+    stop()
+    return Task { @MainActor in
+      await waitForPhysicalStop()
+      start()
+    }
+  }
 }
 
 /// Multi-select for the languages the user speaks to the VOICE ASSISTANT (push-to-talk).
