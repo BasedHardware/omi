@@ -23,6 +23,7 @@ def load_app(tmp_path: Path):
     sys.path.insert(0, str(SERVICE))
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
+    module.runtime.source_namespace = "macos_test"
     return module.app, module
 
 
@@ -78,7 +79,12 @@ def test_sync_promotes_local_kg_nodes_to_backend(tmp_path, monkeypatch) -> None:
     assert body["promotion"]["merged"] == 1
     assert captured["url"] == "https://api.test/v1/knowledge-graph/sync"
     assert captured["headers"] == {"Authorization": "Bearer firebase-token"}
-    assert captured["json"] == {"table": "local_kg_nodes", "rows": rows}
+    assert captured["json"] == {
+        "table": "local_kg_nodes",
+        "rows": rows,
+        "source_namespace": "macos_test",
+        "reconcile_complete": False,
+    }
 
 
 def test_sync_fails_without_firebase_token(tmp_path) -> None:
@@ -225,7 +231,7 @@ def test_promote_local_kg_skips_canonical_conflict(tmp_path, monkeypatch) -> Non
             [{"nodeId": "n1", "label": "Test"}],
         )
     )
-    assert result is None
+    assert result == {"status": "skipped", "reason": "canonical_conflict"}
 
 
 def test_promote_local_kg_preserves_backend_validation_error(tmp_path, monkeypatch) -> None:
@@ -263,3 +269,63 @@ def test_promote_local_kg_preserves_backend_validation_error(tmp_path, monkeypat
         )
     assert error.value.status_code == 422
     assert error.value.detail == "edge endpoint is missing"
+
+
+def test_promote_local_kg_requires_source_namespace(tmp_path) -> None:
+    _, module = load_app(tmp_path)
+    module.runtime.firebase_token = "firebase-token"
+    module.runtime.source_namespace = None
+    with pytest.raises(module.HTTPException) as error:
+        asyncio.run(
+            module.promote_local_kg_to_backend(
+                "local_kg_nodes",
+                [{"nodeId": "n1", "label": "Test"}],
+            )
+        )
+    assert error.value.status_code == 503
+    assert "source namespace" in error.value.detail
+
+
+def test_sync_promotes_empty_graph_reconciliation(tmp_path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE local_kg_nodes (id INTEGER PRIMARY KEY, nodeId TEXT, label TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+    module.runtime.firebase_token = "firebase-token"
+    module.runtime.backend_url = "https://api.test"
+    captured: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"table": "local_kg_nodes", "merged": 0, "deleted": 1}
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def post(self, _url, **kwargs):
+            captured.update(kwargs)
+            return Response()
+
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **_: Client())
+    with TestClient(app) as client:
+        response = client.post(
+            "/sync?token=test-token",
+            json={"table": "local_kg_nodes", "rows": [], "reconcile_complete": True},
+        )
+
+    assert response.status_code == 200
+    assert captured["json"] == {
+        "table": "local_kg_nodes",
+        "rows": [],
+        "source_namespace": "macos_test",
+        "reconcile_complete": True,
+    }

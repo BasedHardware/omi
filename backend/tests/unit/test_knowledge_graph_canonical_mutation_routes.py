@@ -24,18 +24,21 @@ def test_canonical_delete_route_returns_conflict_without_deleting_projection(mon
 
 def test_canonical_sync_route_returns_conflict_without_merging(monkeypatch):
     merge_calls: list[tuple] = []
+    fallback_calls: list[dict] = []
     monkeypatch.setattr(kg_router, "pin_memory_system", lambda *_args, **_kwargs: MemorySystem.CANONICAL)
     monkeypatch.setattr(
-        kg_router.kg_db,
+        kg_router.kg_sync,
         "merge_synced_local_kg",
         lambda *args, **kwargs: merge_calls.append((args, kwargs)) or {},
     )
+    monkeypatch.setattr(kg_router, "record_fallback", lambda **kwargs: fallback_calls.append(kwargs))
 
     with pytest.raises(HTTPException) as error:
         kg_router.sync_local_knowledge_graph(
             payload=kg_router.LocalKgSyncRequest(
                 table="local_kg_nodes",
                 rows=[{"nodeId": "n1", "label": "Test"}],
+                source_namespace="macos_test",
             ),
             uid=UID,
         )
@@ -43,6 +46,15 @@ def test_canonical_sync_route_returns_conflict_without_merging(monkeypatch):
     assert error.value.status_code == 409
     assert error.value.detail == kg_router.CANONICAL_GRAPH_MUTATION_CONFLICT
     assert merge_calls == []
+    assert fallback_calls == [
+        {
+            "component": "agent_tools",
+            "from_mode": "cloud_promotion",
+            "to_mode": "local_only",
+            "reason": "policy",
+            "outcome": "degraded",
+        }
+    ]
 
 
 def test_canonical_rebuild_route_returns_conflict_without_deleting_or_scheduling(monkeypatch):

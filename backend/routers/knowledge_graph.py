@@ -11,7 +11,9 @@ from database._client import db as firestore_db
 from database.auth import get_user_name
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
+from utils import knowledge_graph_sync as kg_sync
 
 router = APIRouter()
 LOCAL_KG_SYNC_MAX_ROWS = 100
@@ -90,7 +92,9 @@ class DeleteKnowledgeGraphResponse(BaseModel):
 
 class LocalKgSyncRequest(BaseModel):
     table: Literal["local_kg_nodes", "local_kg_edges"]
-    rows: List[Dict[str, Any]] = Field(min_length=1, max_length=LOCAL_KG_SYNC_MAX_ROWS)
+    rows: List[Dict[str, Any]] = Field(min_length=0, max_length=LOCAL_KG_SYNC_MAX_ROWS)
+    source_namespace: str = Field(min_length=1, max_length=256)
+    reconcile_complete: bool = False
 
 
 class LocalKgSyncResponse(BaseModel):
@@ -99,6 +103,8 @@ class LocalKgSyncResponse(BaseModel):
     skipped: int
     nodes_evicted: int
     edges_evicted: int
+    quarantined: int = 0
+    deleted: int = 0
 
 
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
@@ -155,9 +161,26 @@ def sync_local_knowledge_graph(
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:sync")),
 ):
     """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
-    _require_legacy_graph_mutation(uid)
     try:
-        result = kg_db.merge_synced_local_kg(uid, payload.table, payload.rows)
-    except (kg_db.MissingKnowledgeGraphEndpointsError, kg_db.InvalidKnowledgeGraphDocumentIdError) as exc:
+        _require_legacy_graph_mutation(uid)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_409_CONFLICT:
+            record_fallback(
+                component="agent_tools",
+                from_mode="cloud_promotion",
+                to_mode="local_only",
+                reason="policy",
+                outcome="degraded",
+            )
+        raise
+    try:
+        result = kg_sync.merge_synced_local_kg(
+            uid,
+            payload.table,
+            payload.rows,
+            payload.source_namespace,
+            reconcile_complete=payload.reconcile_complete,
+        )
+    except (kg_sync.MissingKnowledgeGraphEndpointsError, kg_db.InvalidKnowledgeGraphDocumentIdError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return LocalKgSyncResponse(**result)

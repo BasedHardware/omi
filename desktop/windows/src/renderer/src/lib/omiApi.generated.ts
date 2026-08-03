@@ -2096,14 +2096,18 @@ export interface LlmUsageResponse {
 }
 
 export interface LocalKgSyncRequest {
+  reconcile_complete?: boolean;
   rows: Array<Record<string, unknown>>;
+  source_namespace: string;
   table: "local_kg_nodes" | "local_kg_edges";
 }
 
 export interface LocalKgSyncResponse {
+  deleted?: number;
   edges_evicted: number;
   merged: number;
   nodes_evicted: number;
+  quarantined?: number;
   skipped: number;
   table: string;
 }
