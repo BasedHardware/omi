@@ -116,6 +116,11 @@ def _row_content(row: LegacyRow) -> str:
     return _row_str(row, "content").strip()
 
 
+def row_content(row: LegacyRow) -> str:
+    """Public content accessor for inventory/orchestrators (no new behavior)."""
+    return _row_content(row)
+
+
 def _legacy_source_attribution(
     payload: Payload,
     *,
@@ -811,6 +816,15 @@ def _bucket_counts_and_samples(
     return counts, {bucket: sample_rows for bucket, sample_rows in samples.items() if sample_rows}
 
 
+def bucket_counts_and_samples(
+    rows: Sequence[LegacyRow],
+    *,
+    sample_size: int = 5,
+) -> tuple[Dict[str, int], BucketSampleMap]:
+    """Public inventory helper; wraps the internal classifier tally."""
+    return _bucket_counts_and_samples(rows, sample_size=sample_size)
+
+
 def _fetch_active_legacy_memories(
     uid: str,
     *,
@@ -824,6 +838,22 @@ def _fetch_active_legacy_memories(
         db_client=db_client,
         reader=get_non_filtered_memories_fn,
         is_active=is_active_legacy_row,
+        scan_page_size=scan_page_size,
+    )
+
+
+def fetch_active_legacy_memories(
+    uid: str,
+    *,
+    db_client: Any,
+    get_non_filtered_memories_fn: LegacyReader,
+    scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
+) -> List[LegacyRow]:
+    """Public read-only active legacy scan for inventory/orchestrators."""
+    return _fetch_active_legacy_memories(
+        uid,
+        db_client=db_client,
+        get_non_filtered_memories_fn=get_non_filtered_memories_fn,
         scan_page_size=scan_page_size,
     )
 

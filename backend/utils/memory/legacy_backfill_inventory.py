@@ -11,10 +11,10 @@ from database._client import db as default_db_client
 from database.memories import get_non_filtered_memories
 from utils.memory.legacy_backfill import (
     LegacyReader,
-    _bucket_counts_and_samples,
-    _fetch_active_legacy_memories,
-    _row_content,
+    bucket_counts_and_samples,
+    fetch_active_legacy_memories,
     is_legacy_backfill_admissible,
+    row_content,
 )
 from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryReport
 
@@ -27,16 +27,16 @@ def inventory_legacy_user(
 ) -> LegacyBackfillInventoryReport:
     """Return counts and token proxies without logging or returning memory content."""
     client: Any = db_client if db_client is not None else default_db_client
-    legacy_rows = _fetch_active_legacy_memories(
+    legacy_rows = fetch_active_legacy_memories(
         uid,
         db_client=client,
         get_non_filtered_memories_fn=get_non_filtered_memories_fn,
     )
-    eligible_rows = [row for row in legacy_rows if _row_content(row)]
-    bucket_counts, _ = _bucket_counts_and_samples(eligible_rows, sample_size=0)
+    eligible_rows = [row for row in legacy_rows if row_content(row)]
+    bucket_counts, _ = bucket_counts_and_samples(eligible_rows, sample_size=0)
     admitted_rows = [row for row in eligible_rows if is_legacy_backfill_admissible(row)]
-    content_character_count = sum(len(_row_content(row)) for row in eligible_rows)
-    admitted_character_count = sum(len(_row_content(row)) for row in admitted_rows)
+    content_character_count = sum(len(row_content(row)) for row in eligible_rows)
+    admitted_character_count = sum(len(row_content(row)) for row in admitted_rows)
     return LegacyBackfillInventoryReport(
         uid=uid,
         source_count=len(eligible_rows),

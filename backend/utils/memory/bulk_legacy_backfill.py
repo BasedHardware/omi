@@ -27,10 +27,18 @@ WRITABLE_BUCKETS = frozenset({"manual_required_promotion", "reviewed_long_term"}
 
 
 def _nonnegative_int(value: object) -> int:
-    try:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
         return max(0, int(value))
-    except (TypeError, ValueError):
-        return 0
+    if isinstance(value, str):
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return 0
+    return 0
 
 
 class BackfillReport(Protocol):
