@@ -8,7 +8,6 @@ from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_validation.common import (
     ConfigDict,
     StringMap,
-    _SYNC_LEDGER_FENCE_SERVICES,
     _as_config_dict,
     _as_config_list,
     _env_entries_by_name,
