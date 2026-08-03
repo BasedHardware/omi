@@ -148,3 +148,19 @@ async def send_to_user_async(user_id: str, msg: PushMessage, *, endpoints: Optio
         await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
     logger.info('UnifiedPush send: %s/%s successful', success, len(endpoints))
     return success
+
+
+async def send_bulk(endpoints: List[str], msg: PushMessage) -> None:
+    """Broadcast a message to many endpoints (bulk daily notification); dead endpoints are dropped."""
+    if not endpoints:
+        return
+
+    body = json.dumps(render_payload(msg)).encode('utf-8')
+    statuses = await asyncio.gather(*[_post_async(_target_url(ep), body) for ep in endpoints])
+
+    dead: List[str] = []
+    success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep, status, dead))
+
+    if dead:
+        await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
+    logger.info('UnifiedPush bulk send: %s/%s successful', success, len(endpoints))

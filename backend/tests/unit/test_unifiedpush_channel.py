@@ -103,6 +103,31 @@ def test_send_to_user_async_drops_dead(monkeypatch):
     assert removed == [['http://ntfy/dead?up=1']]
 
 
+def test_send_bulk_posts_all_and_drops_dead(monkeypatch):
+    removed = []
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
+    statuses = {'http://ntfy/a?up=1': 200, 'http://ntfy/b?up=1': 410}
+
+    async def _post(url, _body):
+        return statuses[url]
+
+    monkeypatch.setattr(up, '_post_async', _post)
+    asyncio.run(up.send_bulk(['http://ntfy/a?up=1', 'http://ntfy/b?up=1'], PushMessage(tag='t', title='omi', body='hi')))
+    assert removed == [['http://ntfy/b?up=1']]  # 410 dropped
+
+
+def test_send_bulk_empty_is_noop(monkeypatch):
+    posted = []
+
+    async def _post(url, _body):
+        posted.append(url)
+        return 200
+
+    monkeypatch.setattr(up, '_post_async', _post)
+    asyncio.run(up.send_bulk([], PushMessage(tag='t', title='x', body='y')))
+    assert posted == []
+
+
 # --- routing: public sender -> unifiedpush channel, never Firebase --------------------------------
 
 
@@ -170,3 +195,21 @@ def test_send_notification_routes_to_unifiedpush(monkeypatch):
     url, payload = posted[0]
     assert url == 'http://ntfy/t?up=1'
     assert payload['notification'] == {'title': 'omi', 'body': 'hello'}
+
+
+def test_send_bulk_notification_routes_to_unifiedpush(monkeypatch):
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
+    captured = {}
+
+    async def _spy(endpoints, msg):
+        captured['endpoints'] = list(endpoints)
+        captured['title'] = msg.title
+
+    monkeypatch.setattr(up, 'send_bulk', _spy)
+
+    with _loaded_notifications() as notifications:
+        # In unifiedpush mode the bulk recipients are endpoint URLs, not FCM tokens.
+        asyncio.run(notifications.send_bulk_notification(['http://ntfy/a?up=1', 'http://ntfy/b?up=1'], 'omi', 'hi'))
+
+    assert captured['endpoints'] == ['http://ntfy/a?up=1', 'http://ntfy/b?up=1']
+    assert captured['title'] == 'omi'

@@ -362,6 +362,31 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
+def get_users_endpoints_in_timezones(timezones: list[str]) -> List[str]:
+    """Flat list of UnifiedPush endpoints for all users currently in the given timezones.
+
+    UnifiedPush counterpart of ``get_users_token_in_timezones`` for the bulk daily notification.
+    """
+    endpoints: List[str] = []
+    store = _store()
+
+    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
+
+    for chunk in timezone_chunks:
+        try:
+            user_docs = store.query('users', filters=[('time_zone', 'in', chunk)])
+            for user_doc in user_docs:
+                uid = str(user_doc.id)
+                for doc in store.query(f'users/{uid}/unifiedpush_endpoints'):
+                    value = _typed_doc(doc).get('endpoint')
+                    if value:
+                        endpoints.append(str(value))
+        except Exception as e:
+            logger.error(f"Error querying endpoints chunk for timezones: {e}")
+
+    return endpoints
+
+
 def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
     """
     Get users who should receive daily summary notifications.

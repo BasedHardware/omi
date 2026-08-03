@@ -63,6 +63,18 @@ def test_remove_bulk_endpoints_noop_on_empty(fake_store):
     notification_db.remove_bulk_endpoints([])  # must not raise or query
 
 
+def test_get_users_endpoints_in_timezones(fake_store):
+    fake_store.set('users/u1', {'time_zone': 'Europe/Rome'})
+    fake_store.set('users/u2', {'time_zone': 'Europe/Rome'})
+    fake_store.set('users/u3', {'time_zone': 'America/New_York'})
+    notification_db.save_endpoint('u1', {'endpoint': 'http://ntfy/1?up=1', 'device_key': 'a'})
+    notification_db.save_endpoint('u2', {'endpoint': 'http://ntfy/2?up=1', 'device_key': 'b'})
+    notification_db.save_endpoint('u3', {'endpoint': 'http://ntfy/3?up=1', 'device_key': 'c'})
+
+    got = notification_db.get_users_endpoints_in_timezones(['Europe/Rome'])
+    assert sorted(got) == ['http://ntfy/1?up=1', 'http://ntfy/2?up=1']  # NY user excluded
+
+
 def test_router_composes_device_key_and_saves(monkeypatch):
     saved = {}
     monkeypatch.setattr(notif_router.notification_db, 'save_endpoint', lambda uid, data: saved.update(uid=uid, **data))

@@ -402,9 +402,11 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
     if backend == DISABLED:
         return
     if backend == UNIFIEDPUSH:
-        # The bulk (daily-summary) recipients are pre-gathered as FCM tokens upstream; the
-        # UnifiedPush bulk path gathers endpoints instead and is wired separately (task C3b).
-        logger.info('UnifiedPush bulk send not yet wired; skipping %s recipients', len(user_tokens))
+        # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
+        from utils.push import unifiedpush as _up
+
+        tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
+        await _up.send_bulk(user_tokens, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
         return
     try:
         batch_size = 500
