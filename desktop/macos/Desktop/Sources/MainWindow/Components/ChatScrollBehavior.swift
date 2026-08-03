@@ -444,6 +444,11 @@ struct UserScrollDetector: NSViewRepresentable {
     private var pressCandidateOwnsViewport = false
     private var pressBoundsObservation: NSObjectProtocol?
     private static let dragMovementEpsilon: CGFloat = 1
+    /// AppKit may route dozens of wheel deltas through one trackpad gesture.
+    /// Reader ownership crosses into SwiftUI once per gesture, not once per
+    /// delta, so a long lazy transcript is not invalidated while AppKit is
+    /// still delivering momentum to its current scroll view.
+    private var wheelGestureOwnsViewport = false
     private var willStartLiveScrollObservation: NSObjectProtocol?
     private var didEndLiveScrollObservation: NSObjectProtocol?
 
@@ -520,7 +525,10 @@ struct UserScrollDetector: NSViewRepresentable {
               let wheelLocation = targetScrollView.convert(event.locationInWindow, from: nil)
               guard targetScrollView.bounds.contains(wheelLocation) else { break }
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
-                self.onUserScroll()
+                self.beginUserScroll()
+                if event.phase.isEmpty, event.momentumPhase.isEmpty {
+                  self.scheduleUnphasedWheelEnd(for: targetScrollView)
+                }
               }
             case .leftMouseDown:
               // A press is not viewport movement. Clicking inside the transcript
@@ -560,6 +568,7 @@ struct UserScrollDetector: NSViewRepresentable {
         pressBoundsObservation = nil
         pressOriginScrollTop = nil
         pressCandidateOwnsViewport = false
+        wheelGestureOwnsViewport = false
         if let willStartLiveScrollObservation {
           NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
         }
@@ -637,12 +646,15 @@ struct UserScrollDetector: NSViewRepresentable {
     private func beginUserScroll() {
       settleWorkItem?.cancel()
       settleWorkItem = nil
+      guard !wheelGestureOwnsViewport else { return }
+      wheelGestureOwnsViewport = true
       onUserScroll()
     }
 
     private func finishUserScroll(on scrollView: NSScrollView) {
       settleWorkItem?.cancel()
       settleWorkItem = nil
+      wheelGestureOwnsViewport = false
       // The notification is delivered at the end of AppKit's live-scroll
       // transaction. Read the final clip bounds on the next main turn, after
       // the scroll view has committed its terminal position.
@@ -653,6 +665,29 @@ struct UserScrollDetector: NSViewRepresentable {
       }
       settleWorkItem = workItem
       DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func scheduleUnphasedWheelEnd(for scrollView: NSScrollView) {
+      // Detent wheels and synthetic classic-wheel events do not always emit
+      // AppKit's live-scroll start/end notifications. Debounce only that
+      // unphased path. Trackpad and momentum events use didEndLiveScroll and
+      // never depend on this wall-clock fallback.
+      settleWorkItem?.cancel()
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self else { return }
+        self.wheelGestureOwnsViewport = false
+        guard let scrollView, Self.isAtBottom(scrollView) else {
+          self.settleWorkItem = nil
+          return
+        }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Self.settledBottomDelay,
+        execute: workItem
+      )
     }
 
     private func scheduleDiscreteInputSettledBottomCheck(for scrollView: NSScrollView) {

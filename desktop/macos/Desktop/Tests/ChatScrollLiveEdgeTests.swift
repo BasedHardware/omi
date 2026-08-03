@@ -1,4 +1,5 @@
 import AppKit
+import ObjectiveC
 import XCTest
 
 @testable import Omi_Computer
@@ -315,6 +316,44 @@ final class ScrollPositionDetectorTests: XCTestCase {
 /// live-scroll lifecycle emitted by a rapid trackpad/wheel gesture.
 @MainActor
 final class UserScrollDetectorTests: XCTestCase {
+  func testRapidWheelBurstClaimsReaderOwnershipOnlyOncePerLiveGesture() {
+    let (scrollView, hostView) = makeScrollViewAtBottom()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = scrollView
+    window.orderFrontRegardless()
+    defer {
+      window.orderOut(nil)
+      window.contentView = nil
+    }
+
+    var ownershipClaims = 0
+    let coordinator = UserScrollDetector.Coordinator(
+      onUserScroll: { ownershipClaims += 1 },
+      onScrollSettledAtBottom: {}
+    )
+    coordinator.install(for: hostView)
+    defer { coordinator.stop() }
+
+    NotificationCenter.default.post(
+      name: NSScrollView.willStartLiveScrollNotification,
+      object: scrollView
+    )
+    for _ in 0..<40 {
+      guard let event = makeWheelEvent(window: window, deltaY: 40) else {
+        return XCTFail("Expected a synthetic wheel event")
+      }
+      NSApplication.shared.sendEvent(event)
+    }
+
+    XCTAssertEqual(
+      ownershipClaims,
+      1,
+      "one physical gesture must not invalidate the SwiftUI transcript once per wheel delta"
+    )
+  }
+
   func testRapidLiveScrollHandsOwnershipToReaderAndDoesNotRearmAwayFromBottom() {
     let (scrollView, hostView) = makeScrollViewAtBottom()
     var userScrollStarts = 0
@@ -411,6 +450,20 @@ final class UserScrollDetectorTests: XCTestCase {
     scrollView.documentView = documentView
     scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: 700))
     return (scrollView, hostView)
+  }
+
+  private func makeWheelEvent(window: NSWindow, deltaY: Int32) -> NSEvent? {
+    guard
+      let cgEvent = CGEvent(
+        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
+        wheel1: deltaY, wheel2: 0, wheel3: 0),
+      let event = NSEvent(cgEvent: cgEvent)
+    else { return nil }
+    InjectedScrollEvent.target = window
+    InjectedScrollEvent.targetWindowNumber = window.windowNumber
+    InjectedScrollEvent.locationInWindowOverride = NSPoint(x: 150, y: 150)
+    object_setClass(event, InjectedScrollEvent.self)
+    return event
   }
 
   private func drainMainQueue() {

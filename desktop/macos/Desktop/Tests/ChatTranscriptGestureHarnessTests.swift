@@ -146,6 +146,52 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "the rail's last known position must be where the reader actually is")
   }
 
+  func testRepeatedFastBurstsKeepTheMountedTranscriptAndPromptRailResponsive() throws {
+    let harness = try makeHarness(messageCount: 120)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    var deliveredScrollTop: CGFloat = -1
+    let detector = ScrollPositionDetector.Coordinator { position in
+      deliveredScrollTop = position.scrollTop
+    }
+    detector.setupScrollObserver(for: harness.probeView)
+    defer { detector.stop() }
+
+    for cycle in 0..<20 {
+      let beforeUp = harness.scrollTop
+      harness.performUpwardGesture(events: 8, pumpPerEvent: 0.003)
+      XCTAssertLessThan(
+        harness.scrollTop,
+        beforeUp - 100,
+        "upward burst \(cycle) stopped moving the mounted transcript"
+      )
+
+      harness.appendStreamingText(" background stream \(cycle).")
+      harness.pump(0.02)
+
+      let beforeDown = harness.scrollTop
+      harness.performDownwardGesture(events: 8, pumpPerEvent: 0.003)
+      XCTAssertGreaterThan(
+        harness.scrollTop,
+        beforeDown + 100,
+        "downward burst \(cycle) stopped moving the mounted transcript"
+      )
+      XCTAssertTrue(
+        harness.usesOriginalScrollView,
+        "wheel-driven SwiftUI state churn replaced the native scroll view during burst \(cycle)"
+      )
+    }
+    harness.pump(0.2)
+
+    XCTAssertEqual(
+      deliveredScrollTop,
+      harness.scrollTop,
+      accuracy: 4,
+      "the prompt rail stopped tracking before the repeated burst sequence ended"
+    )
+  }
+
   func testDeliberateReturnToTheLiveEdgeResumesFollowing() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
@@ -308,6 +354,10 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         visibleMaxY: scrollTop + viewportHeight, documentHeight: documentHeight)
     }
 
+    var usesOriginalScrollView: Bool {
+      Self.firstScrollView(in: hostingView) === scrollView
+    }
+
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
@@ -343,6 +393,20 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.05)
       endLiveScroll()
       pump(0.3)
+    }
+
+    func performDownwardGesture(
+      events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,
+      endGesture: Bool = true
+    ) {
+      beginLiveScroll()
+      for _ in 0..<events {
+        sendWheel(deltaY: -deltaPerEvent)
+        moveClipView(by: deltaPerEvent)
+        if pumpPerEvent > 0 { pump(pumpPerEvent) }
+      }
+      pump(0.05)
+      if endGesture { endLiveScroll() }
     }
 
     /// The journal snapshot arrives, exactly as `ChatProvider` delivers it.
