@@ -98,6 +98,28 @@ async def test_status_restarts_running_legacy_vm_before_screen_purge(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_running_vm_migration_stops_before_starting(monkeypatch):
+    calls = []
+
+    async def instance(*_args):
+        return "RUNNING", None
+
+    async def stop(*_args):
+        calls.append("stop")
+
+    async def start(*_args):
+        calls.append("start")
+        return "1.2.3.4"
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", instance)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_vm", stop)
+    monkeypatch.setattr(desktop_agent_vm, "_start_vm", start)
+
+    assert await desktop_agent_vm._restart_vm("project", {"vmName": "omi-agent-user"}) == "1.2.3.4"
+    assert calls == ["stop", "start"]
+
+
+@pytest.mark.asyncio
 async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
     async def run_blocking(_, function, *args):
         return function(*args)
