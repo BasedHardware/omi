@@ -191,8 +191,6 @@ jobs:
           ACCOUNT_DELETION_HANDLER_URL: ${{ env.ACCOUNT_DELETION_HANDLER_URL }}
           SYNC_TASKS_HANDLER_URL: ${{ env.SYNC_TASKS_HANDLER_URL }}
           SYNC_TASKS_INVOKER_SA: ${{ env.SYNC_TASKS_INVOKER_SA }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: modulate-velma-2,parakeet
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}

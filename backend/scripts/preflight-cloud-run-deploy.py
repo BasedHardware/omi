@@ -270,7 +270,7 @@ def _require_manifest_scope(*, env: str, project: str, manifest_path: Path, chec
     environment_config = render_backend_runtime_env._as_config_dict(environments.get(env))
     if environment_config is None:
         raise ValueError(f'{check_name} has no {env} environment in {manifest_path}')
-    expected_project = environment_config.get('gcp_project')
+    expected_project = environment_config.get('compute_project', environment_config.get('gcp_project'))
     if project != expected_project:
         raise ValueError(f'{check_name} for {env} expects project {expected_project!r}, got {project!r}')
 

@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 AUTO_WORKFLOW_PATH = Path(".github/workflows/gcp_backend_auto_dev.yml")
 MANUAL_WORKFLOW_PATH = Path(".github/workflows/gcp_backend.yml")
+DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
 ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_backend_release_admission.py")
 AUTO_ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_auto_backend_release_admission.py")
 AUTO_PROOF_SHA = "${{ github.event.workflow_run.head_sha }}"
@@ -41,6 +42,16 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
     )
 )
 MANUAL_DEPLOY_NEEDS = "needs: [validate-production-boundary, firestore_readiness]"
+
+
+def deploy_backend_stack_action_text(root: Path = ROOT) -> str:
+    return (root / DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
+
+
+def backend_deploy_contract_text(workflow_text: str, root: Path = ROOT) -> str:
+    if "./.github/actions/deploy-backend-stack" not in workflow_text:
+        return workflow_text
+    return workflow_text + "\n" + deploy_backend_stack_action_text(root)
 
 
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
@@ -378,9 +389,10 @@ def validate_auto_workflow(text: str) -> list[str]:
         errors.append("auto backend deploy must check out the verified SHA before Firestore readiness")
     if text.count(f"FIRESTORE_SOURCE_COMMIT: {AUTO_FIRESTORE_ADMITTED_SHA}") != 2:
         errors.append("auto backend deploy must bind Firestore readiness to the verified SHA")
-    if text.count(f"ref: {AUTO_DEPLOY_ADMITTED_SHA}") != 1:
+    contract = backend_deploy_contract_text(text)
+    if contract.count('ref: ${{ inputs.admitted_sha }}') != 1:
         errors.append("auto backend deploy must check out the verified SHA before deployment")
-    if text.count(f'--commit-sha "{AUTO_DEPLOY_ADMITTED_SHA}"') != 3:
+    if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
         errors.append("auto backend deploy must bind every release vector to the verified SHA")
     return errors
 
@@ -406,8 +418,9 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
         errors.append("manual backend deploy must not accept an arbitrary branch or ref")
+    contract = backend_deploy_contract_text(text)
     control_source_ref = "ref: ${{ github.sha }}"
-    if text.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in text:
+    if contract.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in contract:
         errors.append("manual backend deploy must stage workflow-owned control scripts from github.sha")
 
     repair_job = mapping_block(text, "repair-traffic", 2)
@@ -495,6 +508,7 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
 
     deploy_job = mapping_block(text, "deploy", 2)
+    contract = backend_deploy_contract_text(text)
     if deploy_job is None:
         errors.append("manual backend deploy is missing its deployment job")
     else:
@@ -508,17 +522,23 @@ def validate_manual_workflow(text: str) -> list[str]:
             errors.append("manual deployment must use exactly the main-ref deploy condition")
         require_fragment(
             errors,
-            deploy_job,
-            f"ref: {MANUAL_ADMITTED_SHA}",
-            "manual deployment must check out the admitted SHA",
+            contract,
+            f"admitted_sha: {MANUAL_ADMITTED_SHA}",
+            "manual deployment must pass the admitted SHA to the deploy composite action",
         )
-        if deploy_job.count(f'--commit-sha "{MANUAL_ADMITTED_SHA}"') != 3:
+        if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
             errors.append("manual deployment must bind every release vector to the admitted SHA")
     return errors
 
 
 def validate(root: Path = ROOT) -> list[str]:
-    paths = (AUTO_WORKFLOW_PATH, MANUAL_WORKFLOW_PATH, ADMISSION_VERIFIER_PATH, AUTO_ADMISSION_VERIFIER_PATH)
+    paths = (
+        AUTO_WORKFLOW_PATH,
+        MANUAL_WORKFLOW_PATH,
+        ADMISSION_VERIFIER_PATH,
+        AUTO_ADMISSION_VERIFIER_PATH,
+        DEPLOY_BACKEND_STACK_ACTION,
+    )
     missing = [str(path) for path in paths if not (root / path).is_file()]
     if missing:
         return [f"backend source-admission contract is missing: {path}" for path in missing]

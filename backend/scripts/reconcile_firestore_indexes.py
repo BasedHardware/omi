@@ -107,25 +107,6 @@ def verify_manifest_source(manifest_path: Path) -> dict[str, Any]:
     return generated
 
 
-def deploy_indexes(*, project: str, manifest_path: Path, runner: CommandRunner = subprocess.run) -> None:
-    command = [
-        'npx',
-        '--no-install',
-        'firebase',
-        'deploy',
-        '--only',
-        'firestore:indexes',
-        '--project',
-        project,
-        '--config',
-        str(ROOT / 'firebase.json'),
-        '--non-interactive',
-    ]
-    result = runner(command, cwd=ROOT, check=False)
-    if result.returncode != 0:
-        raise RuntimeError('Firebase index deployment failed')
-
-
 def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
     """Build the Firestore Admin API create command for one manifest signature."""
 
@@ -717,11 +698,8 @@ def reconcile(
             project=project,
             database=database,
         )
-        if provision_missing:
-            for signature in sorted(missing):
-                print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
-        else:
-            print('Firestore index deployment dry run: would deploy the generated Firebase manifest')
+        for signature in sorted(missing):
+            print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
         return
     if check_only:
         assert proposal_output is not None and source_commit is not None
@@ -737,10 +715,7 @@ def reconcile(
             clock=clock,
         )
         return
-    if provision_missing:
-        provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
-    else:
-        deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
+    provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
     wait_for_indexes(
         expected=expected,
         project=project,

@@ -16,6 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "backend"
+DEPLOY_BACKEND_STACK_ACTION = ROOT / ".github/actions/deploy-backend-stack/action.yml"
+BACKEND_DEPLOY_WORKFLOWS = frozenset({"gcp_backend.yml", "gcp_backend_auto_dev.yml"})
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -111,6 +113,7 @@ WRITER_MARKERS = (
     "gcloud run jobs update ",
 )
 PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
+BACKEND_STACK_DEPLOY_ACTION = "uses: ./.github/actions/deploy-backend-stack"
 
 PUSHER_CHART_MARKER = "backend/charts/pusher"
 PUSHER_CONFIGMAP_PREFLIGHT = (
@@ -169,6 +172,54 @@ def job_block(text: str, job: str) -> list[str] | None:
     return block
 
 
+def uses_deploy_backend_stack(block: list[str] | None) -> bool:
+    if block is None:
+        return False
+    return any("./.github/actions/deploy-backend-stack" in line for line in block)
+
+
+def composite_action_step_lines(action_text: str) -> list[str]:
+    """Return composite-action step lines with workflow-style indentation."""
+
+    lines = action_text.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line == "  steps:")
+    except StopIteration:
+        return []
+
+    step_lines: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("    - "):
+            step_lines.append(f"      - {line[6:]}")
+        elif line.startswith("      "):
+            step_lines.append(f"      {line[6:]}")
+        elif line.strip() == "":
+            continue
+        elif not line.startswith(" "):
+            break
+        elif line.startswith("  ") and not line.startswith("    "):
+            break
+    return step_lines
+
+
+def backend_deploy_contract_text(name: str, workflow_text: str) -> str:
+    deploy = job_block(workflow_text, "deploy")
+    base = "\n".join(deploy or [])
+    if name in BACKEND_DEPLOY_WORKFLOWS and uses_deploy_backend_stack(deploy):
+        action_text = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding="utf-8")
+        return base + "\n" + action_text
+    return base
+
+
+def backend_deploy_job_steps(name: str, workflow_text: str) -> list[list[str]]:
+    deploy = job_block(workflow_text, "deploy")
+    if deploy is None:
+        return []
+    if name in BACKEND_DEPLOY_WORKFLOWS and uses_deploy_backend_stack(deploy):
+        return deploy_job_steps(composite_action_step_lines(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding="utf-8")))
+    return deploy_job_steps(deploy)
+
+
 def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
     errors: list[str] = []
     concurrency = parse_top_level_concurrency(text)
@@ -183,47 +234,44 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
     return errors
 
 
-def validate_auto_deploy_acceptance(text: str) -> list[str]:
+def validate_auto_deploy_acceptance(name: str, text: str) -> list[str]:
     """Keep exact admitted-source acceptance in the locked deploy job before promotion."""
 
-    block = job_block(text, "deploy")
-    if block is None:
-        return ["gcp_backend_auto_dev.yml: missing deploy job"]
+    contract = backend_deploy_contract_text(name, text)
+    if job_block(text, "deploy") is None:
+        return [f"{name}: missing deploy job"]
     required_markers = (
         "Capture exact no-traffic candidate URLs",
-        "backend/scripts/verify_backend_release_vector.py",
-        "backend/scripts/run_dev_candidate_acceptance.py",
+        "$DEPLOY_CONTROL_SCRIPTS/run_dev_candidate_acceptance.py",
         "--candidate",
-        f'--commit-sha "{AUTO_DEPLOY_ADMITTED_SHA}"',
+        '--commit-sha "${{ inputs.admitted_sha }}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
-        "--environment dev",
+        "--environment",
         "Shift Cloud Run traffic to validated revisions",
     )
     errors = [
-        f"gcp_backend_auto_dev.yml: candidate acceptance missing {marker!r}"
+        f"{name}: candidate acceptance missing {marker!r}"
         for marker in required_markers
-        if not any(marker in line for line in block)
+        if marker not in contract
     ]
-    smoke_index = next((index for index, line in enumerate(block) if "run_dev_candidate_acceptance.py" in line), -1)
-    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
-    if smoke_index >= promotion_index:
-        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must run before traffic promotion")
+    smoke_index = contract.find("run_dev_candidate_acceptance.py")
+    promotion_index = contract.find("Shift Cloud Run traffic")
+    if smoke_index < 0 or promotion_index < 0 or smoke_index >= promotion_index:
+        errors.append(f"{name}: candidate acceptance must run before traffic promotion")
     if job_block(text, "verify") is not None:
-        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must not run in a post-promotion verify job")
+        errors.append(f"{name}: candidate acceptance must not run in a post-promotion verify job")
     return errors
 
 
 def validate_serving_release_vector(name: str, text: str) -> list[str]:
     """Require a post-promotion, all-tier vector check in each full backend deploy."""
 
-    block = job_block(text, "deploy")
-    if block is None:
+    contract = backend_deploy_contract_text(name, text)
+    if job_block(text, "deploy") is None:
         return [f"{name}: missing deploy job"]
-    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
-    verifier_index = next(
-        (index for index, line in enumerate(block) if "Verify serving backend release vector" in line), -1
-    )
+    promotion_index = contract.find("Shift Cloud Run traffic to validated revisions")
+    verifier_index = contract.find("Verify serving backend release vector")
     errors: list[str] = []
     if promotion_index < 0:
         errors.append(f"{name}: missing Cloud Run traffic promotion")
@@ -233,7 +281,7 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
         errors.append(f"{name}: release-vector verification must run after traffic promotion")
 
     verifier_step = next(
-        (step for step in deploy_job_steps(block) if "Verify serving backend release vector" in "\n".join(step)),
+        (step for step in backend_deploy_job_steps(name, text) if "Verify serving backend release vector" in "\n".join(step)),
         [],
     )
     verifier_text = "\n".join(verifier_step)
@@ -245,7 +293,7 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
     if "--environment" not in verifier_text:
         errors.append(f"{name}: release-vector verification must bind an environment")
     if name == "gcp_backend.yml":
-        if "github.event.inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
+        if "inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
             errors.append(f"{name}: cloud-run-only promotion must use the Cloud Run-only release-vector contract")
     return errors
 
@@ -253,10 +301,10 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
 def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     """Keep the Cloud Run candidate boundary ahead of GKE and traffic mutations."""
 
-    block = job_block(text, "deploy")
-    if block is None:
+    contract = backend_deploy_contract_text(name, text)
+    if job_block(text, "deploy") is None:
         return [f"{name}: missing deploy job"]
-    steps = deploy_job_steps(block)
+    steps = backend_deploy_job_steps(name, text)
 
     def step_index(marker: str) -> int:
         return next((index for index, step in enumerate(steps) if marker in "\n".join(step)), -1)
@@ -267,7 +315,37 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
     serving_vector_index = step_index("Verify serving backend release vector")
     production_smoke_index = step_index("Smoke promoted production serving API")
-    restore_index = step_index("Restore Cloud Run traffic snapshot after failed promotion")
+    restore_steps = [
+        (index, "\n".join(step))
+        for index, step in enumerate(steps)
+        if "Restore Cloud Run traffic snapshot after failed promotion" in "\n".join(step)
+    ]
+    restore_text = "\n".join(text for _, text in restore_steps)
+    profile_marker = (
+        "inputs.deploy_profile == 'manual'"
+        if name == "gcp_backend.yml"
+        else "inputs.deploy_profile == 'auto-dev'"
+    )
+    profile_restore = [text for _, text in restore_steps if profile_marker in text]
+    restore_index = next((index for index, text in restore_steps if profile_marker in text), -1)
+    required_restore_parts = (
+        "steps.cloud-run-traffic-snapshot.outcome == 'success'",
+        "steps.shift-cloud-run-traffic.outcome == 'failure'",
+        "steps.verify-serving-release-vector.outcome == 'failure'",
+    )
+    if not profile_restore or not all(part in "\n".join(profile_restore) for part in required_restore_parts):
+        errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
+    if name == "gcp_backend.yml" and not any(
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
+    ):
+        errors.append(f"{name}: traffic restoration must include failed production serving smoke")
+    if name == "gcp_backend_auto_dev.yml" and any(
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
+    ):
+        errors.append(f"{name}: traffic restoration must not require production serving smoke")
+
+    if not profile_restore:
+        restore_index = -1
     required_steps = {
         "candidate acceptance": candidate_index,
         "pre-promotion traffic snapshot": snapshot_index,
@@ -321,30 +399,13 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         if f"--service {service}" not in snapshot_step:
             errors.append(f"{name}: pre-promotion snapshot must include {service}")
 
-    restore_step = "\n".join(steps[restore_index]) if restore_index >= 0 else ""
-    restore_condition = (
-        "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
-        "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
-        "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
-    )
-    if name == "gcp_backend.yml":
-        restore_condition = (
-            "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
-            "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
-            "|| steps.verify-serving-release-vector.outcome == 'failure' "
-            "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
-        )
-    if restore_condition not in restore_step:
-        errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
-    if name == "gcp_backend.yml" and "steps.smoke-promoted-production-serving-api.outcome == 'failure'" not in restore_step:
-        errors.append(f"{name}: traffic restoration must include failed production serving smoke")
     if not any(
-        marker in restore_step
+        marker in "\n".join(profile_restore)
         for marker in ("backend/scripts/cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore')
     ):
         errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
     for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
-        if artifact not in text:
+        if artifact not in contract:
             errors.append(f"{name}: must retain {artifact!r} as deployment evidence")
     return errors
 
@@ -479,8 +540,9 @@ def is_persistent_writer(text: str) -> bool:
     return (
         any(marker in text for marker in WRITER_MARKERS)
         or any(
-            any(PUBLIC_BUILD_DEPLOY_ACTION in line and not line.lstrip().startswith("#") for line in step)
+            any(action in line and not line.lstrip().startswith("#") for line in step)
             for step in workflow_steps(text)
+            for action in (PUBLIC_BUILD_DEPLOY_ACTION, BACKEND_STACK_DEPLOY_ACTION)
         )
         or has_firestore_index_writer(text)
     )
@@ -611,13 +673,17 @@ def check_repository() -> list[str]:
         "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}",
     )
     for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
-        text = workflow_text.get(name, "")
+        contract = backend_deploy_contract_text(name, workflow_text.get(name, ""))
         for marker in identity_markers:
-            if marker not in text:
+            if marker not in contract:
                 errors.append(f"{name}: backend revision identity must include {marker!r}")
 
-    auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
-    errors.extend(validate_auto_deploy_acceptance(auto_deploy))
+    errors.extend(
+        validate_auto_deploy_acceptance(
+            "gcp_backend_auto_dev.yml",
+            workflow_text.get("gcp_backend_auto_dev.yml", ""),
+        )
+    )
     for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
         errors.extend(validate_serving_release_vector(name, workflow_text.get(name, "")))
         errors.extend(validate_phase_aware_backend_promotion(name, workflow_text.get(name, "")))
@@ -627,8 +693,11 @@ def check_repository() -> list[str]:
         name
         for name, text in workflow_text.items()
         if any(
-            marker in text
-            for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+            marker in backend_deploy_contract_text(name, text) if name in BACKEND_DEPLOY_WORKFLOWS else marker in text
+            for marker in (
+                "backend/scripts/verify_backend_release_vector.py",
+                "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py",
+            )
         )
     )
     # Release-ring deploys are admitted from an immutable record and bind the

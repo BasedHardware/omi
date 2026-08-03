@@ -26,19 +26,23 @@ def _gcloud_live_index(index, *, state='READY'):
     }
 
 
-def test_reconcile_deploys_generated_manifest_and_waits_for_every_index():
+def test_reconcile_provisions_missing_indexes_and_waits_for_every_index():
     commands = []
     list_calls = 0
     sleeps = []
+    target = firebase_index_manifest()['indexes'][-1]
 
     def runner(command, **_kwargs):
         nonlocal list_calls
         commands.append(command)
-        if command[:3] == ['npx', '--no-install', 'firebase']:
-            return SimpleNamespace(returncode=0)
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            return SimpleNamespace(returncode=0, stdout='')
         list_calls += 1
-        indexes = _ready_indexes()
-        indexes[0]['state'] = 'CREATING' if list_calls == 1 else 'READY'
+        indexes = [_gcloud_live_index(index) for index in firebase_index_manifest()['indexes']]
+        if list_calls == 1:
+            indexes.pop()
+        else:
+            indexes[-1] = _gcloud_live_index(target, state='CREATING' if list_calls == 2 else 'READY')
         return SimpleNamespace(returncode=0, stdout=json.dumps(indexes))
 
     reconcile_firestore_indexes.reconcile(
@@ -52,8 +56,9 @@ def test_reconcile_deploys_generated_manifest_and_waits_for_every_index():
         monotonic=iter((0, 0, 1, 1)).__next__,
     )
 
-    assert commands[0][:6] == ['npx', '--no-install', 'firebase', 'deploy', '--only', 'firestore:indexes']
-    assert all(command[:4] == ['gcloud', 'firestore', 'indexes', 'composite'] for command in commands[1:])
+    assert commands[0][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'list']
+    assert commands[1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']
+    assert commands[-1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'list']
     assert sleeps == [1]
 
 
@@ -519,8 +524,8 @@ def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check
     )
 
     def runner(command, **_kwargs):
-        if command[:3] == ['npx', '--no-install', 'firebase']:
-            return SimpleNamespace(returncode=0)
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            return SimpleNamespace(returncode=0, stdout='')
         return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
 
     proposal_kwargs = (
@@ -663,8 +668,8 @@ def test_provisioning_fails_closed_when_gcloud_cannot_create_a_missing_index():
 
 def test_reconcile_fails_when_a_required_index_never_becomes_ready():
     def runner(command, **_kwargs):
-        if command[:3] == ['npx', '--no-install', 'firebase']:
-            return SimpleNamespace(returncode=0)
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            return SimpleNamespace(returncode=0, stdout='')
         return SimpleNamespace(returncode=0, stdout='[]')
 
     with pytest.raises(RuntimeError, match='did not become READY'):
