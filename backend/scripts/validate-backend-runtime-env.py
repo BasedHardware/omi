@@ -28,6 +28,10 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_memory_contract import (
+    validate_retired_memory_env,
+    validate_retired_memory_manifest,
+)  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -51,11 +55,13 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
-    '--task-timeout': '3600s',
-    '--cpu': '2',
-    '--memory': '2Gi',
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {'--task-timeout': '3600s', '--cpu': '2', '--memory': '2Gi'}
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
+    'OMI_LLM_GATEWAY_URL',
+    'OMI_LLM_GATEWAY_FEATURE_MODE',
+    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
 }
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -286,7 +292,7 @@ def _get_env_config(manifest: ConfigDict, env: str) -> ConfigDict:
 
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_manifest(env, env_config)
     for key in ('gcp_project', 'region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))
@@ -589,6 +595,59 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
     job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
     job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    if job_cron == 'true':
+        for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
+            if required_env not in job_env:
+                errors.append(
+                    ValidationError(scope, f'missing gateway env {required_env} while canonical maintenance is enabled')
+                )
+        for required_secret in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS):
+            if required_secret not in job_secrets:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'missing gateway secret {required_secret} while canonical maintenance is enabled',
+                    )
+                )
+
+        gateway_url = _as_config_dict(job_env.get('OMI_LLM_GATEWAY_URL'))
+        if gateway_url is not None and gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
+                )
+            )
+        gateway_mode = (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_FEATURE_MODE') or '').strip().lower()
+        if gateway_mode != 'gateway':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_FEATURE_MODE must be gateway while canonical maintenance is enabled',
+                )
+            )
+        direct_exception = (
+            (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION') or '').strip().lower()
+        )
+        if direct_exception != 'false':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION must be false for canonical memory L2 maintenance',
+                )
+            )
+        if env == 'prod':
+            prod_allow = (
+                (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE') or '').strip().lower()
+            )
+            if prod_allow != 'true':
+                errors.append(
+                    ValidationError(
+                        scope,
+                        'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
+                    )
+                )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -1205,7 +1264,7 @@ def _validate_env_entries(
     strict_provisional: bool,
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_env(scope=scope, actual=actual)
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}

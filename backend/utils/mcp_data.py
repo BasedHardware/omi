@@ -9,6 +9,44 @@ import from other routers).
 
 from typing import Any, Dict, List
 
+from datetime import datetime, timezone
+
+
+def parse_date_only_utc(value: str) -> datetime:
+    """Parse a YYYY-MM-DD string into a UTC-anchored datetime (start-of-day).
+
+    Conversation vectors are stored with a UTC epoch ``created_at`` and Firestore
+    conversation/action-item timestamps are timezone-aware UTC, so a date-only
+    filter must be anchored to UTC — a naive ``datetime.strptime(...)`` would be
+    interpreted in the server's local timezone and shift the window by the UTC
+    offset. Callers apply the end-of-day increment (``end_of_day_utc``) when the
+    bound must include the full end day.
+    """
+    parsed = datetime.strptime(value, '%Y-%m-%d')
+    return parsed.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+
+
+def end_of_day_utc(dt: datetime) -> datetime:
+    """Return the inclusive end of the day for a UTC-anchored boundary.
+
+    Matches the integration-router convention: an end date covers the full day
+    through 23:59:59.999999 UTC, not just up to its midnight.
+    """
+    return dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+
+def date_only_to_utc_epoch(value: str, *, end_of_day: bool = False) -> float:
+    """Parse a YYYY-MM-DD string into a UTC epoch seconds boundary.
+
+    Returns the UTC start-of-day (or inclusive end-of-day when ``end_of_day`` is
+    true) as epoch seconds, for comparison against the vector index's UTC epoch
+    ``created_at``.
+    """
+    parsed = parse_date_only_utc(value)
+    if end_of_day:
+        parsed = end_of_day_utc(parsed)
+    return parsed.timestamp()
+
 
 def clean_action_item(item: Dict[str, Any]) -> Dict[str, Any]:
     """Shape an action_item doc for MCP output (locked descriptions truncated)."""
