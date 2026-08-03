@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -1001,6 +1002,38 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
         for workflow_id in ("ios-internal-auto", "android-internal-auto"):
             if workflow_id not in dispatcher_source:
                 errors.append(f"mobile internal build dispatcher is missing {workflow_id}")
+        if dispatcher_script.exists():
+            try:
+                tree = ast.parse(dispatcher_script.read_text(encoding="utf-8"))
+            except SyntaxError:
+                errors.append("mobile internal build dispatcher is not valid Python")
+            else:
+                main = next(
+                    (
+                        node
+                        for node in tree.body
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
+                    ),
+                    None,
+                )
+                has_dispatch_loop = False
+                if main is not None:
+                    for node in ast.walk(main):
+                        if not isinstance(node, ast.For) or not isinstance(node.target, ast.Name):
+                            continue
+                        if node.target.id != "workflow_id":
+                            continue
+                        has_dispatch_loop = any(
+                            isinstance(child, ast.Call)
+                            and isinstance(child.func, ast.Name)
+                            and child.func.id == "dispatch"
+                            and len(child.args) == 4
+                            for child in ast.walk(node)
+                        )
+                        if has_dispatch_loop:
+                            break
+                if not has_dispatch_loop:
+                    errors.append("mobile internal build dispatcher must call dispatch for each selected workflow")
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")
