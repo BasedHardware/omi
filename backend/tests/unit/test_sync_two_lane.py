@@ -1,13 +1,44 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock
 
+import yaml
 from google.cloud import firestore
 
 from database import sync_ledger, user_usage
 from scripts.render_cloud_run_clone_env import clone_environment
 from utils.sync import backfill, capture_manifest, content_id, lanes
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
+
+
+def backend_deploy_contract_text(workflow_name: str) -> str:
+    workflow = (REPOSITORY_ROOT / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
+    if './.github/actions/deploy-backend-stack' not in workflow:
+        return workflow
+    return workflow + '\n' + DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+
+
+def _load_backend_deploy_workflow(workflow_name: str) -> dict[str, Any]:
+    with (REPOSITORY_ROOT / '.github/workflows' / workflow_name).open('r', encoding='utf-8') as handle:
+        loaded = yaml.safe_load(handle)
+    assert isinstance(loaded, dict)
+    return cast(dict[str, Any], loaded)
+
+
+def _backend_deploy_steps(workflow_name: str) -> list[dict[str, Any]]:
+    workflow = _load_backend_deploy_workflow(workflow_name)
+    steps = list(workflow['jobs']['deploy']['steps'])
+    if any('./.github/actions/deploy-backend-stack' in str(step.get('uses', '')) for step in steps):
+        action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+        assert isinstance(action, dict)
+        composite_steps = action['runs']['steps']
+        assert isinstance(composite_steps, list)
+        return [*steps, *composite_steps]
+    return steps
 
 
 def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
@@ -182,21 +213,26 @@ def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_
 
 
 def test_deploy_contract_routes_both_backfill_budget_alerts():
-    action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    composite = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
 
     assert 'SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS' in manual
-    assert "provision_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
+    assert (
+        "sync_backfill_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
+    )
+    assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
     assert 'gcloud monitoring policies create' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
-    root = Path(__file__).resolve().parents[3]
+    root = REPOSITORY_ROOT
     action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
-    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    auto_dev = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
+    composite = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
 
     for workflow in (manual, auto_dev):
         assert 'uses: ./.github/actions/sync-backfill-lifecycle' in workflow
@@ -213,7 +249,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
             '--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
         )
 
-    assert "provision_budget_alerts: 'false'" in auto_dev
+    assert "default: 'false'" in composite
+    assert 'sync_backfill_budget_alerts:' in composite
     assert 'id: backfill-service' in action
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
@@ -251,9 +288,9 @@ def test_cloud_run_default_service_lists_include_sync_backfill():
 
 def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_candidates():
     """Static deployment-contract guard for the two P0 rollout boundaries."""
-    root = Path(__file__).resolve().parents[3]
-    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
-    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    auto_dev = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
+    workflow_only = (REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
 
     for workflow in (manual, auto_dev):
         assert 'verify_sync_ledger_fence_transition.py' in workflow
@@ -261,16 +298,16 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
         assert '--allow-tagged-no-percent-targets' in workflow
         assert workflow.count("SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}") >= 2
 
-    assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in manual
-    assert "format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG)" in manual
+    assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in workflow_only
+    assert "format('--tag={0}', inputs.transcription_candidate_tag)" in manual
     assert 'resolve_cloud_run_tagged_url.py' in manual
     assert 'uses: ./.github/actions/transcription-release-candidate-probe' in manual
     assert 'candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}' in manual
-    assert 'project_id: ${{ vars.GCP_PROJECT_ID }}' in manual
+    assert 'project_id: ${{ inputs.project_id }}' in manual
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert "github.event.inputs.environment == 'development'" in manual
+    assert "inputs.environment == 'development'" in manual
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
@@ -278,18 +315,14 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
 
 def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     """Prod Cloud Run promotion rolls back on runner-local serving smoke failure."""
-    import yaml
-
-    root = Path(__file__).resolve().parents[3]
-    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
-    steps = workflow['jobs']['deploy']['steps']
+    steps = _backend_deploy_steps('gcp_backend.yml')
     by_name = {step.get('name'): step for step in steps}
 
     public_probe = by_name['Gate backend candidate on known audio']
-    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+    assert public_probe['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
 
     serving_smoke = by_name['Smoke promoted production serving API']
-    assert serving_smoke['if'] == "${{ github.event.inputs.environment == 'prod' }}"
+    assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
     assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
     assert 'firebase-production-serving-token' in serving_smoke['run']
@@ -301,10 +334,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         'Remove failed transcription candidate tag',
     ):
         condition = by_name[name].get('if') or ''
-        assert "github.event.inputs.environment == 'development'" in condition
+        assert "inputs.environment == 'development'" in condition
 
-    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
-    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    deploy_flags = by_name['Deploy ${{ inputs.service }} to Cloud Run']['with']['flags']
+    assert "inputs.transcription_candidate_tag != ''" in deploy_flags
     assert steps.index(by_name['Verify serving backend release vector']) < steps.index(serving_smoke)
     assert steps.index(serving_smoke) < steps.index(
         by_name['Restore Cloud Run traffic snapshot after failed promotion']
