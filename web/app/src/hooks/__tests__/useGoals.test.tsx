@@ -69,7 +69,6 @@ describe('useGoals', () => {
     await act(async () => {
       await result.current.addGoal({
         title: 'Read books',
-        goal_type: 'numeric',
         target_value: 10,
       });
     });
@@ -86,7 +85,6 @@ describe('useGoals', () => {
     await act(async () => {
       created = await result.current.addGoal({
         title: 'Read books',
-        goal_type: 'numeric',
         target_value: 10,
       });
     });

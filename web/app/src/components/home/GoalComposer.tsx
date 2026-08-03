@@ -3,15 +3,7 @@
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { CreateGoalParams } from '@/lib/api';
-import type { GoalType } from '@/types/goals';
-
-const TYPES: Array<{ id: GoalType; label: string; hint: string }> = [
-  { id: 'numeric', label: 'Count', hint: 'Read 12 books' },
-  { id: 'scale', label: 'Scale', hint: 'Rate 0 to 10' },
-  { id: 'boolean', label: 'Yes / no', hint: 'Ship the launch' },
-];
 
 interface GoalComposerProps {
   open: boolean;
@@ -21,16 +13,14 @@ interface GoalComposerProps {
 
 export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps) {
   const [title, setTitle] = useState('');
-  const [goalType, setGoalType] = useState<GoalType>('numeric');
-  const [target, setTarget] = useState('10');
+  const [target, setTarget] = useState('');
   const [unit, setUnit] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
     setTitle('');
-    setGoalType('numeric');
-    setTarget('10');
+    setTarget('');
     setUnit('');
     setError(null);
   };
@@ -40,12 +30,12 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
     onOpenChange(next);
   };
 
-  const targetValue = goalType === 'boolean' ? 1 : Number(target);
-  const canSubmit =
-    title.trim().length > 0 &&
-    Number.isFinite(targetValue) &&
-    targetValue > 0 &&
-    !submitting;
+  // Desktop defaults a blank or invalid target to 1, so a title-only goal still
+  // creates as a yes/no-style goal that completes on one tick.
+  const parsedTarget = Number(target);
+  const targetValue =
+    Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : 1;
+  const canSubmit = title.trim().length > 0 && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -54,12 +44,8 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
 
     const created = await onCreate({
       title: title.trim(),
-      goal_type: goalType,
       target_value: targetValue,
-      current_value: 0,
-      min_value: 0,
-      max_value: goalType === 'scale' ? Math.max(targetValue, 10) : targetValue,
-      unit: unit.trim() || null,
+      ...(unit.trim() ? { unit: unit.trim() } : {}),
     });
 
     setSubmitting(false);
@@ -111,59 +97,32 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
               />
             </label>
 
-            <div>
-              <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                Type
-              </span>
-              <div className="mt-1.5 grid grid-cols-3 gap-2">
-                {TYPES.map(({ id, label, hint }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setGoalType(id)}
-                    aria-pressed={goalType === id}
-                    title={hint}
-                    className={cn(
-                      'rounded-chip px-3 py-2 text-xs transition-colors',
-                      goalType === id
-                        ? 'bg-bg-quaternary text-text-primary'
-                        : 'bg-bg-tertiary text-text-quaternary hover:text-text-secondary',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-xs uppercase tracking-wide text-text-quaternary">
+                  Target
+                </span>
+                <input
+                  type="number"
+                  value={target}
+                  onChange={(event) => setTarget(event.target.value)}
+                  min={1}
+                  className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs uppercase tracking-wide text-text-quaternary">
+                  Unit
+                </span>
+                <input
+                  value={unit}
+                  onChange={(event) => setUnit(event.target.value)}
+                  placeholder="books"
+                  maxLength={64}
+                  className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
+                />
+              </label>
             </div>
-
-            {goalType !== 'boolean' && (
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                    Target
-                  </span>
-                  <input
-                    type="number"
-                    value={target}
-                    onChange={(event) => setTarget(event.target.value)}
-                    min={1}
-                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs uppercase tracking-wide text-text-quaternary">
-                    Unit
-                  </span>
-                  <input
-                    value={unit}
-                    onChange={(event) => setUnit(event.target.value)}
-                    placeholder="books"
-                    maxLength={64}
-                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
-                  />
-                </label>
-              </div>
-            )}
 
             {error && <p className="text-sm text-error">{error}</p>}
           </div>
