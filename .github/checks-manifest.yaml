@@ -386,8 +386,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "backend tests or their isolation allowlist changed"
   - id: backend-runtime-env-compose
-    command: ["bash", "scripts/dev-harness/run-python.sh", "backend/deploy/compose_runtime_env.py", "--check"]
-    triggers: ["backend/deploy/runtime_env/_base.yaml", "backend/deploy/runtime_env/dev.overlay.yaml", "backend/deploy/runtime_env/prod.overlay.yaml", "backend/deploy/compose_runtime_env.py", "backend/deploy/_generate_runtime_env_sources.py", "backend/deploy/runtime_env.yaml", ".github/checks-manifest.yaml"]
+    command: ["bash", "backend/scripts/check_runtime_env_compose.sh"]
+    triggers: ["backend/deploy/runtime_env/_base.yaml", "backend/deploy/runtime_env/dev.overlay.yaml", "backend/deploy/runtime_env/prod.overlay.yaml", "backend/deploy/compose_runtime_env.py", "backend/deploy/_generate_runtime_env_sources.py", "backend/deploy/runtime_env.yaml", "backend/scripts/check_runtime_env_compose.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
   - id: backend-workflow-contracts
