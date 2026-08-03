@@ -15,9 +15,10 @@ interface GoalCardProps {
   goal: Goal;
   onSetProgress: (id: string, currentValue: number) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  onOpen: (goal: Goal) => void;
 }
 
-export function GoalCard({ goal, onSetProgress, onRemove }: GoalCardProps) {
+export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProps) {
   const [draft, setDraft] = useState(() => formatMetricValue(goal.current_value));
   const [lastKnownValue, setLastKnownValue] = useState(goal.current_value);
   const percent = goalProgressPercent(goal);
@@ -44,10 +45,16 @@ export function GoalCard({ goal, onSetProgress, onRemove }: GoalCardProps) {
   return (
     <article className="rounded-xl border border-bg-tertiary bg-bg-secondary p-5">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="truncate font-medium text-text-primary">{goal.title}</h3>
+        <button
+          type="button"
+          onClick={() => onOpen(goal)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <h3 className="truncate font-medium text-text-primary hover:underline">
+            {goal.title}
+          </h3>
           <p className="mt-1 text-sm text-text-quaternary">{formatGoalMetric(goal)}</p>
-        </div>
+        </button>
 
         <button
           type="button"

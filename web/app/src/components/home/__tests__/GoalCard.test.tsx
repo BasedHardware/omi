@@ -27,10 +27,16 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 function setup(overrides: Partial<Goal> = {}) {
   const onSetProgress = vi.fn().mockResolvedValue(undefined);
   const onRemove = vi.fn().mockResolvedValue(undefined);
+  const onOpen = vi.fn();
   render(
-    <GoalCard goal={goal(overrides)} onSetProgress={onSetProgress} onRemove={onRemove} />,
+    <GoalCard
+      goal={goal(overrides)}
+      onSetProgress={onSetProgress}
+      onRemove={onRemove}
+      onOpen={onOpen}
+    />,
   );
-  return { onSetProgress, onRemove, user: userEvent.setup() };
+  return { onSetProgress, onRemove, onOpen, user: userEvent.setup() };
 }
 
 describe('GoalCard', () => {
@@ -96,7 +102,7 @@ describe('GoalCard', () => {
       max_value: 1,
     });
 
-    await user.click(screen.getByRole('button', { name: /Mark done/ }));
+    await user.click(screen.getByRole('button', { name: 'Mark done' }));
     expect(onSetProgress).toHaveBeenCalledWith('goal-1', 1);
   });
 
@@ -108,7 +114,16 @@ describe('GoalCard', () => {
       max_value: 1,
     });
 
-    expect(screen.getByRole('button', { name: /Done/ })).toBeInTheDocument();
+    // Exact name: the title button's accessible name also ends in "Done".
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('opens the detail sheet when the title is clicked', async () => {
+    const { onOpen, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: /^Read books/ }));
+
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'goal-1' }));
   });
 });

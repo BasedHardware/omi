@@ -5,8 +5,10 @@ import {
   createGoal,
   deleteGoal,
   getGoals,
+  updateGoal,
   updateGoalProgress,
   type CreateGoalParams,
+  type UpdateGoalParams,
 } from '@/lib/api';
 import { sortGoals } from '@/lib/goals';
 import type { Goal } from '@/types/goals';
@@ -17,6 +19,7 @@ export interface UseGoalsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   addGoal: (params: CreateGoalParams) => Promise<Goal | null>;
+  editGoal: (id: string, updates: UpdateGoalParams) => Promise<void>;
   setProgress: (id: string, currentValue: number) => Promise<void>;
   removeGoal: (id: string) => Promise<void>;
 }
@@ -123,6 +126,23 @@ export function useGoals(): UseGoalsReturn {
     [],
   );
 
+  const editGoal = useCallback(
+    async (id: string, updates: UpdateGoalParams) => {
+      await applyOptimistic(
+        id,
+        (goal) => ({
+          ...goal,
+          title: updates.title ?? goal.title,
+          target_value: updates.target_value ?? goal.target_value,
+          unit: updates.unit !== undefined ? updates.unit : goal.unit,
+        }),
+        () => updateGoal(id, updates),
+        'Failed to update goal',
+      );
+    },
+    [applyOptimistic],
+  );
+
   const setProgress = useCallback(
     async (id: string, currentValue: number) => {
       await applyOptimistic(
@@ -160,6 +180,7 @@ export function useGoals(): UseGoalsReturn {
     error,
     refresh,
     addGoal,
+    editGoal,
     setProgress,
     removeGoal,
   };

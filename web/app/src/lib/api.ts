@@ -34,7 +34,7 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
-import type { Goal, GoalType, Scores } from '@/types/goals';
+import type { Goal, GoalHistoryEntry, GoalType, Scores } from '@/types/goals';
 import type {
   App,
   AppCategory,
@@ -551,9 +551,46 @@ export async function updateGoalProgress(
   return goal;
 }
 
+export interface UpdateGoalParams {
+  title?: string;
+  target_value?: number;
+  current_value?: number;
+  unit?: string | null;
+}
+
+export async function updateGoal(id: string, updates: UpdateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(`/v1/goals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
 export async function deleteGoal(id: string): Promise<void> {
   await fetchWithAuth(`/v1/goals/${id}`, { method: 'DELETE' });
   invalidateCache(invalidationPatterns.goals);
+}
+
+/**
+ * Recorded progress values for a goal, newest window first.
+ *
+ * Uses `/v1/goals/{id}/history`, not `/v1/goals/{id}/detail`. The detail
+ * projection and the progress-events feed both sit behind
+ * `require_canonical_task_user`, which 404s for anyone not enrolled in the
+ * canonical task system — most web users.
+ */
+export async function getGoalHistory(id: string, days = 30): Promise<GoalHistoryEntry[]> {
+  const history = await fetchWithAuth<GoalHistoryEntry[]>(
+    `/v1/goals/${id}/history?days=${days}`,
+  );
+  return Array.isArray(history) ? history : [];
+}
+
+/** AI-generated advice for a goal. Rate limited server-side. */
+export async function getGoalAdvice(id: string): Promise<string> {
+  const response = await fetchWithAuth<{ advice: string }>(`/v1/goals/${id}/advice`);
+  return response.advice;
 }
 
 /** Daily, weekly, and overall task-completion scores. */
