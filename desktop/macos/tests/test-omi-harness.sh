@@ -77,6 +77,69 @@ assert not module.expectation_matches(
     {"result.error_message": {"contains": "HTTP 500"}},
 )
 
+trace_context = module.HarnessContext(
+    base_url="http://127.0.0.1:59999",
+    flow_path=Path("flow.yaml"),
+    run_dir=Path("runs"),
+    steps_dir=Path("runs/steps"),
+    lane="bridge",
+    log_path=Path("/private/tmp/omi/harness-test.log"),
+    log_start=0,
+    bundle_id=None,
+    process_match=None,
+)
+original_recent_traces = module.recent_traces
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "durationMs": 12},
+    {"path": "/navigate", "durationMs": 145},
+    {"path": "/state", "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    ok, error = module.assert_trace(
+        trace_context, {"latest": True, "trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert not ok and "145" in error, error
+    ok, error = module.assert_trace(
+        trace_context, {"trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert ok, error
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "durationMs": 12},
+    {"path": "/state", "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    ok, error = module.assert_trace(
+        trace_context, {"latest": True, "trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert ok, error
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "method": "POST", "statusCode": 200, "durationMs": 12},
+    {"path": "/navigate", "method": "POST", "statusCode": 500, "durationMs": 8},
+    {"path": "/state", "method": "GET", "statusCode": 200, "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    # The latest /navigate returned 500. The selector must NOT filter it out,
+    # so statusCode: 200 must fail on the newest matching route trace.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.statusCode": 200, "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert not ok, "latest failed trace must not be hidden by an earlier success"
+    # Duration alone should also fail because the latest trace is the 500 (8ms),
+    # not the earlier 200 (12ms) — the selector must pick the newest by identity.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert ok, error
+
+module.recent_traces = original_recent_traces
+
 mismatch = module.expectation_mismatches(
     {"result": {"count": "1"}}, {"result.count": {"minimum": 1}}
 )["result.count"]
