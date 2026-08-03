@@ -137,15 +137,19 @@ services:
     profiles: ["inference"]
     environment:
       HF_HOME: /models/hf
+      # Batch model (prerecorded /transcribe) + streaming model (live /v3/stream). Both are
+      # pre-provisioned into the volume's HF cache. PARAKEET_STREAM_CAPACITY/ALLOCATION_PERCENT are
+      # REQUIRED by StreamAdmissionController.from_env (server refuses to start without them). CUDA
+      # graphs default off, which is the required state when a stream model is set.
+      PARAKEET_MODEL: nvidia/parakeet-tdt-0.6b-v3
+      PARAKEET_STREAM_MODEL: nvidia/parakeet-rnnt-1.1b
+      PARAKEET_STREAM_CAPACITY: "4"
+      PARAKEET_STREAM_ALLOCATION_PERCENT: "100"
     volumes:
       - inference-models:/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU via CDI — see the note on the diarizer service.
+    devices:
+      - "nvidia.com/gpu=all"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
@@ -162,39 +166,40 @@ services:
       args:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
         PYTHON_BASE_IMAGE: python:3.11-slim
+        # skip the ~3GB system CUDA 13.2 install: torch bundles its own cu12.8 runtime libraries,
+        # so on-prem needs only the host driver (via CDI). Halves the image (~24.8GB -> ~12.5GB).
+        INSTALL_SYSTEM_CUDA: "0"
     profiles: ["inference"]
     environment:
       HF_HOME: /models/hf
     volumes:
       - inference-models:/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU via CDI (recommended, Docker >=25, Default Runtime runc) — resolves the CDI device the
+    # same way `docker run --device nvidia.com/gpu=all` does. Legacy nvidia-runtime hosts instead
+    # want `deploy.resources.reservations.devices: [{driver: nvidia, count: all, capabilities: [gpu]}]`
+    # (needs `nvidia-ctk runtime configure` + daemon restart). See SELFHOST_NOTES "GPU passthrough".
+    devices:
+      - "nvidia.com/gpu=all"
     networks: [omi]
     restart: unless-stopped
 
   nllb:
     build:
-      context: ../../
+      # This Dockerfile COPYs main.py/requirements.txt from the context root, so the context is the
+      # service dir (unlike diarizer/parakeet, whose Dockerfiles COPY backend/<svc>/ from repo root).
+      context: ../../backend/nllb_translation
       # Base nvidia/cuda:12.4.1-runtime — public, builds directly.
-      dockerfile: backend/nllb_translation/Dockerfile
+      dockerfile: Dockerfile
     profiles: ["inference"]
     environment:
       # CTranslate2 model dir (pre-provisioned into the volume; not baked into the image).
       NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
     volumes:
       - inference-models:/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU via CDI — see the note on the diarizer service (legacy nvidia-runtime hosts use the
+    # deploy.resources form instead). CPU-only smoke: set CT2_DEVICE=cpu and drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
     networks: [omi]
     restart: unless-stopped
 

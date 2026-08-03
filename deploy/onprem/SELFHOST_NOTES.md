@@ -169,12 +169,16 @@ gated: use an `HUGGINGFACE_TOKEN` whose account has accepted the licenses of `py
 model page once and click *Agree and access*). Then:
 
 ```
+# Build the slim on-prem image (skips the redundant system CUDA — see "Diarizer image is slimmed" below):
+docker build -f backend/diarizer/Dockerfile -t omi-diarizer:onprem-lean \
+  --build-arg PYTHON_BASE_IMAGE=python:3.11-slim --build-arg INSTALL_SYSTEM_CUDA=0 .
 docker run -d --name diarizer --network host --device nvidia.com/gpu=all \
-  -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-diarizer:test
+  -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-diarizer:onprem-lean
 docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
   -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
   python -m pytest tests/contract/test_speaker_embedding_live_contract.py -q -p no:cacheprovider
 # expected: 2 passed  (real 256-dim wespeaker embedding, deterministic, discriminates two signals)
+# verified 2026-08-03 on the slim image, RTX 5060 Ti (Blackwell sm_120): 2 passed.
 ```
 
 Live STT (Parakeet / NeMo) — verified on an RTX 5060 Ti (Blackwell sm_120) with driver 610 + the
@@ -245,6 +249,15 @@ These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 docker compose --profile inference up -d --build
 ```
 
+Once the profile is up (and model weights are provisioned into the volume), run all three
+backend live tests against the running compose services in one shot — the reproducible,
+committed form of the per-service recipes below:
+
+```
+deploy/onprem/run-inference-live-tests.sh            # diarizer + nllb + parakeet
+# expected: diarizer PASS · nllb PASS · parakeet PASS
+```
+
 Requirements and gotchas:
 - **GPU passthrough is a container-runtime concern, not just a driver.** A working `nvidia-smi` on
   the host is NOT enough: Docker needs the **NVIDIA Container Toolkit** installed, or `--gpus all` /
@@ -263,6 +276,15 @@ Requirements and gotchas:
 - **Parakeet base is on NGC:** `docker login nvcr.io` (free NVIDIA NGC account) before building —
   base `nvcr.io/nvidia/nemo:26.02`. NLLB uses a public CUDA base; diarizer's private base is
   overridden to `python:3.11-slim` via the `PYTHON_BASE_IMAGE` build-arg (already set in compose).
+- **Diarizer image is slimmed on-prem via `INSTALL_SYSTEM_CUDA=0`** (build-arg, already set in
+  compose). Upstream's Dockerfile installs a ~3GB CUDA 13.2 local-installer .deb on top of the base,
+  but `torch==2.8.0`'s wheels already bundle the CUDA **12.8** runtime libraries (the `nvidia-*-cu12`
+  packages in `requirements.txt`); the only host-side dependency is the NVIDIA driver, injected at
+  runtime via CDI. Skipping the system install halves the image (**~24.8GB → ~12.5GB**) with no loss
+  of function. cu12.8 is exactly the version torch needs for Blackwell (sm_120), so no system CUDA
+  13.2 is involved either way. `INSTALL_SYSTEM_CUDA=1` (the default) reproduces upstream's image
+  byte-for-byte. Verified here: `torch 2.8.0+cu128`, `torch.cuda.is_available()` True on the RTX
+  5060 Ti (capability (12,0)), and the speaker-embedding live contract below passes on the slim image.
 - **Models are pre-provisioned, not downloaded at runtime.** The `omi` network is `internal: true`
   (no egress) — the proof of "zero external calls". Populate the `inference-models` volume before the
   first `--profile inference` run:
