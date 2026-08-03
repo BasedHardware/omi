@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 from pathlib import Path
 import re
 import tempfile
@@ -20,12 +21,33 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def stage_contract(self, root: Path) -> None:
+        workflow_path = root / CHECKER.WORKFLOW
+        composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION
+        workflow_path.parent.mkdir(parents=True, exist_ok=True)
+        composite_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / CHECKER.WORKFLOW, workflow_path)
+        shutil.copy2(ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION, composite_path)
+
+    def mutate_contract(self, root: Path, expected: str, replacement: str) -> None:
+        workflow_path = root / CHECKER.WORKFLOW
+        composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION
+        workflow = workflow_path.read_text(encoding="utf-8")
+        composite = composite_path.read_text(encoding="utf-8")
+        contract = CHECKER.backend_deploy_contract_text(workflow, root)
+        self.assertIn(expected, contract)
+        if expected in workflow:
+            workflow_path.write_text(workflow.replace(expected, replacement, 1), encoding="utf-8")
+        else:
+            composite_path.write_text(composite.replace(expected, replacement, 1), encoding="utf-8")
+
     def test_current_workflow_preserves_the_rollback_first_cloud_run_only_boundary(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
     def test_production_reservation_smoke_uses_a_schema_valid_inert_tag(self) -> None:
-        workflow = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
-        smoke = workflow[workflow.index(CHECKER.PROD_SMOKE) :]
+        workflow = (ROOT / CHECKER.WORKFLOW).read_text(encoding="utf-8")
+        contract = CHECKER.backend_deploy_contract_text(workflow, ROOT)
+        smoke = contract[contract.index(CHECKER.PROD_SMOKE) :]
         match = re.search(r'''--data '\{"tag":"(?P<tag>[^"]+)"\}'\)''', smoke)
         if match is None:
             self.fail("production reservation smoke must send an exact tag body")
@@ -47,11 +69,13 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
         self.assertIn('raise HTTPException(status_code=401, detail="Unauthorized")', reserve)
 
     def test_rejects_production_boundary_regressions(self) -> None:
-        original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
         mutations = {
             "defaults_to_all": ("default: 'cloud-run-only'", "default: 'all'"),
             "permits_prod_all": (CHECKER.PROD_ALL_REJECTION, "if false; then"),
-            "reintroduces_tagged_url": ("Production has no tagged candidate URL", "Production has no tagged candidate URL\n# resolve_cloud_run_tagged_url.py"),
+            "reintroduces_tagged_url": (
+                CHECKER.PROD_SMOKE,
+                CHECKER.PROD_SMOKE + "\n      run: probe-transcription-candidate-from-cloud-run.sh",
+            ),
             "moves_smoke_before_serving_verification": (CHECKER.PROD_SMOKE, "Smoke production candidate API"),
             "omits_schema_valid_unauthenticated_smoke": (
                 "schema-valid inert tag reaches the authorization wall",
@@ -70,10 +94,8 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
         for name, (expected, replacement) in mutations.items():
             with self.subTest(mutation=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                workflow = root / ".github/workflows/gcp_backend.yml"
-                workflow.parent.mkdir(parents=True)
-                self.assertIn(expected, original)
-                workflow.write_text(original.replace(expected, replacement, 1), encoding="utf-8")
+                self.stage_contract(root)
+                self.mutate_contract(root, expected, replacement)
                 self.assertTrue(CHECKER.validate(root))
 
 
