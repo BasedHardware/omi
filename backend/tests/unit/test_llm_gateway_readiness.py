@@ -53,6 +53,18 @@ def test_ready_fails_closed_when_managed_openai_key_is_missing(monkeypatch):
     assert response.json()['detail'] == 'llm gateway managed chat provider is not configured'
 
 
+def test_ready_fails_closed_when_an_explicit_anthropic_lane_is_present(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
+    monkeypatch.setattr(health, '_managed_anthropic_messages_enabled', lambda _config: True)
+    monkeypatch.setattr(health, '_managed_openai_chat_enabled', lambda _config: False)
+
+    response = TestClient(app).get('/ready', headers=auth_headers())
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'llm gateway managed messages provider is not configured'
+
+
 def test_ready_fails_closed_on_invalid_gateway_config(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
 

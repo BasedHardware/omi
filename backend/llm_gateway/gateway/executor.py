@@ -397,9 +397,14 @@ def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
         enriched_message = dict(message)
         content = enriched_message.get('content')
         existing_text = _personality_content_text(content)
-        enriched_message['content'] = (
-            f'{CHAT_AGENT_PERSONALITY_PROMPT}\n\n{existing_text}' if existing_text else CHAT_AGENT_PERSONALITY_PROMPT
-        )
+        if isinstance(content, list):
+            enriched_message['content'] = [{'type': 'text', 'text': CHAT_AGENT_PERSONALITY_PROMPT}, *content]
+        else:
+            enriched_message['content'] = (
+                f'{CHAT_AGENT_PERSONALITY_PROMPT}\n\n{existing_text}'
+                if existing_text
+                else CHAT_AGENT_PERSONALITY_PROMPT
+            )
         return [*messages[:index], enriched_message, *messages[index + 1 :]]
     return [{'role': 'system', 'content': CHAT_AGENT_PERSONALITY_PROMPT}, *messages]
 

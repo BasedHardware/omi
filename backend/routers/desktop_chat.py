@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import time
@@ -14,6 +15,7 @@ from fastapi.routing import APIRoute
 
 from database import llm_usage as llm_usage_db
 from database import redis_db
+from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.clients import anthropic_client, get_direct_anthropic_client
@@ -29,6 +31,9 @@ from utils.llm.gateway_client import (
     llm_gateway_headers,
     should_route_features_through_gateway,
 )
+from utils.llm.gateway_observability import record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
+from utils.llm.gateway_serving import is_gateway_transport_failure
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
@@ -523,33 +528,108 @@ def _sse_json_payloads(frame_buffer: bytearray, chunk: bytes) -> list[dict[str, 
     return payloads
 
 
-async def _stream_gateway(gateway_payload: dict[str, object], uid: str) -> AsyncIterator[bytes]:
+def _gateway_request_headers(request_id: str) -> dict[str, str]:
+    headers = llm_gateway_headers(feature='chat_agent')
+    headers['X-Omi-Request-ID'] = request_id
+    return headers
+
+
+def _record_gateway_result(*, outcome: str, reason: str, request_id: str) -> None:
+    record_gateway_request_result(
+        feature='chat_agent',
+        outcome=outcome,
+        reason=reason,
+        route=CHAT_AGENT_AUTO_LANE_ID,
+        mode='gateway',
+        request_id=request_id,
+        credential_source='omi_managed',
+    )
+
+
+async def _record_chat_quota_question(uid: str, request_id: str, platform: str | None) -> None:
+    await run_blocking(
+        db_executor,
+        llm_usage_db.record_chat_quota_question,
+        uid,
+        f'desktop_chat_completions:{request_id}',
+        'desktop_chat_completions',
+        platform=platform,
+    )
+
+
+async def _stream_gateway(
+    gateway_payload: dict[str, object], uid: str, request_id: str = 'unknown', platform: str | None = None
+) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, 'chat_agent')
     frame_buffer = bytearray()
     usage_recorded = False
+    started_at = time.monotonic()
+    result_recorded = False
     try:
-        async with get_llm_gateway_client().stream(
-            'POST',
-            f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=llm_gateway_headers(feature='chat_agent'),
-            json=gateway_payload,
-        ) as response:
-            if response.status_code >= 400:
-                yield _sse(
-                    {'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}
-                ).encode()
-                yield b'data: [DONE]\n\n'
-                return
-            async for chunk in response.aiter_bytes():
-                if not chunk:
-                    continue
-                for payload in _sse_json_payloads(frame_buffer, chunk):
-                    usage = payload.get('usage')
-                    if not usage_recorded and isinstance(usage, Mapping):
-                        await _record_usage(uid, _openai_usage_as_anthropic(usage))
-                        usage_recorded = True
-                yield chunk
-    except Exception:
+        if not gateway_circuit.allow_request():
+            _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+            yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
+            yield b'data: [DONE]\n\n'
+            return
+        async with get_llm_gateway_semaphore():
+            async with get_llm_gateway_client().stream(
+                'POST',
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=_gateway_request_headers(request_id),
+                json=gateway_payload,
+            ) as response:
+                if response.status_code >= 400:
+                    status_error = SimpleNamespace(status_code=response.status_code)
+                    transport_failure = is_gateway_transport_failure(status_error)
+                    if transport_failure:
+                        gateway_circuit.record_transport_failure()
+                    observe_gateway_first_byte(
+                        feature='chat_agent',
+                        started_at=started_at,
+                        outcome='transport_failure' if transport_failure else 'error',
+                    )
+                    _record_gateway_result(
+                        outcome='fallback' if transport_failure else 'error',
+                        reason=f'http_{response.status_code}',
+                        request_id=request_id,
+                    )
+                    result_recorded = True
+                    yield _sse(
+                        {'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}
+                    ).encode()
+                    yield b'data: [DONE]\n\n'
+                    return
+                await _record_chat_quota_question(uid, request_id, platform)
+                observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
+                async for chunk in response.aiter_bytes():
+                    if not chunk:
+                        continue
+                    for payload in _sse_json_payloads(frame_buffer, chunk):
+                        usage = payload.get('usage')
+                        if not usage_recorded and isinstance(usage, Mapping):
+                            await _record_usage(uid, _openai_usage_as_anthropic(usage))
+                            usage_recorded = True
+                    yield chunk
+        gateway_circuit.record_transport_success()
+        _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+        result_recorded = True
+    except asyncio.CancelledError:
+        if not result_recorded:
+            _record_gateway_result(outcome='cancelled', reason='cancelled', request_id=request_id)
+        raise
+    except Exception as exc:
+        if not result_recorded:
+            transport_failure = is_gateway_transport_failure(exc)
+            if transport_failure:
+                gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature='chat_agent',
+                started_at=started_at,
+                outcome='transport_failure' if transport_failure else 'error',
+            )
+            _record_gateway_result(
+                outcome='fallback' if transport_failure else 'error', reason='request_error', request_id=request_id
+            )
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
         yield b'data: [DONE]\n\n'
     finally:
@@ -608,32 +688,24 @@ async def chat_completions(
         gateway_mode = should_route_features_through_gateway() and _uses_managed_chat_agent(body)
         if gateway_mode and get_byok_key('anthropic'):
             gateway_mode = False
-        enforce_chat_quota(uid, platform=x_app_platform)
-        await _meter_server_request(uid)
         if gateway_mode:
             public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)
             gateway_payload = _gateway_body(body)
         else:
             public_model, payload = _request(body)
             gateway_payload = {}
+        enforce_chat_quota(uid, platform=x_app_platform)
+        await _meter_server_request(uid)
     except HTTPException:
         raise
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await run_blocking(
-        db_executor,
-        llm_usage_db.record_chat_quota_question,
-        uid,
-        f'desktop_chat_completions:{request_id}',
-        'desktop_chat_completions',
-        platform=x_app_platform,
-    )
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -641,6 +713,7 @@ async def chat_completions(
                     'X-Request-Id': request_id,
                 },
             )
+        await _record_chat_quota_question(uid, request_id, x_app_platform)
         return StreamingResponse(
             _stream(
                 payload,
@@ -655,16 +728,30 @@ async def chat_completions(
                 'X-Request-Id': request_id,
             },
         )
+    if not gateway_mode:
+        await _record_chat_quota_question(uid, request_id, x_app_platform)
     if gateway_mode:
         usage_token = set_usage_context(uid, 'chat_agent')
+        started_at = time.monotonic()
+        result_recorded = False
         try:
-            response = await get_llm_gateway_client().post(
-                f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=llm_gateway_headers(feature='chat_agent'),
-                json=gateway_payload,
-            )
+            if not gateway_circuit.allow_request():
+                _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+                result_recorded = True
+                raise HTTPException(status_code=503, detail='Upstream provider unavailable')
+            async with get_llm_gateway_semaphore():
+                response = await get_llm_gateway_client().post(
+                    f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                    headers=_gateway_request_headers(request_id),
+                    json=gateway_payload,
+                )
             response.raise_for_status()
             response_body = response.json()
+            await _record_chat_quota_question(uid, request_id, x_app_platform)
+            gateway_circuit.record_transport_success()
+            observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
+            _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+            result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
             return JSONResponse(
                 response_body,
@@ -676,6 +763,20 @@ async def chat_completions(
         except HTTPException:
             raise
         except Exception as exc:
+            if not result_recorded:
+                transport_failure = is_gateway_transport_failure(exc)
+                if transport_failure:
+                    gateway_circuit.record_transport_failure()
+                observe_gateway_first_byte(
+                    feature='chat_agent',
+                    started_at=started_at,
+                    outcome='transport_failure' if transport_failure else 'error',
+                )
+                _record_gateway_result(
+                    outcome='fallback' if transport_failure else 'error',
+                    reason='request_error',
+                    request_id=request_id,
+                )
             raise HTTPException(status_code=502, detail='Upstream provider error') from exc
         finally:
             reset_usage_context(usage_token)

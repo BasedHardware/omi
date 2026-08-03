@@ -48,9 +48,15 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
+    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),

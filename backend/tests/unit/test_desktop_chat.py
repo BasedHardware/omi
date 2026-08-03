@@ -151,10 +151,50 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
 
     assert b'"id":"chat-1"' in response.body
     assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
+    assert client.calls[0]['headers']['X-Omi-Request-ID']
     assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
     assert recorded and recorded[0][0] == 'user-1'
     assert recorded[0][1].input_tokens == 3
     assert recorded[0][1].output_tokens == 2
+
+
+@pytest.mark.asyncio
+async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(desktop_chat.gateway_circuit, 'reset', lambda: None)
+    quota_calls = []
+
+    async def record_quota(*args, **kwargs):
+        quota_calls.append((args, kwargs))
+
+    monkeypatch.setattr(desktop_chat, '_record_chat_quota_question', record_quota)
+
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            return httpx.Response(
+                400,
+                json={'error': {'message': 'invalid request'}},
+                request=httpx.Request('POST', url),
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='request-1',
+        )
+
+    assert error.value.status_code == 502
+    assert quota_calls == []
 
 
 @pytest.mark.asyncio
@@ -323,6 +363,7 @@ async def test_stream_gateway_emits_sse_error_on_http_failure(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {})
+    monkeypatch.setattr(desktop_chat.gateway_circuit, 'reset', lambda: None)
 
     events = [chunk async for chunk in desktop_chat._stream_gateway({'model': 'x', 'messages': []}, 'user-1')]
     assert b'Upstream provider error' in events[0]
@@ -361,6 +402,8 @@ async def test_stream_gateway_records_usage_from_sse(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(desktop_chat, 'llm_gateway_headers', lambda **_kwargs: {})
+    monkeypatch.setattr(desktop_chat.gateway_circuit, 'reset', lambda: None)
+    monkeypatch.setattr(desktop_chat, '_record_chat_quota_question', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
 
     events = [chunk async for chunk in desktop_chat._stream_gateway({'model': 'x', 'messages': []}, 'user-1')]

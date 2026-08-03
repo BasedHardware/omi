@@ -110,8 +110,9 @@ def test_chat_agent_personality_preserves_array_system_text():
 
     system_message = provider_request['messages'][0]
     assert system_message['role'] == 'system'
-    assert system_message['content'].startswith('You are Omi, a warm and perceptive personal assistant.')
-    assert system_message['content'].endswith('Use the user context.')
+    assert system_message['content'][0]['type'] == 'text'
+    assert system_message['content'][0]['text'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'][1:] == [{'type': 'text', 'text': 'Use the user context.'}]
 
 
 @pytest.mark.asyncio

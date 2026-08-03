@@ -301,6 +301,41 @@ async def test_the_transport_silent_interval_bound_is_not_overridden(agentic_mod
     assert 'timeout' not in calls[0]
 
 
+async def test_gateway_agent_loop_uses_openai_compatible_lane(agentic_mod, monkeypatch):
+    calls = []
+
+    class Model:
+        def astream(self, messages, **kwargs):
+            calls.append((messages, kwargs))
+
+            async def chunks():
+                yield types.SimpleNamespace(content='Luna answer', tool_call_chunks=[])
+
+            return chunks()
+
+    guard = MagicMock()
+    guard.get_stats.return_value = {}
+    callback = agentic_mod.AsyncStreamingCallback()
+    full_response = []
+    monkeypatch.setattr(agentic_mod, 'get_llm', MagicMock(return_value=Model()))
+
+    result = await agentic_mod._run_openai_agent_stream(
+        'SYSTEM',
+        [{'role': 'user', 'content': 'question'}],
+        [],
+        {},
+        callback,
+        full_response,
+        guard,
+        {},
+    )
+
+    assert result is None
+    assert ''.join(full_response) == 'Luna answer'
+    assert calls[0][0][0] == {'role': 'system', 'content': 'SYSTEM'}
+    assert calls[0][1]['tools'] == []
+
+
 async def test_tool_loop_still_reaches_a_second_iteration(agentic_mod):
     """The retry loop must not swallow the ordinary tool-use iteration."""
     streams = [
