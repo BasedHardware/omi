@@ -6,12 +6,19 @@ import { useGoals } from '@/hooks/useGoals';
 import { useScores } from '@/hooks/useScores';
 import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
+import { GoalDetailSheet } from './GoalDetailSheet';
 import { ScoreSummary } from './ScoreSummary';
 
 export function HomePage() {
-  const { goals, loading, error, addGoal, setProgress, removeGoal } = useGoals();
+  const { goals, loading, error, addGoal, editGoal, setProgress, removeGoal } =
+    useGoals();
   const { scores, loading: scoresLoading } = useScores();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [openGoalId, setOpenGoalId] = useState<string | null>(null);
+
+  // Track the goal by id, not by value, so the sheet keeps showing live data
+  // after an optimistic write replaces the object.
+  const openGoal = goals.find((goal) => goal.id === openGoalId) ?? null;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
@@ -74,6 +81,7 @@ export function HomePage() {
                 goal={goal}
                 onSetProgress={setProgress}
                 onRemove={removeGoal}
+                onOpen={(selected) => setOpenGoalId(selected.id)}
               />
             ))}
           </div>
@@ -84,6 +92,12 @@ export function HomePage() {
         open={composerOpen}
         onOpenChange={setComposerOpen}
         onCreate={addGoal}
+      />
+
+      <GoalDetailSheet
+        goal={openGoal}
+        onClose={() => setOpenGoalId(null)}
+        onSave={editGoal}
       />
     </div>
   );

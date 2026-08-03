@@ -1,4 +1,10 @@
-import type { Goal, ScorePeriod, ScoreTab, Scores } from '@/types/goals';
+import type {
+  Goal,
+  GoalHistoryEntry,
+  ScorePeriod,
+  ScoreTab,
+  Scores,
+} from '@/types/goals';
 
 /**
  * How far a goal has come, 0..100.
@@ -81,4 +87,44 @@ export function describeScorePeriod(period: ScorePeriod): string {
     return 'No tasks yet';
   }
   return `${period.completed_tasks} of ${period.total_tasks} tasks done`;
+}
+
+/** Oldest first, so a chart reads left to right in time order. */
+export function sortHistoryAscending(history: GoalHistoryEntry[]): GoalHistoryEntry[] {
+  return [...history].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export interface SparklinePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Project history values onto a 0..1 box for a sparkline.
+ *
+ * `y` is inverted so 0 is the top, matching SVG coordinates. A flat series has
+ * no range to scale against and is drawn down the middle rather than pinned to
+ * an edge.
+ */
+export function sparklinePoints(history: GoalHistoryEntry[]): SparklinePoint[] {
+  const ordered = sortHistoryAscending(history);
+  if (ordered.length === 0) return [];
+  if (ordered.length === 1) return [{ x: 0, y: 0.5 }];
+
+  const values = ordered.map((entry) => entry.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min;
+
+  return ordered.map((entry, index) => ({
+    x: index / (ordered.length - 1),
+    y: span === 0 ? 0.5 : 1 - (entry.value - min) / span,
+  }));
+}
+
+/** Net change across the recorded window, or null when there is nothing to compare. */
+export function historyDelta(history: GoalHistoryEntry[]): number | null {
+  const ordered = sortHistoryAscending(history);
+  if (ordered.length < 2) return null;
+  return ordered[ordered.length - 1].value - ordered[0].value;
 }

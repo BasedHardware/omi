@@ -4,11 +4,14 @@ import {
   formatGoalMetric,
   formatMetricValue,
   goalProgressPercent,
+  historyDelta,
   isGoalComplete,
   resolveDefaultTab,
   sortGoals,
+  sortHistoryAscending,
+  sparklinePoints,
 } from '@/lib/goals';
-import type { Goal, Scores } from '@/types/goals';
+import type { Goal, GoalHistoryEntry, Scores } from '@/types/goals';
 
 function goal(overrides: Partial<Goal> = {}): Goal {
   return {
@@ -169,5 +172,96 @@ describe('describeScorePeriod', () => {
     expect(describeScorePeriod({ score: 0, completed_tasks: 0, total_tasks: 0 })).toBe(
       'No tasks yet',
     );
+  });
+});
+
+describe('sortHistoryAscending', () => {
+  const entry = (date: string, value: number): GoalHistoryEntry => ({
+    date,
+    value,
+    recorded_at: `${date}T00:00:00Z`,
+  });
+
+  it('orders oldest first so a chart reads left to right', () => {
+    const sorted = sortHistoryAscending([
+      entry('2026-03-01', 3),
+      entry('2026-01-01', 1),
+      entry('2026-02-01', 2),
+    ]);
+
+    expect(sorted.map((point) => point.value)).toEqual([1, 2, 3]);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = [entry('2026-03-01', 3), entry('2026-01-01', 1)];
+    sortHistoryAscending(input);
+
+    expect(input.map((point) => point.value)).toEqual([3, 1]);
+  });
+});
+
+describe('sparklinePoints', () => {
+  const entry = (date: string, value: number): GoalHistoryEntry => ({
+    date,
+    value,
+    recorded_at: `${date}T00:00:00Z`,
+  });
+
+  it('spreads x evenly and inverts y for SVG coordinates', () => {
+    const points = sparklinePoints([
+      entry('2026-01-01', 0),
+      entry('2026-01-02', 5),
+      entry('2026-01-03', 10),
+    ]);
+
+    expect(points).toEqual([
+      { x: 0, y: 1 },
+      { x: 0.5, y: 0.5 },
+      { x: 1, y: 0 },
+    ]);
+  });
+
+  it('sorts before projecting, so out-of-order input still reads forward', () => {
+    const points = sparklinePoints([entry('2026-01-03', 10), entry('2026-01-01', 0)]);
+
+    expect(points).toEqual([
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+    ]);
+  });
+
+  it('draws a flat series down the middle rather than dividing by zero', () => {
+    const points = sparklinePoints([entry('2026-01-01', 4), entry('2026-01-02', 4)]);
+
+    expect(points).toEqual([
+      { x: 0, y: 0.5 },
+      { x: 1, y: 0.5 },
+    ]);
+  });
+
+  it('handles empty and single-point history', () => {
+    expect(sparklinePoints([])).toEqual([]);
+    expect(sparklinePoints([entry('2026-01-01', 7)])).toEqual([{ x: 0, y: 0.5 }]);
+  });
+});
+
+describe('historyDelta', () => {
+  const entry = (date: string, value: number): GoalHistoryEntry => ({
+    date,
+    value,
+    recorded_at: `${date}T00:00:00Z`,
+  });
+
+  it('measures last minus first in date order', () => {
+    expect(historyDelta([entry('2026-01-03', 9), entry('2026-01-01', 4)])).toBe(5);
+  });
+
+  it('reports a decline as negative', () => {
+    expect(historyDelta([entry('2026-01-01', 9), entry('2026-01-03', 4)])).toBe(-5);
+  });
+
+  it('has nothing to compare with fewer than two points', () => {
+    expect(historyDelta([])).toBeNull();
+    expect(historyDelta([entry('2026-01-01', 4)])).toBeNull();
   });
 });

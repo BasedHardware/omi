@@ -1,4 +1,5 @@
 import type {
+  GoalHistoryEntryResponse,
   GoalMetric,
   GoalResponse,
   GoalSource,
@@ -10,6 +11,9 @@ export type { GoalMetric, GoalResponse, GoalSource, GoalStatus, GoalType };
 
 /** A goal as the web client consumes it. */
 export type Goal = GoalResponse;
+
+/** One recorded progress value, from `/v1/goals/{id}/history`. */
+export type GoalHistoryEntry = GoalHistoryEntryResponse;
 
 /**
  * Score wire shapes for `/v1/scores` and `/v1/daily-score`.
