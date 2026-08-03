@@ -1,0 +1,172 @@
+"""UnifiedPush send channel (ADR-0011): payload shape, addressing, dead-endpoint cleanup, routing.
+
+The channel POSTs a neutral PushMessage to each registered endpoint and treats HTTP 404/410 as a
+permanently-dead endpoint (parity with the FCM invalid-token taxonomy). A final routing test proves
+that with PUSH_NOTIFICATION_BACKEND=unifiedpush the public sender reaches this channel and never
+touches Firebase.
+"""
+
+import asyncio
+import json
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import Any, Iterator
+
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+import pytest  # noqa: E402
+
+from testing.import_isolation import load_module_fresh, stub_modules  # noqa: E402
+from utils.push import unifiedpush as up  # noqa: E402
+from utils.push.base import PushMessage  # noqa: E402
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def test_render_payload_visible_carries_notification():
+    payload = up.render_payload(PushMessage(tag='t', title='omi', body='hi', data={'type': 'x'}, priority='high'))
+    assert payload == {
+        'tag': 't',
+        'priority': 'high',
+        'is_background': False,
+        'data': {'type': 'x'},
+        'notification': {'title': 'omi', 'body': 'hi'},
+    }
+
+
+def test_render_payload_data_only_omits_notification():
+    payload = up.render_payload(PushMessage(tag='t', data={'type': 'action_item_reminder'}, is_background=True))
+    assert 'notification' not in payload
+    assert payload['is_background'] is True
+    assert payload['data'] == {'type': 'action_item_reminder'}
+
+
+def test_target_url_verbatim_without_internal_base(monkeypatch):
+    monkeypatch.delenv('UNIFIEDPUSH_INTERNAL_BASE_URL', raising=False)
+    assert up._target_url('http://10.0.2.2:8090/topicA?up=1') == 'http://10.0.2.2:8090/topicA?up=1'
+
+
+def test_target_url_rewrites_host_via_internal_base(monkeypatch):
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy:80')
+    # The phone-facing host is dropped; only the path+query survive onto the internal base.
+    assert up._target_url('http://10.0.2.2:8090/topicA?up=1') == 'http://ntfy:80/topicA?up=1'
+
+
+def _endpoints(monkeypatch, values):
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: list(values))
+    removed = []
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
+    return removed
+
+
+def test_send_to_user_counts_success_and_drops_dead(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1', 'http://ntfy/flaky?up=1'])
+    statuses = {'http://ntfy/live?up=1': 200, 'http://ntfy/dead?up=1': 410, 'http://ntfy/flaky?up=1': 503}
+    monkeypatch.setattr(up, '_post_sync', lambda url, _body: statuses[url])
+
+    sent = up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi'))
+
+    assert sent == 1  # only the 2xx endpoint
+    assert removed == [['http://ntfy/dead?up=1']]  # 410 dropped; 503 kept as transient
+
+
+def test_send_to_user_network_error_keeps_endpoint(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/x?up=1'])
+    monkeypatch.setattr(up, '_post_sync', lambda _url, _body: None)  # network error → None
+
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
+    assert removed == []  # transient, not dropped
+
+
+def test_send_to_user_no_endpoints_is_noop(monkeypatch):
+    _endpoints(monkeypatch, [])
+    called = []
+    monkeypatch.setattr(up, '_post_sync', lambda url, body: called.append(url) or 200)
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
+    assert called == []
+
+
+def test_send_to_user_async_drops_dead(monkeypatch):
+    removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1'])
+    statuses = {'http://ntfy/live?up=1': 202, 'http://ntfy/dead?up=1': 404}
+
+    async def _post(url, _body):
+        return statuses[url]
+
+    monkeypatch.setattr(up, '_post_async', _post)
+
+    sent = asyncio.run(up.send_to_user_async('u1', PushMessage(tag='t', title='omi', body='hi')))
+    assert sent == 1
+    assert removed == [['http://ntfy/dead?up=1']]
+
+
+# --- routing: public sender -> unifiedpush channel, never Firebase --------------------------------
+
+
+def _module(name: str, **attributes: Any) -> ModuleType:
+    module = ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    return module
+
+
+@contextmanager
+def _loaded_notifications() -> Iterator[ModuleType]:
+    def _unexpected_send(_messages: Any) -> Any:
+        raise AssertionError('messaging.send_each must not be called in unifiedpush mode')
+
+    messaging = _module(
+        'firebase_admin.messaging',
+        Notification=lambda title, body: SimpleNamespace(title=title, body=body),
+        AndroidConfig=lambda **k: SimpleNamespace(**k),
+        AndroidNotification=lambda **k: SimpleNamespace(**k),
+        APNSConfig=lambda **k: SimpleNamespace(**k),
+        APNSPayload=lambda **k: SimpleNamespace(**k),
+        Aps=lambda **k: SimpleNamespace(**k),
+        WebpushConfig=lambda **k: SimpleNamespace(**k),
+        WebpushNotification=lambda **k: SimpleNamespace(**k),
+        WebpushFCMOptions=lambda **k: SimpleNamespace(**k),
+        Message=lambda **k: SimpleNamespace(**k),
+        send_each=_unexpected_send,
+    )
+    auth = _module('firebase_admin.auth', get_user=lambda _uid: SimpleNamespace(display_name='Ada'))
+    stubs = {
+        'firebase_admin': _module('firebase_admin', messaging=messaging, auth=auth),
+        'firebase_admin.messaging': messaging,
+        'firebase_admin.auth': auth,
+        'database.redis_db': _module(
+            'database.redis_db',
+            set_credit_limit_notification_sent=lambda _uid: None,
+            has_credit_limit_notification_been_sent=lambda _uid: False,
+            set_silent_user_notification_sent=lambda _uid: None,
+            has_silent_user_notification_been_sent=lambda _uid: False,
+        ),
+        'database.auth': _module('database.auth', get_user_from_uid=lambda _uid: None),
+        'utils.llm.notifications': _module(
+            'utils.llm.notifications',
+            generate_notification_message=lambda *_a, **_k: ('t', 'b'),
+            generate_credit_limit_notification=lambda *_a, **_k: ('t', 'b'),
+            generate_silent_user_notification=lambda *_a, **_k: ('t', 'b'),
+        ),
+    }
+    with stub_modules(stubs):
+        notifications = load_module_fresh('utils.notifications', str(BACKEND_DIR / 'utils' / 'notifications.py'))
+        yield notifications
+
+
+def test_send_notification_routes_to_unifiedpush(monkeypatch):
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: ['http://ntfy/t?up=1'])
+    posted = []
+    monkeypatch.setattr(up, '_post_sync', lambda url, body: posted.append((url, json.loads(body))) or 200)
+
+    with _loaded_notifications() as notifications:
+        notifications.send_notification('user-1', 'omi', 'hello')
+
+    assert len(posted) == 1
+    url, payload = posted[0]
+    assert url == 'http://ntfy/t?up=1'
+    assert payload['notification'] == {'title': 'omi', 'body': 'hello'}

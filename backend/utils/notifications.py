@@ -16,7 +16,7 @@ from database.redis_db import (
 )
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
-from utils.push.base import DISABLED
+from utils.push.base import DISABLED, UNIFIEDPUSH, PushMessage
 from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
     generate_notification_message,
@@ -173,6 +173,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _to_push_message(
+    tag: str,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+) -> PushMessage:
+    """Translate the FCM-shaped send arguments into a backend-neutral PushMessage."""
+    title: Optional[str] = cast(Any, notification).title if notification else None
+    body: Optional[str] = cast(Any, notification).body if notification else None
+    return PushMessage(tag=tag, title=title, body=body, data=data, is_background=is_background, priority=priority)
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -183,8 +196,13 @@ def _send_to_user(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
-    if resolve_push_backend() == DISABLED:
+    backend = resolve_push_backend()
+    if backend == DISABLED:
         return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up
+
+        return _up.send_to_user(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -220,8 +238,13 @@ async def _send_to_user_async(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
-    if resolve_push_backend() == DISABLED:
+    backend = resolve_push_backend()
+    if backend == DISABLED:
         return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up
+
+        return await _up.send_to_user_async(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
@@ -375,7 +398,13 @@ def send_training_data_submitted_notification(user_id: str) -> None:
 
 async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
     """Send notification to multiple users in batches."""
-    if resolve_push_backend() == DISABLED:
+    backend = resolve_push_backend()
+    if backend == DISABLED:
+        return
+    if backend == UNIFIEDPUSH:
+        # The bulk (daily-summary) recipients are pre-gathered as FCM tokens upstream; the
+        # UnifiedPush bulk path gathers endpoints instead and is wired separately (task C3b).
+        logger.info('UnifiedPush bulk send not yet wired; skipping %s recipients', len(user_tokens))
         return
     try:
         batch_size = 500
