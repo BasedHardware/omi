@@ -378,12 +378,22 @@ def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
     return errors
 
 
+def _workflow_contract_text(workflow: Path) -> str:
+    workflow_text = workflow.read_text(encoding="utf-8")
+    if "./.github/actions/deploy-backend-stack" not in workflow_text:
+        return workflow_text
+    composite_action = REPOSITORY_ROOT / ".github/actions/deploy-backend-stack/action.yml"
+    if not composite_action.is_file():
+        return workflow_text
+    return workflow_text + "\n" + composite_action.read_text(encoding="utf-8")
+
+
 def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     errors: list[str] = []
     for contract in contracts:
         dockerfile = _repository_relative(contract.dockerfile)
         for workflow in contract.deployment_workflows:
-            workflow_text = workflow.read_text(encoding="utf-8")
+            workflow_text = _workflow_contract_text(workflow)
             workflow_name = _repository_relative(workflow)
             if not any(
                 marker in workflow_text
