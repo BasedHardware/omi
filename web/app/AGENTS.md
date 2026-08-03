@@ -29,11 +29,14 @@ installs.
 `.github/checks-manifest.yaml` as `web-app-checks`, triggered by changes under
 `web/app/`.
 
-Lint is deliberately outside `check`. `eslint-config-next` 16 turned on the
-React Compiler rule set, and the existing tree reports 77 errors and 21 warnings
-that predate the gate — mostly `react-hooks/set-state-in-effect`. Wiring it in
-now would fail every PR on day one. Fix the backlog before adding
-`npm run lint` to `check`.
+Lint is deliberately outside `check`: `eslint-config-next` 16 turned on the
+React Compiler rules and the tree still reports 62 pre-existing errors, so
+wiring it in would fail every PR on day one. 48 are
+`react-hooks/set-state-in-effect`, which fires on the fetch-on-mount shape every
+data hook here uses — the rule cannot see through the async boundary, so even an
+effect that sets state only after an `await` is flagged. Clearing that is a
+design decision (adopt a data-fetching library, or turn the rule off), not a
+mechanical fix. Do it before adding `npm run lint` to `check`.
 
 ## Tests
 
