@@ -1,0 +1,52 @@
+version: 2
+name: google-connector-oauth-read
+tier: manual
+description: Gmail and Calendar connector reads use every active Google OAuth grant and expose OAuth source classification through the automation bridge.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/GmailReaderService.swift
+  - desktop/macos/Desktop/Sources/CalendarReaderService.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthConnection.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthFlow.swift
+  - desktop/macos/Desktop/Sources/GoogleOAuthReader.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Confirm an active OAuth grant
+    bridge.action:
+      name: google_oauth_status
+    expect:
+      result.action: "google_oauth_status"
+      result.source: "oauth"
+
+  - id: S2
+    name: Gmail OAuth read probe returns a classified status
+    bridge.action:
+      name: gmail_read_probe
+      params:
+        maxResults: 1
+        query: "newer_than:1d"
+    expect:
+      result.action: "gmail_read_probe"
+      result.source: "oauth"
+
+  - id: S3
+    name: Calendar OAuth read probe returns a classified status
+    bridge.action:
+      name: calendar_read_probe
+      params:
+        daysBack: 1
+        daysForward: 1
+        maxResults: 1
+    expect:
+      result.action: "calendar_read_probe"
+      result.source: "oauth"
+
+  - id: S4
+    name: Bridge logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
