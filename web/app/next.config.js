@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Moonshine publishes raw TypeScript sources (its package `main` is
+  // `./src/index.ts`), so Next has to compile it like first-party code.
+  transpilePackages: ['@tschk/moonshine'],
   images: {
     remotePatterns: [
       {

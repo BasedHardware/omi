@@ -1,44 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Image from 'next/image';
 import { ExternalLink, User } from 'lucide-react';
 import { getOrCreatePersona } from '@/lib/api';
+import { useAsyncResource } from '@/hooks/useAsyncResource';
 import { isPersonaPublic, personaPublicUrl, personaStatusLabel } from '@/lib/persona';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
-import type { App } from '@/types/apps';
 
 export default function PersonaPage() {
-  const [persona, setPersona] = useState<App | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: persona,
+    loading,
+    error,
+  } = useAsyncResource('persona', getOrCreatePersona, {
+    fallbackMessage: 'Failed to load persona',
+  });
 
   useEffect(() => {
     MixpanelManager.pageView('Persona');
   }, []);
-
-  const load = useCallback(async (isMounted: () => boolean) => {
-    try {
-      const loaded = await getOrCreatePersona();
-      if (!isMounted()) return;
-      setPersona(loaded);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to load persona:', err);
-      if (!isMounted()) return;
-      setError(err instanceof Error ? err.message : 'Failed to load persona');
-    } finally {
-      if (isMounted()) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    void load(() => mounted);
-    return () => {
-      mounted = false;
-    };
-  }, [load]);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10">

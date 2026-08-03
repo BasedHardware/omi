@@ -34,7 +34,8 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
-import type { Goal, GoalHistoryEntry, GoalType, Scores } from '@/types/goals';
+import type { Goal, GoalHistoryEntry, GoalType } from '@/types/goals';
+import type { Scores } from '@/types/scores';
 import type {
   App,
   AppCategory,

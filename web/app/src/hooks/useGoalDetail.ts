@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { getGoalAdvice, getGoalHistory } from '@/lib/api';
+import { useAsyncResource } from '@/hooks/useAsyncResource';
 import type { GoalHistoryEntry } from '@/types/goals';
 
 export interface UseGoalDetailReturn {
@@ -14,54 +15,34 @@ export interface UseGoalDetailReturn {
   requestAdvice: () => Promise<void>;
 }
 
+const NO_HISTORY: GoalHistoryEntry[] = [];
+
 /**
  * History for one goal, plus advice fetched only on demand.
  *
  * Advice is an LLM call behind a server-side rate limit, so it never runs on
- * open — only when the user asks for it.
+ * open — only when the user asks for it. It is therefore plain state rather
+ * than a resource, which would fetch eagerly.
  */
 export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
-  const [history, setHistory] = useState<GoalHistoryEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const history = useAsyncResource(
+    goalId,
+    useCallback(() => getGoalHistory(goalId as string), [goalId]),
+    { fallbackMessage: 'Failed to load history' },
+  );
+
   const [advice, setAdvice] = useState<string | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
+  const [adviceGoalId, setAdviceGoalId] = useState<string | null>(goalId);
 
-  const loadHistory = useCallback(async (id: string, isMounted: () => boolean) => {
-    try {
-      const loaded = await getGoalHistory(id);
-      if (!isMounted()) return;
-      setHistory(loaded);
-      setHistoryError(null);
-    } catch (err) {
-      console.error('Failed to load goal history:', err);
-      if (!isMounted()) return;
-      setHistoryError(err instanceof Error ? err.message : 'Failed to load history');
-    } finally {
-      if (isMounted()) setHistoryLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!goalId) {
-      setHistory([]);
-      setAdvice(null);
-      setHistoryError(null);
-      setAdviceError(null);
-      return;
-    }
-
-    let mounted = true;
-    setHistoryLoading(true);
-    // Advice belongs to the previous goal; drop it when the selection changes.
+  // Advice belongs to the goal it was requested for; drop it when the
+  // selection changes rather than showing it under a new title.
+  if (goalId !== adviceGoalId) {
+    setAdviceGoalId(goalId);
     setAdvice(null);
     setAdviceError(null);
-    void loadHistory(goalId, () => mounted);
-    return () => {
-      mounted = false;
-    };
-  }, [goalId, loadHistory]);
+  }
 
   const requestAdvice = useCallback(async () => {
     if (!goalId) return;
@@ -77,13 +58,24 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
     }
   }, [goalId]);
 
-  return {
-    history,
-    historyLoading,
-    historyError,
-    advice,
-    adviceLoading,
-    adviceError,
-    requestAdvice,
-  };
+  return useMemo(
+    () => ({
+      history: history.data ?? NO_HISTORY,
+      historyLoading: history.loading,
+      historyError: history.error,
+      advice,
+      adviceLoading,
+      adviceError,
+      requestAdvice,
+    }),
+    [
+      history.data,
+      history.loading,
+      history.error,
+      advice,
+      adviceLoading,
+      adviceError,
+      requestAdvice,
+    ],
+  );
 }
