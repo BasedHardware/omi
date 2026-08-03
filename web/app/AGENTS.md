@@ -11,9 +11,8 @@ npm ci          # the Dockerfile uses the same lockfile path
 npm run dev     # generates the Firebase service worker, then next dev --turbopack
 ```
 
-Use npm here, not Bun or pnpm: `web/app/Dockerfile` runs `npm ci` against
-`package-lock.json`, and a competing lockfile changes what the production image
-installs.
+Use npm, not Bun or pnpm: `Dockerfile` runs `npm ci` against `package-lock.json`,
+and a competing lockfile changes what the production image installs.
 
 ## Quality Gates
 
@@ -24,31 +23,33 @@ installs.
 | Both | `npm run check` — what `./test.sh` and CI run | enforced |
 | Lint | `npm run lint` (`eslint .`) | **not enforced — pre-existing failures** |
 
-`./test.sh` is the component runner; it installs dependencies when
-`node_modules` is absent and then runs `npm run check`. It is registered in
-`.github/checks-manifest.yaml` as `web-app-checks`, triggered by changes under
-`web/app/`.
+`./test.sh` is the component runner: installs deps if absent, then `npm run
+check`. Registered in `.github/checks-manifest.yaml` as `web-app-checks`.
 
 Lint is deliberately outside `check`: `eslint-config-next` 16 turned on the
-React Compiler rules and the tree still reports 62 pre-existing errors, so
+React Compiler rules and the tree still reports 57 pre-existing errors, so
 wiring it in would fail every PR on day one. 48 are
-`react-hooks/set-state-in-effect`, which fires on the fetch-on-mount shape every
-data hook here uses — the rule cannot see through the async boundary, so even an
-effect that sets state only after an `await` is flagged. Clearing that is a
-design decision (adopt a data-fetching library, or turn the rule off), not a
-mechanical fix. Do it before adding `npm run lint` to `check`.
+`react-hooks/set-state-in-effect` against the fetch-on-mount shape the older
+data hooks use; signal-backed code does not hit it (see State below). Clear the
+backlog before adding `npm run lint` to `check`.
+
+## State
+
+The Home hub runs on `@tschk/moonshine` signals, not React state:
+`useAsyncResource` for reads, a signal store for optimistically-written lists.
+Import only the kernel. Why, and the pitfalls:
+[`docs/agents/web-app-signals.md`](../../docs/agents/web-app-signals.md).
 
 ## Tests
 
-Tests live in `__tests__/` next to the code they cover and are discovered by
-`vitest.config.mts` (jsdom environment, `@` aliased to `src/`). Prefer testing
-pure logic in `src/lib/` and `src/hooks/`; reserve component rendering for
-behavior that only appears in the tree.
+Tests live in `__tests__/` beside the code, discovered by `vitest.config.mts`
+(jsdom, `@` → `src/`). Prefer pure logic in `src/lib/` and `src/hooks/`; reserve
+component rendering for behavior that only appears in the tree.
 
 ## Parity With Desktop
 
 `web/app` is not a port of `desktop/macos` and cannot be one — Rewind, Focus,
-Insights, the floating bar, Bluetooth pairing, and local file indexing all
-depend on macOS capture APIs with no browser equivalent. When adding a surface
-that desktop already has, check whether its data comes from a
-`backend/routers/` endpoint (portable) or from local Swift storage (not).
+Insights, the floating bar, Bluetooth pairing, and local file indexing need
+macOS capture APIs with no browser equivalent. Before porting a desktop surface,
+check whether its data comes from a `backend/routers/` endpoint (portable) or
+local Swift storage (not).
