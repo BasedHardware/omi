@@ -128,10 +128,10 @@ def get_canonical_knowledge_graph(
         le=canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
     ),
     cursor: Optional[str] = Query(default=None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:canonical")),
 ):
     try:
-        graph = get_canonical_knowledge_graph_payload(
+        page = canonical_graph_service.get_canonical_knowledge_graph(
             uid,
             limit=limit,
             cursor=cursor,
@@ -141,10 +141,10 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
     return CanonicalKnowledgeGraphResponse(
-        nodes=graph.get('nodes', []),
-        edges=graph.get('edges', []),
-        has_more=bool(graph.get('has_more', False)),
-        next_cursor=graph.get('next_cursor'),
+        nodes=page.nodes,
+        edges=page.edges,
+        has_more=page.has_more,
+        next_cursor=page.next_cursor,
     )
 
 

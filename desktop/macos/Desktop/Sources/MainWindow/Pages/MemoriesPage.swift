@@ -162,6 +162,12 @@ class MemoriesViewModel: ObservableObject {
       guard oldValue != selectedLayerFilter else { return }
       bumpScopeGeneration()
       displayLimit = pageSize
+      // Drop the previous layer's projection immediately so an in-flight fetch
+      // cannot leave stale rows visible after the user switches layers.
+      memories = []
+      currentOffset = 0
+      rawBackendOffset = 0
+      hasMoreMemories = true
       Task { await reloadForCurrentLayerFilter() }
     }
   }
@@ -261,6 +267,8 @@ class MemoriesViewModel: ObservableObject {
   private var inFlightInitialMemoryLoads = 0
   private var memoryLoadLifecycleWaiters: [CheckedContinuation<Void, Never>] = []
   private(set) var memoryLoadLifecycleWaiterCount = 0
+  /// Set when a scope-driven reload arrives while `loadMemories()` is active.
+  private var pendingScopeReload = false
 
   /// Whether the memories page is currently visible.
   /// Auto-refresh only runs when active to avoid unnecessary API calls.
@@ -428,11 +436,7 @@ class MemoriesViewModel: ObservableObject {
 
   private func reloadForCurrentLayerFilter() async {
     let token = currentScopeToken
-    if hasAuthoritativeServerProjection
-      && token.searchText.isEmpty
-      && token.selectedTags.isEmpty
-      && token.layerFilter == .defaultAccess
-    {
+    if hasAuthoritativeServerProjection && token.searchText.isEmpty && token.selectedTags.isEmpty {
       await loadMemories()
       guard isCurrentScope(token) else { return }
       await loadTagCountsFromDatabase()
@@ -953,6 +957,7 @@ class MemoriesViewModel: ObservableObject {
   private func fetchMemoriesPageDeviceScopeAware(
     limit: Int,
     offset: Int,
+    includeArchive: Bool,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
@@ -960,6 +965,7 @@ class MemoriesViewModel: ObservableObject {
       let page = try await APIClient.shared.getMemoriesPage(
         limit: limit,
         offset: offset,
+        includeArchive: includeArchive,
         deviceScope: scope,
         authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: nil)
@@ -977,6 +983,7 @@ class MemoriesViewModel: ObservableObject {
       let page = try await APIClient.shared.getMemoriesPage(
         limit: limit,
         offset: offset,
+        includeArchive: includeArchive,
         deviceScope: nil,
         authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
@@ -989,12 +996,19 @@ class MemoriesViewModel: ObservableObject {
   /// 3. Update UI with API data
   /// 4. Sync to local cache in background
   func loadMemories() async {
-    guard !isLoading else { return }
+    if isLoading {
+      pendingScopeReload = true
+      return
+    }
 
     inFlightInitialMemoryLoads += 1
     defer {
       inFlightInitialMemoryLoads -= 1
       resumeMemoryLoadLifecycleWaitersIfIdle()
+      if pendingScopeReload {
+        pendingScopeReload = false
+        Task { await loadMemories() }
+      }
     }
 
     isLoading = true
@@ -1056,6 +1070,7 @@ class MemoriesViewModel: ObservableObject {
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: 0,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
         authorizationSnapshot: authorizationSnapshot
       )
       let page = fetchResult.page
@@ -1350,6 +1365,7 @@ class MemoriesViewModel: ObservableObject {
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: requestedRawOffset,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
         authorizationSnapshot: authorizationSnapshot
       )
       let page = fetchResult.page
