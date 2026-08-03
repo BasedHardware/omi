@@ -1,10 +1,10 @@
 {
     "files": {
-        "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6318,
+        "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6367,
         "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2929
     },
     "raise_justifications": {
-        "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "main-chat success terminal now drains the metered reveal before settling so fast/single-chunk responses render progressively; the drain loop, authority rechecks, and deferred tool-event scheduling add 29 lines.",
+        "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "main-chat success terminal now drains the metered reveal before settling so fast/single-chunk responses render progressively; the drain loop, authority rechecks, deferred tool-event scheduling, and post-reveal spawn projection add 78 lines.",
         "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "update_action_item accepts the realtime `id` alias and backend task writes refresh TasksStore so agent-created tasks appear immediately; permission opens and local-file scans both stay bound to their authorized owner. Swift 6: explicit @preconcurrency import ApplicationServices for AX APIs used by tool execution path."
     },
     "threshold": 1500
