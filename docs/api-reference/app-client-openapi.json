@@ -35145,6 +35145,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "person_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
