@@ -338,7 +338,8 @@ def channel_sign_in_text(channel: str, token: str, expires_at: datetime) -> str:
     from urllib.parse import urlencode
 
     expires = expires_at.astimezone(timezone.utc).strftime('%H:%M UTC')
-    sign_in_url = 'https://omi.me/login?' + urlencode({'channel': channel, 'code': token})
+    sign_in_base_url = (_setting('CHANNEL_SIGN_IN_URL') or 'https://omi.me/login').rstrip('/')
+    sign_in_url = sign_in_base_url + '?' + urlencode({'channel': channel, 'code': token})
     return (
         f"This chat isn't linked to Omi yet. Sign in here to connect it: {sign_in_url} "
         f'(the link expires at {expires}). If you prefer, send /start {token} after signing in.'
