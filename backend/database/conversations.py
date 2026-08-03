@@ -5,7 +5,7 @@ import uuid
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, Set
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -1445,6 +1445,7 @@ def update_conversation_segments(
     data_protection_level: str = None,
     *,
     started_at: datetime = None,
+    settled_speaker_ids: Optional[Set[int]] = None,
     firestore_client: Any = None,
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -1467,6 +1468,14 @@ def update_conversation_segments(
             update_payload['finished_at'] = finished_at
         if started_at:
             update_payload['started_at'] = started_at
+        if settled_speaker_ids:
+            stored_suggestions = current.get('speaker_label_suggestions')
+            if isinstance(stored_suggestions, list):
+                update_payload['speaker_label_suggestions'] = [
+                    item
+                    for item in stored_suggestions
+                    if not (isinstance(item, dict) and item.get('speaker_id') in settled_speaker_ids)
+                ]
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         transaction.update(doc_ref, prepared_payload)
         return True
@@ -1505,11 +1514,21 @@ def assign_conversation_segment_people(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
-    requested = [
-        (speaker_id, person_id)
-        for speaker_id, person_id in assignments
-        if isinstance(speaker_id, int) and not isinstance(speaker_id, bool) and isinstance(person_id, str) and person_id
-    ]
+    requested = []
+    for assignment in assignments:
+        if not isinstance(assignment, (list, tuple)) or len(assignment) not in (2, 3):
+            continue
+        speaker_id, person_id = assignment[:2]
+        expected_name = assignment[2] if len(assignment) == 3 else None
+        if not (
+            isinstance(speaker_id, int)
+            and not isinstance(speaker_id, bool)
+            and isinstance(person_id, str)
+            and person_id
+            and (expected_name is None or isinstance(expected_name, str))
+        ):
+            continue
+        requested.append((speaker_id, person_id, expected_name))
     if not requested:
         return {}
 
@@ -1534,8 +1553,24 @@ def assign_conversation_segment_people(
                 continue
             by_speaker.setdefault(stored_speaker_id, []).append(segment)
 
+        person_snapshots: Dict[str, Any] = {}
+        for _, person_id, expected_name in requested:
+            if expected_name is None or person_id in person_snapshots:
+                continue
+            person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+            person_snapshots[person_id] = person_ref.get(transaction=transaction)
+
         applied: Dict[int, List[str]] = {}
-        for speaker_id, person_id in requested:
+        for speaker_id, person_id, expected_name in requested:
+            if expected_name is not None:
+                person_snapshot = person_snapshots[person_id]
+                if not person_snapshot.exists:
+                    continue
+                person_data = person_snapshot.to_dict() or {}
+                if users_db.person_name_identity_key(
+                    str(person_data.get('name') or '')
+                ) != users_db.person_name_identity_key(expected_name):
+                    continue
             speaker_segments = by_speaker.get(speaker_id) or []
             if not speaker_segments:
                 continue
@@ -1620,23 +1655,42 @@ def accept_conversation_speaker_suggestion(
         if len(remaining) == len(stored_suggestions):
             return None
 
-        person_ref = client.collection('users').document(uid).collection('people').document(person_id)
-        person_snapshot = person_ref.get(transaction=transaction)
-        if person_snapshot.exists:
-            if person_name is not None:
-                existing = person_snapshot.to_dict() or {}
-                if users_db.person_name_identity_key(
-                    str(existing.get('name') or '')
-                ) != users_db.person_name_identity_key(person_name):
-                    return {'error': 'person_collision'}
-        elif person_name is not None:
-            now = datetime.now(timezone.utc)
-            transaction.create(
-                person_ref,
-                {'id': person_id, 'name': person_name, 'created_at': now, 'updated_at': now},
-            )
+        actual_person_id = person_id
+        if person_name is None:
+            person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+            if not person_ref.get(transaction=transaction).exists:
+                return {'error': 'person_missing'}
         else:
-            return {'error': 'person_missing'}
+            name_key = users_db.person_name_identity_key(person_name)
+            people_ref = client.collection('users').document(uid).collection('people')
+            person_ref = None
+            for probe in range(users_db.PERSON_NAME_ID_PROBES):
+                candidate_id = users_db.person_name_document_id(uid, name_key, probe)
+                candidate_ref = people_ref.document(candidate_id)
+                candidate_snapshot = candidate_ref.get(transaction=transaction)
+                if candidate_snapshot.exists:
+                    existing = candidate_snapshot.to_dict() or {}
+                    if users_db.person_name_identity_key(str(existing.get('name') or '')) == name_key:
+                        actual_person_id = candidate_id
+                        person_ref = candidate_ref
+                        break
+                    continue
+                now = datetime.now(timezone.utc)
+                transaction.create(
+                    candidate_ref,
+                    {'id': candidate_id, 'name': person_name, 'created_at': now, 'updated_at': now},
+                )
+                actual_person_id = candidate_id
+                person_ref = candidate_ref
+                break
+            if person_ref is None:
+                actual_person_id = str(uuid.uuid4())
+                person_ref = people_ref.document(actual_person_id)
+                now = datetime.now(timezone.utc)
+                transaction.create(
+                    person_ref,
+                    {'id': actual_person_id, 'name': person_name, 'created_at': now, 'updated_at': now},
+                )
 
         segments = conversation_data.get('transcript_segments')
         if not isinstance(segments, list):
@@ -1653,7 +1707,7 @@ def accept_conversation_speaker_suggestion(
             if isinstance(previous_person_id, str) and previous_person_id and previous_person_id != person_id:
                 displaced_person_ids.add(previous_person_id)
             segment['is_user'] = False
-            segment['person_id'] = person_id
+            segment['person_id'] = actual_person_id
             stored_segment_id = segment.get('id')
             if isinstance(stored_segment_id, str) and stored_segment_id:
                 assigned_segment_ids.append(stored_segment_id)
@@ -1671,6 +1725,7 @@ def accept_conversation_speaker_suggestion(
             'segment_ids': assigned_segment_ids,
             'displaced_person_ids': sorted(displaced_person_ids),
             'still_speaking_person_ids': sorted(still_speaking_person_ids),
+            'person_id': actual_person_id,
             'remaining_suggestions': remaining,
         }
 

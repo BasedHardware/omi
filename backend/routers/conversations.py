@@ -1005,19 +1005,27 @@ def set_assignee_conversation_segment(
         value = None
 
     is_unassigning = value is None or value is False
+    settled_speaker_ids: Set[int] = set()
 
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
+        if bool(value):
+            settled_speaker_ids.add(conversation.transcript_segments[segment_idx].speaker_id)
     elif assign_type == 'person_id':
         conversation.transcript_segments[segment_idx].is_user = False
         conversation.transcript_segments[segment_idx].person_id = value
+        if value:
+            settled_speaker_ids.add(conversation.transcript_segments[segment_idx].speaker_id)
     else:
         logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1077,6 +1085,7 @@ def set_assignee_conversation_segment(
     is_unassigning = value is None or value is False
 
     displaced_person_ids: Set[str] = set()
+    settled_speaker_ids: Set[int] = set()
 
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
@@ -1085,6 +1094,8 @@ def set_assignee_conversation_segment(
                     displaced_person_ids.add(segment.person_id)
                 segment.is_user = bool(value) if value is not None else False
                 segment.person_id = None
+        if bool(value):
+            settled_speaker_ids.add(speaker_id)
     elif assign_type == 'person_id':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
@@ -1093,12 +1104,17 @@ def set_assignee_conversation_segment(
                     displaced_person_ids.add(segment.person_id)
                 segment.is_user = False
                 segment.person_id = value
+        if value:
+            settled_speaker_ids.add(speaker_id)
     else:
         logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
     _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
     # This will be used when we setup recording for conversations, not used for now
@@ -1148,6 +1164,7 @@ def assign_segments_bulk(
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
 
     displaced_person_ids: Set[str] = set()
+    settled_speaker_ids: Set[int] = set()
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1156,14 +1173,21 @@ def assign_segments_bulk(
                 displaced_person_ids.add(segment.person_id)
             segment.is_user = bool(value) if value is not None else False
             segment.person_id = None
+            if bool(value):
+                settled_speaker_ids.add(segment.speaker_id)
         else:
             if segment.person_id and segment.person_id != value:
                 displaced_person_ids.add(segment.person_id)
             segment.is_user = False
             segment.person_id = value
+            if value:
+                settled_speaker_ids.add(segment.speaker_id)
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
     _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
 
@@ -1315,19 +1339,20 @@ def accept_speaker_label_suggestion(
         raise HTTPException(status_code=409, detail="Choose which person should receive this suggestion")
 
     _forget_speaker_label_suggestion(conversation, speaker_id)
+    accepted_person_id = applied.get('person_id') or person_id
     for segment in conversation.transcript_segments:
         if segment.speaker_id != speaker_id:
             continue
         segment.is_user = False
-        segment.person_id = person_id
+        segment.person_id = accepted_person_id
 
     assigned_segment_ids = list(applied.get('segment_ids') or [])
     if assigned_segment_ids:
-        background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=person_id)
+        background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=accepted_person_id)
         background_tasks.add_task(
             extract_speaker_samples,
             uid=uid,
-            person_id=person_id,
+            person_id=accepted_person_id,
             conversation_id=conversation_id,
             segment_ids=assigned_segment_ids,
             attribution=SPEAKER_ATTRIBUTION_USER_TAGGED,

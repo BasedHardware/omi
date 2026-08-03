@@ -349,7 +349,7 @@ async def apply_plan(
             conversations_db.assign_conversation_segment_people,
             uid,
             conversation_id,
-            [(resolved.speaker_id, person_id) for person_id, resolved in pending],
+            [(resolved.speaker_id, person_id, resolved.person_name) for person_id, resolved in pending],
         )
     except Exception as e:
         logger.error('Speaker resolution could not persist segments: %s %s %s', sanitize(e), uid, conversation_id)

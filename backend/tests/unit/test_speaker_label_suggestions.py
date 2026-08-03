@@ -31,6 +31,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 
 import database.conversations as conversations_db
+import database.users as users_db
 from models.conversation import BulkAssignSegmentsRequest, SpeakerLabelSuggestion
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -275,6 +276,7 @@ class _Recorder:
             'segment_ids': segment_ids,
             'displaced_person_ids': sorted(displaced),
             'still_speaking_person_ids': sorted(still_speaking),
+            'person_id': person_id,
             'remaining_suggestions': [],
         }
 
@@ -356,6 +358,13 @@ class TestAcceptSuggestion:
         recorder.router.users_db.get_people.assert_called_once_with('u1')
         recorder.router.users_db.person_name_document_id.assert_called_once_with('u1', 'alex')
         assert convo.transcript_segments[0].person_id == 'p-new'
+
+    def test_manual_assignment_settles_the_speaker_suggestion(self, router):
+        convo = conversation([segment('s1', 1)], [suggestion()])
+
+        recorder = run_assign_speaker(router, convo, 1, 'person_id', 'p-alex')
+
+        assert recorder.segment_writes[0].kwargs['settled_speaker_ids'] == {1}
 
     def test_enrols_as_user_tagged_not_llm_inferred(self, router):
         """The whole point of accept: a tapped name is a confirmation, not an inference."""
@@ -608,6 +617,13 @@ class TestBulkAssignRevokesContradictedInferences:
         revocations = recorder.tasks_for(router.revoke_inferred_speaker_enrolment)
         assert [task.kwargs['person_id'] for task in revocations] == ['p-old']
 
+    def test_a_bulk_assignment_settles_the_speaker_suggestion(self, router):
+        convo = conversation([segment('s1', 1)], [suggestion()])
+
+        recorder = run_assign_bulk(router, convo, ['s1'], 'person_id', 'p-new')
+
+        assert recorder.segment_writes[0].kwargs['settled_speaker_ids'] == {1}
+
     def test_a_bulk_set_to_the_same_person_revokes_nothing(self, router):
         convo = conversation([segment('s1', 1, person_id='p-old')], [])
 
@@ -695,6 +711,39 @@ class TestSuggestionWritesAreTransactional:
         assert self.accept(database, 1, 'person-ben') is None
         assert database.transactions[-1].updates == []
         assert [s['person_id'] for s in self.row(database)['transcript_segments']] == ['person-alex']
+
+    def test_manual_segment_updates_settle_only_the_selected_speaker(self):
+        database = self.store(
+            [stored_segment('s1'), stored_segment('s2', speaker_id=2)],
+            [stored_suggestion(1), stored_suggestion(2, 'Sam')],
+        )
+
+        conversations_db.update_conversation_segments(
+            'uid-1',
+            'conv-1',
+            [stored_segment('s1', person_id='person-alex'), stored_segment('s2', speaker_id=2)],
+            settled_speaker_ids={1},
+            firestore_client=database,
+        )
+
+        stored = self.row(database)
+        assert [item['speaker_id'] for item in stored['speaker_label_suggestions']] == [2]
+        assert [s['person_id'] for s in stored['transcript_segments']] == ['person-alex', None]
+
+    def test_accept_claims_the_next_name_probe_when_the_first_slot_is_occupied(self):
+        database = self.store([stored_segment('s1')], [stored_suggestion(1)])
+        name_key = users_db.person_name_identity_key('Alex')
+        first_id = users_db.person_name_document_id('uid-1', name_key, 0)
+        second_id = users_db.person_name_document_id('uid-1', name_key, 1)
+        database.rows[('users', 'uid-1', 'people', first_id)] = {'id': first_id, 'name': 'Alicia'}
+
+        applied = conversations_db.accept_conversation_speaker_suggestion(
+            'uid-1', 'conv-1', 1, first_id, person_name='Alex', firestore_client=database
+        )
+
+        assert applied['person_id'] == second_id
+        assert database.rows[('users', 'uid-1', 'people', second_id)]['name'] == 'Alex'
+        assert self.row(database)['transcript_segments'][0]['person_id'] == second_id
 
     def test_a_missing_conversation_writes_nothing(self):
         assert self.accept(StrictFirestore(), 1, 'person-alex') is None
