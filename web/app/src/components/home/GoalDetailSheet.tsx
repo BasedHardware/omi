@@ -64,7 +64,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
     <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-bg-tertiary bg-bg-secondary p-6">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-stroke bg-bg-raised p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-lg font-semibold text-text-primary">
@@ -76,7 +76,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
             </div>
             <Dialog.Close
               aria-label="Close"
-              className="rounded-lg p-1.5 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              className="rounded-element p-1.5 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -88,7 +88,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
             </h3>
             <div className="mt-2">
               {detail.historyLoading ? (
-                <div className="h-14 animate-pulse rounded-lg bg-bg-tertiary" />
+                <div className="h-14 animate-pulse rounded-control bg-bg-tertiary" />
               ) : detail.historyError ? (
                 <p className="text-sm text-error">{detail.historyError}</p>
               ) : (
@@ -119,7 +119,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                   type="button"
                   onClick={() => void detail.requestAdvice()}
                   disabled={detail.adviceLoading}
-                  className="flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-control bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary disabled:opacity-50"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   {detail.adviceLoading ? 'Thinking…' : 'Get advice'}
@@ -131,7 +131,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
             )}
           </section>
 
-          <section className="mt-6 border-t border-bg-tertiary pt-6">
+          <section className="mt-6 border-t border-stroke pt-6">
             <h3 className="text-xs uppercase tracking-wide text-text-quaternary">Edit</h3>
             <div className="mt-2 space-y-3">
               <label className="block">
@@ -141,7 +141,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                   onChange={(event) => setTitle(event.target.value)}
                   aria-label="Title"
                   maxLength={500}
-                  className="w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                  className="w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
                 />
               </label>
 
@@ -153,7 +153,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                     onChange={(event) => setTarget(event.target.value)}
                     aria-label="Target"
                     min={1}
-                    className="w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                    className="w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
                   />
                   <input
                     value={unit}
@@ -161,7 +161,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                     aria-label="Unit"
                     placeholder="unit"
                     maxLength={64}
-                    className="w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
+                    className="w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
                   />
                 </div>
               )}
@@ -172,7 +172,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                 type="button"
                 onClick={() => void save()}
                 disabled={!canSave}
-                className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {saving ? 'Saving…' : 'Save changes'}
               </button>

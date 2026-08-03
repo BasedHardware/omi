@@ -43,7 +43,7 @@ export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProp
   };
 
   return (
-    <article className="rounded-xl border border-bg-tertiary bg-bg-secondary p-5">
+    <article className="rounded-card border border-stroke bg-bg-raised p-5 transition-colors hover:border-text-quaternary/40">
       <div className="flex items-start justify-between gap-4">
         <button
           type="button"
@@ -60,7 +60,7 @@ export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProp
           type="button"
           onClick={() => void onRemove(goal.id)}
           aria-label={`Delete goal ${goal.title}`}
-          className="rounded-lg p-2 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-error"
+          className="rounded-control p-2 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-error"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -89,7 +89,7 @@ export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProp
             type="button"
             onClick={() => commit(complete ? goal.min_value : goal.target_value)}
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors',
+              'flex items-center gap-2 rounded-chip px-3 py-1.5 text-xs transition-colors',
               complete
                 ? 'bg-success/10 text-success'
                 : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
@@ -105,7 +105,7 @@ export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProp
               onClick={() => step(-1)}
               aria-label={`Decrease ${goal.title}`}
               disabled={goal.current_value <= goal.min_value}
-              className="rounded-lg bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary disabled:opacity-40"
+              className="rounded-element bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary disabled:opacity-40"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
@@ -125,14 +125,14 @@ export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProp
                 }
               }}
               aria-label={`${goal.title} current value`}
-              className="w-16 rounded-lg bg-bg-tertiary px-2 py-1 text-center text-xs text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+              className="w-16 rounded-element bg-bg-tertiary px-2 py-1 text-center text-xs text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
             />
 
             <button
               type="button"
               onClick={() => step(1)}
               aria-label={`Increase ${goal.title}`}
-              className="rounded-lg bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary"
+              className="rounded-element bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
