@@ -281,11 +281,29 @@ def _record_chat_quota_question_safe(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
+def _resolve_chat_session(uid: str, app_id: Optional[str], chat_session_id: Optional[str]) -> Optional[dict]:
+    """Pick the chat session a request targets.
+
+    With an explicit `chat_session_id` the caller is addressing one specific
+    session, so a missing or foreign id is an error rather than a silent
+    fallback to the current session — writing a message into a different
+    conversation than the client asked for is worse than failing. Without one,
+    behaviour is unchanged: the user's current session for the app.
+    """
+    if chat_session_id:
+        session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+        return session
+    return chat_db.get_chat_session(uid, app_id=app_id)
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
@@ -321,7 +339,7 @@ def send_message(
         compat_app_id = None
 
     # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
@@ -580,14 +598,17 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    # get the targeted chat session
+    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
@@ -622,13 +643,16 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
