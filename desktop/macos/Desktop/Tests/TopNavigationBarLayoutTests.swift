@@ -171,6 +171,14 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(CaptureListeningControlsLayout.listeningSlotWidth, 136)
     XCTAssertGreaterThan(CaptureListeningControlsLayout.listeningSlotWidth, 104)
   }
+
+  func testListeningPrecedesCaptureSoItsReservedSlotStaysOutsideTheVisiblePair() {
+    XCTAssertEqual(
+      CaptureListeningControlsLayout.displayOrder,
+      [.listening, .capture],
+      "Listening must lead Capture so the reserved trailing slot cannot create an inner gap"
+    )
+  }
 }
 
 private enum TopNavigationLayoutSlot: Hashable {
