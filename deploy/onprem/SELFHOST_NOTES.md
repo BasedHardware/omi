@@ -561,6 +561,15 @@ behind `api-proxy` (TLS on `${API_HTTPS_PORT}`). The realm (`keycloak/omi-realm.
 (proven): the token `iss` = the public `KC_HOSTNAME`, so `OIDC_ISSUER` must equal that; the backend
 fetches keys over the **internal http** backchannel, so it needs no CA.
 
+**Backchannel endpoints must use the public issuer port** (`--hostname-backchannel-dynamic=false`).
+Keycloak's discovery doc splits *frontend* URLs (authorization, logout — from `KC_HOSTNAME`) from
+*backchannel* URLs (token, userinfo, jwks). With `-backchannel-dynamic=true` the backchannel URLs are
+derived from the proxy's `X-Forwarded-Port` (kc-proxy's internal `8443`), so a **mobile** OIDC client
+(which does the token exchange itself, following discovery) POSTs to `https://<HOST_IP>:8443/...token`
+— the wrong port (and, if another service occupies it, an untrusted cert → `Trust anchor not found`).
+Setting it `false` makes token/userinfo/jwks use `KC_HOSTNAME` too. The backend is unaffected (it
+validates with the explicit internal `OIDC_JWKS_URL`, not the discovery doc).
+
 App build (Envied is compile-time) — gotchas proven live:
 - **Env comes from the process environment, not `.env`** for this container build; pass values via `-e`
   AND run `dart run build_runner clean` first, else stale generated `*_env.g.dart` keeps `firebase`:

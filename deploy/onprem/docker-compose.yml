@@ -298,7 +298,12 @@ services:
       - --http-port=8090
       - --proxy-headers=xforwarded
       - --hostname=${KC_HOSTNAME:-https://localhost:8443}
-      - --hostname-backchannel-dynamic=true
+      # false: backchannel endpoints (token/userinfo/jwks in the discovery doc) use KC_HOSTNAME too,
+      # not a value derived from the proxy's X-Forwarded-Port. With `true` the mobile OIDC client's
+      # token exchange went to the proxy's INTERNAL port instead of the public issuer port. The
+      # backend is unaffected — it validates tokens with an explicit internal OIDC_JWKS_URL, not the
+      # discovery doc.
+      - --hostname-backchannel-dynamic=false
       - --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
