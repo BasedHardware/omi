@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Tests/PeopleListTableTests.swift
+  s_0c099cae24c74c::t_1273df27eb70b1 1-143
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleListTable.swift
+  s_0c099cae24c74c::t_a82e6372b1ed48 1-225
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_0c099cae24c74c::t_7136c3ed7fe6ea 3371-3391
+desktop/macos/Desktop/Sources/AppState.swift
+  s_0c099cae24c74c::t_93ee69c337026e 860-863
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_0c099cae24c74c::t_ef415493c972d0 1083-1097,1099-1100
+  s_0c099cae24c74c::t_0fc36992ca9a03 486-500,1112,1114
+  s_0c099cae24c74c::t_f15462ecdf2bf5 742-746
+  s_0c099cae24c74c::t_1cd171a2b005e4 776-779
+  s_0c099cae24c74c::t_f6c4cbb8043a2f 715-717,1105-1111,1113,1115
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_0c099cae24c74c::t_6354f78a109184 5,12
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleRowComponents.swift
+  s_0c099cae24c74c::t_9ff2c80f72c675 50-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "d85f2ea414e424c3f4a83decfb0b2d3e31db1631",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
