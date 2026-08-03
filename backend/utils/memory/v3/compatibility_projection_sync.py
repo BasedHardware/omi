@@ -16,7 +16,14 @@ from typing import Any, Callable, Dict, Optional, cast
 from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
 
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryItem, RESTRICTED_SENSITIVITY_LABELS
+from models.product_memory import (
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryTier,
+    ProcessingState,
+    RESTRICTED_SENSITIVITY_LABELS,
+)
+from models.memory_evidence import SourceState
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
@@ -159,6 +166,20 @@ def _has_restricted_sensitivity(item: MemoryItem) -> bool:
     return bool(set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
 
 
+def is_v3_compatibility_projection_eligible(item: MemoryItem) -> bool:
+    """The sole serving-projection eligibility policy for canonical writers."""
+    promotion = item.promotion or {}
+    return (
+        item.status == MemoryItemStatus.active
+        and item.processing_state == ProcessingState.processed
+        and item.source_state == SourceState.active
+        and item.tier in {MemoryTier.short_term, MemoryTier.long_term}
+        and not _has_restricted_sensitivity(item)
+        and promotion.get("user_review") is not False
+        and bool((item.content or "").strip())
+    )
+
+
 def _run_transaction(db_client: Any, callback: Callable[..., bool], *args: Any) -> bool:
     transaction = db_client.transaction()
     if transaction.__class__.__module__.startswith("google.cloud.firestore"):
@@ -209,7 +230,7 @@ def upsert_v3_compatibility_projection_item(
     db_client: Any,
 ) -> bool:
     """Idempotently project one authoritative, privacy-eligible memory item."""
-    if _has_restricted_sensitivity(item):
+    if not is_v3_compatibility_projection_eligible(item):
         return delete_v3_compatibility_projection_item(
             item.uid,
             item.memory_id,
@@ -268,5 +289,6 @@ def delete_v3_compatibility_projection_item(
 __all__ = [
     "CompatibilityProjectionSyncError",
     "delete_v3_compatibility_projection_item",
+    "is_v3_compatibility_projection_eligible",
     "upsert_v3_compatibility_projection_item",
 ]
