@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
+MAINTENANCE_COLLECTION = 'maintenance'
+SCREEN_ACTIVITY_PURGE_MARKER = 'screen_activity_purge_v1'
 
 # Date inputs may arrive as datetime or as pre-formatted 'YYYY-MM-DD HH:MM:SS.mmm' strings.
 DateInput = Union[datetime, str]
@@ -46,9 +48,14 @@ def purge_all_screen_activity() -> int:
     if os.getenv('OMI_ENV_STAGE', '').strip().lower() != 'prod':
         logger.info('Skipping historical screen activity purge outside production')
         return 0
+    marker = db.collection(MAINTENANCE_COLLECTION).document(SCREEN_ACTIVITY_PURGE_MARKER)
+    marker_snapshot = marker.get()
+    if marker_snapshot.exists and (marker_snapshot.to_dict() or {}).get('status') == 'completed':
+        return 0
     total = 0
     for user in db.collection(USERS_COLLECTION).select([]).stream():
         total += purge_screen_activity_for_user(str(user.id))
+    marker.set({'status': 'completed', 'completedAt': firestore.SERVER_TIMESTAMP}, merge=True)
     return total
 
 

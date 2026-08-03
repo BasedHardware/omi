@@ -27,6 +27,26 @@ class _Collection:
         return _Document(doc_id, self._activity)
 
 
+class _MarkerSnapshot:
+    def __init__(self, data=None):
+        self.exists = data is not None
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _MarkerDocument:
+    def __init__(self, database):
+        self.database = database
+
+    def get(self):
+        return _MarkerSnapshot(self.database.marker)
+
+    def set(self, data, merge=False):
+        self.database.marker = dict(data)
+
+
 class _Batch:
     def __init__(self, events):
         self.deleted = []
@@ -48,9 +68,15 @@ class _Database:
         activity_collection = _Collection([_Document(doc_id) for doc_id in ids])
         user = _Document('user-1', activity_collection)
         self.users = _Collection([user], activity=activity_collection)
+        self.marker = None
 
-    def collection(self, _name: str):
+    def collection(self, name: str):
+        if name == screen_activity.MAINTENANCE_COLLECTION:
+            return self
         return self.users
+
+    def document(self, _doc_id: str):
+        return _MarkerDocument(self)
 
     def batch(self):
         batch = _Batch(self.events)
@@ -71,6 +97,7 @@ def test_purge_all_screen_activity_deletes_firestore_and_bounded_vector_batches(
     assert [len(batch.deleted) for batch in database.batches] == [500, 500, 1]
     assert [len(call.kwargs['ids']) for call in vector_index.delete.call_args_list] == [1000, 1]
     assert database.events == ['pinecone', 'pinecone', 'firestore', 'firestore', 'firestore']
+    assert database.marker['status'] == 'completed'
 
 
 def test_purge_all_screen_activity_skips_shared_firestore_outside_production(monkeypatch):
@@ -83,3 +110,13 @@ def test_purge_all_screen_activity_skips_shared_firestore_outside_production(mon
     assert screen_activity.purge_all_screen_activity() == 0
     assert database.batches == []
     vector_index.delete.assert_not_called()
+
+
+def test_purge_all_screen_activity_uses_completion_checkpoint(monkeypatch):
+    database = _Database(['screenshot-1'])
+    database.marker = {'status': 'completed'}
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(screen_activity, 'db', database)
+
+    assert screen_activity.purge_all_screen_activity() == 0
+    assert database.batches == []
