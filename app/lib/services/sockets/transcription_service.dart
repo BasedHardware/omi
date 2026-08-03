@@ -300,6 +300,10 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
+  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
+    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+  }
+
   /// Create default Omi transcription service
   static TranscriptSegmentSocketService createDefault(
     int sampleRate,

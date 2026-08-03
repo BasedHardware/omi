@@ -654,6 +654,21 @@ class CaptureController extends ChangeNotifier
     // Check codec compatibility for custom STT - fallback to default if incompatible
     CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
     if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+      if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, effectiveConfig)) {
+        Logger.warning(
+          '[CustomSTT] Codec $codec is unsupported; refusing Omi fallback because raw audio forwarding is disabled',
+        );
+        final previousSocket = _socket;
+        _socket = null;
+        _transcriptServiceReady = false;
+        try {
+          await previousSocket?.stop(reason: 'unsupported custom STT codec with raw audio forwarding disabled');
+        } catch (e, stack) {
+          Logger.error('[CustomSTT] Failed to stop the previous socket after blocking Omi fallback: $e\n$stack');
+        }
+        notifyListeners();
+        return;
+      }
       Logger.debug('[CustomSTT] Codec $codec not supported, falling back to Omi');
       effectiveConfig = null;
     }

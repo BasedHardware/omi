@@ -114,6 +114,45 @@ void main() {
       expect(service.socket, isA<CompositeTranscriptionSocket>());
       expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
     });
+
+    test('blocks unsupported-codec Omi fallback when raw audio forwarding is disabled', () {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        sendRawAudioToOmi: false,
+      );
+
+      expect(
+        TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.lc3FS1030, config),
+        isTrue,
+      );
+    });
+
+    test('allows unsupported-codec Omi fallback only when raw audio forwarding is enabled', () {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        sendRawAudioToOmi: true,
+      );
+
+      expect(
+        TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.lc3FS1030, config),
+        isFalse,
+      );
+    });
+
+    test('does not block a supported custom STT codec', () {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        sendRawAudioToOmi: false,
+      );
+
+      expect(
+        TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config),
+        isFalse,
+      );
+    });
   });
 }
 
