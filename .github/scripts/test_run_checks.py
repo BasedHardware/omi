@@ -451,6 +451,34 @@ esac
         self.assertNotIn("backend-async-blockers", selected)
         self.assertNotIn("backend-route-policy-baseline", selected)
 
+    def test_manifest_only_trigger_requires_own_entry_change(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+                manifest_changed_ids={"backend-deploy-source-admission"},
+            )
+        }
+        self.assertIn("backend-deploy-source-admission", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
+    def test_manifest_only_trigger_without_diff_context_selects_all_manifest_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+            )
+        }
+        self.assertIn("rayban-dat-build-wrapper", selected)
+
     def test_posix_contracts_skip_windows_without_dropping_linux_ci(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         expected_by_path = {
