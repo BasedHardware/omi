@@ -1,22 +1,16 @@
-FROM node:20-alpine AS base
+FROM oven/bun:1.3.14-alpine AS base
 
 # Set working directory
 WORKDIR /app
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
 WORKDIR /app/web/app
 
 # Copy only the lock and package files
-COPY web/app/package.json web/app/package-lock.json* web/app/yarn.lock* web/app/pnpm-lock.yaml* ./
+COPY web/app/package.json web/app/bun.lock ./
 
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -50,30 +44,26 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do \
       test -n "$value" || { echo "required public build input is empty: $name" >&2; exit 1; }; \
     done
 
-RUN npm run build
+RUN bun run build
 
 # Production image
 FROM base AS runner
-WORKDIR /app
+WORKDIR /app/web/app
 
 ENV NODE_ENV=production
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+COPY --from=builder --chown=bun:bun /app/web/app/.moonshine ./.moonshine
+COPY --from=builder --chown=bun:bun /app/web/app/package.json ./package.json
+COPY --from=builder --chown=bun:bun /app/web/app/bun.lock ./bun.lock
 
-# Copy built output
-COPY --from=builder /app/web/app/public ./public
+RUN bun install --production --frozen-lockfile
 
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-COPY --from=builder --chown=nextjs:nodejs /app/web/app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/web/app/.next/static ./.next/static
-
-USER nextjs
+USER bun
 
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["bun", ".moonshine/server.ts"]
