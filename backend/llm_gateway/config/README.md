@@ -14,6 +14,9 @@ exception: it uses `anthropic.messages` and advertises streaming + tools because
 Anthropic agentic contract. The OpenAI-compatible resolver rejects that surface, and the Messages router rejects
 OpenAI-compatible lanes; this prevents the same lane from silently claiming two incompatible protocols.
 
+The generated `openglass` lane also advertises image input. Channel media sends its downloaded image as an OpenAI
+`image_url` content part through that lane; other generated lanes remain text-only.
+
 ## Runtime credential and readiness contract
 
 The managed Anthropic `/v1/messages` path is active when an active generated route uses an Anthropic primary. In
