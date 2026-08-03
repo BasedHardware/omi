@@ -11,6 +11,7 @@ from models.memory_promotion import PROMOTION_GRAPH_ASSERTION_V2_VERSION, Memory
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
 _client = importlib.import_module(f"{__package__}._client")
+db = _client.db
 from .read_boundary import parse_snapshot_or_none
 
 users_collection = 'users'
@@ -31,7 +32,7 @@ KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
 def _firestore_client(db_client: Any = None) -> Any:
-    return db_client if db_client is not None else _client.db
+    return db_client if db_client is not None else db
 
 
 def _as_utc(value: datetime) -> datetime:
