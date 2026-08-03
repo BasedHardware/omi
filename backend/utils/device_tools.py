@@ -27,7 +27,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
@@ -267,7 +267,7 @@ def build_device_tools(
     uid: str,
     available_tool_names: set[str],
     callback: Any,
-    timeout_seconds: int,
+    timeout_seconds: int | Callable[[], int],
 ) -> list:
     """Build LangChain tools for the device capabilities this client declared.
 
@@ -288,7 +288,7 @@ def build_device_tools(
     return tools
 
 
-def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: int):
+def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: int | Callable[[], int]):
     async def _call(**kwargs) -> str:
         # Drop the RunnableConfig LangChain injects; it is not part of the
         # payload the device should receive.
@@ -308,7 +308,8 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
         await callback.put_device_tool_request(request)
 
         try:
-            result = await _await_device_tool_result(uid, call_id, timeout_seconds)
+            wait_timeout = timeout_seconds() if callable(timeout_seconds) else timeout_seconds
+            result = await _await_device_tool_result(uid, call_id, wait_timeout)
         finally:
             # Once the wait is over the answer is no longer wanted. Dropping the
             # marker means a late submission is rejected rather than left in

@@ -145,6 +145,23 @@ async def test_call_announces_a_request_and_returns_the_client_result(fake_redis
 
 
 @pytest.mark.asyncio
+async def test_device_tool_timeout_provider_is_evaluated_at_wait_start(fake_redis):
+    callback = FakeCallback()
+    observed = []
+
+    async def capture_wait(_uid, _call_id, timeout_seconds):
+        observed.append(timeout_seconds)
+        return {'ok': True, 'status': 'sent'}
+
+    with patch.object(device_tools, '_await_device_tool_result', capture_wait):
+        tool = build_device_tools('uid-1', {'propose_message'}, callback, timeout_seconds=lambda: 17)[0]
+        raw = await tool.ainvoke({'to': ['+15550100'], 'text': 'hi'})
+
+    assert observed == [17]
+    assert json.loads(raw) == {'ok': True, 'status': 'sent'}
+
+
+@pytest.mark.asyncio
 async def test_a_cancelled_sheet_is_returned_verbatim(fake_redis):
     # The model must be able to tell "user declined" from "delivered"; the
     # bridge may not normalize a cancellation into a generic failure.
