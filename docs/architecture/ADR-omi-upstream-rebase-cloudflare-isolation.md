@@ -17,7 +17,7 @@ Omiのcapture、WAL、sync、会話UIは多数のOSS更新と接続する。旧�
 2. `app/lib/self_hosted/sync/` に `SelfHostedWalSyncAdapter` を置く。adapter は将来、既存WALが生成した確定ファイルを転送依頼としてWorkerへ渡せる契約面だけを持ち、WALの生成・削除・Omiの既存同期状態を所有しない。
 3. OSSファイルの変更は接続点に限定する：Provider composition と Conversations入口である。`LocalWalSyncImpl` のアップロード委譲は Worker のupload/ack契約確定後の次sliceに限り、captureは既存所有権を保つ。
 4. 個人Firebase、署名、entitlementは `docs/operational/` のlocal overlay契約に限定し、repositoryのtracked product configurationへ入れない。
-5. l10nはARBのみを変更し、Dart生成物はARBからの機械生成物として扱う。生成l10nを独立した製品laneや旧forkからの移植対象にしない。
+5. l10nの手書き正本はARBだけとする。生成Dartは最新upstream上で `flutter gen-l10n` を実行してARBから再生成し、旧forkの生成Dartをコピーまたはcherry-pickしない。生成l10nを独立した製品laneや手書きの製品差分として扱わない。
 
 ## Threat model
 

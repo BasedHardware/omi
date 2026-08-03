@@ -58,6 +58,34 @@ void main() {
     expect(requests.first.headers['authorization'], 'Bearer $token');
   });
 
+  test('does not follow Worker redirects and reports the 3xx response safely', () async {
+    http.Request? capturedRequest;
+    final api = CloudflareTranscriptHttpApi(
+      configuration: configuration,
+      client: MockClient((request) async {
+        capturedRequest = request;
+        return http.Response('', 302, headers: {'location': 'https://redirect.example.test/leak'});
+      }),
+    );
+
+    await expectLater(
+      api.listSessions(),
+      throwsA(
+        predicate(
+          (Object error) =>
+              error is CloudflareTranscriptApiException &&
+              error.message == 'Worker request failed with HTTP 302.' &&
+              !error.message.contains(token),
+        ),
+      ),
+    );
+    final request = capturedRequest;
+    expect(request, isNotNull);
+    expect(request!.method, 'GET');
+    expect(request.followRedirects, isFalse);
+    expect(request.maxRedirects, 0);
+  });
+
   test('maps the Worker list fixture transcript_char_count and keeps the legacy fallback explicit', () async {
     final api = CloudflareTranscriptHttpApi(
       configuration: configuration,
