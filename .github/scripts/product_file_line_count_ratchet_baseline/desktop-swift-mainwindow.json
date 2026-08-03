@@ -1,13 +1,13 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 2008,
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1998,
     "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1882,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3559,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4463,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3614,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3630,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4427,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1646,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6624,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6633,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1627
   },
   "raise_justifications": {
@@ -17,9 +17,9 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Chat-first entry state remains colocated with the dashboard's canonical route selection and lifecycle synchronization. Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen; the Home prompt rail also receives the ask bar's outer trailing edge so the custom rail aligns flush with it; shared ChatComposerLayout sizing and conversation identity keep the dashboard and home chat surfaces aligned; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Server pages remain the visible authority after lifecycle resolution; MemoryPageProjection, owner authorization snapshots, cache/API scope fencing, canonical capability updates, Brain Map evidence/list-detail/delete lifecycle, and layer-filter reload routing (authoritative loadMemories only on default access) stay with the Memories page's single projection owner rather than exposing coordination state across view-model boundaries. A component split would fragment the cache/server projection contract and remains tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "The Canonical Memory Atlas owns progressive disclosure, island territories and captions, selection-trail Escape behavior, in-place evidence inspection, and related render policies. Geometry and territory labels are extracted where possible; a further surface split remains tracked separately.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": "Relatedness layout, Louvain neighbourhood detection, and the group-separation and anchor-repulsion forces the island map is built on; no baseline entry existed because the file crossed the threshold in this change. It is already separate from the atlas view — a further split of detection from simulation is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": "Relatedness layout, Louvain neighbourhood detection, and the group-separation and anchor-repulsion forces the island map is built on; no baseline entry existed because the file crossed the threshold in this change. It is already separate from the atlas view \u2014 a further split of detection from simulation is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Task detail-panel presentation (escape dismiss, stale detail clearing, workstream-aware chat open), task/chat mutual exclusion, TaskMultiSelectionState wiring with Select/Done affordance and batch bulk delete, bottom-sentinel pagination, filter-aware rendered-order drag/drop, sparse rank allocation, hidden-row rebasing, stale-ID filtering, local-to-backend promotion remapping, generation-fenced serialized local/cloud commits, retry cleanup, and description-addressable reorder automation remain with the Tasks page state owner; recovery coordination stays separately in TasksStore. Splitting the page would fragment its row-to-panel navigation and pagination state; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior. SB redesign adds the hover-expand AppNavRail (icons→labels) and merged navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior. SB redesign adds the hover-expand AppNavRail (icons\u2192labels) and merged navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },
   "threshold": 1500
 }

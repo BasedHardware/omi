@@ -16,53 +16,140 @@ import Foundation
 /// - Long-running `bridge.query` streaming — only refresh and admission are
 ///   serialized; the query stream itself runs outside the gate.
 actor AgentContextAdmissionGate {
-  private struct Waiter {
-    let id: UUID
-    let continuation: CheckedContinuation<Void, Error>
+  private final class WaiterHandle: @unchecked Sendable {
+    var cancelled = false
+    var continuation: CheckedContinuation<WakeReason, Never>?
+  }
+
+  private enum WakeReason {
+    case granted
+    case cancelled
+  }
+
+  private struct WaiterSlot {
+    let handle: WaiterHandle
+    var continuation: CheckedContinuation<WakeReason, Never>?
   }
 
   private var held = false
-  private var waiters: [Waiter] = []
+  private var releasePending = false
+  private var waiters: [WaiterSlot] = []
+  private var waiterHead = 0
 
   func withExclusiveAccess<Result: Sendable>(
     _ operation: @escaping @Sendable () async throws -> Result
   ) async throws -> Result {
-    try await acquire()
+    guard try await waitToAcquire() else {
+      throw CancellationError()
+    }
     defer { release() }
-    try Task.checkCancellation()
     return try await operation()
   }
 
-  private func acquire() async throws {
-    try Task.checkCancellation()
-    guard !held else {
-      let waiterID = UUID()
-      try await withTaskCancellationHandler {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-          waiters.append(Waiter(id: waiterID, continuation: continuation))
-        }
-      } onCancel: { [weak self] in
-        guard let self else { return }
-        Task { await self.cancelWaiter(id: waiterID) }
-      }
-      try Task.checkCancellation()
-      return
+  private func waitToAcquire() async throws -> Bool {
+    guard held else {
+      held = true
+      return true
     }
-    held = true
+
+    let handle = WaiterHandle()
+    let slotIndex = appendWaiterSlot(handle: handle)
+    let wakeReason: WakeReason = await withTaskCancellationHandler {
+      await withCheckedContinuation { (continuation: CheckedContinuation<WakeReason, Never>) in
+        registerWaiter(slotIndex: slotIndex, handle: handle, continuation: continuation)
+      }
+    } onCancel: {
+      handle.cancelled = true
+      if let continuation = handle.continuation {
+        handle.continuation = nil
+        continuation.resume(returning: .cancelled)
+      }
+      Task { await self.finalizeCancelledWaiter(at: slotIndex) }
+    }
+
+    switch wakeReason {
+    case .granted:
+      return true
+    case .cancelled:
+      finalizeCancelledWaiter(at: slotIndex)
+      return false
+    }
   }
 
-  private func cancelWaiter(id: UUID) {
-    guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
-    let waiter = waiters.remove(at: index)
-    waiter.continuation.resume(throwing: CancellationError())
+  private func appendWaiterSlot(handle: WaiterHandle) -> Int {
+    compactWaitersIfNeeded()
+    waiters.append(WaiterSlot(handle: handle))
+    return waiters.count - 1
+  }
+
+  private func registerWaiter(
+    slotIndex: Int,
+    handle: WaiterHandle,
+    continuation: CheckedContinuation<WakeReason, Never>
+  ) {
+    guard waiters.indices.contains(slotIndex) else {
+      continuation.resume(returning: .cancelled)
+      return
+    }
+    if handle.cancelled {
+      continuation.resume(returning: .cancelled)
+      return
+    }
+    handle.continuation = continuation
+    waiters[slotIndex].continuation = continuation
+    if releasePending {
+      releasePending = false
+      release()
+    }
+  }
+
+  private func finalizeCancelledWaiter(at index: Int) {
+    guard waiters.indices.contains(index) else { return }
+    waiters[index].continuation = nil
+    waiters[index].handle.cancelled = true
+    if index == waiterHead {
+      advanceWaiterHeadPastCancelled()
+    }
+    compactWaitersIfNeeded()
+    if waiterHead >= waiters.count, !held {
+      waiters.removeAll(keepingCapacity: true)
+      waiterHead = 0
+    }
   }
 
   private func release() {
-    while !waiters.isEmpty {
-      let waiter = waiters.removeFirst()
-      waiter.continuation.resume()
+    advanceWaiterHeadPastCancelled()
+    while waiterHead < waiters.count {
+      if waiters[waiterHead].handle.cancelled {
+        waiterHead += 1
+        continue
+      }
+      if let continuation = waiters[waiterHead].continuation {
+        waiters[waiterHead].continuation = nil
+        waiterHead += 1
+        compactWaitersIfNeeded()
+        continuation.resume(returning: .granted)
+        return
+      }
+      releasePending = true
       return
     }
     held = false
+    releasePending = false
+    waiters.removeAll(keepingCapacity: true)
+    waiterHead = 0
+  }
+
+  private func advanceWaiterHeadPastCancelled() {
+    while waiterHead < waiters.count, waiters[waiterHead].handle.cancelled {
+      waiterHead += 1
+    }
+    compactWaitersIfNeeded()
+  }
+
+  private func compactWaitersIfNeeded() {
+    guard waiterHead > 32, waiterHead > waiters.count / 2 else { return }
+    waiters.removeFirst(waiterHead)
+    waiterHead = 0
   }
 }

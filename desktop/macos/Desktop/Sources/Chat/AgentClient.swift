@@ -523,6 +523,7 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
+      try Task.checkCancellation()
       let result = try await bridge.query(
         prompt: prompt,
         surface: surface,
@@ -560,6 +561,7 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
+      try Task.checkCancellation()
       return QueryResult(
         try await AgentContextAdmissionRetry.run(
           expectedContext: expectedContext,

@@ -1,10 +1,11 @@
-version: 1
+version: 2
 name: desktop-responsiveness-benchmark
 tier: 3
-description: Fast cursor-free timing for common desktop navigation interactions.
+description: Cursor-free input-to-route-ack gate for common desktop navigation interactions (100 ms maximum per route); default bridge navigation retains its mounted-visibility contract.
 app: non-prod
 preconditions:
   - automation_bridge_ready
+  - chat_first_cohort_named_bundle
 
 steps:
   - id: S1
@@ -12,72 +13,154 @@ steps:
     bridge.navigate:
       target: dashboard
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: more.dashboard
+  - id: S1a
+    name: Dashboard acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S2
     name: Conversations
     bridge.navigate:
       target: conversations
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: conversations
+  - id: S2a
+    name: Conversations acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S3
     name: Chat
     bridge.navigate:
       target: chat
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 2
+      state.chatFirstRoute: chat
+  - id: S3a
+    name: Chat acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S4
     name: Memories
     bridge.navigate:
       target: memories
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
+  - id: S4a
+    name: Memories acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S5
     name: Tasks
     bridge.navigate:
       target: tasks
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 4
+      state.chatFirstRoute: tasks
+  - id: S5a
+    name: Tasks acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S6
     name: Rewind
     bridge.navigate:
       target: rewind
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 7
+      state.chatFirstRoute: more.rewind
+  - id: S6a
+    name: Rewind acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S7
     name: Apps
     bridge.navigate:
       target: apps
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 8
+      state.chatFirstRoute: more.apps
+  - id: S7a
+    name: Apps acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S8
     name: Settings
     bridge.navigate:
       target: settings
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 9
+      state.chatFirstRoute: more.settings
+  - id: S8a
+    name: Settings acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
 
   - id: S9
     name: Return to Dashboard
     bridge.navigate:
       target: dashboard
       activateApp: false
+      waitForVisibility: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: more.dashboard
+  - id: S9a
+    name: Return to Dashboard acknowledges input within 100 ms
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
 
   - id: S10
     name: Assert Logs Are Clean

@@ -95,6 +95,23 @@ def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gate
     )
 
 
+def test_gateway_promotion_intent_includes_memory_maintenance_job(gateway_gate, tmp_path: Path) -> None:
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        'environments:\n'
+        '  prod:\n'
+        '    cloud_run:\n'
+        '      jobs:\n'
+        '        memory-maintenance-job:\n'
+        '          env:\n'
+        '            OMI_LLM_GATEWAY_FEATURE_MODE:\n'
+        '              value: gateway\n',
+        encoding='utf-8',
+    )
+
+    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is True
+
+
 def test_verify_gateway_serving_derives_url_only_from_ready_attached_ilb(gateway_gate) -> None:
     calls: list[list[str]] = []
     target = gateway_gate.GatewayTarget(

@@ -36,6 +36,11 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// Stable conversation identity sentinels for surfaces without a persisted session.
+enum ChatConversationIdentity {
+  static let mainChatDefault = "main-chat-default"
+}
+
 /// Pure decision for the conversation-switch scroll-state reset. Callers pass
 /// the stable conversation/session identity; message IDs are not identities
 /// because prepending history changes the first message in the same chat.
@@ -106,6 +111,20 @@ enum ChatTranscriptWindow {
     Array(messages.suffix(maximumVisibleMessageCount))
   }
 
+  /// Duplicate detection only needs to inspect rows this surface can render.
+  /// Keeping the windowing at this boundary gives streaming body evaluations a
+  /// deterministic O(visible-window) work budget even when the journal grows.
+  static func visibleDuplicateIDs(in messages: [ChatMessage]) -> Set<String> {
+    duplicateIDs(inVisibleWindow: recentMessages(in: messages))
+  }
+
+  /// Deduplicates a window that the caller has already bounded. Keeping this
+  /// overload separate avoids copying the suffix twice when the transcript
+  /// body shares one visible snapshot with the lifecycle projection.
+  static func duplicateIDs(inVisibleWindow messages: [ChatMessage]) -> Set<String> {
+    ChatMessageDeduplicator.duplicateIDs(in: messages)
+  }
+
   static func allowsLoadingEarlier(for messages: [ChatMessage]) -> Bool {
     messages.count < maximumVisibleMessageCount
   }
@@ -163,12 +182,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// surface. Home uses zero because its ask bar fills the chat column.
   var timelineTrailingInset: CGFloat = ChatComposerLayout.pageMargin
   @ViewBuilder var welcomeContent: () -> WelcomeContent
-
-  /// IDs of messages that are near-duplicates of an earlier message in the same session.
-  /// Computed once per messages change to avoid O(n^2) per render.
-  private var duplicateMessageIds: Set<String> {
-    ChatMessageDeduplicator.duplicateIDs(in: messages)
-  }
 
   // MARK: - Scroll State
 
@@ -372,10 +385,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
-        for item in initialScrollWorkItems {
-          item.cancel()
-        }
-        initialScrollWorkItems.removeAll()
+        cancelAllPendingScrolls()
         initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil
@@ -615,8 +625,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     } else if messages.isEmpty {
       welcomeContent()
     } else {
-      let dupeIds = duplicateMessageIds
-      let displayMessages = AgentLifecycleDisplayProjection.project(visibleTranscriptMessages)
+      // Streamed tokens re-evaluate this body. Take one bounded snapshot and
+      // share it with both projections so each token avoids another suffix
+      // copy and never scans history that cannot be rendered.
+      let visibleMessages = visibleTranscriptMessages
+      let dupeIds = ChatTranscriptWindow.duplicateIDs(inVisibleWindow: visibleMessages)
+      let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
       let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(
