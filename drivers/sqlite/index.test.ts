@@ -7,7 +7,7 @@ import { prepareDerivation, validateAtomicGraphTransition, type AtomicGraphTrans
 import { persistValidTime, project, projectTreeInputSnapshot } from "../../core/retrieve";
 import { retrieveDogfood } from "../../core/retrieve/dogfood";
 import { buildDeterministicAnchors } from "../../core/retrieve/tree";
-import { IdempotencyConflictError, SqliteLedger } from "./index";
+import { GraphHeadConflictError, IdempotencyConflictError, SqliteLedger } from "./index";
 
 const versions: DerivationVersions = { strategy_version: "placement-v1", model_version: "none", prompt_version: "none", policy_version: "p1", code_version: "c1", schema_version: "s1", tokenizer_version: "none", tool_version: "none" };
 const entity = { entity_id: "entity:alice", owner_account_id: "owner-1", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] };
@@ -300,6 +300,77 @@ test("G2 SQLite adversarial D35: a purge fence survives reconstructing the ledge
   const rebuilt = new SqliteLedger(db);
   expect(rebuilt.snapshot("owner-1").liveness_causes).toEqual({ purged_claim_revision_ids: ["c-1"], forgotten_claim_revision_ids: [] });
   expect(rebuilt.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" })).toEqual({ claims: [], absence: { kind: "query_gap", message: "no cited memory matched" } });
+});
+
+const emptyTransition = (key: string, parentCommit: string | null): AtomicGraphTransition => ({
+  placement: { offline_experiment: true, allocations: {}, results: [] },
+  derivation: prepareDerivation({ attempt_id: `attempt:${key}`, commit_id: `commit:${key}`, owner_account_id: "owner-1", parent_commit: parentCommit, idempotency_key: key, input_revisions: [], output_revisions: [], versions, success_kind: "successful_empty" }),
+  revisions: [], adjacency: [], artifacts: [],
+});
+
+test("C1 two writers on one owner: a commit landing between head read and append raises GraphHeadConflictError, and appendWithHeadRetry recovers by rebuilding against the new head", async () => {
+  const ledger = new SqliteLedger(new Database(":memory:"));
+  ledger.append(transition("writer-a"));
+
+  // Writer B read the head before writer A's commit landed and built its plan
+  // against the stale (null) parent: the raw append must refuse it.
+  const stalePlan = emptyTransition("writer-b:stale", null);
+  expect(() => ledger.append(stalePlan)).toThrow(GraphHeadConflictError);
+  expect(ledger.graphHead("owner-1")).toMatchObject({ commit_id: "commit:writer-a", sequence: 1 });
+
+  // Same race through the retry contract: an intruder commit lands between the
+  // head read (the parent handed to the callback) and the append. The first
+  // attempt conflicts; the second attempt is REBUILT against the intruder's
+  // commit and succeeds.
+  const observedParents: (string | null)[] = [];
+  let intruded = false;
+  const result = await ledger.appendWithHeadRetry("owner-1", (parentCommit) => {
+    observedParents.push(parentCommit);
+    const plan = emptyTransition(`writer-b:retry:${observedParents.length}`, parentCommit);
+    if (!intruded) { intruded = true; ledger.append(emptyTransition("intruder", parentCommit)); }
+    return plan;
+  });
+  expect(observedParents).toEqual(["commit:writer-a", "commit:intruder"]);
+  expect(result).toEqual({ commit_id: "commit:writer-b:retry:2", sequence: 3, idempotent: false });
+  expect(ledger.graphHead("owner-1")).toMatchObject({ commit_id: "commit:writer-b:retry:2", sequence: 3 });
+});
+
+test("C1 retry exhaustion surfaces GraphHeadConflictError after exactly N rebuilt attempts", async () => {
+  const ledger = new SqliteLedger(new Database(":memory:"));
+  ledger.append(transition("writer-a"));
+  let calls = 0;
+  // The callback ignores the offered parent and always builds against a
+  // deliberately stale one, so every attempt conflicts.
+  await expect(ledger.appendWithHeadRetry("owner-1", () => emptyTransition(`always-stale:${++calls}`, null), { attempts: 3 })).rejects.toThrow(GraphHeadConflictError);
+  expect(calls).toBe(3);
+  // Nothing partial was committed and validation was never weakened.
+  expect(ledger.graphHead("owner-1")).toMatchObject({ commit_id: "commit:writer-a", sequence: 1 });
+  // Non-conflict errors propagate immediately without consuming the budget.
+  let invalidCalls = 0;
+  await expect(ledger.appendWithHeadRetry("owner-1", (parentCommit) => { invalidCalls++; return { ...transition(`invalid:${invalidCalls}`, parentCommit), artifacts: [] }; }, { attempts: 3 })).rejects.toThrow("provisional-consuming transition requires placement artifacts");
+  expect(invalidCalls).toBe(1);
+});
+
+test("C2 file-backed databases run WAL with a busy_timeout; :memory: construction stays harmless", () => {
+  const directory = mkdtempSync(join(tmpdir(), "omi-wal-"));
+  const databaseFile = join(directory, "ledger.sqlite");
+  const db = new Database(databaseFile);
+  const ledger = new SqliteLedger(db);
+  expect((db.query("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode).toBe("wal");
+  expect((db.query("PRAGMA busy_timeout").get() as { timeout: number }).timeout).toBe(5000);
+  ledger.append(transition("wal-file"));
+  expect(ledger.graphHead("owner-1")).toMatchObject({ commit_id: "commit:wal-file", sequence: 1 });
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+
+  // :memory: cannot use WAL; the pragma reports "memory" and the ledger must
+  // construct and append normally regardless.
+  const memory = new Database(":memory:");
+  const memoryLedger = new SqliteLedger(memory);
+  expect((memory.query("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode).toBe("memory");
+  expect((memory.query("PRAGMA busy_timeout").get() as { timeout: number }).timeout).toBe(5000);
+  memoryLedger.append(transition("wal-memory"));
+  expect(memoryLedger.graphHead("owner-1")).toMatchObject({ commit_id: "commit:wal-memory", sequence: 1 });
 });
 
 test("S2 adversarial restart persists 2020 valid time, never falls back to 2026 observation time, and keeps imprecision honest", () => {

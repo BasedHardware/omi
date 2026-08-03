@@ -14,7 +14,10 @@ import type { ModelPort } from "../model/port";
 import type { DurableStmItem } from "./stm";
 import { SqliteLedger } from "./index";
 
-const versions = { strategy_version: "dream-consolidation-v1", model_version: "deterministic-fake-v1", prompt_version: "dream-v1", policy_version: "d50-v1", code_version: "dream-v1", schema_version: "stage-b2-v1", tokenizer_version: "none", tool_version: "dream-v1" };
+export const DEFAULT_DREAM_MODEL_VERSION = "deterministic-fake-v1";
+// model_version is provenance, not decoration: a live-adjudicated commit must
+// not claim the deterministic fake produced it.
+const versionsFor = (model_version: string) => ({ strategy_version: "dream-consolidation-v1", model_version, prompt_version: "dream-v1", policy_version: "d50-v1", code_version: "dream-v1", schema_version: "stage-b2-v1", tokenizer_version: "none", tool_version: "dream-v1" });
 const instant = (at: string) => ({ typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: at }, resolved_interval: { kind: "instant" as const, start: at, end: at, timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "dream-promotion-v1", timezone: "UTC" } });
 const payload = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "mention" ? revision.mention : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "predicate" ? revision.predicate : revision.kind === "predicate_assertion" ? revision.assertion : revision.support;
 
@@ -42,7 +45,7 @@ export class SqliteDreamStore {
   trajectories(owner: string): readonly { cycle_id: string; trajectory: ReturnType<typeof diffGraphSnapshots> }[] { return (this.db.query("SELECT cycle_id, trajectory_json FROM dream_cycles WHERE owner_account_id=? ORDER BY cycle_id").all(owner) as { cycle_id: string; trajectory_json: string }[]).map((row) => ({ cycle_id: row.cycle_id, trajectory: JSON.parse(row.trajectory_json) })); }
 }
 
-const promotionTransition = async (ledger: SqliteLedger, owner: string, items: readonly DurableStmItem[], cycleId: string): Promise<number> => {
+const promotionTransition = async (ledger: SqliteLedger, owner: string, items: readonly DurableStmItem[], cycleId: string, versions: ReturnType<typeof versionsFor>): Promise<number> => {
   let promoted = 0;
   for (const item of items) {
     if (ledger.isProvisionalConsumed(item.claim.claim_revision_id)) continue;
@@ -75,8 +78,9 @@ const supportFor = (snapshot: GraphSnapshot, mention: Mention): import("../../co
   return claim && evidence ? { support_ref: `support:${mention.mention_id}:${claim.revision_id}`, owner_account_id: snapshot.owner_account_id, claim_revision_id: claim.revision_id, evidence_ref: evidence.revision_id, source_independence_key: evidence.evidence.source_independence_key, support_origin: "independent" } : null;
 };
 
-export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteLedger; owner_account_id: string; stm_items: readonly DurableStmItem[]; stm_mentions: readonly Mention[]; model: ModelPort; cycle_id: string; trigger_kind: "volume" | "idle"; max_reprojection_claims?: number }): Promise<DreamCycleReport> => {
+export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteLedger; owner_account_id: string; stm_items: readonly DurableStmItem[]; stm_mentions: readonly Mention[]; model: ModelPort; cycle_id: string; trigger_kind: "volume" | "idle" | "end_of_stream"; model_version?: string; max_reprojection_claims?: number }): Promise<DreamCycleReport> => {
   const state = new SqliteDreamStore(input.db);
+  const versions = versionsFor(input.model_version ?? DEFAULT_DREAM_MODEL_VERSION);
     const before = input.ledger.snapshot(input.owner_account_id);
     // One pass follows doc 45's order. New STM work is promoted only after
     // adjudication has examined the committed frontier; it becomes eligible
@@ -95,7 +99,7 @@ export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteL
     const gate = runDreamCycle({ cycle_id: input.cycle_id, facts, previous_split_keys: contradictions.map((item) => `${item.entity_id}:${item.claim_revision_ids.join(":")}`), proposals: [{ proposal_id: proposal.partition_hash, partition_hash: proposal.partition_hash, prior_partition_hash: state.priorPartitions(input.owner_account_id).includes(proposal.partition_hash) ? proposal.partition_hash : undefined, new_evidence: true }] });
     // Promotion is intentionally not identity-gated: unresolved source-local
     // and literal arguments become canonical, auditable inputs for next time.
-    const promoted = await promotionTransition(input.ledger, input.owner_account_id, input.stm_items, input.cycle_id);
+    const promoted = await promotionTransition(input.ledger, input.owner_account_id, input.stm_items, input.cycle_id, versions);
     let afterPromotion = input.ledger.snapshot(input.owner_account_id);
     const missingMentions = input.stm_mentions.filter((mention) => !(afterPromotion.mentions ?? []).some((stored) => stored.mention.mention_id === mention.mention_id));
     if (missingMentions.length) {

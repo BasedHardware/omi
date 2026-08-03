@@ -143,6 +143,33 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
   const backfillSessions = new Set(pending.filter((session) => ledger.findCommitByIdempotencyKey(`stage-a-ingest:${corpus.owner_account_id}:${session.session_id}`) !== null).map((session) => session.session_id));
   if (backfillSessions.size) console.error(`backfilling extraction for ${backfillSessions.size} previously ingested session(s)`);
 
+  const dreamOnce = async (triggerKind: "volume" | "idle" | "end_of_stream", windowLabel: string): Promise<void> => {
+    cycleCounter += 1;
+    const hermetic = { async invoke(request: { strategy: string; input: unknown }) { if (request.strategy === "predicate-alignment") return { assertions: [] }; if (request.strategy === "identity-verification") return { verdict: "same", who: (request.input as { surfaces?: readonly string[] }).surfaces?.[0] ?? null }; if (request.strategy === "identity-naming-check") return { names_specific_referent: true }; if (request.strategy === "speaker-self-reference") return { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) }; const profiles = (request.input as { profiles?: Parameters<typeof proposeProfileOverlaps>[0] }).profiles ?? []; return { same_groups: proposeProfileOverlaps(profiles).slice(0, 1), uncertain_pairs: [] }; }, async render() { return { summary_text: "", citations: [] }; }, async compose() { return { answer_text: "", citations: [], assertions: [] }; } };
+    const selection = dependencies.selectDreamModel?.(hermetic) ?? selectDreamModel(options, hermetic);
+    // Provenance must name the model that actually adjudicated this cycle:
+    // live GLM runs stamp the live model id, hermetic runs stamp the fake.
+    const modelVersion = selection.live ? (process.env.OMI_BENCH_OPENAI_MODEL ?? "glm-4.7") : "deterministic-fake-v1";
+    // A consolidation failure costs you consolidation, not the extraction run.
+    // Dream is the experimental half; committed memories must not be discarded
+    // because one merge could not satisfy the ledger.
+    try {
+      await runSqliteDreamCycle({ db, ledger, owner_account_id: corpus.owner_account_id, stm_items: stm.unconsumed(), stm_mentions: stm.mentions(), model: selection.model, cycle_id: `cycle:${cycleCounter}:${windowLabel}`, trigger_kind: triggerKind, model_version: modelVersion });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      dreamFailures.push({ cycle: cycleCounter, reason });
+      console.error(`dream cycle ${cycleCounter} failed: ${reason}`);
+    }
+    dreamCycles += 1;
+    // DRAIN: the ledger's consumed markers are the authority on which
+    // provisional claims a cycle promoted; tombstone exactly those items and
+    // recompute the watermark from what remains, so a later volume trigger can
+    // genuinely fire again instead of being pinned above the low watermark.
+    stm.consume(stm.unconsumed().filter((item) => ledger.isProvisionalConsumed(item.claim.claim_revision_id)).map((item) => item.id));
+    lastTriggerTokens = stm.unconsumed().reduce((sum, item) => sum + item.bytes, 0);
+    parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
+  };
+
   for (let offset = 0; offset < pending.length; offset += batchSize) {
     const batch = pending.slice(offset, offset + batchSize);
     const ingested: { session: Session; evidence: readonly ReturnType<typeof ingestConversation>["evidence"][number][] }[] = [];
@@ -152,7 +179,7 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
       ingested.push({ session, evidence });
     }
 
-    const graph = ledger.snapshot(corpus.owner_account_id), frontier = stm.all();
+    const graph = ledger.snapshot(corpus.owner_account_id), frontier = stm.unconsumed();
     const extracted = await Promise.all(ingested.map(async ({ session, evidence }) => {
       const current: StmItem = { id: `session:${session.session_id}`, session_id: session.session_id, event_time_watermark: session.segments[0]!.start_at, capture_sequence: session.capture_sequence, revision_lineage: session.revision_lineage, ingest_sequence: session.ingest_sequence, entity_refs: [], lexical_terms: [], vector_key: "session", predicate_id: "session", bytes: 0 };
       if (!backfillSessions.has(session.session_id)) assertNoLookahead(current, frontier);
@@ -181,28 +208,17 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
     }
 
     const last = batch[batch.length - 1]!, settledEventTime = last.segments[last.segments.length - 1]!.start_at;
-    const trigger = shouldConsolidate({ stm_tokens: stm.all().reduce((sum, item) => sum + item.bytes, 0), last_trigger_stm_tokens: lastTriggerTokens, high_watermark_tokens: 1_000_000, low_watermark_tokens: 500_000, previous_settled_window_id: previousWindow, previous_settled_event_time: previousEventTime, settled_window_id: last.settled_window_id, settled_event_time: settledEventTime, idle_gap_ms: 6 * 60 * 60 * 1000 });
-    if (trigger.fire) {
-      cycleCounter += 1;
-      const hermetic = { async invoke(request: { strategy: string; input: unknown }) { if (request.strategy === "predicate-alignment") return { assertions: [] }; if (request.strategy === "identity-verification") return { verdict: "same", who: (request.input as { surfaces?: readonly string[] }).surfaces?.[0] ?? null }; if (request.strategy === "identity-naming-check") return { names_specific_referent: true }; if (request.strategy === "speaker-self-reference") return { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) }; const profiles = (request.input as { profiles?: Parameters<typeof proposeProfileOverlaps>[0] }).profiles ?? []; return { same_groups: proposeProfileOverlaps(profiles).slice(0, 1), uncertain_pairs: [] }; }, async render() { return { summary_text: "", citations: [] }; }, async compose() { return { answer_text: "", citations: [], assertions: [] }; } };
-      const model = dependencies.selectDreamModel?.(hermetic).model ?? selectDreamModel(options, hermetic).model;
-      // A consolidation failure costs you consolidation, not the extraction run.
-      // Dream is the experimental half; committed memories must not be discarded
-      // because one merge could not satisfy the ledger.
-      try {
-        await runSqliteDreamCycle({ db, ledger, owner_account_id: corpus.owner_account_id, stm_items: stm.all(), stm_mentions: stm.mentions(), model, cycle_id: `cycle:${cycleCounter}:${last.settled_window_id}`, trigger_kind: trigger.kind });
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        dreamFailures.push({ cycle: cycleCounter, reason });
-        console.error(`dream cycle ${cycleCounter} failed: ${reason}`);
-      }
-      dreamCycles += 1;
-      lastTriggerTokens = stm.all().reduce((sum, item) => sum + item.bytes, 0);
-      parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
-    }
+    const trigger = shouldConsolidate({ stm_tokens: stm.unconsumed().reduce((sum, item) => sum + item.bytes, 0), last_trigger_stm_tokens: lastTriggerTokens, high_watermark_tokens: 1_000_000, low_watermark_tokens: 500_000, previous_settled_window_id: previousWindow, previous_settled_event_time: previousEventTime, settled_window_id: last.settled_window_id, settled_event_time: settledEventTime, idle_gap_ms: 6 * 60 * 60 * 1000 });
+    if (trigger.fire) await dreamOnce(trigger.kind, last.settled_window_id);
     previousWindow = last.settled_window_id;
     previousEventTime = settledEventTime;
   }
+
+  // END-OF-STREAM FLUSH: the tail of a corpus arrives after the last trigger,
+  // so without this final cycle every export under-reports whatever the last
+  // sessions said. Runs on the unconsumed frontier only; the cycle id is a
+  // pure function of how many cycles preceded it, so replays agree.
+  if (stm.unconsumed().length) await dreamOnce("end_of_stream", "end-of-stream");
 
   const quality_findings = checkRelationDistribution(relations);
   for (const finding of quality_findings) console.error(`quality run: ${finding.code}: ${finding.detail}`);

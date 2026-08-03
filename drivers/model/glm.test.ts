@@ -7,7 +7,7 @@ import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
 import { buildUnitBoundaryRequest } from "./unit-boundary-edge";
-import { GlmModel } from "./glm";
+import { EDGES, GlmModel } from "./glm";
 
 const claim = (id = "p-1", surface = "Alice"): ProvisionalClaim => ({
   claim_lineage_id: `lineage:${id}`, claim_revision_id: id, owner_account_id: "owner", predicate: "works_on",
@@ -115,7 +115,7 @@ test("every dispatched prompt shows readable names and asks only for labels back
     { mention_id: "mention:evidence:3b8d:led:0:subject", claim_revision_id: "provisional:s2:e1:0:led", source_identity_ref: { namespace_instance_ref: "device:7c1e", local_key: "speaker:3", producer: { producer_ref: null, contract_ref: null }, asserted_identity: { domain: null, scope_ref: null } }, discriminating_claims: [{ predicate: "led", role: "subject", polarity: "positive" as const, other_arguments: [], evidence_context: [{ evidence_ref: "evidence:3b8d", excerpt: "She led the Atlas rollout", capture_session_id: "s2", event_time: null, source_sequence: 2 }], cooccurring_predicates: [], observed_at: "2026-01-02T00:00:00Z", evidence_refs: ["evidence:3b8d"] }] },
   ];
   const identityProvider = fixtureProvider('{"same_groups":[["r1","r2"]],"uncertain_pairs":[]}');
-  const adjudicated = await modelFor(identityProvider).invoke({ strategy: "identity-adjudication", version: "v1", input: { profiles } });
+  const adjudicated = await modelFor(identityProvider).invoke({ strategy: "identity-adjudication", version: "dream-identity-v1", input: { profiles } });
   const identityPrompt = (identityProvider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
   for (const id of ["mention:evidence", "provisional:s1", "source-local:", "device:7c1e", "evidence:9f2a"]) expect(identityPrompt).not.toContain(id);
   expect(identityPrompt).toContain("Nora runs the Atlas rollout");
@@ -123,7 +123,7 @@ test("every dispatched prompt shows readable names and asks only for labels back
   // never handles -- or invents -- a durable identifier.
   expect(adjudicated).toEqual({ same_groups: [{ members: [profiles[0]!.mention_id, profiles[1]!.mention_id], who: null, kind: "deictic_or_generic" }], uncertain_pairs: [] });
 
-  const hallucinated = await modelFor(fixtureProvider('{"same_groups":[["r1","r9"]],"uncertain_pairs":[["r1","r9"]]}')).invoke({ strategy: "identity-adjudication", version: "v1", input: { profiles } });
+  const hallucinated = await modelFor(fixtureProvider('{"same_groups":[["r1","r9"]],"uncertain_pairs":[["r1","r9"]]}')).invoke({ strategy: "identity-adjudication", version: "dream-identity-v1", input: { profiles } });
   expect(hallucinated).toEqual({ same_groups: [], uncertain_pairs: [] });
 });
 
@@ -133,7 +133,7 @@ test("predicate alignment is asked about names, not about the digests it cannot 
     { predicate_id: "predicate:8d0f2a4e6c8b1d3f5a7e9c0b2d4f6a8c", name: "is_working_on", slot_ids: ["actor", "project"] },
   ] };
   const provider = fixtureProvider('{"aliases":[{"relation":"p2","means_the_same_as":"p1","slot_aliases":[{"from_slot_id":"actor","to_slot_id":"subject"}]}]}');
-  const aligned = await modelFor(provider).invoke({ strategy: "predicate-alignment", version: "v1", input });
+  const aligned = await modelFor(provider).invoke({ strategy: "predicate-alignment", version: "dream-predicate-v1", input });
   const prompt = (provider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
   for (const predicate of input.predicates) expect(prompt).not.toContain(predicate.predicate_id);
   expect(prompt).toContain("is_working_on");
@@ -235,13 +235,55 @@ test("identity-naming-check parses the contract key, the exact 'answer' alias, a
     '{"is_generic":true}',
   );
   const model = modelFor(provider);
-  await expect(model.invoke({ strategy: "identity-naming-check", version: "v1", input: { label: "him", surfaces: ["him"] } })).resolves.toEqual({ names_specific_referent: false });
-  await expect(model.invoke({ strategy: "identity-naming-check", version: "v1", input: { label: "Telegram", surfaces: ["telegram"] } })).resolves.toEqual({ names_specific_referent: true });
-  await expect(model.invoke({ strategy: "identity-naming-check", version: "v1", input: { label: "700", surfaces: ["700"] } })).resolves.toEqual({ names_specific_referent: false });
+  await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "him", surfaces: ["him"] } })).resolves.toEqual({ names_specific_referent: false });
+  await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "Telegram", surfaces: ["telegram"] } })).resolves.toEqual({ names_specific_referent: true });
+  await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "700", surfaces: ["700"] } })).resolves.toEqual({ names_specific_referent: false });
   // {"is_generic": true} semantically means REJECT; treating any renamed
   // single key as the verdict would invert it into an admission. It must fail
   // loudly, and the caller's fail-closed catch turns that into a rejection.
-  await expect(model.invoke({ strategy: "identity-naming-check", version: "v1", input: { label: "x", surfaces: ["x"] } })).rejects.toThrow("identity-naming-check");
+  await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "x", surfaces: ["x"] } })).rejects.toThrow("identity-naming-check");
   const prompts = (provider.calls as { messages: { content: string }[] }[]).map((call) => call.messages[0]!.content);
   expect(prompts[0]).toContain("UNTRUSTED CONTENT");
+});
+
+test("a version the driver does not implement is refused loudly, before any chat call is made", async () => {
+  const provider = fixtureProvider('{"verdict":"same","who":"Nora"}');
+  const model = modelFor(provider);
+  // Version drift used to be invisible: request.version was decorative and any
+  // string selected the current prompt. Now the mismatch names both versions.
+  await expect(model.invoke({ strategy: "identity-verification", version: "dream-identity-verify-v1", input: { who: "Nora", surfaces: ["Nora"], profiles: [] } }))
+    .rejects.toThrow('GLM identity-verification version mismatch: caller requested "dream-identity-verify-v1" but this driver implements "dream-identity-verify-v2"');
+  expect(provider.calls).toHaveLength(0);
+  await expect(model.invoke({ strategy: "identity-verification", version: "dream-identity-verify-v2", input: { who: "Nora", surfaces: ["Nora"], profiles: [] } })).resolves.toEqual({ verdict: "same", who: "Nora" });
+  expect(provider.calls).toHaveLength(1);
+});
+
+test("caller-versioned edges accept the version the caller names instead of pinning one", async () => {
+  // grounded-extraction's version is a parameter of extractGrounded and is
+  // recorded as data; compose/render carry a per-run model_version. None of
+  // these name this driver's prompt contract, so no version is pinned.
+  await expect(modelFor(fixtureProvider('{"claims":[]}')).invoke({ strategy: "grounded-extraction", version: "stage-a-grounded-v1", input: { prompt: "x" } })).resolves.toEqual({ claims: [] });
+  await expect(modelFor(fixtureProvider('{"answer":"","assertions":[]}')).compose({ strategy: "citation-grounded-compose", version: "unspecified", input: composeInput })).resolves.toMatchObject({ answer_text: "" });
+  await expect(modelFor(fixtureProvider('{"summary":"","cites":[]}')).render({ strategy: "run-named-render-strategy", version: "glm-4.7", input: {} })).resolves.toEqual({ summary_text: "", citations: [] });
+});
+
+test("the edge registry is the single adding-an-edge surface and stays in sync with the strategy union", () => {
+  // `EDGES satisfies Record<GlmStrategy, GlmEdge>` enforces the union<->registry
+  // sync at compile time; this pins the runtime shape and the invoke surface.
+  expect(Object.keys(EDGES).sort()).toEqual([
+    "citation-grounded-compose", "grounded-extraction", "identity-adjudication", "identity-naming-check",
+    "identity-verification", "local-handle-durable-entity", "mention-local-handle", "predicate-alignment",
+    "retrieval-node-summary", "scope-role-binding", "span-entailment", "speaker-self-reference", "stm-ltm-unit-boundary",
+  ]);
+  for (const edge of Object.values(EDGES)) {
+    expect(typeof edge.prompt).toBe("function");
+    expect(typeof edge.parse).toBe("function");
+    expect(edge.versions === null || edge.versions instanceof Set).toBe(true);
+  }
+  // The versions pinned here are exactly what core/harness call sites pass today.
+  expect(EDGES["identity-verification"].versions).toEqual(new Set(["dream-identity-verify-v2"]));
+  expect(EDGES["identity-naming-check"].versions).toEqual(new Set(["dream-naming-check-v1"]));
+  expect(EDGES["speaker-self-reference"].versions).toEqual(new Set(["dream-self-reference-v1"]));
+  expect(EDGES["identity-adjudication"].versions).toEqual(new Set(["dream-identity-v1"]));
+  expect(EDGES["predicate-alignment"].versions).toEqual(new Set(["dream-predicate-v1"]));
 });

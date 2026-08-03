@@ -36,6 +36,15 @@ export class SqliteLedger implements LedgerPort {
   constructor(private readonly db: Database) { this.migrate(); }
 
   private migrate(): void {
+    // Production concurrency defaults. WAL lets concurrent readers proceed
+    // while a writer holds the write lock, and busy_timeout makes a second
+    // connection wait (instead of failing immediately with SQLITE_BUSY) when
+    // the write lock is briefly held. On :memory: databases -- every test
+    // constructs one -- `journal_mode = WAL` is a documented no-op that
+    // reports "memory"; we consume the pragma's result row and never assert
+    // on it, so both file-backed and in-memory construction succeed.
+    this.db.exec("PRAGMA busy_timeout = 5000;");
+    this.db.query("PRAGMA journal_mode = WAL;").get();
     this.db.exec(`
       PRAGMA foreign_keys = ON;
       CREATE TABLE IF NOT EXISTS claim_revisions (
@@ -145,6 +154,43 @@ export class SqliteLedger implements LedgerPort {
 
   async appendTransitionPlan(plan: AtomicGraphTransition): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> {
     return this.append(plan);
+  }
+
+  /**
+   * Bounded optimistic-concurrency retry for two writers on one owner.
+   *
+   * Reads the current graph head, asks `planFor` to produce a transition
+   * against that parent, and attempts the append. When another writer lands a
+   * commit between the head read and the append, `append` throws
+   * GraphHeadConflictError; this method then re-reads the head and calls
+   * `planFor` again with the NEW parent, up to `attempts` times (default 3),
+   * rethrowing the last conflict when the budget is exhausted.
+   *
+   * The callback takes the parent commit because the plan's derivation must be
+   * REBUILT against the new head, never mutated: `parent_commit` is baked into
+   * the derivation record at `prepareDerivation` time, and any placement or
+   * identity decision the caller made may depend on graph state that the
+   * intervening commit changed. Patching `parent_commit` on a stale plan would
+   * commit decisions derived from a head that no longer exists.
+   *
+   * This is strictly a retry loop around `appendTransitionPlan`: witness
+   * verification, validation, and idempotency behave exactly as they do there,
+   * and every non-conflict error propagates immediately without a retry.
+   */
+  async appendWithHeadRetry(ownerAccountId: string, planFor: (parentCommit: string | null) => AtomicGraphTransition | Promise<AtomicGraphTransition>, opts?: { attempts?: number }): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> {
+    const attempts = Math.max(1, opts?.attempts ?? 3);
+    let conflict: GraphHeadConflictError | undefined;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const parent = this.graphHead(ownerAccountId)?.commit_id ?? null;
+      const plan = await planFor(parent);
+      try {
+        return await this.appendTransitionPlan(plan);
+      } catch (error) {
+        if (!(error instanceof GraphHeadConflictError)) throw error;
+        conflict = error;
+      }
+    }
+    throw conflict;
   }
 
   async replayTransitionPlan(plan: AtomicGraphTransition): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> {

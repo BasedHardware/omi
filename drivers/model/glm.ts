@@ -583,37 +583,35 @@ const parseRenderResponse = (content: string, input: RenderInput): { summary_tex
   return { summary_text: root.summary.trim(), citations };
 };
 
-const promptFor = (strategy: GlmStrategy, input: unknown): string => {
-  if (strategy === entityStrategy) return promptForEntity(input as EntityResolutionRequest);
-  if (strategy === mentionStrategy) return promptForMention(input as MentionDetectionRequest);
-  if (strategy === scopeStrategy) return promptForScope(input as ScopeRoleRequest);
-  if (strategy === identityStrategy) return promptForIdentityAdjudication(input as { profiles?: readonly ReferentProfile[] });
-  if (strategy === identityVerifyStrategy) return promptForIdentityVerification(input as { who?: string | null; profiles?: readonly ReferentProfile[] });
-  if (strategy === namingCheckStrategy) return promptForNamingCheck(input as { label?: string | null; surfaces?: readonly string[] });
-  if (strategy === selfReferenceStrategy) return promptForSelfReference(input as { speaker?: string | null; phrases?: readonly string[] });
-  if (strategy === predicateStrategy) return promptForPredicateAlignment(input as PredicateAlignmentRequest);
-  if (strategy === composeStrategy) return promptForCompose(input as ComposeInput);
-  if (strategy === entailmentStrategy) return promptForEntailment(input as EntailmentInput);
-  if (strategy === renderStrategy) return promptForRender(input as RenderInput);
-  if (strategy === groundedStrategy) return typeof (input as { prompt?: unknown }).prompt === "string" ? (input as { prompt: string }).prompt : JSON.stringify(input);
-  return promptForBoundary(input as BoundaryInput);
-};
+/**
+ * One registry row per model edge: adding an edge is adding one entry here (plus
+ * its prompt/parse functions above and the strategy name in GlmStrategy).
+ *
+ * `versions` is the set of request versions this driver implements for the
+ * edge, copied verbatim from what the core/harness call sites pass today
+ * (e.g. core/consolidate/identity.ts sends "dream-identity-verify-v2").
+ * A `null` means the edge is caller-versioned by design and the driver pins
+ * nothing: grounded-extraction threads `extractGrounded(..., version)` through
+ * as data, and compose/render carry a per-run `model_version` that names the
+ * model behind the port, not this prompt contract (see harness/recall.ts).
+ */
+type GlmEdge = { versions: ReadonlySet<string> | null; prompt(input: unknown): string; parse(content: string, input: unknown): unknown };
 
-const parseResponse = (strategy: GlmStrategy, content: string, input: unknown): unknown => {
-  if (strategy === entityStrategy) return parseEntityProposal(content, input as EntityResolutionRequest);
-  if (strategy === mentionStrategy) return parseMentionResponse(content, input as MentionDetectionRequest);
-  if (strategy === scopeStrategy) return parseScopeResponse(content, input as ScopeRoleRequest);
-  if (strategy === identityStrategy) return parseIdentityAdjudication(content, input as { profiles?: readonly ReferentProfile[] });
-  if (strategy === identityVerifyStrategy) return parseIdentityVerification(content);
-  if (strategy === namingCheckStrategy) return parseNamingCheck(content);
-  if (strategy === selfReferenceStrategy) return parseSelfReference(content, input as { phrases?: readonly string[] });
-  if (strategy === predicateStrategy) return parsePredicateAlignment(content, input as PredicateAlignmentRequest);
-  if (strategy === composeStrategy) return parseComposeResponse(content, input as ComposeInput);
-  if (strategy === entailmentStrategy) return parseEntailmentResponse(content);
-  if (strategy === renderStrategy) return parseRenderResponse(content, input as RenderInput);
-  if (strategy === groundedStrategy) return parseGroundedResponse(content);
-  return parseBoundaryResponse(content);
-};
+export const EDGES = {
+  [entityStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntity(input as EntityResolutionRequest), parse: (content, input) => parseEntityProposal(content, input as EntityResolutionRequest) },
+  [mentionStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForMention(input as MentionDetectionRequest), parse: (content, input) => parseMentionResponse(content, input as MentionDetectionRequest) },
+  [scopeStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForScope(input as ScopeRoleRequest), parse: (content, input) => parseScopeResponse(content, input as ScopeRoleRequest) },
+  [boundaryStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
+  [groundedStrategy]: { versions: null, prompt: (input) => typeof (input as { prompt?: unknown }).prompt === "string" ? (input as { prompt: string }).prompt : JSON.stringify(input), parse: (content) => parseGroundedResponse(content) },
+  [identityStrategy]: { versions: new Set(["dream-identity-v1"]), prompt: (input) => promptForIdentityAdjudication(input as { profiles?: readonly ReferentProfile[] }), parse: (content, input) => parseIdentityAdjudication(content, input as { profiles?: readonly ReferentProfile[] }) },
+  [identityVerifyStrategy]: { versions: new Set(["dream-identity-verify-v2"]), prompt: (input) => promptForIdentityVerification(input as { who?: string | null; profiles?: readonly ReferentProfile[] }), parse: (content) => parseIdentityVerification(content) },
+  [namingCheckStrategy]: { versions: new Set(["dream-naming-check-v1"]), prompt: (input) => promptForNamingCheck(input as { label?: string | null; surfaces?: readonly string[] }), parse: (content) => parseNamingCheck(content) },
+  [selfReferenceStrategy]: { versions: new Set(["dream-self-reference-v1"]), prompt: (input) => promptForSelfReference(input as { speaker?: string | null; phrases?: readonly string[] }), parse: (content, input) => parseSelfReference(content, input as { phrases?: readonly string[] }) },
+  [predicateStrategy]: { versions: new Set(["dream-predicate-v1"]), prompt: (input) => promptForPredicateAlignment(input as PredicateAlignmentRequest), parse: (content, input) => parsePredicateAlignment(content, input as PredicateAlignmentRequest) },
+  [composeStrategy]: { versions: null, prompt: (input) => promptForCompose(input as ComposeInput), parse: (content, input) => parseComposeResponse(content, input as ComposeInput) },
+  [entailmentStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntailment(input as EntailmentInput), parse: (content) => parseEntailmentResponse(content) },
+  [renderStrategy]: { versions: null, prompt: (input) => promptForRender(input as RenderInput), parse: (content, input) => parseRenderResponse(content, input as RenderInput) },
+} satisfies Record<GlmStrategy, GlmEdge>;
 
 /** Thin OpenAI-compatible GLM edge. The core resolver remains pure. */
 export class GlmModel implements ModelPort {
@@ -629,37 +627,42 @@ export class GlmModel implements ModelPort {
     this.fetchFn = options.fetch ?? fetch;
   }
 
-  /** One chat call per edge; the three port methods differ only in which strategy they dispatch. */
-  private async complete(strategy: GlmStrategy, input: unknown): Promise<unknown> {
+  /** One chat call per edge; the three port methods differ only in which registry row they dispatch. */
+  private async complete(strategy: GlmStrategy, input: unknown, version?: string): Promise<unknown> {
+    const edge = EDGES[strategy];
+    // Version drift must be loud: a caller naming a contract this driver does
+    // not implement used to be silently answered by whatever is implemented.
+    if (version !== undefined && edge.versions !== null && !edge.versions.has(version)) throw new Error(`GLM ${strategy} version mismatch: caller requested "${version}" but this driver implements "${[...edge.versions].join('", "')}"`);
     if (!this.apiKey) throw new Error("GLM API key missing: set GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY");
     const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content: promptFor(strategy, input) }] }),
+      body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content: edge.prompt(input) }] }),
       // A hung request must become an ERROR the caller's fail-closed/retry
       // paths can see, never a dream cycle stalled forever on one socket.
       signal: AbortSignal.timeout(300_000),
     });
     if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
     const payload = await response.json();
-    return parseResponse(strategy, readContent(payload), input);
+    return edge.parse(readContent(payload), input);
   }
 
-  // Compose and render are deliberately absent from this list: their responses
-  // have their own typed shapes and their own methods, and an `invoke` caller
+  // Compose and render are deliberately refused here: their responses have
+  // their own typed shapes and their own methods, and an `invoke` caller
   // receiving `unknown` would have to re-assert one of them by hand.
   async invoke(request: { strategy: string; version: string; input: unknown }): Promise<unknown> {
-    if (![entityStrategy, mentionStrategy, scopeStrategy, boundaryStrategy, groundedStrategy, identityStrategy, identityVerifyStrategy, namingCheckStrategy, selfReferenceStrategy, predicateStrategy, entailmentStrategy].includes(request.strategy)) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
-    return this.complete(request.strategy as GlmStrategy, request.input);
+    if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
+    return this.complete(request.strategy as GlmStrategy, request.input, request.version);
   }
 
-  /** The retrieval tree names its own render strategy per run for cache identity; this method IS the edge. */
+  /** The retrieval tree names its own render strategy per run for cache identity; this method IS the edge,
+   * so the request's strategy and version (a per-run model_version) pass through untouched. */
   async render(request: { strategy: string; version: string; input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> {
-    return await this.complete(renderStrategy, request.input) as { summary_text: string; citations: readonly string[] };
+    return await this.complete(renderStrategy, request.input, request.version) as { summary_text: string; citations: readonly string[] };
   }
 
   async compose(request: { strategy: string; version: string; input: unknown }): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }> {
     if (request.strategy !== composeStrategy) throw new Error(`GlmModel compose does not support strategy: ${request.strategy}`);
-    return await this.complete(composeStrategy, request.input) as { answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] };
+    return await this.complete(composeStrategy, request.input, request.version) as { answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] };
   }
 }

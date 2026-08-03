@@ -57,6 +57,30 @@ test("dream writes a graph export with its visible trajectory", async () => {
   expect(exported.trajectory.length).toBeGreaterThan(0);
 });
 
+test("a run whose tail never trips a trigger ends with an end_of_stream flush and no unconsumed eligible STM", async () => {
+  // One batch spanning the whole corpus: no idle boundary is ever crossed and
+  // the tiny fixture never nears the volume watermark, so before the flush
+  // existed this run consolidated NOTHING.
+  const path = dbPath("omi-flush-");
+  const result = await runPipeline([fixture, "--db", path, "--batch", "7"]);
+  expect(result.dream_cycles).toBe(1);
+  expect(result.dream_failures).toEqual([]);
+  const db = new Database(path);
+  const cycles = db.query("SELECT cycle_id, trigger_kind FROM dream_cycles ORDER BY cycle_id").all() as { cycle_id: string; trigger_kind: string }[];
+  expect(cycles).toEqual([{ cycle_id: "cycle:1:end-of-stream", trigger_kind: "end_of_stream" }]);
+  const stm = new SqliteStmStore(db);
+  expect(stm.unconsumed()).toEqual([]);
+  // Consumed items stay visible to resume bookkeeping; only the live frontier drains.
+  expect(stm.all().length).toBeGreaterThan(0);
+});
+
+test("mid-run cycles drain the STM frontier so every item is consolidated exactly once", async () => {
+  const path = dbPath("omi-drain-");
+  const result = await runPipeline([fixture, "--db", path]);
+  expect(result.dream_cycles).toBeGreaterThan(1);
+  expect(new SqliteStmStore(new Database(path)).unconsumed()).toEqual([]);
+});
+
 test("a collapsed relation distribution is reported, not vetoed", async () => {
   const collapse = (seed: unknown) => ({ claims: (seed as { claims: { relation: string }[] }).claims.map((claim) => ({ ...claim, relation: "generic/statement" })) });
   const result = await runPipeline([fixture, "--db", dbPath("omi-degenerate-")], {

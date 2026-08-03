@@ -235,6 +235,32 @@ test("a partition whose only failures are retryable is not recorded as processed
   expect(second).toMatchObject({ committed_merges: 0, skipped_merges: [{ reason: "no_reprojectable_canonical_claim" }] });
 });
 
+test("a dream cycle stamps the adjudicating model's identity into its derivation commits", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("provenance-left", true), right = seedClaim("provenance-right", true);
+  await seed(ledger, [left, right]);
+  const adjudicate = (cycleId: string) => new DeterministicFakeModel((request) => request.strategy === "identity-adjudication" ? { partition_hash: cycleId, same_groups: [[left.mention.mention_id, right.mention.mention_id]], uncertain_pairs: [] } : request.strategy === "identity-verification" ? { verdict: "same", who: "the recurring referent" } : request.strategy === "identity-naming-check" ? { names_specific_referent: true } : request.strategy === "speaker-self-reference" ? { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) } : { assertions: [] });
+
+  const report = await runSqliteDreamCycle({ db, ledger, owner_account_id: owner, stm_items: [], stm_mentions: [], cycle_id: "provenance-live", trigger_kind: "volume", model: adjudicate("provenance-live"), model_version: "glm-4.7" });
+  expect(report.committed_merges).toBe(1);
+  const commits = db.query("SELECT record_json FROM derivation_commits WHERE commit_id LIKE 'dream-%'").all() as { record_json: string }[];
+  expect(commits.length).toBeGreaterThan(0);
+  for (const commit of commits) {
+    expect(commit.record_json).toContain("glm-4.7");
+    expect(commit.record_json).not.toContain("deterministic-fake-v1");
+  }
+});
+
+test("a dream cycle without an explicit model identity keeps the deterministic default", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("provenance-default-left", true), right = seedClaim("provenance-default-right", true);
+  await seed(ledger, [left, right]);
+  await cycle(db, ledger, "provenance-default", [[left.mention.mention_id, right.mention.mention_id]]);
+  const commits = db.query("SELECT record_json FROM derivation_commits WHERE commit_id LIKE 'dream-%'").all() as { record_json: string }[];
+  expect(commits.length).toBeGreaterThan(0);
+  for (const commit of commits) expect(commit.record_json).toContain("deterministic-fake-v1");
+});
+
 test("a terminally processed partition is recorded, preserving the variance guard", async () => {
   const db = new Database(":memory:"), ledger = new SqliteLedger(db);
   const left = seedClaim("terminal-left", true), right = seedClaim("terminal-right", true);
