@@ -253,6 +253,12 @@ private actor AgentSyncDelayedTokenGate {
 /// on a compound `(updatedAt, id)` cursor.
 final class AgentSyncBatchQueryTests: XCTestCase {
 
+  func testScreenTableIsNotRegisteredForCloudSync() {
+    XCTAssertFalse(AgentSyncService.tableNamesForTesting.contains("screenshots"))
+    XCTAssertFalse(AgentSyncService.tableNamesForTesting.contains("focus_sessions"))
+    XCTAssertFalse(AgentSyncService.tableNamesForTesting.contains("observations"))
+  }
+
   func testPartialSchemaIsNotReadyEvenWhenDatabaseReadyIsTrue() {
     let readiness = AgentSyncService.databaseReadiness(
       healthPayload: ["databaseReady": true],

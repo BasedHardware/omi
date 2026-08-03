@@ -141,18 +141,15 @@ actor AgentSyncService {
     TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
     TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
     // Append-only (cursor by id) — segments after sessions
-    TableSpec(
-      name: "screenshots", appendOnly: true,
-      excludedColumns: [
-        "ocrDataJson"
-      ]),
     TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
   ]
 
   private let tables = AgentSyncService.tableSpecs
   private static let requiredRemoteTables = Set(tableSpecs.map(\.name))
+
+  #if DEBUG
+    static var tableNamesForTesting: Set<String> { requiredRemoteTables }
+  #endif
 
   // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
   // by id — handled via appendOnly=true above.

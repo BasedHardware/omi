@@ -1,4 +1,3 @@
-import Accelerate
 import CryptoKit
 import Foundation
 
@@ -10,7 +9,10 @@ import Foundation
 actor OCREmbeddingService {
   static let shared = OCREmbeddingService()
 
-  private let embeddingDimension = EmbeddingService.embeddingDimension
+  enum SearchError: Error {
+    case unavailable
+  }
+
   private let minTextLength = 20
 
   // MARK: - Batch Embedding Buffer
@@ -53,9 +55,7 @@ actor OCREmbeddingService {
   private let embeddingWriter: EmbeddingWriter
 
   private init() {
-    self.batchEmbedder = { texts, taskType in
-      try await EmbeddingService.shared.embedBatch(texts: texts, taskType: taskType)
-    }
+    self.batchEmbedder = { _, _ in [] }
     self.embeddingWriter = { screenshotId, embedding in
       try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: embedding)
     }
@@ -238,93 +238,8 @@ actor OCREmbeddingService {
 
   // MARK: - Backfill
 
-  /// Backfill embeddings for existing screenshots that have OCR text but no embedding.
-  /// Capped at 5000 items per launch to prevent cost spikes.
   func backfillIfNeeded() async {
-    do {
-      let status = try await RewindDatabase.shared.getScreenshotEmbeddingBackfillStatus()
-      if status.completed {
-        log("OCREmbeddingService: Backfill already complete, skipping")
-        return
-      }
-
-      log("OCREmbeddingService: Starting backfill (previously processed: \(status.processedCount))")
-
-      let batchSize = 100
-      let maxItemsPerLaunch = 5000
-      var totalProcessed = status.processedCount
-      var processedThisLaunch = 0
-      var hitError = false
-
-      while processedThisLaunch < maxItemsPerLaunch {
-        let items = try await RewindDatabase.shared.getScreenshotsMissingEmbeddings(limit: batchSize)
-        if items.isEmpty { break }
-
-        let itemsToProcess = items
-
-        let texts = itemsToProcess.map {
-          Self.formatForEmbedding(ocrText: $0.ocrText, appName: $0.appName, windowTitle: $0.windowTitle)
-        }
-        let embeddings: [[Float]]
-        do {
-          embeddings = try await EmbeddingService.shared.embedBatch(texts: texts, taskType: "RETRIEVAL_DOCUMENT")
-        } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
-          log(
-            "OCREmbeddingService: Backfill paused at \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
-          )
-          hitError = true
-          break
-        } catch {
-          logError(
-            "OCREmbeddingService: Batch embed failed at \(totalProcessed) items, will retry on next launch",
-            error: error)
-          hitError = true
-          break
-        }
-
-        for (i, embedding) in embeddings.enumerated() where i < itemsToProcess.count {
-          let item = itemsToProcess[i]
-          let data = await EmbeddingService.shared.floatsToData(embedding)
-          try await RewindDatabase.shared.updateScreenshotEmbedding(id: item.id, embedding: data)
-        }
-
-        totalProcessed += itemsToProcess.count
-        processedThisLaunch += itemsToProcess.count
-
-        // Update progress every 1000 items
-        if totalProcessed % 1000 < batchSize {
-          try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-            completed: false, processedCount: totalProcessed)
-          log(
-            "OCREmbeddingService: Backfill progress: \(totalProcessed) items (\(processedThisLaunch)/\(maxItemsPerLaunch) this launch)"
-          )
-        }
-
-        // Rate limiting delay between batches
-        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
-      }
-
-      if processedThisLaunch >= maxItemsPerLaunch {
-        try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-          completed: false, processedCount: totalProcessed)
-        log(
-          "OCREmbeddingService: Backfill paused at \(totalProcessed) items (cap of \(maxItemsPerLaunch)/launch reached), will continue on next launch"
-        )
-      } else if hitError {
-        try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-          completed: false, processedCount: totalProcessed)
-        log("OCREmbeddingService: Backfill paused at \(totalProcessed) items due to error, will resume on next launch")
-      } else {
-        try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-          completed: true, processedCount: totalProcessed)
-        log("OCREmbeddingService: Backfill complete — \(totalProcessed) items embedded")
-      }
-
-    } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
-      log("OCREmbeddingService: Backfill stopped — backend gating/limit: \(error.localizedDescription)")
-    } catch {
-      logError("OCREmbeddingService: Backfill failed", error: error)
-    }
+    return
   }
 
   // MARK: - Disk-Based Semantic Search
@@ -341,60 +256,6 @@ actor OCREmbeddingService {
     // Flush any pending embeddings before searching so recent screenshots are findable
     await flushPendingEmbeddings()
 
-    // Embed the query with RETRIEVAL_QUERY task type for asymmetric search
-    let queryEmbedding = try await EmbeddingService.shared.embed(text: query, taskType: "RETRIEVAL_QUERY")
-
-    let batchSize = 5000
-    var offset = 0
-    var topResults: [(screenshotId: Int64, similarity: Float)] = []
-
-    while true {
-      let batch = try await RewindDatabase.shared.readEmbeddingBatch(
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        limit: batchSize,
-        offset: offset
-      )
-
-      if batch.isEmpty { break }
-
-      for (screenshotId, embeddingData) in batch {
-        guard let storedEmbedding = dataToFloats(embeddingData) else { continue }
-        let sim = cosineSimilarity(queryEmbedding, storedEmbedding)
-        topResults.append((screenshotId: screenshotId, similarity: sim))
-      }
-
-      // Compact top results periodically to keep memory bounded
-      if topResults.count > topK * 2 {
-        topResults.sort { $0.similarity > $1.similarity }
-        topResults = Array(topResults.prefix(topK))
-      }
-
-      offset += batchSize
-    }
-
-    // Final sort and trim
-    topResults.sort { $0.similarity > $1.similarity }
-    return Array(topResults.prefix(topK))
-  }
-
-  // MARK: - Helpers
-
-  /// Cosine similarity using Accelerate vDSP
-  private func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
-    guard a.count == b.count, !a.isEmpty else { return 0 }
-    var dot: Float = 0
-    vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
-    // Vectors are pre-normalized, so dot product = cosine similarity
-    return dot
-  }
-
-  /// Convert Data (BLOB) back to [Float]
-  private func dataToFloats(_ data: Data) -> [Float]? {
-    guard data.count == embeddingDimension * MemoryLayout<Float>.size else { return nil }
-    return data.withUnsafeBytes { raw in
-      Array(raw.bindMemory(to: Float.self))
-    }
+    throw SearchError.unavailable
   }
 }

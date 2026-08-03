@@ -74,7 +74,6 @@ struct DesktopHomeView: View {
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
-  @State private var didScheduleAgentVMProvisioning = false
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
   @State private var isWaitingForScreenAnalysisKeys = false
   // Anchor for the proactive-monitoring warmup budget. Captured at view
@@ -273,7 +272,6 @@ struct DesktopHomeView: View {
           // Trigger eager data loading when main content appears
           await viewModelContainer.loadAllData()
           scheduleConversationWarmup()
-          scheduleAgentVMProvisioning()
         }
         // Refresh conversations when app becomes active (e.g. switching back from another app)
         .onReceive(
@@ -893,24 +891,9 @@ struct DesktopHomeView: View {
   private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
     viewModelContainer.resetStartupState()
     didScheduleConversationWarmup = false
-    didScheduleAgentVMProvisioning = false
     proactiveMonitoringStartGate.finishAttempt()
     initialFileIndexingBackfill.releaseReservation()
     CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
-  }
-
-  private func scheduleAgentVMProvisioning() {
-    guard !didScheduleAgentVMProvisioning else { return }
-    didScheduleAgentVMProvisioning = true
-
-    let scheduled = viewModelContainer.scheduleSessionWarmup(
-      id: .agentVMProvisioning,
-      delay: StartupWarmupPolicy.agentVMProvisioningDelay,
-      onCancel: { didScheduleAgentVMProvisioning = false },
-      operation: {
-        await AgentVMService.shared.ensureProvisioned()
-      })
-    if !scheduled { didScheduleAgentVMProvisioning = false }
   }
 
   private func scheduleConversationWarmup() {

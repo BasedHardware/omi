@@ -17,13 +17,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testAgentVMProvisioningWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.agentVMProvisioningDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testProactiveAssistantsWaitUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.proactiveAssistantsStartDelay,
@@ -286,7 +279,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
       .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("id: .agentVMProvisioning"))
     XCTAssertTrue(source.contains("id: .conversationWarmup"))
     XCTAssertTrue(source.contains("id: .initialFileIndexing"))
     XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
@@ -295,6 +287,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
     XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
+    XCTAssertFalse(source.contains("AgentVMService.shared"))
   }
 
   @MainActor
