@@ -106,7 +106,8 @@
             "group": "Overview",
             "pages": [
               "api-reference/introduction",
-              "doc/developer/api/overview"
+              "doc/developer/api/overview",
+              "memory/api-service"
             ]
           },
           {
@@ -231,7 +232,8 @@
             "group": "Getting Started",
             "pages": [
               "doc/developer/mcp/introduction",
-              "doc/developer/mcp/setup"
+              "doc/developer/mcp/setup",
+              "memory/embedding"
             ]
           },
           {
