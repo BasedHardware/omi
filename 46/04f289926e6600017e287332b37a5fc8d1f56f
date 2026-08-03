@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleOpenRequest.swift
+  s_0c099cae24c74c::t_b7044ec96be66c 1-47
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_0c099cae24c74c::t_31422f23b8daea 3385-3392
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_0c099cae24c74c::t_67660f62d56be1 5,12
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_0c099cae24c74c::t_cd51c7024a65cf 742
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4604f289926e6600017e287332b37a5fc8d1f56f",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
