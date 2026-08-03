@@ -16,7 +16,7 @@ Omi is the agent control plane. ACP, pi-mono, Hermes, OpenClaw, AgentVM, A2A age
 
 ## Agent VM tool surface
 
-The Agent VM REST surface is intentionally narrower than the backend's internal tool registry. `GET /v1/agent/tools` omits `fetch_url_tool`, and `POST /v1/agent/execute-tool` rejects it with `404`. Agent VMs must not use a cloud execution path for URLs or content that a desktop user supplied for local-only handling; URL fetching remains available only through the current-turn, user-provided allowlist enforced by the backend agent path.
+The Agent VM REST surface is intentionally narrower than the backend's internal tool registry. `GET /v1/agent/tools` omits `fetch_url_tool`, and `POST /v1/agent/execute-tool` rejects it with `404`; clients must treat that absence and rejection as the stable removal contract. Agent VMs must not use a cloud execution path for URLs or content that a desktop user supplied for local-only handling; URL fetching remains available only through the current-turn, user-provided allowlist enforced by the backend agent path.
 
 The canonical product object is an Omi `AgentSession`. Every user turn or delegated objective is an Omi `AgentRun`. Every concrete execution or retry of that run is a `RunAttempt`. Runtime-native session IDs are opaque `AdapterBinding` data and are never Omi session IDs.
 
