@@ -137,7 +137,9 @@ def check_caller_id_verified(phone_number: str) -> bool:
 def check_twilio_voice_number(phone_number: str) -> bool:
     client = _get_client()
     numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
-    return any(bool((getattr(number, 'capabilities', None) or {}).get('voice')) for number in numbers)
+    if any(bool((getattr(number, 'capabilities', None) or {}).get('voice')) for number in numbers):
+        return True
+    return bool(client.outgoing_caller_ids.list(phone_number=phone_number))
 
 
 def get_caller_id(phone_number: str) -> Optional[Dict[str, Any]]:

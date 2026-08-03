@@ -15,7 +15,7 @@ install_twilio_stub()
 prepare_twilio_service_import()
 install_phone_calls_stub()
 
-from utils.twilio_service import generate_access_token, validate_twilio_signature
+from utils.twilio_service import check_twilio_voice_number, generate_access_token, validate_twilio_signature
 
 _MISSING = object()
 
@@ -26,6 +26,17 @@ def test_generate_access_token(mock_jwt):
     assert result['access_token'] == 'mock.jwt.token'
     assert result['identity'] == 'user-abc'
     assert result['ttl'] == 600
+
+
+def test_check_twilio_voice_number_accepts_verified_caller_id():
+    client = MagicMock()
+    client.incoming_phone_numbers.list.return_value = []
+    client.outgoing_caller_ids.list.return_value = [MagicMock(phone_number='+15551234567')]
+
+    with patch('utils.twilio_service._get_client', return_value=client):
+        assert check_twilio_voice_number('+15551234567') is True
+
+    client.outgoing_caller_ids.list.assert_called_once_with(phone_number='+15551234567')
 
 
 def test_install_twilio_stub_replaces_incomplete_existing_twilio():
