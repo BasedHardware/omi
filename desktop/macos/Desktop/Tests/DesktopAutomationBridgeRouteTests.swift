@@ -80,6 +80,25 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
     XCTAssertEqual(mountedCalls, 1)
   }
 
+  func testNavigationAcknowledgementRejectsUnknownTarget() async throws {
+    let unknownPayload = DesktopAutomationNavigationRequest(
+      target: "nonexistent-destination",
+      settingsSection: nil,
+      highlightedSettingId: nil,
+      activateApp: nil,
+      settleMs: nil,
+      waitForVisibility: false
+    )
+    do {
+      _ = try await DesktopAutomationBridge.shared.navigationSnapshot(for: unknownPayload)
+      XCTFail("unknown target must not return a cached acknowledgement")
+    } catch DesktopAutomationActionError.invalidParams(let message) {
+      XCTAssertEqual(message, "unknown_navigation_target")
+    } catch {
+      XCTFail("unknown target must be rejected with invalidParams, got: \(error)")
+    }
+  }
+
   func testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity() async throws {
     let response = await DesktopAutomationBridge.shared.response(
       for: DesktopAutomationHTTPRequest(

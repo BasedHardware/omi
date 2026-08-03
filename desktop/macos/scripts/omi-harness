@@ -588,12 +588,13 @@ def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -
     if latest:
         # State waits commonly issue a follow-up /state request. Select the
         # newest trace for the exercised route rather than accidentally
-        # asserting on that bookkeeping request. Duration predicates are not
-        # selectors: they remain the threshold being tested.
+        # asserting on that bookkeeping request. Select by route identity only
+        # (path + method); status and duration remain assertion predicates so a
+        # failed latest response can never be hidden by an earlier success.
         selector = {
             key: value
             for key, value in expectations.items()
-            if key in {"trace.path", "trace.method", "trace.statusCode"}
+            if key in {"trace.path", "trace.method"}
             and not isinstance(value, dict)
         }
         matching = [trace for trace in traces if expectation_matches({"trace": trace}, selector)]

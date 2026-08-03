@@ -114,6 +114,30 @@ with tempfile.TemporaryDirectory() as directory:
         trace_context, {"latest": True, "trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
     )
     assert ok, error
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "method": "POST", "statusCode": 200, "durationMs": 12},
+    {"path": "/navigate", "method": "POST", "statusCode": 500, "durationMs": 8},
+    {"path": "/state", "method": "GET", "statusCode": 200, "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    # The latest /navigate returned 500. The selector must NOT filter it out,
+    # so statusCode: 200 must fail on the newest matching route trace.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.statusCode": 200, "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert not ok, "latest failed trace must not be hidden by an earlier success"
+    # Duration alone should also fail because the latest trace is the 500 (8ms),
+    # not the earlier 200 (12ms) — the selector must pick the newest by identity.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert ok, error
+
 module.recent_traces = original_recent_traces
 
 mismatch = module.expectation_mismatches(
