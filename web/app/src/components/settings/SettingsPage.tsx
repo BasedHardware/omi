@@ -56,6 +56,11 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  SECTION_INFO,
+  isSettingsSectionId,
+  type SettingsSectionId,
+} from '@/lib/settingsSections';
+import {
   getUserLanguage,
   setUserLanguage,
   getDailySummarySettings,
@@ -109,7 +114,7 @@ import type {
 // Types
 // ============================================================================
 
-type SettingsSection = 'profile' | 'privacy' | 'integrations' | 'developer' | 'account';
+type SettingsSection = SettingsSectionId;
 
 // ============================================================================
 // Reusable Components
@@ -3080,16 +3085,6 @@ function AccountSection({
 // ============================================================================
 
 // Section titles and descriptions for the header
-const SECTION_INFO: Record<SettingsSection, { title: string; description: string }> = {
-  profile: {
-    title: 'Profile',
-    description: 'Account details, language, and notifications',
-  },
-  privacy: { title: 'Privacy', description: 'Data permissions and training settings' },
-  integrations: { title: 'Integrations', description: 'Connected services and apps' },
-  developer: { title: 'Developer', description: 'API keys, webhooks, and data export' },
-  account: { title: 'Account', description: 'Plan, usage, and account management' },
-};
 
 export function SettingsPage() {
   const router = useRouter();
@@ -3101,9 +3096,7 @@ export function SettingsPage() {
   // Get section from URL, default to 'profile'
   const sectionParam = searchParams.get('section');
   const activeSection: SettingsSection =
-    sectionParam && sectionParam in SECTION_INFO
-      ? (sectionParam as SettingsSection)
-      : 'profile';
+    sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : 'profile';
 
   // Track which sections have been loaded (using ref to avoid dependency issues)
   const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set());

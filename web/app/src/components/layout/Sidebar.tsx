@@ -22,10 +22,12 @@ import {
   Puzzle,
   Code,
   Settings,
+  Shield,
   Bell,
   Mic,
   MessageSquare,
   Smartphone,
+  type LucideIcon,
 } from 'lucide-react';
 
 // Apple logo SVG component
@@ -50,6 +52,7 @@ import { useNotificationContext } from '@/components/notifications/NotificationC
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -114,13 +117,21 @@ const navItems: NavItem[] = [
   },
 ];
 
-// Settings menu items for user dropdown
-const settingsMenuItems = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'integrations', label: 'Integrations', icon: Puzzle },
-  { id: 'developer', label: 'Developer', icon: Code },
-  { id: 'account', label: 'Account', icon: Settings },
-];
+// Settings menu items for user dropdown.
+// The icon map is total over SettingsSectionId, so adding a settings section
+// without giving it a nav entry fails to compile.
+const SETTINGS_SECTION_ICONS: Record<SettingsSectionId, LucideIcon> = {
+  profile: User,
+  privacy: Shield,
+  integrations: Puzzle,
+  developer: Code,
+  account: Settings,
+};
+
+const settingsMenuItems = SETTINGS_SECTIONS.map((section) => ({
+  ...section,
+  icon: SETTINGS_SECTION_ICONS[section.id],
+}));
 
 interface SidebarProps {
   isOpen: boolean;
