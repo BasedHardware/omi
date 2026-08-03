@@ -27,6 +27,11 @@ MAX_CAPTURE_TEXT_CHARS = 16 * 1024
 MAX_CAPTURE_SEQUENCE_ITEMS = 1_000
 
 
+def _is_screen_surface(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized.startswith("screen") or normalized.startswith("ocr")
+
+
 def _anonymous_id(*parts: str) -> str:
     return sha256("\0".join(parts).encode("utf-8")).hexdigest()[:32]
 
@@ -90,6 +95,8 @@ class SurfaceParityCapture:
         environ: Mapping[str, str] | None = None,
     ) -> "SurfaceParityCapture":
         env = os.environ if environ is None else environ
+        if _is_screen_surface(surface) or _is_screen_surface(source):
+            return cls(None)
         root = _capture_root(env)
         if root is None:
             return cls(None)
@@ -120,6 +127,9 @@ class SurfaceParityCapture:
 
     def observe(self, direction: str, payload: Mapping[str, Any]) -> None:
         if not self._can_observe():
+            return
+        payload_type = payload.get("type")
+        if isinstance(payload_type, str) and _is_screen_surface(payload_type):
             return
         try:
             invocation = self._invocation
