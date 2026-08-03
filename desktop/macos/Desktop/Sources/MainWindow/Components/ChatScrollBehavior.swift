@@ -438,6 +438,10 @@ struct UserScrollDetector: NSViewRepresentable {
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
     private var settleWorkItem: DispatchWorkItem?
+    /// Where the viewport sat when the current press began, so a drag can be
+    /// told apart from a click that never moved anything.
+    private var pressOriginScrollTop: CGFloat?
+    private static let dragMovementEpsilon: CGFloat = 1
     private var willStartLiveScrollObservation: NSObjectProtocol?
     private var didEndLiveScrollObservation: NSObjectProtocol?
 
@@ -511,11 +515,25 @@ struct UserScrollDetector: NSViewRepresentable {
           } else {
             let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
             guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-            if event.type == .scrollWheel {
+            switch event.type {
+            case .scrollWheel:
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
                 self.onUserScroll()
               }
-            } else {
+            case .leftMouseDown:
+              // A press is not viewport movement. Clicking inside the transcript
+              // to focus the window, select text, or hit a control used to claim
+              // scroll ownership outright, which cancelled the one-shot launch
+              // placement and left a freshly opened chat stranded at the top of
+              // its history. Remember where the viewport was instead, so a drag
+              // can be judged by whether it actually moved anything.
+              self.pressOriginScrollTop = Self.scrollTop(of: targetScrollView)
+            default:
+              // A drag owns the viewport only once it has genuinely moved it —
+              // a scrollbar drag, or a selection drag that auto-scrolls.
+              guard let pressOrigin = self.pressOriginScrollTop,
+                abs(Self.scrollTop(of: targetScrollView) - pressOrigin) >= Self.dragMovementEpsilon
+              else { break }
               self.onUserScroll()
               self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
             }
@@ -605,21 +623,27 @@ struct UserScrollDetector: NSViewRepresentable {
       )
     }
 
+    private static func scrollTop(of scrollView: NSScrollView) -> CGFloat {
+      MainActor.assumeIsolated {
+        guard let documentView = scrollView.documentView else { return 0 }
+        let clipBounds = scrollView.contentView.bounds
+        return ChatScrollLiveEdge.topBasedScrollOffset(
+          clipOriginY: clipBounds.origin.y,
+          viewportHeight: clipBounds.height,
+          documentHeight: documentView.frame.height,
+          isDocumentFlipped: documentView.isFlipped
+        )
+      }
+    }
+
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
       MainActor.assumeIsolated {
         guard let documentView = scrollView.documentView else { return false }
         let clipBounds = scrollView.contentView.bounds
-        let documentHeight = documentView.frame.height
-        let scrollTop = ChatScrollLiveEdge.topBasedScrollOffset(
-          clipOriginY: clipBounds.origin.y,
-          viewportHeight: clipBounds.height,
-          documentHeight: documentHeight,
-          isDocumentFlipped: documentView.isFlipped
-        )
-        let visibleMaxY = scrollTop + clipBounds.height
+        let visibleMaxY = scrollTop(of: scrollView) + clipBounds.height
         return ChatScrollLiveEdge.isAtBottom(
           visibleMaxY: visibleMaxY,
-          documentHeight: documentHeight
+          documentHeight: documentView.frame.height
         )
       }
     }

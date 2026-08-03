@@ -202,6 +202,24 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "a drag that moved the viewport must keep the reader's position")
   }
 
+  /// The real launch sequence: the transcript appears while the journal is still
+  /// loading, the reader clicks somewhere in that region (to focus the window, to
+  /// dismiss something, anything), and only then does the history arrive. A click
+  /// is not a scroll, so it must not cancel the launch placement that has not even
+  /// had content to place yet.
+  func testAClickBeforeTheHistoryLoadsDoesNotStrandTheTranscriptAtTheTop() throws {
+    let harness = try Harness(loadingWithPendingMessageCount: 60)
+    defer { harness.tearDown() }
+
+    harness.sendLeftMouseDown()
+    harness.finishInitialLoad()
+
+    XCTAssertTrue(
+      harness.isAtBottom,
+      "a click while the history was still loading must not strand the reader at the top "
+        + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
+  }
+
   // MARK: - Harness
 
   private func makeHarness(messageCount: Int = 60) throws -> Harness {
@@ -213,13 +231,20 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     let model: TranscriptModel
     private let window: NSWindow
     private let hostingView: NSHostingView<HarnessChatHost>
+    private var pendingMessages: [ChatMessage] = []
     private(set) var scrollView: NSScrollView
     /// Parked inside the document so a detector coordinator resolves the same
     /// enclosing scroll view the production detectors bind to.
     let probeView: NSView
 
-    init(messageCount: Int) throws {
+    convenience init(loadingWithPendingMessageCount messageCount: Int) throws {
+      try self.init(messageCount: 0, startsLoading: true, pendingMessageCount: messageCount)
+    }
+
+    init(messageCount: Int, startsLoading: Bool = false, pendingMessageCount: Int = 0) throws {
       model = TranscriptModel(messages: Self.makeMessages(count: messageCount))
+      model.isLoadingInitial = startsLoading
+      self.pendingMessages = Self.makeMessages(count: pendingMessageCount)
       hostingView = NSHostingView(rootView: HarnessChatHost(model: model))
       hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
       window = NSWindow(
@@ -298,6 +323,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.05)
       endLiveScroll()
       pump(0.3)
+    }
+
+    /// The journal snapshot arrives, exactly as `ChatProvider` delivers it.
+    func finishInitialLoad() {
+      model.messages = pendingMessages
+      model.isLoadingInitial = false
+      pump(1.2)
     }
 
     func sendLeftMouseDown() {
