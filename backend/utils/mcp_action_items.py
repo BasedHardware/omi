@@ -58,9 +58,11 @@ def content_idempotency_key(uid: str, description: str) -> str:
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
 
-def _normalize_description(description: Optional[str]) -> str:
+def _normalize_description(description: object) -> str:
     if description is None:
         raise ValueError("description is required")
+    if not isinstance(description, str):
+        raise ValueError("description must be a string")
     text = description.strip()
     if not text:
         raise ValueError("description cannot be empty")
@@ -69,7 +71,7 @@ def _normalize_description(description: Optional[str]) -> str:
     return text
 
 
-def parse_due_at(value: Union[str, datetime, None]) -> Optional[datetime]:
+def parse_due_at(value: object) -> Optional[datetime]:
     """Accept an ISO 8601 datetime, a yyyy-mm-dd date, a datetime, or None.
 
     REST passes a parsed ``datetime``; MCP tools pass a JSON string. Both routes
@@ -77,6 +79,8 @@ def parse_due_at(value: Union[str, datetime, None]) -> Optional[datetime]:
     """
     if value is None or isinstance(value, datetime):
         return value
+    if not isinstance(value, str):
+        raise ValueError("due_at must be a string or datetime")
     text = value.strip()
     if not text:
         return None
@@ -121,10 +125,7 @@ def _reload(uid: str, action_item_id: str) -> Dict[str, Any]:
 
 
 def create_action_item(
-    uid: str,
-    description: Optional[str],
-    due_at: Union[str, datetime, None] = None,
-    completed: bool = False,
+    uid: str, description: Optional[str], due_at: Union[str, datetime, None] = None, completed: bool = False,
 ) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
     (uid, normalized description)."""
@@ -162,10 +163,7 @@ def set_completed(uid: str, action_item_id: str, completed: bool = True) -> Dict
 
 
 def update_action_item(
-    uid: str,
-    action_item_id: str,
-    description: Optional[str] = None,
-    due_at: Union[str, datetime, None] = None,
+    uid: str, action_item_id: str, description: Optional[str] = None, due_at: Union[str, datetime, None] = None,
 ) -> Dict[str, Any]:
     """Update a task's description and/or due date.
 
@@ -220,7 +218,7 @@ def delete_action_item(uid: str, action_item_id: str) -> None:
 
 def search_action_items(uid: str, query: Optional[str], limit: int = 10) -> List[Dict[str, Any]]:
     """Semantic search over the user's tasks, returned in relevance order."""
-    if not query or not query.strip():
+    if not isinstance(query, str) or not query.strip():
         raise ValueError("query is required")
     try:
         limit = int(limit)

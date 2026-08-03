@@ -142,7 +142,7 @@ if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseExceptio
     _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
-    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
+    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10 ** 12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
@@ -432,6 +432,20 @@ class TestSseDispatch:
     def test_tool_create_bad_due_date_is_invalid_params(self, _mock_db):
         with pytest.raises(sse.ToolExecutionError) as ei:
             sse.execute_tool(UID, 'create_action_item', {'description': 'x', 'due_at': 'whenever'})
+        assert ei.value.code == -32602
+
+    @pytest.mark.parametrize(
+        ('tool_name', 'arguments'),
+        [
+            ('create_action_item', {'description': {'text': 'Email Bob'}}),
+            ('create_action_item', {'description': 'Email Bob', 'due_at': ['2026-07-01']}),
+            ('search_action_items', {'query': {'text': 'Bob'}}),
+        ],
+    )
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_tool_rejects_non_string_text_arguments(self, _mock_db, tool_name, arguments):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, tool_name, arguments)
         assert ei.value.code == -32602
 
     @patch('utils.mcp_action_items.action_items_db')
