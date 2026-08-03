@@ -47,3 +47,72 @@ struct ChannelDots: View {
     }
   }
 }
+
+struct ConnectorCard: View {
+  let name: String
+  let systemIcon: String
+  let tint: Color
+  let isConnected: Bool
+  let statusText: String
+  let actionTitle: String?
+  let actionEnabled: Bool
+  let action: () -> Void
+
+  @Environment(\.sbTheme) private var sb
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        ZStack {
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(tint.opacity(0.16))
+            .frame(width: 28, height: 28)
+          Image(systemName: systemIcon)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(tint)
+        }
+        Spacer(minLength: 6)
+        Circle()
+          .fill(isConnected ? Color(red: 0.15, green: 0.78, blue: 0.44) : sb.ink(.w18))
+          .frame(width: 8, height: 8)
+      }
+
+      Text(name)
+        .geist(size: 15, weight: .semibold)
+        .foregroundStyle(sb.ink)
+
+      Text(statusText)
+        .geist(size: 12)
+        .foregroundStyle(sb.ink(.w45))
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+
+      Spacer(minLength: 0)
+
+      if let actionTitle {
+        Button(action: action) {
+          Text(actionTitle)
+            .geist(size: 12.5, weight: .medium)
+            .foregroundStyle(actionEnabled ? sb.ink(.w85) : sb.ink(.w35))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+              RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(sb.ink(.w18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!actionEnabled)
+      } else {
+        Text("Coming soon")
+          .geist(size: 12, weight: .medium)
+          .foregroundStyle(sb.ink(.w25))
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 7)
+      }
+    }
+    .padding(11)
+    .frame(width: 148, height: 118, alignment: .topLeading)
+    .sbCard(radius: 14)
+  }
+}

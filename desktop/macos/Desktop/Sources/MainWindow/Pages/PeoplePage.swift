@@ -483,6 +483,21 @@ final class PeopleViewModel: ObservableObject {
     PeopleChatCorrection.fixInChat(name: name)
   }
 
+  /// Opens a profile without a click. Matches on id first, then exact name, then
+  /// a case-insensitive prefix so a caller can pass a partial display name.
+  /// Returns silently when nothing matches — selection is never guessed.
+  func openPerson(personID: String?, name: String?) {
+    let match =
+      people.first { $0.id == personID }
+      ?? people.first { $0.name.caseInsensitiveCompare(name ?? "") == .orderedSame }
+      ?? people.first {
+        guard let name, !name.isEmpty else { return false }
+        return $0.name.lowercased().hasPrefix(name.lowercased())
+      }
+    guard let match else { return }
+    selectedID = match.id
+  }
+
   /// Persist-then-reflect: overrides are already written; re-apply them to the people file off the
   /// main thread and reload so the review card and any merge/split/edit surfaces immediately.
   private func reapplyAndReload() {
@@ -697,6 +712,9 @@ struct PeoplePage: View {
   @Environment(\.sbTheme) private var sb
   /// The fact review item currently being edited (drives the correction sheet).
   @State private var editingItem: PeopleReviewItem?
+  @State private var listScope: PeopleListScope = .everyone
+  @State private var listSort: PeopleListSort = .lastTouch
+  @State private var listDescending = true
 
   var body: some View {
     Group {
@@ -720,6 +738,11 @@ struct PeoplePage: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       connectors.refreshFullDiskAccess()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .peopleOpenPerson)) { note in
+      viewModel.openPerson(
+        personID: note.userInfo?["personId"] as? String,
+        name: note.userInfo?["name"] as? String)
     }
     // Opting in to iMessage mapping runs the on-device pipeline; reload so its output surfaces.
     .onChange(of: connectors.imessageMappingEnabled) { _, enabled in
@@ -750,7 +773,10 @@ struct PeoplePage: View {
       VStack(alignment: .leading, spacing: 20) {
         header
         connectorSection
-        searchField
+        HStack(spacing: 10) {
+          searchField
+          scopePicker
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 28)
@@ -1054,26 +1080,37 @@ struct PeoplePage: View {
     }
   }
 
-  private var peopleList: some View {
-    ScrollView {
-      LazyVStack(spacing: 8) {
-        ForEach(viewModel.filteredPeople) { person in
-          PersonRowView(
-            person: person,
-            isSelected: viewModel.selectedID == person.id,
-            onTap: {
-              withAnimation(SBMotion.standard) {
-                viewModel.selectedID = viewModel.selectedID == person.id ? nil : person.id
-              }
-            },
-            onFixInChat: { viewModel.fixInChat(name: person.name) }
-          )
+  /// Everyone Omi has seen, versus the people an actual conversation happened
+  /// with. The distinction matters at a few hundred contacts.
+  private var scopePicker: some View {
+    HStack(spacing: 4) {
+      ForEach(PeopleListScope.allCases) { scope in
+        let selected = scope == listScope
+        Button {
+          withAnimation(SBMotion.standard) { listScope = scope }
+        } label: {
+          Text(scope.title)
+            .geist(size: 11, weight: selected ? .semibold : .medium)
+            .foregroundStyle(selected ? sb.inkInverted : sb.ink(.w55))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(selected ? sb.ink : sb.ink(.w06)))
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("people-scope-\(scope.rawValue)")
       }
-      .padding(.horizontal, 28)
-      .padding(.top, 6)
-      .padding(.bottom, 32)
     }
+  }
+
+  private var peopleList: some View {
+    PeopleListTable(
+      people: PeopleListOrder.scoped(viewModel.filteredPeople, to: listScope),
+      sort: $listSort,
+      descending: $listDescending,
+      onSelect: { person in
+        withAnimation(SBMotion.standard) { viewModel.selectedID = person.id }
+      }
+    )
   }
 
   private var loadingState: some View {
@@ -1108,167 +1145,6 @@ struct PeoplePage: View {
 }
 
 // MARK: - Connector Card
-
-private struct ConnectorCard: View {
-  let name: String
-  let systemIcon: String
-  let tint: Color
-  let isConnected: Bool
-  let statusText: String
-  let actionTitle: String?
-  let actionEnabled: Bool
-  let action: () -> Void
-
-  @Environment(\.sbTheme) private var sb
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        ZStack {
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(tint.opacity(0.16))
-            .frame(width: 28, height: 28)
-          Image(systemName: systemIcon)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(tint)
-        }
-        Spacer(minLength: 6)
-        Circle()
-          .fill(isConnected ? Color(red: 0.15, green: 0.78, blue: 0.44) : sb.ink(.w18))
-          .frame(width: 8, height: 8)
-      }
-
-      Text(name)
-        .geist(size: 15, weight: .semibold)
-        .foregroundStyle(sb.ink)
-
-      Text(statusText)
-        .geist(size: 12)
-        .foregroundStyle(sb.ink(.w45))
-        .lineLimit(2)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Spacer(minLength: 0)
-
-      if let actionTitle {
-        Button(action: action) {
-          Text(actionTitle)
-            .geist(size: 12.5, weight: .medium)
-            .foregroundStyle(actionEnabled ? sb.ink(.w85) : sb.ink(.w35))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(sb.ink(.w18), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(!actionEnabled)
-      } else {
-        Text("Coming soon")
-          .geist(size: 12, weight: .medium)
-          .foregroundStyle(sb.ink(.w25))
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 7)
-      }
-    }
-    .padding(11)
-    .frame(width: 148, height: 118, alignment: .topLeading)
-    .sbCard(radius: 14)
-  }
-}
-
-// MARK: - Person Row (with inline-expand detail)
-
-private struct PersonRowView: View {
-  let person: PeopleIntelPerson
-  let isSelected: Bool
-  let onTap: () -> Void
-  let onFixInChat: () -> Void
-
-  @State private var isHovering = false
-  @Environment(\.sbTheme) private var sb
-
-  var body: some View {
-    VStack(spacing: 0) {
-      Button(action: onTap) {
-        HStack(spacing: 14) {
-          PersonAvatar(photoPath: person.photoPath, initials: person.initials)
-
-          VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-              Text(person.name)
-                .geist(size: 15, weight: .medium)
-                .foregroundStyle(sb.ink)
-                .lineLimit(1)
-
-              if !person.relationship.isEmpty {
-                RelationshipPill(text: person.relationship)
-              }
-            }
-
-            HStack(spacing: 8) {
-              ChannelDots(channels: person.channels)
-              if let touch = lastTouchLine {
-                Text(touch)
-                  .geistMono(size: 11, tracking: 0)
-                  .foregroundStyle(sb.ink(.w35))
-                  .lineLimit(1)
-              }
-            }
-          }
-
-          Spacer(minLength: 8)
-
-          Image(systemName: "chevron.right")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(sb.ink(.w35))
-            .rotationEffect(.degrees(isSelected ? 90 : 0))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-
-    }
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(isSelected ? sb.ink(.w05) : (isHovering ? sb.ink(.w04) : Color.clear))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(sb.ink(isSelected ? .w12 : .w07), lineWidth: 1)
-    )
-    .onHover { hovering in
-      isHovering = hovering
-      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-    }
-  }
-
-  private var lastTouchLine: String? {
-    guard let touch = person.lastTouch else { return nil }
-    let label = channelDisplayLabel(for: touch.channel)
-    if let rel = PeopleDateFormat.relative(from: touch.date) {
-      return label.isEmpty ? rel : "\(label) · \(rel)"
-    }
-    return label.isEmpty ? nil : label
-  }
-
-  private func channelDisplayLabel(for key: String) -> String {
-    let k = key.lowercased()
-    if k.contains("whatsapp") { return "WhatsApp" }
-    if k.contains("imessage") || k.contains("messages") { return "iMessage" }
-    if k.contains("instagram") || k.contains("insta") { return "Instagram" }
-    if k.contains("email") || k.contains("gmail") || k.contains("mail") { return "Email" }
-    if k.contains("linkedin") { return "LinkedIn" }
-    if k.contains("call") || k.contains("phone") { return "Calls" }
-    if k.contains("telegram") { return "Telegram" }
-    if k.contains("voice") { return "Voice" }
-    if k.contains("screen") { return "Screen" }
-    return key.capitalized
-  }
-}
 
 private struct InitialsAvatar: View {
   let initials: String
