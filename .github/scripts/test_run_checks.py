@@ -451,6 +451,49 @@ esac
         self.assertNotIn("backend-async-blockers", selected)
         self.assertNotIn("backend-route-policy-baseline", selected)
 
+    def test_manifest_only_trigger_requires_own_entry_change(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+                manifest_changed_ids={"backend-deploy-source-admission"},
+            )
+        }
+        self.assertIn("backend-deploy-source-admission", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
+    def test_manifest_only_trigger_without_diff_context_selects_all_manifest_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+            )
+        }
+        self.assertIn("rayban-dat-build-wrapper", selected)
+
+    def test_manifest_worktree_edit_selects_only_changed_check_entry(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "local",
+                platform="macos",
+                manifest_changed_ids={"backend-runtime-env-compose"},
+            )
+        }
+        self.assertIn("backend-runtime-env-compose", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
     def test_posix_contracts_skip_windows_without_dropping_linux_ci(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         expected_by_path = {
@@ -634,6 +677,74 @@ chmod +x "{python}"
                 lock.read_text(encoding="utf-8"),
                 r'(?ms)^\[\[packages\]\]\nname = "pyyaml"\nversion = "6\.0\.1"$',
             )
+
+    def test_runtime_env_compose_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
+        """The compose check must never depend on a runner-global PyYAML install."""
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "backend-runtime-env-compose")
+        self.assertEqual(check.command, ("bash", "backend/scripts/check_runtime_env_compose.sh"))
+        for lane in ("local", "ci"):
+            selected = resolve_checks(manifest, list(check.triggers), lane)
+            self.assertIn(check, selected)
+
+        runner = REPO_ROOT / check.command[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            copied_runner = root / check.command[1]
+            copied_runner.parent.mkdir(parents=True)
+            shutil.copy2(runner, copied_runner)
+            resolver = root / "scripts/dev-harness/_resolve_python.sh"
+            resolver.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / "scripts/dev-harness/_resolve_python.sh", resolver)
+
+            sync = root / "backend/scripts/sync-python-deps.sh"
+            sync.parent.mkdir(parents=True, exist_ok=True)
+            python = root / "backend/.venv/bin/python"
+            compose = root / "backend/deploy/compose_runtime_env.py"
+            compose.parent.mkdir(parents=True)
+            compose.write_text("# fixture\n", encoding="utf-8")
+            sync.write_text(
+                f'''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "{python.parent}"
+cat > "{python}" <<'PYTHON'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-c" ]]; then
+  [[ "$2" == "import yaml" ]]
+  exit
+fi
+printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
+PYTHON
+chmod +x "{python}"
+''',
+                encoding="utf-8",
+            )
+            sync.chmod(0o755)
+
+            try:
+                bash = bash_executable()
+            except FileNotFoundError as exc:
+                self.skipTest(str(exc))
+            env = os.environ.copy()
+            env["PYTHON"] = "ambient-python-must-not-run"
+            result = subprocess.run(
+                [bash, str(copied_runner)],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded_lines = (root / "compose-args.txt").read_text(encoding="utf-8").splitlines()
+            self.assertGreaterEqual(len(recorded_lines), 1)
+            recorded_script = native_path_from_bash(recorded_lines[0], bash)
+            self.assertTrue(
+                recorded_script.samefile(compose),
+                f"compose check received {recorded_lines[0]!r}, expected {str(compose)!r}",
+            )
+            self.assertIn("--check", recorded_lines[1:])
 
 
 class PlatformTests(unittest.TestCase):

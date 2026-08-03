@@ -18,7 +18,8 @@
 // Transport template is insight/gemini.ts, itself templated on focus/gemini.ts:
 // Electron net.fetch through the Rust Gemini proxy (the key never touches the
 // device), a per-call timeout composed with the session abort signal, and a
-// [2s, 8s] transient-only retry with a fallback-model round.
+// [2s, 8s] explicit-backend-retryable retry policy; duplicate model IDs collapse
+// to one round.
 //
 // WIRE PROTOCOL (Mac's exact shape, unchanged from Insight):
 //  - body keys snake_case (system_instruction, generation_config, tool_config,
@@ -35,12 +36,9 @@ import { net } from 'electron'
 import { getAbortSignal, type BackendSession } from '../core/session'
 import type { GeminiTool, ToolCall } from '../insight/models'
 
-/** Task-loop model pair. Windows surfaces no tier, so both are Flash: the primary
- *  round runs, and the "fallback" is a same-family fresh retry round (Mac §4:
- *  "swap to the next model and retry fresh"). Unlike Insight — whose flash+flash
- *  pair is collapsed to one round by a dedup shortcut — Task keeps BOTH rounds so
- *  the documented fallback behavior actually runs; on a persistent transient error
- *  that is up to 2 rounds × 3 attempts. Keep the exact ids as strings. */
+/** Task-loop model pair. Windows surfaces no tier, so both are Flash and dedupe
+ *  to one model round (up to three explicitly authorized attempts). Keep the
+ *  exact ids as strings. */
 export const TASK_MODEL = 'gemini-2.5-flash'
 export const TASK_FALLBACK_MODEL = 'gemini-2.5-flash'
 export const TASK_THINKING_BUDGET = 1024
@@ -50,19 +48,20 @@ export const TASK_REQUEST_TIMEOUT_MS = 300_000
 /** 3 attempts per model round. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]
 
-/** Carries only the status — never a body (which can echo the prompt/frame). */
+/** Carries typed response metadata only — never a body (which can echo the prompt/frame). */
 export class GeminiHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly retryable: boolean
+  ) {
     super(`gemini proxy HTTP ${status}`)
     this.name = 'GeminiHttpError'
   }
 }
 
-/** 5xx/429/timeout/network are retryable; a session sign-out (AbortError) is
- *  terminal — the token is dead. A 4xx fails identically every time. */
+/** Replay only when the backend explicitly marks the response retryable. */
 function isTransient(e: unknown): boolean {
-  if (e instanceof GeminiHttpError) return e.status === 429 || e.status >= 500
-  return !(e instanceof Error && e.name === 'AbortError')
+  return e instanceof GeminiHttpError && e.retryable
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -80,9 +79,9 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-/** Per-request timeout composed with the external (session) abort. A timeout
- *  surfaces as a retryable 'TimeoutError'; the external signal stays an
- *  'AbortError' (terminal). Same seam as insight/gemini.ts. */
+/** Per-request timeout composed with the external (session) abort. Local timeout
+ *  and external abort are both terminal; only typed backend responses authorize
+ *  replay. Same seam as insight/gemini.ts. */
 async function withTimeout<T>(
   ms: number,
   fn: (signal: AbortSignal) => Promise<T>,
@@ -209,19 +208,19 @@ async function callModel(model: string, opts: TurnOpts): Promise<ToolTurn> {
           signal
         }
       )
-      if (!res.ok) throw new GeminiHttpError(res.status)
+      if (!res.ok)
+        throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return parseTurn(await res.json())
     },
     opts.external
   )
 }
 
-/** One tool-loop turn over the wire: retry the primary model on transient errors,
- *  then run a fresh fallback-model round. A non-transient error throws immediately
- *  (no retry, no fallback) — Mac's exact policy. */
+/** One tool-loop turn. Duplicate model IDs collapse to one round, and only
+ *  explicitly retryable backend outcomes are replayed. */
 async function sendToolTurn(opts: TurnOpts): Promise<ToolTurn> {
   let lastError: unknown
-  for (const model of [TASK_MODEL, TASK_FALLBACK_MODEL]) {
+  for (const model of [...new Set([TASK_MODEL, TASK_FALLBACK_MODEL])]) {
     for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
       try {
         return await callModel(model, opts)
@@ -231,7 +230,7 @@ async function sendToolTurn(opts: TurnOpts): Promise<ToolTurn> {
         if (i < RETRY_DELAYS_MS.length) await sleep(RETRY_DELAYS_MS[i], opts.external)
       }
     }
-    // Primary exhausted its retries on a transient error → try the fallback round.
+    // A distinct fallback model, when configured, gets its own fresh round.
   }
   throw lastError
 }

@@ -84,6 +84,14 @@ npm run test:parity-pack-v0
 Never promote cassettes to production storage or commit them to the repository.
 The emptyDir scratch is still lost on pod restart before a successful export.
 
+Dev listen capture exposes the zero-initialized
+`omi_parity_pack_capture_events_total{stage,outcome,reason_class}` counter and a
+matching `parity_pack_capture_event` log marker. The closed labels distinguish
+accepted listens, allowlist decisions, capture initialization, cassette
+persistence, and GCS export attempt/success/failure. These events never include
+principal or session identifiers, payloads, credentials, or cassette object
+paths; non-dev runtimes do not increment or log them.
+
 ## Replay players
 
 `STTCassettePlayer` and `LLMCassettePlayer` are callback-oriented loopback
