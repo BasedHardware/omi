@@ -11,7 +11,7 @@ from datetime import date
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from models.paper import Edition
+from models.paper import Brief, Edition
 
 _TEMPLATES = pathlib.Path(__file__).parent.parent.parent / 'templates'
 
@@ -52,6 +52,40 @@ def render_html(edition: Edition, reader_name: str = '') -> str:
         dateline=_dateline(edition.date),
         age=_age,
         silence=_silence,
+    )
+
+
+def _pct(value: float, bars: list) -> float:
+    """Bar width as a share of the largest bar in its own chart.
+
+    Scaling per-chart rather than to a fixed axis is what lets a caption say the
+    bars are not comparable across charts without the drawing contradicting it.
+    """
+    try:
+        largest = max(abs(float(v)) for _, v in bars)
+    except (ValueError, TypeError):
+        return 0.0
+    if not largest:
+        return 0.0
+    return round(abs(float(value)) / largest * 100, 2)
+
+
+def _group_news(brief: Brief) -> list[tuple[str, list]]:
+    """News lines grouped by category, first-seen order preserved."""
+    grouped: dict[str, list] = {}
+    for line in brief.news:
+        grouped.setdefault(line.category, []).append(line)
+    return list(grouped.items())
+
+
+def render_brief(brief: Brief, cover_url: str = '') -> str:
+    """The full morning briefing: dark cover, then the reading pages."""
+    return _env.get_template('brief.html').render(
+        brief=brief,
+        cover_url=cover_url,
+        dateline=_dateline(brief.date),
+        pct=_pct,
+        news_by_category=_group_news(brief),
     )
 
 

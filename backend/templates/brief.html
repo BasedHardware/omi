@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Morning Brief — {{ dateline }}</title>
+    <style>
+      /* A briefing, not a feed. Dark cover, then warm paper for reading.
+         Every claim carries its source; a number we derived says it is derived.
+         Type system is shared with the personal edition (paper.html). */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      :root {
+        --ink: #333333;
+        --ink-strong: #131313;
+        --meta: #757575;
+        --paper: #fffaf1;
+        --rule: #e2ded4;
+        --rule-strong: #131313;
+        --night: #131a2c;
+        --gold: #c9a24a;
+        --night-text: #f3f1ec;
+        --night-meta: #9aa0b0;
+        --serif: 'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino, Georgia, serif;
+        --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 17px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      /* ---------------- cover ---------------- */
+      .cover {
+        position: relative;
+        min-height: 100vh;
+        background: var(--night) {% if cover_url %}url('{{ cover_url }}') no-repeat center bottom{% endif %};
+        background-size: 100% auto;
+        color: var(--night-text);
+        padding: 3.5rem 3rem 2.5rem;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .cover::after {
+        /* keeps the headline legible over the densest part of the image */
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, var(--night) 12%, rgba(19, 26, 44, 0.72) 38%, rgba(19, 26, 44, 0.2) 62%);
+        pointer-events: none;
+      }
+
+      .cover > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .cover .eyebrow {
+        color: var(--gold);
+      }
+
+      .thesis {
+        margin-top: 1.75rem;
+        max-width: 22ch;
+        font-size: clamp(2.25rem, 6.4vw, 3.5rem);
+        line-height: 1.1;
+        font-weight: 400;
+        letter-spacing: -0.02em;
+      }
+
+      .thesis em {
+        color: var(--gold);
+        font-style: italic;
+      }
+
+      .standfirst {
+        margin-top: 1.5rem;
+        max-width: 46ch;
+        font-size: 0.9375rem;
+        line-height: 1.55;
+        color: var(--night-meta);
+      }
+
+      .cover-foot {
+        margin-top: auto;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(201, 162, 74, 0.55);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--night-meta);
+      }
+
+      /* ---------------- interior ---------------- */
+      .sheet {
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 4rem 1.75rem;
+      }
+
+      .band {
+        margin-top: 4rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid var(--rule-strong);
+        color: var(--ink-strong);
+      }
+
+      .band.first {
+        margin-top: 0;
+      }
+
+      .intro {
+        margin-top: 1.25rem;
+        color: var(--meta);
+        text-wrap: pretty;
+      }
+
+      article {
+        margin-top: 2.75rem;
+        padding-top: 1.75rem;
+        border-top: 1px solid var(--rule);
+      }
+
+      .kicker {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--meta);
+      }
+
+      article h3 {
+        margin-top: 0.6rem;
+        font-size: 1.5rem;
+        line-height: 1.24;
+        font-weight: 400;
+        letter-spacing: -0.014em;
+        color: var(--ink-strong);
+        text-wrap: balance;
+      }
+
+      .byline {
+        margin-top: 0.5rem;
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        line-height: 1.5;
+        color: var(--meta);
+        word-break: break-word;
+      }
+
+      h4 {
+        margin-top: 1.6rem;
+        margin-bottom: 0.5rem;
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        font-weight: 400;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--meta);
+      }
+
+      p + p {
+        margin-top: 0.9rem;
+      }
+
+      /* the one thing they could run tomorrow */
+      .experiment {
+        margin-top: 1.6rem;
+        padding: 1.1rem 1.25rem;
+        border-left: 3px solid var(--gold);
+        background: rgba(201, 162, 74, 0.07);
+      }
+
+      .experiment h4 {
+        margin-top: 0;
+      }
+
+      /* ---------------- figures ---------------- */
+      figure {
+        margin-top: 1.9rem;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--rule);
+      }
+
+      .fig-title {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-strong);
+      }
+
+      .fig-sub {
+        margin-top: 0.25rem;
+        font-size: 0.8125rem;
+        color: var(--meta);
+      }
+
+      .bars {
+        margin-top: 1.1rem;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 11rem 1fr auto;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.55rem;
+        font-size: 0.8125rem;
+      }
+
+      .bar-label {
+        color: var(--ink-strong);
+        text-align: right;
+      }
+
+      .bar-track {
+        display: block;
+        height: 0.65rem;
+        background: var(--rule);
+      }
+
+      .bar-fill {
+        display: block;
+        height: 100%;
+        background: var(--ink-strong);
+      }
+
+      .bar-value {
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        color: var(--meta);
+      }
+
+      figcaption {
+        margin-top: 0.9rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--meta);
+      }
+
+      .not-comparable {
+        color: var(--ink-strong);
+      }
+
+      /* ---------------- tools + news ---------------- */
+      .cols {
+        margin-top: 1.75rem;
+        columns: 2;
+        column-gap: 2rem;
+      }
+
+      .cols > * {
+        break-inside: avoid;
+        margin-bottom: 1.5rem;
+      }
+
+      .tool-name {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-strong);
+      }
+
+      .tool-body {
+        margin-top: 0.35rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .news-cat {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--meta);
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .news-line {
+        margin-top: 0.7rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .src {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        color: var(--meta);
+      }
+
+      .flag {
+        display: inline-block;
+        margin-left: 0.35rem;
+        font-family: var(--mono);
+        font-size: 0.5625rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #8a6d1f;
+      }
+
+      /* ---------------- held back + health ---------------- */
+      .held li {
+        list-style: none;
+        margin-top: 0.8rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid var(--rule);
+        font-size: 0.875rem;
+      }
+
+      .held .why {
+        color: var(--meta);
+      }
+
+      .health-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 0.7rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .down {
+        color: #a4331f;
+      }
+
+      .draft {
+        margin-top: 1.5rem;
+        padding-left: 1.1rem;
+        border-left: 1px solid var(--rule);
+        white-space: pre-wrap;
+        font-size: 0.9375rem;
+      }
+
+      .end {
+        margin-top: 4rem;
+        padding-top: 1.3rem;
+        border-top: 1px solid var(--rule-strong);
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        color: var(--meta);
+      }
+
+      @media print {
+        .cover {
+          min-height: 297mm;
+          page-break-after: always;
+        }
+        .sheet {
+          padding: 18mm 20mm;
+          max-width: none;
+        }
+        article,
+        figure,
+        .news-group {
+          break-inside: avoid;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .cols {
+          columns: 1;
+        }
+        .bar-row {
+          grid-template-columns: 7rem 1fr auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="cover">
+      <div class="eyebrow">Morning Brief &middot; {{ dateline }}</div>
+      {% if brief.cover.thesis %}
+        <h1 class="thesis">
+          {{ brief.cover.thesis }}{% if brief.cover.emphasis %} <em>{{ brief.cover.emphasis }}</em>{% endif %}
+        </h1>
+      {% endif %}
+      {% if brief.cover.standfirst %}<p class="standfirst">{{ brief.cover.standfirst }}</p>{% endif %}
+      <div class="cover-foot eyebrow">
+        <span>{{ brief.counts }}</span>
+        <span>No. {{ brief.issue_number }}</span>
+      </div>
+    </section>
+
+    <div class="sheet">
+      {% if brief.papers %}
+        <h2 class="band eyebrow first">Papers</h2>
+        {% for paper in brief.papers %}
+          <article>
+            {% if paper.submitted %}<div class="kicker">{{ paper.submitted }}</div>{% endif %}
+            <h3>{{ paper.title }}</h3>
+            <div class="byline">
+              {% if paper.authors %}{{ paper.authors }}{% endif %}
+              {% if paper.identifier %} &middot; {{ paper.identifier }}{% endif %}
+            </div>
+
+            {% if paper.what_it_says %}
+              <h4>What it says</h4>
+              <p>{{ paper.what_it_says }}</p>
+            {% endif %}
+
+            {% if paper.figure %}
+              {% set fig = paper.figure %}
+              <figure>
+                <div class="fig-title">{{ fig.title }}</div>
+                {% if fig.subtitle %}<div class="fig-sub">{{ fig.subtitle }}</div>{% endif %}
+                <div class="bars">
+                  {% for label, value in fig.bars %}
+                    <div class="bar-row">
+                      <span class="bar-label">{{ label }}</span>
+                      <span class="bar-track"><span class="bar-fill" style="width: {{ pct(value, fig.bars) }}%"></span></span>
+                      <span class="bar-value">{{ value }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+                <figcaption>
+                  {{ fig.caption }}
+                  {% if not fig.comparable %}
+                    <span class="not-comparable">Different benchmarks. Plotted on one axis for scale only, not a ranking.</span>
+                  {% endif %}
+                </figcaption>
+              </figure>
+            {% endif %}
+
+            {% if paper.why_it_matters %}
+              <h4>Why it matters to you</h4>
+              <p>{{ paper.why_it_matters }}</p>
+            {% endif %}
+
+            {% if paper.experiment %}
+              <div class="experiment">
+                <h4>One experiment</h4>
+                <p>{{ paper.experiment }}</p>
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      {% endif %}
+
+      {% if brief.skim %}
+        <h2 class="band eyebrow">Off-cycle, worth a skim</h2>
+        <ul class="held">
+          {% for claim in brief.skim %}
+            <li>
+              {{ claim.text }}
+              {% for source in claim.sources %}<span class="src">({{ source.name }})</span>{% endfor %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if brief.tools %}
+        <h2 class="band eyebrow">Tools shipped</h2>
+        <div class="cols">
+          {% for tool in brief.tools %}
+            <div>
+              <div class="tool-name">{{ tool.name }}</div>
+              <div class="tool-body">
+                {{ tool.what }}
+                {% if tool.why %} {{ tool.why }}{% endif %}
+                {% if tool.source %}<span class="src">{{ tool.source.name }}</span>{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if brief.news %}
+        <h2 class="band eyebrow">News</h2>
+        <div class="cols">
+          {% for category, lines in news_by_category %}
+            <div>
+              <div class="news-cat">{{ category }}</div>
+              {% for line in lines %}
+                <div class="news-line">
+                  {{ line.claim.text }}
+                  {% for source in line.claim.sources %}<span class="src">({{ source.name }})</span>{% endfor %}
+                  {% if line.claim.provenance.value != 'reported' %}
+                    <span class="flag">{{ line.claim.provenance.value }}</span>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if brief.your_day %}
+        {% set day = brief.your_day %}
+        <h2 class="band eyebrow">Today &amp; yesterday</h2>
+        {% if day.lede %}
+          <article style="border-top: 0; padding-top: 0">
+            <h3>{{ day.lede.headline }}</h3>
+            {% if day.lede.body %}<p>{{ day.lede.body }}</p>{% endif %}
+          </article>
+        {% endif %}
+        {% if day.open_loops %}
+          <h4>Still open</h4>
+          {% for entry in day.open_loops %}
+            <p>{{ entry.question }} <span class="src">open {{ entry.days_open }}d</span></p>
+          {% endfor %}
+        {% endif %}
+        {% if day.counterpoint %}
+          <h4>Counterpoint</h4>
+          <p>
+            <em>{{ day.counterpoint.position }}</em>
+            <span class="src">{{ day.counterpoint.days_asserted }} separate days</span>
+          </p>
+          <p>{{ day.counterpoint.argument }}</p>
+        {% endif %}
+        {% for item in day.desk %}
+          <h4>The desk</h4>
+          <p>
+            {{ item.name }} <span class="src">quiet {{ item.days_since }}d</span>{% if item.context %} — {{ item.context }}{% endif %}
+          </p>
+        {% endfor %}
+        {% if day.margin %}
+          <h4>The margin</h4>
+          <p><em>{{ day.margin.insight }}</em></p>
+        {% endif %}
+      {% endif %}
+
+      {% if brief.drafts %}
+        <h2 class="band eyebrow">Drafts</h2>
+        <p class="intro">Draft only. Nothing has been posted anywhere.</p>
+        {% for draft in brief.drafts %}
+          <div class="draft">{{ draft.body }}</div>
+        {% endfor %}
+      {% endif %}
+
+      {% if brief.held_back %}
+        <h2 class="band eyebrow">Held back</h2>
+        <p class="intro">What was cut, and why. Printing the exclusions is what makes the inclusions trustworthy.</p>
+        <ul class="held">
+          {% for entry in brief.held_back %}
+            <li>{{ entry.item }} <span class="why">— {{ entry.reason }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if brief.source_health %}
+        <h2 class="band eyebrow">Source health</h2>
+        <p class="intro">
+          Silent degradation is the real failure mode, so every source reports whether it worked, not just what it
+          returned.
+        </p>
+        {% for source in brief.source_health %}
+          <div class="health-row">
+            <span>{{ source.source }}</span>
+            <span class="{% if not source.ok %}down{% endif %}">
+              {% if source.ok %}{{ source.fetched }} fetched &middot; {{ source.kept }} kept{% else %}failed{% endif %}
+              {% if source.note %} &middot; {{ source.note }}{% endif %}
+            </span>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="end">End of brief</div>
+    </div>
+  </body>
+</html>
