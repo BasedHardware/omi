@@ -139,9 +139,16 @@ git init -q --bare "$TMPDIR/fallback-bare.git"
 # This contract also runs beneath `make preflight`; suppress nested Make's
 # directory banner so stdout remains the resolver value under both entrypoints.
 out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
-# Resolve the physical path because Git Bash exposes /tmp as a logical mount
-# while BASH_SOURCE resolves the same directory through its Windows path.
+# Compare physical paths on BOTH sides. Git Bash exposes /tmp as a logical mount
+# while BASH_SOURCE resolves the same directory through its Windows path; macOS
+# does the mirror image, handing Make a logical /var/... while `pwd -P` yields
+# /private/var/.... Resolving only the expectation made this pass on one platform
+# and fail on the other for the same correct behaviour.
 expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
+out_path="${out#PYTHON=}"
+if [ -d "$(dirname "$out_path")" ]; then
+  out="PYTHON=$(cd "$(dirname "$out_path")" && pwd -P)/$(basename "$out_path")"
+fi
 if [ "$out" != "$expected" ]; then
   echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
   printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
