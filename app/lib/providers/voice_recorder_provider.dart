@@ -65,8 +65,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
   final IMicRecorderService? _micOverride;
 
   VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, IMicRecorderService? mic})
-    : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage,
-      _micOverride = mic;
+      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage,
+        _micOverride = mic;
 
   IMicRecorderService get _mic => _micOverride ?? ServiceManager.instance().mic;
 
