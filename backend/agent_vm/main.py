@@ -33,6 +33,10 @@ SYNC_TABLES = frozenset(
         "task_dedup_log",
     }
 )
+SCREEN_DATA_TABLES = frozenset({"screenshots", "focus_sessions", "observations"})
+SCREEN_DATA_TABLE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:screenshots|focus_sessions|observations|ocr_[A-Za-z0-9_]*)(?![A-Za-z0-9_])", re.I
+)
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
 
@@ -203,6 +207,17 @@ def quoted(value: str) -> str:
     return f'"{value}"'
 
 
+def is_screen_data_table(name: str) -> bool:
+    return name in SCREEN_DATA_TABLES or name.lower().startswith("ocr_")
+
+
+def screen_data_tables() -> list[str]:
+    if runtime.db is None:
+        return []
+    rows = runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    return [str(row[0]) for row in rows if is_screen_data_table(str(row[0]))]
+
+
 def json_value(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return json.dumps(value, separators=(",", ":"))
@@ -342,6 +357,8 @@ def execute_sql(query: str) -> str:
         return json.dumps({"error": "Multi-statement queries not allowed"})
     if not upper.lstrip().startswith("SELECT"):
         return json.dumps({"error": "Database is in read-only mode (cloud copy)"})
+    if SCREEN_DATA_TABLE_PATTERN.search(query):
+        return json.dumps({"error": "Screen activity is unavailable"})
     if not re.search(r"\bLIMIT\b", query, re.I):
         query = query.rstrip().rstrip(";") + " LIMIT 200"
     try:
@@ -360,11 +377,13 @@ def database_schema() -> str:
         with runtime.lock:
             tables = runtime.db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
-                "AND name NOT LIKE 'grdb_%' AND name NOT IN ('screenshots', 'focus_sessions', 'observations') ORDER BY name"
+                "AND name NOT LIKE 'grdb_%' ORDER BY name"
             ).fetchall()
             entries = []
             for table in tables:
                 name = table[0]
+                if is_screen_data_table(str(name)):
+                    continue
                 columns = runtime.db.execute(f"PRAGMA table_info({quoted(name)})").fetchall()
                 count = runtime.db.execute(f"SELECT COUNT(*) FROM {quoted(name)}").fetchone()[0]
                 entries.append(
@@ -636,9 +655,9 @@ async def purge_screen_activity(request: Request) -> dict[str, Any]:
         return {"status": "ok", "deleted": 0}
     deleted = 0
     with runtime.lock:
-        for table in ("screenshots", "focus_sessions", "observations"):
+        for table in screen_data_tables():
             try:
-                cursor = runtime.db.execute(f'DELETE FROM "{table}"')
+                cursor = runtime.db.execute(f"DELETE FROM {quoted(table)}")
             except sqlite3.OperationalError as exc:
                 if "no such table" in str(exc).lower():
                     continue

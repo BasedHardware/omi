@@ -144,13 +144,13 @@ def test_dynamic_backend_tool_request_uses_authenticated_protocol(tmp_path: Path
 def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
     _, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT, appName TEXT)")
-    connection.execute("INSERT INTO screenshots VALUES ('one', 'Safari')")
+    connection.execute("CREATE TABLE memories (id TEXT, content TEXT)")
+    connection.execute("INSERT INTO memories VALUES ('one', 'Safari')")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
-    assert json.loads(module.execute_sql("SELECT id, appName FROM screenshots")) == {
-        "rows": [{"id": "one", "appName": "Safari"}],
+    assert json.loads(module.execute_sql("SELECT id, content FROM memories")) == {
+        "rows": [{"id": "one", "content": "Safari"}],
         "count": 1,
     }
 
@@ -190,9 +190,15 @@ def test_purge_screen_activity_removes_legacy_screen_tables(tmp_path: Path) -> N
     connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY)")
     connection.execute("CREATE TABLE focus_sessions (id TEXT PRIMARY KEY)")
     connection.execute("CREATE TABLE observations (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE ocr_texts (id TEXT PRIMARY KEY, text TEXT)")
+    connection.execute("CREATE TABLE ocr_occurrences (id TEXT PRIMARY KEY, text_id TEXT)")
+    connection.execute("CREATE VIRTUAL TABLE ocr_texts_fts USING fts5(text)")
     connection.executemany("INSERT INTO screenshots VALUES (?)", [("s1",), ("s2",)])
     connection.execute("INSERT INTO focus_sessions VALUES ('f1')")
     connection.execute("INSERT INTO observations VALUES ('o1')")
+    connection.execute("INSERT INTO ocr_texts VALUES ('t1', 'secret')")
+    connection.execute("INSERT INTO ocr_occurrences VALUES ('o1', 't1')")
+    connection.execute("INSERT INTO ocr_texts_fts VALUES ('secret')")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
@@ -207,12 +213,33 @@ def test_purge_screen_activity_removes_legacy_screen_tables(tmp_path: Path) -> N
             module.runtime.db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
             for table in ("screenshots", "focus_sessions", "observations")
         ]
+        ocr_remaining = [
+            module.runtime.db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+            for table in ("ocr_texts", "ocr_occurrences", "ocr_texts_fts")
+        ]
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Table 'screenshots' not in sync whitelist"
     assert purge.status_code == 200
-    assert purge.json() == {"status": "ok", "deleted": 4}
+    assert purge.json()["status"] == "ok"
+    assert purge.json()["deleted"] >= 7
     assert remaining == [0, 0, 0]
+    assert ocr_remaining == [0, 0, 0]
+
+
+def test_agent_vm_hides_and_rejects_legacy_ocr_tables(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE memories (id TEXT)")
+    connection.execute("CREATE TABLE ocr_texts (id TEXT, text TEXT)")
+    connection.execute("INSERT INTO ocr_texts VALUES ('t1', 'secret')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    assert json.loads(module.execute_sql("SELECT text FROM ocr_texts")) == {"error": "Screen activity is unavailable"}
+    assert "ocr_texts:" not in module.database_schema()
+    assert "memories:" in module.database_schema()
 
 
 def test_agent_session_starts_without_local_database(tmp_path: Path, monkeypatch) -> None:

@@ -20,6 +20,7 @@ from utils.subscription import is_trial_paywalled
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ZONE = "us-central1-a"
+_SCREEN_PRIVACY_VERSION = 1
 
 
 class AgentVmResponse(BaseModel):
@@ -102,6 +103,9 @@ def _set_vm(
     }
     if ip:
         vm["ip"] = ip
+    else:
+        vm["ip"] = DELETE_FIELD
+    vm["screenPrivacyVersion"] = _SCREEN_PRIVACY_VERSION
     get_firestore_client().collection("users").document(uid).set({"agentVm": vm}, merge=True)
 
 
@@ -210,6 +214,26 @@ async def _start_vm(project: str, vm_name: str, zone: str) -> str:
     return _ip(instance)
 
 
+async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/stop"
+    response = await _gce_request("POST", url, token)
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE stop response omitted operation name")
+    await _operation(project, zone, operation)
+
+
+async def _restart_vm(project: str, vm: dict[str, Any]) -> str:
+    vm_name = str(vm["vmName"])
+    zone = str(vm.get("zone") or _ZONE)
+    status, _ = await _instance(project, zone, vm_name)
+    if status == "RUNNING":
+        await _stop_vm(project, vm_name, zone)
+    return await _start_vm(project, vm_name, zone)
+
+
 async def _provision_background(
     uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str
 ) -> None:
@@ -226,7 +250,7 @@ async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> Non
     zone = str(vm.get("zone") or _ZONE)
     auth_token = str(vm.get("authToken") or "")
     try:
-        ip = await _start_vm(project, vm_name, zone)
+        ip = await _restart_vm(project, vm)
         await run_blocking(db_executor, _set_vm, uid, vm_name, "ready", auth_token, _now(), ip, zone)
     except Exception as exc:
         logger.error("Agent VM restart failed for uid=%s: %s", uid, exc)
@@ -329,5 +353,20 @@ async def get_agent_status(
     if gce_status == "RUNNING" and status in {"error", "stopped"} and instance is not None:
         pending = {**vm, "status": "provisioning", "ip": None}
         background_tasks.add_task(_recover_background, uid, vm, _ip(instance))
+        return _response(pending)
+    if gce_status == "RUNNING" and status == "ready" and vm.get("screenPrivacyVersion") != _SCREEN_PRIVACY_VERSION:
+        pending = {**vm, "status": "provisioning", "ip": None}
+        await run_blocking(
+            db_executor,
+            _set_vm,
+            uid,
+            str(vm["vmName"]),
+            "provisioning",
+            str(vm.get("authToken") or ""),
+            _now(),
+            None,
+            str(vm.get("zone") or _ZONE),
+        )
+        background_tasks.add_task(_restart_background, uid, project, vm)
         return _response(pending)
     return _response(vm)

@@ -68,6 +68,36 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_status_restarts_running_legacy_vm_before_screen_purge(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-user",
+        "zone": "us-central1-a",
+        "ip": "1.2.3.4",
+        "authToken": "omi-token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+    writes = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *args: _running_instance())
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm", lambda *args: writes.append(args))
+    tasks = BackgroundTasks()
+
+    response = await desktop_agent_vm.get_agent_status(tasks, "user")
+
+    assert response.status == "provisioning"
+    assert response.ip is None
+    assert writes[0][2] == "provisioning"
+    assert len(tasks.tasks) == 1
+
+
+@pytest.mark.asyncio
 async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -84,3 +114,7 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 
 async def _stopped_instance():
     return "TERMINATED", None
+
+
+async def _running_instance():
+    return "RUNNING", {"networkInterfaces": [{"accessConfigs": [{"natIP": "1.2.3.4"}]}]}
