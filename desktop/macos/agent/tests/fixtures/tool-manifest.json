@@ -5,8 +5,7 @@
     "description": "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only in agent adapters.",
     "promptSnippet": "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
     "promptGuidelines": [
-      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content."
+      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations)."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -64,8 +63,7 @@
         "Supports SELECT, INSERT, UPDATE, DELETE.",
         "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
-        "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-        "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks."
+        "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked."
       ]
     }
   },
@@ -109,31 +107,23 @@
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
     },
-    "aliases": [
-      "search_screen_history"
-    ],
-    "intendedForAgents": true,
+    "aliases": [],
+    "intendedForAgents": false,
     "runtimePreconditions": [
       "Requires local Rewind screen-history data."
     ],
     "adapters": {
       "pi-mono": {
-        "advertised": true
+        "advertised": false
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": false
       },
       "local-agent-api": {
-        "advertised": true,
-        "adapterName": "search_screen_history",
-        "aliases": [
-          "semantic_search"
-        ]
+        "advertised": false
       }
     },
-    "surfaces": [
-      "desktop_chat"
-    ],
+    "surfaces": [],
     "capabilityDoc": {
       "title": "Semantic Search",
       "summary": "Vector similarity search on the user's screen history.",
@@ -143,18 +133,7 @@
         "Parameters: query (required), days (default 7), app_filter (optional)."
       ]
     },
-    "aliasCapabilityDocs": {
-      "search_screen_history": {
-        "title": "Search Screen History",
-        "summary": "Search the user's on-screen history by meaning.",
-        "bullets": [
-          "Use for what the user saw, read, or worked on. Speak a short summary of the result."
-        ],
-        "surfaces": [
-          "realtime_voice"
-        ]
-      }
-    },
+    "aliasCapabilityDocs": {},
     "voice": {
       "realtimeDescription": "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result."
     }

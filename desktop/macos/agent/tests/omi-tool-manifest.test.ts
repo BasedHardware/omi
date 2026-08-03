@@ -38,7 +38,6 @@ describe("omi tool manifest", () => {
   it("projects the pi-mono task-agent surface", () => {
     expect(toolNamesForAdapter("pi-mono")).toEqual([
       "execute_sql",
-      "semantic_search",
       "get_daily_recap",
       "fill_cloud_connector_form",
       "list_agent_sessions",
@@ -279,8 +278,8 @@ describe("omi tool manifest", () => {
       wasAlias: true,
     });
     expect(normalizeOmiToolName("local-agent-api", "search_screen_history")).toEqual({
-      canonicalName: "semantic_search",
-      wasAlias: true,
+      canonicalName: "search_screen_history",
+      wasAlias: false,
     });
   });
 
@@ -297,7 +296,7 @@ describe("omi tool manifest", () => {
   it("requires surfaces and capabilityDoc on every manifest entry", () => {
     // spawn_background_agent is the coordinator-RPC-only entrypoint and is
     // deliberately advertised on no agent-facing surface (see sibling test).
-    const internalOnlyTools = new Set(["spawn_background_agent"]);
+    const internalOnlyTools = new Set(["semantic_search", "spawn_background_agent"]);
     for (const tool of omiToolManifest) {
       if (!internalOnlyTools.has(tool.name)) {
         expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);

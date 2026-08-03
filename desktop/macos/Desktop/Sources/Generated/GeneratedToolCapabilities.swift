@@ -40,32 +40,7 @@ enum GeneratedToolCapabilities {
       "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-      "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
-      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content."
-    ]
-    ),
-    Capability(
-      toolName: "semantic_search",
-      title: "Semantic Search",
-      latency: .fastLocal,
-      surfaces: Set([.desktopChat]),
-      summary: "Vector similarity search on the user's screen history.",
-      bullets: [
-      "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
-      "Examples: \"reading about machine learning\", \"working on design mockups\".",
-      "Parameters: query (required), days (default 7), app_filter (optional).",
-      "Prefer semantic_search over execute_sql when the user asks about something they 'saw' or worked on."
-    ]
-    ),
-    Capability(
-      toolName: "search_screen_history",
-      title: "Search Screen History",
-      latency: .fastLocal,
-      surfaces: Set([.realtimeHub]),
-      summary: "Search the user's on-screen history by meaning.",
-      bullets: [
-      "Use for what the user saw, read, or worked on. Speak a short summary of the result."
+      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations)."
     ]
     ),
     Capability(
@@ -264,17 +239,6 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
       "Creates a new run in the existing session."
-    ]
-    ),
-    Capability(
-      toolName: "spawn_background_agent",
-      title: "Spawn Background Agent",
-      latency: .asyncBackground,
-      surfaces: Set([]),
-      summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
-      bullets: [
-      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces.",
-      "Swift coordinator entrypoint only."
     ]
     ),
     Capability(
@@ -664,6 +628,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

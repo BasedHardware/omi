@@ -15,12 +15,11 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.canonicalToolName, "get_memories")
   }
 
-  func testAliasResolvesThroughGeneratedManifest() throws {
-    let command = try AuthorizedToolExecution.parse(
-      payload(toolName: "search_screen_history"),
-      currentOwnerID: "owner-1")
-
-    XCTAssertEqual(command.canonicalToolName, "semantic_search")
+  func testDisabledScreenHistoryAliasIsRejected() {
+    XCTAssertThrowsError(
+      try AuthorizedToolExecution.parse(
+        payload(toolName: "search_screen_history"),
+        currentOwnerID: "owner-1"))
   }
 
   func testChatFirstToolRequiresMainChatCapabilityAndDynamicManifest() throws {

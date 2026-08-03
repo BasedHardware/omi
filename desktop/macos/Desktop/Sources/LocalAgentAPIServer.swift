@@ -327,9 +327,8 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     if toolName == "execute_sql" {
       arguments["read_only"] = true
     }
-    let executorToolName = toolName == "search_screen_history" ? "semantic_search" : toolName
     let result = await ChatToolExecutor.execute(
-      ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
+      ToolCall(name: toolName, arguments: arguments, thoughtSignature: nil))
     return toolResponse(name: toolName, result: result)
   }
 

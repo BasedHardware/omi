@@ -226,12 +226,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
         "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-        "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
       ],
     ),
   },
   semantic_search: {
-    surfaces: ["desktop_chat"],
+    surfaces: [],
     capabilityDoc: doc(
       "Semantic Search",
       "Vector similarity search on the user's screen history.",
@@ -241,16 +240,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Parameters: query (required), days (default 7), app_filter (optional).",
       ],
     ),
-    aliasCapabilityDocs: {
-      search_screen_history: {
-        ...doc(
-          "Search Screen History",
-          "Search the user's on-screen history by meaning.",
-          ["Use for what the user saw, read, or worked on. Speak a short summary of the result."],
-        ),
-        surfaces: ["realtime_voice"],
-      },
-    },
+    aliasCapabilityDocs: {},
     voice: {
       realtimeDescription:
         "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
@@ -658,7 +648,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
     promptGuidelines: [
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
     ],
     latency: "fast local",
     inputSchema: schema(
@@ -702,12 +691,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
-    aliases: ["search_screen_history"],
-    intendedForAgents: true,
+    aliases: [],
+    intendedForAgents: false,
     runtimePreconditions: ["Requires local Rewind screen-history data."],
     adapters: {
-      ...piAndStdio(),
-      "local-agent-api": { advertised: true, adapterName: "search_screen_history", aliases: ["semantic_search"] },
+      "pi-mono": { advertised: false },
+      "omi-tools-stdio": { advertised: false },
+      "local-agent-api": { advertised: false },
     },
   },
   {

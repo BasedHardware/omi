@@ -25,28 +25,6 @@ enum OmiToolManifest {
       annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
     ),
     LocalAgentTool(
-      name: "semantic_search",
-      description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
-      properties: [
-        "query": [
-          "type": "string",
-          "description": "Natural language search query",
-        ],
-        "days": [
-          "type": "number",
-          "description": "Days to search back (default 7)",
-        ],
-        "app_filter": [
-          "type": "string",
-          "description": "Filter to a specific app",
-        ]
-      ],
-      required: [
-      "query"
-    ],
-      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
-    ),
-    LocalAgentTool(
       name: "get_daily_recap",
       description: "Pre-formatted daily activity recap: app usage, conversations, tasks, focus, memories, observations.",
       properties: [

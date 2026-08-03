@@ -2,7 +2,6 @@
 import Foundation
 
 enum HubTool: String {
-  case searchScreenHistory = "search_screen_history"
   case getDailyRecap = "get_daily_recap"
   case listAgentSessions = "list_agent_sessions"
   case getAgentRun = "get_agent_run"
@@ -31,31 +30,6 @@ enum HubTool: String {
 enum GeneratedRealtimeTools {
   private static let baseOpenAIToolsTemplateJSON = """
 [
-  {
-    "type": "function",
-    "name": "search_screen_history",
-    "description": "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Natural language search query"
-        },
-        "days": {
-          "type": "number",
-          "description": "Days to search back (default 7)"
-        },
-        "app_filter": {
-          "type": "string",
-          "description": "Filter to a specific app"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
   {
     "type": "function",
     "name": "get_daily_recap",

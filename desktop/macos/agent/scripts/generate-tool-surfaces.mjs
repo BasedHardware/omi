@@ -171,9 +171,12 @@ function collectCapabilities() {
   };
 
   for (const tool of omiToolManifest) {
-    pushCapability(tool.name, tool, tool.capabilityDoc, tool.surfaces, { mergeGuidelines: true });
+    if (tool.surfaces.length > 0) {
+      pushCapability(tool.name, tool, tool.capabilityDoc, tool.surfaces, { mergeGuidelines: true });
+    }
     for (const [alias, doc] of Object.entries(tool.aliasCapabilityDocs ?? {})) {
       const aliasSurfaces = doc.surfaces ?? tool.surfaces;
+      if (aliasSurfaces.length === 0) continue;
       pushCapability(alias, tool, doc, aliasSurfaces);
     }
   }
