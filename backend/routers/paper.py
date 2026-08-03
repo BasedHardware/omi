@@ -28,7 +28,8 @@ def _parse_date(value: str) -> date_cls:
     try:
         return date_cls.fromisoformat(value)
     except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail='Date must be yyyy-mm-dd')
+        # The detail fully describes the fault; a chained ValueError adds only noise.
+        raise HTTPException(status_code=400, detail='Date must be yyyy-mm-dd') from None
 
 
 def _issue_number(uid: str) -> int:

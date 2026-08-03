@@ -41,6 +41,7 @@ model_config_features:
       - notifications
       - onboarding
       - openglass
+      - paper
       - persona_chat
       - persona_chat_premium
       - persona_clone
