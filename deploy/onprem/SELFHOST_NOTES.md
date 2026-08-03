@@ -577,6 +577,68 @@ Full E2E proven (2026-08-02, emulator): `Sign in with SSO` → Keycloak login (h
 → redirect → token exchange → **refresh token in Keychain/Keystore, not prefs** → force-stop/relaunch keeps
 the session → backend `saveToken {"status":"Ok"}`, `GET /v1/users/me/subscription 200`, `POST /v1/users/fcm-token 200`.
 
+## Push notifications (UnifiedPush/ntfy) — ADR-0011
+
+Remote push is the one allowed cloud dependency, behind `PUSH_NOTIFICATION_BACKEND`:
+- `fcm` (default) — Firebase Cloud Messaging / APNs. Needs Firebase.
+- `disabled` — no remote push at all. The backend runs fully and sends nothing; the app shows only
+  its own local notifications. Nothing else to deploy.
+- `unifiedpush` — self-hosted push via [ntfy](https://ntfy.sh), no Google. Bring the server up with
+  the `push` profile.
+
+```bash
+cd deploy/onprem
+# backend.env: PUSH_NOTIFICATION_BACKEND=unifiedpush + UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80
+docker compose --profile push up -d           # ntfy (internal) + ntfy-proxy (TLS on NTFY_HTTPS_PORT)
+```
+
+`ntfy` stays **internal** (on `omi` only); only the TLS reverse proxy `ntfy-proxy` is on `edge` with a
+published https port — exactly the api-proxy/kc-proxy posture. The ntfy Android distributor refuses a
+cleartext server, so it must point at the proxy's https URL (`https://<HOST_IP>:${NTFY_HTTPS_PORT}`,
+cert from `gen-dev-certs.sh`, SAN=HOST_IP).
+
+**Addressing (why UNIFIEDPUSH_INTERNAL_BASE_URL exists).** The phone's UnifiedPush distributor
+registers with the server on its **host-facing** URL (`NTFY_BASE_URL = https://<HOST_IP>:${NTFY_HTTPS_PORT}`)
+and hands the app an endpoint like `https://<HOST_IP>:${NTFY_HTTPS_PORT}/<topic>?up=1`, which the app
+saves to the backend (`POST /v1/users/unifiedpush-endpoint`). The backend sits on the **internal**
+`omi` network (no egress) and cannot reach that host address — so it keeps only the endpoint's *path*
+and POSTs to `${UNIFIEDPUSH_INTERNAL_BASE_URL}${path}` = `http://ntfy:80/<topic>?up=1`, reaching the
+same server by service name.
+
+**Flow:** app registers → `onNewEndpoint` → saves endpoint to backend → backend POSTs the
+notification JSON (`{notification?, data, tag, priority, is_background}`) to the endpoint → ntfy
+delivers it to the distributor → the app decodes it and shows the notification (same dispatch it
+runs for an FCM message). Dead endpoints (HTTP 404/410) are dropped from `unifiedpush_endpoints`.
+
+**Debt:** the POST body is plaintext — WebPush (aes128gcm) payload encryption is not implemented; use
+a UnifiedPush connector that delivers raw bytes. Message durability across distributor reconnects
+uses ntfy's default in-memory cache (add `NTFY_CACHE_FILE` + a volume to harden).
+
+### Full app E2E (emulator + ntfy distributor) — proven 2026-08-03
+
+The whole flow runs on the compose dev stack, same posture as the OIDC E2E: the app reaches the
+backend ONLY through `api-proxy` https, ntfy through `ntfy-proxy` https, self-signed CA trusted on
+the device. Prereqs:
+- App built with `NOTIFICATIONS_BACKEND=unifiedpush` + `API_BASE_URL=https://<HOST_IP>:${API_HTTPS_PORT}/`.
+- ntfy Android app installed as the distributor, its **Default server** set to
+  `https://<HOST_IP>:${NTFY_HTTPS_PORT}` (Settings → Default server; persisted as `DefaultBaseURL`).
+- The self-signed CA installed on the device **via Settings** (Encryption & credentials → Install a
+  CA certificate). A raw `adb push` into `cacerts-added` is trusted by Chrome but NOT by AppAuth's
+  token exchange — the KeyChain registration the Settings flow does is what `<certificates src="user"/>`
+  needs. (Needs a screen-lock PIN.)
+- Keycloak must advertise the **token endpoint on the public issuer port** — see the backchannel note
+  in the OIDC section. Otherwise the mobile token exchange goes to the internal proxy port and fails.
+
+Proven flow (logs verbatim):
+1. Launch → `UnifiedPush notification service initialized` (no FCM background handler).
+2. Sign in with SSO (testuser) → token exchange succeeds; `registerApp` → the ntfy distributor issues
+   `onNewEndpoint: https://<HOST_IP>:${NTFY_HTTPS_PORT}/<topic>?up=1` → `saveUnifiedPushEndpoint:
+   {"status":"Ok"}` (`POST /v1/users/unifiedpush-endpoint` 200).
+3. Backend send for that uid → POSTs to `http://ntfy:80/<topic>` (rewritten from the stored host-facing
+   endpoint) → ntfy delivers to the distributor → `UnifiedPushReceiver: OnMessage` → the app decodes
+   the JSON and **shows the notification** (same dispatch as FCM). Payload received matches the sent
+   `{notification:{title,body}, data, tag, priority, is_background}`.
+
 ## Git notes
 
 Work happens on the `fullonprem` branch (ADR-0013). `backend.env` is ignored (`*.env`); the

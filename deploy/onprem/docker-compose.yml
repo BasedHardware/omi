@@ -87,6 +87,50 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # Self-hosted push server for UnifiedPush (ADR-0011). Opt-in via the `push` profile; the default
+  # baseline sends push over FCM. With PUSH_NOTIFICATION_BACKEND=unifiedpush the backend POSTs
+  # notifications to endpoints on this ntfy server, reached internally via
+  # UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80. The phone's UnifiedPush distributor (the ntfy app)
+  # subscribes to the SAME server on its host-facing URL (NTFY_BASE_URL). ntfy joins `edge` so its
+  # published port has host ingress for the device, and `omi` so the backend reaches it by name. To
+  # use it: set PUSH_NOTIFICATION_BACKEND=unifiedpush in backend.env, then:
+  #   docker compose --profile push up -d
+  # See SELFHOST_NOTES "Push notifications (UnifiedPush/ntfy)".
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    profiles: ["push"]
+    command: ["serve"]
+    environment:
+      # Public https URL the phone's UnifiedPush distributor uses (served by ntfy-proxy). It must be
+      # the address the DEVICE reaches (HOST_IP) and match the cert SAN. ntfy itself stays internal;
+      # the backend reaches it via UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80, so it needs no egress.
+      NTFY_BASE_URL: https://${HOST_IP:-localhost}:${NTFY_HTTPS_PORT:-8455}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/v1/health | grep -q '\"healthy\":true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for ntfy — the UnifiedPush distributor (ntfy app) refuses a
+  # cleartext server. Same posture as api-proxy/kc-proxy: ntfy stays internal (omi), only this proxy
+  # is on `edge` with host ingress. Uses the same self-signed certs (gen-dev-certs.sh, SAN=HOST_IP).
+  ntfy-proxy:
+    image: nginx:stable-alpine
+    profiles: ["push"]
+    depends_on: [ntfy]
+    ports:
+      - "${NTFY_HTTPS_PORT:-8455}:8443"
+    volumes:
+      - ./ntfy-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
   backend:
     build:
       context: ../../
