@@ -177,7 +177,7 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   }
 
   @MainActor
-  func testMissingDefaultCalendarStillReconcilesSyncedItems() async throws {
+  func testMissingDefaultCalendarFailsBeforeReconciliation() async throws {
     let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
     _ = store.makeReminder(id: "reminder-linked", title: "Linked task", completed: false)
     let sync = AppleRemindersSyncStub(
@@ -201,7 +201,7 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
       _ = try await AppleEventKitReaderService(
         eventStore: store, remindersSync: sync, exportJournal: try makeExportJournal()
       ).syncReminders()
-      XCTFail("Expected missing default calendar to fail after reconciliation")
+      XCTFail("Expected missing default calendar to fail before reconciliation")
     } catch {
       XCTAssertEqual(
         error as? AppleEventKitReaderError,
@@ -210,8 +210,9 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     }
 
     let reminder = try XCTUnwrap(store.remindersByID["reminder-linked"])
-    XCTAssertTrue(reminder.isCompleted)
-    XCTAssertEqual(sync.deletedIDs, ["item-gone"])
+    XCTAssertFalse(reminder.isCompleted)
+    XCTAssertTrue(sync.deletedIDs.isEmpty)
+    XCTAssertTrue(sync.syncBatches.isEmpty)
     XCTAssertFalse(sync.syncBatches.flatMap { $0 }.contains { $0.id == "item-new" })
   }
 
