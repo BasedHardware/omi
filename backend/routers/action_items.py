@@ -263,6 +263,20 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
+    for update in updates:
+        if update['id'] not in updated_ids or not ({'completed', 'due_at'} & update['data'].keys()):
+            continue
+        updated_item = action_items_db.get_action_item(uid, update['id'])
+        if updated_item is None:
+            continue
+        sync_action_item_reminder(
+            user_id=uid,
+            action_item_id=update['id'],
+            description=updated_item.get('description', ''),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
+        )
+
     return _batch_mutation_response(result, locked_ids=locked_ids)
 
 

@@ -737,6 +737,12 @@ class TestSyncBatchSkipsLocked:
                     "description": "Leave the deadline unchanged",
                     "is_locked": False,
                 },
+                {
+                    "id": "t1",
+                    "description": "Clear the deadline",
+                    "completed": False,
+                    "due_at": None,
+                },
             ]
             mock_db.batch_sync_update_action_items.return_value = batch_result
             request = action_items_router.SyncBatchRequest(
@@ -746,9 +752,17 @@ class TestSyncBatchSkipsLocked:
                 ]
             )
 
-            action_items_router.sync_batch_update(request, uid='test-uid')
+            with patch.object(action_items_router, 'sync_action_item_reminder') as sync_reminder:
+                action_items_router.sync_batch_update(request, uid='test-uid')
 
         updates = mock_db.batch_sync_update_action_items.call_args.args[1]
         assert updates == [
             {'id': 't1', 'data': {'due_at': None}}
         ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'
+        sync_reminder.assert_called_once_with(
+            user_id='test-uid',
+            action_item_id='t1',
+            description='Clear the deadline',
+            completed=False,
+            due_at=None,
+        )
