@@ -66,6 +66,7 @@ def test_memory_maintenance_job_exits_with_failure_when_cron_reports_outbox_erro
         return SimpleNamespace(errors=["uid=test: outbox_delivery_failed"])
 
     monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
+    monkeypatch.setattr(memory_maintenance_job, "purge_all_screen_activity", lambda: 0)
     monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", failed_cron)
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):

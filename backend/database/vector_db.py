@@ -869,7 +869,8 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     if index is None:
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
-    index.delete(ids=vector_ids, namespace=SCREEN_ACTIVITY_NAMESPACE)
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
 
 
 # ==========================================
