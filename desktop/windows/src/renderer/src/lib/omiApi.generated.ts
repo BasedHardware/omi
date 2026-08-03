@@ -865,6 +865,13 @@ export type CandidateStatus = "pending" | "accepted" | "rejected" | "expired";
 
 export type CandidateSubjectKind = "task" | "workstream";
 
+export interface CanonicalKnowledgeGraphResponse {
+  edges: Array<Record<string, unknown>>;
+  has_more: boolean;
+  next_cursor?: string | null;
+  nodes: Array<Record<string, unknown>>;
+}
+
 export interface CaptureLinkSpec {
   conversation_id: string;
   moment_timestamp_ms?: number | null;
@@ -4012,6 +4019,7 @@ export interface OmiApiSchemas {
   "CandidateResolutionRequest": CandidateResolutionRequest;
   "CandidateStatus": CandidateStatus;
   "CandidateSubjectKind": CandidateSubjectKind;
+  "CanonicalKnowledgeGraphResponse": CanonicalKnowledgeGraphResponse;
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChannelBindingResponse": ChannelBindingResponse;
@@ -6470,6 +6478,16 @@ export interface OmiApiPaths {
       operationId: "delete_knowledge_graph_v1_knowledge_graph_delete";
       responses: {
         "200": DeleteKnowledgeGraphResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/knowledge-graph/canonical": {
+    get: {
+      operationId: "get_canonical_knowledge_graph_v1_knowledge_graph_canonical_get";
+      responses: {
+        "200": CanonicalKnowledgeGraphResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12409,6 +12427,28 @@ export async function delete_knowledge_graph_v1_knowledge_graph_delete(header: {
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_canonical_knowledge_graph_v1_knowledge_graph_canonical_get(query: { limit?: number, cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CanonicalKnowledgeGraphResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/knowledge-graph/canonical`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,

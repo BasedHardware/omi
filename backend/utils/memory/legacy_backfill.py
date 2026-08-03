@@ -33,6 +33,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id
+from utils.memory.legacy_backfill_bulk_support import apply_with_control_refresh, fetch_active_legacy_rows
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
@@ -113,6 +114,11 @@ def _row_str(row: LegacyRow, key: str, default: str = "") -> str:
 
 def _row_content(row: LegacyRow) -> str:
     return _row_str(row, "content").strip()
+
+
+def row_content(row: LegacyRow) -> str:
+    """Public content accessor for inventory/orchestrators (no new behavior)."""
+    return _row_content(row)
 
 
 def _legacy_source_attribution(
@@ -810,6 +816,15 @@ def _bucket_counts_and_samples(
     return counts, {bucket: sample_rows for bucket, sample_rows in samples.items() if sample_rows}
 
 
+def bucket_counts_and_samples(
+    rows: Sequence[LegacyRow],
+    *,
+    sample_size: int = 5,
+) -> tuple[Dict[str, int], BucketSampleMap]:
+    """Public inventory helper; wraps the internal classifier tally."""
+    return _bucket_counts_and_samples(rows, sample_size=sample_size)
+
+
 def _fetch_active_legacy_memories(
     uid: str,
     *,
@@ -817,33 +832,30 @@ def _fetch_active_legacy_memories(
     get_non_filtered_memories_fn: LegacyReader,
     scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
 ) -> List[LegacyRow]:
-    """Read-only scan of active legacy memories (never writes).
+    """Read-only raw-page scan; active filtering never mutates legacy rows."""
+    return fetch_active_legacy_rows(
+        uid,
+        db_client=db_client,
+        reader=get_non_filtered_memories_fn,
+        is_active=is_active_legacy_row,
+        scan_page_size=scan_page_size,
+    )
 
-    Paginates over the raw Firestore page from ``get_non_filtered_memories`` so
-    ``len(page) < page_size`` reliably signals end-of-data even when many rows in
-    a page are inactive and filtered out here.
-    """
-    all_rows: List[LegacyRow] = []
-    offset = 0
-    page_size = scan_page_size
-    while True:
-        try:
-            page: List[LegacyRow] = get_non_filtered_memories_fn(
-                uid, limit=page_size, offset=offset, firestore_client=db_client
-            )
-        except TypeError as exc:
-            if "firestore_client" not in str(exc):
-                raise
-            page = get_non_filtered_memories_fn(uid, limit=page_size, offset=offset)
-        if not page:
-            break
-        for row in page:
-            if is_active_legacy_row(row):
-                all_rows.append(row)
-        if len(page) < page_size:
-            break
-        offset += page_size
-    return sorted(all_rows, key=lambda row: _row_str(row, "id"))
+
+def fetch_active_legacy_memories(
+    uid: str,
+    *,
+    db_client: Any,
+    get_non_filtered_memories_fn: LegacyReader,
+    scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
+) -> List[LegacyRow]:
+    """Public read-only active legacy scan for inventory/orchestrators."""
+    return _fetch_active_legacy_memories(
+        uid,
+        db_client=db_client,
+        get_non_filtered_memories_fn=get_non_filtered_memories_fn,
+        scan_page_size=scan_page_size,
+    )
 
 
 def _read_control_state(uid: str, *, db_client: Any, create_if_missing: bool = True) -> MemoryControlState:
@@ -1538,6 +1550,9 @@ def backfill_user(
     dry_run: bool = False,
     batch_size: int = DEFAULT_BATCH_SIZE,
     resume: bool = True,
+    max_rows: Optional[int] = None,
+    continue_on_error: bool = False,
+    stop_requested: Optional[Callable[[], bool]] = None,
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
@@ -1580,7 +1595,10 @@ def backfill_user(
         start_index = 0
         if resume and control.legacy_backfill_source_fingerprint == fingerprint:
             start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
-        intended_count = max(0, len(admissible_rows) - start_index)
+        end_index = len(admissible_rows)
+        if max_rows is not None:
+            end_index = min(end_index, start_index + max(0, max_rows))
+        intended_count = max(0, end_index - start_index)
         _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
         return BackfillReport(
             uid=uid,
@@ -1614,7 +1632,10 @@ def backfill_user(
         )
         start_index = 0
 
-    intended_count = max(0, len(admissible_rows) - start_index)
+    end_index = len(admissible_rows)
+    if max_rows is not None:
+        end_index = min(end_index, start_index + max(0, max_rows))
+    intended_count = max(0, end_index - start_index)
     written_count = 0
     skipped_already_present = 0
     skipped_both_store_duplicate = 0
@@ -1626,7 +1647,9 @@ def backfill_user(
     materialized_semantic_keys: set[str] = set()
 
     processed_index = start_index
-    while processed_index < len(admissible_rows):
+    while processed_index < end_index:
+        if stop_requested is not None and stop_requested():
+            break
         legacy_row = admissible_rows[processed_index]
         semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
         if semantic_key is not None and semantic_key in materialized_semantic_keys:
@@ -1641,15 +1664,21 @@ def backfill_user(
             )
             _persist_control_state(control, db_client=client)
             continue
-        try:
-            row_result = _apply_one_legacy_row(
+        attempt = apply_with_control_refresh(
+            control=control,
+            apply_fn=lambda latest: _apply_one_legacy_row(
                 uid=uid,
                 legacy_row=legacy_row,
                 index=processed_index,
-                control=control,
+                control=latest,
                 run_id=effective_run_id,
                 db_client=client,
-            )
+            ),
+            refresh_control=lambda: _read_control_state(uid, db_client=client, create_if_missing=False),
+            retry_once=continue_on_error,
+        )
+        control, row_result, row_error = attempt.control, attempt.result, attempt.error
+        if row_result is not None:
             control = row_result.control
             if row_result.written:
                 written_count += 1
@@ -1665,12 +1694,13 @@ def backfill_user(
                 keyword_sync_failures += 1
             if row_result.kg_extraction_failed:
                 kg_extraction_failures += 1
-        except Exception as exc:
+        elif row_error is not None:
             safe_uid = sanitize_pii(uid)
             safe_legacy_id = sanitize_pii(_row_str(legacy_row, "id", "unknown"))
-            logger.exception("legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
-            errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
-            break
+            logger.error("legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
+            errors.append(f"{safe_legacy_id}: {sanitize(row_error)}")
+            if not continue_on_error:
+                break
 
         processed_index += 1
         control = control.model_copy(

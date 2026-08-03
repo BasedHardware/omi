@@ -48,6 +48,18 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert chat_agent_lane.capabilities.tools is True
 
 
+def test_memory_l2_gateway_lane_resolves_to_luna():
+    config = load_gateway_config(prod_mode=True)
+
+    assert get_model('memory_l2') == 'gpt-5.6-luna'
+    assert get_provider('memory_l2') == 'openai'
+    lane = config.lanes['omi:auto:memory-l2']
+    route = config.route_artifacts[lane.active_route]
+    assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert route.primary.model == 'gpt-5.6-luna'
+    assert route.primary.provider == 'openai'
+
+
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 

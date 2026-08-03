@@ -576,12 +576,34 @@ def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> 
 def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     traces = recent_traces(ctx)
     write_json(path, traces)
-    expectations = spec.get("equals") or spec
+    # A responsiveness assertion must apply to the route just exercised, not
+    # a faster matching route left over from an earlier loop iteration.
+    # `latest` is intentionally a harness-only selector, never a trace field.
+    latest = spec.get("latest", False)
+    if not isinstance(latest, bool):
+        return False, "trace.expect latest must be a boolean"
+    expectations = spec.get("equals") or {key: value for key, value in spec.items() if key != "latest"}
     if not isinstance(expectations, dict):
         return False, "trace.expect requires a mapping"
-    if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+    if latest:
+        # State waits commonly issue a follow-up /state request. Select the
+        # newest trace for the exercised route rather than accidentally
+        # asserting on that bookkeeping request. Select by route identity only
+        # (path + method); status and duration remain assertion predicates so a
+        # failed latest response can never be hidden by an earlier success.
+        selector = {
+            key: value
+            for key, value in expectations.items()
+            if key in {"trace.path", "trace.method"}
+            and not isinstance(value, dict)
+        }
+        matching = [trace for trace in traces if expectation_matches({"trace": trace}, selector)]
+        candidates = matching[-1:] if matching else traces[-1:]
+    else:
+        candidates = traces
+    if any(expectation_matches({"trace": trace}, expectations) for trace in candidates):
         return True, None
-    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in traces]
+    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in candidates]
     return False, f"no trace matched: expectations={expectations}, mismatches={reasons}"
 
 

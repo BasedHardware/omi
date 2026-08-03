@@ -16,6 +16,7 @@ struct ConversationDetailView: View {
   var onFetchPeople: (() async -> Void)?
   var onCreatePerson: ((String) async -> Person?)?
   var onAssignSpeaker: ((String, [String], String?, Bool) async -> Bool)?
+  @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
   @State private var showAppSelector = false
@@ -204,6 +205,10 @@ struct ConversationDetailView: View {
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
         newValue, conversationId: conversation.id)
+    }
+    .onChange(of: automation.transcriptDrawerOpen) { _, isOpen in
+      guard automation.openConversationId == conversation.id, isOpen else { return }
+      showTranscriptDrawer = true
     }
     .task {
       await appProvider.fetchApps()

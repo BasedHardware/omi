@@ -54,21 +54,29 @@ struct ChatBubble: View {
   }
 
   /// Messages longer than this are truncated with a "Show more" button
-  private static let truncationThreshold = 500
+  private static let truncationThreshold = ChatBubbleTruncation.threshold
+
+  /// Readable width shared by the bubble and its metadata row. Keeping this
+  /// explicit lets the metadata row expand to the message column even when
+  /// the Markdown body has only a few words.
+  private static let messageColumnMaxWidth: CGFloat = 640
 
   /// Whether this message should be truncated
   private var shouldTruncate: Bool {
-    !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    ChatBubbleTruncation.shouldTruncate(
+      text: message.text,
+      isStreaming: message.isStreaming,
+      isExpanded: isExpanded
+    )
   }
 
   /// The text to display (truncated or full) — keeps the start of the message visible
   private var displayText: String {
-    if shouldTruncate {
-      return String(message.text.prefix(Self.truncationThreshold)).trimmingCharacters(
-        in: .whitespacesAndNewlines
-      ) + "…"
-    }
-    return message.text
+    ChatBubbleTruncation.displayText(
+      message.text,
+      isStreaming: message.isStreaming,
+      isExpanded: isExpanded
+    )
   }
 
   private var backgroundAgentSummary: BackgroundAgentSummary? {
@@ -132,8 +140,15 @@ struct ChatBubble: View {
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
             messageContentView(groupedBlocks)
           }
+          // A max-width frame alone preserves the body's intrinsic width in
+          // an unconstrained HStack. Expand first, then cap it, so metadata
+          // has a stable trailing edge for short assistant replies too.
           .frame(
-            maxWidth: 640,
+            maxWidth: message.sender == .ai ? .infinity : Self.messageColumnMaxWidth,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+          .frame(
+            maxWidth: Self.messageColumnMaxWidth,
             alignment: message.sender == .user ? .trailing : .leading
           )
         }
@@ -224,31 +239,39 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          OmiMarkdown(text: displayText, sender: message.sender)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              message.sender == .user
-                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+          if message.sender == .ai, shouldTruncate {
+            // Keep the expansion affordance on the same baseline as the
+            // visible truncation ellipsis. The text gets the remaining width,
+            // so the control cannot fall onto a detached row.
+            HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs) {
+              messageTextBubble(displayText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(0)
+              showMoreButton
+            }
+            .frame(
+              maxWidth: .infinity,
+              alignment: .leading
             )
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-                .stroke(
-                  message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
-                  lineWidth: 1
-                )
-            )
-            .padding(.top, OmiSpacing.hairline)
+          } else {
+            messageTextBubble(displayText)
+          }
         }
 
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
-          Button(action: { isExpanded.toggle() }) {
-            Text(isExpanded ? "Show less" : "Show more")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(.white)
+          if isExpanded {
+            Button(action: { isExpanded.toggle() }) {
+              Text("Show less")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(.white)
+            }
+            .buttonStyle(.plain)
+          } else if message.sender == .user, shouldTruncate {
+            // Keep the pre-existing user-bubble layout. Only assistant replies
+            // need the inline treatment; moving this control beside a user
+            // bubble would pull its trailing edge left by the button width.
+            showMoreButton
           }
-          .buttonStyle(.plain)
         }
 
         if message.sender != .user, let resourceStrip {
@@ -277,6 +300,36 @@ struct ChatBubble: View {
     } else if !message.isStreaming || !message.text.isEmpty {
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
     }
+  }
+
+  @ViewBuilder
+  private func messageTextBubble(_ text: String) -> some View {
+    OmiMarkdown(text: text, sender: message.sender)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        message.sender == .user
+          ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+      )
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+          .stroke(
+            message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+            lineWidth: 1
+          )
+      )
+      .padding(.top, OmiSpacing.hairline)
+  }
+
+  private var showMoreButton: some View {
+    Button(action: { isExpanded = true }) {
+      Text("Show more")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(.white)
+    }
+    .buttonStyle(.plain)
+    .accessibilityHint("Expand the full message")
   }
 
   private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
@@ -437,6 +490,9 @@ struct ChatBubble: View {
 
       ChatMessageTimestamp(date: message.createdAt)
     }
+    // Keep the timestamp on the message column's trailing edge rather than
+    // the intrinsic width of a short reply.
+    .frame(maxWidth: .infinity, alignment: .trailing)
     // Quiet timeline: actions and timestamps only surface while the reader
     // is on the message — by pointer hover or keyboard focus — or
     // mid-interaction with them.
@@ -548,72 +604,6 @@ struct ChatBubble: View {
         MessageMetadataPopover(metadata: metadata)
       }
     }
-  }
-}
-
-/// Shared understated date treatment for a transcript row and its prompt-rail
-/// preview. Keeping this outside the bubble makes the time contextual rather
-/// than part of the message itself.
-struct ChatMessageTimestamp: View {
-  let date: Date
-
-  var body: some View {
-    Text(date, format: .dateTime.year().month(.abbreviated).day().hour().minute())
-      .scaledFont(size: OmiType.micro)
-      .foregroundColor(OmiColors.textTertiary.opacity(0.82))
-  }
-}
-
-/// Visibility rule for the quiet timeline's per-message metadata row
-/// (rating / copy / info / timestamp). Keyboard parity is part of the
-/// contract: focus on any metadata control must reveal the row, otherwise
-/// Tab / Full Keyboard Access ends up on an invisible button.
-enum ChatBubbleMetadataReveal {
-  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
-    hovering || controlFocused || transientFeedback
-  }
-}
-
-struct BackgroundAgentSummary: Equatable {
-  let agentID: UUID?
-  let prompt: String
-  let output: String
-
-  static func parse(_ text: String) -> BackgroundAgentSummary? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasPrefix("[Background agent") else { return nil }
-    guard let close = trimmed.firstIndex(of: "]") else { return nil }
-
-    let headerStart = trimmed.index(trimmed.startIndex, offsetBy: 1)
-    let header = String(trimmed[headerStart..<close])
-    guard header.hasPrefix("Background agent") else { return nil }
-
-    var remainder = String(header.dropFirst("Background agent".count))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    var agentID: UUID?
-
-    if remainder.hasPrefix("id=") {
-      remainder.removeFirst(3)
-      let idEnd = remainder.firstIndex { $0 == " " || $0 == "—" } ?? remainder.endIndex
-      let idText = String(remainder[..<idEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-      agentID = UUID(uuidString: idText)
-      remainder = String(remainder[idEnd...]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    if remainder.hasPrefix("—") {
-      remainder.removeFirst()
-      remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    let outputStart = trimmed.index(after: close)
-    let output = String(trimmed[outputStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !output.isEmpty else { return nil }
-
-    return BackgroundAgentSummary(
-      agentID: agentID,
-      prompt: remainder.isEmpty ? "Background agent" : remainder,
-      output: output
-    )
   }
 }
 

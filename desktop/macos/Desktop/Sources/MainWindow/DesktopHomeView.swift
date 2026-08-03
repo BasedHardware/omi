@@ -70,7 +70,6 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
-  @State private var isShowingMemoryAtlasPage = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -687,7 +686,6 @@ struct DesktopHomeView: View {
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
     guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    if isShowingMemoryAtlasPage { return false }
     return ![.permissions, .help].contains(item)
   }
 
@@ -1293,8 +1291,8 @@ struct DesktopHomeView: View {
         }
       }
       .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
-        selectedIndex = SidebarNavItem.memories.rawValue
-        isShowingMemoryAtlasPage = true
+        memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
+        selectedIndex = SidebarNavItem.conversations.rawValue
       }
       .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
         memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
@@ -1458,8 +1456,7 @@ struct DesktopHomeView: View {
           memoryDestinationRawValue: $memoryDestinationRawValue,
           selectedSettingsSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
-          selectedTabIndex: $selectedIndex,
-          isShowingMemoryAtlasPage: $isShowingMemoryAtlasPage
+          selectedTabIndex: $selectedIndex
         )
       }
       .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
@@ -1469,10 +1466,6 @@ struct DesktopHomeView: View {
   }
 
   private func navigateHomeOnEscapeIfNeeded() -> Bool {
-    if isShowingMemoryAtlasPage {
-      isShowingMemoryAtlasPage = false
-      return true
-    }
     if usesChatFirstShell {
       guard chatFirstNavigation.route != .chat else { return false }
       OmiMotion.withGated(Self.pageNavigationAnimation) {
@@ -1592,7 +1585,7 @@ private struct HubSegmentedControl: View {
   }
 }
 
-private struct MemoryHubPage: View {
+struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
   /// Observed, not just read through the container: the canonical lifecycle
@@ -1750,7 +1743,6 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
-  @Binding var isShowingMemoryAtlasPage: Bool
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
   /// content in a centered, width-capped column so wide monitors get calm
@@ -1796,36 +1788,16 @@ private struct PageContentView: View {
           onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
-        if isShowingMemoryAtlasPage {
-          CanonicalMemoryAtlasPage(
-            viewModel: viewModelContainer.memoryGraphViewModel,
-            onBack: { isShowingMemoryAtlasPage = false },
-            evidenceProvider: { memoryIds in
-              MemoryAtlasEvidence.resolve(
-                memoryIds,
-                in: await viewModelContainer.memoriesViewModel.memories(withIDs: memoryIds))
-            },
-            onOpenMemory: { memoryId in
-              Task { @MainActor in
-                guard await viewModelContainer.memoriesViewModel.openMemory(id: memoryId) else {
-                  return
-                }
-                isShowingMemoryAtlasPage = false
-              }
-            }
+        // Same rule as the hub's Memories destination: the readable-width
+        // cap yields while the detail panel is open so the panel takes new
+        // space instead of eating the list's column.
+        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+          .frame(
+            maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
+              ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
+            maxHeight: .infinity
           )
-        } else {
-          // Same rule as the hub's Memories destination: the readable-width
-          // cap yields while the detail panel is open so the panel takes new
-          // space instead of eating the list's column.
-          MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-            .frame(
-              maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
-                ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
-              maxHeight: .infinity
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       case 4:
         constrainedListPage(
           TasksPage(
@@ -1873,7 +1845,7 @@ private struct PageContentView: View {
 
 /// Hosts the standalone Conversations page with its own selection state
 /// so tapping a row navigates to the detail view.
-private struct ConversationsPageHost: View {
+struct ConversationsPageHost: View {
   let appState: AppState
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
