@@ -191,6 +191,150 @@ section {
   color: var(--meta);
 }
 
+/* ---- the edition ---- */
+/* These mirror `backend/templates/paper.html` rule for rule, so the edition on screen
+   and the edition on the sheet are visibly the same object. Change both together. */
+
+.edition section {
+  margin-top: 3rem;
+}
+
+.edition h2 {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--meta);
+  margin-bottom: 1.5rem;
+}
+
+.lede {
+  margin-top: 3.5rem;
+}
+
+.lede h1 {
+  color: var(--ink-strong);
+  font-size: clamp(1.875rem, 6.5vw, 2.5rem);
+  line-height: 1.12;
+  font-weight: 400;
+  letter-spacing: -0.019em;
+  text-wrap: balance;
+}
+
+.lede p,
+.loop p {
+  text-wrap: pretty;
+}
+
+.lede p {
+  margin-top: 1.5rem;
+}
+
+.loop + .loop {
+  margin-top: 1.75rem;
+}
+
+/* Furniture again — the age of a thing is stated in the second voice, not in prose. */
+.stamp {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--meta);
+}
+
+.stamp + p {
+  margin-top: 0.75rem;
+}
+
+/* The one place the paper raises its voice: your own words, quoted back at you.
+   Also the only appearance of the accent. */
+.edition blockquote {
+  margin: 1.1rem 0 1.4rem;
+  padding-left: 1.2rem;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-strong);
+  font-style: italic;
+}
+
+.desk-item + .desk-item {
+  margin-top: 1.75rem;
+}
+
+.desk-name {
+  color: var(--ink-strong);
+}
+
+.margin-note {
+  font-style: italic;
+}
+
+/* ---- the hard stop ---- */
+.end {
+  margin-top: 4rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--rule-strong);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--meta);
+}
+
+/* Loading, empty, and failure all print centred and quiet — a paper that has nothing
+   to say says so in the same voice it says everything else. */
+.quiet {
+  margin-top: 3rem;
+  text-align: center;
+  color: var(--meta);
+  text-wrap: pretty;
+}
+
+.quiet .stamp {
+  margin-top: 0.75rem;
+}
+
+/* ---- sign-in ---- */
+.signin {
+  margin-top: 3.5rem;
+  text-align: center;
+}
+
+.signin .actions {
+  margin-top: 2rem;
+}
+
+button.cta {
+  border: 0;
+  cursor: pointer;
+  font-family: var(--mono);
+}
+
+button.cta:disabled {
+  background: var(--meta);
+  cursor: not-allowed;
+}
+
+button.cta:disabled:hover {
+  background: var(--meta);
+}
+
+button.cta-secondary {
+  margin-left: auto;
+  margin-right: auto;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.edition .actions {
+  text-align: center;
+}
+
 /* ---- footer ---- */
 footer {
   margin-top: 5.5rem;
