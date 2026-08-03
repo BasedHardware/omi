@@ -212,14 +212,12 @@ struct DesktopHomeView: View {
           updatePolicyManager.refresh(force: true)
           // Check all permissions on launch
           appState.checkAllPermissions()
-
           // For existing users who haven't indexed files yet, run a background scan
           if !AppBuild.usesLazyDevPermissions
             && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
           {
             scheduleInitialFileIndexing()
           }
-
           // Migration: one-time reset for users whose screenAnalysisEnabled
           // was incorrectly set to false by a bug in syncMonitoringState() that
           // persisted false whenever monitoring stopped for any reason.
@@ -235,7 +233,6 @@ struct DesktopHomeView: View {
             // Push true to server so syncFromServer() doesn't revert it
             Task { await SettingsSyncManager.shared.syncToServer() }
           }
-
           // Named development bundles used to seed screen analysis off to
           // avoid permission prompts. Screen capture no longer requests
           // TCC during startup, so restore the default once: a granted
@@ -250,7 +247,6 @@ struct DesktopHomeView: View {
           }
 
           restorePersistedCaptureServices(reason: "launch")
-
           // Start Crisp chat in background for notifications, scoped to the signed-in user
           CrispManager.shared.start(
             initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
@@ -517,7 +513,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
+      seedTopBarNewSinceIfNeeded()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -555,6 +551,10 @@ struct DesktopHomeView: View {
       return
     }
     consumePendingMainChatRequestForChatFirstShell()
+  }
+
+  private func seedTopBarNewSinceIfNeeded() {
+    topBarNewSinceRaw = topBarNewSinceRaw == 0 ? Date().timeIntervalSince1970 : topBarNewSinceRaw
   }
 
   private func consumePendingMainChatRequestForChatFirstShell() {

@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import Image from 'next/image';
+import Link from '@tschk/moonshine-next/link';
+import Image from '@tschk/moonshine-next/image';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +34,7 @@ export function MarketplaceHeader() {
                   className={cn(
                     'px-4 py-1.5 rounded-full text-sm font-medium',
                     'bg-purple-primary text-white',
-                    'hover:bg-purple-secondary transition-colors'
+                    'hover:bg-purple-secondary transition-colors',
                   )}
                 >
                   Dashboard
@@ -46,7 +46,7 @@ export function MarketplaceHeader() {
                 className={cn(
                   'px-4 py-1.5 rounded-full text-sm font-medium',
                   'bg-white text-gray-900',
-                  'hover:bg-gray-100 transition-colors'
+                  'hover:bg-gray-100 transition-colors',
                 )}
               >
                 Sign In

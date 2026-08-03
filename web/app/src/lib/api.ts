@@ -2048,6 +2048,43 @@ export async function disconnectIntegration(integrationId: string): Promise<void
   });
 }
 
+export interface ChannelBinding {
+  channel: string;
+  linked_at: string;
+}
+
+export interface ChannelStatus {
+  bindings: ChannelBinding[];
+  phone_registered: boolean;
+}
+
+export interface ChannelLinkResponse {
+  channel: string;
+  code: string;
+  expires_at: string;
+  instructions: string;
+}
+
+export async function getChannelStatus(): Promise<ChannelStatus> {
+  return fetchWithAuth<ChannelStatus>('/v1/channels');
+}
+
+export async function createChannelLink(channel: string): Promise<ChannelLinkResponse> {
+  return fetchWithAuth<ChannelLinkResponse>(`/v1/channels/${channel}/link`, {
+    method: 'POST',
+  });
+}
+
+export async function claimChannelLink(
+  channel: string,
+  code: string,
+): Promise<ChannelBinding> {
+  return fetchWithAuth<ChannelBinding>(`/v1/channels/${channel}/claim`, {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
 // ============================================================================
 // Conversation Reprocessing API
 // ============================================================================

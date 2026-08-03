@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { ExternalLink, User } from 'lucide-react';
 import { getOrCreatePersona } from '@/lib/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
 import { isPersonaPublic, personaPublicUrl, personaStatusLabel } from '@/lib/persona';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function PersonaPage() {
   const {
@@ -90,3 +91,5 @@ export default function PersonaPage() {
     </div>
   );
 }
+
+registerMoonshineRoute('/persona', PersonaPage, 'authenticated');

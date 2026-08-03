@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
 import {
   User,
   Bell,
@@ -88,6 +88,8 @@ import {
   exportAllData,
   deleteKnowledgeGraph,
   getIntegrations,
+  getChannelStatus,
+  createChannelLink,
   getIntegrationOAuthUrl,
   disconnectIntegration,
   getAvailablePlans,
@@ -1596,6 +1598,31 @@ function IntegrationsSection({
 }) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
+  const [channelStatus, setChannelStatus] = useState<{
+    bindings: { channel: string; linked_at: string }[];
+  } | null>(null);
+  const [channelLink, setChannelLink] = useState<{
+    channel: string;
+    code: string;
+    expires_at: string;
+    instructions: string;
+  } | null>(null);
+  const [channelLoading, setChannelLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    getChannelStatus()
+      .catch(() => null)
+      .then((status) => setChannelStatus(status));
+  }, []);
+
+  const handleCreateChannelLink = async (channel: string) => {
+    setChannelLoading(channel);
+    try {
+      setChannelLink(await createChannelLink(channel));
+    } finally {
+      setChannelLoading(null);
+    }
+  };
 
   const handleConnect = async (integration: Integration) => {
     if (integration.coming_soon || loadingId) return;
@@ -1646,6 +1673,63 @@ function IntegrationsSection({
 
   return (
     <div className="space-y-6">
+      <Card>
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-bg-tertiary flex items-center justify-center">
+            <MessageSquare className="w-6 h-6 text-text-secondary" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-text-primary font-medium">Messaging channels</h3>
+            <p className="text-sm text-text-tertiary mt-1">
+              Use the same Omi core chat from Telegram, iMessage, or SMS.
+            </p>
+            <div className="mt-4 space-y-3">
+              {['telegram', 'imessage', 'sms'].map((channel) => {
+                const linked = channelStatus?.bindings.some(
+                  (binding) => binding.channel === channel,
+                );
+                const activeLink = channelLink?.channel === channel ? channelLink : null;
+                return (
+                  <div key={channel} className="rounded-xl bg-bg-tertiary/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-text-primary capitalize">
+                          {channel === 'imessage' ? 'iMessage' : channel}
+                        </p>
+                        <p className="text-xs text-text-tertiary">
+                          {linked ? 'Connected' : 'Not connected'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateChannelLink(channel)}
+                        disabled={channelLoading !== null}
+                        className="px-3 py-1.5 rounded-lg bg-white/10 text-text-primary text-xs hover:bg-white/15 disabled:opacity-50"
+                      >
+                        {channelLoading === channel
+                          ? 'Generating…'
+                          : linked
+                            ? 'Generate new code'
+                            : 'Generate code'}
+                      </button>
+                    </div>
+                    {activeLink && (
+                      <div className="mt-3 rounded-lg bg-black/20 p-3 space-y-2">
+                        <p className="font-mono text-xs text-text-primary break-all">
+                          {activeLink.code}
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                          {activeLink.instructions}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {integrations.map((integration) => (
           <Card

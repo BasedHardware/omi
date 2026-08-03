@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import type {
   OmiNotification,
   NotificationType,
@@ -178,31 +178,34 @@ export function useNotifications(): UseNotificationsReturn {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Handle foreground message (defined before useEffect that uses it)
-  const handleForegroundMessage = useCallback((payload: MessagePayload) => {
-    const notification = payloadToNotification(payload);
+  const handleForegroundMessage = useCallback(
+    (payload: MessagePayload) => {
+      const notification = payloadToNotification(payload);
 
-    setNotifications((prev) => {
-      const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      saveNotifications(updated);
-      return updated;
-    });
-
-    // Show browser notification for foreground messages
-    if (Notification.permission === 'granted') {
-      const browserNotif = new Notification(notification.title, {
-        body: notification.body,
-        icon: '/logo.png',
-        tag: notification.id,
+      setNotifications((prev) => {
+        const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
+        saveNotifications(updated);
+        return updated;
       });
 
-      browserNotif.onclick = () => {
-        window.focus();
-        const route = getNotificationRoute(notification);
-        router.push(route);
-        browserNotif.close();
-      };
-    }
-  }, [router]);
+      // Show browser notification for foreground messages
+      if (Notification.permission === 'granted') {
+        const browserNotif = new Notification(notification.title, {
+          body: notification.body,
+          icon: '/logo.png',
+          tag: notification.id,
+        });
+
+        browserNotif.onclick = () => {
+          window.focus();
+          const route = getNotificationRoute(notification);
+          router.push(route);
+          browserNotif.close();
+        };
+      }
+    },
+    [router],
+  );
 
   // Initialize on mount
   useEffect(() => {
@@ -214,9 +217,10 @@ export function useNotifications(): UseNotificationsReturn {
       setNotifications(stored);
 
       // Check basic browser support (without triggering Firebase initialization)
-      const hasNotificationSupport = typeof window !== 'undefined'
-        && 'Notification' in window
-        && 'serviceWorker' in navigator;
+      const hasNotificationSupport =
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        'serviceWorker' in navigator;
       setIsSupported(hasNotificationSupport);
 
       // Get current permission status
@@ -309,7 +313,7 @@ export function useNotifications(): UseNotificationsReturn {
   const markAsRead = useCallback((notificationId: string) => {
     setNotifications((prev) => {
       const updated = prev.map((n) =>
-        n.id === notificationId ? { ...n, read: true } : n
+        n.id === notificationId ? { ...n, read: true } : n,
       );
       saveNotifications(updated);
       return updated;
@@ -347,7 +351,7 @@ export function useNotifications(): UseNotificationsReturn {
       const route = getNotificationRoute(notification);
       router.push(route);
     },
-    [router, markAsRead]
+    [router, markAsRead],
   );
 
   // Unregister token (for logout)

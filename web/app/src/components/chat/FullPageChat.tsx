@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { Send, Sparkles, Trash2, Brain, Paperclip, X } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -110,7 +110,7 @@ export function FullPageChat() {
           preview = URL.createObjectURL(file);
         }
         return { file, preview, uploading: true };
-      })
+      }),
     );
 
     setSelectedFiles((prev) => [...prev, ...newItems]);
@@ -118,29 +118,22 @@ export function FullPageChat() {
     // Upload files
     setIsUploading(true);
     try {
-      const uploadedFiles = await uploadChatFiles(
-        filesToAdd,
-        selectedAppId || undefined
-      );
+      const uploadedFiles = await uploadChatFiles(filesToAdd, selectedAppId || undefined);
 
       // Update items with uploaded IDs
       setSelectedFiles((prev) =>
         prev.map((item) => {
-          const uploadedFile = uploadedFiles.find(
-            (f) => f.name === item.file.name
-          );
+          const uploadedFile = uploadedFiles.find((f) => f.name === item.file.name);
           if (uploadedFile) {
             return { ...item, uploading: false, uploadedId: uploadedFile.id };
           }
           return item;
-        })
+        }),
       );
     } catch (err) {
       console.error('Failed to upload files:', err);
       // Remove failed uploads
-      setSelectedFiles((prev) =>
-        prev.filter((item) => !filesToAdd.includes(item.file))
-      );
+      setSelectedFiles((prev) => prev.filter((item) => !filesToAdd.includes(item.file)));
     } finally {
       setIsUploading(false);
     }
@@ -203,7 +196,10 @@ export function FullPageChat() {
     }
   };
 
-  const canSend = (input.trim() || selectedFiles.some((f) => f.uploadedId)) && !isStreaming && !isUploading;
+  const canSend =
+    (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
+    !isStreaming &&
+    !isUploading;
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
@@ -267,7 +263,7 @@ export function FullPageChat() {
                       'text-text-secondary hover:text-text-primary',
                       'border border-bg-quaternary hover:border-purple-primary/30',
                       'transition-all',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {prompt}
@@ -286,7 +282,7 @@ export function FullPageChat() {
                   transition={{ duration: 0.2 }}
                   className={cn(
                     'flex',
-                    message.sender === 'human' ? 'justify-end' : 'justify-start'
+                    message.sender === 'human' ? 'justify-end' : 'justify-start',
                   )}
                 >
                   {message.sender === 'ai' ? (
@@ -426,9 +422,18 @@ export function FullPageChat() {
                     </div>
                     <div className="bg-bg-secondary border border-bg-tertiary rounded-2xl px-5 py-4">
                       <div className="flex gap-1.5">
-                        <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <div
+                          className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
+                          style={{ animationDelay: '0ms' }}
+                        />
+                        <div
+                          className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
+                          style={{ animationDelay: '150ms' }}
+                        />
+                        <div
+                          className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
+                          style={{ animationDelay: '300ms' }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -443,9 +448,18 @@ export function FullPageChat() {
           {isLoading && messages.length === 0 && (
             <div className="flex justify-center py-12">
               <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div
+                  className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce"
+                  style={{ animationDelay: '0ms' }}
+                />
+                <div
+                  className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <div
+                  className="w-2.5 h-2.5 bg-text-quaternary rounded-full animate-bounce"
+                  style={{ animationDelay: '300ms' }}
+                />
               </div>
             </div>
           )}
@@ -473,9 +487,13 @@ export function FullPageChat() {
                 'p-2 rounded-lg flex-shrink-0',
                 'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
-                'transition-colors'
+                'transition-colors',
               )}
-              title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
+              title={
+                selectedFiles.length >= MAX_FILES
+                  ? `Max ${MAX_FILES} files`
+                  : 'Attach file'
+              }
             >
               <Paperclip className="w-5 h-5" />
             </button>
@@ -504,7 +522,7 @@ export function FullPageChat() {
                 'focus:outline-none focus:ring-2 focus:ring-purple-primary/50 focus:border-purple-primary/50',
                 'transition-all',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
-                'h-[48px] max-h-[200px]'
+                'h-[48px] max-h-[200px]',
               )}
             />
 
@@ -523,7 +541,7 @@ export function FullPageChat() {
                 'flex items-center justify-center',
                 'bg-purple-primary hover:bg-purple-secondary',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
-                'transition-colors'
+                'transition-colors',
               )}
               aria-label="Send message"
             >

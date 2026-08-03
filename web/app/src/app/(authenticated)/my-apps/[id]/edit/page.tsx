@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from '@tschk/moonshine-next/navigation';
+import Link from '@tschk/moonshine-next/link';
 import { AppForm } from '@/components/apps/AppForm';
 import { getApp } from '@/lib/api';
 import type { App } from '@/types/apps';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function EditAppPage() {
   const params = useParams();
@@ -58,3 +59,5 @@ export default function EditAppPage() {
     </div>
   );
 }
+
+registerMoonshineRoute('/my-apps/:id/edit', EditAppPage, 'authenticated');

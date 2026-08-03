@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { usePathname, useRouter } from '@tschk/moonshine-next/navigation';
+import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
 import { GanttChartSquare, MessageCircle, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         'lg:hidden', // Only show on mobile
         'bg-bg-secondary/80 backdrop-blur-md',
         'border-t border-bg-tertiary',
-        'pb-safe' // Safe area inset for devices with home indicators
+        'pb-safe', // Safe area inset for devices with home indicators
       )}
       aria-label="Primary navigation"
     >
@@ -67,7 +67,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
                 'transition-colors duration-150',
                 isActive
                   ? 'bg-purple-primary/10 text-purple-primary'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                  : 'text-text-tertiary hover:text-text-secondary',
               )}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
@@ -92,7 +92,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
             'flex flex-col items-center justify-center',
             'w-14 h-14 rounded-xl',
             'text-text-tertiary hover:text-text-secondary',
-            'transition-colors duration-150'
+            'transition-colors duration-150',
           )}
           aria-label="More options"
         >

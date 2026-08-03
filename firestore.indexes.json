@@ -329,6 +329,24 @@
       ]
     },
     {
+      "collectionGroup": "channel_bindings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "channel",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "memory_outbox",
       "queryScope": "COLLECTION",
       "fields": [

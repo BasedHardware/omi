@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 import { Sparkles, Zap, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 

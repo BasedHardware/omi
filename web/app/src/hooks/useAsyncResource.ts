@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { createResource, createSignal, type Resource } from '@tschk/moonshine';
-import { useResourceValue } from '@/lib/signals';
+import { useResource } from '@tschk/moonshine-react';
 
 export interface AsyncResource<T> {
   data: T | undefined;
@@ -57,7 +57,7 @@ export function useAsyncResource<T>(
     [key, active],
   );
 
-  const { data, loading, error, refetch } = useResourceValue(resource);
+  const { data, loading, error, refetch } = useResource(resource);
 
   // Kicked off here rather than via `immediate: true` at construction: useMemo
   // may run more than once per commit (StrictMode renders twice), and firing

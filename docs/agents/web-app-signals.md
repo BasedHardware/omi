@@ -10,7 +10,7 @@ so the next person does not reintroduce the pattern it replaced.
 |---|---|
 | Read something from the API | `useAsyncResource(key, fetcher)` (`web/app/src/hooks/useAsyncResource.ts`) |
 | A list that is also written optimistically | A signal store — see `createGoalsStore` in `web/app/src/hooks/useGoals.ts` |
-| Subscribe a component to a raw signal | `useSignalValue` / `useResourceValue` (`web/app/src/lib/signals.ts`) |
+| Subscribe a component to a raw signal | `useSignal` / `useResource` from `@tschk/moonshine-react` |
 
 `useAsyncResource` is keyed: change the key and it refetches, pass `null` and it
 holds without fetching. `fetcher` is read when the request runs, so it does not
@@ -38,18 +38,14 @@ Start the load from an effect, not from the store factory or `immediate: true`.
 fetching in the factory fires one request per discarded store. Writing signals
 from an effect is fine — it is not React state.
 
-## Import only the kernel
+## Which package to import
 
-Import `@tschk/moonshine`. Do **not** import `@tschk/moonshine-react`: its entry
-point re-exports an SSR renderer and island hydration that call
-`import(specifier)` with a runtime variable, which neither webpack nor Turbopack
-can resolve, so the Next build fails with module-not-found. Its `exports` map
-exposes only `.`, so the usable half cannot be deep-imported.
-`web/app/src/lib/signals.ts` carries the two `useSyncExternalStore` adapters
-instead; they are the same shape as the upstream ones and are about fifteen
-lines.
+Import the signal kernel from `@tschk/moonshine` and the React bridges
+(`useSignal`, `useResource`) from `@tschk/moonshine-react`.
 
-Moonshine publishes raw TypeScript rather than compiled output, so it is listed
-in `transpilePackages` in `web/app/next.config.js`. It is ISC licensed,
-carries no telemetry, and its kernel entry point has no runtime imports of its
-own.
+Historical note: while `web/app` was still on Next, `@tschk/moonshine-react`
+could not be imported at all — its entry pulls in an SSR renderer and island
+hydration that call `import(specifier)` with a runtime variable, which Turbopack
+cannot resolve, so the build failed with module-not-found. That forced a local
+`useSyncExternalStore` shim. Moonshine's own compiler handles those dynamic
+imports, so the shim is gone and the official bridge is used directly.

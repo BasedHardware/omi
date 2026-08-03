@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 
 import { FeaturedPluginCard } from './plugin-card/FeaturedPluginCard';
 import { CompactPluginCard } from './plugin-card/CompactPluginCard';

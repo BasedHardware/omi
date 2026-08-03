@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react';
 import { createSignal } from '@tschk/moonshine';
-import { useSignalValue } from '@/lib/signals';
+import { useSignal } from '@tschk/moonshine-react';
 import {
   createGoal,
   deleteGoal,
@@ -122,9 +122,9 @@ export function useGoals(): UseGoalsReturn {
     void store.load();
   }, [store]);
 
-  const goals = useSignalValue(store.goals);
-  const loading = useSignalValue(store.loading);
-  const error = useSignalValue(store.error);
+  const goals = useSignal(store.goals);
+  const loading = useSignal(store.loading);
+  const error = useSignal(store.error);
 
   const editGoal = useCallback(
     (id: string, updates: UpdateGoalParams) =>

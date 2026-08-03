@@ -1,37 +1,36 @@
 # web/app — Developer Guide
 
-The signed-in Omi web client (Next.js 16 App Router, React 19). Sibling web
-surfaces live in `web/admin`, `web/frontend`, `web/personas-open-source`.
+The signed-in Omi web client: React 19 on the `@tschk/moonshine` runtime, served
+by Bun. Sibling web surfaces live in `web/admin`, `web/frontend`,
+`web/personas-open-source`.
 
 ## Setup
 
 ```bash
 cd web/app
-npm ci          # the Dockerfile uses the same lockfile path
-npm run dev     # generates the Firebase service worker, then next dev --turbopack
+bun install     # the Dockerfile uses the same bun.lock
+bun run dev     # generates the Firebase service worker, then moonshine dev
 ```
 
-Use npm, not Bun or pnpm: `Dockerfile` runs `npm ci` against `package-lock.json`,
-and a competing lockfile changes what the production image installs.
+Use Bun, not npm or pnpm: `Dockerfile` installs from `bun.lock`, and a competing
+lockfile changes what the production image installs.
 
 ## Quality Gates
 
 | Gate | Command | Status |
 |---|---|---|
-| Types | `npm run typecheck` | enforced |
-| Tests | `npm test` (vitest + jsdom + testing-library) | enforced |
-| Both | `npm run check` — what `./test.sh` and CI run | enforced |
-| Lint | `npm run lint` (`eslint .`) | **not enforced — pre-existing failures** |
+| Types | `bun run typecheck` | enforced |
+| Tests | `bun run test` — `bun test` for the moonshine smoke suite, then vitest for `src/` | enforced |
+| Both | `bun run check` — what `./test.sh` and CI run | enforced |
+| Lint | `bun run lint` (`oxlint`) | not in `check` |
 
-`./test.sh` is the component runner: installs deps if absent, then `npm run
+`./test.sh` is the component runner: installs deps if absent, then `bun run
 check`. Registered in `.github/checks-manifest.yaml` as `web-app-checks`.
+Vitest is scoped to `src/`; `scripts/` is `bun test` only, because the moonshine
+smoke test imports `bun:test`.
 
-Lint is deliberately outside `check`: `eslint-config-next` 16 turned on the
-React Compiler rules and the tree still reports 57 pre-existing errors, so
-wiring it in would fail every PR on day one. 48 are
-`react-hooks/set-state-in-effect` against the fetch-on-mount shape the older
-data hooks use; signal-backed code does not hit it (see State below). Clear the
-backlog before adding `npm run lint` to `check`.
+Lint moved from `eslint` to `oxlint` with the moonshine migration, so the
+`eslint-config-next` React Compiler backlog no longer applies.
 
 ## State
 

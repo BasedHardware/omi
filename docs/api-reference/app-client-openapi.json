@@ -5659,6 +5659,64 @@
         "title": "CategoryEnum",
         "type": "string"
       },
+      "ChannelBindingResponse": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "linked_at": {
+            "format": "date-time",
+            "title": "Linked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "linked_at"
+        ],
+        "title": "ChannelBindingResponse",
+        "type": "object"
+      },
+      "ChannelRevokeResponse": {
+        "properties": {
+          "revoked": {
+            "title": "Revoked",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "revoked"
+        ],
+        "title": "ChannelRevokeResponse",
+        "type": "object"
+      },
+      "ChannelStatusResponse": {
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelBindingResponse"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "phone_registered": {
+            "title": "Phone Registered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bindings",
+          "phone_registered"
+        ],
+        "title": "ChannelStatusResponse",
+        "type": "object"
+      },
       "ChartData": {
         "properties": {
           "chart_type": {
@@ -5985,6 +6043,19 @@
           "verified"
         ],
         "title": "CheckVerificationResponse",
+        "type": "object"
+      },
+      "ClaimChannelRequest": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ClaimChannelRequest",
         "type": "object"
       },
       "CleanerMemory": {
@@ -12752,6 +12823,35 @@
           "event_id"
         ],
         "title": "LinkCalendarEventRequest",
+        "type": "object"
+      },
+      "LinkChannelResponse": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "code",
+          "expires_at",
+          "instructions"
+        ],
+        "title": "LinkChannelResponse",
         "type": "object"
       },
       "LlmTotalCostResponse": {
@@ -31393,6 +31493,354 @@
         "summary": "Reject Candidate",
         "tags": [
           "candidates"
+        ]
+      }
+    },
+    "/v1/channels": {
+      "get": {
+        "operationId": "get_channel_status_v1_channels_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Channel Status",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/{channel}": {
+      "delete": {
+        "operationId": "revoke_channel_v1_channels__channel__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "title": "Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelRevokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Revoke Channel",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/{channel}/claim": {
+      "post": {
+        "operationId": "claim_channel_link_v1_channels__channel__claim_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "title": "Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimChannelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Channel Link",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/{channel}/link": {
+      "post": {
+        "operationId": "issue_channel_link_v1_channels__channel__link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel",
+            "required": true,
+            "schema": {
+              "title": "Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkChannelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Issue Channel Link",
+        "tags": [
+          "channels"
         ]
       }
     },

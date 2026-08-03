@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -68,7 +68,10 @@ export function ConversationSplitView() {
   const [filterDate, setFilterDate] = useState<Date | null>(null);
 
   // Resizable panel width
-  const [panelWidth, setPanelWidth] = useLocalStorage('omi-panel-width', DEFAULT_PANEL_WIDTH);
+  const [panelWidth, setPanelWidth] = useLocalStorage(
+    'omi-panel-width',
+    DEFAULT_PANEL_WIDTH,
+  );
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -109,7 +112,11 @@ export function ConversationSplitView() {
     }
 
     // Add folder filter (only for user folders, not 'all' or 'starred')
-    if (selectedFolderId && selectedFolderId !== FOLDER_ALL && selectedFolderId !== FOLDER_STARRED) {
+    if (
+      selectedFolderId &&
+      selectedFolderId !== FOLDER_ALL &&
+      selectedFolderId !== FOLDER_STARRED
+    ) {
       params.folderId = selectedFolderId;
     }
 
@@ -183,16 +190,19 @@ export function ConversationSplitView() {
   const searchGroupedConversations = useMemo(() => {
     if (!isSearching || searchResults.length === 0) return {};
 
-    return searchResults.reduce((groups, conversation) => {
-      const date = new Date(conversation.started_at || conversation.created_at);
-      const dateKey = formatRelativeDate(date);
+    return searchResults.reduce(
+      (groups, conversation) => {
+        const date = new Date(conversation.started_at || conversation.created_at);
+        const dateKey = formatRelativeDate(date);
 
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(conversation);
-      return groups;
-    }, {} as Record<string, Conversation[]>);
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+        groups[dateKey].push(conversation);
+        return groups;
+      },
+      {} as Record<string, Conversation[]>,
+    );
   }, [isSearching, searchResults]);
 
   // Filter conversations for starred folder
@@ -201,7 +211,7 @@ export function ConversationSplitView() {
       // Filter for starred conversations only
       const starredGroups: Record<string, Conversation[]> = {};
       for (const [date, convs] of Object.entries(groupedConversations)) {
-        const starredConvs = convs.filter(c => c.starred);
+        const starredConvs = convs.filter((c) => c.starred);
         if (starredConvs.length > 0) {
           starredGroups[date] = starredConvs;
         }
@@ -212,7 +222,9 @@ export function ConversationSplitView() {
   }, [selectedFolderId, groupedConversations]);
 
   // Get the conversations to display (search results or regular list, with folder filtering)
-  const displayedConversations = isSearching ? searchGroupedConversations : displayedGroupedConversations;
+  const displayedConversations = isSearching
+    ? searchGroupedConversations
+    : displayedGroupedConversations;
 
   // Get ordered date keys
   const dateKeys = Object.keys(displayedConversations);
@@ -230,7 +242,7 @@ export function ConversationSplitView() {
     return dateB.getTime() - dateA.getTime();
   });
 
-  const isLoading = isSearching ? searchLoading : (listLoading || folderSwitching);
+  const isLoading = isSearching ? searchLoading : listLoading || folderSwitching;
   const isEmpty = !isLoading && orderedKeys.length === 0;
 
   // Clear folder switching state when loading completes
@@ -246,60 +258,75 @@ export function ConversationSplitView() {
   }, []);
 
   // Handle star toggle
-  const handleStarToggle = useCallback(async (id: string, starred: boolean) => {
-    try {
-      await toggleStarred(id, starred);
-      // Refresh the list to update starred status
-      await refresh();
-    } catch (error) {
-      console.error('Failed to toggle starred:', error);
-    }
-  }, [refresh]);
+  const handleStarToggle = useCallback(
+    async (id: string, starred: boolean) => {
+      try {
+        await toggleStarred(id, starred);
+        // Refresh the list to update starred status
+        await refresh();
+      } catch (error) {
+        console.error('Failed to toggle starred:', error);
+      }
+    },
+    [refresh],
+  );
 
   // Handle folder selection with loading state
-  const handleFolderSelect = useCallback((folderId: string) => {
-    if (folderId !== selectedFolderId) {
-      // Starred filter is client-side only, no loading needed
-      // Also, switching between All and Starred doesn't need API call
-      const isClientSideSwitch =
-        (folderId === FOLDER_STARRED || selectedFolderId === FOLDER_STARRED) &&
-        (folderId === FOLDER_ALL || folderId === FOLDER_STARRED) &&
-        (selectedFolderId === FOLDER_ALL || selectedFolderId === FOLDER_STARRED);
+  const handleFolderSelect = useCallback(
+    (folderId: string) => {
+      if (folderId !== selectedFolderId) {
+        // Starred filter is client-side only, no loading needed
+        // Also, switching between All and Starred doesn't need API call
+        const isClientSideSwitch =
+          (folderId === FOLDER_STARRED || selectedFolderId === FOLDER_STARRED) &&
+          (folderId === FOLDER_ALL || folderId === FOLDER_STARRED) &&
+          (selectedFolderId === FOLDER_ALL || selectedFolderId === FOLDER_STARRED);
 
-      if (!isClientSideSwitch) {
-        setFolderSwitching(true);
+        if (!isClientSideSwitch) {
+          setFolderSwitching(true);
+        }
+        setSelectedFolderId(folderId);
       }
-      setSelectedFolderId(folderId);
-    }
-  }, [selectedFolderId]);
+    },
+    [selectedFolderId],
+  );
 
   // Handle search
-  const handleSearch = useCallback((query: string) => {
-    if (query.trim()) {
-      performSearch(query);
-    } else {
-      clearSearch();
-    }
-  }, [performSearch, clearSearch]);
+  const handleSearch = useCallback(
+    (query: string) => {
+      if (query.trim()) {
+        performSearch(query);
+      } else {
+        clearSearch();
+      }
+    },
+    [performSearch, clearSearch],
+  );
 
   // Handle date filter change
-  const handleDateFilterChange = useCallback((date: Date | null) => {
-    setFilterDate(date);
-    setSelectedId(null); // Reset selection to auto-select first from new results
-    // Clear search when changing date filter
-    if (searchQuery) {
-      setSearchQuery('');
-      clearSearch();
-    }
-  }, [searchQuery, clearSearch]);
+  const handleDateFilterChange = useCallback(
+    (date: Date | null) => {
+      setFilterDate(date);
+      setSelectedId(null); // Reset selection to auto-select first from new results
+      // Clear search when changing date filter
+      if (searchQuery) {
+        setSearchQuery('');
+        clearSearch();
+      }
+    },
+    [searchQuery, clearSearch],
+  );
 
   // Handle resize
-  const handleResize = useCallback((delta: number) => {
-    setPanelWidth((prev) => {
-      const newWidth = prev + delta;
-      return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth));
-    });
-  }, [setPanelWidth]);
+  const handleResize = useCallback(
+    (delta: number) => {
+      setPanelWidth((prev) => {
+        const newWidth = prev + delta;
+        return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth));
+      });
+    },
+    [setPanelWidth],
+  );
 
   const handleResetWidth = useCallback(() => {
     setPanelWidth(DEFAULT_PANEL_WIDTH);
@@ -326,7 +353,7 @@ export function ConversationSplitView() {
   }, []);
 
   const toggleSelection = useCallback((id: string) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -340,7 +367,7 @@ export function ConversationSplitView() {
   // Get selected conversations for merge dialog
   const selectedConversations = useMemo(() => {
     const allConvs = isSearching ? searchResults : conversations;
-    return allConvs.filter(c => selectedIds.has(c.id));
+    return allConvs.filter((c) => selectedIds.has(c.id));
   }, [isSearching, searchResults, conversations, selectedIds]);
 
   const handleMergeClick = useCallback(() => {
@@ -390,7 +417,7 @@ export function ConversationSplitView() {
     setDeleteLoading(true);
     try {
       // Delete each selected conversation
-      const deletePromises = Array.from(selectedIds).map(id => deleteConversation(id));
+      const deletePromises = Array.from(selectedIds).map((id) => deleteConversation(id));
       await Promise.all(deletePromises);
 
       // Exit selection mode and close dialog
@@ -453,23 +480,26 @@ export function ConversationSplitView() {
     setShowFolderDialog(true);
   }, []);
 
-  const handleFolderSubmit = useCallback(async (data: CreateFolderRequest | UpdateFolderRequest) => {
-    setFolderActionLoading(true);
-    try {
-      if (editingFolder) {
-        await updateFolder(editingFolder.id, data);
-      } else {
-        await createFolder(data as CreateFolderRequest);
+  const handleFolderSubmit = useCallback(
+    async (data: CreateFolderRequest | UpdateFolderRequest) => {
+      setFolderActionLoading(true);
+      try {
+        if (editingFolder) {
+          await updateFolder(editingFolder.id, data);
+        } else {
+          await createFolder(data as CreateFolderRequest);
+        }
+        setShowFolderDialog(false);
+        setEditingFolder(null);
+        await refreshFolders();
+      } catch (error) {
+        console.error('Failed to save folder:', error);
+      } finally {
+        setFolderActionLoading(false);
       }
-      setShowFolderDialog(false);
-      setEditingFolder(null);
-      await refreshFolders();
-    } catch (error) {
-      console.error('Failed to save folder:', error);
-    } finally {
-      setFolderActionLoading(false);
-    }
-  }, [editingFolder, refreshFolders]);
+    },
+    [editingFolder, refreshFolders],
+  );
 
   const handleDeleteFolderConfirm = useCallback(async () => {
     if (!deletingFolder) return;
@@ -497,26 +527,29 @@ export function ConversationSplitView() {
     }
   }, [selectedIds.size]);
 
-  const handleMoveToFolder = useCallback(async (folderId: string) => {
-    if (selectedIds.size < 1) return;
+  const handleMoveToFolder = useCallback(
+    async (folderId: string) => {
+      if (selectedIds.size < 1) return;
 
-    setMovingToFolderId(folderId);
-    try {
-      await bulkMoveConversationsToFolder(folderId, Array.from(selectedIds));
+      setMovingToFolderId(folderId);
+      try {
+        await bulkMoveConversationsToFolder(folderId, Array.from(selectedIds));
 
-      // Exit selection mode and close dialog
-      setShowMoveDialog(false);
-      setIsSelectionMode(false);
-      setSelectedIds(new Set());
+        // Exit selection mode and close dialog
+        setShowMoveDialog(false);
+        setIsSelectionMode(false);
+        setSelectedIds(new Set());
 
-      // Refresh both folders and conversations
-      await Promise.all([refreshFolders(), refresh()]);
-    } catch (error) {
-      console.error('Failed to move conversations:', error);
-    } finally {
-      setMovingToFolderId(null);
-    }
-  }, [selectedIds, refreshFolders, refresh]);
+        // Refresh both folders and conversations
+        await Promise.all([refreshFolders(), refresh()]);
+      } catch (error) {
+        console.error('Failed to move conversations:', error);
+      } finally {
+        setMovingToFolderId(null);
+      }
+    },
+    [selectedIds, refreshFolders, refresh],
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -555,7 +588,7 @@ export function ConversationSplitView() {
             'flex flex-col h-full overflow-hidden',
             'bg-bg-primary border-r border-bg-tertiary',
             // On mobile, hide list when conversation is selected
-            selectedId ? 'hidden lg:flex' : 'flex'
+            selectedId ? 'hidden lg:flex' : 'flex',
           )}
         >
           {/* Search, Date Filter, and Select - stays with list */}
@@ -581,7 +614,7 @@ export function ConversationSplitView() {
                   'text-sm font-medium transition-colors',
                   isSelectionMode
                     ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
                 {isSelectionMode ? (
@@ -711,7 +744,7 @@ export function ConversationSplitView() {
             'flex-1 flex flex-col min-w-0 h-full overflow-hidden',
             'bg-bg-primary',
             // On mobile, show detail when conversation is selected
-            !selectedId ? 'hidden lg:flex' : 'flex'
+            !selectedId ? 'hidden lg:flex' : 'flex',
           )}
         >
           {selectedId ? (

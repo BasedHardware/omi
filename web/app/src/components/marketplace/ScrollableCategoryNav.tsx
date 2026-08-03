@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 import { useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { categoryMetadata } from './category';

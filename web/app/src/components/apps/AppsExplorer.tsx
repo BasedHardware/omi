@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -65,7 +65,7 @@ function FilterDropdown({
   placeholder?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find(o => o.id === value);
+  const selectedOption = options.find((o) => o.id === value);
 
   return (
     <div className="relative">
@@ -75,11 +75,13 @@ function FilterDropdown({
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
             ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
         <span>{selectedOption?.title || label}</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+        />
       </button>
 
       {isOpen && (
@@ -93,12 +95,12 @@ function FilterDropdown({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary'
+                !value ? 'text-purple-primary' : 'text-text-secondary',
               )}
             >
               {placeholder || `All ${label}s`}
             </button>
-            {options.map(option => (
+            {options.map((option) => (
               <button
                 key={option.id}
                 onClick={() => {
@@ -107,7 +109,7 @@ function FilterDropdown({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                  value === option.id ? 'text-purple-primary' : 'text-text-primary'
+                  value === option.id ? 'text-purple-primary' : 'text-text-primary',
                 )}
               >
                 {option.title}
@@ -139,12 +141,14 @@ function RatingFilter({
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
             ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
         <Star className="w-4 h-4" />
         <span>{value ? `${value}+` : 'Rating'}</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+        />
       </button>
 
       {isOpen && (
@@ -158,12 +162,12 @@ function RatingFilter({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary'
+                !value ? 'text-purple-primary' : 'text-text-secondary',
               )}
             >
               Any rating
             </button>
-            {ratings.map(rating => (
+            {ratings.map((rating) => (
               <button
                 key={rating}
                 onClick={() => {
@@ -172,7 +176,7 @@ function RatingFilter({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-1',
-                  value === rating ? 'text-purple-primary' : 'text-text-primary'
+                  value === rating ? 'text-purple-primary' : 'text-text-primary',
                 )}
               >
                 {rating}+ <Star className="w-3 h-3 fill-current" />
@@ -200,7 +204,7 @@ function SortDropdown({
     { id: 'name_asc', label: 'A-Z' },
     { id: 'name_desc', label: 'Z-A' },
   ];
-  const selected = sortOptions.find(o => o.id === value);
+  const selected = sortOptions.find((o) => o.id === value);
 
   return (
     <div className="relative">
@@ -210,18 +214,20 @@ function SortDropdown({
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value && value !== 'installs_desc'
             ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
         <span>{selected?.label || 'Sort'}</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+        />
       </button>
 
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
           <div className="absolute top-full right-0 mt-1 z-20 min-w-[150px] bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1">
-            {sortOptions.map(option => (
+            {sortOptions.map((option) => (
               <button
                 key={option.id}
                 onClick={() => {
@@ -232,7 +238,7 @@ function SortDropdown({
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
                   value === option.id || (!value && option.id === 'installs_desc')
                     ? 'text-purple-primary'
-                    : 'text-text-primary'
+                    : 'text-text-primary',
                 )}
               >
                 {option.label}
@@ -260,10 +266,14 @@ export function AppsExplorer() {
   const [appGroups, setAppGroups] = useState<AppGroup[]>(appsCache.appGroups || []);
   const [popularApps, setPopularApps] = useState<App[]>(appsCache.popularApps || []);
   const [searchResults, setSearchResults] = useState<App[]>([]);
-  const [installedApps, setInstalledApps] = useState<App[]>(appsCache.installedApps || []);
+  const [installedApps, setInstalledApps] = useState<App[]>(
+    appsCache.installedApps || [],
+  );
   const [myApps, setMyApps] = useState<App[]>(appsCache.myApps || []);
   const [categories, setCategories] = useState<AppCategory[]>(appsCache.categories || []);
-  const [capabilities, setCapabilities] = useState<AppCapability[]>(appsCache.capabilities || []);
+  const [capabilities, setCapabilities] = useState<AppCapability[]>(
+    appsCache.capabilities || [],
+  );
 
   // Track if fetch is in progress
   const fetchingRef = useRef(false);
@@ -345,7 +355,8 @@ export function AppsExplorer() {
   // Search or filter apps
   useEffect(() => {
     async function performSearch() {
-      const hasFilters = filters.category || filters.capability || filters.rating || filters.sort;
+      const hasFilters =
+        filters.category || filters.capability || filters.rating || filters.sort;
       const hasQuery = debouncedQuery.trim().length > 0;
 
       if (!hasFilters && !hasQuery) {
@@ -480,7 +491,8 @@ export function AppsExplorer() {
     appsCache.timestamp = Date.now();
   }, [activeTab]);
 
-  const isShowingSearchResults = debouncedQuery.trim().length > 0 || activeFilterCount > 0;
+  const isShowingSearchResults =
+    debouncedQuery.trim().length > 0 || activeFilterCount > 0;
 
   // Get group title from capability or category
   const getGroupTitle = (group: AppGroup): string => {
@@ -532,7 +544,7 @@ export function AppsExplorer() {
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'explore'
                   ? 'bg-purple-primary text-white'
-                  : 'text-text-secondary hover:bg-bg-tertiary'
+                  : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
               Explore
@@ -543,7 +555,7 @@ export function AppsExplorer() {
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'installed'
                   ? 'bg-purple-primary text-white'
-                  : 'text-text-secondary hover:bg-bg-tertiary'
+                  : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
               Installed
@@ -554,7 +566,7 @@ export function AppsExplorer() {
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'my-apps'
                   ? 'bg-purple-primary text-white'
-                  : 'text-text-secondary hover:bg-bg-tertiary'
+                  : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
               My Apps
@@ -567,7 +579,7 @@ export function AppsExplorer() {
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-xl',
                 'bg-purple-primary text-white font-medium',
-                'hover:bg-purple-primary/90 transition-colors'
+                'hover:bg-purple-primary/90 transition-colors',
               )}
             >
               <Plus className="w-5 h-5" />
@@ -588,7 +600,7 @@ export function AppsExplorer() {
                 'bg-bg-tertiary border border-bg-quaternary',
                 'text-text-primary placeholder:text-text-quaternary',
                 'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                'transition-all'
+                'transition-all',
               )}
             />
             {searchQuery && (
@@ -607,23 +619,23 @@ export function AppsExplorer() {
               label="Category"
               value={filters.category}
               options={categories}
-              onChange={(v) => setFilters(f => ({ ...f, category: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
               placeholder="All categories"
             />
             <FilterDropdown
               label="Capability"
               value={filters.capability}
               options={capabilities}
-              onChange={(v) => setFilters(f => ({ ...f, capability: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, capability: v }))}
               placeholder="All capabilities"
             />
             <RatingFilter
               value={filters.rating}
-              onChange={(v) => setFilters(f => ({ ...f, rating: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, rating: v }))}
             />
             <SortDropdown
               value={filters.sort}
-              onChange={(v) => setFilters(f => ({ ...f, sort: v }))}
+              onChange={(v) => setFilters((f) => ({ ...f, sort: v }))}
             />
             {activeFilterCount > 0 && (
               <button
@@ -654,7 +666,8 @@ export function AppsExplorer() {
               // Search results within tab
               <>
                 <p className="text-sm text-text-tertiary mb-4">
-                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
+                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'}{' '}
+                  found
                 </p>
                 {searchResults.length === 0 ? (
                   <div className="text-center py-12">
@@ -662,7 +675,7 @@ export function AppsExplorer() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {searchResults.map(app => (
+                    {searchResults.map((app) => (
                       <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                     ))}
                   </div>
@@ -677,7 +690,7 @@ export function AppsExplorer() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {getAppsForCurrentTab().map(app => (
+                {getAppsForCurrentTab().map((app) => (
                   <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                 ))}
               </div>
@@ -698,7 +711,7 @@ export function AppsExplorer() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {searchResults.map(app => (
+                {searchResults.map((app) => (
                   <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
                 ))}
               </div>
@@ -718,8 +731,8 @@ export function AppsExplorer() {
 
             {/* Capability/Category groups */}
             {appGroups
-              .filter(group => group.data && group.data.length > 0)
-              .map(group => (
+              .filter((group) => group.data && group.data.length > 0)
+              .map((group) => (
                 <AppGridSection
                   key={getGroupId(group)}
                   title={getGroupTitle(group)}
