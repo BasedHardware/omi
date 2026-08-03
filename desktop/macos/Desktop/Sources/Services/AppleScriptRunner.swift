@@ -52,11 +52,11 @@ enum AppleScriptRunnerError: LocalizedError {
   /// denial sent the model to `request_permission(type: "automation")`, which
   /// probes Apple Events against System Events, answers "granted", and leaves
   /// the actual block in place — so every retry failed the same way.
-  var requiredPermission: String {
+  var requiredPermission: String? {
     switch self {
     case .notPermitted: return "automation"
     case .assistiveAccessDenied: return "accessibility"
-    case .outputLimitExceeded: return "automation"
+    case .outputLimitExceeded: return nil
     case .executionFailed: return "automation"
     }
   }
