@@ -2,6 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+extension Notification.Name {
+  static let chatVerticalWheelPassthrough = Notification.Name("chatVerticalWheelPassthrough")
+}
+
 /// The narrow distance from the live edge that means the reader has actually
 /// returned to it. A generous threshold makes a deliberate small upward scroll
 /// look like "follow the stream" and pulls the reader back down on the next token.
@@ -451,6 +455,7 @@ struct UserScrollDetector: NSViewRepresentable {
     private var wheelGestureOwnsViewport = false
     private var willStartLiveScrollObservation: NSObjectProtocol?
     private var didEndLiveScrollObservation: NSObjectProtocol?
+    private var verticalWheelPassthroughObservation: NSObjectProtocol?
 
     private static let settledBottomDelay: TimeInterval = 0.36
 
@@ -508,6 +513,19 @@ struct UserScrollDetector: NSViewRepresentable {
         ) { [weak self, weak targetScrollView] _ in
           guard let self, let targetScrollView else { return }
           self.finishUserScroll(on: targetScrollView)
+        }
+        verticalWheelPassthroughObservation = NotificationCenter.default.addObserver(
+          forName: .chatVerticalWheelPassthrough,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] notification in
+          guard let self, let targetScrollView else { return }
+          self.beginUserScroll()
+          if let event = notification.userInfo?["event"] as? NSEvent,
+            event.phase.isEmpty, event.momentumPhase.isEmpty
+          {
+            self.scheduleUnphasedWheelEnd(for: targetScrollView)
+          }
         }
 
         let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
@@ -577,6 +595,10 @@ struct UserScrollDetector: NSViewRepresentable {
           NotificationCenter.default.removeObserver(didEndLiveScrollObservation)
         }
         didEndLiveScrollObservation = nil
+        if let verticalWheelPassthroughObservation {
+          NotificationCenter.default.removeObserver(verticalWheelPassthroughObservation)
+        }
+        verticalWheelPassthroughObservation = nil
         if let monitor {
           NSEvent.removeMonitor(monitor)
         }
