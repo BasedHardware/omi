@@ -1,0 +1,71 @@
+web/paper/src/app/globals.css
+  s_6d4a9488ea3cd2::t_cd968c0afd5c01 1-211
+.github/actions/detect-changes/action.yml
+  s_6d4a9488ea3cd2::t_ee435c8b6cb93c 129,135
+  s_6d4a9488ea3cd2::t_99109dcea1d4b2 108
+  s_6d4a9488ea3cd2::t_4e5600e32f02ec 83
+  s_6d4a9488ea3cd2::t_93d3b015fa6006 23-24
+.github/workflows/web-checks.yml
+  s_6d4a9488ea3cd2::t_f818a0188e5005 98
+  s_6d4a9488ea3cd2::t_2bf57fce70fa78 54
+  s_6d4a9488ea3cd2::t_bc8ed122a667a6 20
+  s_6d4a9488ea3cd2::t_b6230ebb307cc4 72-78
+  s_6d4a9488ea3cd2::t_930588c58ef252 134-139
+  s_0c099cae24c74c::t_47728cc6f467b7 140
+scripts/pre-commit
+  s_6d4a9488ea3cd2::t_49a465c1295931 70
+web/paper/src/app/page.tsx
+  s_6d4a9488ea3cd2::t_e84240e297fe37 38
+  s_6d4a9488ea3cd2::t_6868726f13f018 33
+  s_6d4a9488ea3cd2::t_0e3457ffce17b6 1-32,34-37,39-70
+  s_6d4a9488ea3cd2::t_dd62e544cbaf3b 71-74
+web/paper/README.md
+  s_6d4a9488ea3cd2::t_09ed45b2cd484f 1-7
+web/paper/next.config.ts
+  s_6d4a9488ea3cd2::t_8d3a5f68a6ff1d 1-9
+  s_6d4a9488ea3cd2::t_802f73b9f62949 10-12
+web/paper/src/app/layout.tsx
+  s_6d4a9488ea3cd2::t_7991956b28fb04 1-22
+  s_6d4a9488ea3cd2::t_a3a7390c065c39 23-27
+web/paper/package.json
+  s_6d4a9488ea3cd2::t_6f4cce0eeabbc9 6
+  s_6d4a9488ea3cd2::t_83bfec99c1c40a 1-5,7-26
+web/paper/.gitignore
+  s_6d4a9488ea3cd2::t_8183168a8c9ee5 1-41
+web/paper/.prettierrc.js
+  s_6d4a9488ea3cd2::t_74253678b68bf4 1-10
+web/paper/AGENTS.md
+  s_6d4a9488ea3cd2::t_5ad6ae58fc7fe6 1-5
+web/paper/eslint.config.mjs
+  s_6d4a9488ea3cd2::t_8321c015e711d5 1-18
+web/paper/package-lock.json
+  s_6d4a9488ea3cd2::t_cb8a3eb5f134fb 1-6708
+web/paper/postcss.config.mjs
+  s_6d4a9488ea3cd2::t_861015efb4fe44 1-7
+web/paper/tsconfig.json
+  s_6d4a9488ea3cd2::t_23acb8a11f51ad 1-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a27c87b4d7c4e340a6634062f84a904550f9a297",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
