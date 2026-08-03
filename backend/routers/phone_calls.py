@@ -1,3 +1,4 @@
+import os
 import re
 import traceback
 import uuid
@@ -20,6 +21,7 @@ from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
     check_caller_id_verified,
+    check_twilio_voice_number,
     delete_caller_id,
     get_caller_id,
     validate_twilio_signature,
@@ -60,6 +62,17 @@ def _twilio_request_url(request: Request) -> str:
     scheme = forwarded_proto or request.url.scheme
     query = f'?{request.url.query}' if request.url.query else ''
     return f'{scheme}://{host}{request.url.path}{query}'
+
+
+def _select_caller_id(caller_number: str, to_number: str) -> Optional[str]:
+    if not caller_number.startswith('+91') or not to_number.startswith('+91'):
+        return caller_number
+
+    configured_number = os.getenv('TWILIO_NUMBER', '').strip()
+    configured_number = re.sub(r'[\s\-\(\).]+', '', configured_number)
+    if E164_PATTERN.match(configured_number) and not configured_number.startswith('+91'):
+        return configured_number
+    return None
 
 
 # ************************************************
@@ -313,6 +326,11 @@ async def twiml_voice_webhook(request: Request):
         _say(response, 'Invalid destination number format. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
 
+    dial_caller_number = _select_caller_id(caller_number, to_number)
+    if not dial_caller_number:
+        _say(response, 'Calls to India require an international caller ID. Please configure a Twilio voice number.')
+        return Response(content=str(response), media_type='text/xml')
+
     # Final quota + destination check before placing the call. Free-tier users
     # on exhausted monthly buckets or disallowed destinations are turned away
     # here so Twilio never actually dials; we then refuse to count the attempt.
@@ -327,13 +345,14 @@ async def twiml_voice_webhook(request: Request):
         return Response(content=str(response), media_type='text/xml')
 
     # Verify the number is still a valid outgoing caller ID in Twilio
-    is_verified = await run_blocking(critical_executor, check_caller_id_verified, caller_number)
+    caller_id_check = check_twilio_voice_number if dial_caller_number != caller_number else check_caller_id_verified
+    is_verified = await run_blocking(critical_executor, caller_id_check, dial_caller_number)
     print(
-        f"twiml_voice_webhook: caller_id={_redact_phone(caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
+        f"twiml_voice_webhook: caller_id={_redact_phone(dial_caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
     )
 
     if not is_verified:
-        print(f"twiml_voice_webhook: caller_id {_redact_phone(caller_number)} is NOT verified in Twilio!")
+        print(f"twiml_voice_webhook: caller_id {_redact_phone(dial_caller_number)} is NOT verified in Twilio!")
         _say(response, 'Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
@@ -346,7 +365,7 @@ async def twiml_voice_webhook(request: Request):
             _say(response, 'Monthly phone call limit reached. Goodbye.')
             return Response(content=str(response), media_type='text/xml')
 
-    dial_kwargs: Dict[str, Any] = {'caller_id': caller_number}
+    dial_kwargs: Dict[str, Any] = {'caller_id': dial_caller_number}
     if snapshot.max_duration_seconds and snapshot.max_duration_seconds > 0:
         dial_kwargs['time_limit'] = int(snapshot.max_duration_seconds)
     dial = Dial(**dial_kwargs)

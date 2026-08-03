@@ -287,6 +287,35 @@ def test_twiml_success(mock_db, mock_check, mock_sig, client):
 
 
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
+@patch('routers.phone_calls.check_twilio_voice_number', return_value=True)
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_india_uses_international_twilio_number(mock_db, mock_check, mock_sig, client, monkeypatch):
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+919876543210'}
+    monkeypatch.setenv('TWILIO_NUMBER', '+16472874800')
+
+    resp = client.post('/v1/phone/twiml', data={'To': '+919812345678', 'From': 'client:test-uid', 'CallId': 'C1'})
+
+    assert resp.status_code == 200
+    assert '<Dial callerId="+16472874800">' in resp.text
+    mock_check.assert_called_once_with('+16472874800')
+
+
+@patch('routers.phone_calls.validate_twilio_signature', return_value=True)
+@patch('routers.phone_calls.check_twilio_voice_number')
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_india_rejects_without_international_twilio_number(mock_db, mock_check, mock_sig, client, monkeypatch):
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+919876543210'}
+    monkeypatch.delenv('TWILIO_NUMBER', raising=False)
+
+    resp = client.post('/v1/phone/twiml', data={'To': '+919812345678', 'From': 'client:test-uid', 'CallId': 'C1'})
+
+    assert resp.status_code == 200
+    assert 'international caller ID' in resp.text
+    assert '<Dial' not in resp.text
+    mock_check.assert_not_called()
+
+
+@patch('routers.phone_calls.validate_twilio_signature', return_value=True)
 @patch('routers.phone_calls.check_caller_id_verified', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_free_tier_reserves_successful_call(mock_db, mock_check, mock_sig, client, monkeypatch):

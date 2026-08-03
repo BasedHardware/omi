@@ -134,6 +134,12 @@ def check_caller_id_verified(phone_number: str) -> bool:
     return len(outgoing_caller_ids) > 0
 
 
+def check_twilio_voice_number(phone_number: str) -> bool:
+    client = _get_client()
+    numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
+    return any(bool((getattr(number, 'capabilities', None) or {}).get('voice')) for number in numbers)
+
+
 def get_caller_id(phone_number: str) -> Optional[Dict[str, Any]]:
     """
     Get the caller ID record for a verified phone number.
