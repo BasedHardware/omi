@@ -3,17 +3,31 @@ import Foundation
 enum AgentContextAdmissionRetry {
   static func run<Result>(
     expectedContext: AgentContextFreshness?,
-    refresh: () async throws -> AgentContextFreshness,
-    attempt: (AgentContextFreshness?) async throws -> Result
+    gate: AgentContextAdmissionGate,
+    refresh: @escaping @Sendable () async throws -> AgentContextFreshness,
+    attempt: @escaping @Sendable (AgentContextFreshness?) async throws -> Result
   ) async throws -> Result {
+    func admit(_ context: AgentContextFreshness?) async throws -> AgentContextFreshness? {
+      try await gate.withExclusiveAccess {
+        context
+      }
+    }
+
+    func admitRefreshed() async throws -> AgentContextFreshness {
+      try await gate.withExclusiveAccess {
+        try await refresh()
+      }
+    }
+
+    let admittedContext = try await admit(expectedContext)
     do {
-      return try await attempt(expectedContext)
+      return try await attempt(admittedContext)
     } catch let error as BridgeError
       where expectedContext != nil && error.isContextSnapshotProjectionMismatch
     {
       log("AgentClient: canonical context advanced before admission; refreshing and retrying once")
       do {
-        let refreshedContext = try await refresh()
+        let refreshedContext = try await admitRefreshed()
         let result = try await attempt(refreshedContext)
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "chat_bridge",
@@ -114,43 +128,6 @@ enum AgentClient {
       _ operation: @escaping @Sendable () async throws -> Result
     ) async throws -> Result {
       try await contextAdmissionGate.withExclusiveAccess(operation)
-    }
-
-    private func runGatedContextAdmissionRetry(
-      expectedContext: AgentContextFreshness?,
-      refresh: @escaping @Sendable () async throws -> AgentContextFreshness,
-      attempt: @escaping @Sendable (AgentContextFreshness?) async throws -> AgentBridge.QueryResult
-    ) async throws -> AgentBridge.QueryResult {
-      do {
-        return try await attempt(expectedContext)
-      } catch let error as BridgeError
-        where expectedContext != nil && error.isContextSnapshotProjectionMismatch
-      {
-        log("AgentClient: canonical context advanced before admission; refreshing and retrying once")
-        do {
-          let result = try await withContextAdmissionAccess {
-            let refreshedContext = try await refresh()
-            return try await attempt(refreshedContext)
-          }
-          DesktopDiagnosticsManager.shared.recordFallback(
-            area: "chat_bridge",
-            from: "stale_context_snapshot",
-            to: "fresh_context_snapshot",
-            reason: "local_heal",
-            outcome: .recovered
-          )
-          return result
-        } catch {
-          DesktopDiagnosticsManager.shared.recordFallback(
-            area: "chat_bridge",
-            from: "stale_context_snapshot",
-            to: "fresh_context_snapshot",
-            reason: "local_heal",
-            outcome: .exhausted
-          )
-          throw error
-        }
-      }
     }
 
     var isAlive: Bool {
@@ -355,12 +332,15 @@ enum AgentClient {
       sessionID: String,
       controlGeneration: Int
     ) async throws -> ChatFirstPromptReceiptBatch {
-      try await bridge.listChatFirstMaterializationReceipts(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        controlGeneration: controlGeneration
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.listChatFirstMaterializationReceipts(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          controlGeneration: controlGeneration
+        )
+      }
     }
 
     @discardableResult
@@ -371,13 +351,16 @@ enum AgentClient {
       controlGeneration: Int,
       receipts: ChatFirstPromptReceiptBatch
     ) async throws -> Int {
-      try await bridge.acknowledgeChatFirstMaterializationReceipts(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        controlGeneration: controlGeneration,
-        receipts: receipts
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.acknowledgeChatFirstMaterializationReceipts(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          controlGeneration: controlGeneration,
+          receipts: receipts
+        )
+      }
     }
 
     func invokeChatFirstFixtureTaskCard(
@@ -386,12 +369,15 @@ enum AgentClient {
       producingTurnID: String,
       controlGeneration: Int
     ) async throws -> AgentRuntimeProcess.ChatFirstHarnessExecutorReceipt {
-      try await bridge.invokeChatFirstFixtureTaskCard(
-        ownerID: ownerID,
-        sessionID: sessionID,
-        producingTurnID: producingTurnID,
-        controlGeneration: controlGeneration
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.invokeChatFirstFixtureTaskCard(
+          ownerID: ownerID,
+          sessionID: sessionID,
+          producingTurnID: producingTurnID,
+          controlGeneration: controlGeneration
+        )
+      }
     }
 
     func updateJournalTurn(
@@ -435,6 +421,8 @@ enum AgentClient {
       }
     }
 
+    /// Read-only journal snapshot; excluded from `AgentContextAdmissionGate` —
+    /// see gate comment (non-reentrant; no projection advance).
     func listJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -449,6 +437,8 @@ enum AgentClient {
       )
     }
 
+    /// Read-only journal snapshot; excluded from `AgentContextAdmissionGate` —
+    /// see gate comment (non-reentrant; no projection advance).
     func listJournalTurnsForControl(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -573,8 +563,9 @@ enum AgentClient {
       let bridge = bridge
       try Task.checkCancellation()
       return QueryResult(
-        try await runGatedContextAdmissionRetry(
+        try await AgentContextAdmissionRetry.run(
           expectedContext: expectedContext,
+          gate: contextAdmissionGate,
           refresh: {
             try await bridge.getContextSnapshot(
               sessionId: session.sessionId,

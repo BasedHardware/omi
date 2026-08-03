@@ -2,6 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+extension Notification.Name {
+  static let chatVerticalWheelPassthrough = Notification.Name("chatVerticalWheelPassthrough")
+}
+
 /// The narrow distance from the live edge that means the reader has actually
 /// returned to it. A generous threshold makes a deliberate small upward scroll
 /// look like "follow the stream" and pulls the reader back down on the next token.
@@ -438,6 +442,20 @@ struct UserScrollDetector: NSViewRepresentable {
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
     private var settleWorkItem: DispatchWorkItem?
+    /// Where the viewport sat when the current press began, so movement can be
+    /// told apart from a click that never moved anything.
+    private var pressOriginScrollTop: CGFloat?
+    private var pressCandidateOwnsViewport = false
+    private var pressBoundsObservation: NSObjectProtocol?
+    private static let dragMovementEpsilon: CGFloat = 1
+    /// AppKit may route dozens of wheel deltas through one trackpad gesture.
+    /// Reader ownership crosses into SwiftUI once per gesture, not once per
+    /// delta, so a long lazy transcript is not invalidated while AppKit is
+    /// still delivering momentum to its current scroll view.
+    private var wheelGestureOwnsViewport = false
+    private var willStartLiveScrollObservation: NSObjectProtocol?
+    private var didEndLiveScrollObservation: NSObjectProtocol?
+    private var verticalWheelPassthroughObservation: NSObjectProtocol?
 
     private static let settledBottomDelay: TimeInterval = 0.36
 
@@ -474,6 +492,42 @@ struct UserScrollDetector: NSViewRepresentable {
         stop()
         installedScrollView = targetScrollView
 
+        // AppKit owns the lifecycle of a trackpad/wheel gesture, including
+        // momentum. A wall-clock debounce can fire during a brief gap in a
+        // fast gesture and incorrectly decide that the reader settled at the
+        // live edge. That re-arms follow mode and the next streaming/layout
+        // update snaps the transcript back to the bottom. Observe the native
+        // live-scroll boundary instead, so ownership cannot return until
+        // AppKit says the complete gesture (momentum included) has ended.
+        willStartLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.willStartLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.beginUserScroll()
+        }
+        didEndLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.didEndLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] _ in
+          guard let self, let targetScrollView else { return }
+          self.finishUserScroll(on: targetScrollView)
+        }
+        verticalWheelPassthroughObservation = NotificationCenter.default.addObserver(
+          forName: .chatVerticalWheelPassthrough,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] notification in
+          guard let self, let targetScrollView else { return }
+          self.beginUserScroll()
+          if let event = notification.userInfo?["event"] as? NSEvent,
+            event.phase.isEmpty, event.momentumPhase.isEmpty
+          {
+            self.scheduleUnphasedWheelEnd(for: targetScrollView)
+          }
+        }
+
         let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
           guard let self else { return event }
           guard event.window == targetScrollView.window else { return event }
@@ -482,22 +536,43 @@ struct UserScrollDetector: NSViewRepresentable {
             guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
             guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
             self.onUserScroll()
+            self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
           } else {
-            let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
-            guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-            if event.type == .scrollWheel {
+            switch event.type {
+            case .scrollWheel:
+              let wheelLocation = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(wheelLocation) else { break }
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
-                self.onUserScroll()
+                self.beginUserScroll()
+                if event.phase.isEmpty, event.momentumPhase.isEmpty {
+                  self.scheduleUnphasedWheelEnd(for: targetScrollView)
+                }
               }
-            } else {
-              self.onUserScroll()
+            case .leftMouseDown:
+              // A press is not viewport movement. Clicking inside the transcript
+              // to focus the window, select text, or hit a control used to claim
+              // scroll ownership outright, which cancelled the one-shot launch
+              // placement and left a freshly opened chat stranded at the top of
+              // its history. Open a candidate instead; only real displacement of
+              // this clip view promotes it to ownership.
+              let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(locationInScrollView) else { break }
+              self.beginPressCandidate(on: targetScrollView)
+            case .leftMouseUp:
+              self.endPressCandidate(on: targetScrollView)
+            default:
+              // Deliberately not bounds-checked: a scrollbar drag and a
+              // selection autoscroll both leave the transcript's bounds while
+              // still moving it, and dropping those events lost the reader's
+              // ownership exactly when they were moving fastest.
+              self.promotePressCandidateIfMoved(on: targetScrollView)
             }
           }
-          self.scheduleSettledBottomChecks(for: targetScrollView)
           return event
         }
         monitor = NSEvent.addLocalMonitorForEvents(
-          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown], handler: handler)
+          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown],
+          handler: handler)
       }
     }
 
@@ -505,6 +580,25 @@ struct UserScrollDetector: NSViewRepresentable {
       MainActor.assumeIsolated {
         settleWorkItem?.cancel()
         settleWorkItem = nil
+        if let pressBoundsObservation {
+          NotificationCenter.default.removeObserver(pressBoundsObservation)
+        }
+        pressBoundsObservation = nil
+        pressOriginScrollTop = nil
+        pressCandidateOwnsViewport = false
+        wheelGestureOwnsViewport = false
+        if let willStartLiveScrollObservation {
+          NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
+        }
+        willStartLiveScrollObservation = nil
+        if let didEndLiveScrollObservation {
+          NotificationCenter.default.removeObserver(didEndLiveScrollObservation)
+        }
+        didEndLiveScrollObservation = nil
+        if let verticalWheelPassthroughObservation {
+          NotificationCenter.default.removeObserver(verticalWheelPassthroughObservation)
+        }
+        verticalWheelPassthroughObservation = nil
         if let monitor {
           NSEvent.removeMonitor(monitor)
         }
@@ -532,11 +626,97 @@ struct UserScrollDetector: NSViewRepresentable {
       }
     }
 
-    private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
-      // A check from an earlier wheel event must not survive into a later
-      // gesture. The old pair of independent timers could observe a transient
-      // live-edge position and re-enable follow mode after the reader had
-      // already started scrolling away.
+    @MainActor
+    private func beginPressCandidate(on scrollView: NSScrollView) {
+      pressOriginScrollTop = Self.scrollTop(of: scrollView)
+      pressCandidateOwnsViewport = false
+      // A scrollbar track click repositions the viewport during mouse-down and
+      // may never produce a drag event, so watch the clip view rather than
+      // waiting for one.
+      scrollView.contentView.postsBoundsChangedNotifications = true
+      pressBoundsObservation = NotificationCenter.default.addObserver(
+        forName: NSView.boundsDidChangeNotification,
+        object: scrollView.contentView,
+        queue: .main
+      ) { [weak self, weak scrollView] _ in
+        guard let self, let scrollView else { return }
+        MainActor.assumeIsolated { self.promotePressCandidateIfMoved(on: scrollView) }
+      }
+    }
+
+    @MainActor
+    private func promotePressCandidateIfMoved(on scrollView: NSScrollView) {
+      guard let origin = pressOriginScrollTop, !pressCandidateOwnsViewport else { return }
+      guard abs(Self.scrollTop(of: scrollView) - origin) >= Self.dragMovementEpsilon else { return }
+      pressCandidateOwnsViewport = true
+      onUserScroll()
+    }
+
+    @MainActor
+    private func endPressCandidate(on scrollView: NSScrollView) {
+      let ownedViewport = pressCandidateOwnsViewport
+      if let observation = pressBoundsObservation {
+        NotificationCenter.default.removeObserver(observation)
+      }
+      pressBoundsObservation = nil
+      pressOriginScrollTop = nil
+      pressCandidateOwnsViewport = false
+      guard ownedViewport else { return }
+      scheduleDiscreteInputSettledBottomCheck(for: scrollView)
+    }
+
+    private func beginUserScroll() {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      guard !wheelGestureOwnsViewport else { return }
+      wheelGestureOwnsViewport = true
+      onUserScroll()
+    }
+
+    private func finishUserScroll(on scrollView: NSScrollView) {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      wheelGestureOwnsViewport = false
+      // The notification is delivered at the end of AppKit's live-scroll
+      // transaction. Read the final clip bounds on the next main turn, after
+      // the scroll view has committed its terminal position.
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func scheduleUnphasedWheelEnd(for scrollView: NSScrollView) {
+      // Detent wheels and synthetic classic-wheel events do not always emit
+      // AppKit's live-scroll start/end notifications. Debounce only that
+      // unphased path. Trackpad and momentum events use didEndLiveScroll and
+      // never depend on this wall-clock fallback.
+      settleWorkItem?.cancel()
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self else { return }
+        self.wheelGestureOwnsViewport = false
+        guard let scrollView, Self.isAtBottom(scrollView) else {
+          self.settleWorkItem = nil
+          return
+        }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Self.settledBottomDelay,
+        execute: workItem
+      )
+    }
+
+    private func scheduleDiscreteInputSettledBottomCheck(for scrollView: NSScrollView) {
+      // Keyboard navigation and scrollbar mouse interaction do not reliably
+      // participate in the live-scroll notification lifecycle. Keep a bounded
+      // fallback for those discrete inputs only; wheel/trackpad gestures must
+      // never use this timer because momentum can outlive it.
       settleWorkItem?.cancel()
       let workItem = DispatchWorkItem { [weak self, weak scrollView] in
         guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
@@ -550,21 +730,27 @@ struct UserScrollDetector: NSViewRepresentable {
       )
     }
 
+    private static func scrollTop(of scrollView: NSScrollView) -> CGFloat {
+      MainActor.assumeIsolated {
+        guard let documentView = scrollView.documentView else { return 0 }
+        let clipBounds = scrollView.contentView.bounds
+        return ChatScrollLiveEdge.topBasedScrollOffset(
+          clipOriginY: clipBounds.origin.y,
+          viewportHeight: clipBounds.height,
+          documentHeight: documentView.frame.height,
+          isDocumentFlipped: documentView.isFlipped
+        )
+      }
+    }
+
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
       MainActor.assumeIsolated {
         guard let documentView = scrollView.documentView else { return false }
         let clipBounds = scrollView.contentView.bounds
-        let documentHeight = documentView.frame.height
-        let scrollTop = ChatScrollLiveEdge.topBasedScrollOffset(
-          clipOriginY: clipBounds.origin.y,
-          viewportHeight: clipBounds.height,
-          documentHeight: documentHeight,
-          isDocumentFlipped: documentView.isFlipped
-        )
-        let visibleMaxY = scrollTop + clipBounds.height
+        let visibleMaxY = scrollTop(of: scrollView) + clipBounds.height
         return ChatScrollLiveEdge.isAtBottom(
           visibleMaxY: visibleMaxY,
-          documentHeight: documentHeight
+          documentHeight: documentView.frame.height
         )
       }
     }
@@ -672,6 +858,12 @@ struct ChatScrollContainer<Content: View>: View {
       userScrollEndWorkItem = endWork
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
     } onScrollSettledAtBottom: {
+      // Same contract as ChatMessagesView: the detector only reports a settle
+      // once the input finished, so release the wall-clock latch here rather
+      // than consulting it — it is still true on this very run-loop turn.
+      userScrollEndWorkItem?.cancel()
+      userScrollEndWorkItem = nil
+      userIsScrolling = false
       guard
         ChatScrollLiveEdge.canResumeFollowing(
           source: .settledUserScroll,
@@ -680,7 +872,6 @@ struct ChatScrollContainer<Content: View>: View {
         ), scrollMode == .freeScrolling
       else { return }
       cancelAllPendingScrolls()
-      userIsScrolling = false
       scrollMode = .followingBottom
       hasActivityBelow = false
     }

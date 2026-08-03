@@ -5,6 +5,8 @@ OMI Desktop App for macOS (Swift)
 
 ## Logs & Debugging
 
+For difficult SwiftUI/AppKit runtime bugs—stale views, lost input, layout loops, jumps, beachballs, or fast-interaction failures—follow [`docs/swiftui-appkit-runtime-debugging.md`](docs/swiftui-appkit-runtime-debugging.md).
+
 ### Local App Logs
 - **App log file**: `/private/tmp/omi.log` (production). Each non-production
   launch writes to its own owner-only log; ask the running named bundle for its

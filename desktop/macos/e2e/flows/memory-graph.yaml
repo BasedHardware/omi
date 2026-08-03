@@ -6,7 +6,8 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   # The graph snapshot action uses the paged canonical fetch and its
-  # compatibility fallback owned by APIClient+Settings.
+  # compatibility fallback owned by APIClient+KnowledgeGraph.
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+KnowledgeGraph.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
 preconditions:
   - automation_bridge_ready

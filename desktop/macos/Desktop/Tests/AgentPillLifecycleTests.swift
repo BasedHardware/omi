@@ -534,7 +534,7 @@ import XCTest
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
     XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
     XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
-    XCTAssertTrue(scrollSource.contains("scheduleSettledBottomChecks"))
+    XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow"))
     XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
     XCTAssertTrue(scrollSource.contains("scrollMode = .freeScrolling"))
     XCTAssertTrue(scrollSource.contains("if scrollMode == .followingBottom"))
@@ -980,7 +980,10 @@ import XCTest
     XCTAssertTrue(source.contains("initialRestoreState = .pending"))
     XCTAssertTrue(source.contains("completesInitialRestore"))
     XCTAssertTrue(source.contains("initialRestoreState = .completed"))
-    XCTAssertTrue(source.contains(".defaultScrollAnchor(.bottom)"))
+    XCTAssertFalse(
+      source.contains(".defaultScrollAnchor(.bottom)"),
+      "launch placement must remain cancelable instead of becoming a persistent bottom anchor"
+    )
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertFalse(
@@ -996,9 +999,15 @@ import XCTest
     XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
     XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
     XCTAssertTrue(source.contains("ChatPromptRowAnchorReporter"))
-    XCTAssertTrue(
-      source.contains(
-        "    scrollMode = .followingBottom\n    hasActivityBelow = false\n    userIsScrolling = false"))
+    // omi-test-quality: source-inspection -- static contract: a local send may
+    // enter follow mode, but must never clear the reader's in-flight gesture
+    // latch to do it; the behavioral coverage is in
+    // ChatTranscriptGestureHarnessTests.
+    XCTAssertTrue(source.contains("    scrollMode = .followingBottom\n    hasActivityBelow = false"))
+    XCTAssertFalse(
+      source.contains("    hasActivityBelow = false\n    userIsScrolling = false"),
+      "a send must not clear the reader's gesture latch in order to seize the viewport"
+    )
     XCTAssertFalse(source.contains("Find the last user message"))
   }
 

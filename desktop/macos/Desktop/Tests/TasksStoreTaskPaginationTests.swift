@@ -70,6 +70,26 @@ final class TasksStoreTaskPaginationTests: XCTestCase {
 
     XCTAssertTrue(TasksStore.activeDatedOnly([cancelledDated]).isEmpty)
     XCTAssertTrue(TasksStore.noDeadlineOnly([deletedUndated]).isEmpty)
+    XCTAssertEqual(TasksStore.apiDatedBucketCount(in: [cancelledDated]), 1)
+    XCTAssertEqual(
+      TasksStore.apiDatedBucketCount(in: TasksStore.activeDatedOnly([cancelledDated])),
+      0
+    )
+  }
+
+  func testApiDatedBucketCountIncludesRetiredRowsForNullDueBoundary() {
+    let active = task(id: "active", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let retired = TaskActionItem(
+      id: "retired",
+      description: "retired",
+      completed: false,
+      createdAt: createdAt,
+      dueAt: Date(timeIntervalSince1970: 1_800_000_000),
+      taskStatus: "cancelled"
+    )
+
+    XCTAssertEqual(TasksStore.apiDatedBucketCount(in: [active, retired]), 2)
+    XCTAssertEqual(TasksStore.activeDatedOnly([active, retired]).count, 1)
   }
 
   func testStableDeduplicationKeepsFirstOccurrenceAcrossBuckets() {

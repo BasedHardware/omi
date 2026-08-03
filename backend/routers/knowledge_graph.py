@@ -18,9 +18,14 @@ router = APIRouter()
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 KnowledgeGraphLoader = Callable[[str], Payload]
+CanonicalKnowledgeGraphLoader = Callable[..., Payload]
 RateLimitFactory = Callable[[Any, str], Any]
 RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
 get_knowledge_graph_payload: KnowledgeGraphLoader = cast(KnowledgeGraphLoader, getattr(kg_db, "get_knowledge_graph"))
+get_canonical_knowledge_graph_payload: CanonicalKnowledgeGraphLoader = cast(
+    CanonicalKnowledgeGraphLoader,
+    getattr(canonical_graph_service, "get_canonical_knowledge_graph"),
+)
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
     "Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."

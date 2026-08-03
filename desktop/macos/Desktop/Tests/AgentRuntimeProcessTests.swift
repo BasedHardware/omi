@@ -206,6 +206,24 @@ private actor CredentialFreeControlStartProbe {
   }
 }
 
+private actor ContextAdmissionRetryTestState {
+  private(set) var attempts: [AgentContextFreshness?] = []
+  private(set) var refreshCount = 0
+
+  func recordRefresh() {
+    refreshCount += 1
+  }
+
+  func recordAttempt(_ context: AgentContextFreshness?) -> Int {
+    attempts.append(context)
+    return attempts.count
+  }
+
+  func snapshot() -> (attempts: [AgentContextFreshness?], refreshCount: Int) {
+    (attempts, refreshCount)
+  }
+}
+
 final class AgentRuntimeProcessTests: XCTestCase {
   func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
     let environment = [
@@ -1484,27 +1502,29 @@ final class AgentRuntimeProcessTests: XCTestCase {
       rendererFingerprint: "renderer-v2",
       capabilityVersion: "capabilities-v2"
     )
-    var attempts: [AgentContextFreshness?] = []
-    var refreshCount = 0
+    let state = ContextAdmissionRetryTestState()
 
+    let gate = AgentContextAdmissionGate()
     let result: String = try await AgentContextAdmissionRetry.run(
       expectedContext: initial,
+      gate: gate,
       refresh: {
-        refreshCount += 1
+        await state.recordRefresh()
         return refreshed
       },
       attempt: { context in
-        attempts.append(context)
-        if attempts.count == 1 {
-          throw self.contextProjectionMismatchError()
+        let attemptNumber = await state.recordAttempt(context)
+        if attemptNumber == 1 {
+          throw Self.contextProjectionMismatchBridgeError()
         }
         return "admitted"
       }
     )
 
+    let snapshot = await state.snapshot()
     XCTAssertEqual(result, "admitted")
-    XCTAssertEqual(refreshCount, 1)
-    XCTAssertEqual(attempts, [initial, refreshed])
+    XCTAssertEqual(snapshot.refreshCount, 1)
+    XCTAssertEqual(snapshot.attempts, [initial, refreshed])
   }
 
   func testContextAdmissionGateConvergesAfterWarmupContextAdvance() async throws {
@@ -1515,33 +1535,33 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let gate = AgentContextAdmissionGate()
     let queuedAdvance = ContextProjectionTaskBox()
-    let admission = Task { () async throws -> (String, [String]) in
-      do {
-        _ = await harness.recordAdmissionAttempt()
-        let currentContext = await harness.freshness()
-        guard warmupContext == currentContext else {
-          throw BridgeError.agentError("context_snapshot_projection_mismatch")
-        }
-        return ("admitted", await harness.snapshot())
-      } catch let error as BridgeError {
-        guard case .agentError("context_snapshot_projection_mismatch") = error else { throw error }
-        return try await gate.withExclusiveAccess { () -> (String, [String]) in
-          await queuedAdvance.store(
-            Task {
-              try? await gate.withExclusiveAccess {
-                await harness.advance("context_advanced_during_admission")
-              }
-            })
-          await Task.yield()
-          let refreshedContext = await harness.freshness()
+    let admission = Task { () throws -> (String, [String]) in
+      await queuedAdvance.store(
+        Task {
+          do {
+            try await gate.withExclusiveAccess {
+              await harness.advance("context_advanced_during_admission")
+            }
+          } catch {
+            // Cancellation while waiting for the gate is expected in some races.
+          }
+        })
+      await Task.yield()
+
+      let result: String = try await AgentContextAdmissionRetry.run(
+        expectedContext: warmupContext,
+        gate: gate,
+        refresh: { await harness.freshness() },
+        attempt: { candidate in
           _ = await harness.recordAdmissionAttempt()
-          let retryContext = await harness.freshness()
-          guard refreshedContext == retryContext else {
+          let currentContext = await harness.freshness()
+          guard candidate == currentContext else {
             throw BridgeError.agentError("context_snapshot_projection_mismatch")
           }
-          return ("admitted", await harness.snapshot())
+          return "admitted"
         }
-      }
+      )
+      return (result, await harness.snapshot())
     }
 
     let (result, eventsInsideAdmission) = try await admission.value
@@ -1553,13 +1573,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
       [
         "warmup",
         "context_advanced_between_warmup_and_admission",
+        "context_advanced_during_admission",
         "admission_attempt_1",
         "admission_attempt_2",
       ],
-      "a queued context writer must not advance the projection between refresh and the bounded retry"
+      "refresh+admit stay under the gate; queued writers may advance during attempts outside it"
     )
     let finalEvents = await harness.snapshot()
-    XCTAssertEqual(finalEvents.last, "context_advanced_during_admission")
+    XCTAssertEqual(finalEvents.last, "admission_attempt_2")
   }
 
   func testContextAdmissionGateCancelledWaiterDoesNotStealTurn() async throws {
@@ -1622,19 +1643,20 @@ final class AgentRuntimeProcessTests: XCTestCase {
       rendererFingerprint: "renderer-v2",
       capabilityVersion: "capabilities-v2"
     )
-    var attempts: [AgentContextFreshness?] = []
-    var refreshCount = 0
+    let state = ContextAdmissionRetryTestState()
 
+    let gate = AgentContextAdmissionGate()
     do {
       let _: String = try await AgentContextAdmissionRetry.run(
         expectedContext: initial,
+        gate: gate,
         refresh: {
-          refreshCount += 1
+          await state.recordRefresh()
           return refreshed
         },
         attempt: { context in
-          attempts.append(context)
-          throw self.contextProjectionMismatchError()
+          _ = await state.recordAttempt(context)
+          throw Self.contextProjectionMismatchBridgeError()
         }
       )
       XCTFail("expected the second projection mismatch to fail closed")
@@ -1644,8 +1666,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       XCTFail("unexpected error: \(error)")
     }
 
-    XCTAssertEqual(refreshCount, 1)
-    XCTAssertEqual(attempts, [initial, refreshed])
+    let snapshot = await state.snapshot()
+    XCTAssertEqual(snapshot.refreshCount, 1)
+    XCTAssertEqual(snapshot.attempts, [initial, refreshed])
   }
 
   func testSessionQueryUsesGatedRetryWithoutHoldingGateForStreaming() throws {
@@ -1655,7 +1678,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let sessionQueryEnd = try XCTUnwrap(
       source.range(of: "  static func makeSession", range: sessionQueryStart.upperBound..<source.endIndex))
     let sessionQueryBody = String(source[sessionQueryStart.lowerBound..<sessionQueryEnd.lowerBound])
-    XCTAssertTrue(sessionQueryBody.contains("runGatedContextAdmissionRetry("))
+    XCTAssertTrue(sessionQueryBody.contains("AgentContextAdmissionRetry.run("))
     XCTAssertFalse(
       sessionQueryBody.contains(
         "withContextAdmissionAccess {\n        try Task.checkCancellation()\n        return QueryResult("),
@@ -1685,6 +1708,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   private func contextProjectionMismatchError() -> BridgeError {
+    Self.contextProjectionMismatchBridgeError()
+  }
+
+  private static func contextProjectionMismatchBridgeError() -> BridgeError {
     .agentRuntimeFailure(
       AgentRuntimeFailure(
         code: "runtime_query_failed",

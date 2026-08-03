@@ -270,7 +270,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   @ViewBuilder
   private func scrollContent(proxy: ScrollViewProxy) -> some View {
     ScrollView {
-      LazyVStack(spacing: OmiSpacing.lg) {
+      // Keep transcript rows eagerly measured. LazyVStack estimates the heights
+      // of off-screen rich Markdown rows; as those rows materialize during a
+      // fast gesture, its document height can change by tens of thousands of
+      // points and AppKit preserves the wrong visual anchor. The transcript is
+      // already capped by ChatTranscriptWindow, so stable geometry is the more
+      // important optimization here.
+      VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         messageContent
       }
@@ -284,10 +290,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
 
-      // Invisible anchor lives OUTSIDE the LazyVStack so it is always
-      // eagerly rendered. Inside LazyVStack it may not exist in the view
-      // hierarchy when scrollTo is first called (lazy evaluation), causing
-      // the scroll to jump to an estimated — often empty — position.
+      // Keep the live-edge anchor outside the message stack so it remains a
+      // stable, dedicated target for ScrollViewReader.
       if !messages.isEmpty {
         Color.clear
           .frame(height: 1)
@@ -300,7 +304,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // re-enter SwiftUI's AttributeGraph layout pass indefinitely on long
     // histories.
     .scrollIndicators(.hidden)
-    .defaultScrollAnchor(.bottom)
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
@@ -339,8 +342,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - React to isSending (send started)
     .onChange(of: isSending) { oldValue, newValue in
       if newValue && !oldValue && localSendToken == nil {
+        // A send is deliberate, so it may reclaim the live edge — but not out
+        // from under a reader whose gesture is still in flight. Clearing the
+        // latch unconditionally let a send this reader did not make (poll,
+        // sync, another surface) teleport them to the bottom mid-scroll.
+        guard !userIsScrolling else {
+          hasActivityBelow = true
+          return
+        }
         cancelPendingScrollsForUserInteraction()
-        userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
         scrollToBottom(proxy: proxy)
@@ -472,11 +482,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// view unless the user explicitly scrolls away.
   private func handleLocalSend(proxy: ScrollViewProxy) {
     guard !messages.isEmpty else { return }
+    // The reader typed and hit send, so following is what they asked for —
+    // unless a gesture is genuinely in flight, in which case their hand is
+    // still on the trackpad and the viewport is still theirs.
+    guard !userIsScrolling else {
+      hasActivityBelow = true
+      return
+    }
 
     cancelPendingScrollsForUserInteraction()
     scrollMode = .followingBottom
     hasActivityBelow = false
-    userIsScrolling = false
     scrollToBottom(proxy: proxy)
     scheduleInitialScroll(proxy: proxy, delay: 0.1)
   }
@@ -690,6 +706,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         userScrollEndWorkItem = endWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
       } onScrollSettledAtBottom: {
+        // The detector reports a settle only once the input that produced it
+        // genuinely finished: AppKit's `didEndLiveScroll` for wheel/trackpad
+        // (momentum included), or the bounded timer for keyboard and scrollbar
+        // input. Both are stronger evidence than the wall-clock
+        // `userIsScrolling` latch, which exists only to stop programmatic
+        // scrolls fighting a gesture still in flight. Consulting the latch here
+        // made this resume unreachable: `didEndLiveScroll` delivers on the very
+        // next main-thread turn, ~0.3s before the latch clears, so a reader who
+        // returned to the live edge could never resume live following.
+        userScrollEndWorkItem?.cancel()
+        userScrollEndWorkItem = nil
+        userIsScrolling = false
         guard
           ChatScrollLiveEdge.canResumeFollowing(
             source: .settledUserScroll,
@@ -698,7 +726,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           ), scrollMode == .freeScrolling
         else { return }
         cancelAllPendingScrolls()
-        userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
         transcriptGeometry.setFollowingLiveEdge(true)

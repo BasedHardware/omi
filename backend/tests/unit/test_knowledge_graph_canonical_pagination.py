@@ -315,6 +315,20 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
 
 
+def test_assertion_loader_rechecks_account_generation_before_fetch():
+    stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
+    db = _fake_db_for([(stale_item, stale_assertion)])
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        ["stale-generation"],
+        account_generation=4,
+        db_client=db,
+    )
+
+    assert loaded == []
+
+
 def test_underfilled_empty_item_window_advances_without_overlap(monkeypatch):
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
     stale_item, stale_assertion = _assertion_and_item(
@@ -420,3 +434,75 @@ def test_canonical_route_fails_closed_for_invalid_cursor(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "invalid_or_stale_cursor"
+
+
+def test_canonical_route_maps_read_unavailable_to_503(monkeypatch):
+    monkeypatch.setattr(
+        kg_router.canonical_graph_service,
+        "get_canonical_knowledge_graph",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            kg.CanonicalGraphReadUnavailable("malformed_memory_state_head")
+        ),
+    )
+    app = FastAPI()
+    app.include_router(kg_router.router)
+    app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: UID
+
+    response = TestClient(app).get("/v1/knowledge-graph/canonical")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "canonical_graph_unavailable"
+
+
+def test_canonical_graph_retries_once_when_revision_changes_during_read(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    valid_row = _assertion_and_item("valid", 1)
+    db = _fake_db_for([valid_row])
+    original_read = kg._read_canonical_graph_revision
+    revision_reads = 0
+
+    def flaky_read(uid: str, *, db_client):
+        nonlocal revision_reads
+        revision_reads += 1
+        revision = original_read(uid, db_client=db_client)
+        if revision_reads == 2:
+            return kg._CanonicalGraphRevision(
+                account_generation=revision.account_generation,
+                commit_sequence=revision.commit_sequence + 1,
+                head_commit_id="head-changed",
+            )
+        return revision
+
+    monkeypatch.setattr(kg, "_read_canonical_graph_revision", flaky_read)
+
+    page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert _page_memory_ids(page) == {"valid"}
+    assert revision_reads == 4
+
+
+def test_canonical_graph_fails_after_bounded_revision_retry_exhausted(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    valid_row = _assertion_and_item("valid", 1)
+    db = _fake_db_for([valid_row])
+    original_read = kg._read_canonical_graph_revision
+    revision_reads = 0
+
+    def always_changing_ending_read(uid: str, *, db_client):
+        nonlocal revision_reads
+        revision_reads += 1
+        revision = original_read(uid, db_client=db_client)
+        if revision_reads % 2 == 0:
+            return kg._CanonicalGraphRevision(
+                account_generation=revision.account_generation,
+                commit_sequence=revision.commit_sequence + revision_reads,
+                head_commit_id=f"head-{revision_reads}",
+            )
+        return revision
+
+    monkeypatch.setattr(kg, "_read_canonical_graph_revision", always_changing_ending_read)
+
+    with pytest.raises(kg.CanonicalGraphReadUnavailable, match="canonical_revision_changed_during_read"):
+        kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert revision_reads == 4

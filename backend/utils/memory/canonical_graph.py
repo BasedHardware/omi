@@ -32,6 +32,7 @@ CANONICAL_GRAPH_CURSOR_READ_MODE = 'canonical_graph'
 CANONICAL_GRAPH_CURSOR_FILTER = 'canonical_graph_v1:updated_at_desc:memory_id_desc'
 CANONICAL_GRAPH_CURSOR_TTL_SECONDS = 600
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
+CANONICAL_GRAPH_REVISION_READ_RETRIES = 2
 
 
 class CanonicalGraphCursorError(ValueError):
@@ -406,6 +407,9 @@ def _read_canonical_graph_page_once(
         pending_snapshots = []
         pending_window_has_more = False
 
+    # Refuse to return a page assembled across two canonical revisions. The
+    # second head read is bounded and makes the signed cursor's revision fence
+    # meaningful even when writes race this request.
     ending_revision = _read_canonical_graph_revision(uid, db_client=client)
     if ending_revision != revision:
         raise CanonicalGraphReadUnavailable('canonical_revision_changed_during_read')
@@ -448,7 +452,7 @@ def get_canonical_knowledge_graph(
     if cursor is not None and not cursor.strip():
         raise CanonicalGraphCursorError('malformed_cursor')
 
-    for attempt in range(2):
+    for attempt in range(CANONICAL_GRAPH_REVISION_READ_RETRIES):
         try:
             return _read_canonical_graph_page_once(
                 uid,
