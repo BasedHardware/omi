@@ -166,6 +166,7 @@ final class SBOnboardingModel: ObservableObject {
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
   let fileScanRunner: FileScanRunner
+  private let streamSleeper: @Sendable (UInt64) async -> Void
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
   var localFileScanTask: Task<Void, Never>?
@@ -220,12 +221,16 @@ final class SBOnboardingModel: ObservableObject {
         memoryCount: coordinator.localFileMemoriesSaved,
         deniedFolders: outcome.deniedUserFolders)
     },
+    streamSleeper: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+      try? await Task.sleep(nanoseconds: nanoseconds)
+    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.importConnectorStatusStore = importConnectorStatusStore
     self.fileScanRunner = fileScanRunner
+    self.streamSleeper = streamSleeper
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -381,7 +386,7 @@ final class SBOnboardingModel: ObservableObject {
     typing = true
     let full = message(for: step)
     streamTask = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 700_000_000)
+      await self.streamSleeper(700_000_000)
       guard let self, !Task.isCancelled else { return }
       self.typing = false
       // Reveal the reply incrementally: assigning the full string at once
@@ -393,7 +398,7 @@ final class SBOnboardingModel: ObservableObject {
         let revealStep = SmoothStreamReveal.step(remaining: full.count - revealed, elapsedMs: 40)
         revealed = min(full.count, revealed + max(1, revealStep))
         self.streamingText = String(full.prefix(revealed))
-        try? await Task.sleep(nanoseconds: 40_000_000)
+        await self.streamSleeper(40_000_000)
       }
       guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))

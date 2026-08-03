@@ -699,7 +699,18 @@ final class TaskChatCoordinator: ObservableObject {
           return ["error": "empty query"]
         }
         let messagesBefore = state.messages.count
+        let sendGenerationBefore = state.localSendToken.generation
         Task { await state.sendMessage(query) }
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline,
+          state.localSendToken.generation == sendGenerationBefore,
+          state.isSending
+        {
+          try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard state.localSendToken.generation > sendGenerationBefore else {
+          return ["accepted": "false", "error": "task thread admission failed"]
+        }
         return [
           "accepted": "true",
           "workstream_id": state.workstreamId,
@@ -710,22 +721,26 @@ final class TaskChatCoordinator: ObservableObject {
       DesktopAutomationActionRegistry.shared.register(
         name: "wait_task_thread_streaming_reveal",
         summary: "Wait for visible assistant text while the task-thread turn is still streaming",
-        params: ["timeoutMs", "pollMs"]
+        params: ["timeoutMs", "pollMs", "expectedPrefix"]
       ) { [weak self] params in
         guard let self, let state = self.activeTaskState else {
           return ["error": "task thread state unavailable"]
         }
         let timeoutMs = max(1_000, Int(params["timeoutMs"] ?? "") ?? 10_000)
         let pollMs = max(25, Int(params["pollMs"] ?? "") ?? 50)
+        let expectedPrefix = params["expectedPrefix"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
         while Date() < deadline {
           if let message = state.messages.last(where: {
             $0.sender == .ai && $0.isStreaming
-              && !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              && (expectedPrefix.isEmpty
+                ? !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                : $0.copyableText.hasPrefix(expectedPrefix))
           }) {
             return [
               "streaming_reveal_observed": "true",
               "visible_assistant_text": message.copyableText,
+              "visible_assistant_prefix": expectedPrefix,
               "is_streaming": "true",
             ]
           }

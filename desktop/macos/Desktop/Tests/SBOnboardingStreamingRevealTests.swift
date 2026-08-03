@@ -5,7 +5,11 @@ import XCTest
 @MainActor
 final class SBOnboardingStreamingRevealTests: XCTestCase {
   func testStreamMessageRevealsIncrementallyBeforeSettling() async throws {
-    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    let model = SBOnboardingModel(
+      appState: AppState(),
+      chatProvider: ChatProvider(),
+      streamSleeper: { _ in await Task.yield() },
+      onComplete: nil)
     model.step = .promise
     let full = model.message(for: .promise)
     XCTAssertGreaterThan(full.count, 0)
@@ -16,13 +20,12 @@ final class SBOnboardingStreamingRevealTests: XCTestCase {
     // Wait for the reveal to start (after the initial typing delay), then
     // sample the streaming text until the thread settles.
     var observedPrefixes: [String] = []
-    let deadline = Date().addingTimeInterval(5)
-    while Date() < deadline && model.thread.isEmpty {
+    for _ in 0..<full.count * 2 where model.thread.isEmpty {
+      await Task.yield()
       if let streaming = model.streamingText {
         observedPrefixes.append(streaming)
       }
       // omi-test-quality: wall-clock-wait -- poll the reveal loop, which itself ticks on a 40ms timer
-      try? await Task.sleep(nanoseconds: 20_000_000)
     }
 
     XCTAssertFalse(observedPrefixes.isEmpty, "onboarding message should reveal through streamingText")

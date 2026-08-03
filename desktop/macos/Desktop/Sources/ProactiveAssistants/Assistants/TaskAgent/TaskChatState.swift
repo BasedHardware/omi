@@ -243,7 +243,7 @@ class TaskChatState: ObservableObject {
     journalEventToken = nil
     runtimeProjectionCancellable?.cancel()
     runtimeProjectionCancellable = nil
-    streamingBuffer.cancelPendingFlush()
+    streamingBuffer.discardAllPendingSegments()
     journalWriteCoordinator.cancelAll()
     messages.removeAll()
     surfacedFailureKeys.removeAll()
@@ -482,14 +482,25 @@ class TaskChatState: ObservableObject {
     guard let message = messages.first(where: { $0.id == messageId }) else {
       throw BridgeError.agentError("Producing task-chat turn is unavailable")
     }
-    let turn = try await TaskChatRuntime.terminalizeJournalMessage(
-      workstreamId: workstreamId,
-      ownerID: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot,
-      message: message,
-      producingRunId: producingRunId,
-      producingAttemptId: producingAttemptId
-    )
+    var terminalTurn: KernelJournalTurn?
+    let terminalized = await journalWriteCoordinator.retryTerminalization {
+      guard self.isCurrent(lease) else { return false }
+      guard
+        let turn = try? await TaskChatRuntime.terminalizeJournalMessage(
+          workstreamId: self.workstreamId,
+          ownerID: lease.ownerID,
+          authorizationSnapshot: lease.authorizationSnapshot,
+          message: message,
+          producingRunId: producingRunId,
+          producingAttemptId: producingAttemptId
+        )
+      else { return false }
+      terminalTurn = turn
+      return true
+    }
+    guard terminalized, let turn = terminalTurn else {
+      throw BridgeError.agentError("Task-chat terminalization failed after retry")
+    }
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
     guard turn.turnId == messageId,
       turn.producingRunId == producingRunId,
@@ -604,10 +615,14 @@ class TaskChatState: ObservableObject {
     if draftText == text { draftText = "" }
     activeAssistantMessageId = aiMessageId
     producingRunProjection.begin(assistantMessageID: aiMessageId)
+    let callbackQueue = ChatTurnCallbackQueue(
+      generation: 0,
+      lifecycle: ChatTurnLifecycle(),
+      currentGeneration: { 0 })
 
     do {
       let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
-        Task { @MainActor [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
           guard let self, self.isCurrent(lease) else { return }
           self.appendToMessage(id: aiMessageId, text: delta)
         }
@@ -615,7 +630,7 @@ class TaskChatState: ObservableObject {
       let toolActivityHandler: @Sendable (String, String, String?, [String: Any]?) -> Void = {
         [weak self] name, status, toolUseId, input in
         let inputBox = input.map { EventPayloadBox(value: $0) }
-        Task { @MainActor [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
           guard let self, self.isCurrent(lease) else { return }
           self.addToolActivity(
             messageId: aiMessageId,
@@ -627,14 +642,14 @@ class TaskChatState: ObservableObject {
         }
       }
       let thinkingDeltaHandler: @Sendable (String) -> Void = { [weak self] text in
-        Task { @MainActor [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
           guard let self, self.isCurrent(lease) else { return }
           self.appendThinking(messageId: aiMessageId, text: text)
         }
       }
       let toolResultDisplayHandler: @Sendable (String, String, String) -> Void = {
         [weak self] toolUseId, name, output in
-        Task { @MainActor [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
           guard let self, self.isCurrent(lease) else { return }
           self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
         }
@@ -655,6 +670,7 @@ class TaskChatState: ObservableObject {
         onAuthRequired: onAuthRequired ?? { _, _ in },
         onAuthSuccess: onAuthSuccess ?? {}
       )
+      await callbackQueue.drain()
       guard isCurrent(lease) else { return }
 
       guard
@@ -673,9 +689,17 @@ class TaskChatState: ObservableObject {
       // terminal) must still render progressively instead of jumping to the
       // full settled text.
       while streamingBuffer.hasPendingSegments {
+        guard isCurrent(lease), !isStopping else {
+          streamingBuffer.discardAllPendingSegments()
+          throw BridgeError.stopped
+        }
         flushStreamingBuffer(revealAll: false)
         if streamingBuffer.hasPendingSegments {
           try? await Task.sleep(nanoseconds: 100_000_000)
+          guard isCurrent(lease), !isStopping else {
+            streamingBuffer.discardAllPendingSegments()
+            throw BridgeError.stopped
+          }
         }
       }
       streamingBuffer.cancelPendingFlush()
@@ -735,15 +759,20 @@ class TaskChatState: ObservableObject {
         guard isCurrent(lease) else { return }
       }
     } catch {
+      await callbackQueue.drain()
       guard isCurrent(lease) else { return }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
 
       let failedByUserStop: Bool
       if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
         failedByUserStop = true
       } else {
         failedByUserStop = false
+      }
+      if failedByUserStop {
+        streamingBuffer.discardAllPendingSegments()
+      } else {
+        flushStreamingBuffer()
       }
 
       if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -919,7 +948,10 @@ class TaskChatState: ObservableObject {
       status: status,
       toolUseId: toolUseId,
       input: input,
-      messages: &messages
+      messages: &messages,
+      scheduleFlush: { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
+      }
     )
     scheduleJournalUpdate(messageId: messageId, status: .streaming)
   }
@@ -931,7 +963,10 @@ class TaskChatState: ObservableObject {
       toolUseId: toolUseId,
       name: name,
       output: output,
-      messages: &messages
+      messages: &messages,
+      scheduleFlush: { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
+      }
     )
     scheduleJournalUpdate(messageId: messageId, status: .streaming)
   }
