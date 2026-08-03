@@ -52,6 +52,8 @@ class GeneratedEvidenceRef {
 
 class GeneratedActionItemResponse {
   final String? appleReminderId;
+  final String? assigneePersonId;
+  final String? assignerPersonId;
   final bool completed;
   final DateTime? completedAt;
   final String? conversationId;
@@ -81,6 +83,8 @@ class GeneratedActionItemResponse {
 
   const GeneratedActionItemResponse({
     this.appleReminderId,
+    this.assigneePersonId,
+    this.assignerPersonId,
     required this.completed,
     this.completedAt,
     this.conversationId,
@@ -112,6 +116,8 @@ class GeneratedActionItemResponse {
   factory GeneratedActionItemResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemResponse(
       appleReminderId: _readFieldValue<String>(_readField(json, const ["apple_reminder_id"]), "apple_reminder_id", _readString, requiredField: false, nullable: true),
+      assigneePersonId: _readFieldValue<String>(_readField(json, const ["assignee_person_id"]), "assignee_person_id", _readString, requiredField: false, nullable: true),
+      assignerPersonId: _readFieldValue<String>(_readField(json, const ["assigner_person_id"]), "assigner_person_id", _readString, requiredField: false, nullable: true),
       completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: true, nullable: false), "completed"),
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
@@ -144,6 +150,8 @@ class GeneratedActionItemResponse {
   Map<String, dynamic> toJson() {
     return {
       'apple_reminder_id': appleReminderId,
+      'assignee_person_id': assigneePersonId,
+      'assigner_person_id': assignerPersonId,
       'completed': completed,
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'conversation_id': conversationId,
@@ -176,6 +184,8 @@ class GeneratedActionItemResponse {
 
 class GeneratedActionItemCreateRequest {
   final String? appleReminderId;
+  final String? assigneePersonId;
+  final String? assignerPersonId;
   final bool? completed;
   final String? conversationId;
   final String description;
@@ -199,6 +209,8 @@ class GeneratedActionItemCreateRequest {
 
   const GeneratedActionItemCreateRequest({
     this.appleReminderId,
+    this.assigneePersonId,
+    this.assignerPersonId,
     this.completed,
     this.conversationId,
     required this.description,
@@ -224,6 +236,8 @@ class GeneratedActionItemCreateRequest {
   factory GeneratedActionItemCreateRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemCreateRequest(
       appleReminderId: _readFieldValue<String>(_readField(json, const ["apple_reminder_id"]), "apple_reminder_id", _readString, requiredField: false, nullable: true),
+      assigneePersonId: _readFieldValue<String>(_readField(json, const ["assignee_person_id"]), "assignee_person_id", _readString, requiredField: false, nullable: true),
+      assignerPersonId: _readFieldValue<String>(_readField(json, const ["assigner_person_id"]), "assigner_person_id", _readString, requiredField: false, nullable: true),
       completed: _readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
@@ -250,6 +264,8 @@ class GeneratedActionItemCreateRequest {
   Map<String, dynamic> toJson() {
     return {
       'apple_reminder_id': appleReminderId,
+      'assignee_person_id': assigneePersonId,
+      'assigner_person_id': assignerPersonId,
       'completed': completed,
       'conversation_id': conversationId,
       'description': description,
@@ -276,6 +292,8 @@ class GeneratedActionItemCreateRequest {
 
 class GeneratedActionItemUpdateRequest {
   final GeneratedPatchField<String> appleReminderId;
+  final GeneratedPatchField<String> assigneePersonId;
+  final GeneratedPatchField<String> assignerPersonId;
   final GeneratedPatchField<bool> clearDueAt;
   final GeneratedPatchField<bool> completed;
   final GeneratedPatchField<String> description;
@@ -299,6 +317,8 @@ class GeneratedActionItemUpdateRequest {
 
   const GeneratedActionItemUpdateRequest({
     this.appleReminderId = const GeneratedPatchField.omitted(),
+    this.assigneePersonId = const GeneratedPatchField.omitted(),
+    this.assignerPersonId = const GeneratedPatchField.omitted(),
     this.clearDueAt = const GeneratedPatchField.omitted(),
     this.completed = const GeneratedPatchField.omitted(),
     this.description = const GeneratedPatchField.omitted(),
@@ -324,6 +344,8 @@ class GeneratedActionItemUpdateRequest {
   factory GeneratedActionItemUpdateRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemUpdateRequest(
       appleReminderId: _readPatchField<String>(json, "apple_reminder_id", _readString),
+      assigneePersonId: _readPatchField<String>(json, "assignee_person_id", _readString),
+      assignerPersonId: _readPatchField<String>(json, "assigner_person_id", _readString),
       clearDueAt: _readPatchField<bool>(json, "clear_due_at", _readBool),
       completed: _readPatchField<bool>(json, "completed", _readBool),
       description: _readPatchField<String>(json, "description", _readString),
@@ -351,6 +373,12 @@ class GeneratedActionItemUpdateRequest {
     final json = <String, dynamic>{};
     if (appleReminderId.isPresent) {
       json['apple_reminder_id'] = appleReminderId.value;
+    }
+    if (assigneePersonId.isPresent) {
+      json['assignee_person_id'] = assigneePersonId.value;
+    }
+    if (assignerPersonId.isPresent) {
+      json['assigner_person_id'] = assignerPersonId.value;
     }
     if (clearDueAt.isPresent) {
       json['clear_due_at'] = clearDueAt.value;

@@ -61,6 +61,7 @@ from routers import (
     goals,
     workstreams,
     announcements,
+    people_dossier,
     phone_calls,
     agent_tools,
     tools,
@@ -166,6 +167,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(people_dossier.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 

@@ -525,6 +525,27 @@ extension APIClient {
     return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
   }
 
+  /// Every memory the server has attributed to one person, newest first.
+  ///
+  /// `GET /v3/memories` is a pagination contract, not a query surface: it takes no subject
+  /// filter (the `category=` / `tags=` params above are silently dropped by FastAPI) and it
+  /// orders by `scoring` before `created_at`, so a person's freshly written facts are not
+  /// necessarily on any page the client has cached. This endpoint asks the server the
+  /// question directly, by subject id.
+  ///
+  /// `personID` is the backend `Person` uuid (`users/{uid}/people`) — the same id space as
+  /// `TranscriptSegment.person_id` — never a display name or a locally derived slug.
+  func getPersonMemories(
+    personID: String,
+    limit: Int = 200,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [ServerMemory] {
+    let encoded =
+      personID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? personID
+    let endpoint = "v3/memories/by-person/\(encoded)?limit=\(limit)"
+    return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
+  }
+
   /// Fetches memories plus server-authoritative capability headers.
   func getMemoriesPage(
     limit: Int = 100,

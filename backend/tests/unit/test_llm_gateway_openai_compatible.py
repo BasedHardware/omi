@@ -410,6 +410,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
         'capture_confidence',
         'ownership_confidence',
         'capture_owner',
+        'counterparty_name',
         'concrete_deliverable',
         'candidate_action',
         'target_task_id',

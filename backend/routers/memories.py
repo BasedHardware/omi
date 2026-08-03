@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
+from database.entities import person_entity_id
 from database.memory_imports import ingest_memory_import_batch
 from database import review_queue
 from database.vector_db import (
@@ -871,6 +872,44 @@ def get_memories(
     headers['Cache-Control'] = 'no-store'
     exposure = MemoryApiExposure.CANONICAL if canonical_lifecycle_exposed else MemoryApiExposure.LEGACY
     return memory_list_response(memory_response.body or [], exposure, headers=headers)
+
+
+@router.get('/v3/memories/by-person/{person_id}', tags=['memories'], response_model=List[MemoryDB])
+def get_memories_by_person(
+    person_id: str,
+    limit: int = Query(200, ge=1, le=500),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Every memory attributed to one person, newest first.
+
+    Exists because `GET /v3/memories` is a pagination contract, not a query surface: it
+    orders by `scoring` before `created_at` and takes no subject filter, so a client that
+    wants one person's facts has to page the whole store to find a handful of rows — which
+    is why the desktop profile page was reading its local cache instead and showing
+    nothing on a machine whose cache is cold or scoring-truncated.
+
+    `person_id` is the backend `Person` uuid from `users/{uid}/people`, the same id space
+    as `TranscriptSegment.person_id`. The read is by subject id, never by name.
+    """
+    subject_entity_id = person_entity_id(person_id.strip())
+    memories = memories_db.get_memories_by_subject(uid, subject_entity_id, limit=limit)
+
+    valid_memories: List[MemoryDB] = []
+    for memory in memories:
+        if memory.get('is_locked', False):
+            # Same redaction the paginated legacy read applies: a locked memory stays
+            # countable but its content is truncated rather than served in full.
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+        try:
+            valid_memories.append(MemoryDB.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
+            )
+            continue
+    return _legacy_memories_response(valid_memories)
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])

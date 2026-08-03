@@ -274,6 +274,7 @@ class TestModelQosProfiles:
             'conv_discard',
             'daily_summary_simple',
             'memory_category',
+            'person_dossier',
             'smart_glasses',
             'persona_chat',
         }

@@ -19,9 +19,62 @@ def test_infer_subject_from_non_user_person_segments():
     assert attribution == SubjectAttribution.third_party
 
 
-def test_infer_subject_from_mixed_segments_is_unknown():
+def test_infer_subject_attributes_a_one_to_one_thread_to_the_identified_counterpart():
+    """A 1:1 thread — the user plus exactly one identified person — resolves to that person.
+
+    This is the shape every on-device message-thread ingest uploads. Before this branch existed,
+    the mere presence of a user turn forced `unknown`, which is true of *every* 1:1 conversation by
+    construction — so a populated `person_id` could never affect anything downstream.
+    """
     subject_id, attribution = infer_subject_from_segments(
-        [SimpleNamespace(is_user=True, person_id=None), SimpleNamespace(is_user=False, person_id='p1')]
+        [
+            SimpleNamespace(is_user=True, person_id=None),
+            SimpleNamespace(is_user=False, person_id='p1'),
+            SimpleNamespace(is_user=True, person_id=None),
+            SimpleNamespace(is_user=False, person_id='p1'),
+        ]
+    )
+
+    assert subject_id == entities.person_entity_id('p1')
+    assert attribution == SubjectAttribution.third_party
+
+
+def test_infer_subject_from_mixed_segments_without_person_id_is_unknown():
+    """The carve-out is for an *identified* counterpart only — an anonymous one stays unknown."""
+    subject_id, attribution = infer_subject_from_segments(
+        [SimpleNamespace(is_user=True, person_id=None), SimpleNamespace(is_user=False, person_id=None)]
+    )
+
+    assert subject_id is None
+    assert attribution == SubjectAttribution.unknown
+
+
+def test_infer_subject_from_multi_party_conversation_is_unknown():
+    """Two identified people plus the user is a group conversation, not one person's memories."""
+    subject_id, attribution = infer_subject_from_segments(
+        [
+            SimpleNamespace(is_user=True, person_id=None),
+            SimpleNamespace(is_user=False, person_id='p1'),
+            SimpleNamespace(is_user=False, person_id='p2'),
+        ]
+    )
+
+    assert subject_id is None
+    assert attribution == SubjectAttribution.unknown
+
+
+def test_infer_subject_requires_every_non_user_segment_to_be_identified():
+    """One unattributed non-user speaker means a third voice is in the room.
+
+    Its memories must not be pinned on the one person we happen to recognize, so partial
+    attribution stays unknown even though only a single distinct person_id appears.
+    """
+    subject_id, attribution = infer_subject_from_segments(
+        [
+            SimpleNamespace(is_user=True, person_id=None),
+            SimpleNamespace(is_user=False, person_id='p1'),
+            SimpleNamespace(is_user=False, person_id=None),
+        ]
     )
 
     assert subject_id is None

@@ -9,6 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from database.firestore_index_registry import ACTION_ITEMS_BY_ASSIGNEE_QUERY, ACTION_ITEMS_BY_ASSIGNER_QUERY
 from ._client import db
 
 logger = logging.getLogger(__name__)
@@ -547,6 +548,81 @@ def get_action_items(
         total_docs,
     )
 
+    if offset > 0:
+        action_items = action_items[offset:]
+    return action_items[:effective_limit]
+
+
+def get_action_items_for_person(
+    uid: str,
+    person_id: str,
+    *,
+    completed: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    """Tasks where ``person_id`` is the assignee or the assigner.
+
+    Deliberately a separate read path rather than another filter folded into
+    ``get_action_items``:
+
+    * Firestore cannot OR across two fields in one query, so this issues one
+      equality query per attribution field and merges them in process.
+    * Every shape here is **equality-only** — no ``order_by``. An ordered
+      ``due_at`` read silently drops documents whose ``due_at`` is missing, and
+      most commitments with a person on them have no due date at all; ordering
+      would hide exactly the rows this page exists to show. Product order is
+      applied in process by ``_action_item_list_sort_key``, the same key the
+      general list uses.
+
+    Legacy tasks (written before person attribution existed) carry neither field
+    and are therefore absent from these results by construction — they remain
+    fully visible through ``get_action_items``, which this does not touch.
+    """
+    person_id = (person_id or '').strip()
+    if not person_id:
+        return []
+
+    offset = max(0, int(offset or 0))
+    if limit is None or limit <= 0:
+        effective_limit = _ACTION_ITEMS_LIST_HARD_MAX
+    else:
+        effective_limit = min(int(limit), _ACTION_ITEMS_LIST_HARD_MAX)
+    need = min(offset + effective_limit, _ACTION_ITEMS_LIST_HARD_MAX)
+
+    user_ref = db.collection('users').document(uid)
+    merged: Dict[str, Dict[str, Any]] = {}
+    total_docs = 0
+
+    collection = user_ref.collection(action_items_collection)
+    if completed is None:
+        # One equality filter each: Firestore's automatic single-field indexes serve these,
+        # so there is no compound shape to declare.
+        queries = (
+            collection.where(filter=FieldFilter('assignee_person_id', '==', person_id)),
+            collection.where(filter=FieldFilter('assigner_person_id', '==', person_id)),
+        )
+    else:
+        values = {'person_id': person_id, 'completed': completed}
+        queries = (
+            ACTION_ITEMS_BY_ASSIGNEE_QUERY.build(collection, values, field_filter_factory=FieldFilter),
+            ACTION_ITEMS_BY_ASSIGNER_QUERY.build(collection, values, field_filter_factory=FieldFilter),
+        )
+
+    for query in queries:
+        items, docs = _stream_action_items_bounded(query, max_docs=need)
+        total_docs += docs
+        for item in items:
+            # A task can name the same person on both sides; keep one row.
+            merged.setdefault(item['id'], item)
+
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_LIST,
+        FirestoreReadMode.BOUNDED,
+        total_docs,
+    )
+
+    action_items = sorted(merged.values(), key=_action_item_list_sort_key)
     if offset > 0:
         action_items = action_items[offset:]
     return action_items[:effective_limit]

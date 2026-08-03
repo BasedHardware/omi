@@ -39,6 +39,7 @@ struct PersonProfilePage: View {
   @State private var context: PeopleProfileContext = .empty
   @StateObject private var history = PersonMessageHistoryModel()
   @StateObject private var memories = PersonMemoriesModel()
+  @StateObject private var commitments = PersonCommitmentsModel()
   @State private var tab: PersonProfileTab = .overview
   @State private var askText: String = ""
   @State private var shareNote: String?
@@ -77,7 +78,13 @@ struct PersonProfilePage: View {
       }.value
       await history.load(
         personID: person.id, contactName: person.contactName, displayName: person.name)
-      await memories.load(personID: person.id, displayName: person.name)
+      await memories.load(
+        personID: person.id, backendPersonID: person.personUUID, displayName: person.name)
+      await commitments.load(
+        profileID: person.id,
+        displayName: person.name,
+        contactName: person.contactName,
+        aliases: person.aliases)
     }
   }
 
@@ -488,24 +495,128 @@ struct PersonProfilePage: View {
 
   // MARK: Commitments
 
+  private var commitmentsLayout: PersonCommitmentsTabLayout {
+    PersonCommitmentsTabLayout(
+      assigned: commitments.commitments,
+      openThreads: person.openThreads,
+      state: commitments.state)
+  }
+
+  /// Two different things live here and they are never mixed:
+  ///
+  /// 1. **Assigned** — real tasks that name this person, either as the one who has to act or
+  ///    as the one who asked. Read from the backend, keyed on that person's id.
+  /// 2. **Open threads** — prose the people pipeline noticed. Nobody is assigned to these.
+  ///
+  /// The old copy said none of this was assigned. That was accurate only while no task could
+  /// carry a person at all; each section now states what it actually is.
   private var commitmentsTab: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      // Tasks carry no assignee in the data model today, so this page shows the
-      // open threads the people pipeline extracted rather than implying that
-      // anything here was formally assigned to or by this person.
-      Text("Open threads Omi noticed with \(firstName). These are not assigned tasks.")
-        .geist(size: 11)
-        .foregroundStyle(sb.ink(.w45))
-      if person.openThreads.isEmpty {
+    let layout = commitmentsLayout
+    return VStack(alignment: .leading, spacing: 22) {
+      assignedCommitmentsSection(layout)
+      openThreadsSection(layout)
+      if layout.showsEmptyState {
         PersonProfileEmptyState(
           icon: "checklist",
-          title: "No open threads",
-          message: "When you leave something unresolved with \(firstName), it shows up here.")
-      } else {
-        bulletBlock("Open threads", person.openThreads)
+          title: "Nothing open",
+          message:
+            "Tasks that name \(firstName) show up here, along with anything you left unresolved with them."
+        )
       }
     }
   }
+
+  @ViewBuilder private func assignedCommitmentsSection(_ layout: PersonCommitmentsTabLayout) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      SBSectionLabel(text: "Assigned")
+      if layout.showsAssignedProgress {
+        PersonProfileLoading(text: "Checking assigned tasks…")
+      } else if case .failed(let reason) = layout.state {
+        Text(reason)
+          .geist(size: 11)
+          .foregroundStyle(sb.ink(.w45))
+      } else if layout.showsAssignedRows {
+        Text("Tasks that name \(firstName). Each row says who has to act.")
+          .geist(size: 11)
+          .foregroundStyle(sb.ink(.w45))
+        ForEach(layout.assigned) { item in
+          commitmentRow(item)
+        }
+      } else if layout.showsAssignedPlaceholder {
+        noAssignedTasksNote
+      }
+    }
+    .accessibilityIdentifier("person-profile-commitments-assigned")
+  }
+
+  private var noAssignedTasksNote: some View {
+    Text(
+      "No tasks name \(firstName) yet. Omi assigns one only when a conversation names them outright."
+    )
+    .geist(size: 11)
+    .foregroundStyle(sb.ink(.w45))
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private func commitmentRow(_ item: PersonCommitmentItem) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+        .font(.system(size: 11))
+        .foregroundStyle(sb.ink(item.completed ? .w35 : .w5))
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(item.description)
+          .geist(size: 12)
+          .foregroundStyle(sb.ink(item.completed ? .w45 : .w8))
+          .strikethrough(item.completed, color: sb.ink(.w35))
+          .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
+        HStack(spacing: 6) {
+          Text(item.direction.label)
+            .geist(size: 10)
+            .foregroundStyle(sb.ink(.w5))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(sb.ink(.w06)))
+          if let due = item.dueAt {
+            Text(Self.commitmentDueFormatter.string(from: due))
+              .geist(size: 10)
+              .foregroundStyle(sb.ink(.w45))
+          }
+        }
+      }
+      Spacer(minLength: 0)
+    }
+  }
+
+  @ViewBuilder private func openThreadsSection(_ layout: PersonCommitmentsTabLayout) -> some View {
+    if layout.showsOpenThreads {
+      VStack(alignment: .leading, spacing: 8) {
+        SBSectionLabel(text: "Open threads")
+        Text("Loose ends Omi noticed with \(firstName). Nobody is assigned to these.")
+          .geist(size: 11)
+          .foregroundStyle(sb.ink(.w45))
+        ForEach(layout.openThreads, id: \.self) { item in
+          HStack(alignment: .top, spacing: 7) {
+            Circle().fill(sb.ink(.w3)).frame(width: 4, height: 4).padding(.top, 6)
+            Text(item)
+              .geist(size: 12)
+              .foregroundStyle(sb.ink(.w7))
+              .fixedSize(horizontal: false, vertical: true)
+              .textSelection(.enabled)
+          }
+        }
+      }
+      .accessibilityIdentifier("person-profile-commitments-threads")
+    }
+  }
+
+  private static let commitmentDueFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter
+  }()
 
   // MARK: Export / send
 
@@ -535,9 +646,12 @@ struct PersonProfilePage: View {
     let personID = person.id
     let contactName = person.contactName
     let displayName = person.name
+    // Identity keys first: matching on these is what keeps a renamed contact addressable.
+    let identityKeys = person.handles
     let handles = await Task.detached(priority: .userInitiated) {
       PersonHandleResolver.resolve(
-        personID: personID, contactName: contactName, displayName: displayName)
+        personID: personID, contactName: contactName, displayName: displayName,
+        identityKeys: identityKeys)
     }.value
 
     let recipients = handles.phones + handles.emails

@@ -1304,6 +1304,9 @@ def _save_action_items(uid: str, conversation: Conversation):
 
     action_items_data: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
+    # One resolver per conversation: it memoizes the user's people so attributing several
+    # items in the same conversation costs a single people read, not one per item.
+    person_resolver = conversation_capture.PersonAttributionResolver(uid)
 
     for action_item in conversation.structured.action_items:
         action_item_data = {
@@ -1315,7 +1318,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
-            **conversation_capture.canonical_fields(action_item, conversation.id),
+            **conversation_capture.canonical_fields(action_item, conversation.id, person_resolver),
         }
         action_items_data.append(action_item_data)
 

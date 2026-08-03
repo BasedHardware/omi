@@ -7,7 +7,7 @@ import Foundation
 /// No model. No network. Every value here is a mechanical restatement of a signal that is already
 /// on disk, which is what makes it safe to ship to every user:
 ///
-///   - `affiliations`   — organizations, from email domains and work-category group-chat names
+///   - `affiliations`   — organizations, from email domains and recurring group-chat name tokens
 ///   - `relationship`   — a short reach/context label ("close · work")
 ///   - `community_meanings` — plain-English gloss for a group chat's inferred category
 ///   - `connections[].how` — how a "knows" edge was actually derived
@@ -28,9 +28,21 @@ enum PeopleIntelDerivation {
   /// A group-chat name is only read as an organization when the chat has at least this many known
   /// members. Below it, the "group" is effectively a small thread and its name is not org evidence.
   static let minKnownMembersForOrgGroup = 3
+  /// …and at most this many. Above it the chat is a broadcast community (a 591-member "Cold Email
+  /// Club", a 247-member friends list): being in one says nothing about where you work. Mirrors
+  /// `PeopleGraphBuilder.maxGroup`, which drops the same chats when it builds edges.
+  static let maxKnownMembersForOrgGroup = 60
+  /// Distinct group chats a token has to appear in before it is treated as an organization at all.
+  /// Measured on a real 149-chat export: at three, the survivors were exactly the five real orgs;
+  /// dropping to two additionally admitted `spring`, `sf`, `events`, `hires` and `vc` — season and
+  /// role words that are not organizations.
+  static let minChatsToEstablishOrg = 3
   /// Most affiliations shown per person. The profile header renders the first and the Overview tab
   /// the rest; beyond three this reads as a dump rather than an identity.
   static let maxAffiliationsPerPerson = 3
+  /// Chats cited as evidence for one affiliation. An organization with 29 chats does not need 29
+  /// lines of proof, and the profile renders `via` verbatim.
+  static let maxEvidencePerAffiliation = 3
   /// Absolute message floors. Percentile rank alone is degenerate on a small graph (with three
   /// contacts the top 10% is one person), so a tier also has to clear a real volume of messages.
   static let closeMessageFloor = 50
@@ -159,6 +171,148 @@ enum PeopleIntelDerivation {
     }
   }
 
+  /// One organization the graph's own chat names establish, plus the chats that established it.
+  struct Organization: Equatable, Sendable {
+    /// Comparison key (`orgKey`), e.g. `"breakout"`.
+    let key: String
+    /// The spelling to show, taken from how the user actually types it: `"BreakOut"`.
+    let display: String
+    /// Every qualifying chat whose name bears this token, sorted.
+    let chats: [String]
+    /// The subset of `chats` the organization *owns* — the chat is named after it (`"GLO OPS"`),
+    /// rather than merely mentioning it alongside another party (`"Compass >< GLO"`).
+    let ownChats: Set<String>
+  }
+
+  /// `Organization`s keyed by `orgKey`, plus the per-chat membership used to derive them.
+  struct OrganizationIndex: Sendable {
+    var organizations: [String: Organization] = [:]
+    var membersByChat: [String: Set<String>] = [:]
+  }
+
+  /// Names that describe a home, a family or an occasion rather than an organization. A token whose
+  /// chats are mostly these is a place or a trip ("Crib", "Tahoe"), never an employer.
+  private static let personalCategories: Set<String> = ["family", "household", "trip / event"]
+
+  /// Punctuation people use to name a chat that spans two parties: `"Compass >< GLO"`.
+  private static let bridgeMarkers = ["><", "<>", "<->", "|"]
+
+  /// The organizations this graph's group-chat names actually establish.
+  ///
+  /// **The problem this solves.** Affiliation used to require an email domain to corroborate a
+  /// group name. Real message exports carry phone handles and almost no email, so on a 1,825-person
+  /// export the email leg fired for one person and the whole feature produced zero affiliations.
+  /// Corroboration therefore has to come from the chat names themselves — but a *single* work-ish
+  /// chat name is not evidence, because the categorizer keys off loose words (`gang`, `class`,
+  /// `meat`, `sage`), and `"meat gang"` must never become an employer called "Meat Gang".
+  ///
+  /// **The rule.** A word is an organization only when four independent things agree:
+  ///
+  ///  1. **Recurrence** — it appears in at least `minChatsToEstablishOrg` (3) distinct group-chat
+  ///     names. One chat is a name; three chats is a thing people organize around. `"meat"` appears
+  ///     in exactly one chat on the measured export, so the trap word never clears this on its own.
+  ///  2. **Membership overlap** — at least one person is in two of those chats, so they are one
+  ///     cluster rather than three unrelated groups that happen to share a word.
+  ///  3. **Category agreement** — the chats are not mostly `family` / `household` / `trip / event`.
+  ///     This is what stops `"Crib"` (three household chats) from becoming an organization.
+  ///  4. **Token shape** — the word is not a generic group word (`team`, `gang`, `class`, `ops`), not
+  ///     a date or cohort code (anything containing a digit: `S26`, `F25`, `2024`), and **not the
+  ///     name of anybody in the graph**. That last one matters most: on the measured export the
+  ///     single most recurrent token was the user's own first name (17 chats), and several contacts'
+  ///     first names recurred too. An organization is not a person you know.
+  ///
+  /// The cost of (4) is that a real org sharing a contact's name is dropped. That is the correct
+  /// direction: a missing affiliation is a blank field, a wrong one is a lie about somebody's job.
+  static func organizations(
+    people: PeopleGraphBuilder.People, communities: PeopleGraphBuilder.Communities
+  ) -> OrganizationIndex {
+    let nameTokens = personNameTokens(people)
+
+    var index = OrganizationIndex()
+    var categoryByChat: [String: String] = [:]
+    var wordsByChat: [String: [String]] = [:]
+    for community in communities.list {
+      guard
+        let name = (community["name"] as? String)?
+          .trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+        let members = community["known_members"] as? [[String: Any]],
+        (minKnownMembersForOrgGroup...maxKnownMembersForOrgGroup).contains(members.count)
+      else { continue }
+      index.membersByChat[name, default: []].formUnion(members.compactMap { $0["id"] as? String })
+      // `list` is ordered by known-membership descending, so the first sighting of a name is its
+      // richest one; a same-named chat on the other connector must not overwrite it.
+      if categoryByChat[name] == nil {
+        categoryByChat[name] = (community["category"] as? String) ?? "social"
+        wordsByChat[name] = identityWords(inGroupName: name, excludingNames: nameTokens)
+      }
+    }
+
+    var chatsByToken: [String: Set<String>] = [:]
+    var spellingsByToken: [String: [String: Int]] = [:]
+    for (name, words) in wordsByChat {
+      var seen: Set<String> = []
+      for word in words {
+        let key = orgKey(word)
+        guard !key.isEmpty, seen.insert(key).inserted else { continue }
+        chatsByToken[key, default: []].insert(name)
+        spellingsByToken[key, default: [:]][word, default: 0] += 1
+      }
+    }
+
+    for (key, chats) in chatsByToken where chats.count >= minChatsToEstablishOrg {
+      let personal = chats.filter { personalCategories.contains(categoryByChat[$0] ?? "") }.count
+      guard personal * 2 <= chats.count else { continue }
+      var appearances: [String: Int] = [:]
+      for chat in chats {
+        for id in index.membersByChat[chat] ?? [] { appearances[id, default: 0] += 1 }
+      }
+      guard appearances.values.contains(where: { $0 >= 2 }) else { continue }
+      guard let display = dominantSpelling(spellingsByToken[key] ?? [:]) else { continue }
+      index.organizations[key] = Organization(
+        key: key, display: display, chats: chats.sorted(), ownChats: [])
+    }
+
+    // Second pass: which chats each organization *owns*. Needs the full establish set, because a
+    // chat naming two established organizations is a chat between them and belongs to neither.
+    let established = index.organizations
+    for (key, org) in established {
+      let owned = org.chats.filter { chat in
+        guard !bridgeMarkers.contains(where: { chat.contains($0) }) else { return false }
+        let words = wordsByChat[chat] ?? []
+        let named = Set(words.map(orgKey).filter { established[$0] != nil })
+        guard named.count < 2 else { return false }
+        // "GLO OPS" / "AV Tech Team": the organization leads, the rest is the sub-team. When it
+        // trails other identity words ("Roundtable VC 👑 GLO") the chat names a second party the
+        // graph has not established, so its members are not necessarily this organization's.
+        return orgKey(words.first ?? "") == key
+      }
+      index.organizations[key] = Organization(
+        key: org.key, display: org.display, chats: org.chats, ownChats: Set(owned))
+    }
+    return index
+  }
+
+  /// Every letter-token of every name in the graph, for the "an organization is not a person you
+  /// know" filter. An email used as a display name contributes its local part only — the domain of
+  /// `matt@molinar.ai` is the company, not the person.
+  private static func personNameTokens(_ people: PeopleGraphBuilder.People) -> Set<String> {
+    var out: Set<String> = []
+    for name in people.idName.values {
+      let local = name.split(separator: "@", omittingEmptySubsequences: false).first.map(String.init) ?? name
+      for token in local.lowercased().split(whereSeparator: { !$0.isLetter }) where token.count >= 3 {
+        out.insert(String(token))
+      }
+    }
+    return out
+  }
+
+  /// Most-used spelling, ties broken lexicographically so a rebuild never renames an organization.
+  private static func dominantSpelling(_ counts: [String: Int]) -> String? {
+    counts.max { lhs, rhs in
+      lhs.value != rhs.value ? lhs.value < rhs.value : lhs.key > rhs.key
+    }?.key
+  }
+
   /// Organizations per person id, from two independent deterministic signals.
   ///
   /// **Email domain (direct).** A non-consumer domain on a handle you actually exchange messages
@@ -168,12 +322,19 @@ enum PeopleIntelDerivation {
   /// domain. A domain that merely echoes the person's own name is dropped outright as a vanity
   /// domain.
   ///
-  /// **Work group-chat name (indirect, always corroborated).** A single work-category group chat is
-  /// a weak signal — this categorizer keys off loose words like "gang" and "class" — so a group name
-  /// alone never creates an organization. It is emitted only when a second, independent signal
-  /// agrees: the same organization token appears in two different group chats the person is in
-  /// (0.55), or somebody in that very chat has an email at the matching domain (0.7). When both the
-  /// email and the group name point at the same organization the two merge into one entry at 0.85.
+  /// **Recurring chat-name organization (indirect, always corroborated).** `organizations(…)` first
+  /// establishes that an organization exists at all, from recurrence + membership overlap + category
+  /// agreement + token shape. Attaching a *person* to it then needs its own evidence, because the
+  /// single biggest false-positive class is the two-party chat: `"Compass >< GLO"` contains Compass
+  /// people and GLO people, and calling everybody in it a GLO employee is exactly the wrong answer.
+  /// So a person is affiliated only when:
+  ///
+  ///   - they are in **two or more** chats bearing the organization (0.7, or 0.8 at three or more) —
+  ///     across two-party chats the counterparty changes every time and only the organization's own
+  ///     people recur; or
+  ///   - they are in a chat the organization **owns** — named after it, no second party (0.55).
+  ///
+  /// When the email and the chat names agree the two merge into one entry at 0.85.
   static func affiliations(
     people: PeopleGraphBuilder.People, communities: PeopleGraphBuilder.Communities
   ) -> [String: [Affiliation]] {
@@ -198,31 +359,32 @@ enum PeopleIntelDerivation {
       orgKeyHolders[key, default: []].formUnion(holders)
     }
 
-    // ---- 2. work group-chat organization candidates ----
-    // person id -> org key -> group names that produced it.
-    var groupOrgs: [String: [String: Set<String>]] = [:]
-    // org key -> true when somebody inside that chat also has the matching email domain.
-    var groupOrgDomainBacked: [String: Set<String>] = [:]  // person id -> org keys
-    for community in communities.list {
-      guard (community["category"] as? String) == "work / venture",
-        let name = community["name"] as? String,
-        let members = community["known_members"] as? [[String: Any]],
-        members.count >= minKnownMembersForOrgGroup,
-        let token = organizationToken(fromGroupName: name)
-      else { continue }
-      let key = orgKey(token)
-      guard !key.isEmpty else { continue }
-      let memberIDs = members.compactMap { $0["id"] as? String }
-      // Independent corroboration: somebody actually in this chat has an email at the matching
-      // domain, so the chat name is not the only thing claiming the organization exists.
-      let domainBacked = memberIDs.contains { memberID in
-        (domainsByPerson[memberID] ?? []).contains { domain in
-          orgKey(registrableLabel(domain) ?? "") == key
-        }
+    // ---- 2. recurring organization tokens across group-chat names ----
+    let index = organizations(people: people, communities: communities)
+    // person id -> org key -> (confidence, cited chats)
+    var groupOrgs: [String: [String: (confidence: Double, chats: [String])]] = [:]
+    for (key, org) in index.organizations {
+      var chatsByMember: [String: [String]] = [:]
+      for chat in org.chats {
+        for id in index.membersByChat[chat] ?? [] { chatsByMember[id, default: []].append(chat) }
       }
-      for memberID in memberIDs {
-        groupOrgs[memberID, default: [:]][key, default: []].insert(name)
-        if domainBacked { groupOrgDomainBacked[memberID, default: []].insert(key) }
+      for (memberID, chats) in chatsByMember {
+        let owned = chats.filter { org.ownChats.contains($0) }
+        let confidence: Double
+        var cited: [String]
+        if chats.count >= 2 {
+          confidence = chats.count >= 3 ? 0.8 : 0.7
+          // Chats the organization owns are the clearest evidence, so cite those first.
+          cited = owned.sorted() + chats.filter { !org.ownChats.contains($0) }.sorted()
+        } else if !owned.isEmpty {
+          confidence = 0.55
+          cited = owned.sorted()
+        } else {
+          // In exactly one chat, and that chat names a second party too — no affiliation.
+          continue
+        }
+        cited = Array(cited.prefix(maxEvidencePerAffiliation))
+        groupOrgs[memberID, default: [:]][key] = (confidence, cited)
       }
     }
 
@@ -237,6 +399,11 @@ enum PeopleIntelDerivation {
         let key = orgKey(label)
         guard !key.isEmpty else { continue }
         let shared = (orgKeyHolders[key]?.count ?? 1) >= 2
+        // A domain only one contact holds has no corroboration at all, so it also has to *look*
+        // like a brand. Two of the three non-consumer domains in a real 1,825-person address book
+        // were spam senders with machine-generated hostnames; without this they became companies
+        // named "Xrbru" and "Yxzvwggct" on somebody's profile.
+        guard shared || !isMachineGenerated(label) else { continue }
         byKey[key] = Affiliation(
           name: displayName(fromDomainLabel: label),
           kind: isAcademic(domain) ? "school" : "company",
@@ -244,25 +411,18 @@ enum PeopleIntelDerivation {
           via: ["email: @\(domain)"])
       }
 
-      for (key, groupNames) in groupOrgs[personID] ?? [:] {
-        let domainBacked = groupOrgDomainBacked[personID]?.contains(key) ?? false
-        let multiGroup = groupNames.count >= 2
-        // No corroboration → no organization. A lone work-ish chat name is not evidence.
-        guard domainBacked || multiGroup || byKey[key] != nil else { continue }
-        let evidence = groupNames.sorted().map { "group chat: \($0)" }
+      for (key, evidence) in groupOrgs[personID] ?? [:] {
+        let cited = evidence.chats.map { "group chat: \($0)" }
         if let existing = byKey[key] {
-          // The email and the group name agree — independent signals, so the entry gets stronger.
+          // The email and the chat names agree — independent signals, so the entry gets stronger.
           byKey[key] = Affiliation(
             name: existing.name, kind: existing.kind,
             confidence: max(existing.confidence, 0.85),
-            via: existing.via + evidence)
+            via: existing.via + cited)
         } else {
-          guard let display = groupNames.sorted().compactMap({ organizationToken(fromGroupName: $0) }).first
-          else { continue }
+          guard let display = index.organizations[key]?.display else { continue }
           byKey[key] = Affiliation(
-            name: display, kind: "organization",
-            confidence: domainBacked ? 0.7 : 0.55,
-            via: evidence)
+            name: display, kind: "organization", confidence: evidence.confidence, via: cited)
         }
       }
 
@@ -281,24 +441,29 @@ enum PeopleIntelDerivation {
   /// membership counts — the group's inferred kind, the connector it lives on, and how much of it
   /// you actually know.
   ///
-  /// Groups in the categorizer's `social` fallback bucket get **no** entry: that bucket means "we
-  /// could not tell", and glossing it as "a social group chat" would report a categorization that
-  /// never happened.
+  /// The categorizer's `social` bucket is its "we could not tell" fallback, and on a real 149-chat
+  /// export it swallowed 111 of them — so requiring a category meant three quarters of the user's
+  /// groups rendered as a bare name with nothing under it. The fix is to stop conflating the two
+  /// claims: the **category** is asserted only when the categorizer actually made one, while the
+  /// **connector and membership** are facts about every chat and are always stated. An unclassified
+  /// group reads "A group chat on WhatsApp — 4 people you know." — which reports no categorization
+  /// that never happened, and still tells the reader something they did not know.
   static func communityMeanings(_ communities: PeopleGraphBuilder.Communities) -> [String: String] {
     var out: [String: String] = [:]
     for community in communities.list {
-      guard let name = community["name"] as? String, !name.isEmpty,
-        let category = community["category"] as? String,
-        let phrase = categoryPhrase(category)
-      else { continue }
+      guard let name = community["name"] as? String, !name.isEmpty else { continue }
       let known = (community["known_members"] as? [[String: Any]])?.count ?? 0
       guard known > 0 else { continue }
+      // `list` is ordered by known-membership descending, so the first entry for a name is the
+      // richest; a same-named chat on the other connector must not overwrite it with a smaller one.
+      guard out[name] == nil else { continue }
       let total = (community["size_total"] as? Int) ?? known
       let channel = PeopleGraphBuilder.channelLabel((community["channel"] as? String) ?? "imessage")
       let membership =
         total > known
         ? "\(known) of its \(total) members are people you know"
         : "\(known) \(known == 1 ? "person" : "people") you know"
+      let phrase = categoryPhrase((community["category"] as? String) ?? "") ?? "A group chat"
       out[name] = "\(phrase) on \(channel) — \(membership)."
     }
     return out
@@ -398,16 +563,24 @@ enum PeopleIntelDerivation {
     "com.tr", "edu.au", "edu.cn", "edu.in", "edu.sg", "gov.uk", "net.au", "org.uk",
   ]
 
-  /// Words that carry no organization identity on their own. A group name made only of these
-  /// yields no token at all.
+  /// Words that carry no organization identity on their own, so a chat name made only of these
+  /// names no organization. Three kinds, and every one of them was observed misfiring on real data:
+  ///
+  ///   - **group words** — `team`, `gang`, `class`, `crew`, `squad`, `board`, `ops`
+  ///   - **season and cohort words** — `spring`, `summer`, `fall`, `winter` (numeric cohort codes
+  ///     like `S26` / `F25` / `2024` are dropped separately, by the digit rule in `identityWords`)
+  ///   - **industry and role words** — `ai`, `tech`, `dev`, `labs`, `vc`, `startup`, `founder`.
+  ///     `ai` recurred across five unrelated chats on the measured export; it describes what a
+  ///     company does, never which company.
   private static let genericGroupWords: Set<String> = [
-    "a", "all", "analyst", "analysts", "and", "band", "board", "boys", "chat", "chats", "class",
-    "club", "co", "cohort", "corp", "crew", "daily", "design", "directors", "eng", "engineering",
-    "fam", "family", "folks", "for", "founders", "founding", "friends", "gang", "gc", "general",
-    "girls", "group", "groups", "hq", "inc", "intern", "interns", "internship", "llc", "ltd",
-    "main", "misc", "of", "office", "ops", "people", "ppl", "product", "random", "room", "rooms",
-    "sales", "squad", "standup", "startup", "startups", "stuff", "sync", "team", "teams", "the",
-    "things", "thread", "weekly", "with", "work",
+    "a", "ai", "all", "analyst", "analysts", "and", "app", "autumn", "band", "board", "boys", "chat",
+    "chats", "class", "club", "co", "cohort", "corp", "crew", "daily", "design", "dev", "directors",
+    "eng", "engineering", "fall", "fam", "family", "folks", "for", "founder", "founders", "founding",
+    "friends", "gang", "gc", "general", "girls", "group", "groups", "hq", "house", "inc", "intern",
+    "interns", "internship", "labs", "llc", "ltd", "main", "misc", "of", "office", "ops", "people",
+    "ppl", "product", "random", "room", "rooms", "sales", "spring", "squad", "standup", "startup",
+    "startups", "stuff", "summer", "summit", "sync", "team", "teams", "tech", "the", "things",
+    "thread", "vc", "weekly", "winter", "with", "work",
   ]
 
   private static func mailDomain(_ handle: String) -> String? {
@@ -437,16 +610,37 @@ enum PeopleIntelDerivation {
   }
 
   /// A domain that merely restates the person's own name is a personal site, not an employer.
+  ///
+  /// The comparison is against the person's *name*, so when the display name is itself the handle
+  /// (`"matt@molinar.ai"` — what an unnamed email contact falls back to) only the local part counts.
+  /// Comparing the whole string made every such contact look like their own vanity domain, which on
+  /// the measured export dropped the one real corporate domain in the entire address book.
   private static func isVanityDomain(_ label: String, forName name: String) -> Bool {
     let key = orgKey(label)
     guard !key.isEmpty else { return true }
-    let tokens = name.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+    let local = name.split(separator: "@", omittingEmptySubsequences: false).first.map(String.init) ?? name
+    let tokens = local.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     for token in tokens where token.count >= 4 {
       if key.contains(token) { return true }
     }
     // "alicesmith.com" vs "Alice Smith": the whole name, spaces removed.
     let joined = tokens.joined()
     return joined.count >= 6 && key == joined
+  }
+
+  /// A label a human would never type as a brand: `xrbru`, `yxzvwggct`. A name meant to be said out
+  /// loud does not run four consonants together, and a randomly generated spam hostname routinely
+  /// does. Applied **only** to a domain no second contact shares — a domain two of your contacts
+  /// both use is corroborated by that fact whatever it looks like, so a real acronym company keeps
+  /// working.
+  static func isMachineGenerated(_ label: String) -> Bool {
+    let vowels: Set<Character> = ["a", "e", "i", "o", "u", "y"]
+    var run = 0
+    for character in label.lowercased() where character.isLetter {
+      run = vowels.contains(character) ? 0 : run + 1
+      if run > 3 { return true }
+    }
+    return false
   }
 
   /// Comparison key: lowercase, letters and digits only.
@@ -467,21 +661,35 @@ enum PeopleIntelDerivation {
     return first.uppercased() + text.dropFirst()
   }
 
-  /// The organization token inside a group-chat name: `"Acme Team 🚀"` → `"Acme"`. Returns nil when
-  /// nothing identity-bearing survives (all-generic names, pure years, single letters, emoji-only).
-  static func organizationToken(fromGroupName raw: String) -> String? {
+  /// The identity-bearing words of a group-chat name, in order, in the spelling the user typed:
+  /// `"🚀 Acme eng standup"` → `["Acme"]`, `"AV S26"` → `["AV"]`, `"the team chat"` → `[]`.
+  ///
+  /// Each of the four filters removes a class of word that cannot name an organization:
+  ///
+  ///   - **no letter** — emoji, pure numbers.
+  ///   - **any digit** — a cohort, season or date code (`S26`, `F25`, `2024`, `0-1`). A real
+  ///     organization's name does not carry the term it ran in.
+  ///   - **generic** — `genericGroupWords`: group, season, industry and role words.
+  ///   - **a name in the graph** — `excludingNames`. Chat names are full of the people in them, and
+  ///     on real data a contact's first name recurs far more often than any employer does.
+  ///
+  /// Two-letter words survive only when the user typed them as an acronym (`AV`, `YC`); otherwise
+  /// three characters is the floor.
+  static func identityWords(inGroupName raw: String, excludingNames nameTokens: Set<String>)
+    -> [String]
+  {
     let scrubbed = String(
       raw.unicodeScalars.map { scalar -> Character in
         CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "&"
           ? Character(scalar) : " "
       })
-    let words = scrubbed.split(separator: " ").map(String.init).filter { word in
-      guard word.count >= 2, word.contains(where: { $0.isLetter }) else { return false }
-      return !genericGroupWords.contains(word.lowercased())
+    return scrubbed.split(separator: " ").map(String.init).filter { word in
+      guard word.contains(where: { $0.isLetter }), !word.contains(where: { $0.isNumber }) else {
+        return false
+      }
+      let key = orgKey(word)
+      guard key.count >= (word == word.uppercased() ? 2 : 3) else { return false }
+      return !genericGroupWords.contains(key) && !nameTokens.contains(key)
     }
-    // One to three identity-bearing words. Longer than that is a sentence, not an org name.
-    guard (1...3).contains(words.count) else { return nil }
-    let name = words.map(capitalizedWord).joined(separator: " ")
-    return name.count >= 3 ? name : nil
   }
 }

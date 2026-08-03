@@ -8,6 +8,25 @@ The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and rev
 and the other compatibility fields while the same response also carries typed status, owner, source,
 provenance, goal/workstream links, due confidence, priority, and recurrence fields.
 
+A task may also name **which person** is on either side of the work. `assignee_person_id` and
+`assigner_person_id` are backend `Person` ids (`users/{uid}/people`), the same id space as
+`TranscriptSegment.person_id`. `owner` still classifies me-vs-not-me and is unchanged. Both person fields are
+optional forever: every task written before they existed carries neither, keeps deserializing, and remains in
+every unfiltered list. Conversation extraction fills them only when ownership is already settled
+(`capture_owner` of `user` or `other`, never `unknown`) with ownership confidence at the shared `0.8` floor
+**and** the transcript names one unambiguous counterparty. `capture_owner` then fixes the direction: `other`
+makes the named party the assignee, `user` makes them the assigner. The name resolves through the single
+get-or-create in `database.users`, so extraction and `POST /v1/users/people` can never mint two people for one
+name.
+
+`GET /v1/action-items?person_id=…` returns every task where that person is the assignee or the assigner. It is
+a separate read path (`get_action_items_for_person`), one equality query per attribution side, and deliberately
+never ordered: an ordered `due_at` query drops documents whose `due_at` is missing, which is most
+person-attributed commitments. The route therefore rejects `person_id` combined with a date range or
+`conversation_id` instead of silently returning a subset. Both composites are registered as
+`ACTION_ITEMS_BY_ASSIGNEE_QUERY` / `ACTION_ITEMS_BY_ASSIGNER_QUERY` in
+`backend/database/firestore_index_registry.py`.
+
 Candidate payloads are discriminated by `subject_kind`. A task Candidate has either a typed create payload or
 a typed mutation payload. A workstream Candidate has only a workstream proposal with an anchor-task payload.
 Goal links, evidence, source surface, and confidence remain on the Candidate envelope and are never duplicated

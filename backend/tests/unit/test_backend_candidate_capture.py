@@ -28,6 +28,16 @@ def _enable_canonical(monkeypatch):
     )
 
 
+def _no_people_resolver():
+    """Person resolver for cases that carry no counterparty name.
+
+    Given a uid whose people store is never stubbed on purpose: if one of these cases did
+    try to attribute, the lookup would fail rather than quietly inventing a person, so the
+    capture-policy assertions below stay about capture policy alone.
+    """
+    return conversation_capture.PersonAttributionResolver('uid-with-no-people-store')
+
+
 def _action(
     description,
     *,
@@ -37,6 +47,7 @@ def _action(
     target_task_id=None,
     concrete_deliverable=None,
     capture_confidence=None,
+    counterparty_name=None,
 ):
     default_confidence = 0.95 if capture_kind else None
     return SimpleNamespace(
@@ -50,6 +61,7 @@ def _action(
         capture_owner=capture_owner,
         capture_confidence=default_confidence if capture_confidence is None else capture_confidence,
         ownership_confidence=1 if capture_owner == 'user' else None,
+        counterparty_name=counterparty_name,
         candidate_action=candidate_action,
         target_task_id=target_task_id,
         concrete_deliverable=concrete_deliverable,
@@ -190,6 +202,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
                 concrete_deliverable=True,
             ),
             'conversation-1',
+            _no_people_resolver(),
         ).policy.outcome
         == 'auto_accept_silent'
     )
@@ -203,6 +216,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
                 concrete_deliverable=True,
             ),
             'conversation-1',
+            _no_people_resolver(),
         ).policy.outcome
         == 'pending_candidate'
     )
@@ -210,6 +224,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
         conversation_capture._capture_decision(
             _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
             'conversation-1',
+            _no_people_resolver(),
         ).policy.outcome
         == 'ignore'
     )
@@ -242,6 +257,7 @@ def test_conversation_adapter_requires_owned_concrete_high_confidence_requests_a
             capture_confidence=capture_confidence,
         ),
         'conversation-1',
+        _no_people_resolver(),
     )
 
     assert decision.policy.outcome == expected
@@ -252,10 +268,12 @@ def test_conversation_adapter_uses_supplied_targets_for_update_and_completion():
     update = conversation_capture._capture_decision(
         _action('Send the revised budget', candidate_action='update', target_task_id='task-budget'),
         'conversation-1',
+        _no_people_resolver(),
     )
     complete = conversation_capture._capture_decision(
         _action('Send the budget', candidate_action='complete', target_task_id='task-budget'),
         'conversation-1',
+        _no_people_resolver(),
     )
     invented_target = conversation_capture._capture_decision(
         _action(
@@ -266,6 +284,7 @@ def test_conversation_adapter_uses_supplied_targets_for_update_and_completion():
             concrete_deliverable=True,
         ),
         'conversation-1',
+        _no_people_resolver(),
     )
 
     assert update.candidate.proposed_action == 'update'
@@ -367,7 +386,7 @@ def test_shadow_mode_uses_canonical_extraction_without_writing(monkeypatch):
     monkeypatch.setattr(
         conversation_capture,
         '_capture_decision',
-        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id))
+        lambda action_item, conversation_id, resolver: decisions.append((action_item.description, conversation_id))
         or _NoCandidateDecision(),
     )
     monkeypatch.setattr(

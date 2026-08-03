@@ -57,6 +57,10 @@ class ActionItem(BaseModel):
     capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    counterparty_name: Optional[str] = Field(
+        default=None,
+        description='The other party, by name, only when the source names them explicitly and unambiguously',
+    )
     concrete_deliverable: Optional[bool] = Field(
         default=None,
         description='True only when the commitment names a concrete deliverable or outcome',

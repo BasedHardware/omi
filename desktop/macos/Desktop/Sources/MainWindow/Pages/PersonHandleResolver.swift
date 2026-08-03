@@ -33,19 +33,20 @@ struct ContactHandleRecord: Equatable, Sendable {
 
 /// Resolves "how do I actually message this person" at send time.
 ///
-/// The people-intelligence engine deliberately never persists a phone number or email on a
-/// person card (`PeopleGraphBuilder.createPeople` writes identity, channels and social fields
-/// only), so a handle has to be recovered when the user asks to send something. Two sources,
-/// in order:
+/// A person card now carries the identity keys the graph resolved it by (`handles`:
+/// `phone_last10` / lowercased handle — see `PersonIdentityKeys`), so the primary match is on
+/// **identity**, not on a display name. What still has to be recovered here is the *dialable*
+/// form of those keys — a bare last-10 is an identity, not a recipient — from two local sources:
 ///
 ///  1. **Contacts** — the phone/email map the graph builder already reads, inverted from
-///     `phone → name` to `name → handles` and widened to email addresses.
+///     `phone → name` to `identity → handles` and widened to email addresses.
 ///  2. **`imessage_export.json` / `whatsapp_export.json`** — the raw handles the exporter
-///     persisted. This is what covers people who were never resolved to a contact card: their
-///     person id *is* the slug of the raw handle.
+///     persisted. This is what covers people who were never resolved to a contact card.
 ///
-/// Matching is on `slug(name)` — byte-identical to the slug that produced the person id — so a
-/// contact card and a person card line up without any new identity concept.
+/// Name-slug matching remains only as the fallback for a card written before handles were
+/// persisted; it is the path that breaks the moment the user renames a contact, which is why it is
+/// no longer the primary. The slug itself is `PeopleGraphBuilder.slug` — never a second copy,
+/// because any drift between two copies silently stops matching.
 ///
 /// Everything stays local: no network, and nothing is logged about who was resolved.
 enum PersonHandleResolver {
@@ -59,6 +60,7 @@ enum PersonHandleResolver {
     personID: String,
     contactName: String?,
     displayName: String,
+    identityKeys: PersonIdentityKeys = .none,
     uid: String? = nil
   ) -> PersonHandles {
     let userDir = PeopleUserDirectory.resolve(uid: uid)
@@ -69,6 +71,7 @@ enum PersonHandleResolver {
       personID: personID,
       contactName: contactName,
       displayName: displayName,
+      identityKeys: identityKeys,
       contacts: loadContacts(),
       exportFileURLs: exports
     )
@@ -79,31 +82,52 @@ enum PersonHandleResolver {
     personID: String,
     contactName: String?,
     displayName: String,
+    identityKeys: PersonIdentityKeys = .none,
     contacts: [ContactHandleRecord],
     exportFileURLs: [URL]
   ) -> PersonHandles {
-    let keys = identityKeys(personID: personID, contactName: contactName, displayName: displayName)
-    guard !keys.isEmpty else { return .none }
+    // The card's persisted identity keys, normalized the same way handles are keyed everywhere.
+    let identity = Set(identityKeys.all.map { $0.contains("@") ? $0.lowercased() : phoneKey($0) })
+    // Fallback for cards written before identity keys were persisted: re-derive from the name.
+    let nameKeys =
+      identity.isEmpty
+      ? nameSlugs(personID: personID, contactName: contactName, displayName: displayName) : []
+    guard !identity.isEmpty || !nameKeys.isEmpty else { return .none }
 
     var phones = DedupedHandles(normalize: phoneKey)
     var emails = DedupedHandles(normalize: { $0.lowercased() })
 
-    // Contacts first: a real address-book card is the highest-quality handle we have.
-    for contact in contacts where keys.contains(slug(contact.name)) {
+    /// True when a handle-like string is one of this person's identity keys.
+    func isIdentity(_ raw: String) -> Bool {
+      identity.contains(raw.contains("@") ? raw.lowercased() : phoneKey(raw))
+    }
+
+    // Contacts first: a real address-book card is the highest-quality handle we have. Matched by
+    // identity key when the card has one, so renaming the contact changes nothing.
+    for contact in contacts {
+      let matched =
+        identity.isEmpty
+        ? nameKeys.contains(PeopleGraphBuilder.slug(contact.name))
+        : contact.phones.contains(where: isIdentity) || contact.emails.contains(where: isIdentity)
+      guard matched else { continue }
       for phone in contact.phones { phones.insert(phone) }
       for email in contact.emails { emails.insert(email) }
     }
 
-    // Then the raw export handles, resolved to a name exactly the way the graph builder does.
+    // Then the raw export handles — the dialable form of an identity key, and the only source for
+    // someone who was never resolved to a contact card.
     let contactNameByPhone = phoneNameMap(contacts)
     for url in exportFileURLs {
       guard let root = PeopleGraphBuilder.readExport(at: url) else { continue }
       for handle in root.handles {
         let raw = handle.handle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { continue }
-        let resolvedName =
-          contactNameByPhone[phoneKey(raw)] ?? nonEmpty(handle.contactName) ?? raw
-        guard keys.contains(slug(resolvedName)) else { continue }
+        if identity.isEmpty {
+          let resolvedName = contactNameByPhone[phoneKey(raw)] ?? nonEmpty(handle.contactName) ?? raw
+          guard nameKeys.contains(PeopleGraphBuilder.slug(resolvedName)) else { continue }
+        } else {
+          guard isIdentity(nonEmpty(handle.phoneLast10) ?? raw) || isIdentity(raw) else { continue }
+        }
         if raw.contains("@") {
           emails.insert(raw)
         } else {
@@ -158,15 +182,16 @@ enum PersonHandleResolver {
 
   // MARK: - Matching helpers
 
-  /// The slugs a person can legitimately be addressed by. The person id is already a slug, and
-  /// both names are slugged so an export row or contact card matches the same way.
-  private nonisolated static func identityKeys(
+  /// Legacy fallback only: the slugs a card with no persisted identity keys can be addressed by.
+  /// This is the path a contact rename silently breaks — `slug(name)` changes, so the card stops
+  /// matching its own handles — which is precisely why a card that carries `handles` never uses it.
+  private nonisolated static func nameSlugs(
     personID: String, contactName: String?, displayName: String
   ) -> Set<String> {
     var keys: Set<String> = []
     for candidate in [personID, contactName, displayName] {
       guard let value = nonEmpty(candidate) else { continue }
-      keys.insert(slug(value))
+      keys.insert(PeopleGraphBuilder.slug(value))
     }
     return keys
   }
@@ -195,24 +220,6 @@ enum PersonHandleResolver {
     guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
     else { return nil }
     return trimmed
-  }
-
-  /// Mirrors `PeopleGraphBuilder.slug` exactly — person ids are produced by that function, so
-  /// any drift here silently stops matching.
-  nonisolated static func slug(_ name: String) -> String {
-    var out = ""
-    var lastDash = false
-    for ch in name.lowercased() {
-      if ch.isASCII && (ch.isLetter || ch.isNumber) {
-        out.append(ch)
-        lastDash = false
-      } else if !lastDash {
-        out.append("-")
-        lastDash = true
-      }
-    }
-    let trimmed = out.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-    return trimmed.isEmpty ? "person" : trimmed
   }
 
   /// Order-preserving dedupe keyed on a normalized form, so "+1 (555) 010-1234" and

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Memories tab on a person's profile showing nothing — it now asks the server for that person's facts instead of relying on a local cache that never received them"
+}

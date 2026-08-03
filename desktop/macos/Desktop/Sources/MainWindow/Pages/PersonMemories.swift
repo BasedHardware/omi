@@ -3,22 +3,26 @@ import Foundation
 
 /// The memories Omi holds about one person, for the person profile page.
 ///
-/// Reads the **local** store, never the network: `GET /v3/memories` takes only
-/// `limit`/`offset`/`cursor`/`device_scope`/`client_device_id` (see
-/// `backend/routers/memories.py`), so the `category=` / `tags=` query parameters the Swift client
-/// appends are silently dropped by FastAPI and a network path would page the user's entire memory
-/// store to find a handful of rows. `MemoryStorage` already indexes tags locally, so the filter
-/// happens where the data is.
-///
-/// Two matching paths, in priority order:
-///   1. **Tag** — `person:<personID>`, written by `PeopleMemoryWriter`. Durable and exact; this is
-///      the path everything written after the tagging fix takes.
-///   2. **Name prefix** — a fallback for facts written *before* the fix, which carry no usable
-///      provenance at all (`source` was dropped by the backend model). Those are recognised by the
-///      literal shape `PeopleMemoryWriter` gives every fact.
+/// Three matching paths, in priority order:
+///   1. **Server, by subject** — `GET /v3/memories/by-person/{person_id}`, which queries
+///      `subject_entity_id` and the `person:<id>` tag in Firestore. This is the authority and the
+///      only leg that works on a machine whose local cache is cold or truncated — which is the
+///      normal case. The cache is filled from `GET /v3/memories`, a pagination contract that takes
+///      no subject filter (the `category=` / `tags=` params the Swift client appends are silently
+///      dropped by FastAPI) and orders by `scoring` before `created_at`, so a freshly written,
+///      low-scoring relationship fact is not on the pages the client caches. That is why this tab
+///      was empty even though the writes succeeded.
+///   2. **Local tag** — `person:<personID>`, written by `PeopleMemoryWriter`. The same id string
+///      the server matches on, read from SQLite, so the tab still renders offline and instantly.
+///   3. **Name prefix** — a fallback for facts written *before* tagging existed, which carry no
+///      usable provenance at all (`source` was dropped by the backend model). Those are recognised
+///      by the literal shape `PeopleMemoryWriter` gives every fact.
 ///
 /// Fallback rows are marked `isTagged: false` so the UI can tell an exact match from a heuristic
 /// one, and so the fallback can be deleted once the pre-fix facts have aged out.
+///
+/// Every leg is independently fallible: an offline machine still shows its cached rows, a cold
+/// machine still shows the server's. Only a total failure of all three reports `.failed`.
 
 // MARK: - Public model types
 
@@ -53,17 +57,31 @@ struct PersonMemoryCandidate: Equatable, Sendable {
   let tags: [String]
 }
 
-/// Read seam over the local memory store.
+/// Read seam over the two stores a person's memories can come from.
 protocol PersonMemorySource: Sendable {
+  /// Server-side, by subject id. Default-implemented as empty so the two local legs stay
+  /// independently testable and an offline-only stub does not have to fake a network.
+  func serverMemories(forPerson personID: String, limit: Int) async throws -> [PersonMemoryCandidate]
   func memories(taggedWith tag: String, limit: Int) async throws -> [PersonMemoryCandidate]
   func memories(containing text: String, limit: Int) async throws -> [PersonMemoryCandidate]
 }
 
-/// The production source: the on-device SQLite memory cache.
+extension PersonMemorySource {
+  func serverMemories(forPerson personID: String, limit: Int) async throws -> [PersonMemoryCandidate] {
+    []
+  }
+}
+
+/// The production source: the server's by-subject query plus the on-device SQLite memory cache.
 ///
-/// `MemoryStorage` is an actor, so every query below runs on its own executor — never on the main
-/// actor — and the calls are additionally hopped off via `Task.detached` by the model.
-struct LocalPersonMemorySource: PersonMemorySource {
+/// `MemoryStorage` is an actor, so every local query below runs on its own executor — never on the
+/// main actor — and the calls are additionally hopped off via `Task.detached` by the model.
+struct DefaultPersonMemorySource: PersonMemorySource {
+  func serverMemories(forPerson personID: String, limit: Int) async throws -> [PersonMemoryCandidate] {
+    let rows = try await APIClient.shared.getPersonMemories(personID: personID, limit: limit)
+    return rows.map(PersonMemoryCandidate.init)
+  }
+
   func memories(taggedWith tag: String, limit: Int) async throws -> [PersonMemoryCandidate] {
     let rows = try await MemoryStorage.shared.getFilteredMemories(limit: limit, matchAnyTag: [tag])
     return rows.map(PersonMemoryCandidate.init)
@@ -121,18 +139,19 @@ enum PersonMemoryMatcher {
     return false
   }
 
-  /// Merge the tag results and the name-prefix results into one newest-first list.
+  /// Merge the server, tag and name-prefix results into one newest-first list.
   ///
-  /// A memory reached by both paths is kept once and reported as tagged — the tag is real
-  /// provenance, the prefix only a guess about the same row.
+  /// A memory reached by more than one path is kept once and reported as tagged — server
+  /// attribution and the tag are real provenance, the name prefix only a guess about the same row.
   static func merge(
     personID: String,
     displayName: String,
+    server: [PersonMemoryCandidate] = [],
     tagged: [PersonMemoryCandidate],
     named: [PersonMemoryCandidate]
   ) -> [PersonMemoryItem] {
     var byID: [String: PersonMemoryItem] = [:]
-    byID.reserveCapacity(tagged.count + named.count)
+    byID.reserveCapacity(server.count + tagged.count + named.count)
 
     func insert(_ candidate: PersonMemoryCandidate, isTagged: Bool) {
       guard !candidate.id.isEmpty else { return }
@@ -146,6 +165,13 @@ enum PersonMemoryMatcher {
         isTagged: isTagged)
     }
 
+    // The server already answered "is this fact about this person" by querying
+    // `subject_entity_id`/`tags`, and a subject-attributed fact need not carry the tag at all, so
+    // re-deriving the answer here from the row's tags would drop exactly the rows this leg exists
+    // to deliver.
+    for candidate in server {
+      insert(candidate, isTagged: true)
+    }
     if !personID.isEmpty {
       // Re-check the tag in Swift: the store matches tags with a JSON `LIKE`, and this keeps the
       // contract ("tagged means the row really carries the tag") independent of that SQL.
@@ -193,21 +219,26 @@ final class PersonMemoriesModel: ObservableObject {
   @Published private(set) var state: PersonMemoriesState = .idle
 
   /// User-facing and deliberately detail-free: the underlying GRDB error can carry the database path
-  /// and must never reach the UI or a log line.
-  nonisolated static let failureMessage = "Couldn't read memories from the local store."
+  /// and the URLError can carry the host, and neither may reach the UI or a log line.
+  nonisolated static let failureMessage = "Couldn't read memories."
 
   private let source: any PersonMemorySource
   /// Guards against an out-of-order finish when the profile switches people mid-load.
   private var loadToken = 0
 
-  init(source: any PersonMemorySource = LocalPersonMemorySource()) {
+  init(source: any PersonMemorySource = DefaultPersonMemorySource()) {
     self.source = source
   }
 
-  func load(personID: String, displayName: String) async {
+  /// - Parameter backendPersonID: the backend `Person` uuid, when the identity
+  ///   bridge has resolved one. Facts written before the bridge are tagged with the
+  ///   on-device slug and newer ones are attributed to the uuid, so both ids are
+  ///   asked for — on a cold machine the local cache holds neither.
+  func load(personID: String, backendPersonID: String? = nil, displayName: String) async {
     let id = personID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let backendID = (backendPersonID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !id.isEmpty || !name.isEmpty else {
+    guard !id.isEmpty || !backendID.isEmpty || !name.isEmpty else {
       memories = []
       state = .unavailable
       return
@@ -219,7 +250,7 @@ final class PersonMemoriesModel: ObservableObject {
 
     let source = self.source
     let outcome = await Task.detached(priority: .utility) {
-      await Self.fetch(personID: id, displayName: name, source: source)
+      await Self.fetch(personID: id, backendPersonID: backendID, displayName: name, source: source)
     }.value
 
     // A newer load superseded this one; dropping the result keeps the published state monotonic.
@@ -240,27 +271,64 @@ final class PersonMemoriesModel: ObservableObject {
     state = .idle
   }
 
-  /// Off-main: both store queries plus the merge. Never touches the main actor.
+  /// Off-main: all three queries plus the merge. Never touches the main actor.
+  ///
+  /// Each leg fails independently. A cold machine has no local rows and must still show the
+  /// server's; an offline machine has no server and must still show its cached rows. Only a leg
+  /// that was actually attempted and threw counts as a failure, and only when *every* attempted leg
+  /// threw does the tab report `.failed` — otherwise a dropped network connection would blank a
+  /// profile that the local cache could have rendered.
   private nonisolated static func fetch(
-    personID: String, displayName: String, source: any PersonMemorySource
+    personID: String, backendPersonID: String, displayName: String, source: any PersonMemorySource
   ) async -> PersonMemoriesOutcome {
+    var server: [PersonMemoryCandidate] = []
     var tagged: [PersonMemoryCandidate] = []
     var named: [PersonMemoryCandidate] = []
-    do {
-      if !personID.isEmpty {
+    var attempted = 0
+    var failed = 0
+
+    // The uuid finds subject-attributed facts; the slug finds the ones tagged before
+    // the bridge existed. Neither alone is complete, so ask for each distinct id.
+    var serverIDs: [String] = []
+    for candidate in [backendPersonID, personID]
+    where !candidate.isEmpty && !serverIDs.contains(candidate) {
+      serverIDs.append(candidate)
+    }
+    for serverID in serverIDs {
+      attempted += 1
+      do {
+        server += try await source.serverMemories(
+          forPerson: serverID, limit: PersonMemoryMatcher.queryLimit)
+      } catch {
+        failed += 1
+      }
+    }
+
+    if !personID.isEmpty {
+      attempted += 1
+      do {
         tagged = try await source.memories(
           taggedWith: PersonMemoryMatcher.personTag(personID),
           limit: PersonMemoryMatcher.queryLimit)
+      } catch {
+        failed += 1
       }
-      if !displayName.isEmpty {
+    }
+    if !displayName.isEmpty {
+      attempted += 1
+      do {
         named = try await source.memories(
           containing: displayName, limit: PersonMemoryMatcher.queryLimit)
+      } catch {
+        failed += 1
       }
-    } catch {
+    }
+
+    if attempted > 0, failed == attempted {
       return .failure(failureMessage)
     }
     return .items(
       PersonMemoryMatcher.merge(
-        personID: personID, displayName: displayName, tagged: tagged, named: named))
+        personID: personID, displayName: displayName, server: server, tagged: tagged, named: named))
   }
 }

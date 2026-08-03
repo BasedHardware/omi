@@ -147,7 +147,7 @@ final class PersonProfileShareTests: XCTestCase {
       """)
 
     let handles = PersonHandleResolver.resolve(
-      personID: PersonHandleResolver.slug("+15550104321"),
+      personID: PeopleGraphBuilder.slug("+15550104321"),
       contactName: nil,
       displayName: "+15550104321",
       contacts: [],

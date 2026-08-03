@@ -86,6 +86,14 @@ enum DefaultsKey: String {
   /// conversation→memory pipeline (epoch seconds). Independent of the other
   /// throttles so thread ingestion trickles on its own cadence.
   case peopleThreadIngestLastRun = "peopleThreadIngestLastRun"
+  /// Throttle bookkeeping for bridging on-device person cards to backend `Person`
+  /// records (epoch seconds). Independent of the graph throttle because the backend
+  /// people table changes far more slowly than the local message export does.
+  case peopleIdentityBridgeLastRun = "peopleIdentityBridgeLastRun"
+  /// Throttle bookkeeping for the model-backed per-person narrative refresh (epoch
+  /// seconds). Much longer than the graph throttle: a narrative only changes when new
+  /// memories land, and each refreshed person costs a model call.
+  case peopleNarrativeLastRefresh = "peopleNarrativeLastRefresh"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

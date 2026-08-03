@@ -758,6 +758,29 @@ def create_person(uid: str, data: dict):
     return data
 
 
+def get_or_create_person_by_name(uid: str, name: str) -> dict:
+    """Return the person with this exact name, creating them when absent.
+
+    The single get-or-create for people. ``POST /v1/users/people`` and the
+    conversation extractor's person attribution both go through here so there is
+    exactly one place that decides a person's identity, and neither can drift into
+    minting a second id for a name the other already resolved.
+    """
+    existing = get_person_by_name(uid, name)
+    if existing:
+        return existing
+    now = datetime.now(timezone.utc)
+    return create_person(
+        uid,
+        {
+            'id': str(uuid.uuid4()),
+            'name': name,
+            'created_at': now,
+            'updated_at': now,
+        },
+    )
+
+
 def get_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()

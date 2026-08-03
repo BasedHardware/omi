@@ -229,6 +229,82 @@ def get_memories(
     return result
 
 
+_MEMORY_SORT_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+# Upper bound on the rows either subject leg pulls, so one person can never page the
+# whole collection. A person's facts are a handful; this only has to exceed that.
+PERSON_MEMORY_MAX_LIMIT = 500
+
+
+def _memory_recency_key(memory: Dict[str, Any]) -> tuple[datetime, str]:
+    """Newest-first sort key. Undated docs sort last; ids break ties deterministically."""
+    created_at = memory.get('created_at')
+    if not isinstance(created_at, datetime):
+        return (_MEMORY_SORT_EPOCH, str(memory.get('id') or ''))
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return (created_at, str(memory.get('id') or ''))
+
+
+@prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
+def get_memories_by_subject(
+    uid: str,
+    subject_entity_id: str,
+    *,
+    limit: int = 200,
+    include_invalidated: bool = False,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """Return the memories attributed to one subject entity id (``person:<person_id>``).
+
+    Two legs, both single-field Firestore predicates with no ``order_by``, so neither
+    needs a composite index (ordering happens in Python below):
+
+    * ``subject_entity_id`` — the authoritative attribution the extraction pipeline
+      writes and which is mirrored into Pinecone metadata
+      (:func:`database.vector_db.build_legacy_memory_vector_filter`). This is the spine.
+    * ``tags`` ``array_contains`` — **the same id string in a second column**, not a
+      second identity space. Clients that already knew the person when they wrote the
+      fact stamp ``person:<person_id>`` as a tag, which is exactly what
+      :func:`database.entities.person_entity_id` produces. Reaching a fact either way
+      reaches the same fact, so the union is the person's memories, and no id is
+      resolved by name anywhere in this function.
+
+    Neither field is encrypted at rest (``_encrypt_memory_data`` only covers
+    ``content``/``evidence``), so both legs work at every data-protection level.
+
+    Rejected (``user_review is False``) and superseded (``invalid_at``) memories are
+    dropped on the same rule as :func:`get_memories`, so a fact the user retracted does
+    not reappear on a person profile.
+    """
+    if not subject_entity_id:
+        return []
+
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    capped = max(1, min(limit, PERSON_MEMORY_MAX_LIMIT))
+
+    merged: Dict[str, Dict[str, Any]] = {}
+    for field_filter in (
+        FieldFilter('subject_entity_id', '==', subject_entity_id),
+        FieldFilter('tags', 'array_contains', subject_entity_id),
+    ):
+        for doc in memories_ref.where(filter=field_filter).limit(capped).stream():
+            memory = _typed_doc(doc)
+            memory_id = str(memory.get('id') or getattr(doc, 'id', '') or '')
+            if not memory_id:
+                continue
+            merged.setdefault(memory_id, memory)
+
+    result: List[Dict[str, Any]] = [
+        memory
+        for memory in merged.values()
+        if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+    ]
+    result.sort(key=_memory_recency_key, reverse=True)
+    logger.info(f"get_memories_by_subject {uid} {subject_entity_id} -> {len(result)}")
+    return result[:capped]
+
+
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
 def get_user_public_memories(
     uid: str, limit: int = 100, offset: int = 0, *, firestore_client: Any = None

@@ -46,6 +46,9 @@ The shared plumbing every feature call goes through.
 - `working_observations.py` — working-observation batch synthesis
   (`working_memory.py` is a backward-compatible shim, WS-G11).
 - `knowledge_graph.py` — node/edge extraction from memories.
+- `people_dossier.py` — per-person narrative synthesis for the People tab, plus
+  the grounding validator that drops any field the model did not cite
+  (served by `routers/people_dossier.py`).
 - `promotion_proposals.py` / `promotion_routes.py` — durable-memory patch
   proposals and their routing (`durable_memory_patches.py` and
   `l2_memory_routes.py` are backward-compatible shims, WS-G11).

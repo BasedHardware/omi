@@ -656,7 +656,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         // any new local data (fresh iMessages, backend-written people) and rebuild the on-device
         // social graph. Self-gated on the People flags, self-throttled, and runs off the main
         // thread — cheap to call on every activation.
-        Task { await PeopleGraphBuilder.syncIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId)) }
+        Task {
+          let uid = UserDefaults.standard.string(forKey: .authUserId)
+          await PeopleGraphBuilder.syncIfNeeded(uid: uid)
+          // Then the model-backed narrative layer, sequenced after the graph so it reads freshly
+          // stamped `personUUID`s and folds `who`/`now`/`overall`/`facts`/`activities`/`openThreads`
+          // onto the cards the graph just wrote. Same consent gate, its own (much longer) throttle.
+          await PeopleNarrative.refreshIfNeeded(uid: uid)
+        }
         Task { @MainActor in
           await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
             trigger: .appBecameActive,

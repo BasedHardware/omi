@@ -5,20 +5,155 @@ details from leaking into the already broad processing module and gives legacy t
 harnesses one stable dependency seam.
 """
 
+import logging
+import re
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 import database.action_items as action_items_db
 import database.task_intelligence_control as task_control_db
+import database.users as users_db
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner
 from models.candidate import CandidateAction
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
+from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+
+logger = logging.getLogger(__name__)
 
 
 def capture_enabled(uid: str) -> bool:
     return resolve_memory_system(uid) == MemorySystem.CANONICAL
+
+
+# Person names the extractor is never allowed to attribute. Speaker placeholders,
+# collective addressees, and pronouns all look like names to a permissive matcher and
+# every one of them would attach a real commitment to the wrong (or to no) person.
+_NON_PERSON_NAMES = frozenset(
+    {
+        'anyone',
+        'everybody',
+        'everyone',
+        'guys',
+        'her',
+        'him',
+        'himself',
+        'herself',
+        'i',
+        'me',
+        'myself',
+        'nobody',
+        'other',
+        'others',
+        'people',
+        'somebody',
+        'someone',
+        'speaker',
+        'team',
+        'them',
+        'themselves',
+        'they',
+        'unknown',
+        'us',
+        'user',
+        'we',
+        'you',
+        'yourself',
+    }
+)
+
+# A person's name as a human writes it: one to three words, each starting with a letter.
+# Anything with a digit ("Speaker 0") or punctuation beyond an apostrophe/hyphen/period is
+# not a name we will mint a Person for.
+_PERSON_NAME_PATTERN = re.compile(r"^[^\W\d_][\w'\-.]*(?:[ ][^\W\d_][\w'\-.]*){0,2}$", re.UNICODE)
+
+# Matches models.other.CreatePerson, so a name attributed here is always a name the People
+# CRUD would also accept — the two must never disagree about who can exist.
+_MIN_PERSON_NAME_LENGTH = 2
+_MAX_PERSON_NAME_LENGTH = 40
+
+
+class PersonAttributionResolver:
+    """Resolves an extracted counterparty name to a backend Person id.
+
+    Attribution is deliberately narrow. It happens only when the extractor already
+    committed to *who owns the work* (``capture_owner`` of user or other, never unknown)
+    **and** reported ownership confidence at the shared capture floor. ``capture_owner``
+    then fixes the direction, so the name never has to be re-interpreted here:
+
+      * ``owner=other`` — the named party is the one who must act (``assignee``).
+      * ``owner=user``  — the primary user acts, so the named party is who asked
+        (``assigner``).
+
+    Everything else — an unnamed party, an ambiguous or collective name, an unknown
+    owner, low ownership confidence — yields no attribution at all and the task is stored
+    exactly as it is today.
+    """
+
+    def __init__(self, uid: str):
+        self._uid = uid
+        self._by_name: Optional[dict[str, str]] = None
+
+    def _lookup(self, name: str) -> Optional[str]:
+        """Match an existing person by name. Never creates one.
+
+        Extraction attributes only to people the account already has. A name that is
+        merely mentioned in a conversation can pass every shape guard and still not be
+        the counterparty; creating a Person from it would put a contact the user never
+        added into their real People list, and mis-attribute a task to them. The worst
+        case here is no attribution, which is recoverable; a fabricated person is not.
+        Matching is case-insensitive so 'sarah' resolves the existing 'Sarah'.
+        """
+        if self._by_name is None:
+            self._by_name = {}
+            for person in users_db.get_people(self._uid):
+                person_name = person.get('name')
+                person_id = person.get('id')
+                if isinstance(person_name, str) and isinstance(person_id, str):
+                    self._by_name.setdefault(person_name.strip().lower(), person_id)
+        return self._by_name.get(name.lower())
+
+    def attribution(self, action_item: Any) -> dict[str, str]:
+        """Return the person fields for this item, or an empty dict for no attribution."""
+        owner = getattr(action_item, 'capture_owner', None)
+        owner_value = owner.value if isinstance(owner, TaskOwner) else owner
+        if owner_value not in {TaskOwner.user.value, TaskOwner.other.value}:
+            return {}
+        confidence = getattr(action_item, 'ownership_confidence', None)
+        if not isinstance(confidence, (int, float)) or float(confidence) < MINIMUM_CAPTURE_CONFIDENCE:
+            return {}
+        name = _valid_counterparty_name(getattr(action_item, 'counterparty_name', None))
+        if name is None:
+            return {}
+        try:
+            person_id = self._lookup(name)
+        except Exception:
+            # Attribution is an enrichment: a people-store failure must never cost the user
+            # the task itself. Name is intentionally not logged.
+            logger.warning('person attribution lookup failed; storing the task without a person', exc_info=True)
+            return {}
+        if person_id is None:
+            return {}
+        field = 'assignee_person_id' if owner_value == TaskOwner.other.value else 'assigner_person_id'
+        return {field: person_id}
+
+
+def _valid_counterparty_name(raw: Any) -> Optional[str]:
+    """Return a name safe to resolve to a Person, or None to attribute nothing."""
+    if not isinstance(raw, str):
+        return None
+    name = ' '.join(raw.split())
+    if not (_MIN_PERSON_NAME_LENGTH <= len(name) <= _MAX_PERSON_NAME_LENGTH):
+        return None
+    if not _PERSON_NAME_PATTERN.match(name):
+        return None
+    lowered = name.lower()
+    if lowered in _NON_PERSON_NAMES:
+        return None
+    if any(word in _NON_PERSON_NAMES for word in lowered.split()):
+        return None
+    return name
 
 
 def _concrete_deliverable(action_item: Any) -> bool:
@@ -54,13 +189,14 @@ def _capture_signals(action_item: Any) -> BackendCaptureSignals:
     )
 
 
-def _capture_decision(action_item: Any, conversation_id: str):
+def _capture_decision(action_item: Any, conversation_id: str, resolver: PersonAttributionResolver):
     return adapt_backend_capture(
         TaskCreatePayload(
             description=action_item.description,
             owner=getattr(action_item, 'capture_owner', None) or TaskOwner.unknown,
             due_at=action_item.due_at,
             due_confidence=1.0 if action_item.due_at else None,
+            **resolver.attribution(action_item),
         ),
         evidence_ref=EvidenceRef(
             kind=EvidenceKind.conversation,
@@ -72,7 +208,11 @@ def _capture_decision(action_item: Any, conversation_id: str):
     )
 
 
-def canonical_fields(action_item: Any, conversation_id: str) -> dict[str, Any]:
+def canonical_fields(
+    action_item: Any,
+    conversation_id: str,
+    resolver: PersonAttributionResolver,
+) -> dict[str, Any]:
     return {
         'status': 'completed' if action_item.completed else 'active',
         'owner': getattr(action_item, 'capture_owner', None) or 'unknown',
@@ -85,6 +225,7 @@ def canonical_fields(action_item: Any, conversation_id: str) -> dict[str, Any]:
                 scope=EvidenceScope.canonical,
             ).model_dump(mode='python')
         ],
+        **resolver.attribution(action_item),
     }
 
 
@@ -93,8 +234,9 @@ def process_before_legacy(uid: str, conversation_id: str, action_items: Sequence
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
+    resolver = PersonAttributionResolver(uid)
     for action_item, semantic_key, occurrence in _semantic_occurrences(action_items):
-        decision = _capture_decision(action_item, conversation_id)
+        decision = _capture_decision(action_item, conversation_id, resolver)
         if decision.candidate is None:
             continue
         candidate = candidate_service.create_candidate(
@@ -191,6 +333,7 @@ def _idempotency_key(
 
 
 __all__ = [
+    'PersonAttributionResolver',
     'canonical_fields',
     'capture_enabled',
     'legacy_document_ids',

@@ -68,6 +68,13 @@ class SearchConversationsRequest(BaseModel):
 class SearchMemoriesRequest(BaseModel):
     query: str = Field(description="Semantic search query")
     limit: int = Field(default=5, ge=1, le=20)
+    person_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Backend Person uuid (users/{uid}/people) to scope the search to. Same id space as "
+            "TranscriptSegment.person_id and MemoryDB.subject_entity_id — never a display name."
+        ),
+    )
 
 
 class CreateActionItemRequest(BaseModel):
@@ -194,6 +201,7 @@ def search_memories(
         uid=uid,
         query=body.query,
         limit=body.limit,
+        person_id=body.person_id,
     )
     result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
     return _ok("search_memories", result)

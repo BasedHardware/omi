@@ -54,6 +54,11 @@ enum PeopleGraphBuilder {
     await WhatsAppReader.exportIfRequested(force: force)
     _ = await contactsAccess
     await rebuildIfNeeded(uid: uid, force: force)
+    // Bind each on-device person card to the backend `Person` record segments and memories are
+    // keyed by. Runs BEFORE the thread ingest so a uuid resolved now is stamped onto the segments
+    // that ingest uploads moments later — which is what lets the backend attribute a 1:1 thread's
+    // memories to that person instead of leaving the subject unknown. Own throttle; off-main.
+    await PeopleIdentityBridge.resolveIfNeeded(uid: uid, force: force)
     // Write derived graph-structural relationship facts (who-knows-whom via shared groups/circles)
     // into the user's memory store. Self-gated on the same iMessage consent flag and its own
     // throttle; off-main; silent on any failure.
@@ -129,8 +134,19 @@ enum PeopleGraphBuilder {
 
     let contactsByPhone = loadContactsByPhone()
 
+    // The durable `identity key → person id` table. Loaded BEFORE people are built so an id this
+    // machine already assigned survives the contact being renamed, and re-saved after so newly
+    // seen identities are anchored from now on.
+    let links = PeopleIdentityStore.load(directory: userDir)
+
     // ---- 1. canonical people (dedupe by phone_last10, prefer a human name) ----
-    let people = buildCanonicalPeople(root: root, contactsByPhone: contactsByPhone)
+    let people = buildCanonicalPeople(root: root, contactsByPhone: contactsByPhone, links: links)
+    // Only names a *source* asserted are durable. Recording every display name would write phone
+    // numbers into the store as "names", and would launder a name merely read off an email address
+    // into an asserted one on the next run — at which point the card would claim a `contactName`
+    // nobody ever gave us.
+    PeopleIdentityStore.record(
+      identityKeys: people.identityKeysByID(), names: people.assertedNamesByID(), directory: userDir)
 
     // ---- 2. edges (size-normalized), circles, per-person connections ----
     let graph = buildGraph(root: root, people: people)
@@ -152,17 +168,19 @@ enum PeopleGraphBuilder {
       // A backend-written people file already exists: fold graph fields onto it, non-destructively.
       mergeIntoPeopleIntelligence(
         graph: graph, communities: communities, people: people,
-        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, at: peopleURL)
+        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, links: links, at: peopleURL)
     } else {
       // Fresh, backend-less user (file missing or its `people` array empty): CREATE the People
       // list from the on-device canonical people so the tab is populated with no backend at all.
       createPeopleIntelligence(
         graph: graph, communities: communities, people: people,
-        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, at: peopleURL)
+        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, links: links, at: peopleURL)
     }
 
+    let selection = PeopleSelection.select(people: people, graph: graph, communities: communities)
     log(
-      "PeopleGraphBuilder: \(people.canonByID.count) people, \(graph.edges.count) edges, "
+      "PeopleGraphBuilder: \(selection.featured.count) people featured of \(selection.candidateCount) "
+        + "candidates (dropped \(selection.countsByReason)), \(graph.edges.count) edges, "
         + "\(graph.circles.count) circles, \(communities.list.count) communities")
   }
 
@@ -191,6 +209,13 @@ enum PeopleGraphBuilder {
       let phoneLast10: String?
       let contactName: String?
       let messageCount: Int
+      /// Messages **we** sent this person, and messages they sent us. `IMessageExporter` attributes
+      /// an outbound 1:1 message to the chat's single participant and skips outbound group messages,
+      /// so `sent > 0` is proof a one-to-one thread exists and the pair together prove the exchange
+      /// was two-way. Absent for connectors that do not report direction (WhatsApp), which is why
+      /// they are optional rather than zero — "unknown" and "none" must not read the same.
+      let sent: Int?
+      let received: Int?
       let lastDate: String?
       /// Which connector this handle came from ("imessage" / "whatsapp"). Not part of the on-disk
       /// export shape — stamped in-memory at merge time — so it defaults to "imessage" for the
@@ -202,6 +227,8 @@ enum PeopleGraphBuilder {
         case phoneLast10 = "phone_last10"
         case contactName = "contact_name"
         case messageCount = "message_count"
+        case sent
+        case received
         case lastDate = "last_date"
       }
 
@@ -211,6 +238,8 @@ enum PeopleGraphBuilder {
         phoneLast10 = try? c.decodeIfPresent(String.self, forKey: .phoneLast10)
         contactName = try? c.decodeIfPresent(String.self, forKey: .contactName)
         messageCount = (try? c.decode(Int.self, forKey: .messageCount)) ?? 0
+        sent = try? c.decodeIfPresent(Int.self, forKey: .sent)
+        received = try? c.decodeIfPresent(Int.self, forKey: .received)
         lastDate = try? c.decodeIfPresent(String.self, forKey: .lastDate)
       }
 
@@ -302,6 +331,14 @@ enum PeopleGraphBuilder {
     var messagesByChannel: [String: Int] = [:]
     /// Per-channel most-recent message date, used to pick the channel for `lastTouch`.
     var lastByChannel: [String: String] = [:]
+    /// Which source produced `name`. `identified` says "a source asserted this"; this says *which*,
+    /// and distinguishes "we read a name off the address" from "we have no name at all" — the
+    /// difference between a card the selection stage can keep and one it drops.
+    var nameSource: PersonNameSource = .handle
+    /// Messages we sent them / they sent us, summed across connectors that report direction. Nil
+    /// when no connector reported any, so "we never replied" is never inferred from silence.
+    var sentCount: Int?
+    var receivedCount: Int?
   }
 
   /// Resolved people plus the lookup maps used to turn a group member (handle / phone) into a
@@ -324,9 +361,16 @@ enum PeopleGraphBuilder {
     }
   }
 
-  static func buildCanonicalPeople(root: ExportRoot, contactsByPhone: [String: String])
-    -> People
-  {
+  /// Resolve every identity in the export(s) to a canonical person.
+  ///
+  /// `links` is the durable `identity key → person id` table (`people_identity.json`). It is what
+  /// decouples a person's id from their display name: without it `slug(name)` *is* the identity,
+  /// so renaming a contact mints a new person and silently detaches their saved override
+  /// decisions, their `person:<id>` memory tags and their contact photo. Defaulting it to `.empty`
+  /// reproduces the name-only behavior exactly, which is also what a first run sees.
+  static func buildCanonicalPeople(
+    root: ExportRoot, contactsByPhone: [String: String], links: PeopleIdentityLinks = .empty
+  ) -> People {
     // Gather every distinct identity (phone_last10, or email/handle when no phone) from both
     // the direct handles and every group member, so people who only ever appear in a group
     // still become nodes.
@@ -342,6 +386,9 @@ enum PeopleGraphBuilder {
     var emailLast: [String: String] = [:]
     var emailMsgCh: [String: [String: Int]] = [:]
     var emailLastCh: [String: [String: String]] = [:]
+    // Directional counts, summed only over connectors that actually report them, so an identity
+    // seen only on a direction-less connector stays nil rather than looking like a silent contact.
+    var direction: [String: (sent: Int, received: Int)] = [:]
 
     // Keep the newest ISO-8601 date. The exporter writes a fixed `.withInternetDateTime`
     // format, so lexicographic comparison equals chronological ordering.
@@ -358,9 +405,19 @@ enum PeopleGraphBuilder {
       store[key, default: [:]][channel] = d
     }
 
+    /// Fold one handle's reported direction into the identity's running totals.
+    func addDirection(_ key: String, _ handle: ExportRoot.Handle) {
+      guard handle.sent != nil || handle.received != nil else { return }
+      var current = direction[key] ?? (sent: 0, received: 0)
+      current.sent += max(handle.sent ?? 0, 0)
+      current.received += max(handle.received ?? 0, 0)
+      direction[key] = current
+    }
+
     for h in root.handles {
       let msgs = max(h.messageCount, 0)
       if let ph = phoneKey(explicit: h.phoneLast10, handle: h.handle) {
+        addDirection(ph, h)
         phoneMsg[ph, default: 0] += msgs
         phoneMsgCh[ph, default: [:]][h.channel, default: 0] += msgs
         if phoneSample[ph] == nil { phoneSample[ph] = h.handle }
@@ -370,6 +427,7 @@ enum PeopleGraphBuilder {
       } else {
         let key = h.handle.lowercased()
         guard !key.isEmpty else { continue }
+        addDirection(key, h)
         emailMsg[key, default: 0] += msgs
         emailMsgCh[key, default: [:]][h.channel, default: 0] += msgs
         if emailSample[key] == nil { emailSample[key] = h.handle }
@@ -397,14 +455,20 @@ enum PeopleGraphBuilder {
     var people = People()
 
     func upsert(
-      id: String, name: String, messages: Int, identified: Bool, lastDate: String?,
+      id: String, key: String, name: String, source: PersonNameSource, messages: Int, lastDate: String?,
       byChannel: [String: Int], lastByChannel: [String: String]
     ) {
       if var existing = people.canonByID[id] {
         existing.messageCount += messages
-        existing.identified = existing.identified || identified
-        // Prefer a human-resolved name if we only had a fallback before.
-        if identified, !existing.identified { existing.name = name }
+        // The strongest naming source across every identity key that resolved to this person wins.
+        // (This used to read `identified = identified || new` and only *then* test `!identified`,
+        // which is never true — so a WhatsApp name could never replace an iMessage phone-number
+        // fallback on the same person.)
+        if source > existing.nameSource {
+          existing.nameSource = source
+          existing.name = name
+        }
+        existing.identified = existing.nameSource.isAsserted
         if let d = nonEmpty(lastDate), existing.lastDate.map({ $0 < d }) ?? true {
           existing.lastDate = d
         }
@@ -412,32 +476,58 @@ enum PeopleGraphBuilder {
         for (ch, d) in lastByChannel where existing.lastByChannel[ch].map({ $0 < d }) ?? true {
           existing.lastByChannel[ch] = d
         }
+        if let dir = direction[key] {
+          existing.sentCount = (existing.sentCount ?? 0) + dir.sent
+          existing.receivedCount = (existing.receivedCount ?? 0) + dir.received
+        }
         people.canonByID[id] = existing
       } else {
+        let dir = direction[key]
         people.canonByID[id] = Canon(
-          id: id, name: name, messageCount: messages, identified: identified, lastDate: nonEmpty(lastDate),
-          messagesByChannel: byChannel, lastByChannel: lastByChannel)
+          id: id, name: name, messageCount: messages, identified: source.isAsserted,
+          lastDate: nonEmpty(lastDate), messagesByChannel: byChannel, lastByChannel: lastByChannel,
+          nameSource: source, sentCount: dir?.sent, receivedCount: dir?.received)
       }
       people.idName[id] = people.canonByID[id]?.name ?? name
     }
 
+    // Resolve every identity key's display name first, then let the durable link table decide the
+    // id. A freshly-slugged name is only the *default* identity — an id this machine already
+    // assigned to the same phone/handle always wins, so a rename cannot mint a second person.
+    //
+    // Every naming source is exhausted here — address book, the connector's own name, a name this
+    // machine resolved on an earlier run, then the address itself — because "unnamed" is the
+    // strongest drop signal the selection stage has, and it must only fire after everything that
+    // could have named this person has been tried.
+    var namedByKey: [String: (name: String, source: PersonNameSource)] = [:]
+    for ph in phoneMsg.keys.sorted() {
+      namedByKey[ph] = PeopleNaming.resolve(
+        key: ph, addressBook: contactsByPhone[ph], exportContact: phoneContactName[ph], links: links,
+        fallback: phoneSample[ph] ?? ph)
+    }
+    for hh in emailMsg.keys.sorted() {
+      namedByKey[hh] = PeopleNaming.resolve(
+        key: hh, addressBook: nil, exportContact: emailContactName[hh], links: links,
+        fallback: emailSample[hh] ?? hh)
+    }
+    let idByKey = PeopleIdentityLinks.stableIDs(
+      nameIDByKey: namedByKey.mapValues { slug($0.name) }, links: links)
+
     // Deterministic assignment order keeps ids/output stable across runs.
     for ph in phoneMsg.keys.sorted() {
-      let resolved = contactsByPhone[ph] ?? phoneContactName[ph]
-      let name = resolved ?? phoneSample[ph] ?? ph
-      let id = slug(name)
+      let resolved = namedByKey[ph] ?? (name: ph, source: .handle)
+      let id = idByKey[ph] ?? slug(resolved.name)
       upsert(
-        id: id, name: name, messages: phoneMsg[ph] ?? 0, identified: resolved != nil, lastDate: phoneLast[ph],
-        byChannel: phoneMsgCh[ph] ?? [:], lastByChannel: phoneLastCh[ph] ?? [:])
+        id: id, key: ph, name: resolved.name, source: resolved.source, messages: phoneMsg[ph] ?? 0,
+        lastDate: phoneLast[ph], byChannel: phoneMsgCh[ph] ?? [:], lastByChannel: phoneLastCh[ph] ?? [:])
       people.idByPhone[ph] = id
     }
     for hh in emailMsg.keys.sorted() {
-      let resolved = emailContactName[hh]
-      let name = resolved ?? emailSample[hh] ?? hh
-      let id = slug(name)
+      let resolved = namedByKey[hh] ?? (name: hh, source: .handle)
+      let id = idByKey[hh] ?? slug(resolved.name)
       upsert(
-        id: id, name: name, messages: emailMsg[hh] ?? 0, identified: resolved != nil, lastDate: emailLast[hh],
-        byChannel: emailMsgCh[hh] ?? [:], lastByChannel: emailLastCh[hh] ?? [:])
+        id: id, key: hh, name: resolved.name, source: resolved.source, messages: emailMsg[hh] ?? 0,
+        lastDate: emailLast[hh], byChannel: emailMsgCh[hh] ?? [:], lastByChannel: emailLastCh[hh] ?? [:])
       people.idByEmail[hh] = id
     }
 
@@ -464,6 +554,14 @@ enum PeopleGraphBuilder {
     /// Number of graph-contributing groups per channel ("imessage" / "whatsapp"), surfaced in the
     /// social-graph stats so the UI can show which connectors fed the graph.
     var groupsUsedByChannel: [String: Int] = [:]
+    /// Per person, how many groups they share with the user that the graph accepts as a group —
+    /// 2…`maxGroup` resolved members. This is the one definition of "a real group" in the pipeline;
+    /// the selection stage reads it so "shares a group with you" cannot come to mean something
+    /// different there than it does for edges.
+    var sharedGroupCountByID: [String: Int] = [:]
+    /// The mirror image: groups too large to be relationships (a 591-member broadcast list). Kept
+    /// so a dropped node can be explained as "only ever in broadcast groups" rather than "unknown".
+    var broadcastGroupCountByID: [String: Int] = [:]
   }
 
   /// Unordered pair key (a <= b) for edge aggregation.
@@ -486,6 +584,8 @@ enum PeopleGraphBuilder {
     var edgeSrc: [Pair: Set<String>] = [:]
     var edgeCtx: [Pair: [String: Int]] = [:]
     var groupsUsedByChannel: [String: Int] = [:]
+    var sharedGroupCountByID: [String: Int] = [:]
+    var broadcastGroupCountByID: [String: Int] = [:]
 
     // Each shared group of resolved size m contributes 1/(m-1) to every member pair.
     for g in root.groups {
@@ -495,6 +595,17 @@ enum PeopleGraphBuilder {
       }
       let members = ids.sorted()
       let m = members.count
+      // Record which side of the group ceiling every membership fell on before the edge guard drops
+      // the oversized ones — that split is exactly what tells a shared group from a broadcast list.
+      if m >= 2 {
+        for id in members {
+          if m <= maxGroup {
+            sharedGroupCountByID[id, default: 0] += 1
+          } else {
+            broadcastGroupCountByID[id, default: 0] += 1
+          }
+        }
+      }
       guard m >= 2, m <= maxGroup else { continue }
       groupsUsedByChannel[g.channel, default: 0] += 1
       let contrib = 1.0 / Double(m - 1)
@@ -564,6 +675,8 @@ enum PeopleGraphBuilder {
     graph.idName = people.idName
     graph.peopleInGraph = adj.count
     graph.groupsUsedByChannel = groupsUsedByChannel
+    graph.sharedGroupCountByID = sharedGroupCountByID
+    graph.broadcastGroupCountByID = broadcastGroupCountByID
 
     // circles + per-person circle chip (label = most-central members by closeness)
     for (i, comp) in comps.enumerated() {
@@ -762,10 +875,26 @@ enum PeopleGraphBuilder {
   /// `photoPaths` is `person id -> on-device contact-photo path` from `PeopleContactPhotos`. It
   /// defaults to empty so graph-only callers (and tests) stay unchanged; an absent entry simply
   /// means that person has no contact photo, and the avatar falls back to initials.
+  ///
+  /// Every card also carries the identity the pipeline resolved it by:
+  ///   - `handles` — the `phone_last10` / handle keys from `People.idByPhone` / `idByEmail`. These
+  ///     already exist; writing them down is what lets anything downstream address this person
+  ///     without re-slugging their display name.
+  ///   - `personUUID` — the backend `Person` this identity is bridged to, from `links`
+  ///     (`PeopleIdentityBridge` resolves it; the graph never blocks on the network to get one).
+  /// `selection` decides which canonical nodes become cards at all (see `PeopleSelection`). Passing
+  /// nil computes it from the same three inputs, so a caller can never accidentally get the
+  /// unfiltered node dump: there is no "no selection" mode. Callers that already computed the
+  /// outcome (to write its counts into `stats`) pass it in rather than paying for it twice.
   static func createPeople(
     people: People, graph: Graph, communities: Communities, ingestedPersonKeys: Set<String> = [],
-    photoPaths: [String: String] = [:]
+    photoPaths: [String: String] = [:], links: PeopleIdentityLinks = .empty,
+    selection: PeopleSelection.Outcome? = nil
   ) -> [[String: Any]] {
+    let featured =
+      (selection ?? PeopleSelection.select(people: people, graph: graph, communities: communities))
+      .featuredIDs
+    let identityKeys = people.identityKeysByID()
     // Deterministic Phase-2 enrichment, computed once for the whole list (the relationship tier is
     // a rank across everyone, so it cannot be computed per person in isolation).
     let relationships = PeopleIntelDerivation.relationshipLabels(people: people, communities: communities)
@@ -775,6 +904,7 @@ enum PeopleGraphBuilder {
 
     return
       people.canonByID.values
+      .filter { featured.contains($0.id) }
       .map { canon -> [String: Any] in
         let id = canon.id
         // One channel entry per connector this person was seen on, biggest first (stable by key).
@@ -798,6 +928,11 @@ enum PeopleGraphBuilder {
         ]
         // Only claim a contact name when we actually resolved a human (Contacts / export name).
         if canon.identified { person["contactName"] = canon.name }
+        // The identity keys this person was actually resolved by, and the backend Person they are
+        // bridged to. Both are omitted rather than blanked when absent.
+        let keys = identityKeys[id] ?? .none
+        if !keys.isEmpty { person["handles"] = keys.json }
+        if let uuid = links.personUUID(forPersonID: id) { person["personUUID"] = uuid }
         if let last = canon.lastDate {
           // Attribute the last touch to whichever channel carried that newest date.
           let lastChannel =
@@ -835,33 +970,46 @@ enum PeopleGraphBuilder {
   /// the tab never silently asserts an uncertain identity/fact and user truth always wins.
   private static func createPeopleIntelligence(
     graph: Graph, communities: Communities, people: People, ingestedPersonKeys: Set<String>,
-    photoPaths: [String: String], at url: URL
+    photoPaths: [String: String], links: PeopleIdentityLinks, at url: URL
   ) {
+    let selection = PeopleSelection.select(people: people, graph: graph, communities: communities)
     let persons = createPeople(
       people: people, graph: graph, communities: communities, ingestedPersonKeys: ingestedPersonKeys,
-      photoPaths: photoPaths)
+      photoPaths: photoPaths, links: links, selection: selection)
     let overrides = PeopleOverridesStore.load(directory: url.deletingLastPathComponent())
     let result = annotateAndReview(persons: persons, overrides: overrides)
-    let finalPeople = result.people
+    let doc: [String: Any] = [
+      "generated_at": isoNow(),
+      "stats": statsBlock(finalPeople: result.people, selection: selection),
+      "people": result.people,
+      "reviewQueue": result.reviewQueue,
+      // Plain-English gloss per shared group chat, rendered under "Shared groups" on a profile.
+      "community_meanings": PeopleIntelDerivation.communityMeanings(communities),
+    ]
+    writeJSON(doc, to: url)
+  }
+
+  /// The file's `stats` block. `featured` / `dropped` are the two halves of the selection stage and
+  /// always sum to the number of canonical nodes it judged — that is what lets the UI say "you know
+  /// 315 people" instead of quietly hiding 1,510 of them. `people` can be *below* `featured` when
+  /// the user has confirmed two cards are the same person, which merges them after selection.
+  static func statsBlock(
+    finalPeople: [[String: Any]], selection: PeopleSelection.Outcome
+  ) -> [String: Any] {
     let multichannel = finalPeople.filter { (($0["channels"] as? [[String: Any]])?.count ?? 0) > 1 }
       .count
     let channelKeys = Set(
       finalPeople.flatMap {
         ($0["channels"] as? [[String: Any]] ?? []).compactMap { $0["key"] as? String }
       })
-    let doc: [String: Any] = [
-      "generated_at": isoNow(),
-      "stats": [
-        "people": finalPeople.count,
-        "multichannel": multichannel,
-        "channels": channelKeys.count,
-      ],
-      "people": finalPeople,
-      "reviewQueue": result.reviewQueue,
-      // Plain-English gloss per shared group chat, rendered under "Shared groups" on a profile.
-      "community_meanings": PeopleIntelDerivation.communityMeanings(communities),
+    return [
+      "people": finalPeople.count,
+      "multichannel": multichannel,
+      "channels": channelKeys.count,
+      "featured": selection.featured.count,
+      "dropped": selection.drops.count,
+      "dropped_reasons": selection.countsByReason,
     ]
-    writeJSON(doc, to: url)
   }
 
   /// Non-destructively fold `connections` / `circle` / `groups` onto the matching person in an
@@ -870,9 +1018,18 @@ enum PeopleGraphBuilder {
   /// non-destructive contract is covered by a real test against a real file rather than by review.
   /// People are matched by id equality
   /// first, then by normalized name / contactName / alias.
+  ///
+  /// Selection binds this path in both directions:
+  ///   - a node the selection stage **dropped** is never written into the file, so a person hidden
+  ///     on the create path cannot reappear through the merge path;
+  ///   - a card already in the file is **never removed**, whatever this run decided. A person the
+  ///     user has seen (and possibly corrected, tagged or bridged) does not silently vanish because
+  ///     an export went quiet.
+  /// Newly selected people with no matching card are appended, which is what lets the list grow
+  /// after the first run — before this, only the create path ever added anyone, and it runs once.
   static func mergeIntoPeopleIntelligence(
     graph: Graph, communities: Communities, people: People, ingestedPersonKeys: Set<String>,
-    photoPaths: [String: String] = [:], at url: URL
+    photoPaths: [String: String] = [:], links: PeopleIdentityLinks = .empty, at url: URL
   ) {
     guard let data = try? Data(contentsOf: url),
       let obj = try? JSONSerialization.jsonObject(with: data),
@@ -880,6 +1037,9 @@ enum PeopleGraphBuilder {
       var persons = doc["people"] as? [[String: Any]]
     else { return }
 
+    let selection = PeopleSelection.select(people: people, graph: graph, communities: communities)
+    var unmatchedFeatured = selection.featuredIDs
+    let identityKeys = people.identityKeysByID()
     let relationships = PeopleIntelDerivation.relationshipLabels(people: people, communities: communities)
     let affiliations = PeopleIntelDerivation.affiliations(people: people, communities: communities)
     let grounded = PeopleIntelDerivation.historyGroundedIDs(
@@ -895,9 +1055,12 @@ enum PeopleGraphBuilder {
     for i in persons.indices {
       var p = persons[i]
       var matched: String?
+      // An id this run actually resolved is an exact identity match, whether or not the graph
+      // produced edges for them — otherwise a card with no shared groups could only ever be
+      // matched by its display name, which is the failure this change exists to remove.
       if let pid = p["id"] as? String,
-        graph.connectionsByID[pid] != nil || graph.circleChipByID[pid] != nil
-          || communities.groupsByPersonID[pid] != nil
+        people.canonByID[pid] != nil || graph.connectionsByID[pid] != nil
+          || graph.circleChipByID[pid] != nil || communities.groupsByPersonID[pid] != nil
       {
         matched = pid
       }
@@ -912,6 +1075,7 @@ enum PeopleGraphBuilder {
         }
       }
       if let id = matched {
+        unmatchedFeatured.remove(id)
         if let conns = graph.connectionsByID[id] { p["connections"] = conns }
         if let chip = graph.circleChipByID[id] { p["circle"] = chip }
         if let gs = communities.groupsByPersonID[id] { p["groups"] = gs }
@@ -931,8 +1095,29 @@ enum PeopleGraphBuilder {
         if grounded.contains(id) { p["history_grounded"] = true }
         // Same fill-in rule for the avatar: a photo the backend already provided always wins.
         if p["photoPath"] as? String == nil, let photo = photoPaths[id] { p["photoPath"] = photo }
+        // Identity keys UNION rather than replace — gaining a WhatsApp handle must add a key, not
+        // discard the iMessage one a previous run recorded. `personUUID` is fill-in only: a card
+        // already bridged to a backend Person is never repointed at a second one.
+        let resolvedKeys = identityKeys[id] ?? .none
+        if !resolvedKeys.isEmpty {
+          let merged = PersonIdentityKeys.from(json: p["handles"]).union(resolvedKeys)
+          p["handles"] = merged.json
+        }
+        if (p["personUUID"] as? String)?.isEmpty ?? true, let uuid = links.personUUID(forPersonID: id) {
+          p["personUUID"] = uuid
+        }
       }
       persons[i] = p
+    }
+
+    // Append the people this run selected that no existing card accounts for. Built by the same
+    // `createPeople` the create path uses, then filtered to the unmatched ids — so an appended card
+    // is identical in shape to a created one, and a dropped node can never be among them.
+    if !unmatchedFeatured.isEmpty {
+      let fresh = createPeople(
+        people: people, graph: graph, communities: communities, ingestedPersonKeys: ingestedPersonKeys,
+        photoPaths: photoPaths, links: links, selection: selection)
+      persons += fresh.filter { unmatchedFeatured.contains(($0["id"] as? String) ?? "") }
     }
 
     // Same fill-in rule for the file-level group glossary: an existing meaning is never replaced.
@@ -949,269 +1134,11 @@ enum PeopleGraphBuilder {
     let result = annotateAndReview(persons: persons, overrides: overrides)
     doc["people"] = result.people
     doc["reviewQueue"] = result.reviewQueue
+    // The merge path used to leave `stats` exactly as it found it, so a file seeded once kept
+    // reporting that first run's counts forever. Recomputed here for the same reason it is written
+    // on the create path: the header must describe the list the user is looking at.
+    doc["stats"] = statsBlock(finalPeople: result.people, selection: selection)
     writeJSON(doc, to: url)
-  }
-
-  // MARK: - Human-in-the-loop review + user overrides
-
-  /// Cap on low-confidence items surfaced at once, keeping the "Needs your confirmation" surface
-  /// glanceable rather than an endless backlog.
-  static let reviewQueueCap = 20
-  /// Only the closest N people (the array is pre-sorted by closeness) are scanned for similar-name
-  /// identity collisions, bounding the O(n²) pair scan on large lists.
-  private static let similarNameScanLimit = 160
-
-  /// Annotate weak-signal people with `needsConfirmation` / `confirmReason`, derive a capped
-  /// `reviewQueue` of low-confidence items, then fold the user's saved decisions in so user truth
-  /// always wins. Pure (no IO) and idempotent — safe to run on every write.
-  ///
-  /// Weak signals flagged today:
-  ///   - a name that is edit-distance-close to another canonical person (e.g. Prisha / Pritha) —
-  ///     surfaced as an `identity` question the user confirms, splits, or skips;
-  ///   - a first-name-only identity that collides with another person's first name (ambiguous
-  ///     "which one?") — surfaced as the same `identity` question;
-  ///   - a `fact` carried by an identity-uncertain person — surfaced as a `fact` question the user
-  ///     accepts, rejects (drops), or edits.
-  static func annotateAndReview(
-    persons: [[String: Any]], overrides: PeopleOverrides
-  ) -> (people: [[String: Any]], reviewQueue: [[String: Any]]) {
-    var people = persons
-    var review: [[String: Any]] = []
-
-    func id(_ p: [String: Any]) -> String { (p["id"] as? String) ?? "" }
-    func name(_ p: [String: Any]) -> String { (p["name"] as? String) ?? "" }
-    func pairKey(_ a: String, _ b: String) -> String { a < b ? "\(a)|\(b)" : "\(b)|\(a)" }
-
-    // ---- 1. similar-name identity collisions (the Prisha / Pritha case) ----
-    let scanCount = min(people.count, similarNameScanLimit)
-    var flaggedPairs = Set<String>()
-    if scanCount >= 2 {
-      outer: for i in 0..<(scanCount - 1) {
-        for j in (i + 1)..<scanCount {
-          let na = norm(name(people[i]))
-          let nb = norm(name(people[j]))
-          guard !na.isEmpty, !nb.isEmpty, na != nb, na.first == nb.first else { continue }
-          guard min(na.count, nb.count) >= 4 else { continue }
-          let dist = editDistance(na, nb)
-          guard dist >= 1, dist <= 2 else { continue }
-          let a = id(people[i])
-          let b = id(people[j])
-          guard !a.isEmpty, !b.isEmpty, a != b else { continue }
-          let key = pairKey(a, b)
-          guard !flaggedPairs.contains(key) else { continue }
-          flaggedPairs.insert(key)
-          people[i]["needsConfirmation"] = true
-          people[i]["confirmReason"] = "Name is very close to \(name(people[j])) — might be the same person"
-          people[j]["needsConfirmation"] = true
-          people[j]["confirmReason"] = "Name is very close to \(name(people[i])) — might be the same person"
-          review.append([
-            "id": "identity:\(key)",
-            "name": name(people[i]),
-            "kind": "identity",
-            "question": "Are \(name(people[i])) and \(name(people[j])) the same person?",
-            "options": ["Confirm", "Not the same", "Skip"],
-            "a": a,
-            "b": b,
-          ])
-          if review.count >= reviewQueueCap { break outer }
-        }
-      }
-    }
-
-    // ---- 2. first-name-only collisions (two identities that are just the same first name) ----
-    // A single-token name is a weak identity; when two distinct people share the exact same one
-    // (e.g. two "Alex" cards), ask which — rather than assuming they are the same or different.
-    if review.count < reviewQueueCap {
-      var byFirstNameOnly: [String: [Int]] = [:]
-      for idx in 0..<min(people.count, similarNameScanLimit) {
-        let n = norm(name(people[idx]))
-        guard !n.isEmpty, !n.contains(" "), n.count >= 2 else { continue }  // single token only
-        byFirstNameOnly[n, default: []].append(idx)
-      }
-      for firstName in byFirstNameOnly.keys.sorted() {
-        guard review.count < reviewQueueCap, let indices = byFirstNameOnly[firstName], indices.count >= 2
-        else { continue }
-        // One question per colliding first name: pair the two closest (indices are closeness-sorted).
-        let i = indices[0]
-        let j = indices[1]
-        let a = id(people[i])
-        let b = id(people[j])
-        guard !a.isEmpty, !b.isEmpty, a != b else { continue }
-        let key = pairKey(a, b)
-        guard !flaggedPairs.contains(key) else { continue }
-        flaggedPairs.insert(key)
-        for idx in indices {
-          people[idx]["needsConfirmation"] = true
-          people[idx]["confirmReason"] = "Matched on a first name only — may be more than one person"
-        }
-        review.append([
-          "id": "identity:\(key)",
-          "name": name(people[i]),
-          "kind": "identity",
-          "question": "You have two contacts named \(name(people[i])) — are they the same person?",
-          "options": ["Confirm", "Not the same", "Skip"],
-          "a": a,
-          "b": b,
-        ])
-      }
-    }
-
-    // ---- 3. fact confirmation for identity-uncertain people that carry inferred facts ----
-    if review.count < reviewQueueCap {
-      for idx in people.indices {
-        guard review.count < reviewQueueCap else { break }
-        guard (people[idx]["needsConfirmation"] as? Bool) == true else { continue }
-        guard let facts = people[idx]["facts"] as? [String],
-          let fact = facts.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
-        else { continue }
-        let pid = id(people[idx])
-        review.append([
-          "id": "fact:\(pid)",
-          "name": name(people[idx]),
-          "kind": "fact",
-          "question": "Is this right about \(name(people[idx]))? \u{201C}\(fact)\u{201D}",
-          "options": ["Yes", "No", "Edit"],
-          "personId": pid,
-          "fact": fact,
-        ])
-      }
-    }
-
-    return applyOverrides(people: people, reviewQueue: review, overrides: overrides)
-  }
-
-  /// Fold the user's saved decisions onto derived people + review items. **User truth wins:**
-  /// a confirmed-same identity merges the two cards, a confirmed-different / skipped / edited item
-  /// never resurfaces, and a corrected fact replaces (or, when blank, drops) the inferred text.
-  /// Pure and deterministic — no IO.
-  static func applyOverrides(
-    people: [[String: Any]], reviewQueue: [[String: Any]], overrides: PeopleOverrides
-  ) -> (people: [[String: Any]], reviewQueue: [[String: Any]]) {
-    var byIndex = people
-    func indexOf(_ pid: String) -> Int? { byIndex.firstIndex { ($0["id"] as? String) == pid } }
-    func pairKey(_ a: String, _ b: String) -> String { a < b ? "\(a)|\(b)" : "\(b)|\(a)" }
-
-    var decidedPairs = Set<String>()
-
-    // ---- identity decisions ----
-    for decision in overrides.identity {
-      let a = decision.a
-      let b = decision.b
-      guard !a.isEmpty, !b.isEmpty, a != b else { continue }
-      decidedPairs.insert(pairKey(a, b))
-      if decision.same {
-        guard let ia = indexOf(a), let ib = indexOf(b) else {
-          // One side already merged away transitively; just clear any survivor's flag.
-          for pid in [a, b] { if let i = indexOf(pid) { clearConfirmation(&byIndex[i]) } }
-          continue
-        }
-        let ca = (byIndex[ia]["closeness"] as? Double) ?? 0
-        let cb = (byIndex[ib]["closeness"] as? Double) ?? 0
-        let keep = ca >= cb ? ia : ib
-        let drop = ca >= cb ? ib : ia
-        byIndex[keep] = mergePersons(survivor: byIndex[keep], absorbed: byIndex[drop])
-        clearConfirmation(&byIndex[keep])
-        byIndex.remove(at: drop)
-      } else {
-        // Confirmed different: keep both, stop flagging/asking.
-        for pid in [a, b] { if let i = indexOf(pid) { clearConfirmation(&byIndex[i]) } }
-      }
-    }
-
-    // ---- fact edits (replace, or drop when the correction is blank) ----
-    let unit = "\u{1F}"  // unit separator — never appears in a person id or fact
-    var editedFactKeys = Set<String>()
-    for edit in overrides.factEdits {
-      editedFactKeys.insert("\(edit.id)\(unit)\(edit.original)")
-      guard let i = indexOf(edit.id), var facts = byIndex[i]["facts"] as? [String] else { continue }
-      let corrected = edit.corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-      if let fi = facts.firstIndex(of: edit.original) {
-        if corrected.isEmpty {
-          facts.remove(at: fi)
-        } else {
-          facts[fi] = corrected
-        }
-      } else if !corrected.isEmpty, !facts.contains(corrected) {
-        facts.append(corrected)
-      }
-      byIndex[i]["facts"] = facts
-    }
-
-    // ---- filter the review queue: drop decided / edited / dismissed items ----
-    let dismissed = Set(overrides.dismissed)
-    let filtered = reviewQueue.filter { item in
-      guard let itemId = item["id"] as? String else { return false }
-      if dismissed.contains(itemId) { return false }
-      let kind = item["kind"] as? String
-      if kind == "identity", let a = item["a"] as? String, let b = item["b"] as? String,
-        decidedPairs.contains(pairKey(a, b))
-      {
-        return false
-      }
-      if kind == "fact", let pid = item["personId"] as? String, let fact = item["fact"] as? String,
-        editedFactKeys.contains("\(pid)\(unit)\(fact)")
-      {
-        return false
-      }
-      return true
-    }
-
-    return (byIndex, filtered)
-  }
-
-  private static func clearConfirmation(_ person: inout [String: Any]) {
-    person["needsConfirmation"] = false
-    person.removeValue(forKey: "confirmReason")
-  }
-
-  /// Merge an absorbed person into the survivor: keep the survivor's card, record the absorbed
-  /// name/aliases as aliases, sum closeness, and union facts. Never loses the user-confirmed link.
-  private static func mergePersons(survivor: [String: Any], absorbed: [String: Any]) -> [String: Any] {
-    var out = survivor
-    let survivorName = (out["name"] as? String) ?? ""
-    var aliases = (out["aliases"] as? [String]) ?? []
-    func addAlias(_ raw: String?) {
-      guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-        return
-      }
-      if value.caseInsensitiveCompare(survivorName) == .orderedSame { return }
-      if !aliases.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
-        aliases.append(value)
-      }
-    }
-    addAlias(absorbed["name"] as? String)
-    for alias in (absorbed["aliases"] as? [String]) ?? [] { addAlias(alias) }
-    if !aliases.isEmpty { out["aliases"] = aliases }
-
-    let combined = ((out["closeness"] as? Double) ?? 0) + ((absorbed["closeness"] as? Double) ?? 0)
-    out["closeness"] = combined
-
-    if let absorbedFacts = absorbed["facts"] as? [String], !absorbedFacts.isEmpty {
-      var facts = (out["facts"] as? [String]) ?? []
-      for fact in absorbedFacts where !facts.contains(fact) { facts.append(fact) }
-      out["facts"] = facts
-    }
-    return out
-  }
-
-  /// Levenshtein edit distance (two-row DP). Used to detect names that are one or two edits apart
-  /// (e.g. Prisha / Pritha) so a weak identity match asks instead of silently merging.
-  static func editDistance(_ a: String, _ b: String) -> Int {
-    let s = Array(a)
-    let t = Array(b)
-    if s.isEmpty { return t.count }
-    if t.isEmpty { return s.count }
-    var prev = Array(0...t.count)
-    var curr = [Int](repeating: 0, count: t.count + 1)
-    for i in 1...s.count {
-      curr[0] = i
-      for j in 1...t.count {
-        let cost = s[i - 1] == t[j - 1] ? 0 : 1
-        curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-      }
-      swap(&prev, &curr)
-    }
-    return prev[t.count]
   }
 
   /// Re-apply the user's saved corrections to the already-written `people_intelligence.json`
@@ -1258,6 +1185,9 @@ enum PeopleGraphBuilder {
   /// prompts, so it cannot loop.
   static func renameAfterContactsGrant(uid: String?) async {
     await rebuildIfNeeded(uid: uid, force: true)
+    // Names only just became resolvable, so cards that had nothing but a phone number now carry a
+    // human name and can finally be bridged to a backend Person.
+    await PeopleIdentityBridge.resolveIfNeeded(uid: uid, force: true)
     await PeopleMemoryWriter.writeIfNeeded(uid: uid, force: true)
     await PeopleThreadIngest.ingestIfNeeded(uid: uid, force: false)
   }
@@ -1344,7 +1274,9 @@ enum PeopleGraphBuilder {
     return String(digits.suffix(10))
   }
 
-  private static func norm(_ s: String?) -> String {
+  /// Internal (not private) because `PeopleReviewAnnotation` matches names with the same rule; two
+  /// normalizers would silently split people the merge path is meant to join.
+  static func norm(_ s: String?) -> String {
     let lowered = (s ?? "").lowercased()
     return lowered.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
   }

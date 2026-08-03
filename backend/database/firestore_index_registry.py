@@ -506,7 +506,35 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Person-scoped task reads (database.action_items.get_action_items_for_person). Firestore
+# cannot OR across two fields, so a person's commitments are one query per attribution side.
+# Both are deliberately equality-only: adding an order on due_at would drop every task whose
+# due_at is missing, and most person-attributed commitments have no due date at all.
+ACTION_ITEMS_BY_ASSIGNEE_QUERY = FirestoreQuerySpec(
+    identifier='action_items_assignee_person_completed',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('assignee_person_id', '==', 'person_id'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('assignee_person_id'), _asc('completed'), _asc('__name__')),
+)
+
+ACTION_ITEMS_BY_ASSIGNER_QUERY = FirestoreQuerySpec(
+    identifier='action_items_assigner_person_completed',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('assigner_person_id', '==', 'person_id'),
+        FirestoreQueryFilter('completed', '==', 'completed'),
+    ),
+    index_fields=(_asc('assigner_person_id'), _asc('completed'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
+    ACTION_ITEMS_BY_ASSIGNEE_QUERY,
+    ACTION_ITEMS_BY_ASSIGNER_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,

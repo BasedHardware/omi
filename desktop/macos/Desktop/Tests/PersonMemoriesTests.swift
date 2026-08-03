@@ -183,6 +183,85 @@ final class PersonMemoriesTests: XCTestCase {
     XCTAssertEqual(state, .unavailable, "nothing to look a person up by")
   }
 
+  // MARK: - Cold local cache (the server leg)
+
+  func testMemoriesResolveWithAColdLocalCache() async {
+    // The machine has never synced a memory: both local legs are empty, exactly as they are on a
+    // fresh install or after the scoring-ordered pages skipped these rows.
+    let source = StubPersonMemorySource(
+      server: [
+        candidate(
+          id: "s1", content: "Sam \u{2014} in your “Tahoe Trip” group.", tags: ["person:sam"],
+          secondsAgo: 0),
+        candidate(id: "s2", content: "Sam \u{2014} you know them via iMessage.", secondsAgo: 60),
+      ],
+      tagged: [],
+      named: [])
+    let model = await PersonMemoriesModel(source: source)
+
+    await model.load(personID: "sam", displayName: "Sam")
+
+    let state = await model.state
+    let memories = await model.memories
+    XCTAssertEqual(state, .loaded)
+    XCTAssertEqual(memories.map { $0.id }, ["s1", "s2"], "the server answered with a cold cache")
+    XCTAssertEqual(memories.map { $0.isTagged }, [true, true], "server attribution is real provenance")
+  }
+
+  func testServerRowNeedsNoLocalTagToBeAccepted() async {
+    // A fact attributed by `subject_entity_id` alone carries no `person:` tag. Re-deriving the
+    // match from the row's tags here would drop exactly the rows the server leg exists to deliver.
+    let source = StubPersonMemorySource(
+      server: [candidate(id: "s1", content: "A fact with no client-side tag at all.", tags: [])])
+    let model = await PersonMemoriesModel(source: source)
+
+    await model.load(personID: "sam", displayName: "Sam")
+
+    let memories = await model.memories
+    XCTAssertEqual(memories.map { $0.id }, ["s1"])
+  }
+
+  func testOfflineMachineStillShowsItsCachedRows() async {
+    let source = StubPersonMemorySource(
+      tagged: [candidate(id: "m1", content: "Sam \u{2014} cached.", tags: ["person:sam"])],
+      serverShouldThrow: true)
+    let model = await PersonMemoriesModel(source: source)
+
+    await model.load(personID: "sam", displayName: "Sam")
+
+    let state = await model.state
+    let memories = await model.memories
+    XCTAssertEqual(state, .loaded, "a dropped network must not blank a profile the cache can render")
+    XCTAssertEqual(memories.map { $0.id }, ["m1"])
+  }
+
+  func testColdMachineSurvivesAFailingLocalStore() async {
+    let source = StubPersonMemorySource(
+      server: [candidate(id: "s1", content: "Sam \u{2014} from the server.")],
+      localShouldThrow: true)
+    let model = await PersonMemoriesModel(source: source)
+
+    await model.load(personID: "sam", displayName: "Sam")
+
+    let state = await model.state
+    let memories = await model.memories
+    XCTAssertEqual(state, .loaded)
+    XCTAssertEqual(memories.map { $0.id }, ["s1"])
+  }
+
+  func testSameMemoryFromServerAndCacheStaysOneRow() async {
+    let shared = candidate(
+      id: "m1", content: "Sam \u{2014} in your group.", tags: ["person:sam"])
+    let source = StubPersonMemorySource(server: [shared], tagged: [shared], named: [shared])
+    let model = await PersonMemoriesModel(source: source)
+
+    await model.load(personID: "sam", displayName: "Sam")
+
+    let memories = await model.memories
+    XCTAssertEqual(memories.map { $0.id }, ["m1"])
+    XCTAssertTrue(memories[0].isTagged)
+  }
+
   func testResetReturnsToIdleAndClearsRows() async {
     let source = StubPersonMemorySource(
       tagged: [candidate(id: "m1", content: "Sam \u{2014} a.", tags: ["person:sam"])])
@@ -200,21 +279,35 @@ final class PersonMemoriesTests: XCTestCase {
   }
 }
 
-/// In-memory stand-in for `MemoryStorage`, so the model's real load path runs without SQLite.
+/// In-memory stand-in for the server query and `MemoryStorage`, so the model's real load path runs
+/// without a network or SQLite.
+///
+/// `shouldThrow` fails every leg (the historical "the whole store is broken" case);
+/// `serverShouldThrow` / `localShouldThrow` fail one side so the per-leg tolerance is assertable.
 private struct StubPersonMemorySource: PersonMemorySource {
+  var server: [PersonMemoryCandidate] = []
   var tagged: [PersonMemoryCandidate] = []
   var named: [PersonMemoryCandidate] = []
   var shouldThrow = false
+  var serverShouldThrow = false
+  var localShouldThrow = false
 
   struct Failure: Error {}
 
+  func serverMemories(forPerson personID: String, limit: Int) async throws
+    -> [PersonMemoryCandidate]
+  {
+    if shouldThrow || serverShouldThrow { throw Failure() }
+    return server
+  }
+
   func memories(taggedWith tag: String, limit: Int) async throws -> [PersonMemoryCandidate] {
-    if shouldThrow { throw Failure() }
+    if shouldThrow || localShouldThrow { throw Failure() }
     return tagged
   }
 
   func memories(containing text: String, limit: Int) async throws -> [PersonMemoryCandidate] {
-    if shouldThrow { throw Failure() }
+    if shouldThrow || localShouldThrow { throw Failure() }
     return named
   }
 }

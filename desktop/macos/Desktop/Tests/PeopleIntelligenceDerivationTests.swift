@@ -17,16 +17,28 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
 
   /// A small but deliberately varied address book:
   ///
-  ///   - Alice / Bob      — both on `@acme.com`, both in two work-category Acme chats
+  ///   - Alice / Bob      — both on `@acme.com`, both in two Acme chats
   ///   - Carol            — consumer mailbox (`gmail.com`), only in the Zenith chats
-  ///   - Dana             — phone only; in the Acme chats, the Zenith chats and a family chat
+  ///   - Dana             — **phone only**; in the Acme chats, the Zenith chats and a family chat
   ///   - Erin             — a personal domain that restates her own name (vanity)
   ///   - Grace / Harry    — appear ONLY inside the family group chat, never messaged directly
   ///   - Ivan             — a consumer mailbox with zero messages and no group at all
+  ///   - Nia / Owen / Pia — **phone only**, and every group they are in is a false-positive trap
+  ///   - Rex / Quinn / Sam— **phone only**, in exactly one chat Acme owns
   ///
-  /// Group chats cover every branch that matters: an org corroborated by an email domain (Acme),
-  /// one corroborated only by appearing twice (Zenith), one with a single un-corroborated mention
-  /// (Vertex — must produce nothing), a family chat, and a chat the categorizer cannot classify.
+  /// The group chats are the real subject of this fixture. They cover every branch that matters:
+  ///
+  ///   - **Acme** — four chats bear the token, so the organization is established. Alice and Bob
+  ///     also hold the matching email domain; Dana, Rex, Quinn and Sam hold no email at all, which
+  ///     is what makes this a phone-only test.
+  ///   - **`"Northwind >< Acme"`** — a two-party chat. Nia, Owen and Pia are in exactly this one
+  ///     Acme chat, so they are the counterparty and must get nothing.
+  ///   - **Zenith** — two chats, one short of the bar. Must produce nothing.
+  ///   - **Vertex** — one chat. Must produce nothing.
+  ///   - **`"meat gang"`** — the documented trap: the categorizer files it under work because of
+  ///     two loose keywords. One chat, so it must never become an employer.
+  ///   - **Crib ×3** — recurrence and overlap both satisfied, but the chats are a household.
+  ///   - **`"Nia …"` ×3** — recurrence and overlap both satisfied, but the token is a contact.
   private func syntheticExport() throws -> PeopleGraphBuilder.ExportRoot {
     let json = """
       {
@@ -41,7 +53,19 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
             "message_count": 30, "last_date": "2026-05-01T10:00:00Z" },
           { "handle": "erin@erinlovelace.com", "contact_name": "Erin Lovelace", "message_count": 12,
             "last_date": "2026-04-01T10:00:00Z" },
-          { "handle": "ivan@gmail.com", "contact_name": "Ivan Petrov", "message_count": 0 }
+          { "handle": "ivan@gmail.com", "contact_name": "Ivan Petrov", "message_count": 0 },
+          { "handle": "+15550110001", "phone_last10": "5550110001", "contact_name": "Nia Kaur",
+            "message_count": 0 },
+          { "handle": "+15550110002", "phone_last10": "5550110002", "contact_name": "Owen Diaz",
+            "message_count": 0 },
+          { "handle": "+15550110003", "phone_last10": "5550110003", "contact_name": "Pia Roy",
+            "message_count": 0 },
+          { "handle": "+15550110004", "phone_last10": "5550110004", "contact_name": "Rex Bloom",
+            "message_count": 0 },
+          { "handle": "+15550110005", "phone_last10": "5550110005", "contact_name": "Quinn Vega",
+            "message_count": 0 },
+          { "handle": "+15550110006", "phone_last10": "5550110006", "contact_name": "Sam Iyer",
+            "message_count": 0 }
         ],
         "groups": [
           { "display_name": "Acme Interns", "member_count": 3, "members": [
@@ -50,6 +74,12 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
           { "display_name": "Acme Startup 2024", "member_count": 6, "members": [
               { "handle": "alice@acme.com" }, { "handle": "bob@acme.com" },
               { "phone_last10": "5551234567" } ] },
+          { "display_name": "Acme Ops", "member_count": 3, "members": [
+              { "phone_last10": "5550110004" }, { "phone_last10": "5550110005" },
+              { "phone_last10": "5550110006" } ] },
+          { "display_name": "Northwind >< Acme", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
           { "display_name": "Zenith Interns", "member_count": 3, "members": [
               { "handle": "carol@gmail.com" }, { "phone_last10": "5551234567" },
               { "handle": "erin@erinlovelace.com" } ] },
@@ -59,6 +89,27 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
           { "display_name": "Vertex Interns", "member_count": 3, "members": [
               { "handle": "carol@gmail.com" }, { "phone_last10": "5551234567" },
               { "handle": "erin@erinlovelace.com" } ] },
+          { "display_name": "meat gang", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Crib Chat", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Crib Rules", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Crib Nights", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Nia Sync", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Nia Standup", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
+          { "display_name": "Nia Ops", "member_count": 3, "members": [
+              { "phone_last10": "5550110001" }, { "phone_last10": "5550110002" },
+              { "phone_last10": "5550110003" } ] },
           { "display_name": "Kim Family", "member_count": 3, "members": [
               { "phone_last10": "5551234567" }, { "phone_last10": "5550002222" },
               { "phone_last10": "5550003333" } ] },
@@ -119,38 +170,37 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
       acme.via.contains("group chat: Acme Interns"),
       "the evidence must name the group chat it came from")
 
-    // --- group-name-only organization, corroborated by a member's matching email domain.
-    let dana = try XCTUnwrap(orgs["dana-kim"], "Dana is in two corroborated org chats")
+    // --- chat-name-only organization: no email anywhere on this person.
+    let dana = try XCTUnwrap(orgs["dana-kim"], "Dana is in two of the organization's chats")
     let danaAcme = try XCTUnwrap(affiliation(dana, named: "Acme"))
-    XCTAssertEqual(danaAcme.kind, "organization", "Dana has no Acme email — only the chat names it")
+    XCTAssertEqual(danaAcme.kind, "organization", "Dana has no Acme email — only the chats name it")
     XCTAssertEqual(
       danaAcme.confidence, 0.7, accuracy: 0.0001,
-      "a chat name corroborated by a co-member's domain scores below a first-party email")
+      "chat names alone score below a first-party email at the same organization")
     XCTAssertFalse(
       danaAcme.via.contains(where: { $0.hasPrefix("email:") }),
       "Dana's evidence must not cite an email address she does not have")
 
-    // --- group-name-only organization, corroborated only by appearing in two separate chats.
-    let zenith = try XCTUnwrap(affiliation(dana, named: "Zenith"))
-    XCTAssertEqual(
-      zenith.confidence, 0.55, accuracy: 0.0001,
-      "two independent chats naming the same org is the weakest evidence we still accept")
-    XCTAssertEqual(
-      Set(zenith.via), ["group chat: Zenith Interns", "group chat: Zenith Startup Chat"],
-      "both corroborating chats must be cited")
-
-    // --- THE CONSERVATIVE CASE: one work-ish chat, nothing else. No organization at all.
+    // --- THE CONSERVATIVE CASES. Each of these clears some of the bar and must still yield
+    // nothing, because the whole rule is that one signal on its own is never enough.
     for (personID, list) in orgs {
       XCTAssertNil(
         affiliation(list, named: "Vertex"),
         "\(personID): a single un-corroborated group-chat name must never invent an organization")
+      XCTAssertNil(
+        affiliation(list, named: "Zenith"),
+        "\(personID): two chats is one short of establishing an organization")
+      for trap in ["Meat", "Meat Gang", "Gang", "Crib", "Nia"] {
+        XCTAssertNil(
+          affiliation(list, named: trap),
+          "\(personID): '\(trap)' must never be read as an organization")
+      }
     }
 
     // --- consumer mailbox is not an employer.
     let carol = orgs["carol-diaz"] ?? []
     XCTAssertNil(affiliation(carol, named: "Gmail"), "a gmail.com address says nothing about work")
-    XCTAssertEqual(
-      carol.map(\.name), ["Zenith"], "Carol's only honest affiliation is the corroborated one")
+    XCTAssertTrue(carol.isEmpty, "Carol has no corroborated signal of any kind")
 
     // --- a domain that just restates the person's own name is a personal site, not an org.
     let erin = orgs["erin-lovelace"] ?? []
@@ -159,6 +209,87 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
 
     // --- nobody with no signal at all gets an entry.
     XCTAssertNil(orgs["ivan-petrov"], "a consumer mailbox and no groups yields no affiliation")
+  }
+
+  /// The regression this whole rule exists for: a **phone-only** address book with realistic chat
+  /// names must still produce affiliations. The email-corroborated version of this rule shipped a
+  /// cold run with `affiliations` on 0 of 1,825 people, because real message exports carry phone
+  /// handles and essentially no email — so every assertion below deliberately uses a person who has
+  /// no email address at all.
+  func testAffiliationsAreDerivedFromPhoneOnlyData() throws {
+    let p = try runPipeline()
+    let orgs = PeopleIntelDerivation.affiliations(people: p.people, communities: p.communities)
+
+    // Dana holds no email. Four chats bear "Acme"; she is in two of them.
+    let dana = try XCTUnwrap(orgs["dana-kim"], "a phone-only contact must still get an affiliation")
+    XCTAssertTrue(
+      p.people.idByEmail.values.allSatisfy { $0 != "dana-kim" }, "Dana must have no email handle")
+    let danaAcme = try XCTUnwrap(affiliation(dana, named: "Acme"))
+    XCTAssertEqual(danaAcme.confidence, 0.7, accuracy: 0.0001, "in two of the organization's chats")
+
+    // Rex is in exactly one chat, but it is a chat Acme *owns* — named after it, no second party.
+    let rex = try XCTUnwrap(orgs["rex-bloom"], "one chat the organization owns is real evidence")
+    let rexAcme = try XCTUnwrap(affiliation(rex, named: "Acme"))
+    XCTAssertEqual(
+      rexAcme.confidence, 0.55, accuracy: 0.0001, "the weakest evidence we still accept")
+    XCTAssertEqual(rexAcme.via, ["group chat: Acme Ops"], "the owning chat is the evidence")
+    XCTAssertEqual(rexAcme.kind, "organization", "no email said 'company', so we do not either")
+
+    // THE COUNTERPARTY CASE. Nia, Owen and Pia are in exactly one Acme chat and it names a second
+    // party, so they are as likely to be Northwind as Acme. Guessing here would put a stranger's
+    // employer on a real person's profile.
+    for personID in ["nia-kaur", "owen-diaz", "pia-roy"] {
+      XCTAssertNil(
+        affiliation(orgs[personID] ?? [], named: "Acme"),
+        "\(personID): one two-party chat does not say which of the two parties they are on")
+      XCTAssertNil(
+        affiliation(orgs[personID] ?? [], named: "Northwind"),
+        "\(personID): Northwind is named by one chat and is not established at all")
+    }
+  }
+
+  /// The establish step, pinned on its own: which words this graph's chat names make organizations,
+  /// and — more importantly — which ones they do not.
+  func testOrganizationsAreEstablishedOnlyByCorroboratedRecurrence() throws {
+    let p = try runPipeline()
+    let index = PeopleIntelDerivation.organizations(people: p.people, communities: p.communities)
+
+    XCTAssertEqual(
+      Set(index.organizations.keys), ["acme"],
+      "exactly one token in this address book clears recurrence + overlap + category + shape")
+    let acme = try XCTUnwrap(index.organizations["acme"])
+    XCTAssertEqual(acme.display, "Acme", "the spelling the user actually types")
+    XCTAssertEqual(
+      acme.chats,
+      ["Acme Interns", "Acme Ops", "Acme Startup 2024", "Northwind >< Acme"],
+      "every chat bearing the token counts toward establishing it")
+    XCTAssertEqual(
+      acme.ownChats, ["Acme Interns", "Acme Ops", "Acme Startup 2024"],
+      "a two-party chat is evidence the organization exists, never evidence of who works there")
+  }
+
+  /// Each filter, isolated: the fixture gives every one of these tokens enough recurrence and
+  /// enough membership overlap to be established, and each is stopped by exactly one rule.
+  func testIdentityWordsRejectEachClassOfNonOrganization() {
+    let names: Set<String> = ["nia", "kaur", "dana", "kim"]
+    func words(_ name: String) -> [String] {
+      PeopleIntelDerivation.identityWords(inGroupName: name, excludingNames: names)
+    }
+    XCTAssertEqual(words("Acme Interns"), ["Acme"], "role words are decoration")
+    XCTAssertEqual(words("🚀 Acme eng standup"), ["Acme"], "so are emoji")
+    XCTAssertEqual(words("OpenAI Team"), ["OpenAI"], "the user's own capitalization is preserved")
+    XCTAssertEqual(words("AV S26"), ["AV"], "an acronym survives; a cohort code does not")
+    XCTAssertEqual(
+      words("Spring '25 Dilly"), ["Dilly"], "a season and a year are both cohort codes")
+    XCTAssertEqual(words("the team chat"), [], "an all-generic name names no organization")
+    XCTAssertEqual(words("meat gang"), ["meat"], "'gang' is generic; 'meat' survives to be counted")
+    XCTAssertEqual(
+      words("Nia Sync"), [],
+      "a contact's own name is the single most recurrent token in real chat names")
+    XCTAssertEqual(words("🎉🎉🎉"), [], "emoji alone name nothing")
+    XCTAssertEqual(words("2024 2025"), [], "digits carry no organization identity")
+    XCTAssertEqual(
+      words("AI Startup Founders"), [], "industry and role words say what, never which")
   }
 
   /// A single-holder corporate domain is real but weaker evidence than one several contacts share,
@@ -187,24 +318,32 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
     XCTAssertEqual(sam.kind, "school", "a .edu domain is a school, not a company")
   }
 
-  /// The org token is what makes a chat name usable at all; it has to survive decoration and
-  /// refuse to fire on names that carry no identity.
-  func testOrganizationTokenExtraction() {
-    XCTAssertEqual(PeopleIntelDerivation.organizationToken(fromGroupName: "Acme Interns"), "Acme")
+  /// An uncorroborated domain also has to look like a brand. Both of these were real senders in a
+  /// real 1,825-person address book, and both became companies on somebody's profile.
+  func testUncorroboratedSpamDomainsDoNotBecomeCompanies() throws {
+    var people = PeopleGraphBuilder.People()
+    people.canonByID["spam-one"] = PeopleGraphBuilder.Canon(
+      id: "spam-one", name: "Spam One", messageCount: 2, identified: false, lastDate: nil)
+    people.canonByID["real-one"] = PeopleGraphBuilder.Canon(
+      id: "real-one", name: "Matt R", messageCount: 40, identified: true, lastDate: nil)
+    people.idName = ["spam-one": "Spam One", "real-one": "Matt R"]
+    people.idByEmail = [
+      "jaystr8@marketing.yxzvwggct.com": "spam-one", "matt@molinar.ai": "real-one",
+    ]
+
+    let orgs = PeopleIntelDerivation.affiliations(
+      people: people, communities: PeopleGraphBuilder.Communities())
+    XCTAssertNil(orgs["spam-one"], "a machine-generated hostname is not an employer")
     XCTAssertEqual(
-      PeopleIntelDerivation.organizationToken(fromGroupName: "Acme Startup 2024"), "Acme",
-      "a year carries no organization identity")
-    XCTAssertEqual(
-      PeopleIntelDerivation.organizationToken(fromGroupName: "🚀 acme eng standup"), "Acme",
-      "emoji and role words are decoration; casing is normalized only when the user typed none")
-    XCTAssertEqual(
-      PeopleIntelDerivation.organizationToken(fromGroupName: "OpenAI Team"), "OpenAI",
-      "a name the user already capitalized keeps its shape")
-    XCTAssertNil(
-      PeopleIntelDerivation.organizationToken(fromGroupName: "the team chat"),
-      "an all-generic name names no organization")
-    XCTAssertNil(
-      PeopleIntelDerivation.organizationToken(fromGroupName: "🎉🎉🎉"), "emoji alone name nothing")
+      orgs["real-one"]?.first?.name, "Molinar",
+      "a pronounceable single-holder domain is still the person telling you where they work")
+
+    XCTAssertTrue(PeopleIntelDerivation.isMachineGenerated("yxzvwggct"))
+    XCTAssertTrue(PeopleIntelDerivation.isMachineGenerated("xrbru"))
+    for brand in ["molinar", "stanford", "acme", "openai", "vertexrobotics", "breakout"] {
+      XCTAssertFalse(
+        PeopleIntelDerivation.isMachineGenerated(brand), "\(brand) is a name people say out loud")
+    }
   }
 
   // MARK: - Relationship label
@@ -279,7 +418,7 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
 
   // MARK: - Community meanings
 
-  func testCommunityMeaningsGlossOnlyClassifiedGroups() throws {
+  func testCommunityMeaningsExplainEveryGroupWithoutInventingACategory() throws {
     let p = try runPipeline()
     let meanings = PeopleIntelDerivation.communityMeanings(p.communities)
 
@@ -291,10 +430,20 @@ final class PeopleIntelligenceDerivationTests: XCTestCase {
       "A work group chat on iMessage — 3 of its 6 members are people you know.",
       "a partly-known chat is explicit that you only know some of it")
     XCTAssertEqual(meanings["Kim Family"], "A family group chat on iMessage — 3 people you know.")
-    XCTAssertNil(
-      meanings["Brunch Plans"],
-      "the categorizer's `social` bucket means 'we could not tell' — glossing it would report a "
-        + "categorization that never happened")
+
+    // The categorizer's `social` bucket means "we could not tell". Requiring a category meant three
+    // quarters of a real user's groups rendered as a bare name with nothing under them, so the
+    // connector and the membership — facts about every chat — are stated either way.
+    let brunch = try XCTUnwrap(
+      meanings["Brunch Plans"], "an unclassified group still gets the facts we do have")
+    XCTAssertEqual(brunch, "A group chat on iMessage — 3 people you know.")
+    XCTAssertFalse(
+      brunch.lowercased().contains("social"),
+      "the fallback bucket must never be reported as a category we inferred")
+
+    XCTAssertEqual(
+      meanings.count, p.communities.list.count,
+      "every named group with a known member gets an explanation")
   }
 
   // MARK: - connections[].how

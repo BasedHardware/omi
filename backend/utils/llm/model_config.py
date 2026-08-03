@@ -84,6 +84,11 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'conv_discard': ('gpt-5-nano', 'openai'),
     'daily_summary_simple': ('gpt-5-nano', 'openai'),
     'memory_category': ('gpt-5-nano', 'openai'),
+    # Person dossiers run across a whole address book, so they take the cheap tier. The grounding
+    # validator (utils/llm/people_dossier.ground_dossier) discards anything the model asserts
+    # without a citation, so a lighter model yields a smaller profile — never a more confident
+    # wrong one.
+    'person_dossier': ('gpt-5-nano', 'openai'),
     'smart_glasses': ('gpt-5-nano', 'openai'),
     'persona_chat': ('gpt-5-nano', 'openai'),
     # Non-OpenAI routes remain intentionally unchanged.

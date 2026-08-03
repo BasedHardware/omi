@@ -33,6 +33,7 @@ export interface ActionItem {
   completed_at?: string | null;
   concrete_deliverable?: boolean | null;
   conversation_id?: string | null;
+  counterparty_name?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
@@ -43,6 +44,8 @@ export interface ActionItem {
 
 export interface ActionItemCreateRequest {
   apple_reminder_id?: string | null;
+  assignee_person_id?: string | null;
+  assigner_person_id?: string | null;
   completed?: boolean | null;
   conversation_id?: string | null;
   description: string;
@@ -71,6 +74,8 @@ export interface ActionItemIdsResponse {
 
 export interface ActionItemResponse {
   apple_reminder_id?: string | null;
+  assignee_person_id?: string | null;
+  assigner_person_id?: string | null;
   completed: boolean;
   completed_at?: string | null;
   conversation_id?: string | null;
@@ -101,6 +106,8 @@ export interface ActionItemResponse {
 
 export interface ActionItemUpdateRequest {
   apple_reminder_id?: string | null;
+  assignee_person_id?: string | null;
+  assigner_person_id?: string | null;
   clear_due_at?: boolean;
   completed?: boolean | null;
   description?: string | null;
@@ -1604,6 +1611,12 @@ export interface Display {
   start_at?: string | null;
 }
 
+export interface DossierClaimOut {
+  evidence?: Array<string>;
+  field: string;
+  text: string;
+}
+
 export interface ErrorResponse {
   detail: string | Array<unknown> | Record<string, unknown>;
 }
@@ -2608,6 +2621,34 @@ export interface Person {
   updated_at?: string | null;
 }
 
+export interface PersonDossierOut {
+  activities?: Array<string>;
+  claims?: Array<DossierClaimOut>;
+  evidence_count?: number;
+  evidence_fingerprint?: string;
+  facts?: Array<string>;
+  name: string;
+  now?: string | null;
+  open_threads?: Array<string>;
+  overall?: string | null;
+  person_id: string;
+  who?: string | null;
+}
+
+export interface PersonDossierRequest {
+  people?: Array<PersonDossierRequestItem>;
+}
+
+export interface PersonDossierRequestItem {
+  known_fingerprint?: string | null;
+  person_id: string;
+}
+
+export interface PersonDossierResponse {
+  dossiers?: Array<PersonDossierOut>;
+  skipped?: Array<SkippedPerson>;
+}
+
 export interface PhoneCallQuota {
   allowed_countries?: Array<string>;
   has_access: boolean;
@@ -3055,6 +3096,11 @@ export interface SimpleTranscriptSegment {
   text: string;
 }
 
+export interface SkippedPerson {
+  person_id: string;
+  reason: string;
+}
+
 export interface SnapshotReceipt {
   expires_at: string;
   replaced: boolean;
@@ -3273,6 +3319,8 @@ export interface TaskCardSpec {
 }
 
 export interface TaskChangePayload {
+  assignee_person_id?: string | null;
+  assigner_person_id?: string | null;
   description?: string | null;
   due_at?: string | null;
   due_confidence?: number | null;
@@ -3310,6 +3358,8 @@ export interface TaskCreateCandidate {
 }
 
 export interface TaskCreatePayload {
+  assignee_person_id?: string | null;
+  assigner_person_id?: string | null;
   description: string;
   due_at?: string | null;
   due_confidence?: number | null;
@@ -4094,6 +4144,7 @@ export interface OmiApiSchemas {
   "DismissAnnouncementRequest": DismissAnnouncementRequest;
   "DismissAnnouncementResponse": DismissAnnouncementResponse;
   "Display": Display;
+  "DossierClaimOut": DossierClaimOut;
   "ErrorResponse": ErrorResponse;
   "EvaluationRequest": EvaluationRequest;
   "Event": Event;
@@ -4235,6 +4286,10 @@ export interface OmiApiSchemas {
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
   "Person": Person;
+  "PersonDossierOut": PersonDossierOut;
+  "PersonDossierRequest": PersonDossierRequest;
+  "PersonDossierRequestItem": PersonDossierRequestItem;
+  "PersonDossierResponse": PersonDossierResponse;
   "PhoneCallQuota": PhoneCallQuota;
   "PhoneMutationResponse": PhoneMutationResponse;
   "PhoneNumberResponse": PhoneNumberResponse;
@@ -4294,6 +4349,7 @@ export interface OmiApiSchemas {
   "SimplePerson": SimplePerson;
   "SimpleStructured": SimpleStructured;
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
+  "SkippedPerson": SkippedPerson;
   "SnapshotReceipt": SnapshotReceipt;
   "SpeakerAnalytics": SpeakerAnalytics;
   "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
@@ -6835,6 +6891,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/people/dossiers": {
+    post: {
+      operationId: "get_person_dossiers_v1_people_dossiers_post";
+      responses: {
+        "200": PersonDossierResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/phone/numbers": {
     get: {
       operationId: "list_phone_numbers_v1_phone_numbers_get";
@@ -8225,6 +8291,17 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v3/memories/by-person/{person_id}": {
+    get: {
+      operationId: "get_memories_by_person_v3_memories_by_person__person_id__get";
+      responses: {
+        "200": Array<MemoryDB>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v3/memories/review-queue": {
     get: {
       operationId: "list_memory_review_queue_v3_memories_review_queue_get";
@@ -8373,7 +8450,7 @@ export class OmiApiError extends Error {
   }
 }
 
-export async function get_action_items_v1_action_items_get(query: { limit?: number, offset?: number, completed?: boolean | null, conversation_id?: string | null, start_date?: string | null, end_date?: string | null, due_start_date?: string | null, due_end_date?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemsResponse> {
+export async function get_action_items_v1_action_items_get(query: { limit?: number, offset?: number, completed?: boolean | null, conversation_id?: string | null, start_date?: string | null, end_date?: string | null, due_start_date?: string | null, due_end_date?: string | null, person_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items`;
   const _params = query ? Object.entries(query)
@@ -13017,6 +13094,27 @@ export async function save_paypal_payment_details_v1_paypal_payment_details_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_person_dossiers_v1_people_dossiers_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: PersonDossierRequest, init?: OmiApiClientInit): Promise<PersonDossierResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/people/dossiers`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_phone_numbers_v1_phone_numbers_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PhoneNumbersResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/phone/numbers`;
@@ -15818,6 +15916,28 @@ export async function delete_memories_batch_v3_memories_batch_delete(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_memories_by_person_v3_memories_by_person__person_id__get(path: { person_id: string }, query: { limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<MemoryDB>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/by-person/${path.person_id}`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_memory_review_queue_v3_memories_review_queue_get(query: { status?: string, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/review-queue`;
@@ -16092,4 +16212,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 392 client methods generated.
+// Total: 394 client methods generated.

@@ -225,6 +225,18 @@
             "description": "ID of the conversation this action item came from",
             "title": "Conversation Id"
           },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The other party, by name, only when the source names them explicitly and unambiguously",
+            "title": "Counterparty Name"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -314,6 +326,34 @@
               }
             ],
             "title": "Apple Reminder Id"
+          },
+          "assignee_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Person Id"
+          },
+          "assigner_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigner Person Id"
           },
           "completed": {
             "anyOf": [
@@ -545,6 +585,34 @@
               }
             ],
             "title": "Apple Reminder Id"
+          },
+          "assignee_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Person Id"
+          },
+          "assigner_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigner Person Id"
           },
           "completed": {
             "title": "Completed",
@@ -810,6 +878,34 @@
               }
             ],
             "title": "Apple Reminder Id"
+          },
+          "assignee_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Person Id"
+          },
+          "assigner_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigner Person Id"
           },
           "clear_due_at": {
             "default": false,
@@ -9990,6 +10086,31 @@
         "title": "Display",
         "type": "object"
       },
+      "DossierClaimOut": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "text"
+        ],
+        "title": "DossierClaimOut",
+        "type": "object"
+      },
       "ErrorResponse": {
         "properties": {
           "detail": {
@@ -15806,6 +15927,156 @@
         "title": "Person",
         "type": "object"
       },
+      "PersonDossierOut": {
+        "properties": {
+          "activities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Activities",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/DossierClaimOut"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "evidence_count": {
+            "default": 0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "evidence_fingerprint": {
+            "default": "",
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "now": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Now"
+          },
+          "open_threads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Threads",
+            "type": "array"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "who": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Who"
+          }
+        },
+        "required": [
+          "person_id",
+          "name"
+        ],
+        "title": "PersonDossierOut",
+        "type": "object"
+      },
+      "PersonDossierRequest": {
+        "properties": {
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonDossierRequestItem"
+            },
+            "maxItems": 12,
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "title": "PersonDossierRequest",
+        "type": "object"
+      },
+      "PersonDossierRequestItem": {
+        "properties": {
+          "known_fingerprint": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known Fingerprint"
+          },
+          "person_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Person Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id"
+        ],
+        "title": "PersonDossierRequestItem",
+        "type": "object"
+      },
+      "PersonDossierResponse": {
+        "properties": {
+          "dossiers": {
+            "items": {
+              "$ref": "#/components/schemas/PersonDossierOut"
+            },
+            "title": "Dossiers",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedPerson"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "title": "PersonDossierResponse",
+        "type": "object"
+      },
       "PhoneCallQuota": {
         "description": "Phone call feature access + remaining-quota snapshot for the client.",
         "properties": {
@@ -18529,6 +18800,24 @@
         "title": "SimpleTranscriptSegment",
         "type": "object"
       },
+      "SkippedPerson": {
+        "properties": {
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "reason"
+        ],
+        "title": "SkippedPerson",
+        "type": "object"
+      },
       "SnapshotReceipt": {
         "additionalProperties": false,
         "properties": {
@@ -19778,6 +20067,34 @@
       "TaskChangePayload": {
         "additionalProperties": false,
         "properties": {
+          "assignee_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Person Id"
+          },
+          "assigner_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigner Person Id"
+          },
           "description": {
             "anyOf": [
               {
@@ -20068,6 +20385,34 @@
         "additionalProperties": false,
         "description": "Candidate task-create payload; envelope metadata is intentionally absent.",
         "properties": {
+          "assignee_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Person Id"
+          },
+          "assigner_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigner Person Id"
+          },
           "description": {
             "maxLength": 4096,
             "minLength": 1,
@@ -23619,7 +23964,7 @@
   "paths": {
     "/v1/action-items": {
       "get": {
-        "description": "Get action items for the current user.",
+        "description": "Get action items for the current user.\n\n``person_id`` is a separate read path (see\n``database.action_items.get_action_items_for_person``), not another predicate on the\ngeneral list: person-scoped reads must stay equality-only so that tasks without a\n``due_at`` are not dropped by an ordered Firestore query. Combining it with a date\nrange would require that ordering, so the combination is rejected rather than\nsilently returning a subset.",
         "operationId": "get_action_items_v1_action_items_get",
         "parameters": [
           {
@@ -23759,6 +24104,24 @@
               ],
               "description": "Filter by due end date (inclusive)",
               "title": "Due End Date"
+            }
+          },
+          {
+            "description": "Filter to tasks this person is the assignee or the assigner of. Value is a backend Person id (users/{uid}/people). Omitting it lists every task, including the ones that carry no person at all.",
+            "in": "query",
+            "name": "person_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to tasks this person is the assignee or the assigner of. Value is a backend Person id (users/{uid}/people). Omitting it lists every task, including the ones that carry no person at all.",
+              "title": "Person Id"
             }
           },
           {
@@ -44059,6 +44422,94 @@
         "summary": "Save Paypal Payment Details"
       }
     },
+    "/v1/people/dossiers": {
+      "post": {
+        "description": "Narrative + provenance for up to `MAX_PEOPLE_PER_REQUEST` people, in one shared read.",
+        "operationId": "get_person_dossiers_v1_people_dossiers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonDossierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonDossierResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Person Dossiers",
+        "tags": [
+          "people"
+        ]
+      }
+    },
     "/v1/phone/numbers": {
       "get": {
         "description": "List all verified phone numbers for the user.",
@@ -51265,7 +51716,7 @@
         ]
       },
       "post": {
-        "description": "Create a new person or return existing one with same name (idempotent by name).\n\nThis enables backward compatibility: old apps can call this API and get the\nsame person that backend already created, preventing duplicates.",
+        "description": "Create a new person or return existing one with same name (idempotent by name).\n\nThis enables backward compatibility: old apps can call this API and get the\nsame person that backend already created, preventing duplicates. The resolution\nitself lives in the database layer so the conversation extractor's person\nattribution reaches the same person for the same name.",
         "operationId": "get_or_create_person_v1_users_people_post",
         "parameters": [
           {
@@ -56807,6 +57258,112 @@
           }
         ],
         "summary": "Create Memories Batch",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/by-person/{person_id}": {
+      "get": {
+        "description": "Every memory attributed to one person, newest first.\n\nExists because `GET /v3/memories` is a pagination contract, not a query surface: it\norders by `scoring` before `created_at` and takes no subject filter, so a client that\nwants one person's facts has to page the whole store to find a handful of rows — which\nis why the desktop profile page was reading its local cache instead and showing\nnothing on a machine whose cache is cold or scoring-truncated.\n\n`person_id` is the backend `Person` uuid from `users/{uid}/people`, the same id space\nas `TranscriptSegment.person_id`. The read is by subject id, never by name.",
+        "operationId": "get_memories_by_person_v3_memories_by_person__person_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemoryDB"
+                  },
+                  "title": "Response Get Memories By Person V3 Memories By Person  Person Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Memories By Person",
         "tags": [
           "memories"
         ]

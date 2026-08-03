@@ -32,10 +32,22 @@ extension APIClient {
 
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
+  ///
+  /// - Parameters:
+  ///   - conversationId: Scope to the tasks extracted from one conversation.
+  ///   - personId: Scope to one person's tasks — every task where they are the assignee
+  ///     **or** the assigner. A backend `Person` id (`users/{uid}/people`), the same id
+  ///     space as a transcript segment's `person_id`. Omitting it lists every task,
+  ///     including the ones that carry no person at all, so no existing caller changes
+  ///     behavior. The backend rejects pairing it with a date range or `conversationId`
+  ///     (the person-scoped read is equality-only so undated tasks are not dropped), so
+  ///     pass it on its own.
   func getActionItems(
     limit: Int = 100,
     offset: Int = 0,
     completed: Bool? = nil,
+    conversationId: String? = nil,
+    personId: String? = nil,
     startDate: Date? = nil,
     endDate: Date? = nil,
     dueStartDate: Date? = nil,
@@ -49,6 +61,10 @@ extension APIClient {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     var queryItems = ["limit=\(limit)", "offset=\(offset)"]
     if let completed { queryItems.append("completed=\(completed)") }
+    // Both ids are percent-encoded rather than interpolated raw: a person id is minted from
+    // a user-typed name, and one stray `&` would silently become a second query parameter.
+    if let conversationId { queryItems.append("conversation_id=\(Self.actionItemQueryEncoded(conversationId))") }
+    if let personId { queryItems.append("person_id=\(Self.actionItemQueryEncoded(personId))") }
     if let startDate { queryItems.append("start_date=\(formatter.string(from: startDate))") }
     if let endDate { queryItems.append("end_date=\(formatter.string(from: endDate))") }
     if let dueStartDate { queryItems.append("due_start_date=\(formatter.string(from: dueStartDate))") }
@@ -60,6 +76,15 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
+  }
+
+  /// Percent-encodes one query value, additionally escaping the reserved characters
+  /// `.urlQueryAllowed` leaves intact (`&`, `+`, `=`, `?`, `#`) so a value can never be
+  /// read as a second parameter.
+  static func actionItemQueryEncoded(_ value: String) -> String {
+    var allowed = CharacterSet.urlQueryAllowed
+    allowed.remove(charactersIn: "&+=?#")
+    return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
   }
 
   /// Fetch one page from the complete dated active/completed bucket. The

@@ -75,6 +75,11 @@ class CanonicalTaskCreate(BaseModel):
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: TaskOwner = TaskOwner.user
+    # ``owner`` is me-vs-not-me; these name *which* person. Both are backend Person ids
+    # (``users/{uid}/people``) — the same id space as ``TranscriptSegment.person_id``.
+    # Optional forever: every task written before this field existed carries neither.
+    assignee_person_id: Optional[StableId] = None
+    assigner_person_id: Optional[StableId] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: str = Field(default='manual', min_length=1, max_length=64)
@@ -114,6 +119,8 @@ class CanonicalTaskUpdate(BaseModel):
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: Optional[TaskOwner] = None
+    assignee_person_id: Optional[StableId] = None
+    assigner_person_id: Optional[StableId] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: Optional[str] = Field(default=None, min_length=1, max_length=64)
@@ -185,6 +192,10 @@ class ActionItemResponse(BaseModel):
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: TaskOwner = TaskOwner.unknown
+    # Absent on every task written before per-person attribution existed; the response
+    # projects them as null rather than failing, so legacy rows keep deserializing.
+    assignee_person_id: Optional[StableId] = None
+    assigner_person_id: Optional[StableId] = None
     due_at: Optional[datetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: str = 'legacy'
@@ -251,6 +262,11 @@ class TaskCreatePayload(BaseModel):
 
     description: str = Field(min_length=1, max_length=4096)
     owner: TaskOwner = TaskOwner.unknown
+    # Person attribution is an annotation on the work, not part of task identity —
+    # deliberately excluded from _task_create_semantic_payload for the same reason
+    # evidence, source, and confidence are.
+    assignee_person_id: Optional[StableId] = None
+    assigner_person_id: Optional[StableId] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     priority: Optional[TaskPriority] = None
@@ -264,6 +280,8 @@ class TaskChangePayload(BaseModel):
     description: Optional[str] = Field(default=None, min_length=1, max_length=4096)
     status: Optional[TaskStatus] = None
     owner: Optional[TaskOwner] = None
+    assignee_person_id: Optional[StableId] = None
+    assigner_person_id: Optional[StableId] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     priority: Optional[TaskPriority] = None

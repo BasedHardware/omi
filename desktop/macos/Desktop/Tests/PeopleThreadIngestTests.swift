@@ -206,6 +206,91 @@ final class PeopleThreadIngestTests: XCTestCase {
       "the ledger is persisted at people_thread_ingest_ledger.json")
   }
 
+  // MARK: - Legacy ledger recovery (history_grounded)
+
+  /// The regression: `personKeys` was added to the ledger as an additive field, so the ledger a real
+  /// machine already had on disk — `{"keys":[…30 hashes…],"version":1}` and nothing else — decoded
+  /// it as nil. `history_grounded` therefore read **0 of 1,825** even though 30 threads had
+  /// genuinely been ingested.
+  ///
+  /// "It refills on the next run" is only true for threads that move. A window key is
+  /// `sha256(personKey|bucket|day)`; a settled thread's key never changes, so it is never
+  /// resubmitted, so it never records its person — waiting grounds it *never*. This pins that the
+  /// legacy ledger is recovered instead, and that the recovered keys actually ground the person the
+  /// People tab shows.
+  func testALegacyLedgerWithNoPersonKeysRecoversTheThreadsItAlreadyIngested() throws {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("PeopleThreadIngestLegacyLedger-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+
+    // A settled iMessage thread and a settled WhatsApp thread, both already ingested…
+    let settled = candidate("6516210269", name: "Maya Iyer", count: 900, last: "2026-03-02T09:00:00Z")
+    let settledWA = candidate("wa:7746099000", name: "Aryaveer UMN", count: 328, last: "2026-02-11T18:20:00Z")
+    // …and one that has grown since, so its window key has moved on.
+    let moved = candidate("5559876543", name: "Bob Chen", count: 140, last: "2026-07-10T09:00:00Z")
+    let ingestedWindows = [settled, settledWA, moved].map {
+      PeopleThreadIngest.windowKey(
+        personKey: $0.personKey, messageCount: $0.messageCount, lastDate: $0.lastDate)
+    }
+
+    // Exactly the on-disk shape of the ledger the real machine had: window keys, a version, and no
+    // `personKeys` key at all.
+    let legacy = try JSONSerialization.data(
+      withJSONObject: ["version": 1, "keys": ingestedWindows], options: [.sortedKeys])
+    try legacy.write(to: dir.appendingPathComponent(PeopleThreadIngest.ledgerFileName))
+
+    XCTAssertTrue(
+      PeopleThreadIngest.ingestedPersonKeys(directory: dir).isEmpty,
+      "the zero being fixed: a legacy ledger grounds nobody")
+
+    // The live threads today: the two settled ones are unchanged, the third has grown by a bucket.
+    let grown = candidate("5559876543", name: "Bob Chen", count: 190, last: "2026-08-03T11:00:00Z")
+    let recovered = PeopleThreadIngest.recoverablePersonKeys(
+      [settled, settledWA, grown], ledger: Set(ingestedWindows))
+    XCTAssertEqual(
+      recovered, ["6516210269", "wa:7746099000"],
+      "a thread whose window has not moved is provably already ingested — and is precisely the "
+        + "thread that can never re-record itself by being resubmitted")
+    XCTAssertFalse(
+      recovered.contains(moved.personKey),
+      "a thread that has moved must not be claimed from a stale window; it records itself when "
+        + "its new window is submitted")
+
+    PeopleThreadIngest.appendLedger(directory: dir, keys: [], personKeys: recovered)
+    XCTAssertEqual(PeopleThreadIngest.ingestedPersonKeys(directory: dir), recovered)
+    XCTAssertEqual(
+      PeopleThreadIngest.loadLedger(directory: dir), Set(ingestedWindows),
+      "recovering people must not disturb the window keys the dedupe depends on")
+
+    // …and the recovered keys have to reach the person cards, through the `wa:` prefix too.
+    var people = PeopleGraphBuilder.People()
+    people.idByPhone = ["6516210269": "maya-iyer", "7746099000": "aryaveer-umn", "5559876543": "bob-chen"]
+    XCTAssertEqual(
+      PeopleIntelDerivation.historyGroundedIDs(
+        people: people, ingestedPersonKeys: PeopleThreadIngest.ingestedPersonKeys(directory: dir)),
+      ["maya-iyer", "aryaveer-umn"],
+      "a WhatsApp ledger key is `wa:` + the phone the graph keys the person by")
+  }
+
+  /// Recovery is a proof, not a guess: it only claims a person when the *same* window-key function
+  /// says this exact thread is the one in the ledger. An empty ledger claims nobody, and an
+  /// unrelated ledger entry claims nobody.
+  func testRecoveryNeverClaimsAThreadThatIsNotActuallyInTheLedger() {
+    let alice = candidate("5551234567", name: "Alice Nguyen", count: 80)
+    XCTAssertTrue(PeopleThreadIngest.recoverablePersonKeys([alice], ledger: []).isEmpty)
+    XCTAssertTrue(
+      PeopleThreadIngest.recoverablePersonKeys([alice], ledger: ["not-a-window-key"]).isEmpty)
+    XCTAssertEqual(
+      PeopleThreadIngest.recoverablePersonKeys(
+        [alice],
+        ledger: [
+          PeopleThreadIngest.windowKey(
+            personKey: alice.personKey, messageCount: alice.messageCount, lastDate: alice.lastDate)
+        ]),
+      ["5551234567"])
+  }
+
   // MARK: - Name resolution (the deep-ingest gate)
 
   /// Regression: the ingest used to resolve names ONLY from macOS Contacts, which iMessage-only

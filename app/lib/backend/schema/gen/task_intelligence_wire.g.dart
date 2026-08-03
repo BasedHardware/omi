@@ -80,6 +80,8 @@ class GeneratedEvidenceRef {
 
 class GeneratedActionItemResponse {
   final String? appleReminderId;
+  final String? assigneePersonId;
+  final String? assignerPersonId;
   final bool completed;
   final DateTime? completedAt;
   final String? conversationId;
@@ -109,6 +111,8 @@ class GeneratedActionItemResponse {
 
   const GeneratedActionItemResponse({
     this.appleReminderId,
+    this.assigneePersonId,
+    this.assignerPersonId,
     required this.completed,
     this.completedAt,
     this.conversationId,
@@ -140,6 +144,8 @@ class GeneratedActionItemResponse {
   factory GeneratedActionItemResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemResponse(
       appleReminderId: _readFieldValue<String>(_readField(json, const ["apple_reminder_id"]), "apple_reminder_id", _readString, requiredField: false, nullable: true),
+      assigneePersonId: _readFieldValue<String>(_readField(json, const ["assignee_person_id"]), "assignee_person_id", _readString, requiredField: false, nullable: true),
+      assignerPersonId: _readFieldValue<String>(_readField(json, const ["assigner_person_id"]), "assigner_person_id", _readString, requiredField: false, nullable: true),
       completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: true, nullable: false), "completed"),
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
@@ -172,6 +178,8 @@ class GeneratedActionItemResponse {
   Map<String, dynamic> toJson() {
     return {
       'apple_reminder_id': appleReminderId,
+      'assignee_person_id': assigneePersonId,
+      'assigner_person_id': assignerPersonId,
       'completed': completed,
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'conversation_id': conversationId,
@@ -203,6 +211,8 @@ class GeneratedActionItemResponse {
 }
 
 class GeneratedTaskCreatePayload {
+  final String? assigneePersonId;
+  final String? assignerPersonId;
   final String description;
   final DateTime? dueAt;
   final double? dueConfidence;
@@ -212,6 +222,8 @@ class GeneratedTaskCreatePayload {
   final String? recurrenceRule;
 
   const GeneratedTaskCreatePayload({
+    this.assigneePersonId,
+    this.assignerPersonId,
     required this.description,
     this.dueAt,
     this.dueConfidence,
@@ -223,6 +235,8 @@ class GeneratedTaskCreatePayload {
 
   factory GeneratedTaskCreatePayload.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskCreatePayload(
+      assigneePersonId: _readFieldValue<String>(_readField(json, const ["assignee_person_id"]), "assignee_person_id", _readString, requiredField: false, nullable: true),
+      assignerPersonId: _readFieldValue<String>(_readField(json, const ["assigner_person_id"]), "assigner_person_id", _readString, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
@@ -235,6 +249,8 @@ class GeneratedTaskCreatePayload {
 
   Map<String, dynamic> toJson() {
     return {
+      'assignee_person_id': assigneePersonId,
+      'assigner_person_id': assignerPersonId,
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
@@ -247,6 +263,8 @@ class GeneratedTaskCreatePayload {
 }
 
 class GeneratedTaskChangePayload {
+  final String? assigneePersonId;
+  final String? assignerPersonId;
   final String? description;
   final DateTime? dueAt;
   final double? dueConfidence;
@@ -258,6 +276,8 @@ class GeneratedTaskChangePayload {
   final String? supersededBy;
 
   const GeneratedTaskChangePayload({
+    this.assigneePersonId,
+    this.assignerPersonId,
     this.description,
     this.dueAt,
     this.dueConfidence,
@@ -271,6 +291,8 @@ class GeneratedTaskChangePayload {
 
   factory GeneratedTaskChangePayload.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskChangePayload(
+      assigneePersonId: _readFieldValue<String>(_readField(json, const ["assignee_person_id"]), "assignee_person_id", _readString, requiredField: false, nullable: true),
+      assignerPersonId: _readFieldValue<String>(_readField(json, const ["assigner_person_id"]), "assigner_person_id", _readString, requiredField: false, nullable: true),
       description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
@@ -285,6 +307,8 @@ class GeneratedTaskChangePayload {
 
   Map<String, dynamic> toJson() {
     return {
+      'assignee_person_id': assigneePersonId,
+      'assigner_person_id': assignerPersonId,
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,

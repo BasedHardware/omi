@@ -95,6 +95,7 @@ class GeneratedActionItem {
   final DateTime? completedAt;
   final bool? concreteDeliverable;
   final String? conversationId;
+  final String? counterpartyName;
   final DateTime? createdAt;
   final String description;
   final DateTime? dueAt;
@@ -111,6 +112,7 @@ class GeneratedActionItem {
     this.completedAt,
     this.concreteDeliverable,
     this.conversationId,
+    this.counterpartyName,
     this.createdAt,
     required this.description,
     this.dueAt,
@@ -129,6 +131,7 @@ class GeneratedActionItem {
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       concreteDeliverable: _readFieldValue<bool>(_readField(json, const ["concrete_deliverable"]), "concrete_deliverable", _readBool, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      counterpartyName: _readFieldValue<String>(_readField(json, const ["counterparty_name"]), "counterparty_name", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
@@ -148,6 +151,7 @@ class GeneratedActionItem {
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'concrete_deliverable': concreteDeliverable,
       'conversation_id': conversationId,
+      'counterparty_name': counterpartyName,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),

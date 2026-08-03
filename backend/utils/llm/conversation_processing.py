@@ -724,7 +724,23 @@ def extract_action_items(
     • A concrete request addressed directly to the primary user has capture_kind=direct_request,
       capture_owner=user, and high ownership_confidence. Use unknown only when the addressee is genuinely unclear.
     • A request addressed to someone else or broadcast without a direct mention is not owned by the primary user.
-    • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
+    • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.
+    • counterparty_name names the OTHER party to THIS commitment, and only when the transcript
+      names them out loud and only one person can be meant. capture_owner already fixes the
+      direction, so never restate it there: with capture_owner=other, counterparty_name is who
+      must do the work; with capture_owner=user, it is who asked for it.
+    • Leave counterparty_name EMPTY — the default, and always the safe answer — whenever any of
+      these is true:
+      - capture_owner is unknown. Never pick an owner just so you can name someone.
+      - The name is not actually spoken in the transcript, or you inferred it from context.
+      - Two or more people could be meant, or the request went to a group or was broadcast.
+      - The only label available is a speaker placeholder ("Speaker 0"), a pronoun ("he", "they"),
+        a role ("the designer", "my manager"), a team, or a company.
+      - The name belongs to the primary user.
+    • When you do fill it, use only the spoken personal name — "Sarah", "Sarah Chen" — with no
+      title, role, or qualifier ("Sarah from design" is wrong).
+    • A name appearing somewhere in the conversation is NOT enough on its own; it must be the
+      party to this specific commitment. One wrong name is worse than a hundred empty ones.'''
         if task_intelligence_capture
         else '''LEGACY COMMITMENT FILTER:
     • Skip if the user is currently doing it, about to do it, or handling it in this conversation.

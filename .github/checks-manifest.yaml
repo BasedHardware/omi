@@ -533,6 +533,11 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/swift-test-suites.sh"]
     lanes: ["local", "ci"]
     reason: "desktop Swift production or test structure changed"
+  - id: people-intel-decoded-field-writers
+    command: ["python3", "desktop/macos/scripts/check_people_intel_field_writers.py"]
+    triggers: ["desktop/macos/Desktop/Sources/MainWindow/Pages/People*.swift", "desktop/macos/Desktop/Sources/MainWindow/Pages/Person*.swift", "desktop/macos/Desktop/Sources/Providers/People*.swift", "desktop/macos/Desktop/Tests/PeopleColdStartContractTests.swift", "desktop/macos/scripts/check_people_intel_field_writers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "People Intelligence shipped renderers for who/now/overall/facts that nothing in-repo ever wrote, unnoticed because the only machine it was reviewed on had an out-of-tree people_intelligence.json; every decoded field must now have a writer or a declared Phase-2/3 gap, and must be classified in the cold-start contract test that drives the create path a new user actually takes"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
     triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]

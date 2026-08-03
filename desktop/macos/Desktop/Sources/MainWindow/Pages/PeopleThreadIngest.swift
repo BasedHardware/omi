@@ -141,6 +141,10 @@ enum PeopleThreadIngest {
   struct SubmissionPlan {
     let directory: URL
     let submissions: [Submission]
+    /// People whose thread is provably already in the ledger but whose person key predates the
+    /// ledger recording person keys at all. Persisted before (and independently of) any submission
+    /// — see `recoverablePersonKeys`.
+    var recoveredPersonKeys: Set<String> = []
   }
 
   // MARK: - Entry point (gated, throttled, off-main, silent)
@@ -158,7 +162,22 @@ enum PeopleThreadIngest {
     let plan: SubmissionPlan? = await Task.detached(priority: .utility) {
       buildPlan(uid: uid)
     }.value
-    guard let plan, !plan.submissions.isEmpty else { return }
+    guard let plan else { return }
+
+    // Repair a ledger written before person keys were recorded, BEFORE the submission gate below:
+    // the people this recovers are precisely the ones with nothing left to submit, so gating the
+    // repair on there being work to do would never run it.
+    if !plan.recoveredPersonKeys.isEmpty {
+      let recovered = plan.recoveredPersonKeys
+      let directory = plan.directory
+      await Task.detached(priority: .utility) {
+        appendLedger(directory: directory, keys: [], personKeys: recovered)
+      }.value
+      log(
+        "PeopleThreadIngest: recovered \(recovered.count) already-ingested person(s) from a ledger "
+          + "written before person keys were recorded")
+    }
+    guard !plan.submissions.isEmpty else { return }
 
     // Submit sequentially and *paced*. Only successfully-submitted window keys are recorded, so any
     // un-submitted thread is retried on a later throttled run. Pacing matters: a back-to-back burst
@@ -218,13 +237,26 @@ enum PeopleThreadIngest {
     guard !candidates.isEmpty else { return nil }
 
     let ledger = loadLedger(directory: dir)
+    let recovered = recoverablePersonKeys(candidates, ledger: ledger)
+      .subtracting(ingestedPersonKeys(directory: dir))
     let selected = newCandidates(candidates, ledger: ledger, cap: maxPeoplePerRun)
-    guard !selected.isEmpty else { return nil }
+    guard !selected.isEmpty else {
+      guard !recovered.isEmpty else { return nil }
+      return SubmissionPlan(directory: dir, submissions: [], recoveredPersonKeys: recovered)
+    }
+
+    // The durable identity table, so each thread's segments can name their counterpart by the
+    // backend `Person` uuid rather than uploading an anonymous speaker label.
+    let links = PeopleIdentityStore.load(directory: dir)
 
     var submissions: [Submission] = []
     for (candidate, windowKey) in selected {
       let messages = readThread(candidate, limit: maxMessagesPerThread)
-      guard let built = buildTranscript(contactName: candidate.contactName, messages: messages) else {
+      guard
+        let built = buildTranscript(
+          contactName: candidate.contactName, messages: messages,
+          personUUID: links.personUUID(forKey: identityKey(personKey: candidate.personKey)))
+      else {
         continue
       }
       submissions.append(
@@ -237,8 +269,8 @@ enum PeopleThreadIngest {
         )
       )
     }
-    guard !submissions.isEmpty else { return nil }
-    return SubmissionPlan(directory: dir, submissions: submissions)
+    guard !submissions.isEmpty || !recovered.isEmpty else { return nil }
+    return SubmissionPlan(directory: dir, submissions: submissions, recoveredPersonKeys: recovered)
   }
 
   // MARK: - Candidate selection (pure)
@@ -268,6 +300,45 @@ enum PeopleThreadIngest {
     return out
   }
 
+  /// People whose thread is already in a ledger that predates the ledger recording person keys.
+  ///
+  /// `personKeys` was added to the ledger as an additive field, so an existing ledger decodes it as
+  /// nil — which reads as "nobody's history is grounded" even though 30 threads on the measured
+  /// machine had genuinely been ingested. "It refills on the next run" is only true for threads
+  /// that *move*: a window key is `sha256(personKey|bucket|day)`, and a thread is only resubmitted
+  /// once it crosses a message bucket or sees a new day. A settled thread's window key never
+  /// changes, so it is never resubmitted, so waiting grounds that person **never**.
+  ///
+  /// The hash is one-way, so the ledger cannot be read backwards — but it is deterministic, and we
+  /// still have the live threads. Recomputing a candidate's *current* window key and finding it
+  /// already in the ledger proves that exact thread was submitted, and therefore who it belongs to.
+  /// That covers precisely the settled threads that could never recover on their own; threads that
+  /// have moved since ingest mint a new window key and record their person the next time they are
+  /// submitted, so the two paths together converge on the full set.
+  ///
+  /// Pure and deterministic — one hash per candidate, no IO.
+  static func recoverablePersonKeys(_ candidates: [ThreadCandidate], ledger: Set<String>) -> Set<String> {
+    guard !ledger.isEmpty else { return [] }
+    var out: Set<String> = []
+    for candidate in candidates {
+      let key = windowKey(
+        personKey: candidate.personKey, messageCount: candidate.messageCount, lastDate: candidate.lastDate)
+      if ledger.contains(key) { out.insert(candidate.personKey) }
+    }
+    return out
+  }
+
+  /// The graph's identity key for a thread's `personKey`.
+  ///
+  /// A thread's person key is deliberately per-channel (`wa:` prefixes the WhatsApp one) so the
+  /// same human's two threads ingest as two conversations. Identity is the opposite: both channels
+  /// are one person, keyed by `phone_last10` exactly as `People.idByPhone` keys them — so the
+  /// channel prefix is stripped before looking a person up.
+  static func identityKey(personKey: String) -> String {
+    guard personKey.hasPrefix("wa:") else { return personKey }
+    return String(personKey.dropFirst("wa:".count))
+  }
+
   /// Stable dedupe key for a thread's current "window". Combines the person, the message-count
   /// bucket, and the day of the newest message so a thread re-ingests when it grows by a bucket or
   /// sees activity on a new day, but not on every single new message.
@@ -295,7 +366,16 @@ enum PeopleThreadIngest {
   /// `maxMessagesPerThread`, drops messages that are empty after redaction, and returns nil when
   /// fewer than `minSegmentsToSubmit` survive (not enough to ground a memory). Pure and
   /// unit-testable — no IO.
-  static func buildTranscript(contactName: String, messages: [RawMessage]) -> BuiltTranscript? {
+  ///
+  /// `personUUID` is the counterpart's backend `Person.id` (resolved by `PeopleIdentityBridge`).
+  /// It is stamped on the counterpart's segments only — never the user's — because that is exactly
+  /// the shape `infer_subject_from_segments` reads to attribute the whole conversation's memories
+  /// to that person. Nil (not yet bridged) simply reproduces the previous unattributed upload.
+  static func buildTranscript(contactName: String, messages: [RawMessage], personUUID: String? = nil)
+    -> BuiltTranscript?
+  {
+    let counterpartID = personUUID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let personID = (counterpartID?.isEmpty ?? true) ? nil : counterpartID
     let window = messages.suffix(maxMessagesPerThread)
     var segments: [APIClient.UploadSegment] = []
     var startedAt: String?
@@ -310,7 +390,7 @@ enum PeopleThreadIngest {
           speaker: message.fromMe ? "SPEAKER_00" : contactName,
           speaker_id: message.fromMe ? 0 : 1,
           is_user: message.fromMe,
-          person_id: nil,
+          person_id: message.fromMe ? nil : personID,
           start: Double(slot),
           end: Double(slot) + 0.9
         )

@@ -3,7 +3,7 @@ import OmiWAL
 
 // MARK: - People Models
 
-struct Person: Codable, Identifiable {
+struct Person: Codable, Identifiable, Sendable {
   let id: String
   let name: String
   let createdAt: Date?

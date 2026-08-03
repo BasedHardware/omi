@@ -45,6 +45,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let taskStatus: String?
   /// Canonical ownership classification: user, other, unknown.
   let taskOwner: String?
+  /// Backend `Person` id of whoever has to do this, when a person was named.
+  /// `taskOwner` says me-vs-not-me; this says *which person*. Nil on every task
+  /// written before per-person attribution existed, and on any task where the
+  /// other party was never named unambiguously.
+  let assigneePersonId: String?
+  /// Backend `Person` id of whoever asked for this, when a person was named.
+  let assignerPersonId: String?
   let workstreamId: String?
   let dueConfidence: Double?
   let provenance: [OmiAPI.EvidenceRef]?
@@ -118,6 +125,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     case taskId = "task_id"
     case taskStatus = "status"
     case taskOwner = "owner"
+    case assigneePersonId = "assignee_person_id"
+    case assignerPersonId = "assigner_person_id"
     case workstreamId = "workstream_id"
     case dueConfidence = "due_confidence"
     case provenance
@@ -153,6 +162,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     taskId: String? = nil,
     taskStatus: String? = nil,
     taskOwner: String? = nil,
+    assigneePersonId: String? = nil,
+    assignerPersonId: String? = nil,
     workstreamId: String? = nil,
     dueConfidence: Double? = nil,
     provenance: [OmiAPI.EvidenceRef]? = nil,
@@ -195,6 +206,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.taskId = taskId
     self.taskStatus = taskStatus
     self.taskOwner = taskOwner
+    self.assigneePersonId = assigneePersonId
+    self.assignerPersonId = assignerPersonId
     self.workstreamId = workstreamId
     self.dueConfidence = dueConfidence
     self.provenance = provenance
@@ -257,6 +270,10 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     taskId = try wire?.taskId ?? container.decodeIfPresent(String.self, forKey: .taskId)
     taskStatus = try wire?.status?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskStatus)
     taskOwner = try wire?.owner?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskOwner)
+    // Not on the generated wire model yet, so decoded straight from the payload; absent on
+    // every task that carries no person, which is every task written before this field.
+    assigneePersonId = try container.decodeIfPresent(String.self, forKey: .assigneePersonId)
+    assignerPersonId = try container.decodeIfPresent(String.self, forKey: .assignerPersonId)
     workstreamId = try wire?.workstreamId ?? container.decodeIfPresent(String.self, forKey: .workstreamId)
     dueConfidence = try wire?.dueConfidence ?? container.decodeIfPresent(Double.self, forKey: .dueConfidence)
     provenance = try wire?.provenance ?? container.decodeIfPresent([OmiAPI.EvidenceRef].self, forKey: .provenance)

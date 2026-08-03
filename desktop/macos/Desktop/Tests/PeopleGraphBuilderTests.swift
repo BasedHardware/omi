@@ -91,9 +91,17 @@ final class PeopleGraphBuilderTests: XCTestCase {
       communities.list.first?["category"] as? String, "trip / event",
       "a Tahoe/trip group must categorize as trip / event")
 
-    // --- created people list is non-empty, sorted by closeness desc, with an on-device channel.
-    XCTAssertEqual(persons.count, 3, "createPeople must produce one card per canonical person")
-    XCTAssertFalse(persons.isEmpty, "fresh-user people list must not be empty")
+    // --- created people list is the *selected* people, sorted by closeness desc, with a channel.
+    //     All three identities stay nodes in the graph — Carol is still an edge endpoint above —
+    //     but she has never exchanged a message and no source can name her, so she is not a card.
+    //     `createPeople` is a directory, not a dump of the graph (see `PeopleSelection`).
+    let selection = PeopleSelection.select(people: people, graph: graph, communities: communities)
+    XCTAssertEqual(persons.count, 2, "createPeople writes the selected people, not every node")
+    XCTAssertEqual(
+      selection.drops.map(\.reason), [.groupOnlyUnnamed],
+      "the group-only, unnamed identity is dropped for exactly that reason")
+    XCTAssertEqual(
+      selection.candidateCount, people.canonByID.count, "every candidate is accounted for")
     XCTAssertEqual(persons.first?["name"] as? String, "Alice", "highest message_count sorts first")
     XCTAssertEqual(persons.first?["closeness"] as? Double, 100.0, "closeness proxies message_count")
 

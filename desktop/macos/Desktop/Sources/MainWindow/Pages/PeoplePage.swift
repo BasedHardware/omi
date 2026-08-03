@@ -37,13 +37,22 @@ struct PeopleIntelligenceFile: Decodable, Sendable {
   }
 }
 
+/// `featured` / `dropped` are the two halves of `PeopleSelection` and always sum to the number of
+/// canonical nodes the engine judged. They are what makes the People tab honest: without them a
+/// user cannot tell "you know 315 people" from "we hid 1,510 of them".
 struct PeopleStats: Decodable, Equatable, Sendable {
   let people: Int
   let multichannel: Int
   let channels: Int
+  let featured: Int
+  let dropped: Int
+  /// Drop counts keyed by `PeopleSelection.DropReason.rawValue`, so the reason a person is missing
+  /// is answerable rather than merely counted.
+  let droppedReasons: [String: Int]
 
   enum CodingKeys: String, CodingKey {
-    case people, multichannel, channels
+    case people, multichannel, channels, featured, dropped
+    case droppedReasons = "dropped_reasons"
   }
 
   init(from decoder: Decoder) throws {
@@ -51,6 +60,9 @@ struct PeopleStats: Decodable, Equatable, Sendable {
     people = (try c.decodeIfPresent(Int.self, forKey: .people)) ?? 0
     multichannel = (try c.decodeIfPresent(Int.self, forKey: .multichannel)) ?? 0
     channels = (try c.decodeIfPresent(Int.self, forKey: .channels)) ?? 0
+    featured = (try c.decodeIfPresent(Int.self, forKey: .featured)) ?? 0
+    dropped = (try c.decodeIfPresent(Int.self, forKey: .dropped)) ?? 0
+    droppedReasons = (try c.decodeIfPresent([String: Int].self, forKey: .droppedReasons)) ?? [:]
   }
 }
 
@@ -196,12 +208,19 @@ struct PeopleIntelPerson: Decodable, Identifiable, Equatable, Sendable {
   let needsConfirmation: Bool?
   /// A short, plain-language reason paired with `needsConfirmation` (shown on the detail).
   let confirmReason: String?
+  /// The identity keys this person was resolved by (`phone_last10` / handle), persisted by the
+  /// engine so anything addressing this person keys on identity rather than re-slugging their
+  /// display name — which is what makes the card survive a rename.
+  let handles: PersonIdentityKeys
+  /// The backend `Person.id` this card is bridged to, once `PeopleIdentityBridge` resolved one.
+  let personUUID: String?
 
   enum CodingKeys: String, CodingKey {
     case id, name, relationship, who, now, overall, closeness
     case lastTouch, channels, aliases, contactName, linkedin, activities, openThreads, facts, photoPath
     case connections, circle
     case needsConfirmation, confirmReason
+    case handles, personUUID
   }
 
   init(from decoder: Decoder) throws {
@@ -226,6 +245,8 @@ struct PeopleIntelPerson: Decodable, Identifiable, Equatable, Sendable {
     circle = try c.decodeIfPresent(PersonCircle.self, forKey: .circle)
     needsConfirmation = try c.decodeIfPresent(Bool.self, forKey: .needsConfirmation)
     confirmReason = try c.decodeIfPresent(String.self, forKey: .confirmReason)
+    handles = (try c.decodeIfPresent(PersonIdentityKeys.self, forKey: .handles)) ?? .none
+    personUUID = try c.decodeIfPresent(String.self, forKey: .personUUID)
   }
 
   var initials: String {
@@ -377,6 +398,16 @@ final class PeopleViewModel: ObservableObject {
 
   var totalPeopleCount: Int {
     stats?.people ?? people.count
+  }
+
+  /// How many contacts the engine saw but did not turn into people. Zero when the file predates the
+  /// selection stage, which reads as "nothing hidden" rather than as a wrong number.
+  var hiddenCount: Int { stats?.dropped ?? 0 }
+
+  /// Why they are missing, biggest reason first — the answer to "where is everyone?".
+  var hiddenSummary: String? {
+    guard hiddenCount > 0 else { return nil }
+    return PeopleSelection.summarize(droppedReasons: stats?.droppedReasons ?? [:])
   }
 
   func loadIfNeeded() {
@@ -871,6 +902,15 @@ struct PeoplePage: View {
         Text(statLine)
           .geistMono(size: 12.5, tracking: 0)
           .foregroundStyle(sb.ink(.w35))
+
+        // Never let the tab imply this is everyone it saw. The engine reads far more contacts than
+        // it shows, and the difference has to be visible and answerable — not silently swallowed.
+        if let hidden = hiddenLine {
+          Text(hidden)
+            .geistMono(size: 11, tracking: 0)
+            .foregroundStyle(sb.ink(.w25))
+            .help(viewModel.hiddenSummary ?? hidden)
+        }
       }
 
       Spacer(minLength: 12)
@@ -882,6 +922,12 @@ struct PeoplePage: View {
     let multi = viewModel.multiChannelCount
     let channels = viewModel.channelCount
     return "\(people.formatted()) people · \(multi.formatted()) multi-channel · \(channels.formatted()) channels"
+  }
+
+  private var hiddenLine: String? {
+    let hidden = viewModel.hiddenCount
+    guard hidden > 0 else { return nil }
+    return "\(hidden.formatted()) more contacts not shown — \(viewModel.hiddenSummary ?? "no relationship signal")"
   }
 
   // MARK: Connectors

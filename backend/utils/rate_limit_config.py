@@ -91,6 +91,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "goals:extract": (30, 3600),
     # Search
     "conversations:search": (60, 3600),
+    # People dossiers — up to 12 model calls per request, so the cap is set by what a device
+    # actually needs: the desktop asks at most once every 6 hours, and 17 requests walk a
+    # 200-person address book. Twelve per hour leaves room for retries and a manual refresh
+    # without letting a misbehaving client fan out an address book of model calls in an hour.
+    "people:dossiers": (12, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
     "wrapped:generate": (2, 86400),

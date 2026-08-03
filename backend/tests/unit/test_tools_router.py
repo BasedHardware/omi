@@ -98,6 +98,7 @@ _SYS_MODULE_NAMES = [
     "database.conversations",
     "database.users",
     "database.memories",
+    "database.entities",
     "database.vector_db",
     "database.action_items",
     "database.notifications",
@@ -119,8 +120,10 @@ _SYS_MODULE_NAMES = [
     "utils.other",
     "utils.other.endpoints",
     "utils.memory",
+    "utils.memory.atom_keyword_index",
     "utils.memory.chat_memory_adapter",
     "utils.memory.default_read_rollout",
+    "utils.memory.legacy_keyword_search",
     "utils.memory.memory_system",
     "utils.memory.memory_service",
     "utils.memory.surface_routing",
@@ -173,6 +176,11 @@ users_db.get_people_by_ids = MagicMock(return_value=[])
 memories_db = _stub_module("database.memories")
 memories_db.get_memories = MagicMock(return_value=[])
 memories_db.get_memories_by_ids = MagicMock(return_value=[])
+memories_db.get_memories_by_subject = MagicMock(return_value=[])
+
+# Stub database.entities — the single place a Person uuid becomes a subject entity id.
+entities_db = _stub_module("database.entities")
+entities_db.person_entity_id = MagicMock(side_effect=lambda person_id: f"person:{person_id}")
 
 # Stub database.vector_db
 vector_db = _stub_module("database.vector_db")
@@ -229,6 +237,18 @@ memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONIC
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 memory_service_stub.MemoryService = MagicMock
+
+atom_keyword_stub = _stub_module("utils.memory.atom_keyword_index")
+
+
+def _merge_memory_search_ids(keyword_ids, vector_ids):
+    return list(keyword_ids) + [mid for mid in vector_ids if mid not in keyword_ids]
+
+
+atom_keyword_stub.merge_memory_search_ids = MagicMock(side_effect=_merge_memory_search_ids)
+
+legacy_keyword_stub = _stub_module("utils.memory.legacy_keyword_search")
+legacy_keyword_stub.keyword_search_legacy_memory_ids = MagicMock(return_value=[])
 
 surface_routing_stub = _stub_module("utils.memory.surface_routing")
 surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
@@ -889,6 +909,23 @@ class TestRouterEndpoints:
         assert resp.status_code == 200
         body = resp.json()
         assert body["tool_name"] == "search_memories"
+
+    def test_search_memories_person_id_reaches_the_service(self):
+        """The person filter has to survive the route or nothing downstream can scope."""
+        with patch.object(router_mod, "search_memories_text", return_value="ok") as search:
+            resp = self.client.post(
+                "/v1/tools/memories/search",
+                json={"query": "who are they", "person_id": "person-uuid-1"},
+            )
+        assert resp.status_code == 200
+        assert search.call_args.kwargs["person_id"] == "person-uuid-1"
+
+    def test_search_memories_person_id_defaults_to_none(self):
+        """Omitting it must not invent a filter — that is the legacy request shape."""
+        with patch.object(router_mod, "search_memories_text", return_value="ok") as search:
+            resp = self.client.post("/v1/tools/memories/search", json={"query": "food"})
+        assert resp.status_code == 200
+        assert search.call_args.kwargs["person_id"] is None
 
     def test_get_action_items_endpoint(self):
         resp = self.client.get("/v1/tools/action-items")

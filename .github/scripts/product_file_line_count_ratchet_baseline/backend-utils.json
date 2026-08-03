@@ -1,7 +1,8 @@
 {
   "files": {
     "backend/utils/apps.py": 1652,
-    "backend/utils/conversations/process_conversation.py": 1971,
+    "backend/utils/conversations/process_conversation.py": 1974,
+    "backend/utils/llm/conversation_processing.py": 1507,
     "backend/utils/memory/canonical_consolidation.py": 1935,
     "backend/utils/memory/canonical_memory_adapter.py": 2012,
     "backend/utils/memory/legacy_backfill.py": 1753,
@@ -12,12 +13,13 @@
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
-    "backend/utils/conversations/process_conversation.py": "Conversation finalization owns the transcript-to-memory transaction across canonical and legacy paths, so it supplies the shared dev-only allowlisted capture observer with the accepted-write result; cassette bounds, redaction, and export remain in testing.parity_pack_v0.live_capture.",
+    "backend/utils/conversations/process_conversation.py": "Conversation finalization owns the transcript-to-memory transaction across canonical and legacy paths, so it supplies the shared dev-only allowlisted capture observer with the accepted-write result; cassette bounds, redaction, and export remain in testing.parity_pack_v0.live_capture. Person attribution and subject resolution thread a person id through this path so a 1:1 thread resolves a third-party subject.",
+    "backend/utils/llm/conversation_processing.py": "Adds counterparty_name to the canonical commitment-capture rules so an action item can name the other party when a conversation states it outright; ownership direction still comes from capture_owner, and attribution resolves only to people the account already has.",
     "backend/utils/memory/canonical_consolidation.py": "Candidate selection, bounded retry leases, atomic promotion planning, and batch-level duplicate-supersede rejection remain one canonical long-term admission authority; extracting them would permit competing admission state machines (FC-split-mutation-authority).",
     "backend/utils/memory/canonical_memory_adapter.py": "Canonical conversation replacement coordinates source-generation fencing, bounded lineage discovery, and atomic replacement application; splitting this state machine would duplicate lifecycle authority (FC-split-mutation-authority).",
+    "backend/utils/memory/legacy_backfill.py": "Public inventory wrappers for bulk backfill without exposing private helpers; keep one backfill module.",
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873); the deletion purge path additionally records bounded storage wipe counters for telemetry.",
-    "backend/utils/sync/pipeline.py": "Plan-aware soft-cap evaluation and its default-tier fallback remain in a small helper beside Sync's idempotent fresh-speech metering rather than overgrowing the durable worker coordinator.",
-    "backend/utils/memory/legacy_backfill.py": "Public inventory wrappers for bulk backfill without exposing private helpers; keep one backfill module."
+    "backend/utils/sync/pipeline.py": "Plan-aware soft-cap evaluation and its default-tier fallback remain in a small helper beside Sync's idempotent fresh-speech metering rather than overgrowing the durable worker coordinator."
   },
   "threshold": 1500
 }

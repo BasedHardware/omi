@@ -351,9 +351,25 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
+    person_id: Optional[str] = Query(
+        None,
+        description=(
+            "Filter to tasks this person is the assignee or the assigner of. Value is a backend "
+            "Person id (users/{uid}/people). Omitting it lists every task, including the ones "
+            "that carry no person at all."
+        ),
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Get action items for the current user."""
+    """Get action items for the current user.
+
+    ``person_id`` is a separate read path (see
+    ``database.action_items.get_action_items_for_person``), not another predicate on the
+    general list: person-scoped reads must stay equality-only so that tasks without a
+    ``due_at`` are not dropped by an ordered Firestore query. Combining it with a date
+    range would require that ordering, so the combination is rejected rather than
+    silently returning a subset.
+    """
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     if (
@@ -363,17 +379,37 @@ def get_action_items(
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
 
-    action_items = action_items_db.get_action_items(
-        uid=uid,
-        conversation_id=conversation_id,
-        completed=completed,
-        start_date=start_date,
-        end_date=end_date,
-        due_start_date=due_start_date,
-        due_end_date=due_end_date,
-        limit=limit + 1,
-        offset=offset,
-    )
+    person_id = (person_id or '').strip() or None
+    if person_id is not None:
+        if any(value is not None for value in (start_date, end_date, due_start_date, due_end_date)):
+            raise HTTPException(
+                status_code=400,
+                detail="person_id cannot be combined with date range filters",
+            )
+        if conversation_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="person_id cannot be combined with conversation_id",
+            )
+        action_items = action_items_db.get_action_items_for_person(
+            uid=uid,
+            person_id=person_id,
+            completed=completed,
+            limit=limit + 1,
+            offset=offset,
+        )
+    else:
+        action_items = action_items_db.get_action_items(
+            uid=uid,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            due_start_date=due_start_date,
+            due_end_date=due_end_date,
+            limit=limit + 1,
+            offset=offset,
+        )
 
     has_more = len(action_items) > limit
     action_items = action_items[:limit]

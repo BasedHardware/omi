@@ -216,6 +216,15 @@ retains evidence. Backfill never invokes keyword, vector, or legacy KG writers
 directly; historical graph repair must use an explicit assertion migration or
 normal promotion admission.
 
+## Person-scoped reads and keyword retrieval
+
+Memory search has two retrieval legs, merged keyword-first — the shape conversation search settled on for the same class of miss (issue #5072). `utils/retrieval/tool_services/memories.py:search_memories_text` owns the merge; `atom_keyword_index.py:merge_memory_search_ids` is the single merge helper for both cohorts.
+
+- **Identity leg.** With a `person_id` (the backend `Person` uuid from `users/{uid}/people`), `database/entities.py:person_entity_id` turns it into `person:<uuid>` and `database/memories.py:get_memories_by_subject` reads that person's memories with two single-field Firestore predicates: `subject_entity_id ==` (the attribution spine, mirrored into Pinecone metadata by `build_legacy_memory_vector_filter`) and `tags array_contains` (the same id string, stamped by clients that knew the person before the extractor did). Neither needs a composite index and neither field is encrypted at rest. The same `subject_entity_id` is passed into `vector_db.find_similar_memories`, whose filter parameter previously had no caller.
+- **Keyword leg.** Without a `person_id`, `legacy_keyword_search.py:keyword_search_legacy_memory_ids` scans a bounded window of the legacy memories collection and promotes only memories matching a *selective* term — one occurring in at most `SELECTIVE_DF_RATIO` of that window. Legacy memories sit in no keyword index (Typesense holds only `conversations` and `canonical_memory_atoms`), so the bounded scan is the index. `MEMORY_KEYWORD_SCAN_LIMIT` tunes the window (default 1000, hard ceiling 5000). A query with no selective term returns `[]`, which is what keeps ordinary searches ranked exactly as they were.
+
+Both legs fail open to `[]`: a broken leg degrades to vector-only results rather than failing the search. `GET /v3/memories/by-person/{person_id}` in `routers/memories.py` is the structured (non-LLM-text) form of the identity leg, for clients whose local cache cannot answer the question.
+
 ## Rollout and legacy sunset
 
 `backend/config/memory_rollout.py` owns the runtime contract:
@@ -238,6 +247,8 @@ Legacy has no date-based removal. `docs/memory/domain_model.md` requires all use
 ## Where changes belong
 
 - Add a public read/write/search surface through `MemoryService`; use `surface_routing.py` to pin one cohort decision per request. Do not call both stores defensively.
+- Add a person/entity scope by threading `subject_entity_id` (derived once by `database/entities.py:person_entity_id`) into the existing read; do not add a second identity mechanism, and never resolve a person by display name inside retrieval.
+- Add a retrieval leg as an ids-only, fail-open function merged through `merge_memory_search_ids`; a leg that reorders results for queries it was not built for is a ranking change, not a recall fix.
 - Add a canonical list filter in `canonical_visibility_filter.py` for lifecycle semantics or `device_scope_filter.py` for capture-device semantics, then invoke it from `canonical_memory_adapter.py`.
 - Add a composed filter end-to-end: request fields in `v3_composed_get_service.py`, cursor-bound `_filter_hash` in `v3_production_runtime.py`, typed fields in `v3_projection_reader_contract.py`, and the query in `database/memory_compatibility_projection.py`.
 - Add a read mode in the runtime/control decision and bind it into `V3ComposedExecutionContext` plus `v3_cursor.py`; a mode must not reuse another mode's cursor.

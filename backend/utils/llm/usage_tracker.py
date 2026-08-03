@@ -205,6 +205,8 @@ class Features:
     DAILY_SUMMARY = "daily_summary"
     SUBSCRIPTION_NOTIFICATION = "subscription_notification"
     KNOWLEDGE_GRAPH = "knowledge_graph"
+    # Per-person narrative for the People tab (Phase 3 of the people-intelligence doc).
+    PERSON_DOSSIER = "person_dossier"
     OTHER = "other"
 
     PROACTIVE_NOTIFICATION = "proactive_notification"

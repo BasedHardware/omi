@@ -16,6 +16,13 @@ class ExtractedActionItem(BaseModel):
     capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    counterparty_name: Optional[str] = Field(
+        default=None,
+        description=(
+            'The other party by name, only when the transcript names them explicitly and only '
+            'one person can be meant. Empty whenever the addressee is inferred, plural, or unclear.'
+        ),
+    )
     concrete_deliverable: Optional[bool] = Field(
         default=None,
         description='True only when the commitment names a concrete deliverable or outcome',
@@ -31,6 +38,7 @@ class ExtractedActionItem(BaseModel):
             capture_confidence=self.capture_confidence,
             ownership_confidence=self.ownership_confidence,
             capture_owner=self.capture_owner,
+            counterparty_name=self.counterparty_name,
             concrete_deliverable=self.concrete_deliverable,
             candidate_action=self.candidate_action,
             target_task_id=self.target_task_id,
