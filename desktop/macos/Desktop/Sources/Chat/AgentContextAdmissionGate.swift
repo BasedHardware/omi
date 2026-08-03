@@ -21,6 +21,7 @@ actor AgentContextAdmissionGate {
   }
 
   private var held = false
+  private var releasePending = false
   private var waiters: [WaiterSlot] = []
   private var waiterHead = 0
 
@@ -85,7 +86,10 @@ actor AgentContextAdmissionGate {
     }
     handle.continuation = continuation
     waiters[slotIndex].continuation = continuation
-    grantNextWaiterIfReady()
+    if releasePending {
+      releasePending = false
+      release()
+    }
   }
 
   private func finalizeCancelledWaiter(at index: Int) {
@@ -116,21 +120,13 @@ actor AgentContextAdmissionGate {
         continuation.resume(returning: .granted)
         return
       }
+      releasePending = true
       return
     }
     held = false
+    releasePending = false
     waiters.removeAll(keepingCapacity: true)
     waiterHead = 0
-  }
-
-  private func grantNextWaiterIfReady() {
-    guard held, waiterHead < waiters.count else { return }
-    guard !waiters[waiterHead].handle.cancelled else { return }
-    guard let continuation = waiters[waiterHead].continuation else { return }
-    waiters[waiterHead].continuation = nil
-    waiterHead += 1
-    compactWaitersIfNeeded()
-    continuation.resume(returning: .granted)
   }
 
   private func advanceWaiterHeadPastCancelled() {
