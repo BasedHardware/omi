@@ -121,8 +121,27 @@ fn inspect(name: &str, input: &Map<String, Value>) -> Option<String> {
 }
 
 fn hash_input(input: &Map<String, Value>) -> Result<String, String> {
-    let bytes = serde_json::to_vec(input).map_err(|error| error.to_string())?;
+    let bytes = serde_json::to_vec(&canonicalize(&Value::Object(input.clone())))
+        .map_err(|error| error.to_string())?;
     Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
+}
+
+fn canonicalize(value: &Value) -> Value {
+    match value {
+        Value::Object(object) => {
+            let mut keys: Vec<_> = object.keys().cloned().collect();
+            keys.sort();
+            let mut canonical = Map::new();
+            for key in keys {
+                if let Some(value) = object.get(&key) {
+                    canonical.insert(key, canonicalize(value));
+                }
+            }
+            Value::Object(canonical)
+        }
+        Value::Array(values) => Value::Array(values.iter().map(canonicalize).collect()),
+        value => value.clone(),
+    }
 }
 
 fn string(fields: &Map<String, Value>, key: &str) -> Result<String, String> {
@@ -209,6 +228,18 @@ mod tests {
             )
             .expect_err("hyphenated edit-diff must hit the write denylist");
         assert!(!denied.is_empty());
+    }
+
+    #[test]
+    fn input_hash_is_independent_of_object_key_order() {
+        let mut first = Map::new();
+        first.insert("z".into(), json!({"b": 2, "a": 1}));
+        first.insert("a".into(), json!([{"d": 4, "c": 3}]));
+        let mut second = Map::new();
+        second.insert("a".into(), json!([{"c": 3, "d": 4}]));
+        second.insert("z".into(), json!({"a": 1, "b": 2}));
+
+        assert_eq!(hash_input(&first), hash_input(&second));
     }
 
     #[test]
