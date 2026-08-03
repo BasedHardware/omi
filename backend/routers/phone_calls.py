@@ -345,8 +345,7 @@ async def twiml_voice_webhook(request: Request):
         return Response(content=str(response), media_type='text/xml')
 
     # Verify the number is still a valid outgoing caller ID in Twilio
-    caller_id_check = check_twilio_voice_number if dial_caller_number != caller_number else check_caller_id_verified
-    is_verified = await run_blocking(critical_executor, caller_id_check, dial_caller_number)
+    is_verified = await run_blocking(critical_executor, check_twilio_voice_number, dial_caller_number)
     print(
         f"twiml_voice_webhook: caller_id={_redact_phone(dial_caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
     )

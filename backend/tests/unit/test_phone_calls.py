@@ -274,7 +274,7 @@ def test_twiml_signature_uses_public_forwarded_url(mock_db, mock_sig, client):
 
 
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
-@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.check_twilio_voice_number', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_success(mock_db, mock_check, mock_sig, client):
     mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
@@ -316,7 +316,7 @@ def test_twiml_india_rejects_without_international_twilio_number(mock_db, mock_c
 
 
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
-@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.check_twilio_voice_number', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_free_tier_reserves_successful_call(mock_db, mock_check, mock_sig, client, monkeypatch):
     mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
@@ -333,7 +333,7 @@ def test_twiml_free_tier_reserves_successful_call(mock_db, mock_check, mock_sig,
 
 
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
-@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.check_twilio_voice_number', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_free_tier_rejects_when_atomic_quota_reservation_fails(
     mock_db, mock_check, mock_sig, client, monkeypatch
