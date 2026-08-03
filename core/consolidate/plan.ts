@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 export type Disposition = "admit" | "reinforce" | "supersede" | "coexist" | "dispute" | "reject" | "defer_review";
-export interface LeasedInput { provisional_revision_id: string; entity_id: string | null; proposition_key: string; review_attempt: number; max_review_attempts: number; }
-export interface CanonicalSnapshot { canonical_claim_id: string; proposition_key: string; }
+export interface LeasedInput { provisional_revision_id: string; entity_id: string | null; /** legacy/raw historical key */ proposition_key: string; proposition_key_resolved?: string; alias_frontier_generation?: string; review_attempt: number; max_review_attempts: number; }
+export interface CanonicalSnapshot { canonical_claim_id: string; proposition_key: string; proposition_key_resolved?: string; alias_frontier_generation?: string; }
 /** Identity linkage: attach a claim to an entity; it is not proposition consolidation. */
 export interface IdentityLinkage { kind: "identity_linkage"; entity_id: string; }
 /** Consolidation: reinforce/supersede exactly one proposition across captures. */
@@ -20,6 +20,7 @@ export interface PlacementBatch { batch_id: string; leased_inputs: readonly Leas
 export interface AllocatedPlacementPlan { offline_experiment: true; allocations: Readonly<Record<string, string>>; results: readonly PlacementResultRow[]; }
 
 export class BatchValidationError extends Error { constructor(readonly errors: readonly string[]) { super(errors.join("; ")); } }
+const matchKey = (item: { proposition_key: string; proposition_key_resolved?: string }): string => item.proposition_key_resolved ?? item.proposition_key;
 const deterministicId = (batch: string, input: string) => `canonical:${createHash("sha256").update(`${batch}:${input}`).digest("hex").slice(0, 16)}`;
 
 /** Pure B3.2-shaped validation and deterministic allocation; deliberately no batch lease/outbox/concurrency behavior. */
@@ -40,7 +41,10 @@ export const validateAndAllocatePlacement = (batch: PlacementBatch): AllocatedPl
     if (row.operation?.kind === "consolidation") {
       const target = canonical.get(row.operation.canonical_claim_id);
       if (!target) errors.push(`unknown canonical reference: ${row.operation.canonical_claim_id}`);
-      else if (target.proposition_key !== row.operation.proposition_key || input.proposition_key !== row.operation.proposition_key) errors.push(`unrelated proposition consolidation: ${input.provisional_revision_id}`);
+      else if (matchKey(target) !== row.operation.proposition_key || matchKey(input) !== row.operation.proposition_key) errors.push(`unrelated proposition consolidation: ${input.provisional_revision_id}`);
+      // Resolved keys are meaningful only at one declared frontier; otherwise a re-alias could
+      // silently reinterpret history while a batch is being allocated.
+      else if ((input.proposition_key_resolved || target.proposition_key_resolved) && (!input.alias_frontier_generation || !target.alias_frontier_generation || input.alias_frontier_generation !== target.alias_frontier_generation)) errors.push(`frontier mismatch consolidation: ${input.provisional_revision_id}`);
     }
     if (row.operation?.kind === "synthesis" && row.operation.justification_evidence_refs.length === 0) errors.push(`unjustified synthesis: ${input.provisional_revision_id}`);
     if (row.disposition === "defer_review" && (!row.re_resolution_trigger || input.review_attempt >= input.max_review_attempts)) errors.push(`unbounded or triggerless defer_review: ${input.provisional_revision_id}`);

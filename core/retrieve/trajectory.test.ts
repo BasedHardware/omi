@@ -1,0 +1,15 @@
+import { expect, test } from "bun:test";
+import { diffGraphSnapshots, type GraphSnapshot } from "./index";
+
+const claim = (id: string, predicate_alias_frontier: string, proposition_key_resolved: string) => ({ revision_id: id, placement_status: "canonical" as const, claim: { claim_lineage_id: `lineage:${id}`, claim_revision_id: id, owner_account_id: "owner", predicate_id: "p:old", predicate: "old-name", proposition_key_raw: "raw:stable", proposition_key_resolved, predicate_alias_frontier, arguments: [], temporal_scope: { observed_at: "2026-01-01", precision: "day" }, evidence_refs: [], policy_labels: [], source_language: "en", scope: { locality: "durable" as const, scope_ref: null }, lifecycle: "canonical" as const, canonical_claim_id: `canonical:${id}`, source_provisional_revision_ids: [] } });
+const entity = (id: string) => ({ revision_id: id, entity: { entity_id: id, owner_account_id: "owner", entity_revision_id: `r:${id}`, handle: id, labels: [] } });
+
+test("B1.5 reports synthetic structure accumulated between snapshots", () => {
+  const before: GraphSnapshot = { owner_account_id: "owner", graph_generation: 1, claims: [claim("claim", "frontier:old", "resolved:old")], entities: [entity("entity:a"), entity("entity:b")], adjacency: [] };
+  const authorization = { authorization_id: "auth", owner_account_id: "owner", endpoints: [{ kind: "entity" as const, entity_id: "entity:a" }, { kind: "entity" as const, entity_id: "entity:b" }] as const, relation: "same" as const, support: { kind: "owner_confirmation" as const, confirmation_ref: "confirmation" }, standing_policy_ref: null, namespace_scope: { namespace_instance_ref: null, identity_domain: null, scope_ref: null }, authority_policy_version: "p", evaluated_frontier: 1, actor_provenance: { actor_ref: "owner", producer_ref: null }, lifecycle: "active" as const, superseded_by: null };
+  const after: GraphSnapshot = { ...before, graph_generation: 2, claims: [claim("claim:reprojected", "frontier:new", "resolved:new")], predicate_assertions: [{ revision_id: "assertion", assertion: { assertion_id: "assertion", owner_account_id: "owner", predicate_id: "p:old", relation: "alias_of", target_predicate_id: "p:new", slot_aliases: [], alias_frontier: "frontier:new", admission: "accepted", lifecycle: "active", supersedes_assertion_id: null } }], identity_constraints: [{ revision_id: "same", constraint: { constraint_id: "same", owner_account_id: "owner", endpoints: authorization.endpoints, left_handle: "entity:a", right_handle: "entity:b", relation: "same", identity_authorization: authorization, effective_at: 1, reversed_at: null } }], adjacency: [{ claim_revision_id: "claim:reprojected", entity_id: "entity:a", role_slot_id: "subject" }] };
+  const diff = diffGraphSnapshots(before, after);
+  expect(diff.entities_merged).toEqual([{ canonical_entity_id: "entity:a", entity_ids: ["entity:a", "entity:b"] }]);
+  expect(diff.predicates_aliased).toEqual(["assertion"]);
+  expect(diff.claims_reprojected).toEqual([{ claim_revision_id: "claim:reprojected", raw_key: "raw:stable", previous_resolved_key: "resolved:old", resolved_key: "resolved:new", frontier: "frontier:new" }]);
+});

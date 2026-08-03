@@ -13,7 +13,7 @@ class DeterministicFakeModel {
   async render(request: { input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> { this.calls++; return this.response(request); }
 }
 const inputAndTree = () => {
-  const input = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC", valid_time_by_claim_revision: { a: "2026-01-02T10:00:00Z", private: "2026-01-02T10:00:00Z" } });
+  const input = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC" });
   return { input, tree: buildDeterministicAnchors(input) };
 };
 

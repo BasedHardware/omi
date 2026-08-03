@@ -45,3 +45,12 @@ test("T7 defer_review is bounded and carries a re-resolution trigger", () => {
   const exhausted = { ...reviewed, leased_inputs: [{ ...reviewed.leased_inputs[0]!, review_attempt: 2 }, reviewed.leased_inputs[1]!] };
   expect(() => validateAndAllocatePlacement(exhausted)).toThrow("unbounded or triggerless defer_review: p-coffee");
 });
+
+test("B1.3 rejects consolidation across alias-frontier generations", () => {
+  const source = batch([
+    { input_provisional_revision_id: "p-coffee", disposition: "reinforce", operation: { kind: "consolidation", canonical_claim_id: "c-coffee", proposition_key: "resolved:coffee" } },
+    { input_provisional_revision_id: "p-tea", disposition: "reject", operation: null },
+  ]);
+  const input = { ...source, leased_inputs: [{ ...source.leased_inputs[0]!, proposition_key_resolved: "resolved:coffee", alias_frontier_generation: "frontier:new" }, source.leased_inputs[1]!], snapshot: [{ ...source.snapshot[0]!, proposition_key_resolved: "resolved:coffee", alias_frontier_generation: "frontier:old" }] };
+  expect(() => validateAndAllocatePlacement(input)).toThrow("frontier mismatch consolidation: p-coffee");
+});

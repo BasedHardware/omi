@@ -63,13 +63,13 @@ export const buildDeterministicAnchors = (input: TreeInputSnapshot): StructuralT
   for (const claim of input.claims) {
     if (claim.time_anchor.kind === "imprecise_time") add(drafts, "temporal", "imprecise-time", null, claim);
     else {
-      const { year, month, day } = temporalParts(claim.valid_time!, input.account_timezone);
+      const { year, month, day } = temporalParts(claim.time_anchor.value, input.account_timezone);
       const yearKey = `year:${year}`, monthKey = `${yearKey}/month:${month}`, dayKey = `${monthKey}/day:${day}`;
       add(drafts, "temporal", yearKey, null, claim);
       add(drafts, "temporal", monthKey, yearKey, claim);
       add(drafts, "temporal", dayKey, monthKey, claim);
     }
-    // D41: unplaced/withheld claims have no safe entity relation and never enter this view.
+    // D41: unplaced provisional claims have no safe entity relation and never enter this view.
     if (claim.placement_status === "canonical") for (const argument of claim.arguments) {
       if (argument.value.kind === "entity_ref") add(drafts, "entity", `entity:${argument.value.ref}`, null, claim);
     }

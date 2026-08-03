@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.example/platform/graph-browser-export.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "owner_account_id", "graph_generation", "entities", "claims", "walks", "trajectory"],
+  "properties": {
+    "schema_version": {"const": "graph-browser-export-v1"},
+    "owner_account_id": {"type": "string"},
+    "graph_generation": {"type": "number"},
+    "entities": {"type": "array", "items": {"type": "object", "required": ["entity_id", "handle"], "properties": {"entity_id": {"type": "string"}, "handle": {"type": "string"}}, "additionalProperties": false}},
+    "claims": {"type": "array", "items": {"type": "object", "required": ["revision_id", "lineage_id", "predicate"], "properties": {"revision_id": {"type": "string"}, "lineage_id": {"type": "string"}, "predicate": {"type": "string"}}, "additionalProperties": false}},
+    "walks": {"type": "array", "items": {"type": "object", "required": ["anchor", "paths"], "properties": {"anchor": {"type": "string"}, "paths": {"type": "array"}}, "additionalProperties": false}},
+    "trajectory": {"type": "array", "items": {"type": "object", "required": ["cycle_id", "trajectory"], "properties": {"cycle_id": {"type": "string"}, "trajectory": {"type": "object"}}, "additionalProperties": false}}
+  }
+}

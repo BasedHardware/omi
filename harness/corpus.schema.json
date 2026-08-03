@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.example/platform/harness/corpus.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["owner_account_id", "adapter", "sessions"],
+  "properties": {
+    "owner_account_id": { "type": "string", "minLength": 1 },
+    "adapter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer_ref", "contract_ref", "namespace_instance_ref", "asserted_identity_domain", "scope_ref", "issuer_ref", "authority_policy_version"],
+      "properties": {
+        "producer_ref": { "type": "string", "minLength": 1 }, "contract_ref": { "type": "string", "minLength": 1 }, "namespace_instance_ref": { "type": "string", "minLength": 1 },
+        "asserted_identity_domain": { "type": ["string", "null"] }, "scope_ref": { "type": ["string", "null"] }, "issuer_ref": { "type": "string", "minLength": 1 }, "authority_policy_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "source_trust": { "type": "string", "minLength": 1 },
+    "event_kind": { "type": "string", "minLength": 1 },
+    "sessions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/session" } }
+  },
+  "$defs": {
+    "session": { "type": "object", "additionalProperties": false, "required": ["session_id", "capture_sequence", "revision_lineage", "ingest_sequence", "settled_window_id", "segments"], "properties": {
+      "session_id": { "type": "string", "minLength": 1 }, "capture_sequence": { "type": "integer", "minimum": 0 }, "revision_lineage": { "type": "string", "minLength": 1 }, "ingest_sequence": { "type": "integer", "minimum": 0 }, "settled_window_id": { "type": "string", "minLength": 1 }, "adapter": { "$ref": "#/$defs/adapter" }, "segments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/segment" } }
+    } },
+    "adapter": { "type": "object", "additionalProperties": false, "required": ["producer_ref", "contract_ref", "namespace_instance_ref", "asserted_identity_domain", "scope_ref", "issuer_ref", "authority_policy_version"], "properties": { "producer_ref": { "type": "string", "minLength": 1 }, "contract_ref": { "type": "string", "minLength": 1 }, "namespace_instance_ref": { "type": "string", "minLength": 1 }, "asserted_identity_domain": { "type": ["string", "null"] }, "scope_ref": { "type": ["string", "null"] }, "issuer_ref": { "type": "string", "minLength": 1 }, "authority_policy_version": { "type": "string", "minLength": 1 } } },
+    "segment": { "type": "object", "additionalProperties": false, "required": ["event_id", "text", "start_at", "speaker_label", "speaker_id", "revision_lineage", "ingest_sequence", "settled_window_id"], "properties": {
+      "event_id": { "type": "string", "minLength": 1 }, "text": { "type": "string", "minLength": 1 }, "start_at": { "type": "string", "pattern": "(?:Z|[+-][0-9]{2}:[0-9]{2})$" },
+      "speaker_label": { "type": ["string", "null"] }, "speaker_id": { "type": "string", "minLength": 1 }, "is_actor_user": { "type": ["boolean", "null"] }, "person_id": { "type": ["string", "null"] },
+      "revision_lineage": { "type": "string", "minLength": 1 }, "ingest_sequence": { "type": "integer", "minimum": 0 }, "settled_window_id": { "type": "string", "minLength": 1 }
+    } }
+  }
+}

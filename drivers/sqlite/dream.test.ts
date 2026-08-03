@@ -1,0 +1,245 @@
+import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { canonicalizeRedacted, prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition, type GraphRevision } from "../../core/ledger";
+import { project } from "../../core/retrieve";
+import { walk } from "../../core/retrieve/walk";
+import { DeterministicFakeModel } from "../model/port";
+import { runSqliteDreamCycle, SqliteDreamStore } from "./dream";
+import { SqliteLedger } from "./index";
+
+const owner = "dream-test-owner";
+const versions = { strategy_version: "test", model_version: "deterministic-fake-v1", prompt_version: "test", policy_version: "test", code_version: "test", schema_version: "test", tokenizer_version: "none", tool_version: "test" };
+const temporal = { typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: "2026-01-01T00:00:00Z" }, resolved_interval: { kind: "instant" as const, start: "2026-01-01T00:00:00Z", end: "2026-01-01T00:00:00Z", timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "test", timezone: "UTC" } };
+
+const seedClaim = (id: string, reprojectable: boolean) => {
+  const local = `source-local:${id}`;
+  const identity = { namespace_instance_ref: `namespace:${id}`, local_key: id, producer: { producer_ref: "test", contract_ref: "test" }, asserted_identity: { domain: null, scope_ref: null } };
+  const event = { event_id: `event:${id}`, event_revision_id: `event:${id}`, owner_account_id: owner, capture_session_id: `session:${id}`, stream_id: "test", event_kind: "text", payload_schema_ref: "test", schema_version: "v1", payload: {}, event_time: "2026-01-01T00:00:00Z", ingest_time: "2026-01-01T00:00:00Z", source_sequence: 0, evidence_addressable_refs: [`evidence:${id}`], source_trust: "test", policy_labels: [], canonical_redacted_hash: `event:${id}` };
+  const evidence = { evidence_id: `evidence:${id}`, event_revision_id: event.event_revision_id, source_unit_ref: id, range: { start: 0, end: 4 }, excerpt: id, source_identity_ref: identity, speaker_rendering: null, source_local_mention_ref: id, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: `capture:${id}` };
+  const argument = reprojectable ? { slot_id: "subject", role: "subject", value: { kind: "source_local_ref" as const, ref: local } } : { slot_id: "subject", role: "subject", value: { kind: "literal" as const, value: id } };
+  const provisional = { claim_lineage_id: `lineage:${id}`, claim_revision_id: `provisional:${id}`, owner_account_id: owner, predicate: "test_predicate", arguments: [argument], temporal_scope: { observed_at: "2026-01-01T00:00:00Z", precision: "instant" as const }, evidence_refs: [evidence.evidence_id], policy_labels: [], source_language: "en", scope: { locality: "source_local" as const, scope_ref: null }, lifecycle: "provisional" as const, ambiguity_markers: [], context_packet: { version: "v1", referent_refs: [], topic_refs: [] } };
+  const { ambiguity_markers: _ambiguity, context_packet: _context, ...canonicalBase } = provisional;
+  const canonical = { ...canonicalBase, claim_revision_id: `canonical:${id}`, temporal_scope: { ...provisional.temporal_scope, valid_time: temporal }, lifecycle: "canonical" as const, canonical_claim_id: `canonical:${id}`, source_provisional_revision_ids: [provisional.claim_revision_id] };
+  // All fixture mentions share one surface so candidate blocking clusters
+  // them; which of them actually merge is decided by the fake model's answer
+  // and the deterministic gates, which is what these tests exercise.
+  const mention = { mention_id: `mention:${id}`, owner_account_id: owner, claim_revision_id: provisional.claim_revision_id, span: { start: 0, end: 4 }, evidence_id: evidence.evidence_id, source_identity_ref: identity, speaker_rendering: null, slot_id: "subject", surface: "the recurring referent", antecedent_handle: null, resolution: "unresolved" as const, entity_id: null };
+  return { event, evidence, provisional, canonical, mention };
+};
+
+const seed = async (ledger: SqliteLedger, claims: readonly ReturnType<typeof seedClaim>[]) => {
+  const revisions: AtomicGraphTransition["revisions"] = claims.flatMap((item) => [
+    { kind: "event" as const, revision_id: item.event.event_revision_id, event: item.event },
+    { kind: "evidence" as const, revision_id: `evidence-revision:${item.evidence.evidence_id}`, evidence: item.evidence },
+    { kind: "claim" as const, revision_id: item.provisional.claim_revision_id, claim: item.provisional, placement_status: "consumed" as const },
+    { kind: "claim" as const, revision_id: item.canonical.claim_revision_id, claim: item.canonical, placement_status: "canonical" as const },
+    { kind: "mention" as const, revision_id: `mention-revision:${item.mention.mention_id}`, mention: item.mention },
+  ]);
+  const derivation = prepareDerivation({ attempt_id: "seed-attempt", commit_id: "seed", owner_account_id: owner, parent_commit: null, idempotency_key: "seed", input_revisions: [], output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "claim" ? revision.claim : revision.mention })), versions, success_kind: "success" });
+  await ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: Object.fromEntries(claims.map((item) => [item.provisional.claim_revision_id, item.canonical.claim_revision_id])), results: claims.map((item) => ({ input_provisional_revision_id: item.provisional.claim_revision_id, disposition: "admit" as const, operation: null })) }, derivation, revisions, adjacency: [], artifacts: claims.map((item) => ({ artifact_id: `auto-placement:${item.provisional.claim_revision_id}`, kind: "auto_placement_log" as const, provisional_revision_id: item.provisional.claim_revision_id, canonical_claim_revision_id: item.canonical.claim_revision_id, margin: null, risk_markers: [], unit_boundary_decision: "accept_ltm" as const, scope_locality: "source_local" as const })) });
+};
+
+const cycle = (db: Database, ledger: SqliteLedger, cycleId: string, groups: readonly (readonly string[])[]) => runSqliteDreamCycle({
+  db, ledger, owner_account_id: owner, stm_items: [], stm_mentions: [], cycle_id: cycleId, trigger_kind: "idle",
+  model: new DeterministicFakeModel((request) => request.strategy === "identity-adjudication" ? { partition_hash: cycleId, same_groups: groups, uncertain_pairs: [] } : request.strategy === "identity-verification" ? { verdict: "same", who: "the recurring referent" } : request.strategy === "identity-naming-check" ? { names_specific_referent: true } : request.strategy === "speaker-self-reference" ? { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) } : { assertions: [] }),
+});
+
+test("dream commits a reprojectable merge atomically and reaches its claim from the durable entity", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("good-left", true), right = seedClaim("good-right", true);
+  await seed(ledger, [left, right]);
+
+  const report = await cycle(db, ledger, "good", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 1, reprojected: 2, skipped_merges: [] });
+  const snapshot = ledger.snapshot(owner), entity = snapshot.entities[0]!.entity.entity_id;
+  const result = walk(project(snapshot, { reader_account_id: owner, grant: { grant_id: "owner", policy_classes: [] } }), { anchor: `entity:${entity}`, max_hops: 2, relation_kinds: ["entity-shared"] });
+  expect(result.paths.some((path) => path.nodes.some((node) => node.startsWith("claim:reprojected:")))).toBe(true);
+  expect(db.query("SELECT COUNT(*) AS count FROM derivation_commits WHERE commit_id LIKE 'dream-merge:%'").get() as { count: number }).toEqual({ count: 1 });
+  const commits = db.query("SELECT commit_id FROM entity_revisions WHERE commit_id LIKE 'dream-merge:%' UNION SELECT commit_id FROM identity_authorization_revisions WHERE commit_id LIKE 'dream-merge:%' UNION SELECT commit_id FROM identity_revisions WHERE commit_id LIKE 'dream-merge:%' UNION SELECT commit_id FROM mention_revisions WHERE commit_id LIKE 'dream-merge:%' UNION SELECT commit_id FROM claim_revisions WHERE commit_id LIKE 'dream-merge:%' UNION SELECT commit_id FROM generated_adjacency WHERE commit_id LIKE 'dream-merge:%'").all() as { commit_id: string }[];
+  expect(commits).toHaveLength(1);
+  expect(db.query("SELECT COUNT(*) AS count FROM candidate_derivation_artifacts WHERE commit_id LIKE 'dream-merge:%'").get()).toEqual({ count: 2 });
+});
+
+test("dream refuses a same-claim proposal and commits no merge", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("same-claim-left", true), rightBase = seedClaim("same-claim-right", true);
+  // Two distinct source-local slots may never be identity candidates merely
+  // because a model placed them in the same partition.
+  const right = { ...rightBase, mention: { ...rightBase.mention, claim_revision_id: left.provisional.claim_revision_id } };
+  await seed(ledger, [left, right]);
+
+  const report = await cycle(db, ledger, "same-claim", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 0, skipped_merges: [{ reason: "same_claim_revision_id", retryable: false }] });
+  expect(ledger.snapshot(owner).entities).toEqual([]);
+  expect(db.query("SELECT COUNT(*) AS count FROM derivation_commits WHERE commit_id LIKE 'dream-merge:%'").get()).toEqual({ count: 0 });
+});
+
+test("dream refuses a proposed merge whose support roots are not independent", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("shared-root-left", true), rightBase = seedClaim("shared-root-right", true);
+  const right = { ...rightBase, evidence: { ...rightBase.evidence, source_independence_key: left.evidence.source_independence_key } };
+  await seed(ledger, [left, right]);
+
+  const report = await cycle(db, ledger, "shared-root", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 0, skipped_merges: [{ reason: "non_independent_support_set" }] });
+  expect(ledger.snapshot(owner).entities).toEqual([]);
+});
+
+test("dream skips a merge without a reprojectable claim and records why", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("bad-left", false), right = seedClaim("bad-right", false);
+  await seed(ledger, [left, right]);
+
+  const report = await cycle(db, ledger, "bad", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 0, reprojected: 0, skipped_merges: [{ reason: "no_reprojectable_canonical_claim" }] });
+  expect(ledger.snapshot(owner).entities).toEqual([]);
+  // The audit table persists ids+reason; the in-memory retryable bit is report-only.
+  expect(new SqliteDreamStore(db).mergeSkips("bad", owner)).toEqual(report.skipped_merges.map(({ group_mention_ids, reason }) => ({ group_mention_ids, reason })));
+});
+
+test("dream commits the good merge and skips the bad merge in one cycle", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const goodLeft = seedClaim("mixed-good-left", true), goodRight = seedClaim("mixed-good-right", true), badLeft = seedClaim("mixed-bad-left", false), badRight = seedClaim("mixed-bad-right", false);
+  await seed(ledger, [goodLeft, goodRight, badLeft, badRight]);
+
+  const report = await cycle(db, ledger, "mixed", [[goodLeft.mention.mention_id, goodRight.mention.mention_id], [badLeft.mention.mention_id, badRight.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 1, reprojected: 2, skipped_merges: [{ reason: "no_reprojectable_canonical_claim" }] });
+  expect(ledger.snapshot(owner).entities).toHaveLength(1);
+});
+
+test("dream commits each of multiple adjudicated merges in its own atomic transition", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const a = seedClaim("multi-a", true), b = seedClaim("multi-b", true), c = seedClaim("multi-c", true), d = seedClaim("multi-d", true);
+  await seed(ledger, [a, b, c, d]);
+
+  const report = await cycle(db, ledger, "multiple", [[a.mention.mention_id, b.mention.mention_id], [c.mention.mention_id, d.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 2, reprojected: 4, skipped_merges: [] });
+  expect(ledger.snapshot(owner).entities).toHaveLength(2);
+  expect(db.query("SELECT COUNT(*) AS count FROM derivation_commits WHERE commit_id LIKE 'dream-merge:%'").get() as { count: number }).toEqual({ count: 2 });
+});
+
+test("a claim bound in an earlier cycle can be reprojected again: carried authority replays as witnesses", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  // One claim with TWO source-local slots, each merging in a DIFFERENT cycle.
+  const base = seedClaim("carried-x", true);
+  const objectLocal = "source-local:carried-x-object";
+  const withObject = {
+    ...base,
+    provisional: { ...base.provisional, arguments: [...base.provisional.arguments, { slot_id: "object", role: "object", value: { kind: "source_local_ref" as const, ref: objectLocal } }] },
+    canonical: { ...base.canonical, arguments: [...base.canonical.arguments, { slot_id: "object", role: "object", value: { kind: "source_local_ref" as const, ref: objectLocal } }] },
+  };
+  const objectMention = { ...base.mention, mention_id: "mention:carried-x-object", slot_id: "object", source_identity_ref: { ...base.mention.source_identity_ref!, local_key: "carried-x-object" } };
+  const partnerA = seedClaim("carried-a", true), partnerB = seedClaim("carried-b", true);
+  await seed(ledger, [withObject, partnerA, partnerB]);
+  const head = ledger.graphHead(owner);
+  const derivation = prepareDerivation({ attempt_id: "carried-object-mention", commit_id: "carried-object-mention", owner_account_id: owner, parent_commit: head?.commit_id ?? null, idempotency_key: "carried-object-mention", input_revisions: [], output_revisions: [{ revision_id: `mention-revision:${objectMention.mention_id}`, content: objectMention }], versions, success_kind: "success" });
+  await ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: {}, results: [] }, derivation, revisions: [{ kind: "mention", revision_id: `mention-revision:${objectMention.mention_id}`, mention: objectMention }], adjacency: [], artifacts: [] });
+
+  const first = await cycle(db, ledger, "carried-1", [[withObject.mention.mention_id, partnerA.mention.mention_id]]);
+  expect(first).toMatchObject({ committed_merges: 1 });
+  const second = await cycle(db, ledger, "carried-2", [[objectMention.mention_id, partnerB.mention.mention_id]]);
+  expect(second).toMatchObject({ committed_merges: 1, skipped_merges: [] });
+
+  // The live head of the twice-reprojected claim carries BOTH entity bindings.
+  const snapshot = ledger.snapshot(owner);
+  expect(snapshot.entities).toHaveLength(2);
+  const heads = snapshot.claims.filter((item) => item.claim.lifecycle === "canonical" && item.claim.claim_lineage_id === withObject.canonical.claim_lineage_id && item.claim.arguments.every((argument) => argument.value.kind === "entity_ref"));
+  expect(heads.length).toBeGreaterThanOrEqual(1);
+});
+
+/** A transition that writes nothing and exists only to carry a witness set. */
+const witnessPlan = (ledger: SqliteLedger, key: string, committed: readonly GraphRevision[]): AtomicGraphTransition => {
+  const head = ledger.graphHead(owner);
+  return {
+    placement: { offline_experiment: true, allocations: {}, results: [] },
+    derivation: prepareDerivation({ attempt_id: `${key}-attempt`, commit_id: key, owner_account_id: owner, parent_commit: head?.commit_id ?? null, idempotency_key: key, input_revisions: [], output_revisions: [], versions, success_kind: "successful_empty" }),
+    revisions: [], adjacency: [], artifacts: [], committed_revisions: committed,
+  };
+};
+
+const mergedOnce = async (db: Database, ledger: SqliteLedger, name: string) => {
+  const left = seedClaim(`${name}-left`, true), right = seedClaim(`${name}-right`, true);
+  await seed(ledger, [left, right]);
+  expect(await cycle(db, ledger, name, [[left.mention.mention_id, right.mention.mention_id]])).toMatchObject({ committed_merges: 1 });
+  return ledger.snapshot(owner).identity_authorizations![0]!;
+};
+
+test("the storage boundary refuses a forged or tampered witnessed authorization", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const committed = await mergedOnce(db, ledger, "forge");
+
+  // Never committed at all. Its own lifecycle field says "active", which is
+  // exactly why core cannot be the one to check it.
+  const forged = { ...committed.authorization, authorization_id: `${committed.authorization.authorization_id}:forged` };
+  await expect(ledger.appendTransitionPlan(witnessPlan(ledger, "forged-witness", [{ kind: "identity_authorization", revision_id: `identity-authorization:${forged.authorization_id}`, authorization: forged }])))
+    .rejects.toThrow(/witnessed revision is not committed: identity-authorization:.*:forged/);
+
+  // A real revision id carrying content the durable row never authorized.
+  const tampered = { ...committed.authorization, endpoints: [committed.authorization.endpoints[0], { kind: "entity", entity_id: "entity:attacker" }] };
+  await expect(ledger.appendTransitionPlan(witnessPlan(ledger, "tampered-witness", [{ kind: "identity_authorization", revision_id: committed.revision_id, authorization: tampered }])))
+    .rejects.toThrow(/witnessed revision does not match its committed content/);
+
+  // Lineage witnesses are checked for existence too, so a fabricated mention
+  // cannot supply the typed lineage a role binding needs.
+  const invented = { ...ledger.snapshot(owner).mentions![0]!.mention, mention_id: "mention:invented" };
+  await expect(ledger.appendTransitionPlan(witnessPlan(ledger, "invented-mention-witness", [{ kind: "mention", revision_id: "mention-revision:mention:invented", mention: invented }])))
+    .rejects.toThrow(/witnessed revision is not committed: mention-revision:mention:invented/);
+});
+
+test("the storage boundary refuses a witnessed authorization that a later revision superseded", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const committed = await mergedOnce(db, ledger, "stale");
+
+  // Stands in for a later revocation/supersession commit: what matters to the
+  // witness check is that the authorization_id now has a newer head revision.
+  const superseding = { ...committed.authorization, lifecycle: "superseded", superseded_by: `${committed.revision_id}:r2` };
+  db.query("INSERT INTO identity_authorization_revisions VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(`${committed.revision_id}:r2`, owner, canonicalizeRedacted(superseding), sha256CanonicalRedacted(superseding), "supersession", committed.authorization.authorization_id, "superseded");
+
+  // The stale copy still says "active" about itself; storage says otherwise.
+  await expect(ledger.appendTransitionPlan(witnessPlan(ledger, "stale-witness", [{ kind: "identity_authorization", revision_id: committed.revision_id, authorization: committed.authorization }])))
+    .rejects.toThrow(/witnessed identity authorization is not the durable head/);
+});
+
+test("a late member joins an established entity on a single new independent binding", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const a = seedClaim("late-a", true), b = seedClaim("late-b", true), c = seedClaim("late-c", true);
+  await seed(ledger, [a, b, c]);
+
+  expect(await cycle(db, ledger, "late-1", [[a.mention.mention_id, b.mention.mention_id]])).toMatchObject({ committed_merges: 1 });
+  const entityId = ledger.snapshot(owner).entities[0]!.entity.entity_id;
+
+  // A's mention is already bound, so this group yields ONE new binding. The
+  // entity is still corroborated by two independent source roots (A's and C's),
+  // which is the question admission actually asks.
+  const second = await cycle(db, ledger, "late-2", [[a.mention.mention_id, c.mention.mention_id]]);
+  expect(second.committed_merges).toBe(1);
+  expect(second.skipped_merges.map((item) => item.reason)).not.toContain("non_independent_support_set");
+  const snapshot = ledger.snapshot(owner);
+  expect(snapshot.entities).toHaveLength(1);
+  expect(snapshot.mentions!.find((item) => item.mention.mention_id === c.mention.mention_id)!.mention.entity_id).toBe(entityId);
+});
+
+test("a partition whose only failures are retryable is not recorded as processed and re-adjudicates next cycle", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("retry-left", false), right = seedClaim("retry-right", false);
+  await seed(ledger, [left, right]);
+  const first = await cycle(db, ledger, "retry-1", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(first).toMatchObject({ committed_merges: 0, skipped_merges: [{ reason: "no_reprojectable_canonical_claim" }] });
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_partition_history").get()).toEqual({ count: 0 });
+  // Before the fix the partition was recorded BEFORE the merge loop, so this
+  // second, identical proposal was suppressed as a repeat: the retryable skip
+  // vanished and the group could never become admissible even after its claim
+  // became reprojectable.
+  const second = await cycle(db, ledger, "retry-2", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(second).toMatchObject({ committed_merges: 0, skipped_merges: [{ reason: "no_reprojectable_canonical_claim" }] });
+});
+
+test("a terminally processed partition is recorded, preserving the variance guard", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const left = seedClaim("terminal-left", true), right = seedClaim("terminal-right", true);
+  await seed(ledger, [left, right]);
+  const report = await cycle(db, ledger, "terminal-1", [[left.mention.mention_id, right.mention.mention_id]]);
+  expect(report).toMatchObject({ committed_merges: 1, skipped_merges: [] });
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_partition_history").get()).toEqual({ count: 1 });
+});

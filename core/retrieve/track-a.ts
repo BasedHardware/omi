@@ -44,7 +44,7 @@ export const incrementallyTransitionAnchors = (previous: StructuralTree, transit
     const partition = policyPartitionLabel(claim.policy_class);
     if (claim.time_anchor.kind === "imprecise_time") add("temporal", "imprecise-time", null, partition, claim.claim_revision_id);
     else {
-      const get = parts(claim.valid_time!, transition.account_timezone); const y = `year:${get("year")}`, m = `${y}/month:${get("month")}`, d = `${m}/day:${get("day")}`;
+      const get = parts(claim.time_anchor.value, transition.account_timezone); const y = `year:${get("year")}`, m = `${y}/month:${get("month")}`, d = `${m}/day:${get("day")}`;
       add("temporal", y, null, partition, claim.claim_revision_id); add("temporal", m, y, partition, claim.claim_revision_id); add("temporal", d, m, partition, claim.claim_revision_id);
     }
     if (claim.placement_status === "canonical") for (const argument of claim.arguments) if (argument.value.kind === "entity_ref") add("entity", `entity:${argument.value.ref}`, null, partition, claim.claim_revision_id);

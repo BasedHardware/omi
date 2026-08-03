@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ingestSyntheticConversation } from "./ingest";
+import { ingestConversation } from "./ingest";
 import { checkStmSufficiency } from "./provisional";
 import { placementConversation } from "../../harness/fixtures";
 import type { ProvisionalClaim } from "../schema";
@@ -13,7 +13,7 @@ const claim = (): ProvisionalClaim => ({
 });
 
 test("T3 accepts a provisional claim only with retained role/evidence/context structure", () => {
-  const { evidence } = ingestSyntheticConversation(placementConversation);
+  const { evidence } = ingestConversation(placementConversation);
   expect(checkStmSufficiency(claim(), evidence, ["subject"]).ok).toBe(true);
   const incomplete = { ...claim(), arguments: [], evidence_refs: [], context_packet: null };
   const result = checkStmSufficiency(incomplete, evidence, ["subject"]);

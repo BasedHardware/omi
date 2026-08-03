@@ -3,9 +3,9 @@ import { buildMentionRequest, planLocalHandles } from "./mentions";
 
 test("T4 D-a resolves a pronoun only to a source-local antecedent and preserves a bare pronoun", () => {
   const handles = planLocalHandles(buildMentionRequest([
-    { mention_ref: "mention:alice", text: "Alice", source_local_speaker_ref: "speaker:alice" },
-    { mention_ref: "mention:he", text: "He", source_local_speaker_ref: "speaker:bob" },
-    { mention_ref: "mention:bare-he", text: "He", source_local_speaker_ref: "speaker:unknown" },
+    { mention_ref: "mention:alice", text: "Alice", source_identity_ref: null, speaker_rendering: "speaker:alice" },
+    { mention_ref: "mention:he", text: "He", source_identity_ref: null, speaker_rendering: "speaker:bob" },
+    { mention_ref: "mention:bare-he", text: "He", source_identity_ref: null, speaker_rendering: "speaker:unknown" },
   ]), { links: [
     { mention_ref: "mention:alice", antecedent_mention_ref: null, uncertainty: [] },
     { mention_ref: "mention:he", antecedent_mention_ref: "mention:alice", uncertainty: [] },

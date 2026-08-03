@@ -1,0 +1,17 @@
+{
+  "owner_account_id": "dream-owner",
+  "source_trust": "synthetic",
+  "event_kind": "synthetic.chat/utterance",
+  "adapter": { "producer_ref": "synthetic", "contract_ref": "synthetic-v1", "namespace_instance_ref": "device", "asserted_identity_domain": "person", "scope_ref": "dream-owner", "issuer_ref": "issuer", "authority_policy_version": "v1" },
+  "sessions": [
+    { "session_id": "one", "capture_sequence": 1, "revision_lineage": "r1", "ingest_sequence": 1, "settled_window_id": "w1", "segments": [
+      { "event_id": "one-event", "text": "Alice plans Omi.", "start_at": "2026-01-01T09:00:00Z", "speaker_label": "Channel A", "speaker_id": "a", "revision_lineage": "r1a", "ingest_sequence": 1, "settled_window_id": "w1" }
+    ] },
+    { "session_id": "two", "capture_sequence": 2, "revision_lineage": "r2", "ingest_sequence": 2, "settled_window_id": "w2", "segments": [
+      { "event_id": "two-event", "text": "Alice plans Omi.", "start_at": "2026-01-03T09:00:00Z", "speaker_label": "Channel B", "speaker_id": "b", "revision_lineage": "r2a", "ingest_sequence": 2, "settled_window_id": "w2" }
+    ] },
+    { "session_id": "three", "capture_sequence": 3, "revision_lineage": "r3", "ingest_sequence": 3, "settled_window_id": "w3", "segments": [
+      { "event_id": "three-event", "text": "Unrelated settled boundary.", "start_at": "2026-01-05T09:00:00Z", "speaker_label": "Channel C", "speaker_id": "c", "revision_lineage": "r3a", "ingest_sequence": 3, "settled_window_id": "w3" }
+    ] }
+  ]
+}

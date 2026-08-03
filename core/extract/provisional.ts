@@ -1,4 +1,4 @@
-import type { Evidence, ProvisionalClaim } from "../schema";
+import { hasDistinctArgumentSlotIds, type Evidence, type ProvisionalClaim } from "../schema";
 
 /** B2 adapter input: extraction may populate this only from retained L1/evidence context. */
 export type ProvisionalClaimAdapterInput = ProvisionalClaim;
@@ -7,8 +7,17 @@ export type StmSufficiencyResult =
   | { ok: true; claim: ProvisionalClaim }
   | { ok: false; errors: readonly string[] };
 
+/** D44 semantic boundary output. Only a model strategy may make this decision. */
+export type DecisionMargin = "low" | "medium" | "high";
+/** `risk_markers` are the only diagnostic this edge produces; parsers used to
+ * validate then discard them, so an abstention arrived with no stated cause. */
+export type UnitBoundaryJudgment =
+  | { decision: "accept_ltm"; margin?: DecisionMargin; risk_markers?: readonly string[] }
+  | { decision: "abstain"; reason: string; margin?: DecisionMargin; risk_markers?: readonly string[] };
+
 /**
- * Rejects incomplete STM; it deliberately does not infer lost role, evidence, or context data.
+ * Input-structure validation only. It deliberately does not infer lost role,
+ * evidence, or context data and is not an STM→LTM unit-boundary decision.
  */
 export const checkStmSufficiency = (
   claim: ProvisionalClaimAdapterInput,
@@ -16,6 +25,7 @@ export const checkStmSufficiency = (
   requiredRoleSlots: readonly string[],
 ): StmSufficiencyResult => {
   const errors: string[] = [];
+  if (!hasDistinctArgumentSlotIds(claim.arguments)) errors.push("duplicate argument slot_id");
   const actualSlots = new Set(claim.arguments.map((argument) => argument.slot_id));
   for (const slot of requiredRoleSlots) if (!actualSlots.has(slot)) errors.push(`missing required role slot: ${slot}`);
   if (!Array.isArray(claim.ambiguity_markers)) errors.push("missing ambiguity markers");

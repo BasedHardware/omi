@@ -1,4 +1,6 @@
-export interface SourceMention { mention_ref: string; text: string; source_local_speaker_ref: string | null; }
+import type { SourceIdentityRef } from "../schema";
+
+export interface SourceMention { mention_ref: string; text: string; source_identity_ref: SourceIdentityRef | null; speaker_rendering: string | null; }
 export interface MentionRequest { strategy: "mention-local-handle"; version: "v1"; mentions: readonly SourceMention[]; }
 export interface MentionModelResponse { links: readonly { mention_ref: string; antecedent_mention_ref: string | null; uncertainty: readonly string[] }[]; }
 export interface LocalHandle { handle: string; mention_ref: string; antecedent_handle: string | null; uncertainty: readonly string[]; }

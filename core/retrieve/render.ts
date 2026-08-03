@@ -1,6 +1,9 @@
 import { sha256CanonicalRedacted } from "../ledger";
 import { policyPartitionLabel, type PolicyClass, type TreeInputSnapshot } from "./index";
 import type { DependencyManifest, StructuralNode, StructuralTree } from "./tree";
+import { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
+
+export { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
 
 export type RenderStatus = "ready" | "empty" | "failed";
 export interface RenderNode {
@@ -25,29 +28,6 @@ export interface RenderModelPort {
 }
 export interface RenderOptions { strategy: string; model_version: string; prompt_version: string; policy_version: string; schema_version: string; }
 export type RenderCache = ReadonlyMap<string, RenderNode>;
-
-type PolicyDimension = keyof PolicyClass;
-// Each dimension is a diamond partial order: generic is bottom, restricted is top,
-// and every concrete label (including unknown labels) is an opaque peer.  Thus
-// owner/bystander, private/health, and voice/screen are intentionally incomparable.
-const dominates = (dimension: PolicyDimension, effective: string, contributor: string): boolean => {
-  void dimension; // Dimensions share the same explicitly-defined partial-order shape.
-  return effective === contributor || effective === "restricted" || contributor === "generic";
-};
-const joinDimension = (dimension: PolicyDimension, values: readonly string[]): string => values.reduce((effective, value) => {
-  if (dominates(dimension, effective, value)) return effective;
-  if (dominates(dimension, value, effective)) return value;
-  return "restricted";
-}, "generic");
-/** Least upper bound in the policy lattice, independent of member ordering. */
-export const restrictivePolicyJoin = (contributors: readonly PolicyClass[]): PolicyClass => ({
-  subject_class: joinDimension("subject_class", contributors.map((item) => item.subject_class)),
-  sensitivity: joinDimension("sensitivity", contributors.map((item) => item.sensitivity)),
-  capture_class: joinDimension("capture_class", contributors.map((item) => item.capture_class)),
-});
-/** A result may only be rendered at the same or a stricter policy in every partition dimension. */
-export const validateRestrictiveJoin = (effective: PolicyClass, contributors: readonly PolicyClass[]): boolean =>
-  contributors.every((item) => (dominates("subject_class", effective.subject_class, item.subject_class) && dominates("sensitivity", effective.sensitivity, item.sensitivity) && dominates("capture_class", effective.capture_class, item.capture_class)));
 
 const nodeClaims = (node: StructuralNode, input: TreeInputSnapshot) => node.member_claim_revision_ids.map((id) => input.claims.find((claim) => claim.claim_revision_id === id)).filter((claim): claim is NonNullable<typeof claim> => claim !== undefined);
 
