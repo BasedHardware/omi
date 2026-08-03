@@ -7023,14 +7023,14 @@
             ],
             "title": "Updated At"
           },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
             "type": "boolean"
-          },
-          "visibility": {
-            "$ref": "#/components/schemas/ConversationVisibility",
-            "default": "private"
           }
         },
         "required": [
@@ -19067,14 +19067,14 @@
             ],
             "title": "Updated At"
           },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
             "type": "boolean"
-          },
-          "visibility": {
-            "$ref": "#/components/schemas/ConversationVisibility",
-            "default": "private"
           }
         },
         "required": [
