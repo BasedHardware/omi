@@ -1,7 +1,8 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams } from '@tschk/moonshine-next/navigation';
 import { AppDetail } from '@/components/apps/AppDetail';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function AppDetailPage() {
   const params = useParams();
@@ -13,3 +14,5 @@ export default function AppDetailPage() {
     </div>
   );
 }
+
+registerMoonshineRoute('/my-apps/:id', AppDetailPage, 'authenticated');

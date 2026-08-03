@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
 import { Star, Download, Loader2, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { enableApp, disableApp } from '@/lib/api';

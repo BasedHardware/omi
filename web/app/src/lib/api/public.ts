@@ -34,9 +34,8 @@ export async function getApprovedApps(): Promise<{
   }>;
 }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/v1/approved-apps?include_reviews=true`, {
-      next: { revalidate: 300 }, // Cache for 5 minutes
-    });
+    // Cache for 5 minutes
+    const response = await fetch(`${API_BASE_URL}/v1/approved-apps?include_reviews=true`);
 
     if (!response.ok) {
       console.error('Failed to fetch approved apps:', response.status);
@@ -233,20 +232,25 @@ export interface V2SingleCapabilityResponse {
 export async function getAppsV2(includeReviews = false): Promise<V2AppsResponse> {
   try {
     const url = `${API_BASE_URL}/v2/apps${includeReviews ? '?include_reviews=true' : ''}`;
-    const response = await fetch(url, {
-      next: { revalidate: 300 }, // Cache for 5 minutes
-    });
+    // Cache for 5 minutes
+    const response = await fetch(url);
 
     if (!response.ok) {
       console.error('Failed to fetch v2 apps:', response.status);
-      return { groups: [], meta: { capabilities: [], groupCount: 0, limit: 20, offset: 0 } };
+      return {
+        groups: [],
+        meta: { capabilities: [], groupCount: 0, limit: 20, offset: 0 },
+      };
     }
 
     const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error fetching v2 apps:', error);
-    return { groups: [], meta: { capabilities: [], groupCount: 0, limit: 20, offset: 0 } };
+    return {
+      groups: [],
+      meta: { capabilities: [], groupCount: 0, limit: 20, offset: 0 },
+    };
   }
 }
 
@@ -261,7 +265,7 @@ export async function getAppsByCapability(
   capability: string,
   offset = 0,
   limit = 50,
-  includeReviews = false
+  includeReviews = false,
 ): Promise<V2SingleCapabilityResponse> {
   try {
     const params = new URLSearchParams({
@@ -275,12 +279,14 @@ export async function getAppsByCapability(
     }
 
     const url = `${API_BASE_URL}/v2/apps?${params.toString()}`;
-    const response = await fetch(url, {
-      next: { revalidate: 300 }, // Cache for 5 minutes
-    });
+    // Cache for 5 minutes
+    const response = await fetch(url);
 
     if (!response.ok) {
-      console.error(`Failed to fetch apps for capability ${capability}:`, response.status);
+      console.error(
+        `Failed to fetch apps for capability ${capability}:`,
+        response.status,
+      );
       return {
         data: [],
         pagination: {
@@ -331,7 +337,9 @@ export async function getAllAppsV2(includeReviews = false): Promise<V2AppData[]>
 
     // For each capability group
     for (const group of groups) {
-      console.log(`- ${group.capability.id}: ${group.pagination.count} of ${group.pagination.total} apps`);
+      console.log(
+        `- ${group.capability.id}: ${group.pagination.count} of ${group.pagination.total} apps`,
+      );
 
       // Add first page apps
       allApps.push(...group.data);
@@ -347,10 +355,12 @@ export async function getAllAppsV2(includeReviews = false): Promise<V2AppData[]>
             group.capability.id,
             offset,
             group.pagination.limit,
-            includeReviews
+            includeReviews,
           );
 
-          console.log(`  Fetched page ${page + 1}/${totalPages} (${response.data.length} apps)`);
+          console.log(
+            `  Fetched page ${page + 1}/${totalPages} (${response.data.length} apps)`,
+          );
           allApps.push(...response.data);
         }
       }

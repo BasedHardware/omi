@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,

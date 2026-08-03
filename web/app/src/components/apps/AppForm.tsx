@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
 import { cn } from '@/lib/utils';
 import {
   getAppCategories,
