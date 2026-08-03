@@ -89,7 +89,8 @@ def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_head
     _run_realtime_delivery(monkeypatch, handler)
 
     assert requests == []
-    assert _health(fake_redis) == {}
+    assert _health(fake_redis)["disabled"] == "0"
+    assert _health(fake_redis)["last_status"] == "200"
 
 
 @pytest.mark.parametrize(
