@@ -38,7 +38,8 @@ class TestListToolsIsolation:
             patch.object(agent_tools, "record_fallback") as fallback,
         ):
             result = agent_tools.list_tools(uid="u1")
-        assert len(result["tools"]) == len(agent_tools.CORE_TOOLS)
+        assert len(result["tools"]) == len(agent_tools.CORE_TOOLS) - 1
+        assert all(tool["name"] != "fetch_url_tool" for tool in result["tools"])
         assert fallback.call_count == 1
 
     def test_healthy_path_records_nothing(self):

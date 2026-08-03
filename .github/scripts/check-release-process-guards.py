@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import re
@@ -1085,11 +1088,48 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
                         break
                 if workflow_values != ("ios-internal-auto", "android-internal-auto"):
                     errors.append("mobile internal build dispatcher script must declare both Codemagic mobile workflows")
+                errors.extend(_check_mobile_dispatcher_execution(dispatcher_script))
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")
 
     return errors
+
+
+def _check_mobile_dispatcher_execution(dispatcher_script: Path) -> list[str]:
+    spec = importlib.util.spec_from_file_location("mobile_internal_build_dispatcher_guard", dispatcher_script)
+    if spec is None or spec.loader is None:
+        return ["mobile internal build dispatcher could not be loaded for execution"]
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        dispatched: list[str] = []
+        module.last_built_sha = lambda app_id, workflow_id, token: "baseline"
+        module.app_commits_since = lambda sha: ["pending"]
+        module.dispatch = lambda app_id, workflow_id, token, branch: dispatched.append(workflow_id) or workflow_id
+        previous_token = os.environ.get("CODEMAGIC_API_TOKEN")
+        os.environ["CODEMAGIC_API_TOKEN"] = "contract-test-token"
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = module.main(
+                    [
+                        "--event",
+                        "schedule",
+                        "--app-id",
+                        "contract-test-app",
+                    ]
+                )
+        finally:
+            if previous_token is None:
+                os.environ.pop("CODEMAGIC_API_TOKEN", None)
+            else:
+                os.environ["CODEMAGIC_API_TOKEN"] = previous_token
+    except Exception as exc:
+        return [f"mobile internal build dispatcher execution failed: {type(exc).__name__}: {exc}"]
+    expected = list(module.MOBILE_WORKFLOWS)
+    if status != 0 or dispatched != expected:
+        return ["mobile internal build dispatcher must dispatch both selected workflows"]
+    return []
 
 
 def check_docs_workflow_scripts() -> list[str]:

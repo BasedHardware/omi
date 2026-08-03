@@ -39,6 +39,7 @@ GCE_PROJECT = "based-hardware"
 # IP poll timed out. Never written any more; still read so already-poisoned
 # records are re-provisioned instead of being reported ready.
 UNRESOLVED_VM_IP = "unknown"
+AGENT_VM_UNSUPPORTED_TOOL_NAMES = frozenset({"fetch_url_tool"})
 
 
 class AgentVmInfo(BaseModel):
@@ -334,6 +335,8 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     tools = []
 
     for t in CORE_TOOLS:
+        if t.name in AGENT_VM_UNSUPPORTED_TOOL_NAMES:
+            continue
         tools.append(_tool_schema(t))
 
     degraded = False
@@ -390,7 +393,7 @@ async def execute_tool(
     # Find the tool. `load_app_tools` reads Redis plus one Firestore document
     # per enabled app, so it must not run on the event loop — see the canonical
     # path in utils/retrieval/agentic.py.
-    all_tools = list(CORE_TOOLS)
+    all_tools = [t for t in CORE_TOOLS if t.name not in AGENT_VM_UNSUPPORTED_TOOL_NAMES]
     try:
         app_tools = await run_blocking(db_executor, load_app_tools, uid)
         all_tools.extend(app_tools)
