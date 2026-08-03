@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
+# LIFECYCLE: permanent
 """Force a single Short-term → Long-term canonical promotion proof.
 
-Default is dry-run. ``--apply`` writes one synthetic marker, runs required
-processing + consolidation with ``MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP=1``,
-and reports redacted before/after tier evidence.
+Dry-run is the default. ``--apply`` requires explicit ``--uid``, ``--project``,
+and ``--confirm-data-plane``, then:
 
-Data-plane default matches the dev maintenance job contract:
-``GOOGLE_CLOUD_PROJECT=based-hardware`` (prod Firestore project, not
-``based-hardware-dev``).
+1. optionally repairs only the *user* control doc (never global read gate)
+2. creates one synthetic ST marker
+3. runs required processing for that memory id only
+4. applies one item-scoped promote decision (does not drain the user's queue)
+5. requires ST→processed before and long_term after
+
+Data-plane note: the dev ``memory-maintenance-job`` uses
+``GOOGLE_CLOUD_PROJECT=based-hardware`` (not ``based-hardware-dev``).
 """
 
 from __future__ import annotations
@@ -26,9 +31,11 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Match job defaults before importing memory modules that read env at call time.
 DEFAULT_PROJECT = "based-hardware"
 DEFAULT_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
+CONSOLIDATION_ENABLED_ENV = "MEMORY_CANONICAL_CONSOLIDATION_ENABLED"
+BATCH_CAP_ENV = "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"
 
 
 @dataclass(frozen=True)
@@ -43,6 +50,7 @@ class ProofResult:
     processing_before: Optional[str]
     tier_after: Optional[str]
     processing_after: Optional[str]
+    status_after: Optional[str]
     run_id: str
     batch_cap: int
     gateway_mode: str
@@ -52,34 +60,68 @@ class ProofResult:
 
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    # Prefer explicit job-parity default over ambient GOOGLE_CLOUD_PROJECT (often
-    # based-hardware-dev on laptops). Override with --project when needed.
-    p.add_argument("--project", default=DEFAULT_PROJECT)
-    p.add_argument("--uid", default=DEFAULT_UID)
-    p.add_argument("--apply", action="store_true", help="Perform writes + maintenance (default: dry-run)")
     p.add_argument(
-        "--ensure-control",
-        action="store_true",
-        help="With --apply, merge enroll control docs at stage=write if missing/not write-ready",
+        "--project",
+        default=DEFAULT_PROJECT,
+        help=f"Firestore project (default {DEFAULT_PROJECT}; job-parity)",
     )
-    p.add_argument("--batch-cap", type=int, default=1)
-    p.add_argument("--json", action="store_true", help="Emit machine-readable JSON only")
+    p.add_argument(
+        "--uid",
+        default=DEFAULT_UID,
+        help="Target UID (dry-run default is dogfood; --apply requires --confirm-data-plane)",
+    )
+    p.add_argument("--apply", action="store_true", help="Perform writes (default: dry-run)")
+    p.add_argument(
+        "--confirm-data-plane",
+        action="store_true",
+        help="Required with --apply: acknowledge writes to --project/--uid",
+    )
+    p.add_argument(
+        "--ensure-user-control",
+        action="store_true",
+        help="With --apply, merge only users/{uid}/memory_control/state at stage=write if not write-ready",
+    )
+    p.add_argument(
+        "--allow-direct-llm",
+        action="store_true",
+        help="Allow OMI_LLM_GATEWAY_FEATURE_MODE!=gateway (laptop proofs only)",
+    )
+    p.add_argument("--json", action="store_true", help="Emit JSON only")
     return p.parse_args(argv)
 
 
-def _configure_env(*, project: str, batch_cap: int) -> None:
+def _enum_val(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    return str(getattr(value, "value", value))
+
+
+def _safe_error(exc: BaseException) -> str:
+    """Bounded non-content failure label for proof JSON."""
+    name = type(exc).__name__
+    return f"{name}"
+
+
+def _configure_env(*, project: str) -> None:
     os.environ["GOOGLE_CLOUD_PROJECT"] = project
     os.environ["GOOGLE_CLOUD_PROJECT_ID"] = project
-    os.environ.setdefault("MEMORY_CANONICAL_CONSOLIDATION_ENABLED", "true")
-    os.environ.setdefault("MEMORY_CANONICAL_MAINTENANCE_ENABLED", "true")
-    os.environ["MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"] = str(max(1, batch_cap))
-    os.environ.setdefault("MEMORY_CANONICAL_CONSOLIDATION_MAX_BATCHES_PER_PASS", "5")
+    # Force single-item canary isolation for this harness.
+    os.environ[BATCH_CAP_ENV] = "1"
+    os.environ.setdefault(CONSOLIDATION_ENABLED_ENV, "true")
+    os.environ.setdefault(MAINTENANCE_ENABLED_ENV, "true")
 
 
-def _enum_val(v: Any) -> Optional[str]:
-    if v is None:
-        return None
-    return getattr(v, "value", str(v))
+def _preflight_imports() -> None:
+    """Import apply-path modules before any write."""
+    import utils.llm.clients as _llm_clients
+    import utils.memory.canonical_consolidation as _cons
+    import utils.memory.canonical_required_processing as _req
+    import utils.memory.memory_service as _msvc
+
+    assert hasattr(_llm_clients, "get_llm")
+    assert hasattr(_cons, "apply_consolidation_decision")
+    assert hasattr(_req, "process_required_memory_item")
+    assert hasattr(_msvc, "MemoryService")
 
 
 def _load_client(project: str) -> Any:
@@ -92,47 +134,41 @@ def _load_client(project: str) -> Any:
 
 
 def _control_write_ready(db_client: Any, uid: str) -> tuple[bool, str]:
-    from database.memory_collections import MemoryCollections
     from utils.memory.canonical_activation import canonical_write_decision
 
     decision = canonical_write_decision(uid, db_client=db_client)
-    paths = MemoryCollections(uid=uid)
-    exists = bool(db_client.document(paths.memory_control_state).get().exists)
     if decision.enabled:
         return True, "write_ready"
-    reason = str(decision.reason)
-    if not exists:
-        return False, f"missing_control_doc:{reason}"
-    return False, reason
+    return False, str(decision.reason)
 
 
-def _ensure_write_control(db_client: Any, *, uid: str) -> list[str]:
-    """Merge minimal stage=write control docs (enroll script payloads)."""
-    from scripts.enroll_canonical_memory_user import (
-        apply_documents,
-        build_rollout_documents,
-    )
+def _ensure_user_control_only(db_client: Any, *, uid: str) -> list[str]:
+    """Merge only the per-user control doc; never touch global read/write gates."""
+    from database.memory_collections import MemoryCollections
+    from scripts.enroll_canonical_memory_user import build_user_control_state
     from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
-    generation = int(trusted.account_generation or 0)
-    docs = build_rollout_documents(uid=uid, stage="write", account_generation=generation)
-    apply_documents(db_client, docs, allow_existing_update=True)
-    return [d.path for d in docs]
+    if trusted.read_error_reason is not None or trusted.account_generation is None:
+        raise RuntimeError(f"trusted_generation_unavailable:{trusted.read_error_reason or 'missing'}")
+    generation = int(trusted.account_generation)
+    path = MemoryCollections(uid=uid).memory_control_state
+    payload = build_user_control_state(uid=uid, stage="write", account_generation=generation)
+    db_client.document(path).set(payload, merge=True)
+    return [path]
 
 
 def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
-    from datetime import datetime as dt
-
     from models.memories import MemoryDB
     from utils.memory.memory_service import MemoryService
     from utils.memory.memory_system import MemorySystem
 
-    now = dt.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     mid = str(uuid.uuid4())
     content = (
-        f"{marker}: Forced single-item ST→LT lifecycle proof. "
-        "Progressive cutover with fail-closed kill switches. Unique isolation content."
+        f"{marker}: David prefers progressive Omi canonical-memory cutover: "
+        "dark deploy, then David canary, then staff ring, then budgeted stage-all. "
+        "He rejects all-users GA in one flip."
     )
     row = MemoryDB(
         id=mid,
@@ -147,14 +183,13 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
         conversation_id=None,
         is_locked=False,
     )
-    svc = MemoryService(db_client=db_client)
-    created = svc.create_external_memory(
+    created = MemoryService(db_client=db_client).create_external_memory(
         uid=uid,
         memory_db=row,
         memory_system=MemorySystem.CANONICAL,
         consumer="stlt_lifecycle_proof",
         operation="create",
-        upsert_vector=True,
+        upsert_vector=False,
         require_canonical_promotion=True,
     )
     return str(getattr(created, "id", mid) or mid)
@@ -166,61 +201,76 @@ def _read_item(db_client: Any, *, uid: str, memory_id: str) -> Any:
     return read_canonical_memory_item(uid, memory_id, db_client=db_client)
 
 
-def _run_maintenance(
-    db_client: Any,
-    *,
-    uid: str,
-    run_id: str,
-    llm_invoke: Any = None,
-) -> Any:
+def _process_one(db_client: Any, *, uid: str, memory_id: str) -> Any:
     from utils.llm.clients import get_llm
     from utils.memory.canonical_required_processing import (
-        ProcessedRequiredMemory,
         invoke_required_memory_processor,
+        process_required_memory_item,
     )
-    from utils.memory.short_term_promotion import run_canonical_short_term_maintenance
 
-    def _required_processor(item: Any) -> Any:
-        # Prefer live memory_l2 normalization; fall back to content-preserving
-        # receipt so promote memory_text can bind to output_hash.
-        try:
-            return invoke_required_memory_processor(item, get_llm("memory_l2"))
-        except Exception:
-            return ProcessedRequiredMemory(
-                content=str(getattr(item, "content", "") or "").strip()[:1000],
-                subject_entity_id="user",
-                predicate="remembered_fact",
-                arguments={},
-                sensitivity_labels=[],
-                rationale="stlt_lifecycle_proof content-preserving fallback",
-            )
+    def processor(item: Any) -> Any:
+        # No silent fabricate-on-failure: surface L2 errors to the proof result.
+        return invoke_required_memory_processor(item, get_llm("memory_l2"))
 
-    return run_canonical_short_term_maintenance(
+    return process_required_memory_item(uid, memory_id, db_client=db_client, processor=processor)
+
+
+def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> list[str]:
+    """Item-scoped promote; does not drain other pending ST rows."""
+    import utils.memory.canonical_consolidation as consolidation_mod
+    from utils.memory.canonical_consolidation import (
+        ConsolidationAgentDecision,
+        apply_consolidation_decision,
+    )
+
+    read_control_state = getattr(consolidation_mod, "_read_control_state")
+    item = _read_item(db_client, uid=uid, memory_id=memory_id)
+    if item is None:
+        raise RuntimeError("memory_missing_after_processing")
+    evidence_ids = [str(e.evidence_id) for e in (item.evidence or []) if getattr(e, "evidence_id", None)]
+    if not evidence_ids:
+        raise RuntimeError("missing_evidence_ids")
+    # Receipt binds sha256(promote memory_text) to processed ST content.
+    decision = ConsolidationAgentDecision(
+        source_memory_id=memory_id,
+        route="promote",
+        reconciliation="create",
+        memory_text=str(item.content or ""),
+        evidence_ids=evidence_ids,
+        subject_entity_id="user",
+        predicate="prefers_progressive_memory_rollout",
+        arguments={"topic": "canonical_memory_cutover"},
+        relationship_to_user="self",
+        aboutness="primary_user",
+        basis_for_memory="explicit",
+        confidence="high",
+        rationale="stlt_lifecycle_proof item-scoped promote; memory_text matches processed content",
+    )
+    control = read_control_state(uid, db_client=db_client)
+    return apply_consolidation_decision(
         uid,
-        db_client=db_client,
+        decision=decision,
+        pending_by_id={memory_id: item},
+        control=control,
         run_id=run_id,
-        required_processor=_required_processor,
-        llm_invoke=llm_invoke,
+        now=datetime.now(timezone.utc),
+        db_client=db_client,
     )
 
 
 def run_proof(args: argparse.Namespace) -> ProofResult:
     notes: list[str] = []
     errors: list[str] = []
-    _configure_env(project=args.project, batch_cap=args.batch_cap)
-
+    _configure_env(project=args.project)
     marker = f"omi-stlt-proof-{uuid.uuid4().hex[:10]}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     run_id = f"stlt-proof-{uuid.uuid4().hex[:8]}"
-    gateway_mode = os.environ.get("OMI_LLM_GATEWAY_FEATURE_MODE", "unset")
-    batch_cap = int(os.environ["MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"])
+    gateway_mode = (os.environ.get("OMI_LLM_GATEWAY_FEATURE_MODE") or "unset").strip()
+    batch_cap = 1
 
     if not args.apply:
-        notes.append("dry_run: no writes; would create marker, ensure control if requested, run maintenance")
+        notes.append("dry_run: no writes")
         notes.append(f"target_project={args.project} uid={args.uid} batch_cap={batch_cap}")
-        notes.append(
-            "job parity: dev memory-maintenance-job uses GOOGLE_CLOUD_PROJECT=based-hardware "
-            "(not based-hardware-dev)"
-        )
+        notes.append("job parity: dev memory-maintenance-job uses GOOGLE_CLOUD_PROJECT=based-hardware")
         return ProofResult(
             ok=True,
             mode="dry_run",
@@ -232,6 +282,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
             processing_before=None,
             tier_after=None,
             processing_after=None,
+            status_after=None,
             run_id=run_id,
             batch_cap=batch_cap,
             gateway_mode=gateway_mode,
@@ -239,8 +290,19 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
             errors=errors,
         )
 
+    if not args.confirm_data_plane:
+        errors.append("apply_requires_--confirm-data-plane")
+    if not args.uid or not args.project:
+        errors.append("apply_requires_explicit_uid_and_project")
+    if os.environ.get(MAINTENANCE_ENABLED_ENV, "true").lower() == "false":
+        errors.append("MEMORY_CANONICAL_MAINTENANCE_ENABLED=false")
+    if os.environ.get(CONSOLIDATION_ENABLED_ENV, "true").lower() == "false":
+        errors.append("MEMORY_CANONICAL_CONSOLIDATION_ENABLED=false")
+    if gateway_mode != "gateway" and not args.allow_direct_llm:
+        errors.append("require_OMI_LLM_GATEWAY_FEATURE_MODE=gateway_or_--allow-direct-llm")
     if not os.environ.get("ENCRYPTION_SECRET"):
-        errors.append("ENCRYPTION_SECRET required for --apply")
+        errors.append("ENCRYPTION_SECRET_required")
+    if errors:
         return ProofResult(
             ok=False,
             mode="apply",
@@ -252,6 +314,30 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
             processing_before=None,
             tier_after=None,
             processing_after=None,
+            status_after=None,
+            run_id=run_id,
+            batch_cap=batch_cap,
+            gateway_mode=gateway_mode,
+            notes=notes,
+            errors=errors,
+        )
+
+    try:
+        _preflight_imports()
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"preflight_import:{_safe_error(exc)}")
+        return ProofResult(
+            ok=False,
+            mode="apply",
+            project=args.project,
+            uid=args.uid,
+            marker=marker,
+            memory_id="",
+            tier_before=None,
+            processing_before=None,
+            tier_after=None,
+            processing_after=None,
+            status_after=None,
             run_id=run_id,
             batch_cap=batch_cap,
             gateway_mode=gateway_mode,
@@ -263,9 +349,30 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
     ready, reason = _control_write_ready(db_client, args.uid)
     notes.append(f"control_before={reason}")
     if not ready:
-        if args.ensure_control:
-            written = _ensure_write_control(db_client, uid=args.uid)
-            notes.append(f"ensured_control_paths={len(written)}")
+        if args.ensure_user_control:
+            try:
+                written = _ensure_user_control_only(db_client, uid=args.uid)
+                notes.append(f"ensured_user_control={written[0]}")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"ensure_user_control:{_safe_error(exc)}")
+                return ProofResult(
+                    ok=False,
+                    mode="apply",
+                    project=args.project,
+                    uid=args.uid,
+                    marker=marker,
+                    memory_id="",
+                    tier_before=None,
+                    processing_before=None,
+                    tier_after=None,
+                    processing_after=None,
+                    status_after=None,
+                    run_id=run_id,
+                    batch_cap=batch_cap,
+                    gateway_mode=gateway_mode,
+                    notes=notes,
+                    errors=errors,
+                )
             ready, reason = _control_write_ready(db_client, args.uid)
             notes.append(f"control_after_ensure={reason}")
         if not ready:
@@ -281,6 +388,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
                 processing_before=None,
                 tier_after=None,
                 processing_after=None,
+                status_after=None,
                 run_id=run_id,
                 batch_cap=batch_cap,
                 gateway_mode=gateway_mode,
@@ -288,86 +396,69 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
                 errors=errors,
             )
 
-    memory_id = _create_marker(db_client, uid=args.uid, marker=marker)
-    before = _read_item(db_client, uid=args.uid, memory_id=memory_id)
-    tier_before = _enum_val(getattr(before, "tier", None)) if before else None
-    proc_before = _enum_val(getattr(before, "processing_state", None)) if before else None
-    notes.append(f"created memory_id={memory_id}")
-
+    memory_id = ""
+    tier_before = processing_before = tier_after = processing_after = status_after = None
     try:
-        report = _run_maintenance(db_client, uid=args.uid, run_id=run_id)
-        notes.append(f"maintenance_type={type(report).__name__}")
-        cons = getattr(report, "consolidation", None)
-        if cons is not None:
-            notes.append(
-                "consolidation "
-                f"trigger={getattr(cons, 'trigger_reason', None)} "
-                f"pending={getattr(cons, 'pending_count', None)} "
-                f"skipped={getattr(cons, 'skipped_reason', None)} "
-                f"promoted={getattr(cons, 'promoted_memory_ids', None)}"
+        memory_id = _create_marker(db_client, uid=args.uid, marker=marker)
+        before = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+        tier_before = _enum_val(getattr(before, "tier", None)) if before else None
+        processing_before = _enum_val(getattr(before, "processing_state", None)) if before else None
+        notes.append(f"created memory_id={memory_id}")
+        if tier_before != "short_term":
+            errors.append(f"expected_short_term_before got={tier_before}")
+
+        proc = _process_one(db_client, uid=args.uid, memory_id=memory_id)
+        notes.append(
+            "required_processing "
+            f"processed={getattr(proc, 'processed', None)} "
+            f"skipped={getattr(proc, 'skipped_reason', None)} "
+            f"error={getattr(proc, 'error_code', None)}"
+        )
+        if not getattr(proc, "processed", False):
+            errors.append(
+                "required_processing_failed:"
+                f"{getattr(proc, 'skipped_reason', None) or getattr(proc, 'error_code', None) or 'unknown'}"
             )
-            cons_errors = getattr(cons, "errors", None) or []
-            if cons_errors:
-                errors.extend(str(e) for e in cons_errors[:5])
-        req = getattr(report, "required_processing", None)
-        if req is not None:
-            notes.append(f"required_processing={req}")
-    except Exception as exc:  # noqa: BLE001 - surface live proof failures
-        errors.append(f"maintenance_failed:{type(exc).__name__}:{exc}")
+        else:
+            mid_state = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+            processing_before = (
+                _enum_val(getattr(mid_state, "processing_state", None)) if mid_state else processing_before
+            )
+            if processing_before != "processed":
+                errors.append(f"expected_processed_before_promote got={processing_before}")
+            else:
+                applied = _promote_one(db_client, uid=args.uid, memory_id=memory_id, run_id=run_id)
+                notes.append(f"promote_applied={applied}")
 
-    after = _read_item(db_client, uid=args.uid, memory_id=memory_id)
-    tier_after = _enum_val(getattr(after, "tier", None)) if after else None
-    proc_after = _enum_val(getattr(after, "processing_state", None)) if after else None
+        after = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+        tier_after = _enum_val(getattr(after, "tier", None)) if after else None
+        processing_after = _enum_val(getattr(after, "processing_state", None)) if after else None
+        status_after = _enum_val(getattr(after, "status", None)) if after else None
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"apply_path:{_safe_error(exc)}")
 
-    # Promotion may supersede the ST row; search LT for marker prefix via list pending=0 path.
-    promoted_ok = tier_after == "long_term"
-    if not promoted_ok and after is not None and tier_after == "short_term":
-        # Check lineage/promotion status on the item
-        promo = getattr(after, "promotion", None) or {}
-        if isinstance(promo, dict) and promo.get("status") == "promoted":
-            promoted_ok = True
-            notes.append("promotion.status=promoted while source tier still short_term (supersede path)")
-
-    if not promoted_ok:
-        # Best-effort: scan recent LT docs for marker in plaintext content field (may be encrypted)
-        try:
-            from database.memory_collections import MemoryCollections
-            from models.product_memory import MemoryLayer
-
-            paths = MemoryCollections(uid=args.uid)
-            found_lt = False
-            for snap in (
-                db_client.collection(paths.memory_items)
-                .where("tier", "==", MemoryLayer.long_term.value)
-                .limit(50)
-                .stream()
-            ):
-                data = snap.to_dict() or {}
-                content = str(data.get("content") or "")
-                if marker in content or memory_id in str(data.get("source_memory_ids") or data.get("lineage") or ""):
-                    found_lt = True
-                    notes.append(f"found_lt_doc={snap.id}")
-                    tier_after = "long_term"
-                    break
-            promoted_ok = found_lt
-        except Exception as exc:  # noqa: BLE001
-            notes.append(f"lt_scan_skipped:{type(exc).__name__}")
-
-    ok = promoted_ok and not errors
-    if not promoted_ok and not errors:
-        errors.append("marker_not_long_term_after_maintenance")
+    lifecycle_ok = (
+        tier_before == "short_term"
+        and processing_before == "processed"
+        and tier_after == "long_term"
+        and status_after == "active"
+        and not errors
+    )
+    if not lifecycle_ok and not errors:
+        errors.append("st_to_lt_not_proven")
 
     return ProofResult(
-        ok=ok,
+        ok=lifecycle_ok,
         mode="apply",
         project=args.project,
         uid=args.uid,
         marker=marker,
         memory_id=memory_id,
         tier_before=tier_before,
-        processing_before=proc_before,
+        processing_before=processing_before,
         tier_after=tier_after,
-        processing_after=proc_after,
+        processing_after=processing_after,
+        status_after=status_after,
         run_id=run_id,
         batch_cap=batch_cap,
         gateway_mode=gateway_mode,
@@ -379,11 +470,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
 def main(argv: Optional[list[str]] = None) -> int:
     args = _parse_args(argv)
     result = run_proof(args)
-    payload = asdict(result)
-    if args.json:
-        print(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        print(json.dumps(payload, indent=2, sort_keys=True))
+    print(json.dumps(asdict(result), indent=2, sort_keys=True))
     return 0 if result.ok else 1
 
 
