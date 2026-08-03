@@ -95,16 +95,18 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
     the supported Sonnet aliases. Extraction jobs use Haiku and some callers
     explicitly request Opus; those legacy Anthropic calls must not inherit the
     chat-agent personality/system prompt or have their requested model rewritten
-    to Luna. Unknown models retain the historical managed-chat behavior for
-    clients that omit a model alias.
+    to Luna. An omitted model uses the managed chat-agent default; an explicit
+    unknown model fails closed in the normal request validation path.
     """
-    model = body.get('model')
-    if not isinstance(model, str):
+    if 'model' not in body:
         return True
+    model = body['model']
+    if not isinstance(model, str):
+        return False
     normalized = model.lower()
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
-    return True
+    return False
 
 
 def _text(content: object) -> str:

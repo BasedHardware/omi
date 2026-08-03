@@ -142,7 +142,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
 
     response = await desktop_chat.chat_completions(
-        {'model': 'client-model', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        {'messages': [{'role': 'user', 'content': 'hello'}]},
         uid='user-1',
         x_app_platform=None,
         x_omi_chat_contract_version=None,
@@ -155,6 +155,50 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     assert recorded and recorded[0][0] == 'user-1'
     assert recorded[0][1].input_tokens == 3
     assert recorded[0][1].output_tokens == 2
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'model': 'client-model', 'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+
+    assert error.value.status_code == 400
+    assert error.value.detail == 'unsupported model'
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_rejects_explicit_null_model_before_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'model': None, 'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+
+    assert error.value.status_code == 400
+    assert error.value.detail == 'unsupported model'
 
 
 def test_gateway_body_preserves_validated_image_url():
@@ -212,6 +256,8 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({})
+    assert not desktop_chat._uses_managed_chat_agent({'model': 'client-model'})
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():

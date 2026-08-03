@@ -273,8 +273,9 @@ struct BrowserGoogleSession: Equatable {
 /// retry through `/usr/bin/security`: that would attribute any second prompt to the
 /// CLI and persist access for the wrong requester.
 ///
-/// The in-memory cache below coalesces concurrent reads within a single app run; we do
-/// not duplicate browser Safe Storage secrets into app preferences.
+/// The in-memory cache below coalesces concurrent explicit reads within a single app
+/// run; passive callers cannot consume either a cached secret or the Keychain item.
+/// We do not duplicate browser Safe Storage secrets into app preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
 
@@ -375,6 +376,11 @@ final class BrowserKeychainCache: @unchecked Sendable {
     userInitiated: Bool = false,
     loader: () -> String?
   ) -> String? {
+    // A previous explicit grant is not consent for a later background browser
+    // scrape. Keep the purpose boundary at the cache itself so every caller,
+    // including Gmail and Calendar verification, fails closed consistently.
+    guard userInitiated else { return nil }
+
     loop: while true {
       lock.lock()
 

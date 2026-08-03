@@ -6,7 +6,7 @@ import SwiftUI
 /// legacy shell but owns no second chat state, task state, or navigation index.
 struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
-  @ObservedObject var appState: AppState
+  let appState: AppState
   let viewModelContainer: ViewModelContainer
   let capability: ChatFirstCapabilityProjection
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
@@ -274,7 +274,7 @@ struct ChatFirstShell: View {
     case .insight:
       InsightPage()
     case .rewind:
-      RewindPage(appState: appState)
+      ChatFirstRewindHost(appState: appState)
     case .apps:
       AppsPage(
         appProvider: viewModelContainer.appProvider,
@@ -328,6 +328,18 @@ struct ChatFirstShell: View {
       case .settings: return .settings
       }
     }
+  }
+}
+
+/// Rewind still consumes live AppState values for permission, recording, and
+/// speaker projections. Keep that observation inside the mounted destination
+/// so the shell itself can remain isolated from unrelated AppState publishes.
+@MainActor
+private struct ChatFirstRewindHost: View {
+  @ObservedObject var appState: AppState
+
+  var body: some View {
+    RewindPage(appState: appState)
   }
 }
 

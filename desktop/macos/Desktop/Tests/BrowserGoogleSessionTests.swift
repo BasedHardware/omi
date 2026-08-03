@@ -100,18 +100,18 @@ final class BrowserGoogleSessionTests: XCTestCase {
     XCTAssertNil(userInitiatedQuery[kSecUseAuthenticationUI as String])
   }
 
-  func testSuccessfulSharedSafeStorageGrantIsReadOnceAcrossGoogleConsumers() {
+  func testSuccessfulSharedSafeStorageGrantIsReadOnceAcrossExplicitGoogleConsumers() {
     // This is the exact shared Chrome Safe Storage identity Calendar and Gmail
     // derive through `BrowserKeychainCache.password(for:account:)`; prefix it
     // only to keep the test isolated from a real user credential.
     let cacheKey = "BrowserGoogleSessionTests.\(UUID().uuidString)\u{0}Chrome Safe Storage\u{0}Chrome"
     var keychainReads = 0
 
-    let calendarPassword = BrowserKeychainCache.shared.password(for: cacheKey) {
+    let calendarPassword = BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) {
       keychainReads += 1
       return "granted"
     }
-    let gmailPassword = BrowserKeychainCache.shared.password(for: cacheKey) {
+    let gmailPassword = BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) {
       keychainReads += 1
       return "granted"
     }
@@ -121,6 +121,25 @@ final class BrowserGoogleSessionTests: XCTestCase {
     // A second loader would be a second Keychain authorization request. Both
     // consumers must reuse the original successful grant and exact secret.
     XCTAssertEqual(keychainReads, 1)
+    BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
+  }
+
+  func testPassiveSafeStorageReadCannotReuseExplicitGrant() {
+    let cacheKey = "BrowserGoogleSessionTests.passive.\(UUID().uuidString)"
+    var passiveLoaderCalled = false
+
+    BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    XCTAssertEqual(
+      BrowserKeychainCache.shared.password(for: cacheKey, userInitiated: true) { "granted" },
+      "granted"
+    )
+
+    XCTAssertNil(
+      BrowserKeychainCache.shared.password(for: cacheKey) {
+        passiveLoaderCalled = true
+        return "should-not-be-read"
+      })
+    XCTAssertFalse(passiveLoaderCalled)
     BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
   }
 

@@ -39,33 +39,6 @@ extension AppState {
     }
   }
 
-  /// Repair LaunchServices registration when notification authorization fails.
-  /// The "launch-disabled" flag in LaunchServices prevents the notification center
-  /// from registering the app. This unregisters and re-registers to clear the flag.
-  func repairNotificationRegistrationAndRetry() {
-    NotificationRegistrationRepair.repair(reason: "app_state_retry", includeUnregister: true) {
-      [weak self] _ in
-      NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-        reason: "launch_disabled_error_retry",
-        previousStatus: "post_repair"
-      ) { [weak self] _ in
-        MainActor.assumeIsolated { self?.checkNotificationPermission() }
-      }
-    }
-
-    // After the repair + retry, update our permission state and open System Settings as fallback.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-      UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
-        let isNowGranted = authorizationStatus == .authorized
-        self?.hasNotificationPermission = isNowGranted
-        if !isNowGranted {
-          log("Notification permission still not granted after repair. Opening System Settings.")
-          self?.openNotificationPreferences()
-        }
-      }
-    }
-  }
-
   /// Repair notification registration via lsregister, then fall back to System Settings if still broken.
   /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
   func repairNotificationAndFallback() {
@@ -211,6 +184,8 @@ extension AppState {
 
   /// Check notification permission status and alert style
   func checkNotificationPermission() {
+    // This is observational only. Repairing LaunchServices or opening Settings
+    // belongs to the explicit notification Fix/request actions above.
     // Dispatch async to avoid calling UNUserNotificationCenter.current() during
     // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
     DispatchQueue.main.async { [weak self] in
@@ -258,20 +233,6 @@ extension AppState {
             badgeEnabled: badgeEnabled,
             bannersDisabled: settings.alertStyle == .none
           )
-
-          // Detect regression: was authorized, now reverted to notDetermined
-          // This happens on macOS 26+ where the OS silently revokes notification permission
-          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-            log(
-              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
-            )
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "auth_regression",
-              previousStatus: "authorized",
-              currentStatus: "notDetermined"
-            )
-            self.repairNotificationRegistrationAndRetry()
-          }
 
           // Update last known state
           self.lastNotificationAuthStatus = authStatus
