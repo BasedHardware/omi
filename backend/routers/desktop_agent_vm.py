@@ -91,27 +91,9 @@ def _get_vm(uid: str) -> dict[str, Any] | None:
     return vm if isinstance(vm, dict) and vm.get("vmName") else None
 
 
-def _set_vm(
-    uid: str,
-    vm_name: str,
-    status: str,
-    auth_token: str,
-    created_at: str,
-    ip: str | None = None,
-    zone: str = _ZONE,
-) -> None:
+def _validate_ready_vm_ip(status: str, ip: str | None) -> None:
     if status == "ready" and not _is_usable_vm_ip(ip):
         raise ValueError("refusing to persist ready agentVm without a usable IP address")
-    vm: dict[str, Any] = {
-        "vmName": vm_name,
-        "zone": zone,
-        "status": status,
-        "authToken": auth_token,
-        "createdAt": created_at,
-    }
-    if ip:
-        vm["ip"] = ip
-    get_firestore_client().collection("users").document(uid).set({"agentVm": vm}, merge=True)
 
 
 @transactional
@@ -173,8 +155,7 @@ def _set_vm_if_current_txn(
         return False
     if current.get("vmName") != expected_vm_name or current.get("authToken") != expected_auth_token:
         return False
-    if status == "ready" and not _is_usable_vm_ip(ip):
-        raise ValueError("refusing to persist ready agentVm without a usable IP address")
+    _validate_ready_vm_ip(status, ip)
     next_vm = {
         **current,
         "vmName": expected_vm_name,

@@ -71,9 +71,9 @@ async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeyp
 
 def test_ready_state_rejects_unknown_or_invalid_address():
     with pytest.raises(ValueError, match="usable IP"):
-        desktop_agent_vm._set_vm("uid", "vm", "ready", "token", "now", "unknown")
+        desktop_agent_vm._validate_ready_vm_ip("ready", "unknown")
     with pytest.raises(ValueError, match="usable IP"):
-        desktop_agent_vm._set_vm("uid", "vm", "ready", "token", "now", "not-an-ip")
+        desktop_agent_vm._validate_ready_vm_ip("ready", "not-an-ip")
 
 
 def test_instance_address_parser_never_returns_unknown_placeholder():
