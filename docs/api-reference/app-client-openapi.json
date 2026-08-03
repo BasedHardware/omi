@@ -13692,15 +13692,26 @@
       },
       "LocalKgSyncRequest": {
         "properties": {
+          "reconcile_complete": {
+            "default": false,
+            "title": "Reconcile Complete",
+            "type": "boolean"
+          },
           "rows": {
             "items": {
               "additionalProperties": true,
               "type": "object"
             },
             "maxItems": 100,
-            "minItems": 1,
+            "minItems": 0,
             "title": "Rows",
             "type": "array"
+          },
+          "source_namespace": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Namespace",
+            "type": "string"
           },
           "table": {
             "enum": [
@@ -13713,13 +13724,19 @@
         },
         "required": [
           "table",
-          "rows"
+          "rows",
+          "source_namespace"
         ],
         "title": "LocalKgSyncRequest",
         "type": "object"
       },
       "LocalKgSyncResponse": {
         "properties": {
+          "deleted": {
+            "default": 0,
+            "title": "Deleted",
+            "type": "integer"
+          },
           "edges_evicted": {
             "title": "Edges Evicted",
             "type": "integer"
@@ -13730,6 +13747,11 @@
           },
           "nodes_evicted": {
             "title": "Nodes Evicted",
+            "type": "integer"
+          },
+          "quarantined": {
+            "default": 0,
+            "title": "Quarantined",
             "type": "integer"
           },
           "skipped": {
