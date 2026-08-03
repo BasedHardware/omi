@@ -61,7 +61,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
     creation, so a create already in flight either loses before insert or
     deletes its late-created instance here/on its post-create fence.
     """
-    vm = users_db.get_agent_vm(uid)
+    vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
     if not isinstance(vm, dict) or not vm.get('vmName'):
         return
     project = os.getenv('GCE_PROJECT_ID') or os.getenv('FIREBASE_PROJECT_ID') or os.getenv('GCP_PROJECT_ID')
@@ -76,6 +76,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
     with httpx.Client(timeout=180) as client:
         response = client.delete(instance_url, headers=headers)
         if response.status_code == 404:
+            users_db.clear_late_agent_vm_cleanup(uid, vm_name)
             return
         response.raise_for_status()
         operation = response.json().get('name')
@@ -91,6 +92,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
             if result.get('status') == 'DONE':
                 if result.get('error'):
                     raise RuntimeError(f'GCE Agent VM deletion failed: {result["error"]}')
+                users_db.clear_late_agent_vm_cleanup(uid, vm_name)
                 return
             time.sleep(5)
     raise RuntimeError('GCE Agent VM deletion timed out')

@@ -50,6 +50,9 @@ GCE_PROJECT = "based-hardware"
 # records heal on the next connect instead of resetting a healthy VM forever.
 UNRESOLVED_VM_IP = "unknown"
 VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
+# Each inbound request is fenced immediately; this is only the bounded idle
+# relay backstop that closes a socket after deletion is admitted.
+ACCOUNT_DELETION_IDLE_RECHECK_INTERVAL = 30  # seconds
 # Wait this long for the VM's session_state hello before deciding whether to seed
 # history on the first query. The VM sends it synchronously on connect, so this is a
 # tiny grace window; on timeout we seed history (a fresh amnesiac session is the worse
@@ -592,6 +595,17 @@ async def _admit_account_access_or_close(websocket: WebSocket, uid: str) -> bool
         return False
 
 
+async def _ensure_vm_running_or_close(
+    websocket: WebSocket, uid: str, vm: Dict[str, Any], health_failed: bool = False
+) -> tuple[Optional[Dict[str, Any]], bool]:
+    """Run VM repair while preserving the typed account-deletion socket close."""
+    try:
+        return await _ensure_vm_running(uid, vm, health_failed=health_failed), False
+    except AccountDeletionAccessBlocked:
+        await _admit_account_access_or_close(websocket, uid)
+        return None, True
+
+
 # --------------- encryption helpers ---------------
 
 
@@ -876,7 +890,9 @@ async def agent_ws(websocket: WebSocket):
             # VM not reachable — check GCE and restart/reset if needed
             logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
             await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
-            vm = await _ensure_vm_running(uid, vm, health_failed=True)
+            vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
+            if deletion_blocked:
+                return
             if not vm or vm.get("status") != "ready" or not vm.get("ip"):
                 await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
                 await _close_client(websocket, uid, 4002, "VM startup failed")
@@ -902,7 +918,9 @@ async def agent_ws(websocket: WebSocket):
     else:
         # No IP or not ready — must restart
         await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
-        vm = await _ensure_vm_running(uid, vm)
+        vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm)
+        if deletion_blocked:
+            return
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
             await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
             await _close_client(websocket, uid, 4002, "VM startup failed")
@@ -1140,7 +1158,7 @@ async def agent_ws(websocket: WebSocket):
             async def account_deletion_watcher():
                 """Terminate an idle relay promptly when deletion is admitted."""
                 while True:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(ACCOUNT_DELETION_IDLE_RECHECK_INTERVAL)
                     if not await session_access_allowed():
                         return
 

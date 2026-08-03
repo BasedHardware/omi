@@ -69,6 +69,32 @@ async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeyp
     assert len(tasks.tasks) == 1
 
 
+@pytest.mark.asyncio
+async def test_late_created_vm_cleanup_is_persisted_when_provider_delete_fails(monkeypatch):
+    lifecycle_checks = iter([True, False, False])
+    persisted = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def delete_vm(*_args):
+        raise RuntimeError("GCE unavailable")
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: next(lifecycle_checks))
+    monkeypatch.setattr(desktop_agent_vm, "_create_vm", lambda *_args: _async_result("34.1.2.3"))
+    monkeypatch.setattr(desktop_agent_vm, "_delete_vm", delete_vm)
+    monkeypatch.setattr(
+        desktop_agent_vm.users_db,
+        "record_late_agent_vm_cleanup",
+        lambda *args: persisted.append(args),
+    )
+
+    await desktop_agent_vm._provision_background("uid", "project", "image", "bucket", "omi-agent-uid", "omi-token")
+
+    assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
+
+
 def test_ready_state_rejects_unknown_or_invalid_address():
     with pytest.raises(ValueError, match="usable IP"):
         desktop_agent_vm._validate_ready_vm_ip("ready", "unknown")
@@ -199,3 +225,7 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 
 async def _stopped_instance():
     return "TERMINATED", None
+
+
+async def _async_result(value):
+    return value

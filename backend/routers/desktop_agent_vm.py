@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from google.cloud.firestore import DELETE_FIELD, transactional
 from pydantic import BaseModel, ConfigDict, Field
 
+from database import users as users_db
 from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
 from utils.account_deletion_access import account_deletion_blocks_access, normalize_account_deletion_status
@@ -353,7 +354,14 @@ async def _provision_background(
         ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
         if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
             logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
-            await _delete_vm(project, vm_name, _ZONE)
+            try:
+                await _delete_vm(project, vm_name, _ZONE)
+            except Exception:
+                # The deletion worker may have observed a pre-create 404. Keep
+                # this concrete instance in the durable marker and reopen its
+                # wipe so reconciliation retries provider cleanup.
+                await run_blocking(db_executor, users_db.record_late_agent_vm_cleanup, uid, vm_name, _ZONE)
+                raise
             return
         updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
         if not updated:
