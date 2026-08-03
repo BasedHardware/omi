@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat transcripts pulling readers back to the bottom after they explicitly scroll into history"
+}

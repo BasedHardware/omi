@@ -88,6 +88,21 @@ class TasksStore: ObservableObject {
         self.hasMoreNoDeadline = hasMoreNoDeadline
         self.apiConsumedNoDeadlineCount = apiConsumedNoDeadlineCount ?? noDeadlineTasks.count
       }
+
+      var activeDatedTasks: [TaskActionItem] {
+        TasksStore.activeDatedOnly(datedTasks)
+      }
+
+      var activeNoDeadlineTasks: [TaskActionItem] {
+        TasksStore.noDeadlineOnly(noDeadlineTasks)
+      }
+
+      var stablePresentationItems: [TaskActionItem] {
+        TasksStore.stableIncompleteTaskSurfaceItems(
+          datedTasks: activeDatedTasks,
+          noDeadlineTasks: activeNoDeadlineTasks
+        )
+      }
     }
 
     var fetchPage:
@@ -244,10 +259,7 @@ class TasksStore: ObservableObject {
     error = nil
     incompleteError = nil
     completedError = nil
-    incompleteOffset = 0
-    datedTaskCount = 0
-    noDeadlineOffset = 0
-    noDeadlineAPIOffset = 0
+    incompleteSurfaceState.reset()
     completedOffset = 0
     deletedOffset = 0
     hasLoadedIncomplete = false
@@ -259,17 +271,59 @@ class TasksStore: ObservableObject {
 
   // MARK: - Private State
 
-  private var incompleteOffset = 0
-  /// Number of active dated rows in the current owner-scoped API snapshot.
-  /// The backend uses this boundary to expose the null due-date bucket.
-  private var datedTaskCount = 0
-  /// Offset within the bounded No Deadline bucket, never within the general
-  /// mixed dated/undated list. This is a local presentation count.
-  private var noDeadlineOffset = 0
-  /// Number of raw rows consumed from the API's No Deadline partition. This
-  /// must never be reconstructed from a locally reordered or deduplicated
-  /// presentation array.
-  private var noDeadlineAPIOffset = 0
+  /// Tracks dated vs no-deadline bucket boundaries and API vs presentation
+  /// offsets for incomplete-task pagination.
+  private var incompleteSurfaceState = IncompleteTaskSurfaceState()
+
+  private struct IncompleteTaskSurfaceState {
+    /// Number of active dated rows in the current owner-scoped API snapshot.
+    /// The backend uses this boundary to expose the null due-date bucket.
+    var datedCount = 0
+    /// Offset within the bounded No Deadline bucket (local presentation count).
+    var noDeadlinePresentationOffset = 0
+    /// Number of raw rows consumed from the API's No Deadline partition.
+    var noDeadlineAPIOffset = 0
+
+    mutating func reset() {
+      datedCount = 0
+      noDeadlinePresentationOffset = 0
+      noDeadlineAPIOffset = 0
+    }
+
+    mutating func syncFrom(surface: OwnerBoundOperations.IncompleteTaskSurface) {
+      datedCount = surface.activeDatedTasks.count
+      noDeadlinePresentationOffset = surface.activeNoDeadlineTasks.count
+    }
+
+    mutating func syncFrom(
+      datedCount: Int,
+      noDeadlinePresentationOffset: Int,
+      noDeadlineAPIOffset: Int? = nil
+    ) {
+      self.datedCount = datedCount
+      self.noDeadlinePresentationOffset = noDeadlinePresentationOffset
+      if let apiOffset = noDeadlineAPIOffset {
+        self.noDeadlineAPIOffset = apiOffset
+      }
+    }
+
+    mutating func syncNoDeadlinePresentation(from items: [TaskActionItem]) {
+      noDeadlinePresentationOffset = items.filter { $0.dueAt == nil }.count
+    }
+
+    mutating func recordInitialFetch(
+      surface: OwnerBoundOperations.IncompleteTaskSurface,
+      noDeadlineTasks: [TaskActionItem]
+    ) {
+      datedCount = surface.activeDatedTasks.count
+      noDeadlinePresentationOffset = noDeadlineTasks.count
+      noDeadlineAPIOffset = max(surface.apiConsumedNoDeadlineCount, noDeadlineTasks.count)
+    }
+
+    mutating func advanceNoDeadlineAPI(by rawConsumed: Int) {
+      noDeadlineAPIOffset += rawConsumed
+    }
+  }
   private var completedOffset = 0
   private var deletedOffset = 0
   private let pageSize = 100  // Reduced from 1000 for better performance
@@ -614,8 +668,7 @@ class TasksStore: ObservableObject {
         }
 
         incompleteTasks = merged
-        noDeadlineOffset = merged.filter { $0.dueAt == nil }.count
-        incompleteOffset = noDeadlineOffset
+        incompleteSurfaceState.syncNoDeadlinePresentation(from: merged)
         log("TasksStore: Auto-refresh updated incomplete tasks (\(merged.count) items)")
       } else {
         log("RENDER: Auto-refresh: no changes detected, skipping update")
@@ -805,9 +858,7 @@ class TasksStore: ObservableObject {
         let refreshed = surfaceItems(refreshedSurface)
         if refreshed != incompleteTasks {
           incompleteTasks = refreshed
-          datedTaskCount = Self.activeDatedOnly(refreshedSurface.datedTasks).count
-          noDeadlineOffset = refreshedSurface.noDeadlineTasks.filter { $0.dueAt == nil }.count
-          incompleteOffset = noDeadlineOffset
+          incompleteSurfaceState.syncFrom(surface: refreshedSurface)
         }
         await refreshDashboardCache(lease: lease, operations: operations)
       }
@@ -869,9 +920,7 @@ class TasksStore: ObservableObject {
       guard isCurrent(lease) else { return }
       if cachedTasks != incompleteTasks {
         incompleteTasks = cachedTasks
-        datedTaskCount = Self.activeDatedOnly(cachedSurface.datedTasks).count
-        noDeadlineOffset = cachedSurface.noDeadlineTasks.filter { $0.dueAt == nil }.count
-        incompleteOffset = noDeadlineOffset
+        incompleteSurfaceState.syncFrom(surface: cachedSurface)
         hasMoreIncompleteTasks = cachedSurface.hasMoreNoDeadline
         log("TasksStore: Reloaded \(cachedTasks.count) incomplete tasks from local cache (external change)")
       }
@@ -1081,7 +1130,7 @@ class TasksStore: ObservableObject {
 
   /// Keep the dated and null-due buckets disjoint even if a concurrent backend
   /// update or a duplicate response races a page boundary.
-  static func stableIncompleteTaskSurfaceItems(
+  nonisolated static func stableIncompleteTaskSurfaceItems(
     datedTasks: [TaskActionItem],
     noDeadlineTasks: [TaskActionItem]
   ) -> [TaskActionItem] {
@@ -1089,22 +1138,19 @@ class TasksStore: ObservableObject {
     return (datedTasks + noDeadlineTasks).filter { seen.insert($0.id).inserted }
   }
 
-  static func noDeadlineOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
+  nonisolated static func noDeadlineOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
     var seen = Set<String>()
     return items.filter {
       $0.dueAt == nil && !$0.completed && !$0.isRetired && seen.insert($0.id).inserted
     }
   }
 
-  static func activeDatedOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
+  nonisolated static func activeDatedOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
     items.filter { $0.dueAt != nil && !$0.completed && !$0.isRetired }
   }
 
   private func surfaceItems(_ surface: OwnerBoundOperations.IncompleteTaskSurface) -> [TaskActionItem] {
-    Self.stableIncompleteTaskSurfaceItems(
-      datedTasks: Self.activeDatedOnly(surface.datedTasks),
-      noDeadlineTasks: Self.noDeadlineOnly(surface.noDeadlineTasks)
-    )
+    surface.stablePresentationItems
   }
 
   private func loadIncompleteTaskSurface(
@@ -1186,9 +1232,7 @@ class TasksStore: ObservableObject {
       )
       guard isCurrent(lease) else { return }
       incompleteTasks = surfaceItems(refreshedSurface)
-      datedTaskCount = Self.activeDatedOnly(refreshedSurface.datedTasks).count
-      noDeadlineOffset = refreshedSurface.noDeadlineTasks.filter { $0.dueAt == nil }.count
-      incompleteOffset = noDeadlineOffset
+      incompleteSurfaceState.syncFrom(surface: refreshedSurface)
       hasMoreIncompleteTasks = refreshedSurface.hasMoreNoDeadline
       log("TasksStore: Refreshed UI after full sync - \(incompleteTasks.count) incomplete tasks")
     } catch {
@@ -1219,22 +1263,7 @@ class TasksStore: ObservableObject {
       )
     }
 
-    var datedTasks: [TaskActionItem] = []
-    var datedOffset = 0
-    while true {
-      guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
-      let page = try await APIClient.shared.getDatedActionItems(
-        limit: Self.apiPageLimitCap,
-        offset: datedOffset,
-        completed: false,
-        expectedOwnerId: lease.ownerID,
-        authorizationSnapshot: lease.authorizationSnapshot
-      )
-      guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
-      datedTasks.append(contentsOf: page.items.filter { $0.dueAt != nil && !$0.completed && !$0.isRetired })
-      datedOffset += page.items.count
-      if page.items.isEmpty || !page.hasMore { break }
-    }
+    let datedTasks = try await scanDatedIncompleteBuckets(lease: lease)
 
     let noDeadlinePage = try await APIClient.shared.getNoDeadlineActionItems(
       limit: pageSize,
@@ -1268,6 +1297,13 @@ class TasksStore: ObservableObject {
       return Self.activeDatedOnly(incompleteTasks)
     }
 
+    return try await scanDatedIncompleteBuckets(lease: lease)
+  }
+
+  /// Scan every dated incomplete bucket page from the API.
+  private func scanDatedIncompleteBuckets(
+    lease: OwnerOperationLease
+  ) async throws -> [TaskActionItem] {
     var datedTasks: [TaskActionItem] = []
     var datedOffset = 0
     while true {
@@ -1304,7 +1340,7 @@ class TasksStore: ObservableObject {
     let page = try await APIClient.shared.getNoDeadlineActionItems(
       limit: limit,
       offset: offset,
-      datedCount: datedTaskCount,
+      datedCount: incompleteSurfaceState.datedCount,
       completed: false,
       expectedOwnerId: lease.ownerID,
       authorizationSnapshot: lease.authorizationSnapshot
@@ -1643,7 +1679,7 @@ class TasksStore: ObservableObject {
     isLoadingIncomplete = true
     error = nil
     incompleteError = nil
-    incompleteOffset = 0
+    incompleteSurfaceState.reset()
 
     // Step 1: Load the complete dated surface plus one bounded No Deadline
     // page from local cache for instant display.
@@ -1657,9 +1693,7 @@ class TasksStore: ObservableObject {
       let cachedTasks = surfaceItems(cachedSurface)
       if !cachedTasks.isEmpty {
         incompleteTasks = cachedTasks
-        datedTaskCount = Self.activeDatedOnly(cachedSurface.datedTasks).count
-        noDeadlineOffset = cachedSurface.noDeadlineTasks.filter { $0.dueAt == nil }.count
-        incompleteOffset = noDeadlineOffset
+        incompleteSurfaceState.syncFrom(surface: cachedSurface)
         hasMoreIncompleteTasks = cachedSurface.hasMoreNoDeadline
         log("TasksStore: Loaded \(cachedTasks.count) incomplete tasks from local cache")
       }
@@ -1672,17 +1706,11 @@ class TasksStore: ObservableObject {
       let surface = try await fetchIncompleteTaskSurface(lease: lease, operations: operations)
       guard isCurrent(lease) else { return }
       hasLoadedIncomplete = true
-      let datedTasks = Self.activeDatedOnly(surface.datedTasks)
-      let noDeadlineTasks = Self.noDeadlineOnly(surface.noDeadlineTasks)
-      datedTaskCount = datedTasks.count
-      noDeadlineOffset = noDeadlineTasks.count
-      noDeadlineAPIOffset = max(surface.apiConsumedNoDeadlineCount, noDeadlineTasks.count)
-      incompleteOffset = noDeadlineOffset
+      let datedTasks = surface.activeDatedTasks
+      let noDeadlineTasks = surface.activeNoDeadlineTasks
+      incompleteSurfaceState.recordInitialFetch(surface: surface, noDeadlineTasks: noDeadlineTasks)
       hasMoreIncompleteTasks = surface.hasMoreNoDeadline
-      let fetchedTasks = Self.stableIncompleteTaskSurfaceItems(
-        datedTasks: datedTasks,
-        noDeadlineTasks: noDeadlineTasks
-      )
+      let fetchedTasks = surface.stablePresentationItems
       log(
         "TasksStore: Fetched \(datedTasks.count) dated and \(noDeadlineTasks.count) No Deadline incomplete tasks "
           + "(hasMoreNoDeadline=\(surface.hasMoreNoDeadline))"
@@ -1719,13 +1747,14 @@ class TasksStore: ObservableObject {
         mergedSurface.noDeadlineTasks + noDeadlineTasks
       )
       let mergedTasks = Self.stableIncompleteTaskSurfaceItems(
-        datedTasks: Self.activeDatedOnly(mergedSurface.datedTasks),
+        datedTasks: mergedSurface.activeDatedTasks,
         noDeadlineTasks: mergedNoDeadlineTasks
       )
       incompleteTasks = mergedTasks
-      datedTaskCount = Self.activeDatedOnly(mergedSurface.datedTasks).count
-      noDeadlineOffset = mergedNoDeadlineTasks.count
-      incompleteOffset = noDeadlineOffset
+      incompleteSurfaceState.syncFrom(
+        datedCount: mergedSurface.activeDatedTasks.count,
+        noDeadlinePresentationOffset: mergedNoDeadlineTasks.count
+      )
       hasMoreIncompleteTasks = surface.hasMoreNoDeadline || mergedSurface.hasMoreNoDeadline
       log("TasksStore: Showing \(mergedTasks.count) incomplete tasks from merged local cache")
     } catch {
@@ -1827,9 +1856,7 @@ class TasksStore: ObservableObject {
         let refreshed = surfaceItems(refreshedSurface)
         if refreshed != incompleteTasks {
           incompleteTasks = refreshed
-          datedTaskCount = Self.activeDatedOnly(refreshedSurface.datedTasks).count
-          noDeadlineOffset = refreshedSurface.noDeadlineTasks.filter { $0.dueAt == nil }.count
-          incompleteOffset = noDeadlineOffset
+          incompleteSurfaceState.syncFrom(surface: refreshedSurface)
         }
         await refreshDashboardCache(lease: lease, operations: operations)
       } else {
@@ -2438,9 +2465,9 @@ class TasksStore: ObservableObject {
       // shifts that boundary and can cause skips or duplicates.
       let datedTasks = try await fetchDatedTasks(lease: lease, operations: operations)
       guard isCurrent(lease) else { return }
-      datedTaskCount = datedTasks.count
+      incompleteSurfaceState.datedCount = datedTasks.count
       let response = try await fetchNoDeadlinePage(
-        offset: noDeadlineAPIOffset,
+        offset: incompleteSurfaceState.noDeadlineAPIOffset,
         limit: pageSize,
         lease: lease,
         operations: operations
@@ -2468,9 +2495,8 @@ class TasksStore: ObservableObject {
       hasMoreIncompleteTasks = response.hasMore
       // Advance the API cursor by raw API consumption, not by the number of
       // accepted/deduplicated rows in the local presentation.
-      noDeadlineAPIOffset += response.items.count
-      noDeadlineOffset = incompleteTasks.filter { $0.dueAt == nil }.count
-      incompleteOffset = noDeadlineOffset
+      incompleteSurfaceState.advanceNoDeadlineAPI(by: response.items.count)
+      incompleteSurfaceState.syncNoDeadlinePresentation(from: incompleteTasks)
       log("TasksStore: Loaded \(noDeadlineItems.count) more No Deadline tasks from API")
     } catch {
       if isCurrent(lease) {

@@ -86,9 +86,10 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testChatStartsAtBottomOnLaunchButPreservesExplicitReaderScroll() throws {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
 
-    // omi-test-quality: source-inspection -- the transcript's default placement
-    // is bottom-first, while user interaction is the only path that cancels it.
-    XCTAssertTrue(messagesSource.contains(".defaultScrollAnchor(.bottom)"))
+    // omi-test-quality: source-inspection -- launch placement is owned by the
+    // cancelable state machine. An unconditional SwiftUI default anchor is a
+    // second authority that can pull an explicitly free-scrolled reader back.
+    XCTAssertFalse(messagesSource.contains(".defaultScrollAnchor(.bottom)"))
     XCTAssertTrue(messagesSource.contains("ChatInitialRestoreState.afterDisappear"))
     XCTAssertTrue(messagesSource.contains("cancelPendingScrollsForUserInteraction()"))
     XCTAssertTrue(messagesSource.contains("initialRestoreState = .completed"))

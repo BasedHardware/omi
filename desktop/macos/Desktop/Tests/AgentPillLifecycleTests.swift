@@ -980,7 +980,10 @@ import XCTest
     XCTAssertTrue(source.contains("initialRestoreState = .pending"))
     XCTAssertTrue(source.contains("completesInitialRestore"))
     XCTAssertTrue(source.contains("initialRestoreState = .completed"))
-    XCTAssertTrue(source.contains(".defaultScrollAnchor(.bottom)"))
+    XCTAssertFalse(
+      source.contains(".defaultScrollAnchor(.bottom)"),
+      "launch placement must remain cancelable instead of becoming a persistent bottom anchor"
+    )
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertFalse(

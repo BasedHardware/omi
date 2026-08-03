@@ -295,7 +295,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // re-enter SwiftUI's AttributeGraph layout pass indefinitely on long
     // histories.
     .scrollIndicators(.hidden)
-    .defaultScrollAnchor(.bottom)
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in

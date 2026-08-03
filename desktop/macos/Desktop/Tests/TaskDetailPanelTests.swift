@@ -81,6 +81,29 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertTrue(fields.contains(.init(label: "Relevant Files", value: "Report.swift")))
   }
 
+  func testPanelDetailsExcludeNarrativeContextMetadata() {
+    let task = makeTask(
+      id: "task-context",
+      description: "Review the budget",
+      metadata: """
+        {
+          "context_summary": "Spreadsheet open with Q4 numbers",
+          "current_activity": "Editing cells in Excel",
+          "reasoning": "User mentioned sending the budget",
+          "agent_plan": "Draft email with attached figures",
+          "creation_reason": "Screen capture"
+        }
+        """
+    )
+
+    let fields = TaskDetailPanelContent.make(for: task).fields
+    XCTAssertTrue(fields.contains(.init(label: "Creation Reason", value: "Screen capture")))
+    XCTAssertFalse(fields.contains { $0.label == "Context Summary" })
+    XCTAssertFalse(fields.contains { $0.label == "Current Activity" })
+    XCTAssertFalse(fields.contains { $0.label == "Reasoning" })
+    XCTAssertFalse(fields.contains { $0.label == "Agent Plan" })
+  }
+
   func testTaskDetailActionPolicyPreservesCompletionAndCRUDActions() {
     let active = makeTask(id: "active", description: "Do it", completed: false)
     let completed = makeTask(id: "done", description: "Did it", completed: true)

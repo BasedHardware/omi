@@ -318,12 +318,15 @@ enum AgentClient {
       sessionID: String,
       controlGeneration: Int
     ) async throws -> ChatFirstPromptReceiptBatch {
-      try await bridge.listChatFirstMaterializationReceipts(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        controlGeneration: controlGeneration
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.listChatFirstMaterializationReceipts(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          controlGeneration: controlGeneration
+        )
+      }
     }
 
     @discardableResult
@@ -334,13 +337,16 @@ enum AgentClient {
       controlGeneration: Int,
       receipts: ChatFirstPromptReceiptBatch
     ) async throws -> Int {
-      try await bridge.acknowledgeChatFirstMaterializationReceipts(
-        surface: surface,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        controlGeneration: controlGeneration,
-        receipts: receipts
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.acknowledgeChatFirstMaterializationReceipts(
+          surface: surface,
+          ownerID: ownerID,
+          sessionID: sessionID,
+          controlGeneration: controlGeneration,
+          receipts: receipts
+        )
+      }
     }
 
     func invokeChatFirstFixtureTaskCard(
@@ -349,12 +355,15 @@ enum AgentClient {
       producingTurnID: String,
       controlGeneration: Int
     ) async throws -> AgentRuntimeProcess.ChatFirstHarnessExecutorReceipt {
-      try await bridge.invokeChatFirstFixtureTaskCard(
-        ownerID: ownerID,
-        sessionID: sessionID,
-        producingTurnID: producingTurnID,
-        controlGeneration: controlGeneration
-      )
+      let bridge = bridge
+      return try await withContextAdmissionAccess {
+        try await bridge.invokeChatFirstFixtureTaskCard(
+          ownerID: ownerID,
+          sessionID: sessionID,
+          producingTurnID: producingTurnID,
+          controlGeneration: controlGeneration
+        )
+      }
     }
 
     func updateJournalTurn(
@@ -398,6 +407,8 @@ enum AgentClient {
       }
     }
 
+    /// Read-only journal snapshot; excluded from `AgentContextAdmissionGate` —
+    /// see gate comment (non-reentrant; no projection advance).
     func listJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -412,6 +423,8 @@ enum AgentClient {
       )
     }
 
+    /// Read-only journal snapshot; excluded from `AgentContextAdmissionGate` —
+    /// see gate comment (non-reentrant; no projection advance).
     func listJournalTurnsForControl(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
