@@ -51,6 +51,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
+        {"name": "CHANNEL_SIGN_IN_URL", "value": "https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login"},
         {"name": "TWILIO_NUMBER", "value": "+15551234567"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
@@ -1313,6 +1314,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                 'env': {
                                     'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
                                     'OMI_ENV_STAGE': {'value': 'dev'},
+                                    'CHANNEL_SIGN_IN_URL': {'value': 'https://app.example/login'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
                                     'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway'},
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
