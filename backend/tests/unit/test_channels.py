@@ -278,7 +278,7 @@ def test_unlinked_channel_reply_contains_a_one_time_sign_in_link(monkeypatch):
             },
         )
     )
-    assert 'https://omi.me/login?channel=sms&code=' + 'b' * 48 in result
+    assert 'https://app.omi.me/login?channel=sms&code=' + 'b' * 48 in result
     assert '/start ' + 'b' * 48 in result
 
 
