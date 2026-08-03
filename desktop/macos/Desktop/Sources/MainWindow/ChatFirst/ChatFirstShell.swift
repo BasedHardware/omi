@@ -13,6 +13,10 @@ struct ChatFirstShell: View {
   @Binding var highlightedSettingID: String?
   @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
   @StateObject private var automationRuntime: ChatFirstAutomationRuntime
+  @State private var conversationsSelectionGeneration = 0
+  @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
+    MemoryHubDestination.memories.rawValue
+  @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
 
   init(
     navigation: ChatFirstShellNavigation,
@@ -39,33 +43,50 @@ struct ChatFirstShell: View {
   }
 
   var body: some View {
-    HStack(spacing: 0) {
-      ChatFirstSidebar(navigation: navigation)
+    ZStack {
+      RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+        .fill(OmiColors.backgroundPrimary)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+            .stroke(OmiColors.border.opacity(0.3), lineWidth: 1)
+        )
 
-      ZStack {
-        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-          .fill(OmiColors.backgroundPrimary)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.3), lineWidth: 1)
-          )
-
+      VStack(spacing: 0) {
+        DesktopTopBar(
+          selectedIndex: modernTopBarSelection,
+          memoryDestinationRawValue: $memoryDestinationRawValue,
+          appState: appState,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
+          tasksStore: viewModelContainer.tasksStore,
+          sinceDate: topBarSinceDate,
+          onRewind: {
+            navigation.selectMore(.rewind)
+          }
+        )
         destination
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(OmiSpacing.md)
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
     }
+    .padding(OmiSpacing.md)
     .background(OmiColors.backgroundPrimary)
     .environmentObject(navigation)
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
       viewModelContainer.canonicalGoalsStore.activate(capability: capability)
       automationRuntime.install()
+      syncMemoryDestination(for: navigation.route)
       AnalyticsManager.shared.chatFirst(
         .routeEntered(route: navigation.route.analyticsRoute, origin: .shellLaunch)
       )
     }
     .onDisappear { automationRuntime.uninstall() }
+    .onChange(of: navigation.route) { _, route in
+      syncMemoryDestination(for: route)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
+      memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
+      navigation.selectPrimary(.memories)
+    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }
       promptMaterializationCoordinator.mainWindowDidBecomeForeground()
@@ -89,16 +110,16 @@ struct ChatFirstShell: View {
   private var destination: some View {
     switch navigation.route {
     case .chat:
-      ChatPage(
+      DashboardPage(
+        viewModel: viewModelContainer.dashboardViewModel,
+        homeStatusStore: viewModelContainer.homeStatusStore,
+        appState: appState,
         appProvider: viewModelContainer.appProvider,
         chatProvider: viewModelContainer.chatProvider,
-        chatFirstRichBlockContext: ChatFirstRichBlockContext(
-          navigation: navigation,
-          tasksStore: viewModelContainer.tasksStore,
-          chatProvider: viewModelContainer.chatProvider,
-          canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
-          promptMaterializationCoordinator: promptMaterializationCoordinator
-        )
+        memoriesViewModel: viewModelContainer.memoriesViewModel,
+        taskChatCoordinator: viewModelContainer.taskChatCoordinator,
+        chatFirstRichBlockContext: richBlockContext,
+        selectedIndex: legacySelectionBinding
       )
       .accessibilityIdentifier("chat-first-route-chat")
       .onAppear {
@@ -111,18 +132,22 @@ struct ChatFirstShell: View {
       }
       .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
-      CaptureArchivePage(
+      ChatFirstConversationsHost(
         navigation: navigation,
+        appState: appState,
         chatProvider: viewModelContainer.chatProvider,
-        automationRuntime: automationRuntime
+        automationRuntime: automationRuntime,
+        explicitSelectionGeneration: conversationsSelectionGeneration
       )
       .accessibilityIdentifier("chat-first-route-conversations")
       .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
-      ChatFirstTasksPage(
+      ChatFirstRestoredTasksHost(
         navigation: navigation,
+        viewModel: viewModelContainer.tasksViewModel,
         tasksStore: viewModelContainer.tasksStore,
         chatProvider: viewModelContainer.chatProvider,
+        chatCoordinator: viewModelContainer.taskChatCoordinator,
         automationRuntime: automationRuntime
       )
       .accessibilityIdentifier("chat-first-route-tasks")
@@ -138,10 +163,15 @@ struct ChatFirstShell: View {
       .accessibilityIdentifier("chat-first-route-goals")
       .onAppear { navigation.markRouteVisible(.goals) }
     case .memories:
-      MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-        .accessibilityIdentifier("chat-first-route-memories")
-        .onAppear { navigation.markRouteVisible(.memories) }
-        .task(id: pendingMemoryFocusID) { await resolvePendingMemoryFocus() }
+      MemoryHubPage(
+        appState: appState,
+        viewModelContainer: viewModelContainer,
+        memoriesViewModel: viewModelContainer.memoriesViewModel,
+        destinationRawValue: $memoryDestinationRawValue
+      )
+      .accessibilityIdentifier("chat-first-route-memories")
+      .onAppear { navigation.markRouteVisible(.memories) }
+      .task(id: pendingMemoryFocusID) { await resolvePendingMemoryFocus() }
     case .more(let page):
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
@@ -164,6 +194,62 @@ struct ChatFirstShell: View {
       )
     else { return }
     _ = navigation.acknowledgeFocus(focus)
+  }
+
+  private var topBarSinceDate: Date {
+    topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
+  }
+
+  private var richBlockContext: ChatFirstRichBlockContext {
+    ChatFirstRichBlockContext(
+      navigation: navigation,
+      tasksStore: viewModelContainer.tasksStore,
+      chatProvider: viewModelContainer.chatProvider,
+      canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
+      promptMaterializationCoordinator: promptMaterializationCoordinator
+    )
+  }
+
+  private var modernTopBarSelection: Binding<Int> {
+    Binding(
+      get: { ChatFirstModernNavigationPolicy.topBarIndex(for: navigation.route) },
+      set: { rawValue in
+        if rawValue == SidebarNavItem.conversations.rawValue {
+          let destination =
+            MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+          if destination == .conversations {
+            conversationsSelectionGeneration &+= 1
+          }
+          navigation.selectPrimary(destination == .conversations ? .conversations : .memories)
+          return
+        }
+        guard let route = ChatFirstModernNavigationPolicy.route(forTopBarIndex: rawValue) else {
+          return
+        }
+        switch route {
+        case .chat, .conversations, .tasks, .memories, .goals:
+          navigation.selectPrimary(route)
+        case .more(let page):
+          navigation.selectMore(page)
+        }
+      }
+    )
+  }
+
+  private func syncMemoryDestination(for route: ChatFirstRoute) {
+    if route == .memories, case .memory = navigation.pendingFocus {
+      memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
+      return
+    }
+    guard
+      let destination = ChatFirstMemoryRoutePolicy.destination(
+        afterSelecting: route,
+        current: MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+      )
+    else {
+      return
+    }
+    memoryDestinationRawValue = destination.rawValue
   }
 
   @ViewBuilder
@@ -248,6 +334,211 @@ struct ChatFirstShell: View {
   }
 }
 
+enum ChatFirstMemoryRoutePolicy {
+  static func destination(
+    afterSelecting route: ChatFirstRoute,
+    current: MemoryHubDestination
+  ) -> MemoryHubDestination? {
+    switch route {
+    case .memories:
+      return current == .brainMap ? .brainMap : .memories
+    case .conversations:
+      return .conversations
+    default:
+      return nil
+    }
+  }
+}
+
+/// The chat-first shell changes chrome, not destination capability. Keep the
+/// established Conversations page as the one feature owner and adapt only its
+/// typed route/deep-link and non-production automation contracts here.
+@MainActor
+private struct ChatFirstConversationsHost: View {
+  @ObservedObject var navigation: ChatFirstShellNavigation
+  let appState: AppState
+  let chatProvider: ChatProvider
+  let automationRuntime: ChatFirstAutomationRuntime?
+  let explicitSelectionGeneration: Int
+  @State private var showsCaptureArchive = false
+
+  private var pendingCaptureToken: String {
+    guard case .capture(let id, let momentTimestamp) = navigation.pendingFocus else { return "none" }
+    let moment = momentTimestamp.map { String($0) } ?? ""
+    return "\(id):\(moment)"
+  }
+
+  var body: some View {
+    Group {
+      if showsCaptureArchive || pendingCaptureToken != "none" {
+        // Capture links retain their specialized playback/timestamp owner;
+        // ordinary Conversations navigation uses the established full editor.
+        CaptureArchivePage(
+          navigation: navigation,
+          chatProvider: chatProvider,
+          automationRuntime: automationRuntime
+        )
+      } else {
+        ConversationsPageHost(appState: appState)
+      }
+    }
+    .onAppear {
+      if pendingCaptureToken != "none" { showsCaptureArchive = true }
+    }
+    .onChange(of: pendingCaptureToken) { _, token in
+      if token != "none" { showsCaptureArchive = true }
+    }
+    .onChange(of: explicitSelectionGeneration) { _, _ in
+      showsCaptureArchive = false
+    }
+  }
+}
+
+/// The mature Tasks page remains the sole owner of editing, drag/reorder,
+/// nesting, keyboard, suggested-task, and task-thread behavior. This adapter
+/// carries only chat-first routing and automation state.
+@MainActor
+private struct ChatFirstRestoredTasksHost: View {
+  @ObservedObject var navigation: ChatFirstShellNavigation
+  @ObservedObject var viewModel: TasksViewModel
+  @ObservedObject var tasksStore: TasksStore
+  let chatProvider: ChatProvider
+  let chatCoordinator: TaskChatCoordinator
+  let automationRuntime: ChatFirstAutomationRuntime?
+
+  private var pendingFocusToken: String {
+    switch navigation.pendingFocus {
+    case .task(let id): return "task:\(id)"
+    case .goal(let id): return "goal:\(id)"
+    default: return "none"
+    }
+  }
+
+  var body: some View {
+    TasksPage(
+      viewModel: viewModel,
+      chatCoordinator: chatCoordinator,
+      chatProvider: chatProvider
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task(id: pendingFocusToken) {
+      await viewModel.loadTasksForFirstUse()
+      switch navigation.pendingFocus {
+      case .task(let id):
+        guard let task = await taskForFocus(id: id) else { return }
+        await reveal(task, acknowledging: .task(id: id))
+      case .goal(let id):
+        var task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+        if task == nil {
+          await tasksStore.loadCompletedTasks()
+          task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+        }
+        if task == nil,
+          let detail = try? await APIClient.shared.getCanonicalGoalDetail(goalID: id),
+          let relatedTaskID = detail.tasks.first?.id
+        {
+          task = await taskForFocus(id: relatedTaskID)
+        }
+        guard let task else { return }
+        await reveal(task, acknowledging: .goal(id: id))
+      default:
+        return
+      }
+    }
+    .onAppear { registerAutomationActions() }
+    .onDisappear { automationRuntime?.unregisterTasksPage() }
+  }
+
+  private func taskForFocus(id: String) async -> TaskActionItem? {
+    if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
+      return task
+    }
+    if let task = try? await APIClient.shared.getActionItem(id: id), task.deleted != true {
+      return task
+    }
+    await tasksStore.loadCompletedTasks()
+    return tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true })
+  }
+
+  private func reveal(_ task: TaskActionItem, acknowledging focus: ChatFirstPendingFocus) async {
+    viewModel.revealTaskForNavigation(task)
+    await Task.yield()
+    guard viewModel.displayTasks.contains(where: { $0.id == task.id }) else { return }
+    viewModel.keyboardSelectedTaskId = task.id
+    guard await waitForScrollProxy(timeoutMs: 1_500) else { return }
+    guard let scrollProxy = viewModel.scrollProxy else { return }
+    scrollProxy.scrollTo(task.id, anchor: .center)
+    try? await Task.sleep(nanoseconds: 100_000_000)
+    guard !Task.isCancelled, viewModel.keyboardSelectedTaskId == task.id else { return }
+    _ = navigation.acknowledgeFocus(focus)
+  }
+
+  /// Poll until TasksPage mounts and assigns its ScrollViewReader proxy.
+  private func waitForScrollProxy(timeoutMs: Int) async -> Bool {
+    if viewModel.scrollProxy != nil { return true }
+    let steps = max(1, timeoutMs / 50)
+    for _ in 0..<steps {
+      guard !Task.isCancelled else { return false }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if viewModel.scrollProxy != nil { return true }
+    }
+    return viewModel.scrollProxy != nil
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerTasksPage(
+      toggleTask: {
+        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else {
+          return false
+        }
+        let intendedCompletion = !task.completed
+        AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
+        await tasksStore.toggleTask(task)
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+        AnalyticsManager.shared.chatFirst(
+          .taskMutation(
+            lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,
+            mutation: .completion
+          )
+        )
+        return reconciled?.completed == intendedCompletion
+      }
+    )
+  }
+}
+
+/// Bridges the typed Chat-first routes to the four primary destinations exposed
+/// by the modern top bar. Chat remains Home in this shell; Goals and secondary
+/// destinations keep their route while the bar stays on the nearest primary.
+enum ChatFirstModernNavigationPolicy {
+  static func topBarIndex(for route: ChatFirstRoute) -> Int {
+    switch route {
+    case .chat, .goals: return SidebarNavItem.dashboard.rawValue
+    case .conversations, .memories: return SidebarNavItem.conversations.rawValue
+    case .tasks: return SidebarNavItem.tasks.rawValue
+    case .more(let page):
+      switch page {
+      case .apps: return SidebarNavItem.apps.rawValue
+      case .settings: return SidebarNavItem.settings.rawValue
+      case .rewind: return SidebarNavItem.rewind.rawValue
+      default: return SidebarNavItem.dashboard.rawValue
+      }
+    }
+  }
+
+  static func route(forTopBarIndex rawValue: Int) -> ChatFirstRoute? {
+    switch SidebarNavItem(rawValue: rawValue) {
+    case .dashboard: return .chat
+    case .conversations: return .conversations
+    case .tasks: return .tasks
+    case .apps: return .more(.apps)
+    case .settings: return .more(.settings)
+    case .rewind: return .more(.rewind)
+    default: return nil
+    }
+  }
+}
+
 enum ChatFirstMemoryFocusPolicy {
   static func focusToAcknowledge(
     pendingFocus: ChatFirstPendingFocus?,
@@ -255,138 +546,6 @@ enum ChatFirstMemoryFocusPolicy {
   ) -> ChatFirstPendingFocus? {
     guard case .memory(let memoryID) = pendingFocus, memoryID == visibleMemoryID else { return nil }
     return pendingFocus
-  }
-}
-
-private struct ChatFirstSidebar: View {
-  @ObservedObject var navigation: ChatFirstShellNavigation
-
-  private let expandedWidth: CGFloat = 228
-  private let collapsedWidth: CGFloat = 68
-
-  private var width: CGFloat {
-    navigation.isSidebarCollapsed ? collapsedWidth : expandedWidth
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "circle.fill")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundStyle(OmiColors.textPrimary)
-          .accessibilityHidden(true)
-
-        if !navigation.isSidebarCollapsed {
-          Text("Omi")
-            .scaledFont(size: OmiType.heading, weight: .bold)
-            .foregroundStyle(OmiColors.textPrimary)
-        }
-
-        Spacer(minLength: 0)
-
-        Button {
-          navigation.toggleSidebar()
-        } label: {
-          Image(systemName: navigation.isSidebarCollapsed ? "sidebar.right" : "sidebar.left")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .frame(width: 30, height: 30)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(OmiColors.textSecondary)
-        .accessibilityLabel(navigation.isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")
-        .accessibilityIdentifier("chat-first-sidebar-collapse")
-      }
-      .padding(.horizontal, navigation.isSidebarCollapsed ? OmiSpacing.md : OmiSpacing.lg)
-      .padding(.top, OmiSpacing.lg)
-      .padding(.bottom, OmiSpacing.xl)
-
-      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        ForEach(ChatFirstRoute.primaryDestinations, id: \.self) { route in
-          primaryItem(route)
-        }
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-
-      Spacer(minLength: OmiSpacing.lg)
-
-      Menu {
-        ForEach(ChatFirstMorePage.allCases, id: \.self) { page in
-          Button {
-            navigation.selectMore(page)
-          } label: {
-            Label(page.title, systemImage: page.systemImage)
-          }
-          .accessibilityIdentifier("chat-first-more-\(page.stableName)")
-        }
-      } label: {
-        sidebarLabel(
-          title: "More",
-          icon: "ellipsis.circle",
-          selected: !navigation.route.isPrimaryDestination
-        )
-      }
-      .menuStyle(.borderlessButton)
-      .accessibilityLabel("More destinations")
-      .accessibilityIdentifier("chat-first-sidebar-more")
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.bottom, OmiSpacing.lg)
-    }
-    .frame(width: width)
-    .frame(maxHeight: .infinity)
-    .background(OmiColors.backgroundSecondary.opacity(0.84))
-    .animation(OmiMotion.gated(.easeOut(duration: 0.16)), value: navigation.isSidebarCollapsed)
-  }
-
-  @ViewBuilder
-  private func primaryItem(_ route: ChatFirstRoute) -> some View {
-    Button {
-      navigation.selectPrimary(route)
-    } label: {
-      sidebarLabel(
-        title: route.title,
-        icon: icon(for: route),
-        selected: navigation.route == route
-      )
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel(route.title)
-    .accessibilityIdentifier("chat-first-sidebar-\(route.stableName)")
-  }
-
-  private func sidebarLabel(title: String, icon: String, selected: Bool) -> some View {
-    HStack(spacing: OmiSpacing.md) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .frame(width: 20)
-        .accessibilityHidden(true)
-
-      if !navigation.isSidebarCollapsed {
-        Text(title)
-          .scaledFont(size: OmiType.body, weight: selected ? .semibold : .regular)
-          .lineLimit(1)
-      }
-
-      Spacer(minLength: 0)
-    }
-    .foregroundStyle(selected ? OmiColors.textPrimary : OmiColors.textSecondary)
-    .padding(.horizontal, navigation.isSidebarCollapsed ? OmiSpacing.md : OmiSpacing.sm)
-    .frame(height: 42)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(selected ? OmiColors.backgroundTertiary.opacity(0.9) : Color.clear)
-    )
-    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
-  }
-
-  private func icon(for route: ChatFirstRoute) -> String {
-    switch route {
-    case .chat: return "bubble.left.and.bubble.right.fill"
-    case .conversations: return "text.bubble.fill"
-    case .tasks: return "checklist"
-    case .goals: return "target"
-    case .memories: return "brain"
-    case .more: return "ellipsis.circle"
-    }
   }
 }
 

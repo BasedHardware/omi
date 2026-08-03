@@ -926,6 +926,7 @@ def _load_sync_router_for_fast_path():
         'models',
         'models.conversation',
         'models.conversation_enums',
+        'models.sync_contract',
         'models.sync_audio',
         'models.transcript_segment',
         'utils',

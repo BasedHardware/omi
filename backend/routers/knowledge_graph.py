@@ -1,14 +1,15 @@
 import importlib
 import sys
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from typing import List, Dict, Any, Callable, cast
+from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
 from database._client import db as firestore_db
 from database.auth import get_user_name
+from utils.memory import canonical_graph as canonical_graph_service
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
@@ -17,9 +18,14 @@ router = APIRouter()
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 KnowledgeGraphLoader = Callable[[str], Payload]
+CanonicalKnowledgeGraphLoader = Callable[..., Payload]
 RateLimitFactory = Callable[[Any, str], Any]
 RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
 get_knowledge_graph_payload: KnowledgeGraphLoader = cast(KnowledgeGraphLoader, getattr(kg_db, "get_knowledge_graph"))
+get_canonical_knowledge_graph_payload: CanonicalKnowledgeGraphLoader = cast(
+    CanonicalKnowledgeGraphLoader,
+    getattr(canonical_graph_service, "get_canonical_knowledge_graph"),
+)
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
     "Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."
@@ -77,6 +83,13 @@ class KnowledgeGraphResponse(BaseModel):
     edge_limit: int | None = None
 
 
+class CanonicalKnowledgeGraphResponse(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    has_more: bool
+    next_cursor: Optional[str] = None
+
+
 class RebuildResponse(BaseModel):
     status: str
     nodes_count: int
@@ -100,6 +113,38 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
         edge_count=graph.get('edge_count', len(edges)),
         node_limit=graph.get('node_limit'),
         edge_limit=graph.get('edge_limit'),
+    )
+
+
+@router.get(
+    '/v1/knowledge-graph/canonical',
+    tags=['knowledge_graph'],
+    response_model=CanonicalKnowledgeGraphResponse,
+)
+def get_canonical_knowledge_graph(
+    limit: int = Query(
+        canonical_graph_service.DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
+        ge=1,
+        le=canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
+    ),
+    cursor: Optional[str] = Query(default=None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    try:
+        graph = get_canonical_knowledge_graph_payload(
+            uid,
+            limit=limit,
+            cursor=cursor,
+        )
+    except canonical_graph_service.CanonicalGraphCursorError as exc:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
+    except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
+        raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
+    return CanonicalKnowledgeGraphResponse(
+        nodes=graph.get('nodes', []),
+        edges=graph.get('edges', []),
+        has_more=bool(graph.get('has_more', False)),
+        next_cursor=graph.get('next_cursor'),
     )
 
 

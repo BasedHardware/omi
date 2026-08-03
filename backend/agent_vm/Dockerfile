@@ -19,6 +19,7 @@ ENV BUN_INSTALL=/opt/bun
 ENV PATH="/opt/bun/bin:/opt/venv/bin:$PATH"
 
 COPY --from=bun /usr/local/bin/bun /opt/bun/bin/bun
+RUN ln -s bun /opt/bun/bin/bunx
 RUN bunx playwright@1.59.0-alpha-1770338664000 install --with-deps chromium
 RUN bun add --global @playwright/mcp@0.0.64
 COPY --from=builder /opt/venv /opt/venv

@@ -705,6 +705,8 @@ environments:
         memory-maintenance-job:
           # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
           # These must not rely on a prior Cloud Run revision retaining live-only patches.
+          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
+          # Retired names remain only in --remove-env-vars to clean stale revisions.
           flags:
             --task-timeout: 3600s
             --cpu: '2'
@@ -716,6 +718,18 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # Derived by the deploy workflow only after the gateway serving
+            # gate and Cloud Run VPC probe succeed; never pin an ILB address.
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
             MEMORY_MODE:
               value: read
               category: memory_rollout
@@ -748,6 +762,11 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            # Retained for canonical Pinecone embedding upserts and similarity
+            # queries. Canonical L2 maintenance itself routes through the gateway above.
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -1381,12 +1400,29 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          # Dark prod template only; this declaration does not prove a live job exists.
+          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
           flags:
             --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            # Derived by the deploy workflow only after the gateway serving
+            # gate and Cloud Run VPC probe succeed; never pin an ILB address.
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -1418,6 +1454,11 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            # Retained for canonical Pinecone embedding upserts and similarity
+            # queries. Canonical L2 maintenance itself routes through the gateway above.
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest

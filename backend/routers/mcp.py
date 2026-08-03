@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from utils.executors import db_executor, postprocess_executor
+from utils.mcp_data import date_only_to_utc_epoch
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -530,14 +531,14 @@ def search_conversations(
     ends_at = None
     if start_date:
         try:
-            starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+            starts_at = int(date_only_to_utc_epoch(start_date))
         except ValueError:
             raise HTTPException(
                 status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
             )
     if end_date:
         try:
-            ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+            ends_at = int(date_only_to_utc_epoch(end_date, end_of_day=True))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 

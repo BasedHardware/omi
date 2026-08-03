@@ -87,6 +87,9 @@ class ChangelogRequirementTests(unittest.TestCase):
             # Generated Swift is derived from the OpenAPI contract, never a
             # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
             "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
+            # E2E flow definitions are harness test artifacts; #11039 only added a
+            # `covers:` entry and the post-merge push run reddened main.
+            "desktop/macos/e2e/flows/notifications-settings.yaml",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))

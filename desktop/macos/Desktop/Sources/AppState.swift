@@ -410,6 +410,9 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Serializes segment persistence so a local duplicate replacement cannot race
+  /// the original mic segment's upsert in SQLite.
+  var transcriptPersistenceTail: Task<Void, Never>?
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?

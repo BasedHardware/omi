@@ -6,8 +6,8 @@ struct NameSpeakerSheet: View {
   let segment: TranscriptSegment
   let allSegments: [TranscriptSegment]
   let people: [Person]
-  let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIndices: [Int]) -> Void
-  let onCreatePerson: (_ name: String) async -> Person?
+  let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIndices: [Int]) async -> Bool
+  let onCreatePerson: ((_ name: String) async -> Person?)?
   let onDismiss: () -> Void
 
   @State private var selectedPersonId: String? = nil
@@ -18,6 +18,7 @@ struct NameSpeakerSheet: View {
   @State private var tagAllFromSpeaker: Bool = true
   @State private var isSaving: Bool = false
   @State private var isCreating: Bool = false
+  @State private var saveError: String? = nil
 
   /// Segments from the same speaker in this conversation
   private var sameSpeakerSegments: [TranscriptSegment] {
@@ -81,6 +82,14 @@ struct NameSpeakerSheet: View {
       Divider()
         .background(OmiColors.border)
 
+      if let saveError {
+        Text(saveError)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.error)
+          .padding(.horizontal, OmiSpacing.xl)
+          .padding(.bottom, OmiSpacing.sm)
+      }
+
       // Action buttons
       HStack {
         Spacer()
@@ -92,7 +101,9 @@ struct NameSpeakerSheet: View {
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
 
-        Button(action: save) {
+        Button {
+          Task { await save() }
+        } label: {
           if isSaving {
             ProgressView()
               .scaleEffect(0.6)
@@ -179,12 +190,14 @@ struct NameSpeakerSheet: View {
           }
         }
 
-        // "+ Add Person" chip
-        personChip(label: "+ Add Person", isSelected: isAddingNewPerson, isAction: true) {
-          isAddingNewPerson = true
-          isUserSelected = false
-          selectedPersonId = nil
-          duplicateWarning = nil
+        if onCreatePerson != nil {
+          // "+ Add Person" chip
+          personChip(label: "+ Add Person", isSelected: isAddingNewPerson, isAction: true) {
+            isAddingNewPerson = true
+            isUserSelected = false
+            selectedPersonId = nil
+            duplicateWarning = nil
+          }
         }
       }
 
@@ -283,7 +296,7 @@ struct NameSpeakerSheet: View {
 
   private func createAndSelect() async {
     let trimmed = newPersonName.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty, duplicateWarning == nil else { return }
+    guard !trimmed.isEmpty, duplicateWarning == nil, let onCreatePerson else { return }
 
     isCreating = true
     if let person = await onCreatePerson(trimmed) {
@@ -294,10 +307,20 @@ struct NameSpeakerSheet: View {
     isCreating = false
   }
 
-  private func save() {
+  private func save() async {
+    guard !isSaving else { return }
+
     isSaving = true
+    saveError = nil
     let segmentIndices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
-    onSave(selectedPersonId, isUserSelected, segmentIndices)
+    let succeeded = await onSave(selectedPersonId, isUserSelected, segmentIndices)
+    isSaving = false
+
+    if succeeded {
+      onDismiss()
+    } else {
+      saveError = "Couldn't assign this speaker. Try again."
+    }
   }
 
   private func personChip(label: String, isSelected: Bool, isAction: Bool = false, action: @escaping () -> Void)
