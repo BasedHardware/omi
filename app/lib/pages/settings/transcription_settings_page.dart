@@ -999,7 +999,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 children: [
                   const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
                   const SizedBox(width: 8),
-                  Text(context.l10n.highResourceUsage, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Expanded(
+                    child: Text(
+                      context.l10n.highResourceUsage,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -1040,9 +1045,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
       _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
-      if (!isIOS) {
-        _checkLocalModel();
-      }
       PlatformManager.instance.analytics.transcriptionSourceSelected(
         source: isIOS ? 'custom_on_device_ios' : 'custom_on_device',
       );
@@ -1181,6 +1183,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
 
     final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
+    final warningText = _sendRawAudioToOmi
+        ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
+        : context.l10n.transcriptionUnavailable;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1189,7 +1194,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason),
+              warningText,
               style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
             ),
           ),

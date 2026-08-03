@@ -67,6 +67,16 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
     expect(forwardingTile().value, isTrue);
+
+    final cloudSourceDropdown = tester.widget<DropdownButton<TranscriptionMode>>(
+      find.byType(DropdownButton<TranscriptionMode>),
+    );
+    cloudSourceDropdown.onChanged!(TranscriptionMode.onDevice);
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.tap(find.text('I Understand'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(forwardingTile().value, isFalse);
     expect(
       SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.sendRawAudioToOmi,
       isFalse,
