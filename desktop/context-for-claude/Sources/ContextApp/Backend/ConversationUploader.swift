@@ -4,11 +4,12 @@ import Foundation
 
 /// Pushes finished local sessions into the user's real Omi account.
 ///
-/// **Why `POST v1/conversations/from-segments` and not the `/v4/listen` websocket.** Context for Claude has
-/// already transcribed the audio on this Mac; the websocket exists to carry audio to a cloud STT,
-/// so using it would mean re-uploading speech we have already turned into text. Two concrete
-/// consequences settle it: the explicit-finalize path that websocket sessions end through is capped
-/// at 10 conversations an hour (`conversations:create`) while from-segments allows 30
+/// **Why `POST v1/conversations/from-segments` and not only relying on `/v4/listen`.** Live
+/// capture already streams audio to `/v4/listen` for cloud STT (and, on Apple Silicon, may also
+/// keep an on-device Parakeet fallback). Finished sessions in `context.db` still need a durable,
+/// retryable upload into the account: from-segments accepts transcript lines that arrived from
+/// either path, the explicit-finalize path websocket sessions end through is capped at 10
+/// conversations an hour (`conversations:create`) while from-segments allows 30
 /// (`conversations:from-segments`), and from-segments is a plain request that either succeeded or
 /// did not — a queue can retry it, which is not true of a stream.
 ///

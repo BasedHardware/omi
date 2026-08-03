@@ -1670,7 +1670,12 @@ extension Tools {
 
         let headline: String
         if status.capturing {
-            headline = "Context for Claude is capturing right now."
+            if let reason = status.pausedReason.flatMap(nonEmpty) {
+                // Partial failure while sensors run (e.g. Intel cloud ASR gap) must stay visible.
+                headline = "Context for Claude is capturing right now — \(reason)."
+            } else {
+                headline = "Context for Claude is capturing right now."
+            }
         } else if let reason = status.pausedReason.flatMap(nonEmpty) {
             headline = "Context for Claude is not capturing right now — \(reason)."
         } else {

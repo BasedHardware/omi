@@ -363,7 +363,9 @@ public enum Queries {
         let capturing = live && (state?.capturing ?? false)
         let pausedReason: String?
         if capturing {
-            pausedReason = nil
+            // Sensors can be live while a gap remains (Intel cloud ASR down, mic denied, etc.).
+            // Pass the heartbeat reason through so MCP `status` matches the menu bar.
+            pausedReason = state?.pausedReason
         } else if live {
             pausedReason = state?.pausedReason ?? "Capture is paused"
         } else {

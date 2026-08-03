@@ -135,6 +135,11 @@ fi
 
 # ---------------------------------------------------------------------------------------------
 # Build
+#
+# Plain `swift build` on the host architecture — no `--triple arm64-…` hardcode. That keeps
+# Intel Macs able to produce a native x86_64 binary for local QA. Release builds that must run
+# on both Apple Silicon and Intel should lipo a universal binary (or ship per-arch artifacts);
+# this script intentionally stays host-native.
 # ---------------------------------------------------------------------------------------------
 log "building ContextApp (release)"
 swift build -c release --package-path "$PKG_DIR" --product ContextApp

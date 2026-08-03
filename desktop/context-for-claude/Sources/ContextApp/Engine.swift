@@ -49,15 +49,18 @@ private final class HeartbeatSnapshot: @unchecked Sendable {
 
 /// The parts of the pipeline that fail independently. Storage is one of them: it is the single
 /// shared dependency, and a database that will not open makes capture pointless rather than partial.
+/// `transcription` is not a sensor — it is the cloud (Intel) or cloud+local (Silicon) STT gap so
+/// menu bar and MCP `status` can report "nothing is being transcribed" without inventing coverage.
 private enum CaptureComponent: CaseIterable {
     case storage
     case microphone
     case systemAudio
     case screen
+    case transcription
 
     var capability: Capability? {
         switch self {
-        case .storage: return nil
+        case .storage, .transcription: return nil
         case .microphone: return .microphone
         case .systemAudio: return .systemAudio
         case .screen: return .screen
@@ -70,14 +73,16 @@ private enum CaptureComponent: CaseIterable {
         case .microphone: return "Microphone"
         case .systemAudio: return "Call audio"
         case .screen: return "Screen"
+        case .transcription: return "Transcription"
         }
     }
 
     var segmentSource: SegmentSource { self == .microphone ? .mic : .system }
 }
 
-/// The capture pipeline: three sensors, two transcribers, one database writer, and the published
-/// state the menu bar and `context-for-claude-mcp` read.
+/// The capture pipeline: three sensors, cloud transcription (plus optional local Parakeet on
+/// Apple Silicon), one database writer, and the published state the menu bar and
+/// `context-for-claude-mcp` read.
 ///
 /// The organising rule is that **every source fails alone**. A mic that never comes back, a system
 /// tap the OS refuses, a Screen Recording grant that only takes effect after a relaunch — each one
@@ -90,6 +95,8 @@ private enum CaptureComponent: CaseIterable {
 final class Engine: ObservableObject {
     /// Keeps the sign-in subscription that provisions the MCP key alive.
     private var keyProvisioning: Set<AnyCancellable> = []
+    /// Watches cloud socket + sign-in so Intel hosts can surface an honest transcription gap.
+    private var transcriptionWatch: Set<AnyCancellable> = []
     /// Sums mic and system into the single stream the backend transcribes.
     private let mixer = AudioMixer()
     /// The latest text seen per backend segment id, so a revised segment replaces rather than
@@ -135,6 +142,9 @@ final class Engine: ObservableObject {
     private var chunkFeeds: [CaptureComponent: AsyncStream<Data>.Continuation] = [:]
     private var pumps: [CaptureComponent: Task<Void, Never>] = [:]
     private var starts: [CaptureComponent: Task<Void, Never>] = [:]
+    /// Silicon-only: Parakeet `start()` side tasks. Cancelled in `teardownAudio` so a stop mid-load
+    /// cannot resurrect a pump on a transcriber the engine no longer owns.
+    private var localStarts: [CaptureComponent: Task<Void, Never>] = [:]
     private var screenWatcher: ScreenWatcher?
 
     private var lineFeed: AsyncStream<TranscriptLine>.Continuation?
@@ -259,10 +269,9 @@ final class Engine: ObservableObject {
     /// user's own speech profile — attribution this app can only approximate locally as
     /// "mic is me, system is everyone else".
     ///
-    /// The local transcriber is deliberately left running underneath. Cloud transcription needs a
-    /// network and an account in good standing; when either is missing the socket reports it and
-    /// the local path is already producing lines, so the failure costs transcript *quality* rather
-    /// than the recording itself.
+    /// On Apple Silicon the local Parakeet path stays underneath so a dead network or a paywalled
+    /// account degrades to a worse transcript rather than to silence. On Intel there is no local
+    /// path: cloud is the only ASR, and gaps are reported honestly via `CaptureComponent.transcription`.
     func mixerInput(mic: Data? = nil, system: Data? = nil) {
         if let mic { mixer.setMicAudio(mic) }
         if let system { mixer.setSystemAudio(system) }
@@ -288,7 +297,50 @@ final class Engine: ObservableObject {
             }
         }
 
+        if transcriptionWatch.isEmpty {
+            ListenSocket.shared.$state
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshTranscriptionGap() }
+                .store(in: &transcriptionWatch)
+            OmiAuth.shared.$isSignedIn
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshTranscriptionGap() }
+                .store(in: &transcriptionWatch)
+        }
+        refreshTranscriptionGap()
+
         Task { await ListenSocket.shared.start() }
+    }
+
+    /// Surfaces cloud-only gaps on Intel (and clears them when the socket is live). Silicon keeps
+    /// local fallback, so a cloud outage is not reported as "nothing is being transcribed".
+    private func refreshTranscriptionGap() {
+        let cloud: CloudTranscriptionState
+        switch ListenSocket.shared.state {
+        case .idle:
+            // Signed-in idle is almost always the brief window before `start()` flips to
+            // `.connecting`. Treat it as connecting so Intel does not flash an offline gap at
+            // launch/resume. Signed-out idle is the real "need an account" gap.
+            cloud = OmiAuth.shared.isSignedIn ? .connecting : .idle
+        case .connecting: cloud = .connecting
+        case .live: cloud = .live
+        case .failed(let detail):
+            // ListenSocket uses `.failed("… — reconnecting")` while audio is still buffered and a
+            // retry is scheduled. Treat that like connecting so Intel does not show a permanent
+            // offline message during a recoverable drop.
+            cloud = detail.localizedCaseInsensitiveContains("reconnecting") ? .connecting : .failed
+        case .paywalled: cloud = .paywalled
+        }
+        if let gap = CaptureHostPolicy.cloudTranscriptionGapReason(
+            usesLocalSTT: HostArchitecture.usesLocalSTT,
+            isSignedIn: OmiAuth.shared.isSignedIn,
+            cloud: cloud
+        ) {
+            note(.transcription, gap)
+        } else {
+            clear(.transcription)
+        }
+        publishState()
     }
 
     /// A line the backend transcribed, written on the same path as a local one so sessions,
@@ -336,6 +388,9 @@ final class Engine: ObservableObject {
         // a reconnect loop against the backend for a user who deliberately stopped recording.
         ListenSocket.shared.stop()
         mixer.stop()
+        // Transcription gaps describe a live cloud path. Pause owns the headline; drop the stale
+        // note so resume starts clean rather than carrying a reason from the previous session.
+        reasons.removeValue(forKey: .transcription)
         // Ends the conversation, not just the capture. The app delegate also routes quit through
         // here, and a session left open reports a recording that stopped hours ago.
         store.closeOpenSession()
@@ -344,15 +399,17 @@ final class Engine: ObservableObject {
     }
 
     func resume() {
+        // Wipe sensor reasons *before* restarting cloud transcription. `startCloudTranscription`
+        // calls `refreshTranscriptionGap()`, and wiping after that used to erase the Intel gap so
+        // a signed-out resume looked fully healthy with no ASR running.
+        if isPaused {
+            isPaused = false
+            reasons = reasons.filter { $0.key == .storage }
+            capabilities = Permissions.report()
+            startPermittedSources()
+            ContextLog.info("Capture resumed", "engine")
+        }
         startCloudTranscription()
-        guard isPaused else { return }
-        isPaused = false
-        // Reasons recorded before the pause describe a pipeline that no longer exists. Storage is
-        // the exception: that failure is about the database, not about a source.
-        reasons = reasons.filter { $0.key == .storage }
-        capabilities = Permissions.report()
-        startPermittedSources()
-        ContextLog.info("Capture resumed", "engine")
         publishState()
     }
 
@@ -401,8 +458,9 @@ final class Engine: ObservableObject {
         stopScreen()
     }
 
-    /// Wires one audio device into one transcriber. Identical for the mic and the system tap: the
-    /// only difference is which device can fail and what the user is told when it does.
+    /// Wires one audio device into the cloud mixer, and optionally a local Parakeet instance on
+    /// Apple Silicon. Capture lifecycle must not wait on (or die with) local model load — cloud
+    /// transcription needs the chunks either way.
     private func startAudio(_ component: CaptureComponent) {
         guard starts[component] == nil, !running.contains(component) else { return }
         guard let capability = component.capability, Permissions.check(capability) else {
@@ -411,44 +469,83 @@ final class Engine: ObservableObject {
         }
         guard let device = makeAudioSource(component) else { return }
 
-        let transcriber = Transcriber(source: component.segmentSource)
+        let decision = AudioCaptureDecision.make(usesLocalSTT: HostArchitecture.usesLocalSTT)
         let segmentSource = component.segmentSource
         let lines = lineFeed
         // A stream rather than a task per chunk: tasks reach an actor in whatever order the pool
         // schedules them, and reordered audio is a corrupted transcript. Bounded, because a stalled
-        // transcriber must cost a few dropped seconds rather than the whole machine's memory.
+        // consumer must cost a few dropped seconds rather than the whole machine's memory.
         let (chunks, feed) = AsyncStream<Data>.makeStream(
             of: Data.self, bufferingPolicy: .bufferingNewest(512))
 
         audioSources[component] = device
-        transcribers[component] = transcriber
         chunkFeeds[component] = feed
+
+        let transcriber: Transcriber?
+        if decision.startLocalSTT {
+            let local = Transcriber(source: segmentSource)
+            transcribers[component] = local
+            transcriber = local
+        } else {
+            transcriber = nil
+        }
 
         starts[component] = Task { [weak self] in
             do {
-                await transcriber.setOnLine { text, startedAt, endedAt in
-                    lines?.yield(
-                        TranscriptLine(
-                            text: text, startedAt: startedAt, endedAt: endedAt, source: segmentSource))
+                if let transcriber {
+                    await transcriber.setOnLine { text, startedAt, endedAt in
+                        lines?.yield(
+                            TranscriptLine(
+                                text: text, startedAt: startedAt, endedAt: endedAt, source: segmentSource))
+                    }
+                    if !Transcriber.isModelReady {
+                        // ~600 MB on first run. Say so rather than looking silently broken for minutes.
+                        self?.note(
+                            component,
+                            "\(component.label) warming up — first run downloads the transcription model")
+                        self?.publishState()
+                    }
+                    // Side task: never await before device start. A throw must not tear down capture
+                    // (`AudioCaptureDecision.teardownCaptureOnLocalSTTFailure` is always false).
+                    // Stored so `teardownAudio` can cancel mid-load; completions no-op if this
+                    // component's transcriber was already removed.
+                    let localStart = Task { [weak self] in
+                        do {
+                            try await transcriber.start()
+                            await MainActor.run {
+                                guard let self, self.transcribers[component] != nil else { return }
+                                // Model ready — drop the warming note if that was still the reason.
+                                if self.reasons[component]?.contains("warming up") == true {
+                                    self.clear(component)
+                                }
+                                self.localStarts[component] = nil
+                                self.publishState()
+                            }
+                        } catch {
+                            await MainActor.run {
+                                guard let self, self.transcribers[component] != nil else { return }
+                                self.localStarts[component] = nil
+                                if Task.isCancelled { return }
+                                self.note(
+                                    component,
+                                    "\(component.label) local transcription unavailable — \(error.localizedDescription). Cloud transcription continues.")
+                                if !decision.teardownCaptureOnLocalSTTFailure {
+                                    // Capture and cloud pump keep running.
+                                    self.publishState()
+                                    return
+                                }
+                                self.teardownAudio(component)
+                                self.publishState()
+                            }
+                        }
+                    }
+                    self?.localStarts[component] = localStart
                 }
-                if !Transcriber.isModelReady {
-                    // ~600 MB on first run. Say so rather than looking silently broken for minutes.
-                    self?.note(
-                        component,
-                        "\(component.label) warming up — first run downloads the transcription model")
-                    self?.publishState()
-                }
-                // The model load is a cold-start compile measured in minutes, and the device must
-                // not wait behind it — every second spent loading used to be a second of the user's
-                // life that was never recorded. `Transcriber` buffers from the moment `start()` is
-                // entered, so the capture begins now and the backlog decodes once the model lands.
-                let modelReady = Task { try await transcriber.start() }
+
                 self?.pumps[component] = Task.detached(priority: .userInitiated) {
                     for await chunk in chunks {
-                        // Both paths see every chunk. The cloud is preferred — it diarises and
-                        // matches against the user's speech profile, which this app cannot do — but
-                        // the local transcriber keeps running so a dropped network or a paywalled
-                        // account degrades to a worse transcript rather than to silence.
+                        // Cloud always sees every chunk. Local Parakeet (Silicon only) stays
+                        // underneath so a dropped network degrades rather than going silent.
                         await MainActor.run {
                             switch component {
                             case .microphone: Engine.shared.mixerInput(mic: chunk)
@@ -456,11 +553,12 @@ final class Engine: ObservableObject {
                             default: break
                             }
                         }
-                        await transcriber.append(chunk)
+                        if let transcriber {
+                            await transcriber.append(chunk)
+                        }
                     }
                 }
                 try await device.start(onChunk: { feed.yield($0) }, onLevel: { _ in })
-                try await modelReady.value
 
                 guard let self, !Task.isCancelled else {
                     // Stopped while the device was still coming up; do not leave an IOProc behind.
@@ -468,7 +566,11 @@ final class Engine: ObservableObject {
                     return
                 }
                 self.running.insert(component)
-                self.clear(component)
+                // Permission / device gaps clear here. A "warming up" local note is cleared when
+                // the model finishes (or is replaced by a local-unavailable note on failure).
+                if self.reasons[component]?.contains("warming up") != true {
+                    self.clear(component)
+                }
                 self.publishState()
             } catch {
                 guard let self, !Task.isCancelled else { return }
@@ -489,7 +591,7 @@ final class Engine: ObservableObject {
             if #available(macOS 14.4, *) { return SystemAudioCapture() }
             note(component, "\(component.label) off — needs macOS 14.4 or later")
             return nil
-        case .storage, .screen:
+        case .storage, .screen, .transcription:
             return nil
         }
     }
@@ -503,6 +605,7 @@ final class Engine: ObservableObject {
     /// so a half-built pipeline never leaks an IOProc, a tap, or a pump task.
     private func teardownAudio(_ component: CaptureComponent) {
         starts[component] = nil
+        localStarts.removeValue(forKey: component)?.cancel()
         chunkFeeds[component]?.finish()  // ends the pump's `for await`
         chunkFeeds[component] = nil
         pumps[component]?.cancel()
@@ -528,7 +631,7 @@ final class Engine: ObservableObject {
         let watcher = ScreenWatcher()
         let store = self.store
         watcher.onFrame = { frame in store.record(frame) }
-        watcher.start(interval: 3.0)
+        watcher.start(interval: HostArchitecture.screenCaptureInterval)
         screenWatcher = watcher
         running.insert(.screen)
         clear(.screen)
