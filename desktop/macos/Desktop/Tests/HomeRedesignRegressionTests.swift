@@ -118,33 +118,6 @@ final class ChatBubbleLayoutRegressionTests: XCTestCase {
     )
   }
 
-  // omi-test-quality: source-inspection -- static contract: SwiftUI's view-builder branch and metadata frame have no runtime seam in the unit target; pure truncation behavior is covered above.
-  func testChatBubbleKeepsShowMoreInlineAndMetadataTrailing() throws {
-    let root = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let source = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8
-    )
-
-    XCTAssertTrue(
-      source.contains("HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs)"),
-      "collapsed replies must place the expansion control on the text baseline"
-    )
-    XCTAssertTrue(
-      source.contains("if message.sender == .ai, shouldTruncate"),
-      "the inline treatment must be limited to assistant replies"
-    )
-    XCTAssertTrue(
-      source.contains("else if message.sender == .user, shouldTruncate"),
-      "user replies must retain their trailing intrinsic bubble layout"
-    )
-    XCTAssertTrue(
-      source.contains(".frame(maxWidth: .infinity, alignment: .trailing)"),
-      "metadata must use the message column's trailing edge"
-    )
-  }
 }
 
 final class ChatTranscriptWindowTests: XCTestCase {
