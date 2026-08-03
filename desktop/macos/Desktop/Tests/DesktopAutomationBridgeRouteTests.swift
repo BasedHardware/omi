@@ -17,6 +17,14 @@ private struct AutomationErrorEnvelope: Decodable {
   let error: String?
 }
 
+private actor NavigationWaitCallCounter {
+  private(set) var mountedCalls = 0
+
+  func recordMountedCall() {
+    mountedCalls += 1
+  }
+}
+
 @MainActor
 private final class StubPresentationCoordinator: DesktopAutomationPresentationCoordinating {
   private(set) var calls: [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
@@ -40,6 +48,38 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testNavigationAcknowledgementReturnsCachedRouteWithoutMountedWait() async throws {
+    let calls = NavigationWaitCallCounter()
+    let response = try await DesktopAutomationNavigationResponseMode.snapshot(
+      waitForVisibility: false,
+      cached: { "route-acknowledged" },
+      mounted: {
+        await calls.recordMountedCall()
+        return "mounted"
+      }
+    )
+
+    XCTAssertEqual(response, "route-acknowledged")
+    let mountedCalls = await calls.mountedCalls
+    XCTAssertEqual(mountedCalls, 0)
+  }
+
+  func testNavigationAcknowledgementDefaultsToMountedVisibilityWait() async throws {
+    let calls = NavigationWaitCallCounter()
+    let response = try await DesktopAutomationNavigationResponseMode.snapshot(
+      waitForVisibility: nil,
+      cached: { "route-acknowledged" },
+      mounted: {
+        await calls.recordMountedCall()
+        return "mounted"
+      }
+    )
+
+    XCTAssertEqual(response, "mounted")
+    let mountedCalls = await calls.mountedCalls
+    XCTAssertEqual(mountedCalls, 1)
+  }
+
   func testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity() async throws {
     let response = await DesktopAutomationBridge.shared.response(
       for: DesktopAutomationHTTPRequest(
