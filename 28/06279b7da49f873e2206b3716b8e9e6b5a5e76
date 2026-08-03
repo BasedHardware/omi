@@ -1,0 +1,127 @@
+desktop/macos/agent/src/runtime/desktop-tool-policy.ts
+  s_0c099cae24c74c::t_93c01361466cae 95-97
+desktop/macos/Desktop/Tests/PeopleGraphChatToolTests.swift
+  s_0c099cae24c74c::t_6c2d145bdfc258 1-46,51-59,61-392
+  s_0c099cae24c74c::t_a1453c11bf035e 47-50,60
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_0c099cae24c74c::t_2836e507ac6e98 184
+  s_0c099cae24c74c::t_cfff11e88327e5 168
+  s_0c099cae24c74c::t_a48979ba020f10 195,197
+  s_0c099cae24c74c::t_098002015b8e05 233
+  s_0c099cae24c74c::t_05d04ae5133ab8 132-135
+  s_0c099cae24c74c::t_a55cc58db33afd 528-531,537-547,549-550,553-555,557,559-560
+desktop/macos/docs/people-intelligence-productization.md
+  s_0c099cae24c74c::t_e63e037eae1f77 56-65
+  s_0c099cae24c74c::t_200298f131e7f5 41-46,48
+.github/checks-manifest.yaml
+  s_0c099cae24c74c::t_89a440181dc1ab 553,555
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_0c099cae24c74c::t_bd6b0fe5000c73 394-403
+  s_0c099cae24c74c::t_1c9ea759df1542 10-11,46,352-353,404-427,445,774,806,1113
+desktop/macos/agent/tests/omi-tool-manifest.test.ts
+  s_0c099cae24c74c::t_bfe1dd1dec49e4 80-81
+desktop/macos/agent/src/runtime/relay-tool-result.ts
+  s_0c099cae24c74c::t_efa86afba185ef 196
+  s_0c099cae24c74c::t_f7a9f1b208e93e 252,259-262,272-275,277,279
+  s_0c099cae24c74c::t_f253b37a886f6b 177-179
+  s_0c099cae24c74c::t_802a90dfb90197 170-171
+  s_0c099cae24c74c::t_2a720a8b32a728 137-141,143-152,156-169,172-176,180-195,197-204,206-244,251,256,268,276,296-310
+  s_0c099cae24c74c::t_c7e4a6aae02828 245-250,253-255,257-258,263-267,269-271,278,280-295
+  s_0c099cae24c74c::t_dddbcbb8f1fb50 205
+  s_0c099cae24c74c::t_5e5511b8e53872 104-106,108-111
+  s_0c099cae24c74c::t_33e914b18b29f1 368
+  s_0c099cae24c74c::t_0a4c43225310bc 53-56
+  s_0c099cae24c74c::t_13d8d112f61bd4 12-29
+  s_0c099cae24c74c::t_269ef2f56123ef 311
+desktop/macos/agent/tests/relay-tool-result.test.ts
+  s_0c099cae24c74c::t_b902f3135ab31b 161-178
+  s_0c099cae24c74c::t_6e49b1f2063518 51-64,66-68,71-88,91,101-160,179-231
+  s_0c099cae24c74c::t_e9ff55821f66eb 12-13
+desktop/macos/Desktop/Sources/Providers/PeopleGraphChatQuery.swift
+  s_0c099cae24c74c::t_0b2895f279c445 1-368
+desktop/macos/Desktop/Tests/PeopleContactsAccessTests.swift
+  s_0c099cae24c74c::t_6761debb43d0db 1-166
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleContactsAccess.swift
+  s_0c099cae24c74c::t_b376c8f21d9837 155,157,159-161
+  s_0c099cae24c74c::t_41aaf75273f6dd 1-154,156,158,162-193
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleContactPhotos.swift
+  s_0c099cae24c74c::t_86db1321aa8fd5 1-117
+desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts
+  s_0c099cae24c74c::t_3c89dc479fc419 182-185,187,197-200
+desktop/macos/Desktop/Tests/PeopleIntelligenceDerivationTests.swift
+  s_0c099cae24c74c::t_c713cae26602e5 1-165,167-177,181,183-184,188-227,229-255,258-259,261-263,265-477
+  s_0c099cae24c74c::t_fc0ec59c2d8622 178-180,182,185-187
+  s_0c099cae24c74c::t_5cc33193083ac7 166
+  s_0c099cae24c74c::t_b1fae0e50d1465 228
+  s_0c099cae24c74c::t_afb6f14e424ada 256-257,260,264
+desktop/macos/Desktop/Sources/Providers/PeopleGraphChatTool.swift
+  s_0c099cae24c74c::t_af4e471b797ade 31
+  s_0c099cae24c74c::t_b459327ef1ad50 1-30,32-426
+  s_0c099cae24c74c::t_578729af9e51a7 427-428
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleIntelligenceDerivation.swift
+  s_0c099cae24c74c::t_b47ab80a425e70 216-222
+  s_0c099cae24c74c::t_b540bdd755c696 332,338,340
+  s_0c099cae24c74c::t_9262a788cd6891 1-215,223-331,333-337,339,341-403,411-487
+  s_0c099cae24c74c::t_575438f52a6d85 404-410
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_0c099cae24c74c::t_862d21d3797a94 148-150,154,160
+  s_0c099cae24c74c::t_e2549df3af50af 837,840
+  s_0c099cae24c74c::t_19e4b4f03f239c 869-871
+  s_0c099cae24c74c::t_070cbbb21e4f81 588-590,594-595,597-598,600
+  s_0c099cae24c74c::t_d1f195fcfdb670 756-760,765,768-777
+  s_0c099cae24c74c::t_ac3d448d5a95bf 815-821
+  s_0c099cae24c74c::t_7f7712d040ca1b 873,875
+  s_0c099cae24c74c::t_46fa0acc708324 861-862
+  s_0c099cae24c74c::t_7b7dc08342f95e 599
+  s_0c099cae24c74c::t_022d0af1cf152d 874,883-886
+  s_0c099cae24c74c::t_37cae8d4fec136 918-931,938-944
+  s_0c099cae24c74c::t_95820f354bbbce 43-50,55,141-144,155,161,761-764,766-767,812-814,838,841-842,887,932-933,945,1253-1262,1265-1268,1338-1340
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_0c099cae24c74c::t_9d5c87dde68005 431-442
+desktop/macos/agent/src/runtime/omi-tool-manifest.ts
+  s_0c099cae24c74c::t_d3715f42f8b42b 1428-1433,1436,1439-1470,1472-1502
+  s_0c099cae24c74c::t_d7a5882afe1f50 595
+  s_0c099cae24c74c::t_30d1bedc63478c 1434-1435,1437-1438
+  s_0c099cae24c74c::t_9a2992d507d01e 587-594,596-605,607-610
+  s_0c099cae24c74c::t_e20cddaa3fda2a 606
+  s_0c099cae24c74c::t_813b3e39ace8a2 1471
+desktop/macos/pi-mono-extension/index.test.ts
+  s_0c099cae24c74c::t_0093ef766373dd 1206-1207
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleListTable.swift
+  s_0c099cae24c74c::t_262fe079f0b21a 65-67,75-77
+  s_0c099cae24c74c::t_d232907ca2c91b 91-94,96-99
+  s_0c099cae24c74c::t_d732b637cd6438 95,100-133
+desktop/macos/Desktop/Tests/PeopleContactPhotosTests.swift
+  s_0c099cae24c74c::t_cd618d3695933f 1-165
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfileExtras.swift
+  s_0c099cae24c74c::t_dfd976feb36fdb 7-14
+  s_0c099cae24c74c::t_9e51a34166e62c 3-6
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_0c099cae24c74c::t_fbe5f6240bc548 4,8
+desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
+  s_0c099cae24c74c::t_327093e90f375e 655-682
+desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
+  s_0c099cae24c74c::t_fae2847d67feaa 35-36,50-51,90-91,152-153,191-192
+desktop/macos/Desktop/Sources/Generated/OmiToolManifest.generated.swift
+  s_0c099cae24c74c::t_306f3c70ba911c 191-232
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonHandleResolver.swift
+  s_0c099cae24c74c::t_4941f86857c9b4 121
+desktop/macos/agent/tests/fixtures/tool-manifest.json
+  s_0c099cae24c74c::t_d941bc7ecfa2c4 5045-5180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "2806279b7da49f873e2206b3716b8e9e6b5a5e76",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
