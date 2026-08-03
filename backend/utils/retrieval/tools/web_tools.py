@@ -56,17 +56,23 @@ def _canonical_user_url(
     return parsed.scheme.lower(), hostname, effective_port, parsed.path or '/', parsed.params, parsed.query
 
 
-def extract_urls_from_text(text: str) -> List[str]:
+def extract_urls_from_text(
+    text: str, *, preserve_terminal_punctuation: bool = False, max_urls: Optional[int] = None
+) -> List[str]:
     """Return http(s) URLs found in *text*, preserving order and dropping duplicates."""
     urls: List[str] = []
+    seen: Set[str] = set()
     for match in USER_URL_PATTERN.findall(text or ''):
-        url = normalize_user_url(match)
-        if url and url not in urls:
+        url = match.strip() if preserve_terminal_punctuation else normalize_user_url(match)
+        if url and url not in seen:
+            seen.add(url)
             urls.append(url)
+            if max_urls is not None and len(urls) >= max_urls:
+                break
     return urls
 
 
-def extract_user_turn_urls(messages) -> List[str]:
+def extract_user_turn_urls(messages, *, max_urls: Optional[int] = None) -> List[str]:
     """Return http(s) URLs from the most recent user-authored turn."""
     latest_user_text = None
     for message in reversed(messages or []):
@@ -79,7 +85,11 @@ def extract_user_turn_urls(messages) -> List[str]:
     if not latest_user_text:
         return []
 
-    return extract_urls_from_text(latest_user_text)
+    return extract_urls_from_text(
+        latest_user_text,
+        preserve_terminal_punctuation=True,
+        max_urls=max_urls,
+    )
 
 
 def user_url_allowlist_block(urls: Sequence[str], *, overflow: bool = False) -> str:
@@ -109,7 +119,7 @@ def is_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:
     canonical = _canonical_user_url(url, strip_trailing_punctuation=False)
     if canonical is None:
         return False
-    return any(_canonical_user_url(entry) == canonical for entry in allowlist)
+    return any(_canonical_user_url(entry, strip_trailing_punctuation=False) == canonical for entry in allowlist)
 
 
 def is_redirect_url_allowlisted(url: str, allowlist: Optional[Sequence[str]]) -> bool:

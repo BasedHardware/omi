@@ -903,7 +903,7 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
-    all_user_urls = extract_user_turn_urls(messages)
+    all_user_urls = extract_user_turn_urls(messages, max_urls=MAX_USER_PROVIDED_URLS + 1)
     url_allowlist_overflow = len(all_user_urls) > MAX_USER_PROVIDED_URLS
     user_provided_urls = [] if url_allowlist_overflow else all_user_urls
 

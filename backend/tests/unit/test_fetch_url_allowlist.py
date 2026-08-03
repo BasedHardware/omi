@@ -57,6 +57,14 @@ class TestUrlExtraction:
         ]
         assert extract_user_turn_urls(messages) == ['https://user.example.com/doc']
 
+    def test_extract_user_turn_urls_preserves_terminal_url_punctuation(self):
+        messages = [_message('Fetch https://example.com/releases/v1.0.')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.']
+
+    def test_extract_user_turn_urls_bounds_overflow_scan(self):
+        messages = [_message(' '.join(f'https://example.com/{index}' for index in range(1000)))]
+        assert len(extract_user_turn_urls(messages, max_urls=11)) == 11
+
     def test_user_url_allowlist_block_empty_when_no_urls(self):
         assert user_url_allowlist_block([]) == ''
 
@@ -136,6 +144,10 @@ class TestRuntimeEnforcement:
     def test_is_url_allowlisted_rejects_outbound_trailing_punctuation(self):
         allowlist = ['https://example.com/page']
         assert not is_url_allowlisted('https://example.com/page.', allowlist)
+
+    def test_is_url_allowlisted_accepts_literal_terminal_punctuation(self):
+        allowlist = ['https://example.com/releases/v1.0.']
+        assert is_url_allowlisted('https://example.com/releases/v1.0.', allowlist)
 
     def test_is_url_allowlisted_rejects_unlisted_path_parameters(self):
         allowlist = ['https://example.com/page']
