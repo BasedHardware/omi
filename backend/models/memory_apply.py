@@ -704,6 +704,15 @@ def apply_long_term_patch_transaction(
                 operation=operation,
                 reason="update patch expected_content_hash mismatch",
             )
+        if operation.operation_type == MemoryOperationType.graph_enrichment and (
+            existing_item.status != MemoryItemStatus.active or existing_item.tier != MemoryTier.long_term
+        ):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="graph enrichment requires an active Long-term target",
+            )
         if existing_item.tier == MemoryTier.long_term and existing_item.status == MemoryItemStatus.active:
             proposed_evidence = evidence or existing_item.evidence
             semantic_change = any(
@@ -787,6 +796,7 @@ def apply_long_term_patch_transaction(
                     and promotion_metadata is None
                     and patch.result_status == LifecycleState.active
                     and not patch.supersedes
+                    and graph_plan.subject_entity_id == existing_item.subject_entity_id
                     and patch.subject_entity_id == graph_plan.subject_entity_id
                     and patch.predicate == graph_plan.predicate
                     and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))

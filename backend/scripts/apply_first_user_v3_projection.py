@@ -355,7 +355,6 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
 
     if full_rebuild:
         writes[state_path]["empty_projection"] = not redacted_items
-        writes[state_path]["expected_item_count"] = len(redacted_items)
 
     projected_paths = set(writes) - {state_path}
     stale_projection_paths = (

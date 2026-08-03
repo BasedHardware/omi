@@ -517,6 +517,35 @@ def test_short_term_to_long_term_rejects_non_synthesis_operation_even_with_valid
     assert result.graph_assertions == []
 
 
+def test_graph_enrichment_rejects_a_short_term_target_before_assertion_generation():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _short_term_existing()
+    operation = _operation(
+        operation_type=MemoryOperationType.graph_enrichment,
+        target_memory_id=existing.memory_id,
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "memory_text": None,
+            "target_memory_id": existing.memory_id,
+            "result_status": LifecycleState.active.value,
+            "subject_entity_id": "user",
+            "predicate": "prefers_update_style",
+            "arguments": {"style": "concise"},
+        },
+    )
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id=existing.memory_id,
+        memory_text=None,
+        existing_item=existing.model_dump(mode="python"),
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+
+    assert result.status != ApplyStatus.committed
+    assert result.graph_assertions == []
+
+
 @pytest.mark.parametrize("admission_state", ["missing", "stale"])
 def test_short_term_to_long_term_rejects_missing_or_stale_admission(admission_state):
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)

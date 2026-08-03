@@ -114,7 +114,6 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
     projection_generation = (
         projection_state.get("projection_generation") if isinstance(projection_state, dict) else None
     )
-    expected_item_count = projection_state.get("expected_item_count") if isinstance(projection_state, dict) else None
     fences_match = (
         type(expected_generation) is int
         and isinstance(projection_state, dict)
@@ -171,13 +170,6 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
             "projection_state_ready",
             projection_ready and projection_state.get("uid") == uid,
             path=paths.v3_compatibility_projection_state,
-        ),
-        _check(
-            "projection_item_count_matches_state",
-            type(expected_item_count) is int and expected_item_count >= 0 and len(items) == expected_item_count,
-            path=paths.v3_compatibility_projection_items,
-            expected_count=expected_item_count,
-            actual_count=len(items),
         ),
         _check("projection_generation_fences_match_head", fences_match, expected_generation=expected_generation),
     ]

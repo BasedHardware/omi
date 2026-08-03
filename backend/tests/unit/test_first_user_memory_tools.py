@@ -135,7 +135,6 @@ def _projection_state(uid: str) -> dict:
         "freshness_fence_generation": 7,
         "tombstone_fence_generation": 7,
         "vector_cleanup_fence_generation": 7,
-        "expected_item_count": 1,
     }
 
 
