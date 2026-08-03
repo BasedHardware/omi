@@ -2,7 +2,7 @@ import Foundation
 
 /// A live Google OAuth grant. The only record that ever holds tokens, and it
 /// is only ever written to the keychain.
-struct GoogleOAuthConnection: Codable, Equatable {
+struct GoogleOAuthConnection: Codable, Equatable, Sendable {
   let accessToken: String
   let expiresAt: Date
   let grantedScopes: [String]
@@ -71,7 +71,10 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
   // Team+bundle scoped so a dev/ad-hoc build cannot create an item the signed
   // app cannot silently access (and vice versa).
   static let service = DesktopKeychainStore.scopedService("com.omi.desktop.google-oauth")
-  static let account = "connections"
+  static var account: String {
+    let userID = UserDefaults.standard.string(forKey: .authUserId) ?? "signed-out"
+    return "connections.\(userID)"
+  }
 
   func readAll() -> [GoogleOAuthConnection] {
     guard

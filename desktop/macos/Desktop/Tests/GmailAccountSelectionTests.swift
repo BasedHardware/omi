@@ -30,14 +30,14 @@ final class GmailAccountSelectionTests: XCTestCase {
     )
   }
 
-  func testFilterFallsBackToAllConfigsWhenSelectedProfileIsGone() {
+  func testFilterReturnsNoConfigsWhenSelectedProfileIsGone() {
     let configs = [
       config("Chrome (Default)", "/a/Default/Network/Cookies"),
       config("Chrome (Work)", "/a/Profile 1/Network/Cookies"),
     ]
     GmailSelectionStore.persist(cookiePath: "/gone/Profile 9/Network/Cookies", label: "old@corp.com")
 
-    XCTAssertEqual(GmailSelectionStore.filter(configs), configs)
+    XCTAssertEqual(GmailSelectionStore.filter(configs), [])
   }
 
   func testFilterReturnsAllWhenNoSelectionMade() {

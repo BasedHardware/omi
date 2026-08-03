@@ -30,31 +30,60 @@ enum GoogleOAuthGmailReader {
     query: String = "newer_than:1d",
     session: URLSession = .shared
   ) async throws -> [GmailEmail] {
-    // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
-    var components = URLComponents(url: messagesURL, resolvingAgainstBaseURL: false)!
-    components.queryItems = [
-      URLQueryItem(name: "maxResults", value: "\(maxResults)"),
-      URLQueryItem(name: "q", value: query),
-    ]
-    // swiftlint:disable:next force_unwrapping — fixed components cannot fail
-    let body = try await get(components.url!, token: token, session: session)
-    let ids =
-      (body["messages"] as? [[String: Any]] ?? [])
-      .compactMap { $0["id"] as? String }
+    guard maxResults > 0 else { return [] }
+    var ids: [String] = []
+    var pageToken: String?
+    repeat {
+      // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
+      var components = URLComponents(url: messagesURL, resolvingAgainstBaseURL: false)!
+      var queryItems = [
+        URLQueryItem(name: "maxResults", value: "\(min(maxResults, 500))"),
+        URLQueryItem(name: "q", value: query),
+      ]
+      if let pageToken {
+        queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+      }
+      components.queryItems = queryItems
+      // swiftlint:disable:next force_unwrapping — fixed components cannot fail
+      let body = try await get(components.url!, token: token, session: session)
+      ids.append(contentsOf: (body["messages"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
+      pageToken = body["nextPageToken"] as? String
+    } while ids.count < maxResults && pageToken != nil
+
+    let requestedIDs = Array(ids.prefix(maxResults))
     var emails: [GmailEmail] = []
-    for id in ids.prefix(maxResults) {
-      let detail = try await get(
-        messagesURL.appendingPathComponent(id).appending(
-          queryItems: [
-            URLQueryItem(name: "format", value: "metadata"),
-            URLQueryItem(name: "metadataHeaders", value: "Subject"),
-            URLQueryItem(name: "metadataHeaders", value: "From"),
-          ]),
-        token: token,
-        session: session
-      )
-      if let email = parseMessage(detail) {
-        emails.append(email)
+    var nextIndex = 0
+    try await withThrowingTaskGroup(of: GmailEmail?.self) { group in
+      func addTask(for id: String) {
+        group.addTask {
+          do {
+            let detail = try await get(
+              messagesURL.appendingPathComponent(id).appending(
+                queryItems: [
+                  URLQueryItem(name: "format", value: "metadata"),
+                  URLQueryItem(name: "metadataHeaders", value: "Subject"),
+                  URLQueryItem(name: "metadataHeaders", value: "From"),
+                ]),
+              token: token,
+              session: session
+            )
+            return parseMessage(detail)
+          } catch let error as GoogleOAuthReaderError {
+            if case .http(404) = error { return nil }
+            throw error
+          }
+        }
+      }
+
+      for _ in 0..<min(8, requestedIDs.count) {
+        addTask(for: requestedIDs[nextIndex])
+        nextIndex += 1
+      }
+      while let email = try await group.next() {
+        if let email { emails.append(email) }
+        guard nextIndex < requestedIDs.count else { continue }
+        addTask(for: requestedIDs[nextIndex])
+        nextIndex += 1
       }
     }
     return emails.sorted { $0.date > $1.date }
@@ -66,8 +95,8 @@ enum GoogleOAuthGmailReader {
     let millis = Double(body["internalDate"] as? String ?? "")
     return GmailEmail(
       id: id,
-      from: headers["From"] ?? "",
-      subject: headers["Subject"] ?? "(no subject)",
+      from: headers["from"] ?? "",
+      subject: headers["subject"] ?? "(no subject)",
       snippet: body["snippet"] as? String ?? "",
       date: millis.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date(),
       isUnread: (body["labelIds"] as? [String])?.contains("UNREAD") ?? false
@@ -85,7 +114,7 @@ enum GoogleOAuthGmailReader {
       else {
         continue
       }
-      result[name] = value
+      result[name.lowercased()] = value
     }
     return result
   }
@@ -134,21 +163,29 @@ enum GoogleOAuthCalendarReader {
       from: now.addingTimeInterval(-Double(daysBack) * 86_400))
     let timeMax = iso.string(
       from: now.addingTimeInterval(Double(daysForward) * 86_400))
-    // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
-    var components = URLComponents(url: eventsURL, resolvingAgainstBaseURL: false)!
-    components.queryItems = [
-      URLQueryItem(name: "timeMin", value: timeMin),
-      URLQueryItem(name: "timeMax", value: timeMax),
-      URLQueryItem(name: "maxResults", value: "\(maxResults)"),
-      URLQueryItem(name: "singleEvents", value: "true"),
-      URLQueryItem(name: "orderBy", value: "startTime"),
-    ]
-    let body = try await GoogleOAuthGmailReader.get(
-      // swiftlint:disable:next force_unwrapping — fixed components cannot fail
-      components.url!, token: token, session: session)
-    let events =
-      (body["items"] as? [[String: Any]] ?? []).compactMap(parseEvent)
-    return events.sorted { $0.startTime > $1.startTime }
+    var pageToken: String?
+    var events: [CalendarEvent] = []
+    repeat {
+      // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
+      var components = URLComponents(url: eventsURL, resolvingAgainstBaseURL: false)!
+      var queryItems = [
+        URLQueryItem(name: "timeMin", value: timeMin),
+        URLQueryItem(name: "timeMax", value: timeMax),
+        URLQueryItem(name: "maxResults", value: "\(min(maxResults, 2500))"),
+        URLQueryItem(name: "singleEvents", value: "true"),
+        URLQueryItem(name: "orderBy", value: "startTime"),
+      ]
+      if let pageToken {
+        queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+      }
+      components.queryItems = queryItems
+      let body = try await GoogleOAuthGmailReader.get(
+        // swiftlint:disable:next force_unwrapping — fixed components cannot fail
+        components.url!, token: token, session: session)
+      events.append(contentsOf: (body["items"] as? [[String: Any]] ?? []).compactMap(parseEvent))
+      pageToken = body["nextPageToken"] as? String
+    } while events.count < maxResults && pageToken != nil
+    return Array(events.prefix(maxResults)).sorted { $0.startTime > $1.startTime }
   }
 
   static func parseEvent(_ dict: [String: Any]) -> CalendarEvent? {
@@ -198,7 +235,8 @@ enum GoogleOAuthCalendarReader {
 
   static func attendees(_ raw: [[String: Any]]) -> [String] {
     raw.compactMap {
-      ($0["displayName"] as? String) ?? ($0["email"] as? String)
+      guard !($0["self"] as? Bool ?? false) else { return nil }
+      return ($0["displayName"] as? String) ?? ($0["email"] as? String)
     }
   }
 }

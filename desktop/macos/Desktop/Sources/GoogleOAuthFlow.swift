@@ -18,6 +18,7 @@ enum GoogleOAuthError: LocalizedError {
   case randomGenerationFailed
   case keychainWriteFailed
   case accountUnverified
+  case missingScopes([String])
 
   var errorDescription: String? {
     switch self {
@@ -49,6 +50,8 @@ enum GoogleOAuthError: LocalizedError {
       return "Google sign-in succeeded but the connection could not be saved securely."
     case .accountUnverified:
       return "Google did not return a verified account email."
+    case .missingScopes(let scopes):
+      return "Google did not grant the required permissions: \(scopes.joined(separator: ", "))."
     }
   }
 }
@@ -117,7 +120,14 @@ final class LoopbackRedirectServer: @unchecked Sendable {
           guard let self else { return }
           switch state {
           case .ready:
-            self.boundPort = self.listener.port?.rawValue ?? 0
+            guard let port = self.listener.port?.rawValue, port != 0 else {
+              self.readyWaiter?.resume(
+                throwing: GoogleOAuthError.network("Google sign-in listener did not bind a port."))
+              self.readyWaiter = nil
+              self.listener.cancel()
+              return
+            }
+            self.boundPort = port
             self.readyWaiter?.resume()
             self.readyWaiter = nil
           case .failed(let error):
@@ -218,7 +228,11 @@ final class LoopbackRedirectServer: @unchecked Sendable {
     // Only the OAuth callback URL may settle the waiter. A non-callback
     // request (e.g. a favicon or a health ping) is answered and ignored so it
     // cannot finish the wait with a stateMismatch that drops the real redirect.
-    guard let url, url.path == "/oauth/callback" else { return }
+    guard let url else {
+      settle(with: .failure(GoogleOAuthError.redirectMissing))
+      return
+    }
+    guard url.path == "/oauth/callback" else { return }
     settle(with: .success(url))
   }
 
@@ -260,7 +274,7 @@ final class LoopbackRedirectServer: @unchecked Sendable {
 /// PKCE authorization-code exchange, refresh, revocation, and account naming.
 /// Everything provider specific lives in [GoogleOAuth]; the session is injected
 /// so tests can stub the network.
-final class GoogleOAuthTokenClient {
+final class GoogleOAuthTokenClient: @unchecked Sendable {
   let session: URLSession
 
   init(session: URLSession = .shared) {
@@ -292,7 +306,7 @@ final class GoogleOAuthTokenClient {
     let refreshToken = json["refresh_token"] as? String
     let scopes =
       (json["scope"] as? String)?
-      .split(separator: " ").map(String.init) ?? GoogleOAuth.scopes
+      .split(separator: " ").map(String.init) ?? []
     let account = await fetchAccount(accessToken: accessToken)
     return GoogleOAuthConnection(
       accessToken: accessToken,
@@ -362,6 +376,7 @@ final class GoogleOAuthTokenClient {
       let (data, response) = try await session.data(for: request)
       guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
       let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      guard json?["email_verified"] as? Bool == true else { return nil }
       let email = json?["email"] as? String
       return (email?.isEmpty ?? true) ? nil : email
     } catch {
@@ -414,6 +429,23 @@ final class GoogleOAuthTokenClient {
   }
 }
 
+actor GoogleOAuthRefreshGate {
+  private var tasks: [String: Task<GoogleOAuthConnection, Error>] = [:]
+
+  func run(
+    key: String,
+    operation: @escaping @Sendable () async throws -> GoogleOAuthConnection
+  ) async throws -> GoogleOAuthConnection {
+    if let task = tasks[key] {
+      return try await task.value
+    }
+    let task = Task { try await operation() }
+    tasks[key] = task
+    defer { tasks[key] = nil }
+    return try await task.value
+  }
+}
+
 /// Drives connect, refresh, and disconnect for the Google connector, keeping
 /// one grant per account. Nothing here knows about cookies.
 final class GoogleOAuthConnectionManager: @unchecked Sendable {
@@ -422,6 +454,7 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
   private let store: GoogleOAuthStoring
   private let tokenClient: GoogleOAuthTokenClient
   private let lock = NSLock()
+  private let refreshGate = GoogleOAuthRefreshGate()
 
   init(
     store: GoogleOAuthStoring,
@@ -441,10 +474,15 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     connections().first { !$0.needsReconnect }
   }
 
+  func activeConnections() -> [GoogleOAuthConnection] {
+    connections().filter { !$0.needsReconnect }
+  }
+
   func connection(account: String?) -> GoogleOAuthConnection? {
-    connections().first {
-      $0.account == account || (account == nil && !$0.needsReconnect)
+    if let account {
+      return connections().first { $0.account == account && !$0.needsReconnect }
     }
+    return connections().first { !$0.needsReconnect }
   }
 
   func hasGrants() -> Bool {
@@ -468,9 +506,13 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     }
     let redirect: URL
     do {
-      redirect = try await withTimeout {
-        try await server.waitForRedirect()
-      }
+      redirect = try await withTimeout(
+        {
+          try await server.waitForRedirect()
+        },
+        onTimeout: {
+          server.stop()
+        })
     } catch {
       server.stop()
       throw error
@@ -491,6 +533,10 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     guard let account = connection.account, !account.isEmpty else {
       throw GoogleOAuthError.accountUnverified
     }
+    let missingScopes = Self.missingRequiredScopes(connection.grantedScopes)
+    guard missingScopes.isEmpty else {
+      throw GoogleOAuthError.missingScopes(missingScopes.sorted())
+    }
     // Probe both required APIs before persisting so a disabled API or a
     // missing resource scope fails the connect, not the next import.
     let token = connection.accessToken
@@ -504,7 +550,7 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
   }
 
   func accessToken(account: String? = nil) async throws -> String {
-    guard var stored = connection(account: account) else {
+    guard let stored = connection(account: account) else {
       throw GoogleOAuthError.reconnectRequired
     }
     if !stored.isExpired { return stored.accessToken }
@@ -512,14 +558,32 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
       throw GoogleOAuthError.reconnectRequired
     }
     do {
-      let refreshed = try await tokenClient.refresh(stored, clientId: clientId)
-      if !upsert(refreshed) {
-        throw GoogleOAuthError.keychainWriteFailed
+      let refreshed = try await refreshGate.run(
+        key: stored.account ?? "legacy",
+        operation: { [tokenClient] in
+          try await tokenClient.refresh(stored, clientId: clientId)
+        })
+      return try lock.withLock {
+        let current = store.readAll().first { Self.sameAccount($0, stored) }
+        guard let current else {
+          throw GoogleOAuthError.reconnectRequired
+        }
+        guard Self.sameSnapshot(current, stored) else {
+          guard !current.needsReconnect else {
+            throw GoogleOAuthError.reconnectRequired
+          }
+          return current.accessToken
+        }
+        var all = store.readAll()
+        all.removeAll { Self.sameAccount($0, stored) }
+        all.insert(refreshed, at: 0)
+        guard store.write(all) else {
+          throw GoogleOAuthError.keychainWriteFailed
+        }
+        return refreshed.accessToken
       }
-      return refreshed.accessToken
     } catch GoogleOAuthError.invalidGrant {
-      stored.needsReconnect = true
-      _ = upsert(stored)
+      _ = markNeedsReconnect(account: stored.account, expected: stored)
       throw GoogleOAuthError.reconnectRequired
     }
   }
@@ -532,26 +596,79 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     } catch {
       failure = error
     }
-    remove(account: stored.account)
+    guard remove(account: stored.account, expected: stored) else {
+      throw GoogleOAuthError.keychainWriteFailed
+    }
     if let failure { throw failure }
   }
 
   /// Returns false when the keychain write fails, so callers can surface the
   /// failure instead of reporting a connection that was never persisted.
   func upsert(_ connection: GoogleOAuthConnection) -> Bool {
+    guard let account = connection.account, !account.isEmpty else { return false }
     lock.lock()
     defer { lock.unlock() }
     var all = store.readAll()
-    all.removeAll { $0.account == connection.account }
+    all.removeAll { $0.account == account }
     all.insert(connection, at: 0)
     return store.write(all)
   }
 
-  func remove(account: String?) {
+  @discardableResult
+  func markNeedsReconnect(account: String?, expected: GoogleOAuthConnection? = nil) -> Bool {
     lock.lock()
     defer { lock.unlock() }
-    let all = store.readAll().filter { $0.account != account }
-    _ = store.write(all)
+    var all = store.readAll()
+    guard
+      let index = all.firstIndex(where: { connection in
+        guard Self.sameAccount(connection, account: account) else { return false }
+        guard let expected else { return true }
+        return Self.sameSnapshot(connection, expected)
+      })
+    else {
+      return false
+    }
+    all[index].needsReconnect = true
+    return store.write(all)
+  }
+
+  func remove(account: String?, expected: GoogleOAuthConnection? = nil) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    var all = store.readAll()
+    guard let index = all.firstIndex(where: { Self.sameAccount($0, account: account) }) else {
+      return true
+    }
+    if let expected, !Self.sameSnapshot(all[index], expected) {
+      return true
+    }
+    all.remove(at: index)
+    return store.write(all)
+  }
+
+  private static func sameAccount(_ lhs: GoogleOAuthConnection, _ rhs: GoogleOAuthConnection) -> Bool {
+    sameAccount(lhs, account: rhs.account)
+  }
+
+  private static func sameAccount(_ connection: GoogleOAuthConnection, account: String?) -> Bool {
+    connection.account == account
+  }
+
+  private static func sameSnapshot(_ lhs: GoogleOAuthConnection, _ rhs: GoogleOAuthConnection) -> Bool {
+    lhs.accessToken == rhs.accessToken
+      && lhs.expiresAt == rhs.expiresAt
+      && lhs.grantedScopes == rhs.grantedScopes
+      && lhs.refreshToken == rhs.refreshToken
+      && lhs.account == rhs.account
+      && lhs.needsReconnect == rhs.needsReconnect
+  }
+
+  static func missingRequiredScopes(_ scopes: [String]) -> [String] {
+    let granted = Set(scopes)
+    return Set([
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/calendar.readonly",
+    ]).subtracting(granted).sorted()
   }
 
   static func authorizationURL(
@@ -609,6 +726,7 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
 
   private func withTimeout<T: Sendable>(
     _ operation: @escaping @Sendable () async throws -> T,
+    onTimeout: @escaping @Sendable () -> Void,
     seconds: Double = 300
   ) async throws -> T {
     try await withThrowingTaskGroup(of: T.self) { group in
@@ -618,9 +736,17 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
         throw GoogleOAuthError.timedOut
       }
       // swiftlint:disable:next force_unwrapping — the group always has one winner
-      let value = try await group.next()!
-      group.cancelAll()
-      return value
+      do {
+        guard let value = try await group.next() else {
+          throw GoogleOAuthError.timedOut
+        }
+        group.cancelAll()
+        return value
+      } catch {
+        onTimeout()
+        group.cancelAll()
+        throw error
+      }
     }
   }
 }
