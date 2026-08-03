@@ -438,6 +438,8 @@ def test_media_context_describes_images_without_exposing_provider_urls(monkeypat
         )
     )
     assert 'A diagram on a white background.' in result
+    assert '[Vision analysis for image attachment: photo.jpg (image/jpeg)]' in result
+    assert 'do not claim the image is unavailable' in result
     assert 'file-1' not in result
 
 
