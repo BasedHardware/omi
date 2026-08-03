@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-implicit-resource-selection",
+  "violated_contract": "When a request acts on one of several sibling records, the caller names which one and the server resolves it deterministically; a server-side pick must be ordered, and an explicitly named record that cannot be resolved fails rather than falling back.",
+  "canonical_prevention": "Give the route an explicit identifier parameter and resolve it through the owner-scoped by-id lookup, 404ing when it does not resolve; any implicit fallback query must carry an order_by so its single result is deterministic.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_chat_session_targeting.py"],
+  "evidence_prs": [11058],
+  "scope_hints": ["backend/routers/**", "backend/database/**"],
+  "status": "open"
+}

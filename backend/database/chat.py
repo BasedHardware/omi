@@ -653,11 +653,20 @@ def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, A
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The user's current chat session for an app.
+
+    Ordered newest-first: an unordered `.limit(1)` lets Firestore return any
+    matching document, so once a user has more than one session for an app the
+    "current" one is whichever the index happens to yield. Callers treat this as
+    the session to read and append to, so an arbitrary pick silently splits a
+    conversation across sessions.
+    """
     session_ref = (
         db.collection('users')
         .document(uid)
         .collection('chat_sessions')
         .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
 
