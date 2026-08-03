@@ -266,6 +266,13 @@ final class ChatFirstShellNavigation: ObservableObject {
     analytics(.routeEntered(route: destination.analyticsRoute, origin: origin))
   }
 
+  @discardableResult
+  func handleEscapeNavigation() -> Bool {
+    guard route != .chat else { return false }
+    selectPrimary(.chat)
+    return true
+  }
+
   func selectMore(_ page: ChatFirstMorePage) {
     invalidateGoalLinkResolutions()
     route = .more(page)

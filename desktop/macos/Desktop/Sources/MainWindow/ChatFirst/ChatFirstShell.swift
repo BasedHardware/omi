@@ -98,11 +98,12 @@ struct ChatFirstShell: View {
       else { return }
       promptMaterializationCoordinator.mainWindowDidBecomeForeground()
     }
-    .onExitCommand {
-      guard navigation.route != .chat else { return }
+    .onEscapeKey(priority: .navigation) {
+      guard navigation.route != .chat else { return false }
       OmiMotion.withGated(.easeOut(duration: 0.12)) {
-        navigation.selectPrimary(.chat)
+        _ = navigation.handleEscapeNavigation()
       }
+      return true
     }
   }
 
