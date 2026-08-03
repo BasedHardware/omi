@@ -20,7 +20,9 @@ vi.mock('./resolveHelperPath', () => ({
 // through the shared fallback emitter rather than Sentry (#10240). Mock it so we can
 // assert it fires (exactly once, behind the guard).
 const recordFallbackMock = vi.fn()
-vi.mock('../observability/fallback', () => ({ recordFallback: (...a: unknown[]) => recordFallbackMock(...a) }))
+vi.mock('../observability/fallback', () => ({
+  recordFallback: (...a: unknown[]) => recordFallbackMock(...a)
+}))
 
 type FakeChild = EventEmitter & {
   stdout: EventEmitter
