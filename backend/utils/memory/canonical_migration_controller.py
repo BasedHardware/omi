@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from models.memory_admission import valid_required_processing_receipt
 from models.memory_migration import (
@@ -18,7 +18,12 @@ from models.memory_migration import (
     MigrationPhase,
 )
 from models.memory_promotion import PromotionGraphPlan
+from models.memory_evidence import SourceState
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryItemStatus, MemoryTier, ProcessingState
+from utils.memory.v3.projection_reader_contract import (
+    V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+    V3_COMPATIBILITY_PROJECTION_SOURCE,
+)
 
 
 class MigrationOrchestrationError(RuntimeError):
@@ -79,8 +84,74 @@ def _evidence_ids(item: Any) -> List[str]:
         raw = _value(item, "evidence_ids", []) or []
     result = []
     for value in raw:
-        result.append(str(_value(value, "evidence_id", value)))
+        evidence_id = _value(value, "evidence_id", None)
+        if evidence_id is None and isinstance(value, str):
+            evidence_id = value
+        if evidence_id is not None and str(evidence_id).strip():
+            result.append(str(evidence_id).strip())
     return sorted(set(result))
+
+
+def _compatibility_eligible(item: Any) -> bool:
+    tier = _value(item, "tier")
+    tier_value = tier.value if isinstance(tier, MemoryTier) else str(tier)
+    if tier_value not in {MemoryTier.short_term.value, MemoryTier.long_term.value}:
+        return False
+    promotion = _value(item, "promotion", {}) or {}
+    content = _value(item, "content", "")
+    return (
+        _value(item, "status") in {MemoryItemStatus.active, MemoryItemStatus.active.value}
+        and _value(item, "processing_state") in {ProcessingState.processed, ProcessingState.processed.value}
+        and str(_value(item, "source_state", "active")) in {"SourceState.active", SourceState.active.value}
+        and not set(_value(item, "sensitivity_labels", []) or []).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        and _value(item, "user_review", None) is not False
+        and promotion.get("user_review") is not False
+        and isinstance(content, str)
+        and bool(content.strip())
+    )
+
+
+def _projection_value(row: Any, key: str) -> Any:
+    value = _value(row, key, None)
+    if value is not None:
+        return value
+    payload = _value(row, "payload", {}) or {}
+    return _value(payload, key, None)
+
+
+def _projection_matches_item(row: Any, item: Any, fence: MigrationFence) -> bool:
+    """Require payload identity to match the current canonical item, not only its id."""
+    if _projection_value(row, "memory_id") != _value(item, "memory_id"):
+        return False
+    if _projection_value(row, "uid") != _value(item, "uid"):
+        return False
+    if _projection_value(row, "schema_version") != V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION:
+        return False
+    if _projection_value(row, "source") != V3_COMPATIBILITY_PROJECTION_SOURCE:
+        return False
+    if _projection_value(row, "account_generation") != fence.account_generation:
+        return False
+    if _projection_value(row, "projection_generation") != fence.account_generation:
+        return False
+    if _projection_value(row, "source_commit_id") != fence.observed_head_commit_id:
+        return False
+    if _projection_value(row, "projection_commit_id") != f"commit-{fence.observed_head_commit_id}":
+        return False
+    evidence_fence = f"head-{fence.observed_head_commit_id}"
+    if _projection_value(row, "projection_evidence_fence") != evidence_fence:
+        return False
+    if any(
+        _projection_value(row, field) is not True
+        for field in ("write_convergence_complete", "delete_convergence_complete", "tombstone_convergence_complete")
+    ):
+        return False
+    payload = _value(row, "memorydb", {}) or _value(row, "payload", {}) or {}
+    item_tier = _value(item, "tier")
+    item_tier = item_tier.value if hasattr(item_tier, "value") else item_tier
+    if not (_value(payload, "content") == _value(item, "content") and _value(payload, "memory_tier") == item_tier):
+        return False
+    source_review = _value(item, "user_review", None)
+    return source_review is None or _value(payload, "user_review") == source_review
 
 
 def _assertion_matches_item(assertion: Any, item: Any) -> bool:
@@ -92,7 +163,7 @@ def _assertion_matches_item(assertion: Any, item: Any) -> bool:
         return False
     if _value(assertion, "content_hash") != _value(item, "content_hash"):
         return False
-    if sorted(_value(assertion, "evidence_ids", []) or []) != _evidence_ids(item):
+    if sorted(set(str(value) for value in (_value(assertion, "evidence_ids", []) or []))) != _evidence_ids(item):
         return False
     plan_raw = (_value(item, "promotion", {}) or {}).get("graph_plan")
     if not isinstance(plan_raw, dict):
@@ -138,11 +209,62 @@ def verify_migration_postconditions(
             repeat_inventory.account_generation != fence.account_generation
             or repeat_inventory.source_generation != fence.source_generation
             or repeat_inventory.head_commit_id != fence.observed_head_commit_id
+            or repeat_inventory.head_sequence != fence.observed_head_sequence
         ):
             errors.append("repeat inventory generation/head fence changed")
+        if repeat_inventory.fingerprint != fence.inventory_fingerprint:
+            errors.append("repeat inventory fingerprint changed")
+        if (
+            set(repeat_inventory.item_ids) != set(manifest.item_ids)
+            or repeat_inventory.item_revisions != manifest.item_revisions
+            or repeat_inventory.item_content_hashes != manifest.item_content_hashes
+            or {key: sorted(set(value)) for key, value in repeat_inventory.item_evidence_ids.items()}
+            != {key: sorted(set(value)) for key, value in manifest.item_evidence_ids.items()}
+        ):
+            errors.append("repeat inventory item revision/content/evidence fence changed")
     items = list(canonical_items)
     assertions = list(graph_assertions)
-    assertion_by_id = {_value(value, "memory_id"): value for value in assertions}
+    item_by_id: Dict[Any, Any] = {}
+    for item in items:
+        memory_id = _value(item, "memory_id")
+        if _value(item, "uid") != manifest.uid:
+            errors.append(f"canonical item uid mismatch: {memory_id}")
+        if memory_id not in manifest.item_ids:
+            errors.append(f"canonical item is outside manifest: {memory_id}")
+        if memory_id in item_by_id:
+            errors.append(f"duplicate canonical item outcome: {memory_id}")
+        item_by_id[memory_id] = item
+    for memory_id in manifest.item_ids:
+        item = item_by_id.get(memory_id)
+        if item is None:
+            errors.append(f"manifest item has no authoritative item or terminal outcome: {memory_id}")
+            blocking.append(
+                MigrationBlockingState(
+                    code=MigrationBlockCode.verification_failed,
+                    message="every manifest item must have an authoritative current item or terminal outcome",
+                    item_id=str(memory_id),
+                )
+            )
+            continue
+        # A terminal outcome may be represented by a work/result row, but a
+        # current item must still be at the exact inventory fence whenever its
+        # identity fields are present.
+        if _value(item, "item_revision", None) != manifest.item_revisions.get(memory_id):
+            errors.append(f"canonical item revision fence changed: {memory_id}")
+        if _value(item, "content_hash", None) != manifest.item_content_hashes.get(memory_id):
+            errors.append(f"canonical item content hash fence changed: {memory_id}")
+        if _evidence_ids(item) != sorted(set(manifest.item_evidence_ids.get(memory_id, []))):
+            errors.append(f"canonical item evidence fence changed: {memory_id}")
+    assertion_by_id: Dict[Any, Any] = {}
+    for assertion in assertions:
+        memory_id = _value(assertion, "memory_id")
+        if _value(assertion, "uid") != manifest.uid:
+            errors.append(f"graph assertion uid mismatch: {memory_id}")
+        if memory_id not in manifest.item_ids:
+            errors.append(f"graph assertion is outside manifest: {memory_id}")
+        if memory_id in assertion_by_id:
+            errors.append(f"duplicate graph assertion: {memory_id}")
+        assertion_by_id[memory_id] = assertion
     eligible = [item for item in items if _item_eligible(item)]
     for item in items:
         promotion = _value(item, "promotion", {}) or {}
@@ -179,18 +301,16 @@ def verify_migration_postconditions(
                 )
             )
     compatibility = list(compatibility_projection)
-    compatibility_ids = {_value(value, "memory_id") for value in compatibility}
-    expected_compatibility = {
-        _value(item, "memory_id")
-        for item in items
-        if _value(item, "status") in {MemoryItemStatus.active, MemoryItemStatus.active.value}
-        and _value(item, "processing_state") in {ProcessingState.processed, ProcessingState.processed.value}
-        and (
-            _value(item, "tier")
-            in {MemoryTier.short_term, MemoryTier.long_term, MemoryTier.short_term.value, MemoryTier.long_term.value}
-        )
-    }
-    missing_compat = sorted(str(item_id) for item_id in expected_compatibility - compatibility_ids)
+    compatibility_by_id: Dict[Any, Any] = {}
+    for row in compatibility:
+        memory_id = _projection_value(row, "memory_id")
+        if _projection_value(row, "uid") != manifest.uid:
+            errors.append(f"compatibility projection uid mismatch: {memory_id}")
+        if memory_id in compatibility_by_id:
+            errors.append(f"duplicate compatibility projection row: {memory_id}")
+        compatibility_by_id[memory_id] = row
+    expected_compatibility = {_value(item, "memory_id") for item in items if _compatibility_eligible(item)}
+    missing_compat = sorted(str(item_id) for item_id in expected_compatibility - set(compatibility_by_id))
     if missing_compat:
         errors.append("compatibility projection incomplete: " + ",".join(missing_compat))
         blocking.append(
@@ -199,6 +319,33 @@ def verify_migration_postconditions(
                 message="processed Short-term/Long-term items are missing compatibility projection",
                 retryable=True,
                 details={"missing_memory_ids": missing_compat},
+            )
+        )
+    stale_compat = sorted(str(item_id) for item_id in set(compatibility_by_id) - expected_compatibility)
+    if stale_compat:
+        errors.append("compatibility projection contains unexpected or stale rows: " + ",".join(stale_compat))
+        blocking.append(
+            MigrationBlockingState(
+                code=MigrationBlockCode.projection_not_converged,
+                message="compatibility projection must contain only current eligible items",
+                retryable=True,
+                details={"unexpected_memory_ids": stale_compat},
+            )
+        )
+    stale_payload = sorted(
+        str(memory_id)
+        for memory_id in expected_compatibility
+        if memory_id in compatibility_by_id
+        and not _projection_matches_item(compatibility_by_id[memory_id], item_by_id.get(memory_id), fence)
+    )
+    if stale_payload:
+        errors.append("compatibility projection payload is stale: " + ",".join(stale_payload))
+        blocking.append(
+            MigrationBlockingState(
+                code=MigrationBlockCode.projection_not_converged,
+                message="compatibility projection payload must match current revision, content, and evidence",
+                retryable=True,
+                details={"stale_memory_ids": stale_payload},
             )
         )
     relevant_outbox = []
@@ -242,10 +389,6 @@ def verify_migration_postconditions(
 final_verifier = verify_migration_postconditions
 
 
-class MigrationCallbacks(Protocol):
-    def inventory(self, uid: str) -> MigrationInventory: ...
-
-
 @dataclass
 class ControllerHooks:
     inventory: Callable[[str], MigrationInventory]
@@ -271,6 +414,17 @@ class MigrationRunResult:
 class CanonicalMigrationController:
     """Lease-owned, resumable orchestration for exactly one user."""
 
+    _PHASE_ORDER = (
+        MigrationPhase.inventoried,
+        MigrationPhase.write_enrolled,
+        MigrationPhase.staged,
+        MigrationPhase.canonical_processing,
+        MigrationPhase.graph_enrichment,
+        MigrationPhase.projection_convergence,
+        MigrationPhase.verified,
+        MigrationPhase.read_cutover,
+    )
+
     def __init__(self, *, store: Any, hooks: ControllerHooks, lease_ttl_seconds: float = 60.0):
         self.store = store
         self.hooks = hooks
@@ -281,6 +435,20 @@ class CanonicalMigrationController:
 
     def renew(self, uid: str, lease: MigrationLease) -> MigrationLease:
         return self.store.renew_lease(uid, lease.owner_id, lease.ownership_epoch, ttl_seconds=self.lease_ttl_seconds)
+
+    @classmethod
+    def _phase_rank(cls, phase: MigrationPhase) -> int:
+        return cls._PHASE_ORDER.index(phase)
+
+    @classmethod
+    def _phase_needs_work(
+        cls, current: MigrationPhase, target: MigrationPhase, resume_phase: Optional[MigrationPhase]
+    ) -> bool:
+        if current in {MigrationPhase.failed, MigrationPhase.paused}:
+            return resume_phase == target
+        if current == MigrationPhase.read_cutover:
+            return False
+        return cls._phase_rank(current) < cls._phase_rank(target)
 
     def transition(
         self,
@@ -332,11 +500,34 @@ class CanonicalMigrationController:
     def run_user(self, *, uid: str, owner_id: str, dry_run: bool = True, confirm: bool = False) -> MigrationRunResult:
         if not dry_run and not confirm:
             raise ValueError("apply mode requires explicit confirmation")
+        if not dry_run:
+            required_hooks = {
+                "write_enroll": self.hooks.write_enroll,
+                "stage": self.hooks.stage,
+                "canonical_process": self.hooks.canonical_process,
+                "graph_enrich": self.hooks.graph_enrich,
+                "projection_converge": self.hooks.projection_converge,
+                "verify": self.hooks.verify,
+                "read_cutover": self.hooks.read_cutover,
+            }
+            missing_hooks = sorted(name for name, hook in required_hooks.items() if hook is None)
+            if missing_hooks:
+                raise MigrationOrchestrationError(
+                    "apply mode requires concrete canonical migration hooks: " + ", ".join(missing_hooks)
+                )
         inventory = self.inventory(uid=uid, owner_id=owner_id, dry_run=dry_run)
         manifest = CanonicalMigrationManifest.from_inventory(inventory)
         if dry_run:
             return MigrationRunResult(
                 uid=uid, phase=MigrationPhase.inventoried, dry_run=True, manifest_id=manifest.manifest_id
+            )
+        checkpoint = self.store.read_checkpoint(uid)
+        if checkpoint is not None and checkpoint.phase == MigrationPhase.read_cutover:
+            return MigrationRunResult(
+                uid=uid,
+                phase=MigrationPhase.read_cutover,
+                dry_run=False,
+                manifest_id=checkpoint.manifest_id or manifest.manifest_id,
             )
         lease = self.acquire(uid, owner_id)
         checkpoint = self.store.read_checkpoint(uid)
@@ -349,66 +540,85 @@ class CanonicalMigrationController:
             owner_id=owner_id,
             ownership_epoch=lease.ownership_epoch,
         )
-        self.store.write_manifest(manifest)
-        records = [
-            CanonicalMigrationWorkRecord(
-                uid=uid,
-                manifest_id=manifest.manifest_id,
-                item_id=item_id,
-                item_revision=manifest.item_revisions.get(item_id, 0),
-                content_hash=manifest.item_content_hashes.get(item_id, f"inventory_missing:{item_id}"),
-                evidence_ids=list(manifest.item_evidence_ids.get(item_id, [])),
-                account_generation=manifest.fence.account_generation,
-                source_generation=manifest.fence.source_generation,
+        persisted_manifest = self.store.read_manifest(uid, manifest.manifest_id)
+        if persisted_manifest is None:
+            self.store.write_manifest(manifest)
+        else:
+            if persisted_manifest.model_dump(exclude={"created_at"}) != manifest.model_dump(exclude={"created_at"}):
+                raise MigrationOrchestrationError("persisted manifest fence does not match current inventory")
+            manifest = persisted_manifest
+        existing_records = {
+            record.item_id: record for record in self.store.read_work_records(uid, manifest.manifest_id)
+        }
+        records: List[CanonicalMigrationWorkRecord] = []
+        for item_id in manifest.item_ids:
+            expected_fence = (
+                manifest.item_revisions[item_id],
+                manifest.item_content_hashes[item_id],
+                sorted(set(manifest.item_evidence_ids[item_id])),
+                manifest.fence.account_generation,
+                manifest.fence.source_generation,
             )
-            for item_id in manifest.item_ids
-        ]
+            prior = existing_records.get(item_id)
+            if prior is not None:
+                prior_fence = (
+                    prior.item_revision,
+                    prior.content_hash,
+                    sorted(set(prior.evidence_ids)),
+                    prior.account_generation,
+                    prior.source_generation,
+                )
+                if prior_fence != expected_fence:
+                    raise MigrationOrchestrationError(f"durable work record fence changed: {item_id}")
+                records.append(prior)
+            else:
+                records.append(
+                    CanonicalMigrationWorkRecord(
+                        uid=uid,
+                        manifest_id=manifest.manifest_id,
+                        item_id=item_id,
+                        item_revision=manifest.item_revisions[item_id],
+                        content_hash=manifest.item_content_hashes[item_id],
+                        evidence_ids=list(manifest.item_evidence_ids[item_id]),
+                        account_generation=manifest.fence.account_generation,
+                        source_generation=manifest.fence.source_generation,
+                    )
+                )
         for record in records:
             self.store.upsert_work_record(record)
-        manifest_phases = [
+        phases = [
             (MigrationPhase.write_enrolled, self.hooks.write_enroll, manifest),
             (MigrationPhase.staged, self.hooks.stage, manifest),
-            (MigrationPhase.projection_convergence, self.hooks.projection_converge, manifest),
-        ]
-        work_record_phases = [
             (MigrationPhase.canonical_processing, self.hooks.canonical_process, records),
             (MigrationPhase.graph_enrichment, self.hooks.graph_enrich, records),
+            (MigrationPhase.projection_convergence, self.hooks.projection_converge, manifest),
         ]
+        active_phase: Optional[MigrationPhase] = None
         try:
-            for phase, hook, payload in manifest_phases[:2]:
+            for phase, hook, payload in phases:
                 current = self.store.read_checkpoint(uid)
-                if current is None or current.phase == phase:
+                if current is None or not self._phase_needs_work(current.phase, phase, current.resume_phase):
                     continue
-                if current.phase in {MigrationPhase.failed, MigrationPhase.paused}:
-                    if current.resume_phase != phase:
-                        continue
-                if hook is not None:
-                    hook(uid, payload)  # orchestration delegates all writes/LLM work to hooks
+                lease = self.renew(uid, lease)
+                active_phase = phase
+                cast(Callable[[str, Any], None], hook)(
+                    uid, payload
+                )  # orchestration delegates all writes/LLM work to hooks
+                lease = self.renew(uid, lease)
                 self.transition(uid=uid, target=phase, owner_id=owner_id, ownership_epoch=lease.ownership_epoch)
-            for phase, hook, payload in work_record_phases:
-                current = self.store.read_checkpoint(uid)
-                if current is None or current.phase == phase:
-                    continue
-                if current.phase in {MigrationPhase.failed, MigrationPhase.paused}:
-                    if current.resume_phase != phase:
-                        continue
-                if hook is not None:
-                    hook(uid, payload)
-                self.transition(uid=uid, target=phase, owner_id=owner_id, ownership_epoch=lease.ownership_epoch)
-            for phase, hook, payload in manifest_phases[2:]:
-                current = self.store.read_checkpoint(uid)
-                if current is None or current.phase == phase:
-                    continue
-                if current.phase in {MigrationPhase.failed, MigrationPhase.paused}:
-                    if current.resume_phase != phase:
-                        continue
-                if hook is not None:
-                    hook(uid, payload)
-                self.transition(uid=uid, target=phase, owner_id=owner_id, ownership_epoch=lease.ownership_epoch)
+                active_phase = None
             if self.hooks.verify is not None:
+                lease = self.renew(uid, lease)
                 verification = self.hooks.verify(uid, manifest)
+                lease = self.renew(uid, lease)
             else:
                 verification = MigrationVerificationResult(passed=False, errors=("no verifier hook configured",))
+            if verification.passed and verification.fence != manifest.fence:
+                verification = MigrationVerificationResult(
+                    passed=False,
+                    errors=("verifier returned a missing or mismatched migration fence",),
+                    fence=verification.fence,
+                )
             if not verification.passed:
                 blocking = (
                     verification.blocking[0]
@@ -440,7 +650,9 @@ class CanonicalMigrationController:
                 uid=uid, target=MigrationPhase.verified, owner_id=owner_id, ownership_epoch=lease.ownership_epoch
             )
             if self.hooks.read_cutover is not None:
+                lease = self.renew(uid, lease)
                 self.hooks.read_cutover(uid, manifest.fence)
+                lease = self.renew(uid, lease)
             self.transition(
                 uid=uid, target=MigrationPhase.read_cutover, owner_id=owner_id, ownership_epoch=lease.ownership_epoch
             )
@@ -467,7 +679,12 @@ class CanonicalMigrationController:
                     self.store.compare_and_set_checkpoint(
                         uid,
                         current.version,
-                        current.transition(MigrationPhase.failed, blocking=blocking, lease=current.lease),
+                        current.transition(
+                            MigrationPhase.failed,
+                            blocking=blocking,
+                            lease=current.lease,
+                            resume_phase=active_phase,
+                        ),
                         owner_id=owner_id,
                         ownership_epoch=lease.ownership_epoch,
                     )

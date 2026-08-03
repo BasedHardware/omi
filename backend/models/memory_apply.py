@@ -750,8 +750,11 @@ def apply_long_term_patch_transaction(
                     and raw_graph_receipt.get("memory_id") == existing_item.memory_id
                     and raw_graph_receipt.get("item_revision") == existing_item.item_revision
                     and raw_graph_receipt.get("content_hash") == existing_item.content_hash
-                    and sorted(raw_graph_receipt.get("evidence_ids") or [])
-                    == sorted(item.evidence_id for item in existing_item.evidence)
+                    and isinstance(raw_graph_receipt.get("evidence_ids"), list)
+                    and len(raw_graph_receipt.get("evidence_ids") or [])
+                    == len(set(raw_graph_receipt.get("evidence_ids") or []))
+                    and sorted(set(raw_graph_receipt.get("evidence_ids") or []))
+                    == sorted(set(item.evidence_id for item in existing_item.evidence))
                     and raw_graph_receipt.get("account_generation") == control_state.account_generation
                     and raw_graph_receipt.get("source_generation") == control_state.source_generation
                     and graph_plan is not None
@@ -788,7 +791,8 @@ def apply_long_term_patch_transaction(
                     and patch.predicate == graph_plan.predicate
                     and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))
                     and patch.arguments == graph_plan.arguments
-                    and [item.evidence_id for item in evidence] == [item.evidence_id for item in existing_item.evidence]
+                    and sorted(set(item.evidence_id for item in evidence))
+                    == sorted(set(item.evidence_id for item in existing_item.evidence))
                 )
                 if not valid_graph_enrichment:
                     return ApplyResult(

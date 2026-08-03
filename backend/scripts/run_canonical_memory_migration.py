@@ -111,6 +111,14 @@ def main(argv: list[str] | None = None) -> int:
         validate_confirmation(apply=args.apply, confirm_apply=args.confirm_apply)
         if args.apply and not args.firestore_project:
             raise ValueError("--firestore-project is required with --apply")
+        if args.apply:
+            # This CLI intentionally ships no canonical processing, graph
+            # apply, projection, verifier, or cutover callbacks.  Failing
+            # before credential/client construction prevents an operator from
+            # advancing a durable checkpoint with the placeholder verifier.
+            raise ValueError(
+                "--apply is unavailable until concrete canonical migration hooks are configured; use --inventory-json for dry-run"
+            )
         if not args.apply and args.inventory_json is None:
             raise ValueError("dry-run requires --inventory-json or --apply for a live inventory")
     except ValueError as exc:

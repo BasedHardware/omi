@@ -16,7 +16,7 @@ from models.memory_migration import (
     MigrationTransitionError,
     validate_migration_transition,
 )
-from utils.memory.canonical_migration_controller import verify_migration_postconditions
+from utils.memory.canonical_migration_controller import _projection_matches_item, verify_migration_postconditions
 from utils.memory.graph_enrichment import GraphEnrichmentPlan
 
 
@@ -31,6 +31,8 @@ def _inventory(*, stable: bool = True) -> MigrationInventory:
         head_sequence=4,
         item_ids=["m1"],
         item_revisions={"m1": 3},
+        item_content_hashes={"m1": "hash-m1"},
+        item_evidence_ids={"m1": ["e1"]},
         stable=stable,
     )
 
@@ -78,6 +80,46 @@ def test_checkpoint_cas_and_lease_epoch_reject_races():
 def test_graph_plan_rejects_non_snake_case_predicate():
     with pytest.raises(ValueError):
         GraphEnrichmentPlan(subject_entity_id="self", predicate="LIKES-FOOD", arguments={"value": "x"})
+
+
+def test_projection_freshness_uses_compatibility_payload_and_migration_fence():
+    fence = MigrationFence(
+        account_generation=1,
+        source_generation=2,
+        inventory_id="inv1",
+        inventory_fingerprint="fp1",
+        observed_head_commit_id="head1",
+        observed_head_sequence=4,
+    )
+    item = {
+        "uid": "u1",
+        "memory_id": "m1",
+        "item_revision": 3,
+        "content_hash": "hash-m1",
+        "content": "current text",
+        "tier": "short_term",
+    }
+    row = {
+        "uid": "u1",
+        "schema_version": 1,
+        "source": "memory_items_projection",
+        "memory_id": "m1",
+        "account_generation": 1,
+        "projection_generation": 1,
+        "source_commit_id": "head1",
+        "projection_commit_id": "commit-head1",
+        "projection_evidence_fence": "head-head1",
+        "write_convergence_complete": True,
+        "delete_convergence_complete": True,
+        "tombstone_convergence_complete": True,
+        "memorydb": {"content": "current text", "memory_tier": "short_term"},
+    }
+
+    assert _projection_matches_item(row, item, fence)
+    assert not _projection_matches_item({**row, "source_commit_id": "older-head"}, item, fence)
+    assert not _projection_matches_item(
+        {**row, "memorydb": {"content": "stale", "memory_tier": "short_term"}}, item, fence
+    )
 
 
 def test_final_verifier_blocks_unstable_inventory_and_missing_graph_projection():

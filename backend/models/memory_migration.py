@@ -32,16 +32,6 @@ class MigrationPhase(str, Enum):
     read_cutover = "read_cutover"
     failed = "failed"
     paused = "paused"
-    INVENTORIED = "inventoried"
-    WRITE_ENROLLED = "write_enrolled"
-    STAGED = "staged"
-    CANONICAL_PROCESSING = "canonical_processing"
-    GRAPH_ENRICHMENT = "graph_enrichment"
-    PROJECTION_CONVERGENCE = "projection_convergence"
-    VERIFIED = "verified"
-    READ_CUTOVER = "read_cutover"
-    FAILED = "failed"
-    PAUSED = "paused"
 
 
 # A failed/paused run may only resume at the phase recorded in resume_phase.
@@ -80,11 +70,6 @@ def validate_migration_transition(current: MigrationPhase, target: MigrationPhas
         return
     if target not in _PHASE_TRANSITIONS[current]:
         raise MigrationTransitionError(f"invalid canonical migration transition: {current.value} -> {target.value}")
-
-
-# Compatibility names used by early callers/tests.
-validate_phase_transition = validate_migration_transition
-MigrationState = MigrationPhase
 
 
 class MigrationBlockCode(str, Enum):
@@ -216,8 +201,8 @@ class CanonicalMigrationCheckpoint(BaseModel):
             raise ValueError("failed/paused checkpoints require resume_phase")
         if self.phase not in {MigrationPhase.failed, MigrationPhase.paused} and self.resume_phase is not None:
             raise ValueError("resume_phase is only valid for failed/paused checkpoints")
-        if self.phase == MigrationPhase.verified and self.verified_at is None:
-            raise ValueError("verified checkpoints require verified_at")
+        if self.phase in {MigrationPhase.verified, MigrationPhase.read_cutover} and self.verified_at is None:
+            raise ValueError("verified/read_cutover checkpoints require verified_at")
         return self
 
     def transition(
@@ -228,11 +213,12 @@ class CanonicalMigrationCheckpoint(BaseModel):
         lease: Optional[MigrationLease] = None,
         manifest_id: Optional[str] = None,
         verified_at: Optional[datetime] = None,
+        resume_phase: Optional[MigrationPhase] = None,
     ) -> "CanonicalMigrationCheckpoint":
         if target in {MigrationPhase.failed, MigrationPhase.paused}:
             if self.phase == MigrationPhase.read_cutover:
                 raise MigrationTransitionError("read_cutover is terminal and cannot be paused or failed")
-            resume = (
+            resume = resume_phase or (
                 self.phase if self.phase not in {MigrationPhase.failed, MigrationPhase.paused} else self.resume_phase
             )
             if resume is None:
@@ -254,6 +240,8 @@ class CanonicalMigrationCheckpoint(BaseModel):
                 )
         else:
             validate_migration_transition(self.phase, target)
+        if target == MigrationPhase.read_cutover and self.verified_at is None:
+            raise MigrationTransitionError("read_cutover requires a verified_at timestamp")
         return self.model_copy(
             update={
                 "phase": target,
@@ -302,6 +290,29 @@ class MigrationInventory(BaseModel):
     def normalize_item_ids(cls, value: List[str]) -> List[str]:
         return sorted({item.strip() for item in value if item and item.strip()})
 
+    @model_validator(mode="after")
+    def validate_item_fences(self) -> "MigrationInventory":
+        item_ids = set(self.item_ids)
+        if set(self.item_revisions) != item_ids:
+            raise ValueError("inventory item_revisions must represent every and only item_ids")
+        if set(self.item_content_hashes) != item_ids:
+            raise ValueError("inventory item_content_hashes must represent every and only item_ids")
+        if set(self.item_evidence_ids) != item_ids:
+            raise ValueError("inventory item_evidence_ids must represent every and only item_ids")
+        for item_id in self.item_ids:
+            revision = self.item_revisions[item_id]
+            if revision < 1:
+                raise ValueError(f"inventory item revision must be positive: {item_id}")
+            content_hash = self.item_content_hashes[item_id]
+            if not content_hash.strip():
+                raise ValueError(f"inventory content hash must be nonblank: {item_id}")
+            evidence = self.item_evidence_ids[item_id]
+            if not evidence or any(not value.strip() for value in evidence):
+                raise ValueError(f"inventory item requires nonblank evidence ids: {item_id}")
+            if len(set(evidence)) != len(evidence):
+                raise ValueError(f"inventory item evidence ids must be unique: {item_id}")
+        return self
+
 
 class CanonicalMigrationManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -317,6 +328,32 @@ class CanonicalMigrationManifest(BaseModel):
     stable_inventory: bool = False
     bounded_delta: bool = False
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("item_ids")
+    @classmethod
+    def normalize_manifest_item_ids(cls, value: List[str]) -> List[str]:
+        return sorted({item.strip() for item in value if item and item.strip()})
+
+    @model_validator(mode="after")
+    def validate_item_fences(self) -> "CanonicalMigrationManifest":
+        item_ids = set(self.item_ids)
+        if set(self.item_revisions) != item_ids:
+            raise ValueError("manifest item_revisions must represent every and only item_ids")
+        if set(self.item_content_hashes) != item_ids:
+            raise ValueError("manifest item_content_hashes must represent every and only item_ids")
+        if set(self.item_evidence_ids) != item_ids:
+            raise ValueError("manifest item_evidence_ids must represent every and only item_ids")
+        for item_id in self.item_ids:
+            if self.item_revisions[item_id] < 1:
+                raise ValueError(f"manifest item revision must be positive: {item_id}")
+            if not self.item_content_hashes[item_id].strip():
+                raise ValueError(f"manifest content hash must be nonblank: {item_id}")
+            evidence = self.item_evidence_ids[item_id]
+            if not evidence or any(not value.strip() for value in evidence):
+                raise ValueError(f"manifest item requires evidence ids: {item_id}")
+            if len(set(evidence)) != len(evidence):
+                raise ValueError(f"manifest item evidence ids must be unique: {item_id}")
+        return self
 
     @classmethod
     def from_inventory(cls, inventory: MigrationInventory) -> "CanonicalMigrationManifest":
@@ -398,10 +435,22 @@ class CanonicalMigrationWorkRecord(BaseModel):
             raise ValueError("migration work counters must be nonnegative")
         return value
 
+    @field_validator("item_revision")
+    @classmethod
+    def validate_item_revision(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("migration work item_revision must be positive")
+        return value
 
-MigrationCheckpoint = CanonicalMigrationCheckpoint
-MigrationManifest = CanonicalMigrationManifest
-MigrationWorkRecord = CanonicalMigrationWorkRecord
+    @field_validator("evidence_ids")
+    @classmethod
+    def normalize_evidence_ids(cls, value: List[str]) -> List[str]:
+        normalized = sorted({item.strip() for item in value if item and item.strip()})
+        if not normalized:
+            raise ValueError("migration work record requires evidence ids")
+        if len(normalized) != len(value):
+            raise ValueError("migration work evidence ids must be unique and nonblank")
+        return normalized
 
 
 __all__ = [
@@ -410,17 +459,12 @@ __all__ = [
     "CanonicalMigrationWorkRecord",
     "MigrationBlockCode",
     "MigrationBlockingState",
-    "MigrationCheckpoint",
     "MigrationFence",
     "MigrationInventory",
     "MigrationLease",
-    "MigrationManifest",
     "MigrationPhase",
-    "MigrationState",
     "MigrationTransitionError",
     "MigrationWorkStatus",
-    "MigrationWorkRecord",
     "MIGRATION_SCHEMA_VERSION",
     "validate_migration_transition",
-    "validate_phase_transition",
 ]

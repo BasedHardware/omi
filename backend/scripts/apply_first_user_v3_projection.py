@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Build/apply a complete, redacted `/v3` compatibility projection.
+"""Build/apply a complete, redacted `/v3` compatibility projection repair.
 
 Default mode is dry-run. Firestore writes require both ``--apply`` and an exact
 ``--confirm-uid`` match. The script writes only the compatibility projection
-state/items paths for the requested user.
+state/items paths for the requested user. It deliberately never publishes read
+cutover readiness: only the canonical migration controller may do that after it
+has verified graph assertions, projection freshness, and the durable outbox.
 """
 
 from __future__ import annotations
@@ -179,6 +181,8 @@ def _projection_skip_reason(data: dict[str, Any]) -> str | None:
         return "not_default_tier"
     if data.get("deleted") is True or data.get("tombstoned") is True:
         return "deleted_or_tombstoned"
+    if data.get("archive") is True:
+        return "archived"
     restricted = _labels(data).intersection(RESTRICTED_SENSITIVITY_LABELS)
     if restricted or data.get("restricted_sensitivity") is True:
         return "restricted_sensitivity"
@@ -316,7 +320,10 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
         raise ValueError(f"--limit must be between 1 and {MAX_LIMIT}")
     head_path, head = _read_head(db_client, uid=uid)
     full_rebuild = memory_id is None
-    fences = _projection_fences(uid, head, ready=full_rebuild)
+    # A manual projection rebuild is a repair operation, not canonical migration
+    # verification.  Keep reads fail-closed until the controller writes a
+    # verified read-cutover checkpoint at this same inventory/head fence.
+    fences = _projection_fences(uid, head, ready=False)
     source_rows = _stream_memory_items(db_client, uid=uid, memory_id=memory_id, limit=limit)
     if not source_rows and not full_rebuild:
         raise RuntimeError("memory item was not found for partial projection inspection")
@@ -351,6 +358,7 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
         sorted(set(_projection_item_paths(db_client, uid=uid)) - projected_paths) if full_rebuild else []
     )
 
+    touched_paths = sorted(set(writes).union(stale_projection_paths))
     return ProjectionBuild(
         uid=uid,
         project=project,
@@ -364,7 +372,8 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
             "project": project,
             "uid": uid,
             "dry_run_default": True,
-            "touched_path_count": len(writes) + len(stale_projection_paths),
+            "touched_path_count": len(touched_paths),
+            "touched_doc_paths": touched_paths,
             "operator_action": "delete or restore these exact projection docs from backup if rollback is required",
         },
         redacted_items=redacted_items,
@@ -398,6 +407,9 @@ def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
     _, final_head = _read_head(db_client, uid=build.uid)
     if final_head != build.source_head:
         raise RuntimeError("source head changed during projection rebuild; projection remains not ready")
+    # ``final_state`` remains not-ready by construction.  Do not add a direct
+    # ready=True write here: that would race the head check and bypass the
+    # migration controller's complete postcondition verifier.
     db_client.document(state_path).set(final_state)
     return [state_path, *item_paths, *build.stale_projection_paths]
 

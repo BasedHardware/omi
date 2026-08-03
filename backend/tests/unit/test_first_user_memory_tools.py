@@ -228,6 +228,20 @@ def test_projection_skips_restricted_sensitivity_by_default():
     assert build.skipped_by_reason == {"restricted_sensitivity": 1}
 
 
+def test_projection_skips_archived_memory_even_with_default_tier():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    archived = _memory_item(uid)
+    archived["archive"] = True
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = archived
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.redacted_items == []
+    assert build.skipped_by_reason == {"archived": 1}
+
+
 def test_projection_item_preserves_source_created_at_before_updated_at():
     uid = "uid-a"
     old_created_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -291,7 +305,30 @@ def test_full_rebuild_removes_stale_projection_rows():
     projection_tool.apply_projection(db, build)
 
     assert stale_path not in db.docs
-    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is True
+    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is False
+
+
+def test_projection_repair_never_publishes_read_cutover_ready_state():
+    uid = "uid-a"
+    db = _Db(_ready_docs(uid))
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    projection_tool.apply_projection(db, build)
+
+    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is False
+
+
+def test_projection_rollback_manifest_lists_exact_touched_paths():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    stale_path = f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/stale"
+    docs[stale_path] = _projection_item(uid, "stale")
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.rollback_manifest["touched_doc_paths"] == sorted([*build.writes, *build.stale_projection_paths])
+    assert build.rollback_manifest["touched_path_count"] == len(build.rollback_manifest["touched_doc_paths"])
 
 
 def test_source_change_leaves_full_rebuild_not_ready(monkeypatch):

@@ -88,6 +88,8 @@ class InMemoryMigrationStore:
         ownership_epoch: Optional[int] = None,
     ) -> CanonicalMigrationCheckpoint:
         with self._lock:
+            if checkpoint.uid != uid:
+                raise MigrationFenceConflict("checkpoint uid mismatch")
             current = self._checkpoints.get(uid)
             if current is None:
                 if expected_version != -1:
@@ -165,6 +167,8 @@ class InMemoryMigrationStore:
 
     def write_manifest(self, manifest: CanonicalMigrationManifest) -> CanonicalMigrationManifest:
         with self._lock:
+            if not manifest.uid.strip():
+                raise MigrationFenceConflict("manifest uid must not be blank")
             key = (manifest.uid, manifest.manifest_id)
             prior = self._manifests.get(key)
             if prior is not None and prior != manifest:
@@ -178,15 +182,25 @@ class InMemoryMigrationStore:
 
     def upsert_work_record(self, record: CanonicalMigrationWorkRecord) -> CanonicalMigrationWorkRecord:
         with self._lock:
+            if not record.uid.strip() or not record.manifest_id.strip() or not record.item_id.strip():
+                raise MigrationFenceConflict("work record identity must not be blank")
             key = (record.uid, record.manifest_id, record.item_id)
             prior = self._work.get(key)
             if prior is not None:
-                if prior.manifest_id != record.manifest_id:
-                    raise MigrationFenceConflict("work record manifest mismatch")
-                if (prior.item_revision, prior.content_hash, prior.evidence_ids) != (
+                if (prior.uid, prior.manifest_id, prior.item_id) != (record.uid, record.manifest_id, record.item_id):
+                    raise MigrationFenceConflict("work record identity mismatch")
+                if (
+                    prior.item_revision,
+                    prior.content_hash,
+                    prior.evidence_ids,
+                    prior.account_generation,
+                    prior.source_generation,
+                ) != (
                     record.item_revision,
                     record.content_hash,
                     record.evidence_ids,
+                    record.account_generation,
+                    record.source_generation,
                 ):
                     raise MigrationFenceConflict("work record item fence is immutable")
             self._work[key] = record
@@ -240,7 +254,10 @@ class FirestoreMigrationStore:
     def _decode_checkpoint(self, uid: str, snapshot: Any) -> Optional[CanonicalMigrationCheckpoint]:
         if not getattr(snapshot, "exists", False):
             return None
-        return parse_snapshot_strict(CanonicalMigrationCheckpoint, snapshot)
+        checkpoint = parse_snapshot_strict(CanonicalMigrationCheckpoint, snapshot)
+        if checkpoint.uid != uid:
+            raise MigrationFenceConflict("checkpoint uid does not match requested user")
+        return checkpoint
 
     def read_checkpoint(self, uid: str) -> Optional[CanonicalMigrationCheckpoint]:
         return self._decode_checkpoint(uid, self._ref(self._control_path(uid)).get())
@@ -265,13 +282,17 @@ class FirestoreMigrationStore:
         def body(tx: Any) -> CanonicalMigrationCheckpoint:
             snapshot = ref.get(transaction=tx)
             current = self._decode_checkpoint(uid, snapshot)
+            if checkpoint.uid != uid:
+                raise MigrationFenceConflict("checkpoint uid mismatch")
             if (current is None and expected_version != -1) or (
                 current is not None and current.version != expected_version
             ):
                 raise MigrationCheckpointConflict("checkpoint version mismatch")
             if current is not None and current.fence != checkpoint.fence:
                 raise MigrationFenceConflict("migration fence is immutable")
-            if current is not None and owner_id is not None:
+            if current is not None and (owner_id is not None or ownership_epoch is not None):
+                if owner_id is None:
+                    raise MigrationLeaseUnavailable("owner id is required when checking lease ownership")
                 self._check_snapshot_lease(current, owner_id=owner_id, ownership_epoch=ownership_epoch)
             written = checkpoint.model_copy(update={"version": expected_version + 1, "updated_at": _now()})
             tx.set(ref, written.model_dump(mode="python"))
@@ -360,26 +381,83 @@ class FirestoreMigrationStore:
     release_user_lease = release_lease
 
     def write_manifest(self, manifest: CanonicalMigrationManifest) -> CanonicalMigrationManifest:
-        self._ref(self._manifest_path(manifest.uid, manifest.manifest_id)).set(manifest.model_dump(mode="python"))
-        return manifest
+        if not manifest.uid.strip() or not manifest.manifest_id.strip():
+            raise MigrationFenceConflict("manifest identity must not be blank")
+        transaction = self._db.transaction()
+        ref = self._ref(self._manifest_path(manifest.uid, manifest.manifest_id))
+
+        def body(tx: Any) -> CanonicalMigrationManifest:
+            snapshot = ref.get(transaction=tx)
+            if getattr(snapshot, "exists", False):
+                prior = parse_snapshot_strict(CanonicalMigrationManifest, snapshot)
+                if prior.uid != manifest.uid or prior.manifest_id != manifest.manifest_id:
+                    raise MigrationFenceConflict("manifest identity mismatch")
+                if prior != manifest:
+                    raise MigrationCheckpointConflict("manifest id already contains different data")
+                return prior
+            (
+                tx.create(ref, manifest.model_dump(mode="python"))
+                if hasattr(tx, "create")
+                else tx.set(ref, manifest.model_dump(mode="python"))
+            )
+            return manifest
+
+        return self._transactional(transaction, body)
 
     def read_manifest(self, uid: str, manifest_id: str) -> Optional[CanonicalMigrationManifest]:
         snapshot = self._ref(self._manifest_path(uid, manifest_id)).get()
-        return (
+        manifest = (
             parse_snapshot_strict(CanonicalMigrationManifest, snapshot) if getattr(snapshot, "exists", False) else None
         )
+        if manifest is not None and (manifest.uid != uid or manifest.manifest_id != manifest_id):
+            raise MigrationFenceConflict("manifest identity does not match requested path")
+        return manifest
 
     def upsert_work_record(self, record: CanonicalMigrationWorkRecord) -> CanonicalMigrationWorkRecord:
-        self._ref(self._work_path(record.uid, record.manifest_id, record.item_id)).set(record.model_dump(mode="python"))
-        return record
+        if not record.uid.strip() or not record.manifest_id.strip() or not record.item_id.strip():
+            raise MigrationFenceConflict("work record identity must not be blank")
+        transaction = self._db.transaction()
+        ref = self._ref(self._work_path(record.uid, record.manifest_id, record.item_id))
+
+        def body(tx: Any) -> CanonicalMigrationWorkRecord:
+            snapshot = ref.get(transaction=tx)
+            if getattr(snapshot, "exists", False):
+                prior = parse_snapshot_strict(CanonicalMigrationWorkRecord, snapshot)
+                if (prior.uid, prior.manifest_id, prior.item_id) != (record.uid, record.manifest_id, record.item_id):
+                    raise MigrationFenceConflict("work record identity mismatch")
+                if (
+                    prior.item_revision,
+                    prior.content_hash,
+                    prior.evidence_ids,
+                    prior.account_generation,
+                    prior.source_generation,
+                ) != (
+                    record.item_revision,
+                    record.content_hash,
+                    record.evidence_ids,
+                    record.account_generation,
+                    record.source_generation,
+                ):
+                    raise MigrationFenceConflict("work record item fence is immutable")
+            tx.set(ref, record.model_dump(mode="python"))
+            return record
+
+        return self._transactional(transaction, body)
 
     def read_work_records(self, uid: str, manifest_id: str) -> List[CanonicalMigrationWorkRecord]:
         parent = self._ref(f"users/{uid}/{MIGRATION_WORK_COLLECTION}/{manifest_id}")
         items = parent.collection("items").stream()
         return sorted(
-            [parse_snapshot_strict(CanonicalMigrationWorkRecord, snapshot) for snapshot in items],
+            [self._decode_work_record(uid, manifest_id, snapshot) for snapshot in items],
             key=lambda value: value.item_id,
         )
+
+    @staticmethod
+    def _decode_work_record(uid: str, manifest_id: str, snapshot: Any) -> CanonicalMigrationWorkRecord:
+        record = parse_snapshot_strict(CanonicalMigrationWorkRecord, snapshot)
+        if record.uid != uid or record.manifest_id != manifest_id:
+            raise MigrationFenceConflict("work record identity does not match requested path")
+        return record
 
     @staticmethod
     def _check_snapshot_lease(
