@@ -1,14 +1,17 @@
 from datetime import datetime, timezone
+import importlib
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 import uuid
 
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud import firestore
 
 from models.memory_contracts import deterministic_contract_id
 from models.memory_promotion import MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
-from ._client import db
+_client = importlib.import_module(f"{__package__}._client")
+db = _client.db
 from .read_boundary import parse_snapshot_or_none
 
 users_collection = 'users'
@@ -29,6 +32,33 @@ KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 def _firestore_client(db_client: Any = None) -> Any:
     return db_client if db_client is not None else db
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+class InvalidKnowledgeGraphDocumentIdError(ValueError):
+    """Raised when a synced knowledge-graph id cannot be used as a Firestore document id."""
+
+
+def _validated_document_id(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} must be a non-empty string")
+    normalized = value.strip()
+    if (
+        normalized in {".", ".."}
+        or (normalized.startswith("__") and normalized.endswith("__"))
+        or "/" in normalized
+        or "\x00" in normalized
+        or len(normalized.encode("utf-8")) > 1500
+    ):
+        raise InvalidKnowledgeGraphDocumentIdError(f"{field_name} is not a valid Firestore document id")
+    return normalized
+
+
+def validate_knowledge_graph_document_id(value: Any, field_name: str) -> str:
+    return _validated_document_id(value, field_name)
 
 
 def delete_memory_graph_assertion(uid: str, memory_id: str, *, db_client: Any = None) -> None:
@@ -177,10 +207,17 @@ def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Opti
     return _typed_doc(doc)
 
 
-def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
+def upsert_knowledge_node(
+    uid: str,
+    node_data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    resolve_absent_id_by_label: bool = True,
+) -> Dict[str, Any]:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    now = datetime.now(timezone.utc)
 
     node_id = node_data.get('id')
     if not node_id:
@@ -192,16 +229,22 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
             node_id = str(uuid.uuid4())
         node_data['id'] = node_id
 
+    node_id = _validated_document_id(node_id, "node id")
+    node_data["id"] = node_id
     node_ref = nodes_ref.document(node_id)
     existing = node_ref.get()
 
-    if not existing.exists:
+    if not existing.exists and resolve_absent_id_by_label:
         existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node_by_label:
             node_id = existing_node_by_label['id']
             node_data['id'] = node_id
             node_ref = nodes_ref.document(node_id)
             existing = node_ref.get()
+
+    node_id = _validated_document_id(node_id, "node id")
+    node_data["id"] = node_id
+    node_ref = nodes_ref.document(node_id)
 
     if existing.exists:
         existing_data: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(existing))
@@ -215,18 +258,97 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
 
         node_data['memory_ids'] = merged_memory_ids
         node_data['aliases'] = merged_aliases
-        node_data['updated_at'] = datetime.now(timezone.utc)
-        node_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
+        incoming_updated = node_data.get('updated_at')
+        existing_updated = existing_data.get('updated_at')
+        if incoming_updated is not None:
+            if (
+                isinstance(incoming_updated, datetime)
+                and isinstance(existing_updated, datetime)
+                and _as_utc(existing_updated) > _as_utc(incoming_updated)
+            ):
+                node_data['updated_at'] = existing_updated
+                if 'label' in existing_data:
+                    node_data['label'] = existing_data['label']
+                if 'node_type' in existing_data:
+                    node_data['node_type'] = existing_data['node_type']
+            else:
+                node_data['updated_at'] = incoming_updated
+        else:
+            node_data['updated_at'] = now
+        node_data['created_at'] = existing_data.get('created_at', node_data.get('created_at') or now)
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
     else:
-        node_data['created_at'] = datetime.now(timezone.utc)
-        node_data['updated_at'] = datetime.now(timezone.utc)
+        node_data['created_at'] = node_data.get('created_at') or now
+        node_data['updated_at'] = node_data.get('updated_at') or now
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
     node_ref.set(node_data)
     return node_data
+
+
+def _merge_knowledge_node_data(
+    node_data: Dict[str, Any], existing_data: Optional[Dict[str, Any]], now: datetime
+) -> Dict[str, Any]:
+    merged = dict(node_data)
+    if existing_data is not None:
+        merged['memory_ids'] = list(set(existing_data.get('memory_ids', [])) | set(merged.get('memory_ids', [])))
+        merged['aliases'] = list(set(existing_data.get('aliases', [])) | set(merged.get('aliases', [])))
+        incoming_updated = merged.get('updated_at')
+        existing_updated = existing_data.get('updated_at')
+        if (
+            isinstance(incoming_updated, datetime)
+            and isinstance(existing_updated, datetime)
+            and _as_utc(existing_updated) > _as_utc(incoming_updated)
+        ):
+            merged['updated_at'] = existing_updated
+            if 'label' in existing_data:
+                merged['label'] = existing_data['label']
+            if 'node_type' in existing_data:
+                merged['node_type'] = existing_data['node_type']
+        else:
+            merged['updated_at'] = incoming_updated or now
+        merged['created_at'] = existing_data.get('created_at', merged.get('created_at') or now)
+    else:
+        merged['created_at'] = merged.get('created_at') or now
+        merged['updated_at'] = merged.get('updated_at') or now
+    merged['label_lower'] = merged.get('label', '').lower()
+    merged['aliases_lower'] = [alias.lower() for alias in merged.get('aliases', [])]
+    return merged
+
+
+def merge_knowledge_nodes_batch(
+    uid: str, node_data: Iterable[Dict[str, Any]], *, db_client: Any = None
+) -> List[Dict[str, Any]]:
+    client = db_client if db_client is not None else _client.get_firestore_client()
+    nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
+    values = {data['id']: dict(data) for data in node_data}
+    refs = [nodes_ref.document(node_id) for node_id in values]
+    now = datetime.now(timezone.utc)
+
+    def merge_snapshots(snapshots: Iterable[Any]) -> List[Dict[str, Any]]:
+        existing = {snapshot.id: _typed_doc(snapshot) for snapshot in snapshots if snapshot.exists}
+        return [_merge_knowledge_node_data(data, existing.get(data['id']), now) for data in values.values()]
+
+    if callable(getattr(client, 'transaction', None)):
+
+        @firestore.transactional
+        def transact(transaction: Any) -> List[Dict[str, Any]]:
+            snapshots = transaction.get_all(refs)
+            merged = merge_snapshots(snapshots)
+            for data in merged:
+                transaction.set(nodes_ref.document(data['id']), data)
+            return merged
+
+        return _client.run_transactional(client, transact)
+
+    merged = merge_snapshots(client.get_all(refs))
+    batch = client.batch()
+    for data in merged:
+        batch.set(nodes_ref.document(data['id']), data)
+    batch.commit()
+    return merged
 
 
 def find_node_by_label_or_alias(uid: str, label: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
@@ -270,11 +392,14 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
+    now = datetime.now(timezone.utc)
 
     edge_id = edge_data.get('id')
     if not edge_id:
         edge_id = f"{edge_data['source_id']}_{edge_data['label']}_{edge_data['target_id']}"
-    edge_id = edge_id.replace('/', '_')
+    if isinstance(edge_id, str):
+        edge_id = edge_id.replace('/', '_')
+    edge_id = _validated_document_id(edge_id, "edge id")
     edge_data['id'] = edge_id
 
     edge_ref = edges_ref.document(edge_id)
@@ -287,12 +412,57 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
         merged_memory_ids = list(existing_memory_ids | new_memory_ids)
 
         edge_data['memory_ids'] = merged_memory_ids
-        edge_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
+        edge_data['created_at'] = existing_data.get('created_at', edge_data.get('created_at') or now)
     else:
-        edge_data['created_at'] = datetime.now(timezone.utc)
+        edge_data['created_at'] = edge_data.get('created_at') or now
 
     edge_ref.set(edge_data)
     return edge_data
+
+
+def _merge_knowledge_edge_data(
+    edge_data: Dict[str, Any], existing_data: Optional[Dict[str, Any]], now: datetime
+) -> Dict[str, Any]:
+    merged = dict(edge_data)
+    if existing_data is not None:
+        merged['memory_ids'] = list(set(existing_data.get('memory_ids', [])) | set(merged.get('memory_ids', [])))
+        merged['created_at'] = existing_data.get('created_at', merged.get('created_at') or now)
+    else:
+        merged['created_at'] = merged.get('created_at') or now
+    return merged
+
+
+def merge_knowledge_edges_batch(
+    uid: str, edge_data: Iterable[Dict[str, Any]], *, db_client: Any = None
+) -> List[Dict[str, Any]]:
+    client = db_client if db_client is not None else _client.get_firestore_client()
+    edges_ref = client.collection(users_collection).document(uid).collection(knowledge_edges_collection)
+    values = {data['id']: dict(data) for data in edge_data}
+    refs = [edges_ref.document(edge_id) for edge_id in values]
+    now = datetime.now(timezone.utc)
+
+    def merge_snapshots(snapshots: Iterable[Any]) -> List[Dict[str, Any]]:
+        existing = {snapshot.id: _typed_doc(snapshot) for snapshot in snapshots if snapshot.exists}
+        return [_merge_knowledge_edge_data(data, existing.get(data['id']), now) for data in values.values()]
+
+    if callable(getattr(client, 'transaction', None)):
+
+        @firestore.transactional
+        def transact(transaction: Any) -> List[Dict[str, Any]]:
+            snapshots = transaction.get_all(refs)
+            merged = merge_snapshots(snapshots)
+            for data in merged:
+                transaction.set(edges_ref.document(data['id']), data)
+            return merged
+
+        return _client.run_transactional(client, transact)
+
+    merged = merge_snapshots(client.get_all(refs))
+    batch = client.batch()
+    for data in merged:
+        batch.set(edges_ref.document(data['id']), data)
+    batch.commit()
+    return merged
 
 
 def _enum_value(value: Any) -> Any:
@@ -763,6 +933,25 @@ def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
 
     edges_ref = user_ref.collection(knowledge_edges_collection)
     _batch_delete(edges_ref)
+
+
+def delete_namespaced_knowledge_graph(uid: str, namespace: str, *, db_client: Any = None) -> int:
+    client = db_client if db_client is not None else _client.get_firestore_client()
+    user_ref = client.collection(users_collection).document(uid)
+    deleted = 0
+
+    for collection_name in (knowledge_edges_collection, knowledge_nodes_collection):
+        collection_ref = user_ref.collection(collection_name)
+        query = collection_ref.where(filter=FieldFilter("sync_namespace", "==", namespace))
+        documents = [doc for doc in query.stream() if _typed_doc(doc).get("sync_namespace") == namespace]
+        while documents:
+            batch = client.batch()
+            for document in documents[:450]:
+                batch.delete(document.reference)
+            batch.commit()
+            deleted += min(450, len(documents))
+            documents = documents[450:]
+    return deleted
 
 
 def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client: Any = None) -> int:

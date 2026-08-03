@@ -2095,6 +2095,23 @@ export interface LlmUsageResponse {
   top_features?: Array<LlmUsageFeatureResponse>;
 }
 
+export interface LocalKgSyncRequest {
+  reconcile_complete?: boolean;
+  rows: Array<Record<string, unknown>>;
+  source_namespace: string;
+  table: "local_kg_nodes" | "local_kg_edges";
+}
+
+export interface LocalKgSyncResponse {
+  deleted?: number;
+  edges_evicted: number;
+  merged: number;
+  nodes_evicted: number;
+  quarantined?: number;
+  skipped: number;
+  table: string;
+}
+
 export interface LocationContextConsentResponse {
   disclosed_providers?: Array<unknown>;
   enabled: boolean;
@@ -4146,6 +4163,8 @@ export interface OmiApiSchemas {
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
   "LlmUsageResponse": LlmUsageResponse;
+  "LocalKgSyncRequest": LocalKgSyncRequest;
+  "LocalKgSyncResponse": LocalKgSyncResponse;
   "LocationContextConsentResponse": LocationContextConsentResponse;
   "LocationContextConsentUpdate": LocationContextConsentUpdate;
   "MaterializePromptsRequest": MaterializePromptsRequest;
@@ -6396,6 +6415,16 @@ export interface OmiApiPaths {
       operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
       responses: {
         "200": RebuildResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/knowledge-graph/sync": {
+    post: {
+      operationId: "sync_local_knowledge_graph_v1_knowledge_graph_sync_post";
+      responses: {
+        "200": LocalKgSyncResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12279,6 +12308,27 @@ export async function rebuild_graph_v1_knowledge_graph_rebuild_post(header: { au
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function sync_local_knowledge_graph_v1_knowledge_graph_sync_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: LocalKgSyncRequest, init?: OmiApiClientInit): Promise<LocalKgSyncResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/knowledge-graph/sync`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_action_items_v1_mcp_action_items_get(query: { completed?: boolean | null, due_start_date?: string | null, due_end_date?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleActionItem>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/action-items`;
@@ -16040,4 +16090,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 391 client methods generated.
+// Total: 392 client methods generated.

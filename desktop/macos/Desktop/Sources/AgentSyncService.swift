@@ -23,6 +23,7 @@ private struct AgentSyncRowsPayload: @unchecked Sendable {
 /// Cursors are persisted in UserDefaults so sync resumes after restart.
 actor AgentSyncService {
   static let shared = AgentSyncService()
+  static let graphSyncProtocolVersion = 2
 
   enum DatabaseReadiness: Equatable {
     case ready
@@ -102,6 +103,10 @@ actor AgentSyncService {
     tableSpecs.filter { !$0.includedColumns.isEmpty }.map(\.name)
   }
 
+  static func graphSyncNeedsReconciliation(storedProtocolVersion: Int, reconciliationRequested: Bool) -> Bool {
+    storedProtocolVersion != graphSyncProtocolVersion || reconciliationRequested
+  }
+
   static func resolvedColumnsForTable(_ name: String, schemaColumns: [String]) -> [String]? {
     guard let spec = tableSpecs.first(where: { $0.name == name }) else { return nil }
     return resolveSyncColumns(spec: spec, schemaColumns: schemaColumns)
@@ -140,6 +145,7 @@ actor AgentSyncService {
   /// restart, VM replacement, or effective-owner transition.
   private var syncGeneration: UInt64 = 0
   private var cursorOwnerID: String?
+  private var graphReconcileNeeded = false
   private var latencyBackoffMultiplier: UInt64 = 1
   private var requiredSchemaRecovery: RequiredSchemaRecoveryState?
   private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
@@ -229,6 +235,7 @@ actor AgentSyncService {
       requiredSchemaRecovery = recovery
     }
     loadCursors(ownerID: cursorOwnerID)
+    loadGraphSyncState(ownerID: cursorOwnerID)
     log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
     return generation
   }
@@ -333,6 +340,28 @@ actor AgentSyncService {
 
     var totalSynced = 0
     var anyFailed = false
+    if graphReconcileNeeded {
+      let ownerID = cursorOwnerID
+      if let vmIP {
+        let result = await pushRows(
+          "local_kg_nodes",
+          [],
+          generation: generation,
+          ownerID: ownerID,
+          vmIP: vmIP,
+          reconcileComplete: true)
+        guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
+        if result == .success {
+          graphReconcileNeeded = false
+          if let ownerID {
+            UserDefaults.standard.removeObject(forKey: graphReconcileKey(ownerID: ownerID))
+            UserDefaults.standard.set(Self.graphSyncProtocolVersion, forKey: graphProtocolVersionKey(ownerID: ownerID))
+          }
+        } else if result == .networkError {
+          anyFailed = true
+        }
+      }
+    }
     for spec in tables {
       let count = await syncTable(spec, generation: generation)
       guard syncGeneration == generation else { return }
@@ -470,7 +499,10 @@ actor AgentSyncService {
       request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
       request.timeoutInterval = 15
 
-      let body: [String: String] = ["firebaseToken": idToken]
+      let body: [String: String] = [
+        "firebaseToken": idToken,
+        "sourceNamespace": ClientDeviceService.shared.clientDeviceId,
+      ]
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
       let (_, response) = try await networkHooks.dataForRequest(request)
@@ -685,7 +717,8 @@ actor AgentSyncService {
     _ rows: [[String: Any]],
     generation: UInt64,
     ownerID: String?,
-    vmIP: String
+    vmIP: String,
+    reconcileComplete: Bool = false
   ) async -> PushResult {
     guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP), let authToken else { return .networkError }
 
@@ -701,7 +734,11 @@ actor AgentSyncService {
     request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 30
 
-    let payload: [String: Any] = ["table": table, "rows": rows]
+    var payload: [String: Any] = ["table": table, "rows": rows]
+    if Self.graphSyncTableNames.contains(table) {
+      payload["source_namespace"] = ClientDeviceService.shared.clientDeviceId
+      payload["reconcile_complete"] = reconcileComplete
+    }
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: payload)
     } catch {
@@ -772,6 +809,29 @@ actor AgentSyncService {
     log("AgentSync: loaded cursors for \(decoded.keys.sorted().joined(separator: ", "))")
   }
 
+  private func loadGraphSyncState(ownerID: String?) {
+    guard let ownerID, !ownerID.isEmpty else {
+      graphReconcileNeeded = false
+      return
+    }
+    let versionKey = graphProtocolVersionKey(ownerID: ownerID)
+    let reconcileKey = graphReconcileKey(ownerID: ownerID)
+    let versionChanged = Self.graphSyncNeedsReconciliation(
+      storedProtocolVersion: UserDefaults.standard.integer(forKey: versionKey),
+      reconciliationRequested: UserDefaults.standard.bool(forKey: reconcileKey))
+    if versionChanged {
+      for table in Self.graphSyncTableNames {
+        cursors.removeValue(forKey: table)
+      }
+      graphReconcileNeeded = true
+      if let data = try? JSONEncoder().encode(cursors) {
+        UserDefaults.standard.set(data, forKey: cursorDefaultsKey(ownerID: ownerID))
+      }
+    } else {
+      graphReconcileNeeded = false
+    }
+  }
+
   private func saveCursors(generation: UInt64) {
     guard syncGeneration == generation,
       let ownerID = cursorOwnerID,
@@ -783,7 +843,15 @@ actor AgentSyncService {
     UserDefaults.standard.set(data, forKey: cursorDefaultsKey(ownerID: ownerID))
   }
 
-  private func cursorDefaultsKey(ownerID: String) -> String {
-    "agentSync_cursors.\(ownerID)"
+  private func cursorDefaultsKey(ownerID: String) -> ScopedDefaultsKey {
+    .agentSyncCursors(ownerID: ownerID)
+  }
+
+  private func graphProtocolVersionKey(ownerID: String) -> ScopedDefaultsKey {
+    .agentSyncGraphProtocolVersion(ownerID: ownerID)
+  }
+
+  private func graphReconcileKey(ownerID: String) -> ScopedDefaultsKey {
+    .agentSyncGraphReconcileNeeded(ownerID: ownerID)
   }
 }

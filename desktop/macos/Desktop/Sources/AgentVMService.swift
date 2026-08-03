@@ -306,7 +306,10 @@ actor AgentVMService {
       request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
       request.timeoutInterval = 15
 
-      let body: [String: String] = ["firebaseToken": idToken]
+      let body: [String: String] = [
+        "firebaseToken": idToken,
+        "sourceNamespace": ClientDeviceService.shared.clientDeviceId,
+      ]
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
       let (data, response) = try await URLSession.shared.data(for: request)

@@ -47,6 +47,7 @@ class Runtime:
         self.backend_url = os.environ.get("BACKEND_URL", "https://api.omi.me")
         self.db: sqlite3.Connection | None = None
         self.firebase_token: str | None = None
+        self.source_namespace: str | None = None
         self.backend_tools: list[dict[str, Any]] = []
         self.started_at = time.monotonic()
         self.last_activity_at = time.monotonic()
@@ -314,6 +315,64 @@ async def fetch_backend_tools() -> list[dict[str, Any]]:
         response.raise_for_status()
         data = response.json()
     return data if isinstance(data, list) else data.get("tools", [])
+
+
+LOCAL_KG_SYNC_TABLES = frozenset({"local_kg_nodes", "local_kg_edges"})
+
+
+async def promote_local_kg_to_backend(
+    table: str, rows: list[dict[str, Any]], *, reconcile_complete: bool = False
+) -> dict[str, Any] | None:
+    if table not in LOCAL_KG_SYNC_TABLES:
+        return None
+    if not runtime.firebase_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Knowledge graph promotion unavailable: Firebase token not set",
+        )
+    if not runtime.source_namespace:
+        raise HTTPException(
+            status_code=503,
+            detail="Knowledge graph promotion unavailable: source namespace not set",
+        )
+    headers = {"Authorization": f"Bearer {runtime.firebase_token}"}
+    payload = {
+        "table": table,
+        "rows": rows,
+        "source_namespace": runtime.source_namespace,
+        "reconcile_complete": reconcile_complete,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{runtime.backend_url}/v1/knowledge-graph/sync",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+            return body if isinstance(body, dict) else None
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 409:
+            return {"status": "skipped", "reason": "canonical_conflict"}
+        if exc.response is not None and exc.response.status_code == 422:
+            detail = None
+            try:
+                response_body = exc.response.json()
+                if isinstance(response_body, dict) and isinstance(response_body.get("detail"), str):
+                    detail = response_body["detail"]
+            except ValueError:
+                pass
+            raise HTTPException(
+                status_code=422,
+                detail=detail or "Knowledge graph promotion rejected by backend validation",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Knowledge graph promotion failed: HTTP {exc.response.status_code}",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Knowledge graph promotion failed: {exc}") from exc
 
 
 async def execute_backend_tool(name: str, params: dict[str, Any]) -> str:
@@ -683,8 +742,14 @@ async def authenticate(request: Request) -> dict[str, Any]:
     token = payload.get("firebaseToken") if isinstance(payload, dict) else None
     if not isinstance(token, str) or not token:
         raise HTTPException(status_code=400, detail="Missing firebaseToken")
+    source_namespace = payload.get("sourceNamespace") if isinstance(payload, dict) else None
+    if source_namespace is not None and (
+        not isinstance(source_namespace, str) or not source_namespace.strip() or len(source_namespace) > 256
+    ):
+        raise HTTPException(status_code=400, detail="Invalid sourceNamespace")
     first_token = runtime.firebase_token is None
     runtime.firebase_token = token
+    runtime.source_namespace = source_namespace.strip() if isinstance(source_namespace, str) else None
     runtime.last_activity_at = time.monotonic()
     if first_token:
         try:
@@ -712,11 +777,12 @@ async def sync(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
     table = payload.get("table") if isinstance(payload, dict) else None
     rows = payload.get("rows") if isinstance(payload, dict) else None
+    reconcile_complete = payload.get("reconcile_complete") is True if isinstance(payload, dict) else False
     if (
         not isinstance(table, str)
         or not isinstance(rows, list)
-        or not rows
         or not all(isinstance(row, dict) for row in rows)
+        or (not rows and not (table in LOCAL_KG_SYNC_TABLES and reconcile_complete))
     ):
         raise HTTPException(status_code=400, detail="Required: { table: string, rows: [{...}, ...] }")
     if table not in SYNC_TABLES:
@@ -725,8 +791,12 @@ async def sync(request: Request) -> dict[str, Any]:
         applied = run_sync(table, rows)
     except (ValueError, sqlite3.Error) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    promotion = await promote_local_kg_to_backend(table, rows, reconcile_complete=reconcile_complete)
     runtime.last_activity_at = time.monotonic()
-    return {"applied": applied, "table": table}
+    response: dict[str, Any] = {"applied": applied, "table": table}
+    if promotion is not None:
+        response["promotion"] = promotion
+    return response
 
 
 @app.websocket("/ws")

@@ -332,6 +332,15 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       Set(["local_kg_nodes", "local_kg_edges"]))
   }
 
+  func testGraphProtocolRewindsForOlderVersionsOrPendingReconciliation() {
+    XCTAssertTrue(
+      AgentSyncService.graphSyncNeedsReconciliation(storedProtocolVersion: 1, reconciliationRequested: false))
+    XCTAssertTrue(
+      AgentSyncService.graphSyncNeedsReconciliation(storedProtocolVersion: 2, reconciliationRequested: true))
+    XCTAssertFalse(
+      AgentSyncService.graphSyncNeedsReconciliation(storedProtocolVersion: 2, reconciliationRequested: false))
+  }
+
   func testResolvedSyncColumnsExcludeForbiddenScreenFields() {
     let poisonSchema = [
       "id", "ocrText", "ocrDataJson", "imagePath", "videoChunkPath", "embedding",
@@ -452,6 +461,11 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       let syncedTables = Set(payloads.compactMap { $0["table"] as? String })
       XCTAssertFalse(syncedTables.contains("screenshots"))
       XCTAssertFalse(syncedTables.contains("observations"))
+      let graphPayload = payloads.first { payload in
+        (payload["table"] as? String) == "local_kg_nodes"
+      }
+      XCTAssertEqual(graphPayload?["source_namespace"] as? String, ClientDeviceService.shared.clientDeviceId)
+      XCTAssertEqual(graphPayload?["reconcile_complete"] as? Bool, false)
 
       let forbidden = AgentSyncService.forbiddenSyncFieldNames
       for payload in payloads {
