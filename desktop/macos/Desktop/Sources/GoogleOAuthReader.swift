@@ -34,8 +34,9 @@ enum GoogleOAuthGmailReader {
     var ids: [String] = []
     var pageToken: String?
     repeat {
-      // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
-      var components = URLComponents(url: messagesURL, resolvingAgainstBaseURL: false)!
+      guard var components = URLComponents(url: messagesURL, resolvingAgainstBaseURL: false) else {
+        throw GoogleOAuthReaderError.network("Could not construct the Gmail request.")
+      }
       var queryItems = [
         URLQueryItem(name: "maxResults", value: "\(min(maxResults, 500))"),
         URLQueryItem(name: "q", value: query),
@@ -44,8 +45,10 @@ enum GoogleOAuthGmailReader {
         queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
       }
       components.queryItems = queryItems
-      // swiftlint:disable:next force_unwrapping — fixed components cannot fail
-      let body = try await get(components.url!, token: token, session: session)
+      guard let url = components.url else {
+        throw GoogleOAuthReaderError.network("Could not construct the Gmail request.")
+      }
+      let body = try await get(url, token: token, session: session)
       ids.append(contentsOf: (body["messages"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
       pageToken = body["nextPageToken"] as? String
     } while ids.count < maxResults && pageToken != nil
@@ -166,8 +169,9 @@ enum GoogleOAuthCalendarReader {
     var pageToken: String?
     var events: [CalendarEvent] = []
     repeat {
-      // swiftlint:disable:next force_unwrapping — fixed endpoint constant cannot fail
-      var components = URLComponents(url: eventsURL, resolvingAgainstBaseURL: false)!
+      guard var components = URLComponents(url: eventsURL, resolvingAgainstBaseURL: false) else {
+        throw GoogleOAuthReaderError.network("Could not construct the Calendar request.")
+      }
       var queryItems = [
         URLQueryItem(name: "timeMin", value: timeMin),
         URLQueryItem(name: "timeMax", value: timeMax),
@@ -179,9 +183,10 @@ enum GoogleOAuthCalendarReader {
         queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
       }
       components.queryItems = queryItems
-      let body = try await GoogleOAuthGmailReader.get(
-        // swiftlint:disable:next force_unwrapping — fixed components cannot fail
-        components.url!, token: token, session: session)
+      guard let url = components.url else {
+        throw GoogleOAuthReaderError.network("Could not construct the Calendar request.")
+      }
+      let body = try await GoogleOAuthGmailReader.get(url, token: token, session: session)
       events.append(contentsOf: (body["items"] as? [[String: Any]] ?? []).compactMap(parseEvent))
       pageToken = body["nextPageToken"] as? String
     } while events.count < maxResults && pageToken != nil
