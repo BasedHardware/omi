@@ -19,6 +19,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
     target_value: 10,
     min_value: 0,
     max_value: 10,
+    unit: 'books',
     is_active: true,
     ...overrides,
   };
@@ -26,47 +27,50 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 
 function setup(overrides: Partial<Goal> = {}) {
   const onSetProgress = vi.fn().mockResolvedValue(undefined);
+  const onRename = vi.fn().mockResolvedValue(undefined);
   const onRemove = vi.fn().mockResolvedValue(undefined);
   const onOpen = vi.fn();
   render(
-    <GoalCard
-      goal={goal(overrides)}
-      onSetProgress={onSetProgress}
-      onRemove={onRemove}
-      onOpen={onOpen}
-    />,
+    <ul>
+      <GoalCard
+        goal={goal(overrides)}
+        onSetProgress={onSetProgress}
+        onRename={onRename}
+        onRemove={onRemove}
+        onOpen={onOpen}
+      />
+    </ul>,
   );
-  return { onSetProgress, onRemove, onOpen, user: userEvent.setup() };
+  return { onSetProgress, onRename, onRemove, onOpen, user: userEvent.setup() };
 }
 
 describe('GoalCard', () => {
-  it('reports progress to assistive tech as a percentage', () => {
+  it('reports desktop progress (current/target) to assistive tech', () => {
     setup();
 
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30');
   });
 
-  it('increments and decrements by one', async () => {
-    const { onSetProgress, user } = setup();
+  it('paints the bar with the threshold ramp colour for its stage', () => {
+    setup({ current_value: 9, target_value: 10 });
 
-    await user.click(screen.getByLabelText('Increase Read books'));
-    expect(onSetProgress).toHaveBeenCalledWith('goal-1', 4);
-
-    await user.click(screen.getByLabelText('Decrease Read books'));
-    expect(onSetProgress).toHaveBeenCalledWith('goal-1', 2);
+    // 90% -> green, per the ported five-stage ramp.
+    expect(screen.getByRole('progressbar')).toHaveStyle({
+      backgroundColor: '#22C55E',
+    });
   });
 
-  it('will not decrement below the goal floor', async () => {
-    const { onSetProgress } = setup({ current_value: 0 });
+  it('shows the title-derived emoji desktop uses', () => {
+    setup();
 
-    expect(screen.getByLabelText('Decrease Read books')).toBeDisabled();
-    expect(onSetProgress).not.toHaveBeenCalled();
+    expect(screen.getByText('📚')).toBeInTheDocument();
   });
 
-  it('commits a typed value on blur', async () => {
+  it('commits a typed progress value', async () => {
     const { onSetProgress, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: '3 / 10 books' }));
     const input = screen.getByLabelText('Read books current value');
-
     await user.clear(input);
     await user.type(input, '8');
     await user.tab();
@@ -74,56 +78,103 @@ describe('GoalCard', () => {
     expect(onSetProgress).toHaveBeenCalledWith('goal-1', 8);
   });
 
-  it('does not write when the typed value is unchanged', async () => {
+  it('reverts rather than wiping progress when the field is emptied', async () => {
     const { onSetProgress, user } = setup();
 
-    await user.click(screen.getByLabelText('Read books current value'));
+    await user.click(screen.getByRole('button', { name: '3 / 10 books' }));
+    await user.clear(screen.getByLabelText('Read books current value'));
     await user.tab();
 
     expect(onSetProgress).not.toHaveBeenCalled();
   });
 
-  it('restores the displayed value when the input is left unparseable', async () => {
+  it('abandons a progress edit on Escape', async () => {
     const { onSetProgress, user } = setup();
-    const input = screen.getByLabelText('Read books current value');
 
+    await user.click(screen.getByRole('button', { name: '3 / 10 books' }));
+    await user.type(screen.getByLabelText('Read books current value'), '9');
+    await user.keyboard('{Escape}');
+
+    expect(onSetProgress).not.toHaveBeenCalled();
+  });
+
+  it('renames from the title, which desktop edits inline', async () => {
+    const { onRename, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Read books' }));
+    const input = screen.getByLabelText('Read books title');
     await user.clear(input);
-    await user.tab();
+    await user.type(input, 'Read more books');
+    await user.keyboard('{Enter}');
 
-    expect(onSetProgress).not.toHaveBeenCalled();
-    expect(input).toHaveValue(3);
+    expect(onRename).toHaveBeenCalledWith('goal-1', 'Read more books');
   });
 
-  it('toggles a yes/no goal between its floor and its target', async () => {
-    const { onSetProgress, user } = setup({
-      goal_type: 'boolean',
-      current_value: 0,
-      target_value: 1,
-      max_value: 1,
-    });
+  it('does not rename when the title is unchanged or blank', async () => {
+    const { onRename, user } = setup();
 
-    await user.click(screen.getByRole('button', { name: 'Mark done' }));
-    expect(onSetProgress).toHaveBeenCalledWith('goal-1', 1);
+    await user.click(screen.getByRole('button', { name: 'Read books' }));
+    await user.keyboard('{Enter}');
+    expect(onRename).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Read books' }));
+    await user.clear(screen.getByLabelText('Read books title'));
+    await user.keyboard('{Enter}');
+    expect(onRename).not.toHaveBeenCalled();
   });
 
-  it('shows a completed yes/no goal as done', () => {
-    setup({
-      goal_type: 'boolean',
-      current_value: 1,
-      target_value: 1,
-      max_value: 1,
-    });
+  it('completes a goal by driving the value to target', async () => {
+    const { onSetProgress, user } = setup();
 
-    // Exact name: the title button's accessible name also ends in "Done".
-    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mark as complete' }));
+
+    expect(onSetProgress).toHaveBeenCalledWith('goal-1', 10);
+  });
+
+  it('reopens a completed goal by zeroing it', async () => {
+    const { onSetProgress, user } = setup({ current_value: 10 });
+
+    await user.click(screen.getByRole('button', { name: 'Reopen goal' }));
+
+    expect(onSetProgress).toHaveBeenCalledWith('goal-1', 0);
+  });
+
+  it('treats a server-archived goal as complete', () => {
+    setup({ is_active: false, current_value: 0 });
+
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByRole('button', { name: 'Reopen goal' })).toBeInTheDocument();
   });
 
-  it('opens the detail sheet when the title is clicked', async () => {
+  it('disables completion for a goal with no target, which cannot be driven', () => {
+    setup({ target_value: 0 });
+
+    expect(screen.getByRole('button', { name: 'Mark as complete' })).toBeDisabled();
+  });
+
+  it('hides the insight action when there is no target to reason about', () => {
+    setup({ target_value: 0 });
+
+    expect(
+      screen.queryByRole('button', { name: /Get goal insight/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the detail sheet from the insight action', async () => {
     const { onOpen, user } = setup();
 
-    await user.click(screen.getByRole('button', { name: /^Read books/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Get goal insight for Read books' }),
+    );
 
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'goal-1' }));
+  });
+
+  it('deletes from the trash action', async () => {
+    const { onRemove, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Delete goal Read books' }));
+
+    expect(onRemove).toHaveBeenCalledWith('goal-1');
   });
 });

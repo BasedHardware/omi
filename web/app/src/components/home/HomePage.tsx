@@ -12,6 +12,7 @@ import { ScoreSummary } from './ScoreSummary';
 export function HomePage() {
   const { goals, loading, error, addGoal, editGoal, setProgress, removeGoal } =
     useGoals();
+  const renameGoal = (id: string, title: string) => editGoal(id, { title });
   const { scores, loading: scoresLoading } = useScores();
   const [composerOpen, setComposerOpen] = useState(false);
   const [openGoalId, setOpenGoalId] = useState<string | null>(null);
@@ -74,17 +75,18 @@ export function HomePage() {
             </button>
           </div>
         ) : (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {goals.map((goal) => (
               <GoalCard
                 key={goal.id}
                 goal={goal}
                 onSetProgress={setProgress}
+                onRename={renameGoal}
                 onRemove={removeGoal}
                 onOpen={(selected) => setOpenGoalId(selected.id)}
               />
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
