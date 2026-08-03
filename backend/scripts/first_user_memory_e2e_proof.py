@@ -5,6 +5,8 @@ The proof reads Firestore state and calls `/v3/memories`; it never writes
 Firestore/GCP state. Output is summarized and redacted.
 """
 
+# LIFECYCLE: permanent
+
 from __future__ import annotations
 
 import argparse
@@ -88,7 +90,7 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
     head = _snapshot_data(db_client.document(paths.memory_state_head).get())
     projection_state = _snapshot_data(db_client.document(paths.v3_compatibility_projection_state).get())
     items = []
-    for snapshot in db_client.collection(paths.v3_compatibility_projection_items).limit(limit).stream():
+    for snapshot in db_client.collection(paths.v3_compatibility_projection_items).stream():
         data = _snapshot_data(snapshot)
         if data is None:
             continue
@@ -104,12 +106,15 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
                 "memorydb_fields": sorted(memorydb.keys()),
             }
         )
+        if len(items) > limit:
+            raise RuntimeError(f"projection item count exceeds safety limit ({limit})")
 
     expected_generation = head.get("account_generation") if isinstance(head, dict) else None
     projection_ready = isinstance(projection_state, dict) and projection_state.get("ready") is True
     projection_generation = (
         projection_state.get("projection_generation") if isinstance(projection_state, dict) else None
     )
+    expected_item_count = projection_state.get("expected_item_count") if isinstance(projection_state, dict) else None
     fences_match = (
         type(expected_generation) is int
         and isinstance(projection_state, dict)
@@ -168,7 +173,11 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
             path=paths.v3_compatibility_projection_state,
         ),
         _check(
-            "projection_items_exist", len(items) > 0, path=paths.v3_compatibility_projection_items, count=len(items)
+            "projection_item_count_matches_state",
+            type(expected_item_count) is int and expected_item_count >= 0 and len(items) == expected_item_count,
+            path=paths.v3_compatibility_projection_items,
+            expected_count=expected_item_count,
+            actual_count=len(items),
         ),
         _check("projection_generation_fences_match_head", fences_match, expected_generation=expected_generation),
     ]

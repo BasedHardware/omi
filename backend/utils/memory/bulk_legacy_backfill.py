@@ -41,6 +41,12 @@ def _nonnegative_int(value: object) -> int:
     return 0
 
 
+def _strict_bool(value: object) -> bool:
+    # Firestore writes this as a native boolean.  Treat every drifted value as
+    # false so malformed legacy data cannot accidentally claim stage success.
+    return value if isinstance(value, bool) else False
+
+
 class BackfillReport(Protocol):
     @property
     def written_count(self) -> int: ...
@@ -92,13 +98,12 @@ _FORWARD_TRANSITIONS: Dict[MigrationState, frozenset[MigrationState]] = {
     MigrationState.enrolled: frozenset(
         {MigrationState.processing, MigrationState.staged, MigrationState.paused, MigrationState.failed}
     ),
-    MigrationState.processing: frozenset(
-        {MigrationState.staged, MigrationState.read_ready, MigrationState.paused, MigrationState.failed}
-    ),
-    MigrationState.staged: frozenset(
-        {MigrationState.processing, MigrationState.read_ready, MigrationState.paused, MigrationState.failed}
-    ),
-    MigrationState.read_ready: frozenset(),
+    MigrationState.processing: frozenset({MigrationState.staged, MigrationState.paused, MigrationState.failed}),
+    MigrationState.staged: frozenset({MigrationState.processing, MigrationState.paused, MigrationState.failed}),
+    # ``read_ready`` is a retired legacy marker.  It remains parseable so an
+    # old checkpoint can be reopened as staged/unverified, but no new write
+    # may target it.
+    MigrationState.read_ready: frozenset({MigrationState.staged, MigrationState.paused, MigrationState.failed}),
     MigrationState.failed: frozenset(
         {
             MigrationState.inventory_done,
@@ -138,6 +143,7 @@ class MigrationCheckpoint:
     admitted_candidate_count: int = 0
     admitted_candidate_estimated_tokens: int = 0
     staged_count: int = 0
+    staging_complete: bool = False
     error_count: int = 0
     last_error_code: Optional[str] = None
     updated_at: Optional[datetime] = None
@@ -170,6 +176,7 @@ class MigrationCheckpoint:
             admitted_candidate_count=_nonnegative_int(payload.get("admitted_candidate_count", 0)),
             admitted_candidate_estimated_tokens=_nonnegative_int(payload.get("admitted_candidate_estimated_tokens", 0)),
             staged_count=_nonnegative_int(payload.get("staged_count", 0)),
+            staging_complete=_strict_bool(payload.get("staging_complete", False)),
             error_count=_nonnegative_int(payload.get("error_count", 0)),
             last_error_code=(str(payload["last_error_code"]) if payload.get("last_error_code") is not None else None),
             updated_at=payload.get("updated_at") if isinstance(payload.get("updated_at"), datetime) else None,
@@ -185,6 +192,7 @@ class MigrationCheckpoint:
             "admitted_candidate_count": self.admitted_candidate_count,
             "admitted_candidate_estimated_tokens": self.admitted_candidate_estimated_tokens,
             "staged_count": self.staged_count,
+            "staging_complete": self.staging_complete,
             "error_count": self.error_count,
             "last_error_code": self.last_error_code,
             "updated_at": self.updated_at or datetime.now(timezone.utc),
@@ -289,6 +297,8 @@ class BulkRunSummary:
     requested_user_count: int
     selected_user_count: int
     processed_user_count: int
+    # Retained as a zero-valued compatibility metric; this controller no
+    # longer emits read_ready checkpoints or user results.
     read_ready_count: int
     failed_user_count: int
     paused_user_count: int
@@ -329,6 +339,7 @@ def _checkpoint_from_inventory(
     state: MigrationState,
     resume_state: Optional[MigrationState] = None,
     staged_count: int = 0,
+    staging_complete: bool = False,
     error_count: int = 0,
     last_error_code: Optional[str] = None,
 ) -> MigrationCheckpoint:
@@ -341,6 +352,7 @@ def _checkpoint_from_inventory(
         admitted_candidate_count=inventory.admitted_candidate_count,
         admitted_candidate_estimated_tokens=inventory.admitted_candidate_estimated_tokens,
         staged_count=staged_count,
+        staging_complete=staging_complete,
         error_count=error_count,
         last_error_code=last_error_code,
         updated_at=datetime.now(timezone.utc),
@@ -377,11 +389,32 @@ def _apply_user(
 ) -> BulkUserResult:
     current = checkpoint_store.read(inventory.uid)
     if current.state == MigrationState.read_ready:
+        # ``read_ready`` was emitted by the retired controller before
+        # canonical verification. Reopen it as staged/unverified and require
+        # the canonical migration controller to prove projection convergence
+        # and perform the explicit read cutover.
+        reopened = _checkpoint_from_inventory(
+            inventory,
+            state=MigrationState.staged,
+            staged_count=current.staged_count,
+            staging_complete=True,
+            last_error_code="legacy_read_ready_unverified",
+        )
+        checkpoint_store.write(reopened)
         return BulkUserResult(
             uid=inventory.uid,
-            state=MigrationState.read_ready,
+            state=MigrationState.staged,
             inventory=inventory,
-            actions=("already_read_ready",),
+            actions=("legacy_read_ready_reopened_unverified", "canonical_migration_verification_required"),
+            staged_count=current.staged_count,
+        )
+
+    if current.state == MigrationState.staged and current.staging_complete:
+        return BulkUserResult(
+            uid=inventory.uid,
+            state=MigrationState.staged,
+            inventory=inventory,
+            actions=("already_staged", "canonical_migration_verification_required"),
             staged_count=current.staged_count,
         )
 
@@ -405,6 +438,7 @@ def _apply_user(
                 state=MigrationState.paused,
                 resume_state=resume_state,
                 staged_count=current.staged_count,
+                staging_complete=current.staging_complete,
                 last_error_code=reason,
             )
         )
@@ -419,6 +453,7 @@ def _apply_user(
                     inventory,
                     state=MigrationState.failed,
                     resume_state=MigrationState.inventory_done,
+                    staging_complete=False,
                     error_count=current.error_count + 1,
                     last_error_code="enrollment_failed",
                 )
@@ -443,6 +478,7 @@ def _apply_user(
                 state=MigrationState.paused,
                 resume_state=resume_state,
                 staged_count=current.staged_count,
+                staging_complete=current.staging_complete,
                 last_error_code=reason,
             )
         )
@@ -458,6 +494,7 @@ def _apply_user(
                 inventory,
                 state=MigrationState.failed,
                 resume_state=MigrationState.processing,
+                staging_complete=False,
                 error_count=current.error_count + 1,
                 last_error_code="backfill_failed",
             )
@@ -485,6 +522,7 @@ def _apply_user(
                 state=MigrationState.failed,
                 resume_state=MigrationState.processing,
                 staged_count=staged_count,
+                staging_complete=False,
                 error_count=current.error_count + max(1, len(report.errors)),
                 last_error_code=error_code,
             )
@@ -499,7 +537,12 @@ def _apply_user(
         )
 
     checkpoint_store.write(
-        _checkpoint_from_inventory(inventory, state=MigrationState.staged, staged_count=staged_count)
+        _checkpoint_from_inventory(
+            inventory,
+            state=MigrationState.staged,
+            staged_count=staged_count,
+            staging_complete=bool(report.completed and report.verified),
+        )
     )
     if not report.completed or not report.verified:
         pause_reason = "wall_clock_seconds" if stop_fn() else "max_admitted_rows_per_user"
@@ -509,6 +552,7 @@ def _apply_user(
                 state=MigrationState.paused,
                 resume_state=MigrationState.staged,
                 staged_count=staged_count,
+                staging_complete=False,
                 last_error_code=pause_reason,
             )
         )
@@ -528,6 +572,7 @@ def _apply_user(
                 state=MigrationState.paused,
                 resume_state=MigrationState.staged,
                 staged_count=staged_count,
+                staging_complete=True,
                 last_error_code="max_admitted_rows_per_user",
             )
         )
@@ -551,6 +596,7 @@ def _apply_user(
                     state=MigrationState.failed,
                     resume_state=MigrationState.staged,
                     staged_count=staged_count,
+                    staging_complete=True,
                     error_count=current.error_count + max(1, len(bucket_report.errors)),
                     last_error_code="bucket_processing_failed",
                 )
@@ -565,12 +611,17 @@ def _apply_user(
             )
 
     checkpoint_store.write(
-        _checkpoint_from_inventory(inventory, state=MigrationState.read_ready, staged_count=staged_count)
+        _checkpoint_from_inventory(
+            inventory,
+            state=MigrationState.staged,
+            staged_count=staged_count,
+            staging_complete=True,
+        )
     )
-    actions.append("checkpoint_read_ready")
+    actions.append("staged_requires_canonical_migration_verification_and_read_cutover")
     return BulkUserResult(
         uid=inventory.uid,
-        state=MigrationState.read_ready,
+        state=MigrationState.staged,
         inventory=inventory,
         actions=tuple(actions),
         staged_count=staged_count,
@@ -663,7 +714,11 @@ def run_bulk_migration(
 
     if config.dry_run:
         for inventory in planned:
-            actions = ["would_enroll_write_only", "would_stage_all_for_admission"]
+            actions = [
+                "would_enroll_write_only",
+                "would_stage_all_for_admission",
+                "would_require_canonical_migration_verification_and_read_cutover",
+            ]
             actions.extend(f"would_process_bucket:{bucket}" for bucket in config.process_buckets)
             results.append(
                 BulkUserResult(
