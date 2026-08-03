@@ -148,6 +148,22 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertLessThan(recordRange.lowerBound, tokenRange.lowerBound)
   }
 
+  func testTaskThreadAutomationYieldsBeforeCheckingAdmission() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+
+    XCTAssertTrue(source.contains("Task { await state.sendMessage(query) }"))
+    XCTAssertTrue(source.contains("await Task.yield()"))
+    XCTAssertTrue(source.contains("state.localSendToken.generation == sendGenerationBefore"))
+  }
+
+  func testTaskChatRecoversAClaimedTerminalization() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("recoverTerminalizedJournalMessage"))
+    XCTAssertTrue(source.contains("producingRunIdentity"))
+    XCTAssertTrue(source.contains("await refreshJournal(lease: lease)"))
+  }
+
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {
     let projection = AgentRunProjection(
       surface: .taskChat(taskId: "task-runtime-failure"),
