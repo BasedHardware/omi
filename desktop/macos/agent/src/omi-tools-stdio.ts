@@ -471,7 +471,7 @@ async function main(): Promise<void> {
     process.exit(0);
   });
 
-  const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", { onboarding: isOnboarding });
+  const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", projectionContext);
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       writeFileSync(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);

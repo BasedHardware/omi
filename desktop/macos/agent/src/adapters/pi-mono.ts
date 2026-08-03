@@ -547,15 +547,24 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     env.OMI_ADAPTER_ID = "pi-mono";
     env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
-    if (
-      this.currentToolProjection.surfaceKind === "main_chat"
-      && this.currentToolProjection.chatFirstUi
-      && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
-      && (this.currentToolProjection.controlGeneration ?? -1) >= 0
-    ) {
-      env.OMI_SURFACE_KIND = "main_chat";
-      env.OMI_CHAT_FIRST_UI = "true";
-      env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+    // The typed-chat surface is needed for both the chat-first rollout tools
+    // and legacy typed-chat writes such as create_memory. Keep the surface
+    // marker independent from the optional chat-first capability flags so a
+    // legacy typed-chat session does not accidentally look like a background
+    // or voice run to the stdio projection.
+    if (this.currentToolProjection.surfaceKind === "main_chat" || this.currentToolProjection.surfaceKind === "floating_chat") {
+      env.OMI_SURFACE_KIND = this.currentToolProjection.surfaceKind;
+      if (
+        this.currentToolProjection.chatFirstUi
+        && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
+        && (this.currentToolProjection.controlGeneration ?? -1) >= 0
+      ) {
+        env.OMI_CHAT_FIRST_UI = "true";
+        env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+      } else {
+        delete env.OMI_CHAT_FIRST_UI;
+        delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+      }
     } else {
       delete env.OMI_SURFACE_KIND;
       delete env.OMI_CHAT_FIRST_UI;
@@ -686,14 +695,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
-    } = projection.surfaceKind === "main_chat"
-      && projection.chatFirstUi
-      && Number.isSafeInteger(projection.controlGeneration)
-      && (projection.controlGeneration ?? -1) >= 0
+    } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
       ? {
-          surfaceKind: "main_chat" as const,
-          chatFirstUi: true,
-          controlGeneration: projection.controlGeneration,
+          surfaceKind: projection.surfaceKind,
+          chatFirstUi: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0,
+          controlGeneration: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0
+            ? projection.controlGeneration
+            : null,
         }
       : { chatFirstUi: false, controlGeneration: null };
     if (
@@ -1443,12 +1455,17 @@ function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefine
   controlGeneration: number | null;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
-  const enabled = metadata?.surfaceKind === "main_chat"
+  const typedSurface = metadata?.surfaceKind === "main_chat"
+    ? "main_chat"
+    : metadata?.surfaceKind === "floating_chat"
+      ? "floating_chat"
+      : undefined;
+  const enabled = typedSurface !== undefined
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;
-  return enabled
-    ? { surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: generation }
+  return typedSurface
+    ? { surfaceKind: typedSurface, chatFirstUi: enabled, controlGeneration: enabled ? generation : null }
     : { chatFirstUi: false, controlGeneration: null };
 }
 
