@@ -101,9 +101,13 @@ final class DesktopChatDriftGuardTests: XCTestCase {
 
     // omi-test-quality: source-inspection -- passive position updates and
     // settled checks must both use the active-gesture fence before restoring
-    // live following.
+    // live following. Wheel momentum is owned by AppKit's live-scroll
+    // lifecycle, never by a guessed wall-clock delay.
     XCTAssertTrue(scrollSource.contains("private var settleWorkItem: DispatchWorkItem?"))
     XCTAssertFalse(scrollSource.contains("for delay in [0.12, 0.36]"))
+    XCTAssertTrue(scrollSource.contains("NSScrollView.willStartLiveScrollNotification"))
+    XCTAssertTrue(scrollSource.contains("NSScrollView.didEndLiveScrollNotification"))
+    XCTAssertTrue(scrollSource.contains("scheduleDiscreteInputSettledBottomCheck"))
     XCTAssertTrue(scrollSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
     XCTAssertTrue(messagesSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
   }

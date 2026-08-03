@@ -438,6 +438,8 @@ struct UserScrollDetector: NSViewRepresentable {
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
     private var settleWorkItem: DispatchWorkItem?
+    private var willStartLiveScrollObservation: NSObjectProtocol?
+    private var didEndLiveScrollObservation: NSObjectProtocol?
 
     private static let settledBottomDelay: TimeInterval = 0.36
 
@@ -474,6 +476,29 @@ struct UserScrollDetector: NSViewRepresentable {
         stop()
         installedScrollView = targetScrollView
 
+        // AppKit owns the lifecycle of a trackpad/wheel gesture, including
+        // momentum. A wall-clock debounce can fire during a brief gap in a
+        // fast gesture and incorrectly decide that the reader settled at the
+        // live edge. That re-arms follow mode and the next streaming/layout
+        // update snaps the transcript back to the bottom. Observe the native
+        // live-scroll boundary instead, so ownership cannot return until
+        // AppKit says the complete gesture (momentum included) has ended.
+        willStartLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.willStartLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.beginUserScroll()
+        }
+        didEndLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.didEndLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] _ in
+          guard let self, let targetScrollView else { return }
+          self.finishUserScroll(on: targetScrollView)
+        }
+
         let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
           guard let self else { return event }
           guard event.window == targetScrollView.window else { return event }
@@ -482,6 +507,7 @@ struct UserScrollDetector: NSViewRepresentable {
             guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
             guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
             self.onUserScroll()
+            self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
           } else {
             let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
             guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
@@ -491,9 +517,9 @@ struct UserScrollDetector: NSViewRepresentable {
               }
             } else {
               self.onUserScroll()
+              self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
             }
           }
-          self.scheduleSettledBottomChecks(for: targetScrollView)
           return event
         }
         monitor = NSEvent.addLocalMonitorForEvents(
@@ -505,6 +531,14 @@ struct UserScrollDetector: NSViewRepresentable {
       MainActor.assumeIsolated {
         settleWorkItem?.cancel()
         settleWorkItem = nil
+        if let willStartLiveScrollObservation {
+          NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
+        }
+        willStartLiveScrollObservation = nil
+        if let didEndLiveScrollObservation {
+          NotificationCenter.default.removeObserver(didEndLiveScrollObservation)
+        }
+        didEndLiveScrollObservation = nil
         if let monitor {
           NSEvent.removeMonitor(monitor)
         }
@@ -532,11 +566,32 @@ struct UserScrollDetector: NSViewRepresentable {
       }
     }
 
-    private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
-      // A check from an earlier wheel event must not survive into a later
-      // gesture. The old pair of independent timers could observe a transient
-      // live-edge position and re-enable follow mode after the reader had
-      // already started scrolling away.
+    private func beginUserScroll() {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      onUserScroll()
+    }
+
+    private func finishUserScroll(on scrollView: NSScrollView) {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      // The notification is delivered at the end of AppKit's live-scroll
+      // transaction. Read the final clip bounds on the next main turn, after
+      // the scroll view has committed its terminal position.
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func scheduleDiscreteInputSettledBottomCheck(for scrollView: NSScrollView) {
+      // Keyboard navigation and scrollbar mouse interaction do not reliably
+      // participate in the live-scroll notification lifecycle. Keep a bounded
+      // fallback for those discrete inputs only; wheel/trackpad gestures must
+      // never use this timer because momentum can outlive it.
       settleWorkItem?.cancel()
       let workItem = DispatchWorkItem { [weak self, weak scrollView] in
         guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }

@@ -310,6 +310,115 @@ final class ScrollPositionDetectorTests: XCTestCase {
 
 }
 
+/// AppKit-backed failure harness for chat scroll ownership. Unlike the
+/// coordinate-only detector tests above, these tests drive the same native
+/// live-scroll lifecycle emitted by a rapid trackpad/wheel gesture.
+@MainActor
+final class UserScrollDetectorTests: XCTestCase {
+  func testRapidLiveScrollHandsOwnershipToReaderAndDoesNotRearmAwayFromBottom() {
+    let (scrollView, hostView) = makeScrollViewAtBottom()
+    var userScrollStarts = 0
+    var settledAtBottom = 0
+    let coordinator = UserScrollDetector.Coordinator(
+      onUserScroll: { userScrollStarts += 1 },
+      onScrollSettledAtBottom: { settledAtBottom += 1 }
+    )
+    coordinator.install(for: hostView)
+
+    NotificationCenter.default.post(
+      name: NSScrollView.willStartLiveScrollNotification,
+      object: scrollView
+    )
+    // A fast upward burst crosses most of the transcript before momentum ends.
+    for scrollTop in [620.0, 400.0, 160.0] {
+      scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollTop))
+    }
+    NotificationCenter.default.post(
+      name: NSScrollView.didEndLiveScrollNotification,
+      object: scrollView
+    )
+    drainMainQueue()
+
+    XCTAssertEqual(userScrollStarts, 1, "native live scroll must immediately give the reader ownership")
+    XCTAssertEqual(
+      settledAtBottom,
+      0,
+      "ending momentum in history must not re-arm live following or jump to the bottom"
+    )
+    coordinator.stop()
+  }
+
+  func testNewGestureCancelsAQueuedBottomSettlementFromThePreviousGesture() {
+    let (scrollView, hostView) = makeScrollViewAtBottom()
+    var settledAtBottom = 0
+    let coordinator = UserScrollDetector.Coordinator(
+      onUserScroll: {},
+      onScrollSettledAtBottom: { settledAtBottom += 1 }
+    )
+    coordinator.install(for: hostView)
+
+    NotificationCenter.default.post(
+      name: NSScrollView.willStartLiveScrollNotification,
+      object: scrollView
+    )
+    NotificationCenter.default.post(
+      name: NSScrollView.didEndLiveScrollNotification,
+      object: scrollView
+    )
+    // Before the queued terminal-position read runs, a new burst starts and
+    // moves away. The stale bottom result must never reclaim ownership.
+    NotificationCenter.default.post(
+      name: NSScrollView.willStartLiveScrollNotification,
+      object: scrollView
+    )
+    scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: 200))
+    drainMainQueue()
+
+    XCTAssertEqual(settledAtBottom, 0)
+    coordinator.stop()
+  }
+
+  func testCompletedLiveScrollAtBottomCanResumeFollowing() {
+    let (scrollView, hostView) = makeScrollViewAtBottom()
+    var settledAtBottom = 0
+    let coordinator = UserScrollDetector.Coordinator(
+      onUserScroll: {},
+      onScrollSettledAtBottom: { settledAtBottom += 1 }
+    )
+    coordinator.install(for: hostView)
+
+    NotificationCenter.default.post(
+      name: NSScrollView.willStartLiveScrollNotification,
+      object: scrollView
+    )
+    NotificationCenter.default.post(
+      name: NSScrollView.didEndLiveScrollNotification,
+      object: scrollView
+    )
+    drainMainQueue()
+
+    XCTAssertEqual(settledAtBottom, 1)
+    coordinator.stop()
+  }
+
+  private func makeScrollViewAtBottom() -> (NSScrollView, NSView) {
+    let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 300))
+    let documentView = FlippedScrollDocumentView(
+      frame: NSRect(x: 0, y: 0, width: 300, height: 1_000)
+    )
+    let hostView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 1))
+    documentView.addSubview(hostView)
+    scrollView.documentView = documentView
+    scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: 700))
+    return (scrollView, hostView)
+  }
+
+  private func drainMainQueue() {
+    // omi-test-quality: wall-clock-wait -- drives the AppKit notification callback and its next-turn terminal bounds read.
+    _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+  }
+}
+
 private final class FlippedScrollDocumentView: NSView {
   override var isFlipped: Bool { true }
 }
