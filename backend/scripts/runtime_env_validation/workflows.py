@@ -166,7 +166,15 @@ def _is_cloud_run_deploy_step(step: object) -> bool:
 
 
 def _load_local_composite_action(uses: str, *, workflow_root: Path) -> ConfigDict | None:
-    action_dir = workflow_root / uses[2:]
+    relative_uses = uses[2:]
+    # deploy-backend-stack executes nested privileged composites from its
+    # immutable staged workflow source. Static validation receives the
+    # checked-in workflow root, where the same trusted actions live at their
+    # canonical `.github/actions` paths.
+    staged_prefix = '.deploy-workflow-source/.github/'
+    if relative_uses.startswith(staged_prefix):
+        relative_uses = '.github/' + relative_uses[len(staged_prefix) :]
+    action_dir = workflow_root / relative_uses
     for name in ('action.yml', 'action.yaml'):
         path = action_dir / name
         if path.is_file():

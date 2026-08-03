@@ -51,6 +51,7 @@ def test_reconcile_provisions_missing_indexes_and_waits_for_every_index():
         manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
         timeout_seconds=30,
         poll_interval_seconds=1,
+        provision_missing=True,
         runner=runner,
         sleep=sleeps.append,
         monotonic=iter((0, 0, 1, 1)).__next__,
@@ -399,6 +400,7 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
         manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
         timeout_seconds=30,
         poll_interval_seconds=1,
+        provision_missing=True,
         runner=runner,
         sleep=lambda _seconds: None,
         monotonic=iter((0, 0, 1, 1)).__next__,
@@ -659,6 +661,7 @@ def test_provisioning_fails_closed_when_gcloud_cannot_create_a_missing_index():
             manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
             timeout_seconds=30,
             poll_interval_seconds=1,
+            provision_missing=True,
             runner=runner,
         )
 
@@ -676,6 +679,7 @@ def test_reconcile_fails_when_a_required_index_never_becomes_ready():
             manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
             timeout_seconds=1,
             poll_interval_seconds=1,
+            provision_missing=True,
             runner=runner,
             sleep=lambda _seconds: None,
             monotonic=iter((0, 2)).__next__,

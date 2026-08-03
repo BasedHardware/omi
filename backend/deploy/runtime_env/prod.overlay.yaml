@@ -362,6 +362,9 @@ overlay:
             value: memories-backend
       memory-maintenance-job:
         env:
+          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+            value: 'true'
+            category: rollout
           MEMORY_MODE:
             value: 'off'
           MEMORY_ENABLED_USERS:

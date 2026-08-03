@@ -44,7 +44,17 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
         "github.event.inputs.mode == 'repair-traffic-only'",
     )
 )
-MANUAL_DEPLOY_NEEDS = "needs: [validate-production-boundary, firestore_readiness]"
+MANUAL_DEPLOY_JOB_NEEDS = "needs: [validate-production-boundary, firestore_readiness, record_break_glass]"
+MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
+    (
+        "always() &&",
+        "github.ref == 'refs/heads/main' &&",
+        "github.event.inputs.mode == 'deploy' &&",
+        "needs.validate-production-boundary.result == 'success' &&",
+        "needs.firestore_readiness.result == 'success' &&",
+        "(needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+    )
+)
 
 
 def deploy_backend_stack_action_text(root: Path = ROOT) -> str:
@@ -513,11 +523,11 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         require_fragment(
             errors,
             deploy_job,
-            MANUAL_DEPLOY_NEEDS,
-            "manual deployment must depend on production-boundary validation and source admission",
+            MANUAL_DEPLOY_JOB_NEEDS,
+            "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
         )
-        if folded_job_condition(deploy_job) != MANUAL_DEPLOY_CONDITION:
-            errors.append("manual deployment must use exactly the main-ref deploy condition")
+        if folded_job_condition(deploy_job) != MANUAL_DEPLOY_JOB_CONDITION:
+            errors.append("manual deployment must gate break-glass deploys on a successful audit record")
         require_fragment(
             errors,
             contract,

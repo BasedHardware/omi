@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 DEPLOY_BACKEND_STACK_ACTION_REF = "./.github/actions/deploy-backend-stack"
 DEPLOY_BACKEND_STACK_USES_MARKER = f"uses: {DEPLOY_BACKEND_STACK_ACTION_REF}"
+_DEPLOY_BACKEND_STACK_USES_LINE = re.compile(
+    rf"^\s*uses:\s*{re.escape(DEPLOY_BACKEND_STACK_ACTION_REF)}\s*(?:#.*)?$"
+)
 
 
 def line_has_active_deploy_backend_stack_uses(line: str) -> bool:
@@ -14,7 +18,7 @@ def line_has_active_deploy_backend_stack_uses(line: str) -> bool:
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
         return False
-    return DEPLOY_BACKEND_STACK_USES_MARKER in line
+    return _DEPLOY_BACKEND_STACK_USES_LINE.fullmatch(line) is not None
 
 
 def workflow_text_has_active_deploy_backend_stack_uses(text: str) -> bool:

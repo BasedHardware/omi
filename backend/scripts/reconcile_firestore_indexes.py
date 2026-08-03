@@ -666,6 +666,7 @@ def reconcile(
     poll_interval_seconds: float,
     check_only: bool = False,
     dry_run: bool = False,
+    provision_missing: bool = False,
     proposal_output: Path | None = None,
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
@@ -674,8 +675,8 @@ def reconcile(
     monotonic: Callable[[], float] = time.monotonic,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> None:
-    if check_only and dry_run:
-        raise ValueError('--check-only cannot be combined with --dry-run')
+    if sum((check_only, dry_run, provision_missing)) > 1:
+        raise ValueError('--check-only, --dry-run, and --provision-missing cannot be combined')
     if check_only:
         if proposal_output is None or not source_commit:
             raise ValueError('--check-only requires --proposal-output and --source-commit')
@@ -714,7 +715,7 @@ def reconcile(
             clock=clock,
         )
         return
-    if not check_only and not dry_run:
+    if provision_missing:
         provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
     wait_for_indexes(
         expected=expected,
@@ -770,6 +771,8 @@ def main() -> int:
             )
             print('Firestore schema proposal validation passed')
             return 0
+        if not (args.check_only or args.dry_run or args.provision_missing):
+            raise ValueError('choose one reconciliation mode: --check-only, --dry-run, or --provision-missing')
         reconcile(
             project=args.project,
             database=args.database,
@@ -778,6 +781,7 @@ def main() -> int:
             poll_interval_seconds=args.poll_interval_seconds,
             check_only=args.check_only,
             dry_run=args.dry_run,
+            provision_missing=args.provision_missing,
             proposal_output=args.proposal_output.resolve() if args.proposal_output else None,
             source_commit=args.source_commit,
             proposal_ttl_seconds=args.proposal_ttl_seconds,

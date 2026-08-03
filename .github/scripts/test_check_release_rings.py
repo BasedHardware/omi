@@ -96,8 +96,7 @@ class ReleaseRingGuardTests(unittest.TestCase):
     def test_serving_release_vector_must_follow_traffic_promotion(self) -> None:
         self._stage_release_sources()
         target = self._composite_action_path()
-        if not target.exists():
-            target = self._deploy_workflow()
+        self.assertTrue(target.exists(), 'release-vector canary requires the staged deploy composite action')
         target.write_text(
             target.read_text(encoding="utf-8").replace(
                 "- name: Verify serving backend release vector",
@@ -113,8 +112,7 @@ class ReleaseRingGuardTests(unittest.TestCase):
     def test_staged_workflow_control_verifier_remains_required(self) -> None:
         self._stage_release_sources()
         target = self._composite_action_path()
-        if not target.exists():
-            target = self._deploy_workflow()
+        self.assertTrue(target.exists(), 'release-vector canary requires the staged deploy composite action')
         target.write_text(
             target.read_text(encoding="utf-8").replace(
                 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py",
@@ -146,6 +144,19 @@ class ReleaseRingGuardTests(unittest.TestCase):
         self.assertTrue(
             any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
         )
+
+    def test_shell_text_that_mentions_a_composite_is_not_an_action_reference(self) -> None:
+        self._stage_release_sources()
+        deploy_path = self._deploy_workflow()
+        deploy_path.write_text(
+            deploy_path.read_text(encoding="utf-8").replace(
+                "        uses: ./.github/actions/deploy-backend-stack",
+                "        run: \"echo 'uses: ./.github/actions/deploy-backend-stack'\"",
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertTrue(checker.check())
 
 
 if __name__ == "__main__":

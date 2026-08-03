@@ -329,10 +329,14 @@ jobs:
               "The gate being unusable is the defect. Fix the gate, then close this.")"
 
   deploy:
-    needs: [validate-production-boundary, firestore_readiness]
+    needs: [validate-production-boundary, firestore_readiness, record_break_glass]
     if: >-
+      always() &&
       github.ref == 'refs/heads/main' &&
-      github.event.inputs.mode == 'deploy'
+      github.event.inputs.mode == 'deploy' &&
+      needs.validate-production-boundary.result == 'success' &&
+      needs.firestore_readiness.result == 'success' &&
+      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'

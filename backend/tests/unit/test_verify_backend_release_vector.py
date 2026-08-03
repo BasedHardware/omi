@@ -477,7 +477,8 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
     assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
-    assert text.count('--provision-missing') == 2
+    assert text.count('--provision-missing') == 1
+    assert '--provision-missing \\\n            --dry-run' not in text
     assert text.count('--dry-run') == 1
     assert '--check-only' not in text
     assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
@@ -489,7 +490,8 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
     apply = text.split(apply_step, 1)[1]
     assert text.index(verification_step) < text.index(plan_step)
     assert text.index(plan_step) < text.index(apply_step)
-    assert '--provision-missing' in plan
+    assert '--provision-missing' not in plan
+    assert '--dry-run' in plan
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
     assert '--timeout-seconds 3600' in apply
@@ -1023,12 +1025,13 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
     assert 'ref: ${{ github.sha }}' in checkout_step
     assert 'workflow_source="$RUNNER_TEMP/backend-deploy-workflow-source"' in stage_step
     assert 'cp -a .workflow-source/.github "$workflow_source/.github"' in stage_step
-    assert 'control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"' in stage_step
-    assert 'cp -a .workflow-source/backend/scripts "$control_scripts"' in stage_step
+    assert 'control_source="$RUNNER_TEMP/backend-deploy-control-source"' in stage_step
+    assert 'cp -a .workflow-source/backend "$control_source/backend"' in stage_step
     assert 'workflow_root="$GITHUB_WORKSPACE/.deploy-workflow-source"' in install_step
     assert 'cp -a "$RUNNER_TEMP/backend-deploy-workflow-source/.github" "$workflow_root/.github"' in install_step
-    assert 'control_scripts="$GITHUB_WORKSPACE/.deploy-control/scripts"' in install_step
-    assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-scripts" "$control_scripts"' in install_step
+    assert 'control_root="$GITHUB_WORKSPACE/.deploy-control"' in install_step
+    assert 'control_scripts="$control_root/backend/scripts"' in install_step
+    assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-source/backend" "$control_root/backend"' in install_step
     assert 'DEPLOY_CONTROL_SCRIPTS=%s' in install_step
     assert 'DEPLOY_WORKFLOW_ROOT=%s' in install_step
     assert '>> "$GITHUB_ENV"' in install_step
@@ -1037,17 +1040,23 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
     manifest = workspace / 'backend' / 'deploy' / 'runtime_env.yaml'
     manifest.parent.mkdir(parents=True)
     manifest.touch()
-    legacy_script = tmp_path / 'runner-temp' / 'backend-deploy-control-scripts' / 'preflight-cloud-run-deploy.py'
+    legacy_script = (
+        tmp_path
+        / 'runner-temp'
+        / 'backend-deploy-control-source'
+        / 'backend'
+        / 'scripts'
+        / 'preflight-cloud-run-deploy.py'
+    )
     legacy_script.parent.mkdir(parents=True)
     legacy_script.touch()
-    assert legacy_script.resolve().parents[2] != workspace
-    assert not (legacy_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml').exists()
+    assert legacy_script.resolve().parents[1].name == 'backend'
 
-    control_script = workspace / '.deploy-control' / 'scripts' / 'preflight-cloud-run-deploy.py'
+    control_script = workspace / '.deploy-control' / 'backend' / 'scripts' / 'preflight-cloud-run-deploy.py'
     control_script.parent.mkdir(parents=True)
     control_script.touch()
-    assert control_script.resolve().parents[2] == workspace
-    assert (control_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml') == manifest
+    assert control_script.resolve().parents[2] == workspace / '.deploy-control'
+    assert (control_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml') != manifest
 
     workflow_file = workspace / '.deploy-workflow-source' / '.github' / 'workflows' / 'gcp_backend.yml'
     workflow_file.parent.mkdir(parents=True)
@@ -1068,6 +1077,14 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
         ],
     ]
     assert all('--workflow-root "$DEPLOY_WORKFLOW_ROOT"' in step for step in validation_steps)
+    assert all('--manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml"' in step for step in validation_steps)
+    for action_name in (
+        'sync-backfill-lifecycle',
+        'transcription-release-candidate-probe',
+        'deployment-summary',
+        'deployment-notifier',
+    ):
+        assert f'uses: ./.deploy-workflow-source/.github/actions/{action_name}' in deploy
     assert 'python3 backend/scripts/' not in deploy
     assert 'bash backend/scripts/' not in deploy
     assert 'run: backend/scripts/' not in deploy
@@ -1175,6 +1192,7 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in restore_step
         else:
             assert "inputs.deploy_profile == 'auto-dev'" in restore_step
+        assert 'cancelled()' in restore_step
         assert 'cloud_run_traffic_snapshot.py' in restore_step
         assert ' restore' in restore_step
 
@@ -1191,7 +1209,7 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert 'transactional GKE/config rollback parity does not exist' not in boundary
     assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
     assert 'needs: validate-production-boundary' in workflow
-    assert 'needs: [validate-production-boundary, firestore_readiness]' in workflow
+    assert 'needs: [validate-production-boundary, firestore_readiness, record_break_glass]' in workflow
     for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
         assert forbidden not in boundary
 

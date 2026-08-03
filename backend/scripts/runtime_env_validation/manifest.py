@@ -14,6 +14,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _build_rendered_cloud_run_state,
     _fetch_live_cloud_run_state,
@@ -44,6 +45,13 @@ from scripts.runtime_env_validation.common import (
     _validate_env_entries,
     _validate_forbidden_env_entries,
 )
+
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
+    'OMI_LLM_GATEWAY_URL',
+    'OMI_LLM_GATEWAY_FEATURE_MODE',
+    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
+}
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
 
 
@@ -88,6 +96,9 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
     errors: list[ValidationError] = []
     gke_config = _as_config_dict(env_config.get('gke')) or {}
+    config_map = _as_config_dict(gke_config.get('config_map'))
+    config_map_name = config_map.get('name') if config_map is not None else None
+    config_map_entries = _as_config_dict(config_map.get('entries')) if config_map is not None else None
     for service, raw_service_config in gke_config.items():
         if service == 'config_map':
             continue
@@ -107,11 +118,33 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
                 config_maps=_config_map_names(values.get('envFrom', [])),
             )
         )
+        # The generated ConfigMap is a deployment boundary, not merely an
+        # envFrom hint. A typo here otherwise applies a new unused map and
+        # leaves workloads on stale configuration.
+        if config_map is not None:
+            for env_name, raw_entry in (_as_config_dict(service_config.get('env')) or {}).items():
+                entry = _as_config_dict(raw_entry) or {}
+                binding = _as_config_dict(entry.get('config_map'))
+                if binding is None:
+                    continue
+                binding_name = binding.get('name')
+                binding_key = binding.get('key')
+                if not isinstance(config_map_name, str) or binding_name != config_map_name:
+                    errors.append(
+                        ValidationError(
+                            f'gke/{service}',
+                            f'env {env_name} ConfigMap name must match declared gke.config_map.name {config_map_name!r}',
+                        )
+                    )
+                if not isinstance(binding_key, str) or binding_key not in (config_map_entries or {}):
+                    errors.append(
+                        ValidationError(f'gke/{service}', f'env {env_name} ConfigMap key {binding_key!r} is undeclared')
+                    )
     return errors
 
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_manifest(env, env_config)
     for key in ('region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))
@@ -229,6 +262,55 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
     job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
     job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    if job_cron == 'true':
+        for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
+            if required_env not in job_env:
+                errors.append(
+                    ValidationError(scope, f'missing gateway env {required_env} while canonical maintenance is enabled')
+                )
+        for required_secret in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS):
+            if required_secret not in job_secrets:
+                errors.append(
+                    ValidationError(
+                        scope, f'missing gateway secret {required_secret} while canonical maintenance is enabled'
+                    )
+                )
+        gateway_url = _as_config_dict(job_env.get('OMI_LLM_GATEWAY_URL'))
+        if gateway_url is not None and gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+            errors.append(
+                ValidationError(
+                    scope, 'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly'
+                )
+            )
+        gateway_mode = (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_FEATURE_MODE') or '').strip().lower()
+        if gateway_mode != 'gateway':
+            errors.append(
+                ValidationError(
+                    scope, 'OMI_LLM_GATEWAY_FEATURE_MODE must be gateway while canonical maintenance is enabled'
+                )
+            )
+        direct_exception = (
+            (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION') or '').strip().lower()
+        )
+        if direct_exception != 'false':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION must be false for canonical memory L2 maintenance',
+                )
+            )
+        if env == 'prod':
+            prod_allow = (
+                (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE') or '').strip().lower()
+            )
+            if prod_allow != 'true':
+                errors.append(
+                    ValidationError(
+                        scope,
+                        'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
+                    )
+                )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():

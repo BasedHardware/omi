@@ -855,6 +855,9 @@ environments:
           - HOSTED_PUSHER_API_URL
         memory-maintenance-job:
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             TYPESENSE_API_KEY:
               secret: TYPESENSE_API_KEY
               version: latest
@@ -879,6 +882,16 @@ environments:
             --cpu: '2'
             --memory: 2Gi
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
             MEMORY_ENABLED_USERS:
               category: memory_rollout
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -1719,6 +1732,9 @@ environments:
               category: runtime_identity
         memory-maintenance-job:
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             TYPESENSE_API_KEY:
               secret: TYPESENSE_API_KEY
               version: latest
@@ -1740,6 +1756,16 @@ environments:
           flags:
             --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
             MEMORY_ENABLED_USERS:
               category: memory_rollout
               value: ''
@@ -1767,6 +1793,9 @@ environments:
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
               value: 'false'
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml

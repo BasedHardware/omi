@@ -9,8 +9,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 
-config_map="$(python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" --format name)"
-python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" --format env >"$env_file"
+manifest_args=()
+if [[ -n "${RUNTIME_ENV_MANIFEST:-}" ]]; then
+  manifest_args=(--manifest "$RUNTIME_ENV_MANIFEST")
+fi
+config_map="$(python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" --format name)"
+python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" --format env >"$env_file"
 
 namespace="${ENVIRONMENT}-omi-backend"
 key_count="$(wc -l <"$env_file" | tr -d ' ')"

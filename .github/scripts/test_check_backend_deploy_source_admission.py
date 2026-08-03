@@ -499,10 +499,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness]\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy'\n",
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness]\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' || true\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
         )
-        self.assertIn("manual deployment must use exactly the main-ref deploy condition", CHECKER.validate(root))
+        self.assertIn("manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root))
 
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()
@@ -521,11 +521,11 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "needs: [validate-production-boundary, firestore_readiness]",
+            "needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
             "needs: firestore_readiness",
         )
         self.assertIn(
-            "manual deployment must depend on production-boundary validation and source admission",
+            "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
             CHECKER.validate(root),
         )
 

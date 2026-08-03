@@ -235,7 +235,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     composite = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
 
     for workflow in (manual, auto_dev):
-        assert 'uses: ./.github/actions/sync-backfill-lifecycle' in workflow
+        assert 'uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle' in workflow
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
         assert 'mode: platform' in workflow
@@ -304,7 +304,7 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in workflow_only
     assert "format('--tag={0}', inputs.transcription_candidate_tag)" in manual
     assert 'resolve_cloud_run_tagged_url.py' in manual
-    assert 'uses: ./.github/actions/transcription-release-candidate-probe' in manual
+    assert 'uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe' in manual
     assert 'candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}' in manual
     assert 'project_id: ${{ inputs.project_id }}' in manual
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual

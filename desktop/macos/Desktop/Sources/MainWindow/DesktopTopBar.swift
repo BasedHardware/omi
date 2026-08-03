@@ -32,16 +32,28 @@ struct DesktopTopBar: View {
   }
 
   var body: some View {
-    TopNavigationBarLayout(
-      expandedNavigation: { navPills },
-      compactNavigation: { compactNavigationMenu },
-      persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
-      settings: { settingsButton }
-    )
-    .frame(maxWidth: .infinity)
+    GeometryReader { proxy in
+      let laneWidth = TopNavigationLayoutMetrics.contentLaneWidth(for: proxy.size.width)
+
+      HStack(spacing: 0) {
+        Spacer(minLength: 0)
+        TopNavigationBarLayout(
+          expandedNavigation: { navPills },
+          compactNavigation: { compactNavigationMenu },
+          persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
+          settings: { settingsButton }
+        )
+        .frame(width: laneWidth)
+        Spacer(minLength: 0)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
     .frame(height: 44)
-    .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
+    // The Memory submenu is an inline overlay. Elevation belongs to the shared
+    // top-bar component so every shell and exported preview paints it above the
+    // destination sibling rather than relying on each call site to remember.
+    .zIndex(1)
     .onDisappear {
       memoryDropdownTask?.cancel()
     }
@@ -263,6 +275,20 @@ struct DesktopTopBar: View {
     case SidebarNavItem.tasks.rawValue: return newTasks
     default: return 0
     }
+  }
+}
+
+enum TopNavigationLayoutMetrics {
+  /// The navigation lane follows the same readable width as the Home chat
+  /// composer, while retaining the composer's horizontal inset at narrow sizes.
+  static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
+    max(
+      0,
+      min(
+        ChatComposerLayout.contentLaneMaxWidth,
+        availableWidth - (ChatComposerLayout.pageMargin * 2)
+      )
+    )
   }
 }
 

@@ -16,6 +16,10 @@ if [[ "$DEPLOY_PROFILE" == "manual" ]]; then
     echo "Invalid deploy_targets: $DEPLOY_TARGETS. Must be 'all' or 'cloud-run-only'." >&2
     exit 1
   fi
+  if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
+    echo "environment=prod, deploy_targets=all is unsupported; use the dedicated GKE release workflow." >&2
+    exit 1
+  fi
   if [[ "$DEPLOY_GATEWAY" == "true" && "$DEPLOY_ENVIRONMENT" == "prod" ]]; then
     echo "environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow." >&2
     exit 1

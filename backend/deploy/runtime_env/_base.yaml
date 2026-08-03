@@ -491,6 +491,9 @@ environment_shared:
             category: runtime_identity
       memory-maintenance-job:
         secrets:
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
           TYPESENSE_API_KEY:
             secret: TYPESENSE_API_KEY
             version: latest
@@ -512,6 +515,16 @@ environment_shared:
         flags:
           --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
         env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
           MEMORY_ENABLED_USERS:
             category: memory_rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:

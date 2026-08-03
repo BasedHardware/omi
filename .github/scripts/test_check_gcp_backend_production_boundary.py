@@ -77,8 +77,8 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
             "defaults_to_all": ("default: 'cloud-run-only'", "default: 'all'"),
             "permits_prod_all": (CHECKER.PROD_ALL_REJECTION, "if false; then"),
             "reintroduces_tagged_url": (
-                CHECKER.PROD_SMOKE,
-                CHECKER.PROD_SMOKE + "\n      run: probe-transcription-candidate-from-cloud-run.sh",
+                "inputs.deploy_profile == 'manual' && inputs.environment == 'development'",
+                "inputs.deploy_profile == 'manual' && inputs.environment == 'prod'",
             ),
             "moves_smoke_before_serving_verification": (CHECKER.PROD_SMOKE, "Smoke production candidate API"),
             "omits_schema_valid_unauthenticated_smoke": (

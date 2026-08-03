@@ -7,6 +7,7 @@ from typing import Any, cast
 import yaml
 
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
+from scripts.runtime_env_memory_contract import validate_retired_memory_env
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / 'backend'
@@ -205,7 +206,7 @@ def _validate_cloud_run_secret_entries(
     expected: ConfigDict,
     actual: EnvEntryMap,
 ) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_env(scope=scope, actual=actual)
     for name, expected_entry in expected.items():
         actual_entry = actual.get(name)
         if actual_entry is None:

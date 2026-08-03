@@ -125,7 +125,10 @@ class SpeechProfileProvider extends ChangeNotifier
         await _initiateWebsocket(codec: codec, sampleRate: 16000, force: true);
 
         // Start phone mic streaming
-        await _initiatePhoneMicStreaming();
+        if (!await _initiatePhoneMicStreaming()) {
+          notifyError('SOCKET_INIT_FAILED');
+          return false;
+        }
       } else {
         // Device mode - use device codec
         device = deviceProvider?.connectedDevice;
@@ -169,49 +172,59 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await ServiceManager.instance().socket.speechProfile(
-          codec: codec,
-          sampleRate: rate,
-          language: language,
-          force: force,
-        );
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
   }
 
-  /// Start phone microphone streaming (alternative to BLE device streaming)
-  Future<void> _initiatePhoneMicStreaming() async {
+  /// Start phone microphone streaming (alternative to BLE device streaming).
+  /// Returns false when the mic could not be acquired — contention with a live
+  /// conversation throws a [StateError] — so [initialise] fails visibly instead
+  /// of leaving a recording UI that never receives audio.
+  Future<bool> _initiatePhoneMicStreaming() async {
     Logger.debug('Starting phone mic streaming for speech profile...');
 
     // Request mic permission
     await Permission.microphone.request();
 
-    await ServiceManager.instance().mic.start(
-      onByteReceived: (Uint8List bytes) {
-        if (bytes.isEmpty) return;
+    try {
+      await ServiceManager.instance().mic.start(
+        onByteReceived: (Uint8List bytes) {
+          if (bytes.isEmpty) return;
 
-        // Store audio frames for speech profile upload
-        audioStorage.frames.add(bytes.toList());
+          // Store audio frames for speech profile upload
+          audioStorage.frames.add(bytes.toList());
 
-        // Send to transcription socket
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
-        }
-      },
-      onRecording: () {
-        Logger.debug('Phone mic recording started');
-        updateStartedRecording(true);
-      },
-      onStop: () {
-        Logger.debug('Phone mic recording stopped');
-      },
-    );
+          // Send to transcription socket
+          if (_socket?.state == SocketServiceState.connected) {
+            _socket?.send(bytes);
+          }
+        },
+        onRecording: () {
+          Logger.debug('Phone mic recording started');
+          updateStartedRecording(true);
+        },
+        onStop: () {
+          Logger.debug('Phone mic recording stopped');
+        },
+      );
+      return true;
+    } catch (e) {
+      Logger.debug('Speech profile: phone mic start failed: $e');
+      return false;
+    }
   }
 
   /// Stop phone microphone streaming

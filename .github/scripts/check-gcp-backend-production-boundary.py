@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,7 +41,12 @@ def validate(root: Path) -> list[str]:
         and "inputs.environment == 'development'" not in text
     ):
         errors.append("gcp_backend.yml must retain the development tagged-candidate gate")
-    if 'inputs.environment == \'development\'' not in text or "resolve_cloud_run_tagged_url.py" not in text:
+    resolver_step = re.search(
+        r"- name: Resolve transcription candidate URL(?P<body>.*?)(?=\n\s*- name:|\Z)", text, re.DOTALL
+    )
+    if resolver_step is None or "resolve_cloud_run_tagged_url.py" not in resolver_step.group('body') or (
+        "inputs.deploy_profile == 'manual' && inputs.environment == 'development'" not in resolver_step.group('body')
+    ):
         errors.append("gcp_backend.yml must use the tagged candidate resolver only for development")
     for forbidden in PROD_FORBIDDEN:
         if forbidden in text:
