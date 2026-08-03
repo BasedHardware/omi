@@ -11,14 +11,17 @@ import pytest
 from scripts import verify_backend_release_vector as verifier
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-DEPLOY_BACKEND_STACK_ACTION = BACKEND_DIR.parent / '.github/actions/deploy-backend-stack/action.yml'
+REPOSITORY_ROOT = BACKEND_DIR.parent
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
+_GITHUB_SCRIPTS = REPOSITORY_ROOT / '.github' / 'scripts'
+if str(_GITHUB_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_GITHUB_SCRIPTS))
+from workflow_composite_contract import backend_deploy_contract_text as _expand_contract  # noqa: E402
 
 
 def backend_deploy_contract_text(workflow_name: str) -> str:
-    workflow = (BACKEND_DIR.parent / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
-    if './.github/actions/deploy-backend-stack' not in workflow:
-        return workflow
-    return workflow + '\n' + DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    workflow = (REPOSITORY_ROOT / '.github' / 'workflows' / workflow_name).read_text(encoding='utf-8')
+    return _expand_contract(workflow, REPOSITORY_ROOT, Path('.github/actions/deploy-backend-stack/action.yml'))
 
 
 PREFLIGHT_SCRIPT = BACKEND_DIR / 'scripts' / 'preflight-cloud-run-deploy.py'
