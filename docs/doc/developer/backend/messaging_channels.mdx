@@ -22,6 +22,8 @@ This keeps the trust boundary simple: Firebase authenticates the account, a one-
 
 If an unlinked user sends the first message, Omi returns a one-time sign-in URL containing a claim code. After Firebase sign-in, the web settings page consumes that code and binds the original provider identity. The manual `/start CODE` flow remains available for clients that do not open links.
 
+`CHANNEL_SIGN_IN_URL` selects the web login origin used in that handoff. Production uses `https://omi.me/login`; a candidate backend must use a web candidate built with the same backend API and Firebase project.
+
 ## Phone registration through core chat
 
 The `start_phone_verification` core-chat action reuses the existing caller-ID verification flow. The user explicitly supplies an E.164 number, Omi places the verification call, and the existing app verification screen completes registration. The core chat never asks for or accepts the verification code.

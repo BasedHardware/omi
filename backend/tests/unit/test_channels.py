@@ -282,6 +282,35 @@ def test_unlinked_channel_reply_contains_a_one_time_sign_in_link(monkeypatch):
     assert '/start ' + 'b' * 48 in result
 
 
+def test_unlinked_channel_reply_uses_configured_sign_in_url(monkeypatch):
+    expires_at = datetime(2026, 8, 2, 12, 15, tzinfo=timezone.utc)
+
+    async def fake_run_blocking(_executor, fn, *args, **kwargs):
+        if fn is channels_db.get_binding:
+            return None
+        if fn is channels_db.issue_claim_token:
+            return 'c' * 48, expires_at
+        raise AssertionError(fn)
+
+    import routers.channels as channels_router
+
+    monkeypatch.setenv('CHANNEL_SIGN_IN_URL', 'https://channels-dev.example/login/')
+    monkeypatch.setattr(channels_router, 'run_blocking', fake_run_blocking)
+
+    result = asyncio.run(
+        channels_router._channel_reply(
+            'telegram',
+            {
+                'channel_user_id': '42',
+                'channel_chat_id': '42',
+                'text': 'hello',
+            },
+        )
+    )
+
+    assert 'https://channels-dev.example/login?channel=telegram&code=' + 'c' * 48 in result
+
+
 def test_group_channel_reply_uses_group_binding_and_attributes_sender(monkeypatch):
     import routers.channels as channels_router
 
