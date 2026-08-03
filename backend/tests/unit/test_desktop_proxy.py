@@ -464,10 +464,17 @@ async def test_proxy_bounds_concurrency_pool_wait_and_labels_phase(monkeypatch):
 async def test_streaming_defers_resource_acquisition_until_body_iteration(monkeypatch):
     streams_opened = 0
     streams_closed = 0
+    chunk = b'data: {"ok":true}\n\n'
+
+    class UpstreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            yield chunk
 
     class StreamContext:
         async def __aenter__(self):
-            return httpx.Response(200, content=b'data: {"ok":true}\n\n')
+            return UpstreamResponse()
 
         async def __aexit__(self, *_args):
             nonlocal streams_closed
@@ -485,8 +492,12 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     async def route(_path, _model, _action, _query):
         return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
 
+    async def await_upstream(_request, awaitable):
+        return await awaitable
+
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
     monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
 
@@ -495,6 +506,6 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     assert response.status_code == 200
     assert streams_opened == 0
     chunks = [chunk async for chunk in response.body_iterator]
-    assert chunks == [b'data: {"ok":true}\n\n']
+    assert chunks == [chunk]
     assert streams_opened == 1
     assert streams_closed == 1
