@@ -14,9 +14,7 @@ void main() {
     expect(adapter.enabled, _expectedEnabled);
     expect(
       await adapter.schedule(walId: 'wal-1'),
-      _expectedEnabled
-          ? SelfHostedWalSyncResult.deferred
-          : SelfHostedWalSyncResult.disabled,
+      _expectedEnabled ? SelfHostedWalSyncResult.deferred : SelfHostedWalSyncResult.disabled,
     );
   });
 }
