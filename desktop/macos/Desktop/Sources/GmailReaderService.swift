@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Models
 
-struct GmailEmail: Identifiable {
+struct GmailEmail: Identifiable, Sendable {
   let id: String
   let from: String
   let subject: String
@@ -157,11 +157,11 @@ actor GmailReaderService {
 if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
-    if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
-      let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
-      let emails = try await GoogleOAuthGmailReader.readRecentEmails(
-        token: token, maxResults: maxResults, query: query)
-      return emails.sorted { $0.date > $1.date }
+    let oauth = GoogleOAuthConnectionManager.shared
+    if oauth.hasGrants() {
+      return try await readRecentEmailsViaOAuth(
+        manager: oauth, maxResults: maxResults, query: query)
+    }
     }
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
@@ -198,28 +198,77 @@ if userInitiated {
     return emails.sorted { $0.date > $1.date }
   }
 
-func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
-    if userInitiated {
-      BrowserKeychainCache.shared.beginUserInitiatedOperation()
-    }
-    if let grant = GoogleOAuthConnectionManager.shared.primaryConnection() {
+private func readRecentEmailsViaOAuth(
+    manager: GoogleOAuthConnectionManager,
+    maxResults: Int,
+    query: String
+  ) async throws -> [GmailEmail] {
+    let grants = manager.activeConnections()
+    guard !grants.isEmpty else { throw GmailReaderError.sessionExpired }
+    var merged: [String: GmailEmail] = [:]
+    var successfulReads = false
+    var firstFailure: GmailReaderError?
+    for grant in grants {
       do {
-        let token = try await GoogleOAuthConnectionManager.shared.accessToken(account: grant.account)
-        _ = try await GoogleOAuthGmailReader.readRecentEmails(token: token, maxResults: 1)
-        return .connected(verifiedAt: Date())
+        let token = try await manager.accessToken(account: grant.account)
+        let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+          token: token, maxResults: maxResults, query: query)
+        successfulReads = true
+        for email in emails {
+          guard let existing = merged[email.id], existing.date >= email.date else {
+            merged[email.id] = email
+            continue
+          }
+        }
+      } catch let error as GoogleOAuthReaderError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.gmailError(from: error)
+      } catch let error as GoogleOAuthError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.gmailError(from: error)
       } catch {
-        return .needsSignIn(message: "Reconnect your Google account.")
+        firstFailure = firstFailure ?? .networkError(error.localizedDescription)
       }
     }
+if successfulReads {
+      return Array(
+        merged.values.sorted { $0.date > $1.date }.prefix(maxResults))
     }
+    throw firstFailure ?? GmailReaderError.authFailed
+  }
+
+  private static func gmailError(from error: Error) -> GmailReaderError {
+    switch error {
+    case GoogleOAuthReaderError.reconnectRequired:
+      return .sessionExpired
+    case GoogleOAuthReaderError.http(let status):
+      return .networkError("Google returned HTTP \(status)")
+    case GoogleOAuthReaderError.network(let detail):
+      return .networkError(detail)
+    case GoogleOAuthError.reconnectRequired, GoogleOAuthError.invalidGrant:
+      return .sessionExpired
+    default:
+      return .networkError(error.localizedDescription)
+    }
+  }
+
+  func verifyConnection() async -> GmailConnectionStatus {
     do {
-      _ = try fetchGmailViaAtomFeedSingle(
-        maxResults: 1,
-        query: "newer_than:1d",
-        feedPath: "atom/inbox",
-        allowBootstrap: false,
-        userInitiated: userInitiated
-      )
+      let manager = GoogleOAuthConnectionManager.shared
+      if manager.hasGrants() {
+        _ = try await readRecentEmailsViaOAuth(manager: manager, maxResults: 1, query: "newer_than:1d")
+      } else {
+        _ = try fetchGmailViaAtomFeedSingle(
+          maxResults: 1,
+          query: "newer_than:1d",
+          feedPath: "atom/inbox",
+          allowBootstrap: false
+        )
+      }
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
       switch error {

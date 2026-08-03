@@ -36,7 +36,7 @@ enum GmailSelectionStore {
   static func filter(_ configs: [[String: String]]) -> [[String: String]] {
     guard let selected = selectedCookiePath, !selected.isEmpty else { return configs }
     let narrowed = configs.filter { $0["db_path"] == selected }
-    return narrowed.isEmpty ? configs : narrowed
+    return narrowed
   }
 }
 
@@ -56,16 +56,16 @@ enum GmailAccountProbe {
     let pythonScript = """
       \(BrowserGoogleSession.chromiumCookiePythonSupport)
       import re
+      from concurrent.futures import ThreadPoolExecutor
       from urllib.request import Request, build_opener, HTTPCookieProcessor
 
       browsers = json.loads(sys.stdin.read())
-      accounts = []
-      for browser in browsers:
+      def probe(browser):
           cookies, err = decrypt_google_cookies(browser['db_path'], browser['password'], include_gmail_hosts=True)
           if err or not cookies:
-              continue
+              return None
           if not [c for c in cookies if c['name'] in GOOGLE_AUTH_COOKIE_NAMES]:
-              continue
+              return None
           jar = make_cookie_jar(cookies)
           email = None
           for url in ('https://accounts.google.com/AccountInfo', 'https://www.google.com/accounts/AccountInfo'):
@@ -81,7 +81,13 @@ enum GmailAccountProbe {
                       break
               except Exception:
                   continue
-          accounts.append({'name': browser['name'], 'db_path': browser['db_path'], 'email': email})
+          return {'name': browser['name'], 'db_path': browser['db_path'], 'email': email}
+
+      accounts = []
+      with ThreadPoolExecutor(max_workers=min(4, max(1, len(browsers)))) as executor:
+          for account in executor.map(probe, browsers):
+              if account:
+                  accounts.append(account)
       write_json_result('omi_gmail_accounts_', {'ok': True, 'accounts': accounts})
       """
 

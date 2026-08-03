@@ -44,10 +44,30 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
 }
 
 final class VolatileGoogleOAuthStore: GoogleOAuthStoring {
-  var values: [GoogleOAuthConnection] = []
-  func readAll() -> [GoogleOAuthConnection] { values }
+  private var storedValues: [GoogleOAuthConnection] = []
+  private let lock = NSLock()
+  var values: [GoogleOAuthConnection] {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return storedValues
+    }
+    set {
+      lock.lock()
+      defer { lock.unlock() }
+      storedValues = newValue
+    }
+  }
+
+  func readAll() -> [GoogleOAuthConnection] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storedValues
+  }
   func write(_ connections: [GoogleOAuthConnection]) -> Bool {
-    values = connections
+    lock.lock()
+    defer { lock.unlock() }
+    storedValues = connections
     return true
   }
 }
@@ -173,6 +193,33 @@ final class GoogleOAuthTests: XCTestCase {
     XCTAssertEqual(event?.endTime, "2026-03-20T09:30:00Z")
   }
 
+  func testMissingRequiredScopesAreReportedBeforePersistence() {
+    XCTAssertEqual(
+      GoogleOAuthConnectionManager.missingRequiredScopes(["openid"]),
+      [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ]
+    )
+    XCTAssertEqual(
+      GoogleOAuthConnectionManager.missingRequiredScopes(GoogleOAuth.scopes), [])
+  }
+
+  func testOAuthStoreAccountChangesWithSignedInOmiUser() {
+    let defaults = UserDefaults.standard
+    let original = defaults.string(forKey: DefaultsKey.authUserId.rawValue)
+    defer {
+      defaults.set(original, forKey: DefaultsKey.authUserId.rawValue)
+    }
+    defaults.set("omi-user-a", forKey: DefaultsKey.authUserId.rawValue)
+    let first = GoogleOAuthStore.account
+    defaults.set("omi-user-b", forKey: DefaultsKey.authUserId.rawValue)
+    let second = GoogleOAuthStore.account
+    XCTAssertNotEqual(first, second)
+    XCTAssertTrue(first.hasSuffix("omi-user-a"))
+    XCTAssertTrue(second.hasSuffix("omi-user-b"))
+  }
+
   func testExchangeWithoutVerifiedAccountFails() async throws {
     MockURLProtocol.handler = { request in
       if request.url?.host?.contains("openidconnect") == true {
@@ -207,7 +254,7 @@ final class GoogleOAuthTests: XCTestCase {
   func testExchangeSendsCodeVerifierAndNamesAccount() async throws {
     MockURLProtocol.handler = { request in
       if request.url?.host?.contains("openidconnect") == true {
-        return jsonResponse(["email": "work@corp.com", "name": "Work"])
+        return jsonResponse(["email": "work@corp.com", "email_verified": true, "name": "Work"])
       }
       let body = String(data: MockURLProtocol.body(of: request), encoding: .utf8) ?? ""
       XCTAssertTrue(body.contains("grant_type=authorization_code"))
@@ -291,6 +338,21 @@ final class GoogleOAuthTests: XCTestCase {
     XCTAssertEqual(token, "work-token")
   }
 
+  func testAccessTokenRejectsStaleGrant() async {
+    let store = VolatileGoogleOAuthStore()
+    store.values = [connection(account: "old@corp.com", needsReconnect: true)]
+    let manager = GoogleOAuthConnectionManager(
+      store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    do {
+      _ = try await manager.accessToken(account: "old@corp.com")
+      XCTFail("expected reconnect")
+    } catch let error as GoogleOAuthError {
+      XCTAssertEqual(error.errorDescription, GoogleOAuthError.reconnectRequired.errorDescription)
+    } catch {
+      XCTFail("unexpected error \(error)")
+    }
+  }
+
   func testAccessTokenRefreshesExpiredGrant() async throws {
     let store = VolatileGoogleOAuthStore()
     store.values = [
@@ -320,6 +382,18 @@ final class GoogleOAuthTests: XCTestCase {
     try? await manager.disconnect(account: "work@corp.com")
     XCTAssertEqual(store.readAll().count, 1)
     XCTAssertEqual(store.readAll().first?.account, "junk@gmail.com")
+  }
+
+  func testDisconnectDoesNotRemoveReplacementGrant() {
+    let store = VolatileGoogleOAuthStore()
+    let old = connection(accessToken: "old", account: "work@corp.com")
+    let replacement = connection(accessToken: "new", account: "work@corp.com")
+    store.values = [old]
+    let manager = GoogleOAuthConnectionManager(
+      store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    store.values = [replacement]
+    XCTAssertTrue(manager.remove(account: replacement.account, expected: old))
+    XCTAssertEqual(store.readAll().first?.accessToken, "new")
   }
 
   func testGmailParseMessage() {
@@ -352,6 +426,7 @@ final class GoogleOAuthTests: XCTestCase {
       "attendees": [
         ["displayName": "Kim", "email": "kim@b.co"],
         ["email": "no-name@b.co"],
+        ["displayName": "Self", "email": "me@b.co", "self": true],
       ],
       "location": "Room 1",
       "description": "notes",
@@ -363,6 +438,73 @@ final class GoogleOAuthTests: XCTestCase {
     XCTAssertEqual(event?.attendees, ["Kim", "no-name@b.co"])
     XCTAssertEqual(event?.location, "Room 1")
     XCTAssertEqual(event?.isAllDay, false)
+  }
+
+  func testGmailReaderPaginatesAndSkipsDeletedMessages() async throws {
+    let lock = NSLock()
+    var detailPaths: [String] = []
+    MockURLProtocol.handler = { request in
+      let path = request.url?.path ?? ""
+      if path.hasSuffix("/msg-2") {
+        return jsonResponse(["error": ["code": 404]], status: 404)
+      }
+      if path.hasSuffix("/msg-1") {
+        lock.lock()
+        detailPaths.append(path)
+        lock.unlock()
+        return jsonResponse([
+          "id": "msg-1",
+          "internalDate": "1730000000000",
+          "payload": ["headers": [["name": "FROM", "value": "a@b.co"]]],
+        ])
+      }
+      guard let url = request.url else { throw URLError(.badURL) }
+      let pageToken = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+        .first(where: { $0.name == "pageToken" })?.value
+      if pageToken == nil {
+        return jsonResponse(["messages": [["id": "msg-1"]], "nextPageToken": "page-2"])
+      }
+      return jsonResponse(["messages": [["id": "msg-2"]]])
+    }
+    let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+      token: "token", maxResults: 2, session: mockSession())
+    XCTAssertEqual(emails.map(\.id), ["msg-1"])
+    XCTAssertEqual(emails.first?.from, "a@b.co")
+    XCTAssertEqual(detailPaths.count, 1)
+  }
+
+  func testCalendarReaderPaginatesAndPreservesUntitledEvents() async throws {
+    MockURLProtocol.handler = { request in
+      guard let url = request.url else { throw URLError(.badURL) }
+      let pageToken = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+        .first(where: { $0.name == "pageToken" })?.value
+      if pageToken == nil {
+        return jsonResponse([
+          "items": [
+            [
+              "id": "event-1",
+              "summary": "First",
+              "start": ["dateTime": "2026-08-02T09:00:00Z"],
+              "end": ["dateTime": "2026-08-02T09:30:00Z"],
+            ]
+          ],
+          "nextPageToken": "page-2",
+        ])
+      }
+      return jsonResponse([
+        "items": [
+          [
+            "id": "event-2",
+            "start": ["dateTime": "2026-08-02T10:00:00Z"],
+            "end": ["dateTime": "2026-08-02T10:30:00Z"],
+          ]
+        ]
+      ])
+    }
+    let events = try await GoogleOAuthCalendarReader.readEvents(
+      token: "token", daysBack: 1, daysForward: 1, maxResults: 2, session: mockSession())
+    XCTAssertEqual(Set(events.map(\.id)), Set(["event-1", "event-2"]))
+    XCTAssertEqual(events.first(where: { $0.id == "event-2" })?.summary, "Untitled")
   }
 
   func testCalendarParseAllDayEvent() {
