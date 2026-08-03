@@ -423,6 +423,8 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda provider: 'sk-test' if provider == 'anthropic' else None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
 
     class Messages:
         async def create(self, **payload):
@@ -464,6 +466,15 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
     assert gateway_calls == []
     assert b'"content":"legacy"' in response.body
+    assert fallbacks == [
+        {
+            'component': 'llm_gateway',
+            'from_mode': 'managed_gateway',
+            'to_mode': 'anthropic_byok',
+            'reason': 'byok',
+            'outcome': 'recovered',
+        }
+    ]
 
 
 @pytest.mark.asyncio

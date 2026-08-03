@@ -35,6 +35,7 @@ from utils.llm.gateway_observability import record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
 from utils.llm.gateway_serving import is_gateway_transport_failure
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
 
@@ -687,6 +688,13 @@ async def chat_completions(
     try:
         gateway_mode = should_route_features_through_gateway() and _uses_managed_chat_agent(body)
         if gateway_mode and get_byok_key('anthropic'):
+            record_fallback(
+                component='llm_gateway',
+                from_mode='managed_gateway',
+                to_mode='anthropic_byok',
+                reason='byok',
+                outcome='recovered',
+            )
             gateway_mode = False
         if gateway_mode:
             public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)

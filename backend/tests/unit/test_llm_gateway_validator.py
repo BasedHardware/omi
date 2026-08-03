@@ -203,6 +203,15 @@ def test_accepts_assistant_tool_call_history_without_content():
     assert validated.messages[2]['content'] == ''
 
 
+@pytest.mark.parametrize('role', ['developer', 'system', 'tool', 'user'])
+def test_rejects_null_content_outside_assistant_tool_history(role):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(messages=[{'role': role, 'content': None}])
+
+    with pytest.raises(GatewayInvalidRequestError, match='message content is required'):
+        validate_chat_completion_request(request, lane)
+
+
 def test_rejects_unsupported_message_content_parts():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(
