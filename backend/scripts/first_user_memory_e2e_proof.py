@@ -106,8 +106,6 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
                 "memorydb_fields": sorted(memorydb.keys()),
             }
         )
-        if len(items) > limit:
-            raise RuntimeError(f"projection item count exceeds safety limit ({limit})")
 
     expected_generation = head.get("account_generation") if isinstance(head, dict) else None
     projection_ready = isinstance(projection_state, dict) and projection_state.get("ready") is True

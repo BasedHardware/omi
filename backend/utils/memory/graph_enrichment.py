@@ -210,7 +210,7 @@ def _current_evidence_ids(item: MemoryItem) -> List[str]:
         ids.append(evidence_id)
         if getattr(record, "source_state", None) == SourceState.active:
             active_count += 1
-    if active_count == 0 and not item.user_asserted:
+    if active_count != len(evidence):
         raise GraphEnrichmentError("evidence_not_active", "graph enrichment requires active evidence")
     return sorted(ids)
 

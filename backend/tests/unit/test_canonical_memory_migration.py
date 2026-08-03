@@ -2,6 +2,7 @@ from datetime import timedelta
 import pytest
 from database.memory_migration_store import (
     InMemoryMigrationStore,
+    MigrationCheckpointConflict,
     MigrationFenceConflict,
     MigrationLeaseLost,
     MigrationLeaseUnavailable,
@@ -116,6 +117,23 @@ def test_certificate_rejects_missing_surface_or_mismatch():
             required_surfaces=list(MigrationSurface),
             converged_surfaces=[MigrationSurface.canonical],
         )
+
+
+def test_terminal_job_cannot_be_reclaimed_and_certificate_surface_order_is_ignored():
+    store = InMemoryMigrationStore()
+    store.create_job(_job())
+    claimed = store.claim_job("u1", "job1", "worker-a")
+    assert claimed.claim is not None
+    certificate = _certificate().model_copy(
+        update={
+            "required_surfaces": list(reversed(list(MigrationSurface))),
+            "converged_surfaces": list(reversed(list(MigrationSurface))),
+        }
+    )
+    complete = CanonicalMigrationReconciler(store).certify_and_cutover(claimed, claimed.claim, certificate)
+    assert complete.job.state.value == "complete"
+    with pytest.raises(MigrationCheckpointConflict):
+        store.claim_job("u1", "job1", "worker-a")
 
 
 def test_projection_writer_admission_is_independent_from_reader_readiness():

@@ -391,7 +391,7 @@ def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
 
     state_path = MemoryCollections(uid=build.uid).v3_compatibility_projection_state
     final_state = build.writes[state_path]
-    staged_state = {**final_state, "ready": False, "write_convergence_complete": False}
+    staged_state = {**final_state, "ready": False}
     db_client.document(state_path).set(staged_state)
 
     item_paths = [path for path in sorted(build.writes) if path != state_path]

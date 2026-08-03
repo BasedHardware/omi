@@ -409,7 +409,7 @@ def _apply_user(
             staged_count=current.staged_count,
         )
 
-    if current.state == MigrationState.staged and current.staging_complete:
+    if current.state == MigrationState.staged and current.staging_complete and not config.process_buckets:
         return BulkUserResult(
             uid=inventory.uid,
             state=MigrationState.staged,

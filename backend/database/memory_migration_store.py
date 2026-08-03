@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_migration import (
     CanonicalMigrationJob,
@@ -78,6 +79,8 @@ class InMemoryMigrationStore:
             raise ValueError("claim ttl must be positive")
         with self._lock:
             job = self._require(uid, job_id)
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be claimed")
             prior = job.claim
             now = _now()
             if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
@@ -106,6 +109,8 @@ class InMemoryMigrationStore:
     ) -> CanonicalMigrationJob:
         with self._lock:
             job = self._require(uid, job_id)
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
             self._assert_claim(job, claim)
             return self._write(
                 job.model_copy(
@@ -121,7 +126,10 @@ class InMemoryMigrationStore:
         self, uid: str, job_id: str, claim: MigrationClaim, receipt: MigrationPageReceipt
     ) -> MigrationPageReceipt:
         with self._lock:
-            self._assert_claim(self._require(uid, job_id), claim)
+            job = self._require(uid, job_id)
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
+            self._assert_claim(job, claim)
             key = (uid, job_id, receipt.page_id)
             prior = self._pages.get(key)
             if prior and prior != receipt:
@@ -134,8 +142,10 @@ class InMemoryMigrationStore:
     ) -> CanonicalMigrationJob:
         with self._lock:
             job = self._require(uid, job_id)
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
             self._assert_claim(job, claim)
-            if certificate.required_surfaces != job.required_surfaces:
+            if set(certificate.required_surfaces) != set(job.required_surfaces):
                 raise MigrationFenceConflict("certificate surfaces differ from job")
             return self._write(
                 job.model_copy(
@@ -252,6 +262,8 @@ class FirestoreMigrationStore:
 
         def claim(tx: Any) -> CanonicalMigrationJob:
             job = self._decode(ref.get(transaction=tx))
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be claimed")
             prior = job.claim
             now = _now()
             if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
@@ -283,6 +295,8 @@ class FirestoreMigrationStore:
 
         def renew(tx: Any) -> CanonicalMigrationJob:
             job = self._decode(ref.get(transaction=tx))
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
             self._assert_claim(job, claim)
             written = job.model_copy(
                 update={"claim": claim.renew(ttl_seconds=ttl_seconds), "version": job.version + 1, "updated_at": _now()}
@@ -298,7 +312,10 @@ class FirestoreMigrationStore:
         job_ref, page_ref = self._ref(uid, job_id), self._page_ref(uid, job_id, receipt.page_id)
 
         def write(tx: Any) -> MigrationPageReceipt:
-            self._assert_claim(self._decode(job_ref.get(transaction=tx)), claim)
+            job = self._decode(job_ref.get(transaction=tx))
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
+            self._assert_claim(job, claim)
             snapshot = page_ref.get(transaction=tx)
             if getattr(snapshot, "exists", False):
                 prior = parse_snapshot_strict(MigrationPageReceipt, snapshot)
@@ -327,14 +344,47 @@ class FirestoreMigrationStore:
     def cutover(
         self, uid: str, job_id: str, claim: MigrationClaim, *, expected_head_commit_id: str
     ) -> CanonicalMigrationJob:
-        def mutation(job: CanonicalMigrationJob) -> CanonicalMigrationJob:
+        job_ref = self._ref(uid, job_id)
+        paths = MemoryCollections(uid=uid)
+        head_ref = self._db.document(paths.memory_state_head)
+        control_ref = self._db.document(paths.memory_control_state)
+        projection_ref = self._db.document(paths.v3_compatibility_projection_state)
+
+        def cutover_transaction(tx: Any) -> CanonicalMigrationJob:
+            job = self._decode(job_ref.get(transaction=tx))
+            self._assert_claim(job, claim)
             if job.certificate is None or job.certificate.canonical_head_commit_id != expected_head_commit_id:
                 raise MigrationFenceConflict("fresh certificate/head is required for cutover")
-            return job.model_copy(
+            head = head_ref.get(transaction=tx)
+            control = control_ref.get(transaction=tx)
+            projection = projection_ref.get(transaction=tx)
+            head_data = head.to_dict() if getattr(head, "exists", False) else None
+            control_data = control.to_dict() if getattr(control, "exists", False) else None
+            projection_data = projection.to_dict() if getattr(projection, "exists", False) else None
+            if not isinstance(head_data, dict) or (
+                head_data.get("uid") != uid
+                or head_data.get("head_commit_id") != expected_head_commit_id
+                or head_data.get("account_generation") != job.account_generation
+            ):
+                raise MigrationFenceConflict("authoritative memory head changed before cutover")
+            if not isinstance(control_data, dict) or control_data.get("uid") != uid:
+                raise MigrationFenceConflict("authoritative memory control is unavailable for cutover")
+            if not isinstance(projection_data, dict) or (
+                projection_data.get("uid") != uid
+                or projection_data.get("source_commit_id") != expected_head_commit_id
+                or projection_data.get("writer_admission_ready", projection_data.get("ready")) is not True
+            ):
+                raise MigrationFenceConflict("compatibility projection is not fenced to the verified head")
+            updated = job.model_copy(
                 update={"cutover_head_commit_id": expected_head_commit_id, "state": MigrationState.complete}
             )
+            updated = updated.model_copy(update={"version": job.version + 1, "updated_at": _now()})
+            tx.set(control_ref, {"mode": "read"}, merge=True)
+            tx.set(projection_ref, {"ready": True, "write_convergence_complete": True}, merge=True)
+            tx.set(job_ref, updated.model_dump(mode="python"))
+            return updated
 
-        return self._update_with_claim(uid, job_id, claim, mutation)
+        return self._run(cutover_transaction)
 
     def _update_with_claim(
         self,
@@ -348,8 +398,10 @@ class FirestoreMigrationStore:
 
         def update(tx: Any) -> CanonicalMigrationJob:
             job = self._decode(ref.get(transaction=tx))
+            if job.state in {MigrationState.complete, MigrationState.aborted}:
+                raise MigrationCheckpointConflict("terminal migration jobs cannot be mutated")
             self._assert_claim(job, claim)
-            if certificate is not None and certificate.required_surfaces != job.required_surfaces:
+            if certificate is not None and set(certificate.required_surfaces) != set(job.required_surfaces):
                 raise MigrationFenceConflict("certificate surfaces differ from job")
             updated = mutation(job).model_copy(update={"version": job.version + 1, "updated_at": _now()})
             tx.set(ref, updated.model_dump(mode="python"))
