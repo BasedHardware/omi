@@ -24,6 +24,7 @@ import {
   Settings,
   Shield,
   LifeBuoy,
+  Sparkles,
   Bell,
   Mic,
   MessageSquare,
@@ -115,6 +116,11 @@ const navItems: NavItem[] = [
     label: 'Memories',
     href: '/memories',
     icon: <Brain className="w-5 h-5" />,
+  },
+  {
+    label: 'Persona',
+    href: '/persona',
+    icon: <Sparkles className="w-5 h-5" />,
   },
 ];
 

@@ -620,6 +620,21 @@ export async function getGoalAdvice(id: string): Promise<string> {
   return response.advice;
 }
 
+// ============================================================================
+// Persona API
+// ============================================================================
+
+/**
+ * The signed-in user's persona, creating one if they have none.
+ *
+ * `/v1/user/persona` is get-or-create; plain `GET /v1/personas` 404s for a user
+ * who has never had one, which would render as an error rather than an empty
+ * state.
+ */
+export async function getOrCreatePersona(): Promise<App> {
+  return fetchWithAuth<App>('/v1/user/persona', { method: 'POST' });
+}
+
 /** Daily, weekly, and overall task-completion scores. */
 export async function getScores(date?: string): Promise<Scores> {
   const query = date ? `?date=${encodeURIComponent(date)}` : '';
