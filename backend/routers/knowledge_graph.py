@@ -18,14 +18,9 @@ router = APIRouter()
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 KnowledgeGraphLoader = Callable[[str], Payload]
-CanonicalKnowledgeGraphLoader = Callable[..., Payload]
 RateLimitFactory = Callable[[Any, str], Any]
 RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
 get_knowledge_graph_payload: KnowledgeGraphLoader = cast(KnowledgeGraphLoader, getattr(kg_db, "get_knowledge_graph"))
-get_canonical_knowledge_graph_payload: CanonicalKnowledgeGraphLoader = cast(
-    CanonicalKnowledgeGraphLoader,
-    getattr(canonical_graph_service, "get_canonical_knowledge_graph"),
-)
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
     "Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."
@@ -128,10 +123,10 @@ def get_canonical_knowledge_graph(
         le=canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
     ),
     cursor: Optional[str] = Query(default=None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:canonical")),
 ):
     try:
-        graph = get_canonical_knowledge_graph_payload(
+        page = canonical_graph_service.get_canonical_knowledge_graph(
             uid,
             limit=limit,
             cursor=cursor,
@@ -141,10 +136,10 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
     return CanonicalKnowledgeGraphResponse(
-        nodes=graph.get('nodes', []),
-        edges=graph.get('edges', []),
-        has_more=bool(graph.get('has_more', False)),
-        next_cursor=graph.get('next_cursor'),
+        nodes=page.nodes,
+        edges=page.edges,
+        has_more=page.has_more,
+        next_cursor=page.next_cursor,
     )
 
 
