@@ -844,6 +844,8 @@ export async function sendMessageStream(
   onChunk: (chunk: MessageChunk) => void,
   options?: {
     appId?: string;
+    /** Target one specific thread; omit for the default shared thread. */
+    chatSessionId?: string | null;
     fileIds?: string[];
     context?: {
       type: string;
@@ -869,6 +871,11 @@ export async function sendMessageStream(
   const queryParams = new URLSearchParams();
   if (options?.appId) {
     queryParams.set('app_id', options.appId);
+  }
+  // Without this the reply is persisted to the default shared thread while the
+  // UI shows it under the selected one.
+  if (options?.chatSessionId) {
+    queryParams.set('chat_session_id', options.chatSessionId);
   }
 
   const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -936,10 +943,17 @@ export async function sendMessageStream(
 /**
  * Clear message history
  */
-export async function clearMessages(appId?: string): Promise<void> {
+export async function clearMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<void> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Clearing must delete the thread the reader is looking at, not the shared one.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;

@@ -151,7 +151,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 break;
             }
           },
-          { appId, fileIds, context: context || null },
+          { appId, chatSessionId, fileIds, context: context || null },
         );
       } catch (err) {
         console.error('Failed to send message:', err);
@@ -177,7 +177,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         setStreamingText('');
       }
     },
-    [appId, isStreaming],
+    [appId, chatSessionId, isStreaming],
   );
 
   /**
@@ -188,7 +188,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     setError(null);
 
     try {
-      await clearMessagesApi(appId);
+      await clearMessagesApi(appId, chatSessionId);
       setMessages([]);
       historyLoadedRef.current = false;
     } catch (err) {
@@ -197,7 +197,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [appId]);
+  }, [appId, chatSessionId]);
 
   return {
     messages,
