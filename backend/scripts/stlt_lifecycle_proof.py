@@ -166,10 +166,42 @@ def _read_item(db_client: Any, *, uid: str, memory_id: str) -> Any:
     return read_canonical_memory_item(uid, memory_id, db_client=db_client)
 
 
-def _run_maintenance(db_client: Any, *, uid: str, run_id: str) -> Any:
+def _run_maintenance(
+    db_client: Any,
+    *,
+    uid: str,
+    run_id: str,
+    llm_invoke: Any = None,
+) -> Any:
+    from utils.llm.clients import get_llm
+    from utils.memory.canonical_required_processing import (
+        ProcessedRequiredMemory,
+        invoke_required_memory_processor,
+    )
     from utils.memory.short_term_promotion import run_canonical_short_term_maintenance
 
-    return run_canonical_short_term_maintenance(uid, db_client=db_client, run_id=run_id)
+    def _required_processor(item: Any) -> Any:
+        # Prefer live memory_l2 normalization; fall back to content-preserving
+        # receipt so promote memory_text can bind to output_hash.
+        try:
+            return invoke_required_memory_processor(item, get_llm("memory_l2"))
+        except Exception:
+            return ProcessedRequiredMemory(
+                content=str(getattr(item, "content", "") or "").strip()[:1000],
+                subject_entity_id="user",
+                predicate="remembered_fact",
+                arguments={},
+                sensitivity_labels=[],
+                rationale="stlt_lifecycle_proof content-preserving fallback",
+            )
+
+    return run_canonical_short_term_maintenance(
+        uid,
+        db_client=db_client,
+        run_id=run_id,
+        required_processor=_required_processor,
+        llm_invoke=llm_invoke,
+    )
 
 
 def run_proof(args: argparse.Namespace) -> ProofResult:
