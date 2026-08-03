@@ -3379,7 +3379,7 @@ struct TasksPage: View {
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
       guard let taskDetailTask else { return }
-      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id }) ?? taskDetailTask
+      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id })
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
@@ -3449,6 +3449,10 @@ struct TasksPage: View {
   private func handleEscapeKey() -> Bool {
     if viewModel.isAnyTaskEditing || viewModel.editingTaskId != nil {
       NSApp.keyWindow?.makeFirstResponder(nil)
+      return true
+    }
+    if taskDetailTask != nil {
+      closeTaskDetailPanel()
       return true
     }
     return viewModel.handleEscape()
@@ -5014,7 +5018,10 @@ struct TaskRow: View {
           onSelect?(task)
           if isChatActive, !isActiveChatTask {
             onOpenChat?(task)
-          } else if !isMultiSelectMode {
+          }
+        }
+        .onTapGesture(count: 2) {
+          if !isMultiSelectMode {
             onOpenDetails?(task)
           }
         }

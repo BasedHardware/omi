@@ -210,6 +210,7 @@ final class MemoryLayerFilterTests: XCTestCase {
       .appendingPathComponent("MainWindow")
       .appendingPathComponent("Pages")
       .appendingPathComponent("MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: MemoriesPage layer-filter and projection wiring cannot be exercised without a booted SwiftUI view
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

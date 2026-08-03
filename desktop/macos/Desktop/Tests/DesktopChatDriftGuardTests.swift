@@ -66,7 +66,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
 
-    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
+    // omi-test-quality: source-inspection -- static contract: continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
     XCTAssertTrue(scrollSource.contains("inModes: [.common, .default, Self.eventTrackingRunLoopMode]"))
     XCTAssertTrue(scrollSource.contains("private static let eventTrackingRunLoopMode"))
     XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
@@ -75,8 +75,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
 
-    // omi-test-quality: source-inspection -- AppKit representables must recover
-    // when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
+    // omi-test-quality: source-inspection -- static contract: AppKit representables must recover when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
     XCTAssertTrue(scrollSource.contains("context.coordinator.setupScrollObserver(for: nsView)"))
     XCTAssertTrue(scrollSource.contains("observedClipView"))
     XCTAssertTrue(scrollSource.contains("context.coordinator.install(for: nsView)"))
@@ -86,8 +85,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testChatStartsAtBottomOnLaunchButPreservesExplicitReaderScroll() throws {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
 
-    // omi-test-quality: source-inspection -- the transcript's default placement
-    // is bottom-first, while user interaction is the only path that cancels it.
+    // omi-test-quality: source-inspection -- static contract: the transcript's default placement is bottom-first, while user interaction is the only path that cancels it.
     XCTAssertTrue(messagesSource.contains(".defaultScrollAnchor(.bottom)"))
     XCTAssertTrue(messagesSource.contains("ChatInitialRestoreState.afterDisappear"))
     XCTAssertTrue(messagesSource.contains("cancelPendingScrollsForUserInteraction()"))
@@ -98,9 +96,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
 
-    // omi-test-quality: source-inspection -- passive position updates and
-    // settled checks must both use the active-gesture fence before restoring
-    // live following.
+    // omi-test-quality: source-inspection -- static contract: passive position updates and settled checks must both use the active-gesture fence before restoring live following.
     XCTAssertTrue(scrollSource.contains("private var settleWorkItem: DispatchWorkItem?"))
     XCTAssertFalse(scrollSource.contains("for delay in [0.12, 0.36]"))
     XCTAssertTrue(scrollSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
@@ -111,9 +107,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- the cohort shell must share the
-    // modern top-navigation and Dashboard/Home chat surfaces and must not
-    // resurrect either its retired rail or ChatPage's nested header.
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
     XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))

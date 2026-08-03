@@ -36,6 +36,11 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// Stable conversation identity sentinels for surfaces without a persisted session.
+enum ChatConversationIdentity {
+  static let mainChatDefault = "main-chat-default"
+}
+
 /// Pure decision for the conversation-switch scroll-state reset. Callers pass
 /// the stable conversation/session identity; message IDs are not identities
 /// because prepending history changes the first message in the same chat.
@@ -362,6 +367,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
+        cancelAllPendingScrolls()
         initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil

@@ -506,6 +506,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
@@ -518,6 +519,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
@@ -532,6 +536,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
@@ -544,6 +549,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"

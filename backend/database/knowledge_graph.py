@@ -414,10 +414,12 @@ def _load_memory_items_by_ids(
     for snapshot in _chunked_get_all(client, item_refs, batch_size=MEMORY_GRAPH_ASSERTION_BATCH_SIZE):
         if not getattr(snapshot, 'exists', False):
             continue
+        snapshot_id = getattr(snapshot, 'id', None)
         item = _typed_doc(snapshot)
         memory_id = item.get('memory_id')
-        if isinstance(memory_id, str):
-            items_by_id[memory_id] = item
+        if not isinstance(snapshot_id, str) or not isinstance(memory_id, str) or snapshot_id != memory_id:
+            continue
+        items_by_id[memory_id] = item
     return items_by_id
 
 

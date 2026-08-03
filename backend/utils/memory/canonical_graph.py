@@ -323,80 +323,88 @@ def _read_canonical_graph_page_once(
     last_consumed_snapshot: Any = None
     query_boundary = cursor_boundary
 
-    while len(accepted_assertions) < limit:
-        if not pending_snapshots:
-            query = _build_canonical_graph_items_query(
-                client,
-                uid,
-                revision,
-                cursor_boundary=query_boundary,
-            )
-            snapshots = list(query.limit(limit + 1).stream())
-            if not snapshots:
-                pending_window_has_more = False
-                break
-            pending_window_has_more = len(snapshots) > limit
-            pending_snapshots = list(snapshots)
+    while True:
+        while len(accepted_assertions) < limit:
+            if not pending_snapshots:
+                query = _build_canonical_graph_items_query(
+                    client,
+                    uid,
+                    revision,
+                    cursor_boundary=query_boundary,
+                )
+                snapshots = list(query.limit(limit + 1).stream())
+                if not snapshots:
+                    pending_window_has_more = False
+                    break
+                pending_window_has_more = len(snapshots) > limit
+                pending_snapshots = list(snapshots)
 
-        snapshot = pending_snapshots.pop(0)
-        last_consumed_snapshot = snapshot
-
-        eligible_batch: List[Dict[str, Any]] = []
-        while True:
-            item = _canonical_graph_snapshot_item(
-                uid,
-                snapshot,
-                account_generation=revision.account_generation,
-            )
-            if item is not None:
-                eligible_batch.append(item)
-            if len(accepted_assertions) + len(eligible_batch) >= limit or not pending_snapshots:
-                break
             snapshot = pending_snapshots.pop(0)
             last_consumed_snapshot = snapshot
 
-        if eligible_batch:
-            memory_ids = [cast(str, item['memory_id']) for item in eligible_batch]
-            loaded_assertions = kg_db.load_fenced_assertions_for_memory_items(
-                uid,
-                memory_ids,
-                account_generation=revision.account_generation,
-                db_client=client,
-            )
-            for assertion in loaded_assertions:
-                accepted_assertions.append(assertion)
-                if len(accepted_assertions) >= limit:
+            eligible_batch: List[Dict[str, Any]] = []
+            while True:
+                item = _canonical_graph_snapshot_item(
+                    uid,
+                    snapshot,
+                    account_generation=revision.account_generation,
+                )
+                if item is not None:
+                    eligible_batch.append(item)
+                if len(accepted_assertions) + len(eligible_batch) >= limit or not pending_snapshots:
                     break
+                snapshot = pending_snapshots.pop(0)
+                last_consumed_snapshot = snapshot
 
-        if len(accepted_assertions) >= limit:
-            break
-        if not pending_snapshots and not pending_window_has_more:
-            break
+            if eligible_batch:
+                memory_ids = [cast(str, item['memory_id']) for item in eligible_batch]
+                loaded_assertions = kg_db.load_fenced_assertions_for_memory_items(
+                    uid,
+                    memory_ids,
+                    account_generation=revision.account_generation,
+                    db_client=client,
+                )
+                for assertion in loaded_assertions:
+                    accepted_assertions.append(assertion)
+                    if len(accepted_assertions) >= limit:
+                        break
 
-        if not pending_snapshots and pending_window_has_more:
+            if len(accepted_assertions) >= limit:
+                break
+            if not pending_snapshots and not pending_window_has_more:
+                break
+
+            if not pending_snapshots and pending_window_has_more:
+                if last_consumed_snapshot is None:
+                    raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
+                boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
+                query_boundary = (boundary.updated_at, boundary.memory_id)
+                pending_window_has_more = False
+
+        if pending_snapshots:
+            has_more = True
+        elif pending_window_has_more:
             if last_consumed_snapshot is None:
                 raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
             boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
-            query_boundary = (boundary.updated_at, boundary.memory_id)
-            pending_window_has_more = False
+            probe_query = _build_canonical_graph_items_query(
+                client,
+                uid,
+                revision,
+                cursor_boundary=(boundary.updated_at, boundary.memory_id),
+            )
+            has_more = bool(list(probe_query.limit(1).stream()))
+        else:
+            has_more = False
 
-    if pending_snapshots:
-        has_more = True
-    elif pending_window_has_more:
-        # Filled the page after consuming an entire limit+1 probe window. Confirm a
-        # follow-up query still has rows before advertising pagination.
+        if accepted_assertions or not has_more:
+            break
         if last_consumed_snapshot is None:
-            raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
+            break
         boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
-        probe_query = _build_canonical_graph_items_query(
-            client,
-            uid,
-            revision,
-            cursor_boundary=(boundary.updated_at, boundary.memory_id),
-        )
-        has_more = bool(list(probe_query.limit(1).stream()))
-    else:
-        has_more = False
+        query_boundary = (boundary.updated_at, boundary.memory_id)
+        pending_snapshots = []
+        pending_window_has_more = False
 
     ending_revision = _read_canonical_graph_revision(uid, db_client=client)
     if ending_revision != revision:

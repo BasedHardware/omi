@@ -467,3 +467,23 @@ def test_load_fenced_assertions_excludes_restricted_sensitivity_labels():
         )
         == []
     )
+
+
+def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents():
+    assertion = _assertion("mem-authoritative")
+    docs = _docs_for(assertion, _active_item(assertion))
+    item_path = f"users/{UID}/memory_items/{assertion.memory_id}"
+    miskeyed_item = dict(docs[item_path])
+    miskeyed_item["memory_id"] = "mem-payload-alias"
+    docs[item_path] = miskeyed_item
+    db = _FakeDb(docs)
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )

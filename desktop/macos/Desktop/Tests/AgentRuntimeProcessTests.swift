@@ -131,6 +131,41 @@ private actor ContextProjectionRaceHarness {
   func snapshot() -> [String] { events }
 }
 
+private actor GateAdmissionOrderProbe {
+  private(set) var order: [String] = []
+
+  func append(_ value: String) {
+    order.append(value)
+  }
+
+  func snapshot() -> [String] {
+    order
+  }
+}
+
+private actor GateHoldProbe {
+  private var enteredWaiter: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilEntered() async {
+    await withCheckedContinuation { enteredWaiter = $0 }
+  }
+
+  func signalEntered() {
+    enteredWaiter?.resume()
+    enteredWaiter = nil
+  }
+
+  func waitUntilReleased() async {
+    await withCheckedContinuation { releaseContinuation = $0 }
+  }
+
+  func release() {
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
+}
+
 private actor ContextProjectionTaskBox {
   private var task: Task<Void, Never>?
 
@@ -1480,29 +1515,32 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let gate = AgentContextAdmissionGate()
     let queuedAdvance = ContextProjectionTaskBox()
-    let admission = Task {
-      try await gate.withExclusiveAccess {
-        await queuedAdvance.store(
-          Task {
-            await gate.withExclusiveAccess {
-              await harness.advance("context_advanced_during_admission")
-            }
-          })
-        await Task.yield()
-
-        let result: String = try await AgentContextAdmissionRetry.run(
-          expectedContext: warmupContext,
-          refresh: { await harness.freshness() },
-          attempt: { candidate in
-            _ = await harness.recordAdmissionAttempt()
-            let currentContext = await harness.freshness()
-            guard candidate == currentContext else {
-              throw BridgeError.agentError("context_snapshot_projection_mismatch")
-            }
-            return "admitted"
+    let admission = Task { () async throws -> (String, [String]) in
+      do {
+        _ = await harness.recordAdmissionAttempt()
+        let currentContext = await harness.freshness()
+        guard warmupContext == currentContext else {
+          throw BridgeError.agentError("context_snapshot_projection_mismatch")
+        }
+        return ("admitted", await harness.snapshot())
+      } catch let error as BridgeError {
+        guard case .agentError("context_snapshot_projection_mismatch") = error else { throw error }
+        return try await gate.withExclusiveAccess { () -> (String, [String]) in
+          await queuedAdvance.store(
+            Task {
+              try? await gate.withExclusiveAccess {
+                await harness.advance("context_advanced_during_admission")
+              }
+            })
+          await Task.yield()
+          let refreshedContext = await harness.freshness()
+          _ = await harness.recordAdmissionAttempt()
+          let retryContext = await harness.freshness()
+          guard refreshedContext == retryContext else {
+            throw BridgeError.agentError("context_snapshot_projection_mismatch")
           }
-        )
-        return (result, await harness.snapshot())
+          return ("admitted", await harness.snapshot())
+        }
       }
     }
 
@@ -1522,6 +1560,53 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
     let finalEvents = await harness.snapshot()
     XCTAssertEqual(finalEvents.last, "context_advanced_during_admission")
+  }
+
+  func testContextAdmissionGateCancelledWaiterDoesNotStealTurn() async throws {
+    let gate = AgentContextAdmissionGate()
+    final class CancelledWaiterProbe: @unchecked Sendable {
+      var acquiredGate = false
+    }
+    let cancelledWaiterProbe = CancelledWaiterProbe()
+    let enteredOrder = GateAdmissionOrderProbe()
+    let holdProbe = GateHoldProbe()
+
+    let first = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("first")
+        await holdProbe.signalEntered()
+        await holdProbe.waitUntilReleased()
+        return "first"
+      }
+    }
+
+    await holdProbe.waitUntilEntered()
+
+    let second = Task {
+      _ = try? await gate.withExclusiveAccess {
+        cancelledWaiterProbe.acquiredGate = true
+        await enteredOrder.append("second")
+        return "second"
+      }
+    }
+    second.cancel()
+
+    let third = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("third")
+        return "third"
+      }
+    }
+
+    await holdProbe.release()
+    let thirdResult = try await third.value
+    XCTAssertEqual(thirdResult, "third")
+    let firstResult = try await first.value
+    XCTAssertEqual(firstResult, "first")
+    XCTAssertFalse(cancelledWaiterProbe.acquiredGate)
+    let order = await enteredOrder.snapshot()
+    XCTAssertEqual(order, ["first", "third"])
+    _ = await second.result
   }
 
   func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {
@@ -1561,6 +1646,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertEqual(refreshCount, 1)
     XCTAssertEqual(attempts, [initial, refreshed])
+  }
+
+  func testSessionQueryUsesGatedRetryWithoutHoldingGateForStreaming() throws {
+    let source = try sourceFile("Chat/AgentClient.swift")
+    let sessionQueryStart = try XCTUnwrap(
+      source.range(of: "func query(\n      prompt: String,\n      session: AgentSurfaceSession,"))
+    let sessionQueryEnd = try XCTUnwrap(
+      source.range(of: "  static func makeSession", range: sessionQueryStart.upperBound..<source.endIndex))
+    let sessionQueryBody = String(source[sessionQueryStart.lowerBound..<sessionQueryEnd.lowerBound])
+    XCTAssertTrue(sessionQueryBody.contains("runGatedContextAdmissionRetry("))
+    XCTAssertFalse(
+      sessionQueryBody.contains(
+        "withContextAdmissionAccess {\n        try Task.checkCancellation()\n        return QueryResult("),
+      "streaming query must not hold the admission gate for the entire bridge.query call"
+    )
   }
 
   func testContextAdmissionMismatchClassifierRequiresExactRuntimeCode() {

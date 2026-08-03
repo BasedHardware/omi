@@ -34,7 +34,7 @@ steps:
 
   - id: S2a
     name: Open and inspect task details
-    do: "Click one visible task row (not its completion or selection checkbox) to open the panel identified as task-detail-panel. Verify it shows the task description, 'Why Omi added this' (task-detail-why), 'Linked sources', status/details, and the task actions including the accessible task-detail-toggle and task-detail-copy-link controls. Activate task-detail-close and verify the task list remains visible."
+    do: "Double-click one visible task row (not its completion or selection checkbox) to open the panel identified as task-detail-panel. Verify it shows the task description, 'Why Omi added this' (task-detail-why), 'Linked sources', status/details, and the task actions including the accessible task-detail-toggle and task-detail-copy-link controls. Activate task-detail-close and verify the task list remains visible."
     expect:
       text_visible:
         - Task details

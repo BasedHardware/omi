@@ -609,7 +609,7 @@ struct DashboardPage: View {
 
       ChatMessagesView(
         messages: chatProvider.messages,
-        conversationIdentity: chatProvider.currentSessionId ?? "main-chat-default",
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -1106,7 +1106,7 @@ struct DashboardPage: View {
     VStack(spacing: 0) {
       ChatMessagesView(
         messages: chatProvider.messages,
-        conversationIdentity: chatProvider.currentSessionId ?? "main-chat-default",
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
