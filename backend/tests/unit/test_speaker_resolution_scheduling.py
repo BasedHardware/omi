@@ -24,6 +24,7 @@ conversation document instead of being dropped with the discarded return value.
 
 import asyncio
 import re
+from concurrent.futures import Future
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -63,6 +64,20 @@ def _suggestion(speaker_id: int = 0):
     )
 
 
+def _run_submitted(coro, *, name, cancel_on_shutdown=True):
+    future = Future()
+    try:
+        future.set_result(asyncio.run(coro))
+    except BaseException as exc:
+        future.set_exception(exc)
+    return future
+
+
+@pytest.fixture(autouse=True)
+def application_background_task_registry(monkeypatch):
+    monkeypatch.setattr(pc, 'submit_background_task', _run_submitted)
+
+
 class TestSchedulingIsolation:
     def test_pass_is_not_submitted_to_the_postprocess_pool(self):
         """No postprocess worker is borrowed for the duration of the async coordinator."""
@@ -72,10 +87,10 @@ class TestSchedulingIsolation:
         assert 'schedule_speaker_resolution' not in submissions
         assert 'resolve_conversation_speakers_sync' not in SOURCE
 
-    def test_pass_runs_on_a_dedicated_loop_thread(self):
-        loop = pc._get_speaker_resolution_loop()
-        assert loop is pc._get_speaker_resolution_loop()
-        assert loop.is_running()
+    def test_pass_uses_the_application_background_task_registry(self):
+        assert 'submit_background_task' in SOURCE
+        assert '_get_speaker_resolution_loop' not in SOURCE
+        assert 'atexit.register(drain_speaker_resolution)' not in SOURCE
 
     def test_scheduled_after_audio_files_are_durable(self):
         """Enrolment reads audio_files back, so the write must already have happened."""
@@ -193,49 +208,14 @@ class TestSuggestionsStayInsideTheEncryptionBoundary:
 class TestTheDrainOwnsInFlightPasses:
     """A shutdown must not abandon a pass that has already created a Person."""
 
-    def test_the_pass_is_a_tracked_task(self):
-        """Observed from inside the pass, so the task is necessarily still in flight."""
-        tracked = {}
+    def test_the_pass_is_submitted_with_a_stable_tracking_name(self):
+        with patch.object(pc, 'submit_background_task', wraps=_run_submitted) as submit:
+            with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True):
+                assert pc.schedule_speaker_resolution("uid", _conversation()) is not None
 
-        async def _fake(uid, conv):
-            tracked['names'] = {task.get_name() for task in pc._speaker_resolution_tasks}
-            tracked['self'] = asyncio.current_task() in pc._speaker_resolution_tasks
-            return SimpleNamespace(suggested=[])
-
-        with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
-            'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
-        ):
-            future = pc.schedule_speaker_resolution("uid", _conversation())
-            assert future is not None
-            future.result(timeout=10)
-
-        assert tracked == {'names': {'speaker_resolution:conv-1'}, 'self': True}
-        assert not pc._speaker_resolution_tasks
-
-    def test_drain_is_registered_for_process_exit(self):
-        assert "atexit.register(drain_speaker_resolution)" in SOURCE
-
-    def test_drain_waits_for_an_in_flight_pass_then_retires_the_loop(self):
-        finished = []
-
-        async def _fake(uid, conv):
-            await asyncio.sleep(0.05)
-            finished.append(conv.id)
-            return SimpleNamespace(suggested=[])
-
-        with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
-            'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
-        ):
-            loop = pc._get_speaker_resolution_loop()
-            assert pc.schedule_speaker_resolution("uid", _conversation()) is not None
-            assert pc.drain_speaker_resolution(timeout=5.0) == 0
-
-        assert finished == ["conv-1"]
-        assert not loop.is_running()
-
-    def test_drain_without_a_loop_is_a_no_op(self):
-        pc.drain_speaker_resolution(timeout=1.0)
-        assert pc.drain_speaker_resolution(timeout=1.0) == 0
+        submit.assert_called_once()
+        assert submit.call_args.kwargs['name'] == 'speaker_resolution:conv-1'
+        assert submit.call_args.kwargs['cancel_on_shutdown'] is False
 
 
 if __name__ == "__main__":

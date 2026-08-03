@@ -96,8 +96,10 @@ from utils.executors import (
     log_executor_health,
     run_blocking,
     db_executor,
+    register_background_loop,
+    start_background_task,
+    unregister_background_loop,
 )
-from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_stale_processing_conversations
@@ -248,6 +250,7 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    register_background_loop(asyncio.get_running_loop())
     validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
@@ -349,6 +352,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    unregister_background_loop(asyncio.get_running_loop())
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

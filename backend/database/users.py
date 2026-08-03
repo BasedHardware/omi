@@ -1057,7 +1057,17 @@ attribution onto somebody else's sample.
 
 
 @transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, attribution=None):
+def _add_sample_transaction(
+    transaction,
+    person_ref,
+    sample_path,
+    transcript,
+    max_samples,
+    attribution=None,
+    conversation_ref=None,
+    segment_ids=None,
+    uid=None,
+):
     """Transaction to atomically add sample and transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
@@ -1065,6 +1075,25 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 
     person_data = snapshot.to_dict()
     samples = person_data.get('speech_samples', [])
+
+    if conversation_ref is not None:
+        from database.conversations import _prepare_conversation_for_read
+
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not conversation_snapshot.exists:
+            return False
+        conversation_data = _prepare_conversation_for_read(conversation_snapshot.to_dict(), uid) or {}
+        current_segments = {
+            segment.get('id'): segment
+            for segment in conversation_data.get('transcript_segments', [])
+            if isinstance(segment, dict) and isinstance(segment.get('id'), str)
+        }
+        if not segment_ids or any(
+            current_segments.get(segment_id, {}).get('person_id') != person_ref.id
+            or current_segments.get(segment_id, {}).get('is_user')
+            for segment_id in segment_ids
+        ):
+            return False
 
     if len(samples) >= max_samples:
         return False
@@ -1132,6 +1161,33 @@ def add_person_speech_sample(
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
     return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, attribution)
+
+
+def add_person_speech_sample_if_assignment_current(
+    uid: str,
+    person_id: str,
+    conversation_id: str,
+    segment_ids: list[str],
+    sample_path: str,
+    transcript: Optional[str] = None,
+    max_samples: int = 5,
+    attribution: Optional[str] = None,
+) -> bool:
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    transaction = client.transaction()
+    return _add_sample_transaction(
+        transaction,
+        person_ref,
+        sample_path,
+        transcript,
+        max_samples,
+        attribution,
+        conversation_ref,
+        segment_ids,
+        uid,
+    )
 
 
 def is_person_speech_sample_llm_inferred(person_data: dict, sample_path: str) -> bool:
@@ -1263,6 +1319,61 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, attr
 
     person_ref.update(update_data)
     return True
+
+
+@transactional
+def _set_person_speaker_embedding_if_assignment_current_transaction(
+    transaction, person_ref, conversation_ref, segment_ids, embedding, attribution, uid
+):
+    person_snapshot = person_ref.get(transaction=transaction)
+    if not person_snapshot.exists:
+        return False
+    person_data = person_snapshot.to_dict() or {}
+    if attribution == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+        inferred = person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or []
+        if not inferred:
+            return False
+
+    from database.conversations import _prepare_conversation_for_read
+
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    if not conversation_snapshot.exists:
+        return False
+    conversation_data = _prepare_conversation_for_read(conversation_snapshot.to_dict(), uid) or {}
+    current_segments = {
+        segment.get('id'): segment
+        for segment in conversation_data.get('transcript_segments', [])
+        if isinstance(segment, dict) and isinstance(segment.get('id'), str)
+    }
+    if not segment_ids or any(
+        current_segments.get(segment_id, {}).get('person_id') != person_ref.id
+        or current_segments.get(segment_id, {}).get('is_user')
+        for segment_id in segment_ids
+    ):
+        return False
+
+    update_data = {'speaker_embedding': embedding, 'updated_at': datetime.now(timezone.utc)}
+    if attribution is not None:
+        update_data['speaker_embedding_attribution'] = attribution
+    transaction.update(person_ref, update_data)
+    return True
+
+
+def set_person_speaker_embedding_if_assignment_current(
+    uid: str,
+    person_id: str,
+    conversation_id: str,
+    segment_ids: list[str],
+    embedding: list,
+    attribution: Optional[str] = None,
+) -> bool:
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    transaction = client.transaction()
+    return _set_person_speaker_embedding_if_assignment_current_transaction(
+        transaction, person_ref, conversation_ref, segment_ids, embedding, attribution, uid
+    )
 
 
 def get_person_speaker_embedding_attribution(uid: str, person_id: str) -> Optional[str]:
@@ -1432,18 +1543,44 @@ def clear_person_llm_inferred_enrolment(uid: str, person_id: str) -> List[str]:
     person unmatchable until some later rebuild happened to succeed. The samples
     go either way, since the inference behind them is what was contradicted.
     """
-    person_data = get_person(uid, person_id)
-    if not person_data:
-        return []
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    transaction = client.transaction()
 
-    inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
-    if not inferred:
-        return []
+    @transactional
+    def _clear(transaction, person_ref):
+        snapshot = person_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return []
+        person_data = snapshot.to_dict() or {}
+        inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
+        samples = list(person_data.get('speech_samples') or [])
+        transcripts = list(person_data.get('speech_sample_transcripts') or [])
+        removed = list(dict.fromkeys(inferred))
+        if not inferred and person_data.get('speaker_embedding_attribution') != SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+            return []
+        removed_set = set(removed)
+        kept_samples = []
+        kept_transcripts = []
+        for index, path in enumerate(samples):
+            if path in removed_set:
+                continue
+            kept_samples.append(path)
+            if index < len(transcripts):
+                kept_transcripts.append(transcripts[index])
+        update_data = {
+            'speech_samples': kept_samples,
+            'speech_sample_transcripts': kept_transcripts,
+            LLM_INFERRED_SPEECH_SAMPLES_FIELD: [],
+            'updated_at': datetime.now(timezone.utc),
+        }
+        if person_data.get('speaker_embedding_attribution') == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+            update_data['speaker_embedding'] = firestore.DELETE_FIELD
+            update_data['speaker_embedding_attribution'] = firestore.DELETE_FIELD
+        transaction.update(person_ref, update_data)
+        return removed
 
-    removed = [path for path in inferred if remove_person_speech_sample(uid, person_id, path)]
-    if person_data.get('speaker_embedding_attribution') == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
-        clear_person_speaker_embedding(uid, person_id)
-    return removed
+    return _clear(transaction, person_ref)
 
 
 def update_person_speech_samples_version(uid: str, person_id: str, version: int) -> bool:

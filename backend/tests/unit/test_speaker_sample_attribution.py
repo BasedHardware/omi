@@ -22,6 +22,7 @@ from typing import Any  # noqa: E402
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from google.cloud import firestore  # noqa: E402
 
 import database.users as users_db  # noqa: E402
 import routers.listen.speakers as speakers_mod  # noqa: E402
@@ -58,6 +59,7 @@ class _PersonRef:
 
     def __init__(self, data):
         self.data = data
+        self.id = data.get("id", "p1")
 
     def get(self, transaction=None):
         return _Snapshot(self.data)
@@ -70,6 +72,47 @@ class _Transaction:
     def update(self, ref, data):
         self.updates.append(data)
         ref.data.update(data)
+
+
+class _ClearTransaction(_Transaction):
+    def update(self, ref, data):
+        self.updates.append(data)
+        for key, value in data.items():
+            if value is firestore.DELETE_FIELD:
+                ref.data.pop(key, None)
+            else:
+                ref.data[key] = value
+
+
+class _Path:
+    def __init__(self, ref):
+        self.ref = ref
+        self.id = ref.id
+
+    @property
+    def data(self):
+        return self.ref.data
+
+    def document(self, _):
+        return self
+
+    def collection(self, _):
+        return self
+
+    def get(self, transaction=None):
+        return self.ref.get(transaction=transaction)
+
+
+class _Client:
+    def __init__(self, ref, transaction):
+        self.path = _Path(ref)
+        self._transaction = transaction
+
+    def collection(self, _):
+        return self.path
+
+    def transaction(self):
+        return self._transaction
 
 
 def _add(person_ref, path, transcript=None, max_samples=5, attribution=None):
@@ -140,6 +183,31 @@ def test_removing_a_sample_drops_its_inferred_mark():
     assert transaction.updates[0][INFERRED_FIELD] == []
 
 
+def test_inferred_sample_is_rejected_after_the_assignment_changes():
+    person_ref = _PersonRef({})
+    conversation_ref = _PersonRef(
+        {
+            "transcript_segments": [{"id": "s1", "person_id": "p2", "is_user": False}],
+        }
+    )
+    transaction = _Transaction()
+
+    ok = users_db._add_sample_transaction.to_wrap(
+        transaction,
+        person_ref,
+        "people/u1/p1/a.wav",
+        "hello there",
+        5,
+        INFERRED,
+        conversation_ref,
+        ["s1"],
+        "u1",
+    )
+
+    assert ok is False
+    assert transaction.updates == []
+
+
 def _v3_person(inferred: bool) -> dict:
     person = {
         "id": "p1",
@@ -207,26 +275,9 @@ def test_revoking_removes_both_the_sample_and_the_embedding(monkeypatch):
         INFERRED_FIELD: ["guessed.wav"],
     }
 
-    def _get_person(uid, person_id):
-        return dict(store)
-
-    def _remove_sample(uid, person_id, path):
-        if path not in store["speech_samples"]:
-            return False
-        idx = store["speech_samples"].index(path)
-        store["speech_samples"].pop(idx)
-        store["speech_sample_transcripts"].pop(idx)
-        store[INFERRED_FIELD] = [p for p in store[INFERRED_FIELD] if p != path]
-        return True
-
-    def _clear_embedding(uid, person_id):
-        store.pop("speaker_embedding", None)
-        store.pop("speaker_embedding_attribution", None)
-        return True
-
-    monkeypatch.setattr(users_db, "get_person", _get_person)
-    monkeypatch.setattr(users_db, "remove_person_speech_sample", _remove_sample)
-    monkeypatch.setattr(users_db, "clear_person_speaker_embedding", _clear_embedding)
+    ref = _PersonRef(store)
+    monkeypatch.setattr(users_db, "get_firestore_client", lambda: _Client(ref, _ClearTransaction()))
+    monkeypatch.setattr(users_db, "transactional", lambda fn: fn)
 
     removed = users_db.clear_person_llm_inferred_enrolment("u1", "p1")
 
@@ -266,16 +317,9 @@ def test_revoking_keeps_an_embedding_the_user_later_confirmed(monkeypatch):
     }
     cleared: list[str] = []
 
-    def _remove_sample(uid, person_id, path):
-        idx = store["speech_samples"].index(path)
-        store["speech_samples"].pop(idx)
-        store["speech_sample_transcripts"].pop(idx)
-        store[INFERRED_FIELD] = [p for p in store[INFERRED_FIELD] if p != path]
-        return True
-
-    monkeypatch.setattr(users_db, "get_person", lambda uid, person_id: dict(store))
-    monkeypatch.setattr(users_db, "remove_person_speech_sample", _remove_sample)
-    monkeypatch.setattr(users_db, "clear_person_speaker_embedding", lambda uid, pid: cleared.append(pid) or True)
+    ref = _PersonRef(store)
+    monkeypatch.setattr(users_db, "get_firestore_client", lambda: _Client(ref, _ClearTransaction()))
+    monkeypatch.setattr(users_db, "transactional", lambda fn: fn)
 
     removed = users_db.clear_person_llm_inferred_enrolment("u1", "p1")
 
@@ -288,11 +332,9 @@ def test_revoking_keeps_an_embedding_the_user_later_confirmed(monkeypatch):
 def test_revoking_leaves_a_person_with_no_inferred_samples_alone(monkeypatch):
     """A user-taught person must not lose their voiceprint to a revoke call."""
     cleared: list[str] = []
-    monkeypatch.setattr(
-        users_db, "get_person", lambda uid, person_id: {"id": person_id, "speech_samples": ["taught.wav"]}
-    )
-    monkeypatch.setattr(users_db, "remove_person_speech_sample", lambda *a: True)
-    monkeypatch.setattr(users_db, "clear_person_speaker_embedding", lambda uid, pid: cleared.append(pid) or True)
+    ref = _PersonRef({"id": "p1", "speech_samples": ["taught.wav"]})
+    monkeypatch.setattr(users_db, "get_firestore_client", lambda: _Client(ref, _ClearTransaction()))
+    monkeypatch.setattr(users_db, "transactional", lambda fn: fn)
 
     assert users_db.clear_person_llm_inferred_enrolment("u1", "p1") == []
     assert cleared == []
@@ -330,12 +372,22 @@ def _enrolment_pipeline(monkeypatch, *, embedding):
         written["sample"] = (path, attribution)
         return True
 
+    def _add_if_current(uid, person_id, conversation_id, segment_ids, path, transcript=None, attribution=None):
+        written["sample"] = (path, attribution)
+        return True
+
     def _set_embedding(uid, person_id, vector, attribution=None):
         written["embedding"] = attribution
         return True
 
+    def _set_embedding_if_current(uid, person_id, conversation_id, segment_ids, vector, attribution=None):
+        written["embedding"] = attribution
+        return True
+
     monkeypatch.setattr(users_db, "add_person_speech_sample", _add)
+    monkeypatch.setattr(users_db, "add_person_speech_sample_if_assignment_current", _add_if_current)
     monkeypatch.setattr(users_db, "set_person_speaker_embedding", _set_embedding)
+    monkeypatch.setattr(users_db, "set_person_speaker_embedding_if_assignment_current", _set_embedding_if_current)
     return speaker_identification, written
 
 

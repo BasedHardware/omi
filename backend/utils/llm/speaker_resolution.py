@@ -24,6 +24,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 from utils.speaker_resolution import SpeakerClaim
 
 from .clients import get_llm
@@ -31,6 +32,8 @@ from .clients import get_llm
 logger = logging.getLogger(__name__)
 
 MAX_TRANSCRIPT_CHARS = 24000
+
+MAX_KNOWN_PEOPLE_CHARS = 4000
 
 # Static policy for the speaker-naming route. Nothing user-controlled may ever be
 # interpolated into this message: transcript content, known-person names, and the
@@ -140,7 +143,16 @@ def build_speaker_transcript(segments: Sequence[Any], person_names: Optional[Map
 def build_known_people_context(known_names: Sequence[str]) -> str:
     if not known_names:
         return "None on record yet."
-    return "\n".join(f"- {name}" for name in known_names)
+    lines: List[str] = []
+    used = 0
+    for name in known_names:
+        line = f"- {name}"
+        separator = 1 if lines else 0
+        if used + separator + len(line) > MAX_KNOWN_PEOPLE_CHARS:
+            break
+        lines.append(line)
+        used += separator + len(line)
+    return "\n".join(lines) or "None on record yet."
 
 
 def to_speaker_claims(response: SpeakerResolutionResponse) -> List[SpeakerClaim]:
@@ -211,6 +223,14 @@ def resolve_speakers(
         )
     except Exception as e:
         logger.error('Speaker resolution LLM call failed: %s', sanitize(e))
+        record_fallback(
+            component='other',
+            from_mode='llm_resolution',
+            to_mode='no_assignment',
+            reason='other',
+            outcome='exhausted',
+            log=logger,
+        )
         return []
 
     return to_speaker_claims(response)
