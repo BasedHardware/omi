@@ -257,6 +257,22 @@ def test_twiml_invalid_signature(mock_sig, client):
     assert 'Invalid Twilio signature' in resp.json()['detail']
 
 
+@patch('routers.phone_calls.validate_twilio_signature')
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_signature_uses_public_forwarded_url(mock_db, mock_sig, client):
+    mock_sig.side_effect = lambda url, _params, _signature: url == 'https://api.omiapi.com/v1/phone/twiml'
+    mock_db.get_primary_phone_number.return_value = None
+
+    resp = client.post(
+        '/v1/phone/twiml',
+        data={'To': '+15559876543', 'From': 'client:test-uid', 'CallId': 'C1'},
+        headers={'X-Forwarded-Host': 'api.omiapi.com', 'X-Forwarded-Proto': 'https'},
+    )
+
+    assert resp.status_code == 200
+    mock_sig.assert_called_once()
+
+
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
 @patch('routers.phone_calls.check_caller_id_verified', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')

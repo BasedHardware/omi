@@ -1,4 +1,3 @@
-import os
 import re
 import traceback
 import uuid
@@ -52,6 +51,15 @@ def _dial_number(dial: Dial, phone_number: str) -> None:
 def _append_dial(response: VoiceResponse, dial: Dial) -> None:
     """Wrap twilio ``VoiceResponse.append`` — its params are untyped in the SDK."""
     response.append(dial)  # type: ignore[reportUnknownMemberType]  # twilio VoiceResponse.append params untyped
+
+
+def _twilio_request_url(request: Request) -> str:
+    forwarded_host = request.headers.get('x-forwarded-host', '').split(',', 1)[0].strip()
+    forwarded_proto = request.headers.get('x-forwarded-proto', '').split(',', 1)[0].strip()
+    host = forwarded_host or request.headers.get('host', '').strip() or request.url.netloc
+    scheme = forwarded_proto or request.url.scheme
+    query = f'?{request.url.query}' if request.url.query else ''
+    return f'{scheme}://{host}{request.url.path}{query}'
 
 
 # ************************************************
@@ -258,15 +266,10 @@ async def twiml_voice_webhook(request: Request):
     """
     # Validate Twilio signature
     signature = request.headers.get('X-Twilio-Signature', '')
-    base_api_url = os.getenv('BASE_API_URL', '').rstrip('/')
-    if base_api_url:
-        url = f"{base_api_url}{request.url.path}"
-    else:
-        url = str(request.url)
     form_data = await parse_multipart_form(request, max_part_size=PHONE_CALL_MAX_PART_SIZE)
     params = dict(form_data)
 
-    if not validate_twilio_signature(url, params, signature):
+    if not validate_twilio_signature(_twilio_request_url(request), params, signature):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
     to_number_raw: object = form_data.get('To', '')
