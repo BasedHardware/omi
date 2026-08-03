@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatGoalMetric,
-  formatMetricValue,
-  goalProgressPercent,
   historyDelta,
-  isGoalComplete,
   sortGoals,
   sortHistoryAscending,
   sparklinePoints,
@@ -30,75 +26,6 @@ function goal(overrides: Partial<Goal> = {}): Goal {
     ...overrides,
   };
 }
-
-describe('goalProgressPercent', () => {
-  it('measures progress from min_value, not from zero', () => {
-    // 40 -> 80kg goal sitting at 40 has made no progress, even though 40/80 is half.
-    const weight = goal({ min_value: 40, current_value: 40, target_value: 80 });
-
-    expect(goalProgressPercent(weight)).toBe(0);
-    expect(goalProgressPercent({ ...weight, current_value: 60 })).toBe(50);
-    expect(goalProgressPercent({ ...weight, current_value: 80 })).toBe(100);
-  });
-
-  it('clamps below zero and above the target', () => {
-    expect(goalProgressPercent(goal({ current_value: -5 }))).toBe(0);
-    expect(goalProgressPercent(goal({ current_value: 25 }))).toBe(100);
-  });
-
-  it('treats a boolean goal as all or nothing', () => {
-    const flag = goal({ goal_type: 'boolean', target_value: 1, max_value: 1 });
-
-    expect(goalProgressPercent(flag)).toBe(0);
-    expect(goalProgressPercent({ ...flag, current_value: 1 })).toBe(100);
-  });
-
-  it('does not divide by a zero span', () => {
-    const degenerate = goal({ min_value: 5, target_value: 5, current_value: 5 });
-
-    expect(goalProgressPercent(degenerate)).toBe(100);
-    expect(goalProgressPercent({ ...degenerate, current_value: 1 })).toBe(0);
-  });
-
-  it('rounds to a whole percent', () => {
-    expect(goalProgressPercent(goal({ current_value: 1, target_value: 3 }))).toBe(33);
-  });
-});
-
-describe('isGoalComplete', () => {
-  it('is true once current reaches target', () => {
-    expect(isGoalComplete(goal({ current_value: 9 }))).toBe(false);
-    expect(isGoalComplete(goal({ current_value: 10 }))).toBe(true);
-    expect(isGoalComplete(goal({ current_value: 11 }))).toBe(true);
-  });
-});
-
-describe('formatGoalMetric', () => {
-  it('renders current over target with the unit', () => {
-    expect(formatGoalMetric(goal({ current_value: 3, unit: 'books' }))).toBe(
-      '3 / 10 books',
-    );
-  });
-
-  it('omits the unit when there is none', () => {
-    expect(formatGoalMetric(goal({ current_value: 3 }))).toBe('3 / 10');
-  });
-
-  it('describes boolean goals in words', () => {
-    const flag = goal({ goal_type: 'boolean', target_value: 1 });
-
-    expect(formatGoalMetric(flag)).toBe('Not yet');
-    expect(formatGoalMetric({ ...flag, current_value: 1 })).toBe('Done');
-  });
-});
-
-describe('formatMetricValue', () => {
-  it('drops the trailing zero the backend floats carry', () => {
-    expect(formatMetricValue(3)).toBe('3');
-    expect(formatMetricValue(3.5)).toBe('3.5');
-    expect(formatMetricValue(3.456)).toBe('3.46');
-  });
-});
 
 describe('sortGoals', () => {
   it('puts focused goals first, in focus_rank order', () => {

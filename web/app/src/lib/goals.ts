@@ -1,41 +1,20 @@
 import type { Goal, GoalHistoryEntry } from '@/types/goals';
 
 /**
- * How far a goal has come, 0..100.
+ * Goal progress, completion, and labels come from `@/lib/goalVisuals`, ported
+ * from the desktop apps. Re-exported here so hub code has one import.
  *
- * Progress is measured from `min_value` to `target_value`, so a goal that
- * starts at 40kg and targets 80kg reads 0% at 40, not 50%. A target equal to
- * the floor has nothing to measure, so it reads complete once reached.
+ * Note these are current/target, not min..target: desktop measures a 40->80kg
+ * goal sitting at 40 as 50%, and a goal is also complete when the server has
+ * archived it (`is_active === false`), not only when the value reaches target.
  */
-export function goalProgressPercent(goal: Goal): number {
-  const { current_value: current, target_value: target, min_value: min } = goal;
-
-  if (goal.goal_type === 'boolean') {
-    return current >= target ? 100 : 0;
-  }
-
-  const span = target - min;
-  if (span <= 0) {
-    return current >= target ? 100 : 0;
-  }
-
-  const ratio = (current - min) / span;
-  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
-}
-
-export function isGoalComplete(goal: Goal): boolean {
-  return goal.current_value >= goal.target_value;
-}
-
-/** Human-readable progress, e.g. `3 / 10 books` or `Done`. */
-export function formatGoalMetric(goal: Goal): string {
-  if (goal.goal_type === 'boolean') {
-    return isGoalComplete(goal) ? 'Done' : 'Not yet';
-  }
-
-  const unit = goal.unit ? ` ${goal.unit}` : '';
-  return `${formatMetricValue(goal.current_value)} / ${formatMetricValue(goal.target_value)}${unit}`;
-}
+export {
+  isCompleted,
+  progressColor,
+  progressLabel,
+  progressPct,
+} from '@/lib/goalVisuals';
+export { goalEmoji, DEFAULT_GOAL_EMOJI } from '@/lib/goalEmoji';
 
 /** Trim the trailing `.0` the backend's float metrics produce for whole numbers. */
 export function formatMetricValue(value: number): string {

@@ -1,144 +1,189 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Minus, Plus, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Check, Lightbulb, Trash2 } from 'lucide-react';
+import { goalEmoji } from '@/lib/goalEmoji';
 import {
-  formatGoalMetric,
-  formatMetricValue,
-  goalProgressPercent,
-  isGoalComplete,
-} from '@/lib/goals';
+  isCompleted,
+  progressColor,
+  progressLabel,
+  progressPct,
+} from '@/lib/goalVisuals';
 import type { Goal } from '@/types/goals';
 
 interface GoalCardProps {
   goal: Goal;
   onSetProgress: (id: string, currentValue: number) => Promise<void>;
+  onRename: (id: string, title: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onOpen: (goal: Goal) => void;
 }
 
-export function GoalCard({ goal, onSetProgress, onRemove, onOpen }: GoalCardProps) {
-  const [draft, setDraft] = useState(() => formatMetricValue(goal.current_value));
-  const [lastKnownValue, setLastKnownValue] = useState(goal.current_value);
-  const percent = goalProgressPercent(goal);
-  const complete = isGoalComplete(goal);
-  const isBoolean = goal.goal_type === 'boolean';
+/**
+ * Ported from the Electron desktop app's Goals card
+ * (`desktop/windows/src/renderer/src/pages/Goals.tsx`, `renderCard`): the same
+ * completion checkbox, title-derived emoji tile, threshold-ramp progress bar,
+ * inline-editable title and progress value, and hover-revealed actions.
+ */
+export function GoalCard({
+  goal,
+  onSetProgress,
+  onRename,
+  onRemove,
+  onOpen,
+}: GoalCardProps) {
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const [progressDraft, setProgressDraft] = useState<string | null>(null);
 
-  // Follow server-confirmed values, including a rolled-back optimistic write.
-  // Adjusting during render rather than in an effect avoids rendering the stale
-  // value for a frame first.
-  if (goal.current_value !== lastKnownValue) {
-    setLastKnownValue(goal.current_value);
-    setDraft(formatMetricValue(goal.current_value));
-  }
+  const done = isCompleted(goal);
+  const pct = progressPct(goal);
+  const target = goal.target_value ?? 0;
 
-  const commit = (value: number) => {
-    if (value === goal.current_value) return;
-    void onSetProgress(goal.id, value);
+  const commitTitle = () => {
+    const next = (titleDraft ?? '').trim();
+    setTitleDraft(null);
+    if (next && next !== goal.title) void onRename(goal.id, next);
   };
 
-  const step = (delta: number) => {
-    commit(Math.max(goal.min_value, goal.current_value + delta));
+  const commitProgress = () => {
+    const raw = progressDraft ?? '';
+    setProgressDraft(null);
+    // Number('') is 0, so an emptied field would wipe progress rather than
+    // reverting.
+    const parsed = raw.trim() === '' ? NaN : Number(raw);
+    if (Number.isFinite(parsed) && parsed !== goal.current_value) {
+      void onSetProgress(goal.id, parsed);
+    }
+  };
+
+  /** Toggle completion the only way the backend supports: drive the value. */
+  const toggleComplete = () => {
+    if (target <= 0) return;
+    void onSetProgress(goal.id, done ? 0 : target);
   };
 
   return (
-    <article className="rounded-card border border-stroke bg-bg-raised p-5 transition-colors hover:border-text-quaternary/40">
-      <div className="flex items-start justify-between gap-4">
+    <li className="surface-card group p-4">
+      <div className="flex items-start gap-3">
         <button
           type="button"
-          onClick={() => onOpen(goal)}
-          className="min-w-0 flex-1 text-left"
+          onClick={toggleComplete}
+          disabled={target <= 0}
+          aria-label={done ? 'Reopen goal' : 'Mark as complete'}
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
+            done
+              ? 'border-white/30 bg-white/15 text-white'
+              : 'border-white/20 hover:border-white/45'
+          } ${target <= 0 ? 'opacity-40' : ''}`}
         >
-          <h3 className="truncate font-medium text-text-primary hover:underline">
-            {goal.title}
-          </h3>
-          <p className="mt-1 text-sm text-text-quaternary">{formatGoalMetric(goal)}</p>
+          {done && <Check className="h-3.5 w-3.5" />}
         </button>
 
-        <button
-          type="button"
-          onClick={() => void onRemove(goal.id)}
-          aria-label={`Delete goal ${goal.title}`}
-          className="rounded-control p-2 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-error"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-bg-tertiary">
+        {/* Category glyph auto-derived from the title, shared with desktop. */}
         <div
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${goal.title} progress`}
-          className={cn(
-            'h-full rounded-full transition-all',
-            complete ? 'bg-success' : 'bg-text-secondary',
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[18px] leading-none ${
+            done ? 'opacity-50' : ''
+          }`}
+          aria-hidden="true"
+        >
+          {goalEmoji(goal.title)}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          {titleDraft !== null ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              aria-label={`${goal.title} title`}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commitTitle();
+                else if (event.key === 'Escape') setTitleDraft(null);
+              }}
+              className="w-full border-0 border-b border-white/25 bg-transparent pb-0.5 text-sm text-white focus:border-white/60 focus:outline-none focus:ring-0"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setTitleDraft(goal.title)}
+              title="Click to edit"
+              className={`block w-full text-left text-sm font-medium leading-relaxed ${
+                done ? 'text-white/40 line-through' : 'text-white/90'
+              }`}
+            >
+              {goal.title}
+            </button>
           )}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-xs text-text-quaternary">{percent}%</span>
+          <div className="mt-2.5">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${goal.title} progress`}
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, backgroundColor: progressColor(pct / 100) }}
+              />
+            </div>
+            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-white/45">
+              {progressDraft !== null ? (
+                <input
+                  type="number"
+                  autoFocus
+                  min={0}
+                  value={progressDraft}
+                  aria-label={`${goal.title} current value`}
+                  onChange={(event) => setProgressDraft(event.target.value)}
+                  onBlur={commitProgress}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') commitProgress();
+                    else if (event.key === 'Escape') setProgressDraft(null);
+                  }}
+                  className="w-20 rounded-md border border-white/20 bg-black/30 px-1.5 py-0.5 text-[11px] text-white [color-scheme:dark] focus:border-white/50 focus:outline-none"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setProgressDraft(String(goal.current_value ?? 0))}
+                  className="rounded-md px-1.5 py-0.5 transition-colors hover:bg-white/5 hover:text-white/70"
+                  title="Update progress"
+                >
+                  {progressLabel(goal)}
+                </button>
+              )}
+              {!done && pct > 0 && <span className="text-white/30">{pct}%</span>}
+            </div>
+          </div>
+        </div>
 
-        {isBoolean ? (
+        <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {/* Insight needs a real target; a 0-target yes/no goal gives the
+              advice model little to reason about. Matches desktop. */}
+          {target > 0 && (
+            <button
+              type="button"
+              onClick={() => onOpen(goal)}
+              className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
+              title="Get goal insight"
+              aria-label={`Get goal insight for ${goal.title}`}
+            >
+              <Lightbulb className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => commit(complete ? goal.min_value : goal.target_value)}
-            className={cn(
-              'flex items-center gap-2 rounded-chip px-3 py-1.5 text-xs transition-colors',
-              complete
-                ? 'bg-success/10 text-success'
-                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-            )}
+            onClick={() => void onRemove(goal.id)}
+            className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-rose-300/80"
+            title="Delete goal"
+            aria-label={`Delete goal ${goal.title}`}
           >
-            <Check className="h-3.5 w-3.5" />
-            {complete ? 'Done' : 'Mark done'}
+            <Trash2 className="h-4 w-4" />
           </button>
-        ) : (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => step(-1)}
-              aria-label={`Decrease ${goal.title}`}
-              disabled={goal.current_value <= goal.min_value}
-              className="rounded-element bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary disabled:opacity-40"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-
-            <input
-              type="number"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onBlur={() => {
-                // Number('') is 0, so an emptied field would otherwise wipe
-                // progress to zero on blur rather than reverting.
-                const parsed = draft.trim() === '' ? NaN : Number(draft);
-                if (Number.isFinite(parsed)) {
-                  commit(parsed);
-                } else {
-                  setDraft(formatMetricValue(goal.current_value));
-                }
-              }}
-              aria-label={`${goal.title} current value`}
-              className="w-16 rounded-element bg-bg-tertiary px-2 py-1 text-center text-xs text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
-            />
-
-            <button
-              type="button"
-              onClick={() => step(1)}
-              aria-label={`Increase ${goal.title}`}
-              className="rounded-element bg-bg-tertiary p-1.5 text-text-secondary transition-colors hover:bg-bg-quaternary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
+        </div>
       </div>
-    </article>
+    </li>
   );
 }

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Sparkles, X } from 'lucide-react';
 import { useGoalDetail } from '@/hooks/useGoalDetail';
-import { formatGoalMetric, formatMetricValue, historyDelta } from '@/lib/goals';
+import { formatMetricValue, historyDelta, progressLabel } from '@/lib/goals';
 import type { UpdateGoalParams } from '@/lib/api';
 import type { Goal } from '@/types/goals';
 import { GoalSparkline } from './GoalSparkline';
@@ -71,7 +71,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                 {goal.title}
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-text-quaternary">
-                {formatGoalMetric(goal)}
+                {progressLabel(goal)}
               </Dialog.Description>
             </div>
             <Dialog.Close
