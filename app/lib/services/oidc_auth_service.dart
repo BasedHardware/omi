@@ -20,7 +20,29 @@ import 'package:omi/env/env.dart';
 /// From there the HTTP layer (`backend/http/shared.dart`) and the backend
 /// (`AUTH_BACKEND=oidc`, JWKS verification — ADR-0034) work transparently.
 class OidcAuthService {
-  OidcAuthService._();
+  OidcAuthService._()
+      : _appAuth = const FlutterAppAuth(),
+        _secureStorage = const FlutterSecureStorage(
+          aOptions: AndroidOptions(encryptedSharedPreferences: true),
+        ),
+        _clock = DateTime.now;
+
+  /// Test-only constructor: injects the AppAuth client, secure storage, and a
+  /// clock. Every argument defaults to the exact production instance used by
+  /// [OidcAuthService._], so an unparameterized `OidcAuthService.forTest()`
+  /// behaves identically to [instance] — this constructor adds seams only, it
+  /// changes no behavior.
+  @visibleForTesting
+  OidcAuthService.forTest({
+    FlutterAppAuth? appAuth,
+    FlutterSecureStorage? secureStorage,
+    DateTime Function()? clock,
+  })  : _appAuth = appAuth ?? const FlutterAppAuth(),
+        _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            ),
+        _clock = clock ?? DateTime.now;
 
   static final OidcAuthService instance = OidcAuthService._();
 
@@ -33,16 +55,20 @@ class OidcAuthService {
   /// returned unchanged. A forced refresh (401 recovery) bypasses this entirely.
   static const Duration tokenValidityFloor = Duration(minutes: 5);
 
-  final FlutterAppAuth _appAuth = const FlutterAppAuth();
+  // Injected via the constructors above; production defaults to `const FlutterAppAuth()`.
+  final FlutterAppAuth _appAuth;
+
+  /// Monotonic wall-clock source (production: `DateTime.now`), injectable for tests.
+  final DateTime Function() _clock;
 
   // The long-lived `offline_access` refresh token is a replay credential: it lives in
   // platform secure storage (iOS Keychain / Android Keystore-backed EncryptedSharedPreferences),
   // never in ordinary SharedPreferences. Only non-secret session state (uid, access token,
   // expiry) stays in prefs — `hasStoredSession()` reads those, so it stays synchronous.
   static const String _refreshTokenKey = 'oidcRefreshToken';
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  // Injected via the constructors above; production defaults to the
+  // EncryptedSharedPreferences-backed `const FlutterSecureStorage(...)`.
+  final FlutterSecureStorage _secureStorage;
 
   Future<String> _readRefreshToken() async {
     final secure = await _secureStorage.read(key: _refreshTokenKey);
@@ -93,12 +119,19 @@ class OidcAuthService {
   /// ONLY for a loopback issuer (localhost/127.0.0.1/::1) in a debug build, i.e.
   /// a developer running Keycloak on the same machine. A non-loopback http://
   /// issuer stays strict and the AppAuth request fails closed.
-  bool get _allowInsecureConnections {
-    final issuer = Env.oidcIssuer ?? '';
-    if (!issuer.startsWith('http://')) return false;
-    final host = Uri.tryParse(issuer)?.host ?? '';
+  bool get _allowInsecureConnections => allowInsecureFor(Env.oidcIssuer, debug: kDebugMode);
+
+  /// Pure decision for [_allowInsecureConnections], extracted so the hardening
+  /// rule can be unit-tested without touching `Env`/`kDebugMode`. Cleartext is
+  /// permitted ONLY for a loopback issuer (localhost/127.0.0.1/::1) in a debug
+  /// build; every other case fails closed.
+  @visibleForTesting
+  static bool allowInsecureFor(String? issuer, {required bool debug}) {
+    final i = issuer ?? '';
+    if (!i.startsWith('http://')) return false;
+    final host = Uri.tryParse(i)?.host ?? '';
     final isLoopback = host == 'localhost' || host == '127.0.0.1' || host == '::1';
-    return kDebugMode && isLoopback;
+    return debug && isLoopback;
   }
 
   /// Whether a usable OIDC session is currently stored. OIDC-aware replacement
@@ -156,7 +189,7 @@ class OidcAuthService {
       // freshness bar matches getAuthHeader's renewal window (tokenValidityFloor)
       // so a token inside the 5-minute window is refreshed here, not returned
       // stale. A forced refresh (401 recovery) always bypasses the shortcut.
-      final freshUntil = DateTime.now().add(tokenValidityFloor).millisecondsSinceEpoch;
+      final freshUntil = _clock().add(tokenValidityFloor).millisecondsSinceEpoch;
       if (!forceRefresh && prefs.authToken.isNotEmpty && prefs.tokenExpirationTime > freshUntil) {
         return OidcLoginOutcome.success(prefs.uid);
       }
