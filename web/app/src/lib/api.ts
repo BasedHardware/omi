@@ -414,17 +414,22 @@ export interface GetMemoriesParams {
   categories?: MemoryCategory[];
 }
 
+/**
+ * Read memories.
+ *
+ * Category selection is deliberately not a parameter: `/v3/memories` accepts
+ * limit, offset, cursor, and device scope only. Sending `categories` looked
+ * like a filter but FastAPI drops the unknown query param, so the server
+ * returned everything. Categories are applied client-side — see
+ * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
+ */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
-  const { limit = 100, offset = 0, categories } = params;
+  const { limit = 100, offset = 0 } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
-
-  if (categories && categories.length > 0) {
-    queryParams.set('categories', categories.join(','));
-  }
 
   return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
 }

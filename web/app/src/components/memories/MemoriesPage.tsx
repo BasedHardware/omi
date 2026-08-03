@@ -29,6 +29,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { matchesCategories } from '@/lib/memoryCategory';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
 import { MemoryFilters } from './MemoryFilters';
@@ -214,12 +215,24 @@ export function MemoriesPage() {
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
     // If no filters and backend's default sort (score), return original deferred array (no copy needed)
-    if (!searchQuery && !selectedTag && sortBy === 'score') {
+    if (
+      !searchQuery &&
+      !selectedTag &&
+      activeCategories.length === 0 &&
+      sortBy === 'score'
+    ) {
       return deferredMemories;
     }
 
     // Only filter what we need
     let result = deferredMemories;
+
+    // Filter by category. `/v3/memories` has no `categories` parameter, so this
+    // cannot be pushed to the server — selecting a category used to change
+    // nothing at all.
+    if (activeCategories.length > 0) {
+      result = result.filter((m) => matchesCategories(m, activeCategories));
+    }
 
     // Filter by search query
     if (searchQuery) {
@@ -258,7 +271,7 @@ export function MemoriesPage() {
     }
 
     return result;
-  }, [deferredMemories, searchQuery, selectedTag, sortBy]);
+  }, [deferredMemories, searchQuery, selectedTag, activeCategories, sortBy]);
 
   // Handle node selection from graph
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
