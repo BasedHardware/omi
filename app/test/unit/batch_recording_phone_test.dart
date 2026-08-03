@@ -109,4 +109,57 @@ void main() {
       });
     }
   });
+
+  group('shouldFallbackToPhoneOnDeviceDisconnect', () {
+    test('falls back only for an active supported wearable session', () {
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: true,
+          isRecording: true,
+          supportsBatch: true,
+          batchAlreadyActive: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not restart a stopped, unsupported, or already-batched session', () {
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: false,
+          isRecording: true,
+          supportsBatch: true,
+          batchAlreadyActive: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: true,
+          isRecording: false,
+          supportsBatch: true,
+          batchAlreadyActive: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: true,
+          isRecording: true,
+          supportsBatch: false,
+          batchAlreadyActive: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: true,
+          isRecording: true,
+          supportsBatch: true,
+          batchAlreadyActive: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

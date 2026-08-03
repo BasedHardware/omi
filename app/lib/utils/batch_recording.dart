@@ -83,6 +83,14 @@ PhoneMicSessionMode selectPhoneMicSessionMode({
   return PhoneMicSessionMode.live;
 }
 
+bool shouldFallbackToPhoneOnDeviceDisconnect({
+  required bool isRecordingDevice,
+  required bool isRecording,
+  required bool supportsBatch,
+  required bool batchAlreadyActive,
+}) =>
+    isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive;
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin

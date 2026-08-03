@@ -452,7 +452,7 @@ class CaptureController extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
-    if (device == null) _endOfflineSession();
+    if (device == null && !_phoneMicBatchActive) _endOfflineSession();
     notifyListeners();
   }
 
@@ -1523,6 +1523,17 @@ class CaptureController extends ChangeNotifier
     }
     if (device != null) _updateRecordingDevice(device);
 
+    // A phone batch fallback covers the interval while the wearable was out of
+    // range. Finalize it before opening the device stream again so both capture
+    // paths never own the microphone concurrently.
+    if (_phoneMicBatchActive) {
+      _micInterrupted = true;
+      ServiceManager.instance().phoneMic.stop();
+      _phoneMicBatchActive = false;
+      _endOfflineSession();
+      _micInterrupted = false;
+    }
+
     bool wasPaused = _isPaused;
 
     // Ensure even very short device recordings have a location in Redis before
@@ -1535,6 +1546,22 @@ class CaptureController extends ChangeNotifier
     if (wasPaused) {
       await pauseDeviceRecording();
     }
+  }
+
+  Future<void> onRecordingDeviceDisconnected() async {
+    if (!shouldFallbackToPhoneOnDeviceDisconnect(
+      isRecordingDevice: _recordingDevice != null,
+      isRecording: recordingState == RecordingState.record,
+      supportsBatch: phoneMicSupportsTranscribeLater,
+      batchAlreadyActive: _phoneMicBatchActive,
+    )) {
+      return;
+    }
+
+    Logger.debug('[CaptureProvider] BLE disconnected during recording; starting phone batch fallback');
+    await _cleanupCurrentState(disableNativeBackground: true);
+    await _socket?.stop(reason: 'BLE disconnected; starting phone batch fallback');
+    await _startPhoneMicBatch(auto: true);
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
