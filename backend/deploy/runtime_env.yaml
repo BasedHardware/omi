@@ -45,6 +45,9 @@ environments:
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
             category: stt_policy
+          CHANNEL_SIGN_IN_URL:
+            value: https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login
+            category: oauth_metadata
           TYPESENSE_HOST:
             config_map:
               name: dev-omi-backend-config
@@ -333,6 +336,9 @@ environments:
               category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            CHANNEL_SIGN_IN_URL:
+              value: https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login
               category: oauth_metadata
             TWILIO_NUMBER:
               env_var: TWILIO_NUMBER
@@ -876,6 +882,9 @@ environments:
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
             category: stt_policy
+          CHANNEL_SIGN_IN_URL:
+            value: https://app.omi.me/login
+            category: oauth_metadata
           TYPESENSE_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -1087,6 +1096,9 @@ environments:
               category: runtime_identity
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            CHANNEL_SIGN_IN_URL:
+              value: https://app.omi.me/login
               category: oauth_metadata
             TWILIO_NUMBER:
               env_var: TWILIO_NUMBER
