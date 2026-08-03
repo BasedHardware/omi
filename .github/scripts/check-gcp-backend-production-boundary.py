@@ -3,7 +3,14 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+
+from workflow_composite_contract import backend_deploy_contract_text
 
 WORKFLOW = Path(".github/workflows/gcp_backend.yml")
 DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
@@ -19,16 +26,10 @@ PROD_FORBIDDEN = (
 )
 
 
-def backend_deploy_contract_text(workflow_text: str, root: Path) -> str:
-    if "./.github/actions/deploy-backend-stack" not in workflow_text:
-        return workflow_text
-    return workflow_text + "\n" + (root / DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
-
-
 def validate(root: Path) -> list[str]:
     path = root / WORKFLOW
     workflow_text = path.read_text(encoding="utf-8") if path.exists() else ""
-    text = backend_deploy_contract_text(workflow_text, root)
+    text = backend_deploy_contract_text(workflow_text, root, DEPLOY_BACKEND_STACK_ACTION)
     errors: list[str] = []
     if "default: 'cloud-run-only'" not in text:
         errors.append("gcp_backend.yml must default deploy_targets to cloud-run-only")

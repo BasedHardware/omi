@@ -24,6 +24,10 @@ VPC_PROBE_WORKFLOWS = (
     'gcp_llm_gateway.yml',
     'gcp_backend_pusher.yml',
 )
+VPC_PROBE_WORKFLOW_DEPLOY_PROFILES = {
+    'gcp_backend_auto_dev.yml': 'auto-dev',
+    'gcp_backend.yml': 'manual',
+}
 
 
 def backend_deploy_contract_text(workflow_name: str) -> str:
@@ -72,12 +76,12 @@ def _workflow_step_with_run(workflow: dict[str, Any], needle: str, *, workflow_n
     return next(step for step in steps if needle in str(step.get('run', '')))
 
 
-def _render_probe_workflow_run(run: str) -> str:
+def _render_probe_workflow_run(run: str, *, deploy_profile: str | None = None) -> str:
     replacements = {
         '${{ vars.GCP_PROJECT_ID }}': 'test-project',
         '${{ inputs.project_id }}': 'test-project',
         '${{ inputs.region }}': 'us-central1',
-        '${{ inputs.deploy_profile }}': 'auto-dev',
+        '${{ inputs.service }}': 'backend',
         '${{ env.REGION }}': 'us-central1',
         '${{ env.SERVICE }}': 'llm-gateway',
         '${{ steps.image-tag.outputs.short_sha }}': 'abc1234',
@@ -86,6 +90,8 @@ def _render_probe_workflow_run(run: str) -> str:
         '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
         '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
     }
+    if deploy_profile is not None:
+        replacements['${{ inputs.deploy_profile }}'] = deploy_profile
     for expression, value in replacements.items():
         run = run.replace(expression, value)
     return run
@@ -364,7 +370,11 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
             'DEPLOY_CONTROL_SCRIPTS': bash_path(BACKEND_ROOT / 'scripts', cwd=REPOSITORY_ROOT),
             'OMI_TEST_FAKE_BIN': bash_path(tmp_path, cwd=REPOSITORY_ROOT),
         }
-        run = f'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\n{_render_probe_workflow_run(str(step["run"]))}'
+        run = (
+            f'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\n'
+            f'export IMAGE_TAG=abc1234\n'
+            f'{_render_probe_workflow_run(str(step["run"]), deploy_profile=VPC_PROBE_WORKFLOW_DEPLOY_PROFILES.get(workflow_name))}'
+        )
 
         result = subprocess.run(
             bash_command('-c', run, cwd=REPOSITORY_ROOT),

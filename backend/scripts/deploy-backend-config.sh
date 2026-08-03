@@ -9,10 +9,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 
+config_map="$(python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" --format name)"
 python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" --format env >"$env_file"
 
 namespace="${ENVIRONMENT}-omi-backend"
-config_map="${ENVIRONMENT}-omi-backend-config"
 key_count="$(wc -l <"$env_file" | tr -d ' ')"
 
 kubectl -n "$namespace" create configmap "$config_map" \

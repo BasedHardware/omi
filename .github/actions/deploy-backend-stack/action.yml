@@ -61,6 +61,14 @@ inputs:
     description: 'Monitoring notification channels for sync-backfill budget alerts'
     required: false
     default: ''
+  telegram_bot_token:
+    description: 'Telegram bot token for production deployment notifications'
+    required: false
+    default: ''
+  telegram_chat_id:
+    description: 'Telegram chat ID for production deployment notifications'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -483,6 +491,7 @@ runs:
       with:
         mode: platform
         project_id: ${{ inputs.project_id }}
+        firestore_project_id: ${{ inputs.runtime_gcp_project_id }}
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
@@ -784,10 +793,10 @@ runs:
     - name: Verify validated revisions are still current
       shell: bash
       run: |
-        test "$(gcloud run services describe backend --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-        test "$(gcloud run services describe backend-sync --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-        test "$(gcloud run services describe backend-sync-backfill --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-        test "$(gcloud run services describe backend-integration --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+        test "$(gcloud run services describe backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+        test "$(gcloud run services describe backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+        test "$(gcloud run services describe backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
+        test "$(gcloud run services describe backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
     - name: Shift Cloud Run traffic to validated revisions
       id: shift-cloud-run-traffic
@@ -842,6 +851,19 @@ runs:
           --candidate-api-url https://api.omi.me \
           --bearer-token-file "$token_file" --json-only
 
+    - name: Smoke What Matters Now datastore query
+      id: smoke-what-matters-now-datastore-query
+      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
+      shell: bash
+      env:
+        PROJECT_ID: ${{ inputs.project_id }}
+      run: |
+        set -euo pipefail
+        ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
+        export ADMIN_KEY
+        trap 'unset ADMIN_KEY' EXIT
+        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
+
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
         ${{ inputs.deploy_profile == 'auto-dev' && failure() &&
@@ -860,24 +882,13 @@ runs:
         steps.cloud-run-traffic-snapshot.outcome == 'success' &&
         (steps.shift-cloud-run-traffic.outcome == 'failure' ||
         steps.verify-serving-release-vector.outcome == 'failure' ||
-        steps.smoke-promoted-production-serving-api.outcome == 'failure') }}
+        steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
+        steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
       shell: bash
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
           --evidence-path artifacts/backend-cloud-run-traffic-restore.json
-
-    - name: Smoke What Matters Now datastore query
-      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
-      shell: bash
-      env:
-        PROJECT_ID: ${{ inputs.project_id }}
-      run: |
-        set -euo pipefail
-        ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
-        export ADMIN_KEY
-        trap 'unset ADMIN_KEY' EXIT
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
 
     - name: Cloud Run deploy status report
       if: always()
@@ -974,5 +985,5 @@ runs:
         environment: ${{ inputs.environment }}
         release_version: ${{ inputs.release_version }}
         status: ${{ job.status }}
-        telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+        telegram_bot_token: ${{ inputs.telegram_bot_token }}
+        telegram_chat_id: ${{ inputs.telegram_chat_id }}

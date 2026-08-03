@@ -617,6 +617,23 @@ class WorkflowContractTests(unittest.TestCase):
             CHECKER.validate(root),
         )
 
+    def test_commented_composite_reference_does_not_expand_contract(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "        uses: ./.github/actions/deploy-backend-stack",
+            "        # uses: ./.github/actions/deploy-backend-stack",
+        )
+        self.mutate(
+            root,
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
+            '--commit-sha "${{ inputs.admitted_sha }}"',
+            '--commit-sha "${{ github.sha }}"',
+        )
+        errors = CHECKER.validate(root)
+        self.assertIn("manual deployment must bind every release vector to the admitted SHA", errors)
+
     def test_traffic_only_repair_remains_separate_from_source_admission(self) -> None:
         root = self.fixture_root()
         self.mutate(

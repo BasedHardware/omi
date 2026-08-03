@@ -664,7 +664,6 @@ def reconcile(
     manifest_path: Path,
     timeout_seconds: float,
     poll_interval_seconds: float,
-    provision_missing: bool = False,
     check_only: bool = False,
     dry_run: bool = False,
     proposal_output: Path | None = None,
@@ -715,7 +714,8 @@ def reconcile(
             clock=clock,
         )
         return
-    provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
+    if not check_only and not dry_run:
+        provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
     wait_for_indexes(
         expected=expected,
         project=project,
@@ -776,7 +776,6 @@ def main() -> int:
             manifest_path=args.manifest.resolve(),
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
-            provision_missing=args.provision_missing,
             check_only=args.check_only,
             dry_run=args.dry_run,
             proposal_output=args.proposal_output.resolve() if args.proposal_output else None,

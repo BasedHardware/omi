@@ -87,7 +87,9 @@ def _normalize(obj: object, env: str) -> object:
 def _extract_common(first: object, second: object) -> object | None:
     if isinstance(first, dict) and isinstance(second, dict):
         common: ConfigDict = {}
-        for key in set(first) & set(second):
+        for key in first:
+            if key not in second:
+                continue
             child = _extract_common(first[key], second[key])
             if child is not None:
                 common[key] = child

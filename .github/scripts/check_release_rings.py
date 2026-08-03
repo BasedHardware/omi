@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+
+from workflow_composite_contract import backend_deploy_contract_text
 BACKEND_RELEASE_SOURCES = (
     Path(".github/workflows/gcp_backend.yml"),
 )
@@ -45,15 +49,6 @@ def require_one(text: str, path: Path, description: str, alternatives: tuple[str
     return [f"{path}: missing required release-vector guard {description!r}"]
 
 
-def backend_deploy_contract_text(workflow_text: str, root: Path) -> str:
-    if "./.github/actions/deploy-backend-stack" not in workflow_text:
-        return workflow_text
-    action_path = root / DEPLOY_BACKEND_STACK_ACTION
-    if not action_path.exists():
-        return workflow_text
-    return workflow_text + "\n" + action_path.read_text(encoding="utf-8")
-
-
 def check() -> list[str]:
     paths = {relative: ROOT / relative for relative in BACKEND_RELEASE_SOURCES}
     errors = [f"{path}: canonical production deploy source is missing" for path in paths.values() if not path.exists()]
@@ -62,7 +57,7 @@ def check() -> list[str]:
 
     workflow_path = paths[Path(".github/workflows/gcp_backend.yml")]
     workflow = workflow_path.read_text(encoding="utf-8")
-    contract = backend_deploy_contract_text(workflow, ROOT)
+    contract = backend_deploy_contract_text(workflow, ROOT, DEPLOY_BACKEND_STACK_ACTION)
     errors.extend(
         require(
             contract,

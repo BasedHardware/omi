@@ -14,6 +14,7 @@ from typing import Any, cast
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
+from runtime_env_validation.common import compute_project  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -270,7 +271,7 @@ def _require_manifest_scope(*, env: str, project: str, manifest_path: Path, chec
     environment_config = render_backend_runtime_env._as_config_dict(environments.get(env))
     if environment_config is None:
         raise ValueError(f'{check_name} has no {env} environment in {manifest_path}')
-    expected_project = environment_config.get('compute_project', environment_config.get('gcp_project'))
+    expected_project = compute_project(environment_config)
     if project != expected_project:
         raise ValueError(f'{check_name} for {env} expects project {expected_project!r}, got {project!r}')
 

@@ -361,3 +361,5 @@ jobs:
           transcription_candidate_tag: ${{ github.event.inputs.environment == 'development' && env.TRANSCRIPTION_CANDIDATE_TAG || '' }}
           sync_backfill_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}
           sync_backfill_alert_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

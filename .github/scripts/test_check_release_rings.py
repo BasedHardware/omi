@@ -125,6 +125,28 @@ class ReleaseRingGuardTests(unittest.TestCase):
 
         self.assertTrue(any("canonical release-vector verifier" in error for error in checker.check()))
 
+    def test_commented_composite_reference_does_not_expand_contract(self) -> None:
+        self._stage_release_sources()
+        deploy_path = self._deploy_workflow()
+        deploy_path.write_text(
+            deploy_path.read_text(encoding="utf-8").replace(
+                "        uses: ./.github/actions/deploy-backend-stack",
+                "        # uses: ./.github/actions/deploy-backend-stack",
+            ),
+            encoding="utf-8",
+        )
+        self._composite_action_path().write_text(
+            self._composite_action_path().read_text(encoding="utf-8").replace(
+                "Verify serving backend release vector",
+                "Verify release vector before traffic promotion",
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertTrue(
+            any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

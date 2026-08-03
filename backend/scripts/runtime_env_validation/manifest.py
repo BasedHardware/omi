@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -44,7 +43,6 @@ from scripts.runtime_env_validation.common import (
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
     _validate_forbidden_env_entries,
-    compute_project,
 )
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
 

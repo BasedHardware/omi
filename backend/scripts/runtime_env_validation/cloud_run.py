@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-from typing import Any
 
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_validation.common import (
@@ -20,6 +20,14 @@ from scripts.runtime_env_validation.common import (
     compute_project,
 )
 from scripts.runtime_env_validation.workflows import _validate_workflow_flags
+
+
+def _rendered_env_var_value(entry: ConfigDict, *, env_name: str) -> str:
+    default = str(entry.get('default', f'__rendered_{env_name}__'))
+    env_var = entry.get('env_var')
+    if isinstance(env_var, str):
+        return os.getenv(env_var, default)
+    return default
 
 
 def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
@@ -43,7 +51,7 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 env_entries.append(
                     {
                         'name': str(env_name),
-                        'value': str(entry.get('default', f'__rendered_{env_name}__')),
+                        'value': _rendered_env_var_value(entry, env_name=str(env_name)),
                     }
                 )
         for secret_name, raw_entry in (service_config.get('secrets') or {}).items():
@@ -77,7 +85,7 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 env_entries.append(
                     {
                         'name': str(env_name),
-                        'value': str(entry.get('default', f'__rendered_{env_name}__')),
+                        'value': _rendered_env_var_value(entry, env_name=str(env_name)),
                     }
                 )
         for secret_name, raw_entry in (job_config.get('secrets') or {}).items():

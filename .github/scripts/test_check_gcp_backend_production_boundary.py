@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import sys
 from pathlib import Path
 import re
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+from workflow_composite_contract import backend_deploy_contract_text
 UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
 MODULE_PATH = ROOT / ".github/scripts/check-gcp-backend-production-boundary.py"
@@ -34,7 +38,7 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
         composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION
         workflow = workflow_path.read_text(encoding="utf-8")
         composite = composite_path.read_text(encoding="utf-8")
-        contract = CHECKER.backend_deploy_contract_text(workflow, root)
+        contract = backend_deploy_contract_text(workflow, root, CHECKER.DEPLOY_BACKEND_STACK_ACTION)
         self.assertIn(expected, contract)
         if expected in workflow:
             workflow_path.write_text(workflow.replace(expected, replacement, 1), encoding="utf-8")
@@ -46,7 +50,7 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
 
     def test_production_reservation_smoke_uses_a_schema_valid_inert_tag(self) -> None:
         workflow = (ROOT / CHECKER.WORKFLOW).read_text(encoding="utf-8")
-        contract = CHECKER.backend_deploy_contract_text(workflow, ROOT)
+        contract = backend_deploy_contract_text(workflow, ROOT, CHECKER.DEPLOY_BACKEND_STACK_ACTION)
         smoke = contract[contract.index(CHECKER.PROD_SMOKE) :]
         match = re.search(r'''--data '\{"tag":"(?P<tag>[^"]+)"\}'\)''', smoke)
         if match is None:
@@ -97,6 +101,28 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
                 self.stage_contract(root)
                 self.mutate_contract(root, expected, replacement)
                 self.assertTrue(CHECKER.validate(root))
+
+    def test_commented_composite_reference_does_not_expand_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.stage_contract(root)
+            workflow_path = root / CHECKER.WORKFLOW
+            composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION
+            workflow_path.write_text(
+                workflow_path.read_text(encoding="utf-8").replace(
+                    "        uses: ./.github/actions/deploy-backend-stack",
+                    "        # uses: ./.github/actions/deploy-backend-stack",
+                ),
+                encoding="utf-8",
+            )
+            composite_path.write_text(
+                composite_path.read_text(encoding="utf-8").replace(
+                    CHECKER.PROD_ALL_REJECTION,
+                    "if false; then",
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(CHECKER.validate(root))
 
 
 if __name__ == "__main__":

@@ -20,10 +20,18 @@ DEPLOY_BACKEND_STACK_ACTION = ROOT / ".github/actions/deploy-backend-stack/actio
 BACKEND_DEPLOY_WORKFLOWS = frozenset({"gcp_backend.yml", "gcp_backend_auto_dev.yml"})
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 
 from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
+)
+from workflow_composite_contract import (  # noqa: E402
+    block_has_active_deploy_backend_stack_uses,
+    composite_action_step_lines,
+    expand_deploy_job_block_at_active_uses,
+    line_has_active_deploy_backend_stack_uses,
 )
 
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -113,7 +121,6 @@ WRITER_MARKERS = (
     "gcloud run jobs update ",
 )
 PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
-BACKEND_STACK_DEPLOY_ACTION = "uses: ./.github/actions/deploy-backend-stack"
 
 PUSHER_CHART_MARKER = "backend/charts/pusher"
 PUSHER_CONFIGMAP_PREFLIGHT = (
@@ -175,31 +182,7 @@ def job_block(text: str, job: str) -> list[str] | None:
 def uses_deploy_backend_stack(block: list[str] | None) -> bool:
     if block is None:
         return False
-    return any("./.github/actions/deploy-backend-stack" in line for line in block)
-
-
-def composite_action_step_lines(action_text: str) -> list[str]:
-    """Return composite-action step lines with workflow-style indentation."""
-
-    lines = action_text.splitlines()
-    try:
-        start = next(index for index, line in enumerate(lines) if line == "  steps:")
-    except StopIteration:
-        return []
-
-    step_lines: list[str] = []
-    for line in lines[start + 1 :]:
-        if line.startswith("    - "):
-            step_lines.append(f"      - {line[6:]}")
-        elif line.startswith("      "):
-            step_lines.append(f"      {line[6:]}")
-        elif line.strip() == "":
-            continue
-        elif not line.startswith(" "):
-            break
-        elif line.startswith("  ") and not line.startswith("    "):
-            break
-    return step_lines
+    return block_has_active_deploy_backend_stack_uses(block)
 
 
 def backend_deploy_contract_text(name: str, workflow_text: str) -> str:
@@ -207,7 +190,7 @@ def backend_deploy_contract_text(name: str, workflow_text: str) -> str:
     base = "\n".join(deploy or [])
     if name in BACKEND_DEPLOY_WORKFLOWS and uses_deploy_backend_stack(deploy):
         action_text = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding="utf-8")
-        return base + "\n" + action_text
+        return expand_deploy_job_block_at_active_uses(deploy or [], action_text)
     return base
 
 
@@ -315,6 +298,7 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
     serving_vector_index = step_index("Verify serving backend release vector")
     production_smoke_index = step_index("Smoke promoted production serving API")
+    development_smoke_index = step_index("Smoke What Matters Now datastore query")
     restore_steps = [
         (index, "\n".join(step))
         for index, step in enumerate(steps)
@@ -339,6 +323,10 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
     ):
         errors.append(f"{name}: traffic restoration must include failed production serving smoke")
+    if name == "gcp_backend.yml" and not any(
+        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in step for step in profile_restore
+    ):
+        errors.append(f"{name}: traffic restoration must include failed development serving smoke")
     if name == "gcp_backend_auto_dev.yml" and any(
         "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
     ):
@@ -386,8 +374,12 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     if name == "gcp_backend.yml":
         if production_smoke_index <= serving_vector_index:
             errors.append(f"{name}: production serving smoke must follow serving release-vector verification")
+        if development_smoke_index <= serving_vector_index:
+            errors.append(f"{name}: development serving smoke must follow serving release-vector verification")
         if restore_index <= production_smoke_index:
             errors.append(f"{name}: traffic snapshot restoration must follow production serving smoke")
+        if restore_index <= development_smoke_index:
+            errors.append(f"{name}: traffic snapshot restoration must follow development serving smoke")
 
     snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
     if not any(
@@ -550,7 +542,12 @@ def is_persistent_writer(text: str) -> bool:
         or any(
             any(action in line and not line.lstrip().startswith("#") for line in step)
             for step in workflow_steps(text)
-            for action in (PUBLIC_BUILD_DEPLOY_ACTION, BACKEND_STACK_DEPLOY_ACTION)
+            for action in (PUBLIC_BUILD_DEPLOY_ACTION,)
+        )
+        or any(
+            line_has_active_deploy_backend_stack_uses(line)
+            for step in workflow_steps(text)
+            for line in step
         )
         or has_firestore_index_writer(text)
     )
@@ -1037,6 +1034,17 @@ jobs:
 """
     if not validate_pusher_config_preflight("fixture.yml", masked_preflight):
         raise PolicyError("masked pusher ConfigMap preflight satisfied the deploy contract")
+
+    commented_composite_reference = """name: fixture
+jobs:
+  deploy:
+    steps:
+      # uses: ./.github/actions/deploy-backend-stack
+      - name: Shift Cloud Run traffic to validated revisions
+"""
+    errors = validate_serving_release_vector("gcp_backend_auto_dev.yml", commented_composite_reference)
+    if not errors:
+        raise PolicyError("a commented composite reference expanded the deploy contract")
 
 
 def run_self_test() -> None:

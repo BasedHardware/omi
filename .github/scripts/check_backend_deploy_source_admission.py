@@ -7,8 +7,11 @@ import re
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+
+from workflow_composite_contract import backend_deploy_contract_text
 AUTO_WORKFLOW_PATH = Path(".github/workflows/gcp_backend_auto_dev.yml")
 MANUAL_WORKFLOW_PATH = Path(".github/workflows/gcp_backend.yml")
 DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
@@ -46,12 +49,6 @@ MANUAL_DEPLOY_NEEDS = "needs: [validate-production-boundary, firestore_readiness
 
 def deploy_backend_stack_action_text(root: Path = ROOT) -> str:
     return (root / DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
-
-
-def backend_deploy_contract_text(workflow_text: str, root: Path = ROOT) -> str:
-    if "./.github/actions/deploy-backend-stack" not in workflow_text:
-        return workflow_text
-    return workflow_text + "\n" + deploy_backend_stack_action_text(root)
 
 
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
@@ -383,7 +380,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         errors.append("auto backend deploy must use workflow_run.head_sha only in scope decision and current-main admission guard")
     if text.count(AUTO_PROOF_RUN_ATTEMPT) != 1:
         errors.append("auto backend deploy must use workflow_run.run_attempt only in the source-admission guard")
-    contract = backend_deploy_contract_text(text, root)
+    contract = backend_deploy_contract_text(text, root, DEPLOY_BACKEND_STACK_ACTION)
     allowed_github_sha = "ref: ${{ github.sha }}\n        path: .workflow-source"
     if "github.sha" in contract.replace(allowed_github_sha, ""):
         errors.append("auto backend deploy must not use github.sha after workflow_run admission")
@@ -419,7 +416,7 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
         errors.append("manual backend deploy must not accept an arbitrary branch or ref")
-    contract = backend_deploy_contract_text(text, root)
+    contract = backend_deploy_contract_text(text, root, DEPLOY_BACKEND_STACK_ACTION)
     control_source_ref = "ref: ${{ github.sha }}"
     if contract.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in contract:
         errors.append("manual backend deploy must stage workflow-owned control scripts from github.sha")
@@ -509,7 +506,7 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     )
 
     deploy_job = mapping_block(text, "deploy", 2)
-    contract = backend_deploy_contract_text(text, root)
+    contract = backend_deploy_contract_text(text, root, DEPLOY_BACKEND_STACK_ACTION)
     if deploy_job is None:
         errors.append("manual backend deploy is missing its deployment job")
     else:

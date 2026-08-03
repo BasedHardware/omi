@@ -83,17 +83,24 @@ def main() -> int:
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
         '--format',
-        choices=('env', 'keys'),
+        choices=('env', 'keys', 'name'),
         default='env',
-        help='env: KEY=value lines for kubectl --from-env-file; keys: one key name per line',
+        help=(
+            'env: KEY=value lines for kubectl --from-env-file; '
+            'keys: one key name per line; name: ConfigMap resource name'
+        ),
     )
     args = parser.parse_args()
 
     try:
-        _name, entries = config_map_entries(args.env, args.manifest)
+        name, entries = config_map_entries(args.env, args.manifest)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+
+    if args.format == 'name':
+        print(name)
+        return 0
 
     if args.format == 'keys':
         for key in entries:

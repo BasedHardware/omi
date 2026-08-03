@@ -197,7 +197,9 @@ jobs:
           TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
           X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
-        run: backend/scripts/deploy-backend-config.sh
+        run: |
+          python3 -m pip install -q pyyaml
+          backend/scripts/deploy-backend-config.sh
 
       - name: Ensure dev parity-pack bucket (development only)
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development' }}

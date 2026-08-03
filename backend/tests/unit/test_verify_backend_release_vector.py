@@ -1168,8 +1168,11 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             assert fragment in restore_step
         if workflow_name == 'gcp_backend.yml':
             serving_smoke = text.index('Smoke promoted production serving API')
+            development_smoke = text.index('Smoke What Matters Now datastore query')
             assert serving_vector < serving_smoke < restore
+            assert serving_vector < development_smoke < restore
             assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in restore_step
+            assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in restore_step
         else:
             assert "inputs.deploy_profile == 'auto-dev'" in restore_step
         assert 'cloud_run_traffic_snapshot.py' in restore_step
@@ -1196,8 +1199,10 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
     verify = workflow.index('Verify serving backend release vector')
     smoke = workflow.index('Smoke promoted production serving API')
+    development_smoke = workflow.index('Smoke What Matters Now datastore query')
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
     assert snapshot < traffic < verify < smoke < restore
+    assert snapshot < traffic < verify < development_smoke < restore
     assert '--tag={0}' in workflow
     assert "default: 'cloud-run-only'" in workflow
     assert 'environment=prod, deploy_targets=all is unsupported' in workflow
@@ -1207,6 +1212,7 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert '--data \'{"tag":"v0.0.0+1-macos"}\'' in workflow
     assert "--data '{}')" not in workflow
     assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
+    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
     assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow
 

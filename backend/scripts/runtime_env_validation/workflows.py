@@ -420,7 +420,13 @@ def _validate_cloud_run_workflows(
             continue
         workflow_path = workflow_root / workflow_file
         workflow = _load_yaml(workflow_path)
-        errors.extend(_validate_firestore_index_reconciliation_boundary(workflow_file, workflow))
+        errors.extend(
+            _validate_firestore_index_reconciliation_boundary(
+                workflow_file,
+                workflow,
+                workflow_root=workflow_root,
+            )
+        )
         extracted = _extract_workflow_cloud_run_targets(
             workflow,
             env=env,
@@ -527,7 +533,10 @@ def _validate_cloud_run_workflows(
 
 
 def _validate_firestore_index_reconciliation_boundary(
-    workflow_file: str, workflow: ConfigDict
+    workflow_file: str,
+    workflow: ConfigDict,
+    *,
+    workflow_root: Path | None = None,
 ) -> list[ValidationError]:
     """Keep backend deploys read-only against the serving Firestore project."""
 
@@ -572,11 +581,22 @@ def _validate_firestore_index_reconciliation_boundary(
                     'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
                 )
             )
-    errors.extend(_validate_firestore_readiness_workflow_contract(workflow_file, workflow))
+    errors.extend(
+        _validate_firestore_readiness_workflow_contract(
+            workflow_file,
+            workflow,
+            workflow_root=workflow_root,
+        )
+    )
     return errors
 
 
-def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow: ConfigDict) -> list[ValidationError]:
+def _validate_firestore_readiness_workflow_contract(
+    workflow_file: str,
+    workflow: ConfigDict,
+    *,
+    workflow_root: Path | None = None,
+) -> list[ValidationError]:
     if Path(workflow_file).name not in {'gcp_backend.yml', 'gcp_backend_auto_dev.yml'}:
         return []
 
@@ -647,9 +667,10 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
     )
     deploy_with = _as_config_dict((deploy_stack_step or {}).get('with')) or {}
     admitted_output_ref = '${{ needs.firestore_readiness.outputs.admitted_sha }}'
+    resolved_workflow_root = workflow_root or ROOT
     deploy_backend_stack = _load_local_composite_action(
         './.github/actions/deploy-backend-stack',
-        workflow_root=ROOT,
+        workflow_root=resolved_workflow_root,
     )
     composite_steps = [
         _as_config_dict(step) or {}

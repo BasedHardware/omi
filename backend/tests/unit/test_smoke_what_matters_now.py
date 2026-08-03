@@ -140,3 +140,9 @@ def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
     # root: `"$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url ...`, so
     # the quote from that path prefix sits between the script name and the flag.
     assert 'smoke_what_matters_now.py" --base-url https://api.omi.dev' in workflow
+    assert 'id: smoke-what-matters-now-datastore-query' in workflow
+    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
+    restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
+    smoke = workflow.index('Smoke What Matters Now datastore query')
+    verify = workflow.index('Verify serving backend release vector')
+    assert verify < smoke < restore

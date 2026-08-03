@@ -111,8 +111,12 @@ def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:
 def _compose_environment(
     shared: object,
     overlay_doc: ConfigDict,
+    *,
+    expected_env: str,
 ) -> ConfigDict:
     env = str(overlay_doc['environment'])
+    if env != expected_env:
+        raise ValueError(f'overlay environment {env!r} does not match requested env {expected_env!r}')
     compute_project = str(overlay_doc['compute_project'])
     data_plane_project = str(overlay_doc['data_plane_project'])
     overlay_body = overlay_doc.get('overlay', {})
@@ -146,25 +150,11 @@ def compose_manifest(
     environments: ConfigDict = {}
     for env in ENVIRONMENTS:
         overlay_doc = _load_yaml(_overlay_path(env, runtime_env_dir))
-        environments[env] = _compose_environment(shared, overlay_doc)
+        environments[env] = _compose_environment(shared, overlay_doc, expected_env=env)
     return {
         'schema_version': base_doc.get('schema_version', 1),
         'environments': environments,
     }
-
-
-def write_composed_manifest(
-    output_path: Path = DEFAULT_OUTPUT,
-    *,
-    base_path: Path = DEFAULT_BASE,
-    runtime_env_dir: Path = RUNTIME_ENV_DIR,
-) -> ConfigDict:
-    manifest = compose_manifest(base_path=base_path, runtime_env_dir=runtime_env_dir)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open('w', encoding='utf-8') as handle:
-        handle.write(GENERATED_HEADER)
-        yaml.safe_dump(manifest, handle, sort_keys=False, default_flow_style=False, allow_unicode=True)
-    return manifest
 
 
 def main() -> int:

@@ -242,6 +242,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
+        assert 'firestore_project_id: ${{ inputs.runtime_gcp_project_id }}' in composite
         assert '--wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'gcloud run services update-traffic backend-sync-backfill' in workflow
         assert '--cloud-run-service backend-sync-backfill' in workflow
@@ -269,6 +270,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
+    assert 'firestore_project_id:' in action
+    assert 'FIRESTORE_PROJECT_ID' in action
     assert "inputs.provision_budget_alerts == 'true'" in action
 
 
@@ -345,6 +348,22 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     assert (
         "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
         in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
+
+    development_smoke = by_name['Smoke What Matters Now datastore query']
+    assert development_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
+    assert steps.index(development_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
+    assert (
+        'gcloud run services describe backend --project=${{ inputs.project_id }}'
+        in by_name['Verify validated revisions are still current']['run']
     )
 
 
