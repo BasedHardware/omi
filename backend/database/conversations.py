@@ -1568,6 +1568,7 @@ def accept_conversation_speaker_suggestion(
     conversation_id: str,
     speaker_id: int,
     person_id: str,
+    person_name: Optional[str] = None,
     *,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
@@ -1618,6 +1619,24 @@ def accept_conversation_speaker_suggestion(
         ]
         if len(remaining) == len(stored_suggestions):
             return None
+
+        person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+        person_snapshot = person_ref.get(transaction=transaction)
+        if person_snapshot.exists:
+            if person_name is not None:
+                existing = person_snapshot.to_dict() or {}
+                if users_db.person_name_identity_key(
+                    str(existing.get('name') or '')
+                ) != users_db.person_name_identity_key(person_name):
+                    return {'error': 'person_collision'}
+        elif person_name is not None:
+            now = datetime.now(timezone.utc)
+            transaction.create(
+                person_ref,
+                {'id': person_id, 'name': person_name, 'created_at': now, 'updated_at': now},
+            )
+        else:
+            return {'error': 'person_missing'}
 
         segments = conversation_data.get('transcript_segments')
         if not isinstance(segments, list):

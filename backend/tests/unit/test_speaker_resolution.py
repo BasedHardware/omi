@@ -22,11 +22,14 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import database
 import database.conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations.speaker_resolution import MAX_VERIFICATIONS_PER_CONVERSATION, verify_suggestions
 from utils.llm.speaker_resolution import (
+    MAX_KNOWN_PEOPLE_CHARS,
     SYSTEM_INSTRUCTIONS as RESOLUTION_SYSTEM_INSTRUCTIONS,
+    build_known_people_context,
     build_speaker_transcript,
     resolve_speakers,
 )
@@ -539,6 +542,7 @@ def resolution_pass(monkeypatch):
     setattr(users, 'get_people', lambda uid: [])
     monkeypatch.setitem(sys.modules, 'database.auth', auth)
     monkeypatch.setitem(sys.modules, 'database.users', users)
+    monkeypatch.setattr(database, 'users', users, raising=False)
 
     captured = {}
 
@@ -900,14 +904,14 @@ class TestApplyPlanFailedWrite:
 
         assert [s.person_name for s in outcome.suggested] == ["Alex"]
 
-    def test_a_person_coined_for_a_failed_write_is_deleted_again(self, write_path):
+    def test_a_person_coined_for_a_failed_write_is_not_deleted(self, write_path):
         write_path.state['stored'] = [stored_segment('s1')]
         write_path.state['persisted'] = False
         known = {}
 
         run_apply(write_path, [segment("s1", "I'm Alex", speaker_id=1)], [suggestion(segment_ids=("s1",))], known=known)
 
-        assert write_path.state['deleted'] == [write_path.state['created'][0]['id']]
+        assert write_path.state['deleted'] == []
         assert known == {}
 
     def test_an_existing_person_is_never_deleted_by_the_rollback(self, write_path):
@@ -1052,6 +1056,37 @@ class TestCollidingPersonNames:
 
         assert write_path.state['enrolled'] == []
         assert write_path.state['written'] is None
+
+
+class TestRosterFailures:
+    def test_a_people_read_failure_fails_closed(self, resolution_pass, monkeypatch):
+        import database as database_pkg
+
+        def fail(_uid):
+            raise RuntimeError('roster unavailable')
+
+        monkeypatch.setattr(database_pkg.users, 'get_people', fail)
+
+        assert asyncio.run(resolution_pass.module._known_people('uid-1')) is None
+
+    def test_an_owner_name_read_failure_fails_closed(self, resolution_pass, monkeypatch):
+        auth = sys.modules['database.auth']
+
+        def fail(_uid, _use_default=True):
+            raise RuntimeError('owner unavailable')
+
+        monkeypatch.setattr(auth, 'get_user_name', fail)
+
+        assert run_resolution().assigned == []
+        assert resolution_pass.captured == {}
+
+
+class TestKnownPeoplePromptBudget:
+    def test_known_people_context_is_bounded(self):
+        context = build_known_people_context(['x' * 5000, 'Alex', 'Sam'])
+
+        assert len(context) <= MAX_KNOWN_PEOPLE_CHARS
+        assert 'Alex' not in context
 
 
 class TestNamesAreNotLoggedRaw:
@@ -1442,3 +1477,26 @@ class TestLLMPromptBoundary:
         assert system == RESOLUTION_SYSTEM_INSTRUCTIONS.format(
             format_instructions=captured['variables']['format_instructions']
         )
+
+    def test_resolution_provider_failure_records_an_exhausted_fallback(self, monkeypatch):
+        from utils.llm import speaker_resolution as module
+
+        class FailingPrompt:
+            @staticmethod
+            def from_messages(_messages):
+                return FailingPrompt()
+
+            def __or__(self, _other):
+                return self
+
+            def invoke(self, _variables):
+                raise RuntimeError('provider unavailable')
+
+        fallback_calls = []
+        monkeypatch.setattr(module, 'ChatPromptTemplate', FailingPrompt)
+        monkeypatch.setattr(module, 'get_llm', lambda _name: object())
+        monkeypatch.setattr(module, 'record_fallback', lambda **kwargs: fallback_calls.append(kwargs))
+
+        assert resolve_speakers([segment('s1', 'I am Alex', speaker_id=1), other_speaker('s2', 'hello')]) == []
+        assert fallback_calls[0]['outcome'] == 'exhausted'
+        assert fallback_calls[0]['to_mode'] == 'no_assignment'

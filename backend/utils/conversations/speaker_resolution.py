@@ -56,7 +56,7 @@ def _unresolved_speaker_count(segments: Sequence[Any]) -> int:
     return len(speakers)
 
 
-async def _known_people(uid: str) -> Tuple[Dict[str, Optional[str]], List[str], Set[str], Dict[str, str]]:
+async def _known_people(uid: str) -> Optional[Tuple[Dict[str, Optional[str]], List[str], Set[str], Dict[str, str]]]:
     """Existing Person records: a name lookup, display names, collisions, a roster.
 
     The display names go to the model so it reuses the user's own spelling
@@ -80,7 +80,7 @@ async def _known_people(uid: str) -> Tuple[Dict[str, Optional[str]], List[str], 
         people = await run_blocking(db_executor, users_db.get_people, uid) or []
     except Exception as e:
         logger.error('Speaker resolution could not load people: %s', sanitize(e))
-        return {}, [], set(), {}
+        return None
     known: Dict[str, Optional[str]] = {}
     display_names: List[str] = []
     ambiguous: Set[str] = set()
@@ -153,13 +153,7 @@ async def _discard_created_people(uid: str, person_ids: Sequence[str], known: Di
     transcript, so it would sit in the user's people list as a name they never
     added and cannot explain.
     """
-    from database import users as users_db
-
     for person_id in person_ids:
-        try:
-            await run_blocking(db_executor, users_db.delete_person, uid, person_id)
-        except Exception as e:
-            logger.error('Speaker resolution could not remove orphan person=%s: %s %s', person_id, sanitize(e), uid)
         for key, value in list(known.items()):
             if value == person_id:
                 known.pop(key, None)
@@ -447,13 +441,20 @@ async def resolve_conversation_speakers(uid: str, conversation: Any) -> SpeakerR
         from database.auth import get_user_name
 
         raw_user_name = await run_blocking(db_executor, get_user_name, uid, False)
-        user_name = raw_user_name.strip() if isinstance(raw_user_name, str) else None
-    except Exception:
-        user_name = None
+        if not isinstance(raw_user_name, str) or not raw_user_name.strip():
+            logger.error('Speaker resolution could not load account owner name %s', uid)
+            return SpeakerResolutionOutcome()
+        user_name = raw_user_name.strip()
+    except Exception as e:
+        logger.error('Speaker resolution could not load account owner name: %s %s', sanitize(e), uid)
+        return SpeakerResolutionOutcome()
 
     from utils.llm.usage_tracker import Features, track_usage
 
-    known, known_names, ambiguous, names_by_id = await _known_people(uid)
+    known_people = await _known_people(uid)
+    if known_people is None:
+        return SpeakerResolutionOutcome()
+    known, known_names, ambiguous, names_by_id = known_people
 
     with track_usage(uid, Features.SPEAKER_RESOLUTION):
         plan = await run_blocking(llm_executor, build_plan, segments, user_name, known_names, names_by_id)

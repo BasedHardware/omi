@@ -115,6 +115,10 @@ def router():
         MagicMock(name="revoke_inferred_speaker_enrolment"),
     )
 
+    users = _pkg("database.users")
+    users.person_name_identity_key = lambda name: str(name).strip().casefold()
+    users.person_name_document_id = MagicMock(return_value="p-new")
+
     fakes = {
         "ulid": _pkg("ulid"),
         "pinecone": _pkg("pinecone"),
@@ -140,7 +144,7 @@ def router():
         "database.mem_db": _pkg("database.mem_db"),
         "utils.apps": _pkg("utils.apps"),
         "utils.conversations.merge_conversations": _pkg("utils.conversations.merge_conversations"),
-        "database.users": _pkg("database.users"),
+        "database.users": users,
         "database.vector_db": _pkg("database.vector_db"),
         "firebase_admin": _pkg("firebase_admin"),
         "firebase_admin.messaging": _pkg("firebase_admin.messaging"),
@@ -237,6 +241,8 @@ class _Recorder:
         db.accept_conversation_speaker_suggestion.side_effect = self._accept
         db.remove_conversation_speaker_suggestion.side_effect = self._remove
         self.router.users_db.get_or_create_person_by_name.reset_mock()
+        self.router.users_db.get_people.reset_mock()
+        self.router.users_db.person_name_document_id.reset_mock()
         return self
 
     def __exit__(self, *exc_info):
@@ -248,7 +254,7 @@ class _Recorder:
     def _stored_suggestion_ids(self):
         return [item.speaker_id for item in (self.stored.speaker_label_suggestions if self.stored else [])]
 
-    def _accept(self, uid, conversation_id, speaker_id, person_id):
+    def _accept(self, uid, conversation_id, speaker_id, person_id, person_name=None):
         if self.stored is None or speaker_id not in self._stored_suggestion_ids():
             return None
         self.stored.speaker_label_suggestions = [
@@ -312,9 +318,10 @@ def run_accept(router, convo, existing_person=None, stored=None):
         router, "deserialize_conversation", return_value=convo
     ):
         if existing_person is not None:
-            router.users_db.get_or_create_person_by_name.return_value = (existing_person, False)
+            router.users_db.get_people.return_value = [{'name': 'Alex', **existing_person}]
         else:
-            router.users_db.get_or_create_person_by_name.return_value = ({'id': 'p-new', 'name': 'Alex'}, True)
+            router.users_db.get_people.return_value = []
+        router.users_db.person_name_document_id.return_value = 'p-new'
         result = router.accept_speaker_label_suggestion('c1', 1, recorder.background_tasks, uid='u1')
     return recorder, result
 
@@ -338,15 +345,16 @@ class TestAcceptSuggestion:
 
         recorder, _ = run_accept(router, convo, existing_person={'id': 'p-alex', 'name': 'Alex'})
 
-        router.users_db.get_or_create_person_by_name.assert_called_once_with('u1', 'Alex')
-        assert recorder.router.users_db.get_or_create_person_by_name.return_value[1] is False
+        router.users_db.get_people.assert_called_once_with('u1')
+        assert recorder.router.users_db.person_name_document_id.call_count == 0
 
     def test_creates_a_person_when_the_name_is_new(self, router):
         convo = conversation([segment('s1', 1)], [suggestion()])
 
         recorder, _ = run_accept(router, convo, existing_person=None)
 
-        recorder.router.users_db.get_or_create_person_by_name.assert_called_once_with('u1', 'Alex')
+        recorder.router.users_db.get_people.assert_called_once_with('u1')
+        recorder.router.users_db.person_name_document_id.assert_called_once_with('u1', 'alex')
         assert convo.transcript_segments[0].person_id == 'p-new'
 
     def test_enrols_as_user_tagged_not_llm_inferred(self, router):
@@ -401,7 +409,7 @@ class TestAcceptSuggestion:
         with recorder, patch.object(router, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
             router, "deserialize_conversation", return_value=convo
         ):
-            router.users_db.get_or_create_person_by_name.return_value = ({'id': 'p-alex'}, False)
+            router.users_db.get_people.return_value = [{'id': 'p-alex', 'name': 'Alex'}]
             with pytest.raises(HTTPException) as excinfo:
                 router.accept_speaker_label_suggestion('c1', 1, recorder.background_tasks, uid='u1')
 
@@ -450,7 +458,7 @@ class TestDismissSuggestion:
         assert recorder.dismiss_writes[0][0] == ('u1', 'c1', 1)
         assert recorder.suggestion_writes == []
         assert recorder.segment_writes == []
-        assert recorder.router.users_db.get_or_create_person_by_name.call_count == 0
+        assert recorder.router.users_db.get_people.call_count == 0
         assert segments[0].person_id is None
         assert result is convo
 
@@ -537,7 +545,7 @@ class TestRevokeContradictedInference:
         recorder, _ = run_accept(router, convo, existing_person={'id': 'p-alex'})
 
         revocations = recorder.tasks_for(router.revoke_inferred_speaker_enrolment)
-        assert [task.kwargs['person_id'] for task in revocations] == ['p-old']
+        assert [task.kwargs['person_id'] for task in revocations] == ['p-alex', 'p-old']
 
 
 def run_assign_bulk(router, convo, segment_ids, assign_type, value):
@@ -634,6 +642,7 @@ class TestSuggestionWritesAreTransactional:
             'transcript_segments': segments,
             'speaker_label_suggestions': suggestions,
         }
+        database.rows[('users', 'uid-1', 'people', 'person-alex')] = {'id': 'person-alex', 'name': 'Alex'}
         return database
 
     def row(self, database):

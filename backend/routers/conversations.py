@@ -1229,6 +1229,28 @@ def _resolve_suggested_person_id(uid: str, person_name: str) -> str:
     return person['id']
 
 
+def _resolve_suggested_person(
+    uid: str, person_name: str, requested_person_id: Optional[str]
+) -> tuple[str, Optional[str]]:
+    people = users_db.get_people(uid)
+    matching = [
+        person
+        for person in people
+        if isinstance(person.get('id'), str)
+        and users_db.person_name_identity_key(str(person.get('name') or ''))
+        == users_db.person_name_identity_key(person_name)
+    ]
+    if requested_person_id is not None:
+        if not any(person.get('id') == requested_person_id for person in matching):
+            raise HTTPException(status_code=400, detail="Selected person does not match the suggestion")
+        return requested_person_id, None
+    if len(matching) > 1:
+        raise HTTPException(status_code=409, detail="Choose which person should receive this suggestion")
+    if matching:
+        return matching[0]['id'], None
+    return users_db.person_name_document_id(uid, users_db.person_name_identity_key(person_name)), person_name
+
+
 def _forget_speaker_label_suggestion(conversation: Conversation, speaker_id: int) -> None:
     """Take a suggestion the database has already settled off the in-memory conversation."""
     conversation.speaker_label_suggestions = [
@@ -1245,6 +1267,7 @@ def accept_speaker_label_suggestion(
     conversation_id: str,
     speaker_id: int,
     background_tasks: BackgroundTasks,
+    person_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -1274,12 +1297,22 @@ def accept_speaker_label_suggestion(
     if suggestion is None:
         raise HTTPException(status_code=404, detail="Speaker suggestion not found")
 
-    person_id = _resolve_suggested_person_id(uid, suggestion.person_name)
-    logger.info(f'accept_speaker_label_suggestion {conversation_id} {speaker_id} {person_id} {uid}')
+    person_id, person_name = _resolve_suggested_person(uid, suggestion.person_name, person_id)
+    logger.info(
+        'accept_speaker_label_suggestion conversation=%s speaker=%s person=%s uid=%s',
+        conversation_id,
+        speaker_id,
+        person_id,
+        uid,
+    )
 
-    applied = conversations_db.accept_conversation_speaker_suggestion(uid, conversation_id, speaker_id, person_id)
+    applied = conversations_db.accept_conversation_speaker_suggestion(
+        uid, conversation_id, speaker_id, person_id, person_name=person_name
+    )
     if applied is None:
         raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+    if applied.get('error') in {'person_collision', 'person_missing'}:
+        raise HTTPException(status_code=409, detail="Choose which person should receive this suggestion")
 
     _forget_speaker_label_suggestion(conversation, speaker_id)
     for segment in conversation.transcript_segments:
@@ -1290,6 +1323,7 @@ def accept_speaker_label_suggestion(
 
     assigned_segment_ids = list(applied.get('segment_ids') or [])
     if assigned_segment_ids:
+        background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=person_id)
         background_tasks.add_task(
             extract_speaker_samples,
             uid=uid,
