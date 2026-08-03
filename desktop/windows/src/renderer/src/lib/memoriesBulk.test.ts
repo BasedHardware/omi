@@ -199,16 +199,19 @@ describe('deleteMemoriesPaced Stop responsiveness', () => {
   })
 
   // retentionSweep.ts calls this with no `shouldStop`, so that path keeps its
-  // single unsliced timer rather than polling it can never use.
+  // single unsliced timer rather than polling it can never use. Two ids are
+  // used (not one) so the pacing wait between them still fires: the tail wait
+  // after the *last* id is skipped entirely (see the pacing-tail describe
+  // block below), so a single-id fixture would no longer exercise this timer.
   it('does not slice its waits for a caller that passes no shouldStop', async () => {
     omiApiDelete.mockResolvedValue({ data: {} })
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
 
-    const run = deleteMemoriesPaced(['a'], () => {})
+    const run = deleteMemoriesPaced(['a', 'b'], () => {})
     await vi.advanceTimersByTimeAsync(1100)
     await run
 
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1) // one 1100ms wait, not five slices
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1) // one 1100ms wait between ids, not five slices
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1100)
   })
 
@@ -239,5 +242,81 @@ describe('deleteMemoriesPaced Stop responsiveness', () => {
 
     expect(omiApiDelete).toHaveBeenCalledTimes(2) // rate-limited, then retried
     expect(tally).toEqual({ deleted: 1, failed: 0, firstError: undefined })
+  })
+})
+
+// The 1100ms pacing wait exists to space out *requests*. After the last id
+// there is no next request, so serving it only delays the caller (e.g.
+// Memories.tsx's setDeleting(false) / completion toast) by ~1.1s for no
+// reason. This applies regardless of whether the caller passes shouldStop.
+describe('deleteMemoriesPaced trailing pacing wait', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('does not pace after the only (and last) id for a caller with no shouldStop', async () => {
+    omiApiDelete.mockResolvedValue({ data: {} })
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    let settled = false
+
+    const run = deleteMemoriesPaced(['a'], () => {})
+    void run.then(() => {
+      settled = true
+    })
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(settled).toBe(true) // no 1.1s tail wait after the last id
+    expect(setTimeoutSpy).not.toHaveBeenCalled()
+
+    const tally = await run
+    expect(omiApiDelete).toHaveBeenCalledTimes(1)
+    expect(tally).toEqual({ deleted: 1, failed: 0, firstError: undefined })
+  })
+
+  it('does not pace after the only (and last) id when the caller passes shouldStop', async () => {
+    omiApiDelete.mockResolvedValue({ data: {} })
+    let settled = false
+
+    const run = deleteMemoriesPaced(
+      ['a'],
+      () => {},
+      () => false
+    )
+    void run.then(() => {
+      settled = true
+    })
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(settled).toBe(true) // no 1.1s tail wait after the last id
+
+    const tally = await run
+    expect(tally).toEqual({ deleted: 1, failed: 0, firstError: undefined })
+  })
+
+  it('paces between ids but skips the tail wait after the last one', async () => {
+    omiApiDelete.mockResolvedValue({ data: {} })
+    const onResult = vi.fn()
+    let settled = false
+
+    const run = deleteMemoriesPaced(['a', 'b'], onResult, () => false)
+    void run.then(() => {
+      settled = true
+    })
+
+    // Only the wait between 'a' and 'b' should exist. If the trailing wait
+    // after 'b' were still served, 1100ms would not be enough to settle.
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(settled).toBe(true)
+
+    const tally = await run
+    expect(omiApiDelete).toHaveBeenCalledTimes(2)
+    expect(tally).toEqual({ deleted: 2, failed: 0, firstError: undefined })
+    expect(onResult).toHaveBeenNthCalledWith(1, 'a', true, { deleted: 1, failed: 0 })
+    expect(onResult).toHaveBeenNthCalledWith(2, 'b', true, { deleted: 2, failed: 0 })
   })
 })

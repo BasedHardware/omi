@@ -869,6 +869,8 @@ def check_desktop_qualification_runner() -> list[str]:
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
+        "Checkout trusted qualification controls",
+        "path: qualification-controls",
         "group: desktop-beta-qualification-m1",
         "cancel-in-progress: false",
     ):
@@ -878,6 +880,30 @@ def check_desktop_qualification_runner() -> list[str]:
         errors.append("desktop qualification runner must not promote beta inside its own run")
     if "qualify-m4-mini" in text or "plan-fallbacks" in text:
         errors.append("desktop qualification runner must use only the global M1 fallback lane")
+    probe_start = text.find("Prove production Firebase UID continuity on Beta development authorities")
+    probe_end = text.find("Fetch candidate release inputs into this run only", probe_start)
+    probe = text[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
+    for required_fragment in (
+        "umask 077",
+        'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
+        'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
+        "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
+        'rm -f -- "$signer_file"',
+        'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
+        "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        "unset FIREBASE_PROBE_SIGNER_B64",
+    ):
+        if required_fragment not in probe:
+            errors.append(f"desktop qualification runner is missing Firebase probe cleanup: {required_fragment}")
+    if not (
+        probe.find("firebase_release_probe_token.py")
+        < probe.rfind('rm -f -- "$signer_file"')
+        < probe.rfind('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"')
+        < probe.find("probe_beta_uid_continuity.py")
+    ):
+        errors.append("desktop qualification runner must remove Firebase probe and GitHub auth credentials before probing")
+    if "working-directory: qualification-controls" not in probe:
+        errors.append("desktop qualification runner must run the Firebase probe from trusted main controls")
 
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
@@ -888,11 +914,25 @@ def check_desktop_qualification_runner() -> list[str]:
         "github.event.workflow_run.id",
         "qualification-evidence.json",
         "EVIDENCE_SOURCE_SHA",
+        "qualification_run_id",
+        "qualification_run_attempt",
+        "beta_uid_continuity",
         "/v2/desktop/beta/promote-qualified",
         "environment: beta",
     ):
         if required_fragment not in promotion_text:
             errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
+
+    recovery = ROOT / ".github/workflows/desktop_recover_beta.yml"
+    recovery_text = recovery.read_text(encoding="utf-8") if recovery.exists() else ""
+    for required_fragment in (
+        "actions: read",
+        "uses: ./.github/workflows/desktop_promote_beta.yml",
+        "qualification_run_id:",
+        "qualification_run_attempt:",
+    ):
+        if required_fragment not in recovery_text:
+            errors.append(f"desktop beta recovery workflow is missing retained-evidence access guard: {required_fragment}")
 
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
@@ -909,23 +949,32 @@ def check_desktop_qualification_runner() -> list[str]:
 
 
 def check_desktop_update_docs() -> list[str]:
-    """Keep operator docs aligned with the single retained artifact identity."""
+    """Keep operator docs aligned with Stable/Beta's qualified artifact identities."""
     path = ROOT / "docs/doc/developer/desktop-updates.mdx"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     errors: list[str] = []
-    required = ("Omi.app", "com.omi.computer-macos", "Omi.zip", "`omi.dmg`", "independent pointers")
+    required = (
+        "Omi.app",
+        "com.omi.computer-macos",
+        "Omi.zip",
+        "`omi.dmg`",
+        "Omi Beta.app",
+        "com.omi.computer-macos.beta",
+        "Omi.Beta.zip",
+        "omi-beta.dmg",
+        "production Firebase Auth/Firestore",
+        "Beta OAuth remains on the production identity authority",
+    )
     forbidden = (
-        "separately installable",
-        "own bundle identity",
-        "all four artifacts",
-        "Stable/Beta URLs",
+        "Beta is a server-side distribution channel, not a second app",
+        "Every\nqualified macOS release has one identity",
     )
     for fragment in required:
         if fragment not in text:
-            errors.append(f"desktop update docs are missing single-artifact contract: {fragment}")
+            errors.append(f"desktop update docs are missing Stable/Beta artifact contract: {fragment}")
     for fragment in forbidden:
         if fragment in text:
-            errors.append(f"desktop update docs retain forbidden dual-identity claim: {fragment}")
+            errors.append(f"desktop update docs retain forbidden single-identity claim: {fragment}")
     return errors
 
 
@@ -984,41 +1033,69 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
     else:
         dispatcher_text = dispatcher.read_text(encoding="utf-8")
         dispatcher_script = ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
-        dispatcher_source = dispatcher_text
-        if dispatcher_script.exists():
-            dispatcher_source += "\n" + dispatcher_script.read_text(encoding="utf-8")
-        required_dispatcher = (
-            "  push:\n"
-            "    branches: [main]\n"
-            "    paths: ['app/**']\n"
-            "  schedule:\n"
-            "    - cron: '0 */3 * * *'\n"
-            "  workflow_dispatch:\n"
-        )
-        if required_dispatcher not in dispatcher_text or "cancel-in-progress: false" not in dispatcher_text:
-            errors.append(
-                "mobile internal build dispatcher must trigger on main app/** pushes and preserve active runs"
-            )
-        for workflow_id in ("ios-internal-auto", "android-internal-auto"):
-            if workflow_id not in dispatcher_source:
-                errors.append(f"mobile internal build dispatcher is missing {workflow_id}")
-        if dispatcher_script.exists():
-            try:
-                tree = ast.parse(dispatcher_script.read_text(encoding="utf-8"))
-            except SyntaxError:
-                errors.append("mobile internal build dispatcher is not valid Python")
+        try:
+            workflow = yaml.load(dispatcher_text, Loader=yaml.BaseLoader)
+        except yaml.YAMLError as exc:
+            errors.append(f"mobile internal build dispatcher is not valid YAML: {exc}")
+            workflow = None
+        if not isinstance(workflow, dict):
+            errors.append("mobile internal build dispatcher must be a YAML mapping")
+        else:
+            triggers = workflow.get("on")
+            if not isinstance(triggers, dict):
+                errors.append("mobile internal build dispatcher must declare push, schedule, and workflow_dispatch triggers")
             else:
-                main = next(
+                push = triggers.get("push")
+                if not isinstance(push, dict) or push.get("branches") != ["main"] or push.get("paths") != ["app/**"]:
+                    errors.append("mobile internal build dispatcher must trigger on main app/** pushes")
+                schedule = triggers.get("schedule")
+                if not isinstance(schedule, list) or schedule != [{"cron": "0 */3 * * *"}]:
+                    errors.append("mobile internal build dispatcher must retain its three-hour schedule")
+                if "workflow_dispatch" not in triggers:
+                    errors.append("mobile internal build dispatcher must retain workflow_dispatch")
+            concurrency = workflow.get("concurrency")
+            if not isinstance(concurrency, dict) or concurrency.get("group") != "mobile-internal-build":
+                errors.append("mobile internal build dispatcher must use the mobile-internal-build concurrency group")
+            elif concurrency.get("cancel-in-progress") != "false":
+                errors.append("mobile internal build dispatcher must not cancel an in-progress sequential dispatch")
+            jobs = workflow.get("jobs")
+            dispatch_job = jobs.get("dispatch") if isinstance(jobs, dict) else None
+            steps = dispatch_job.get("steps") if isinstance(dispatch_job, dict) else None
+            runs = [step.get("run", "") for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+            if not any("python3 .github/scripts/dispatch_mobile_internal_builds.py" in run for run in runs):
+                errors.append("mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py")
+
+        if not dispatcher_script.exists():
+            errors.append("mobile internal build dispatcher script is missing")
+        else:
+            try:
+                script_tree = ast.parse(dispatcher_script.read_text(encoding="utf-8"), filename=str(dispatcher_script))
+            except (OSError, SyntaxError) as exc:
+                errors.append(f"mobile internal build dispatcher script is not valid Python: {exc}")
+            else:
+                workflow_values = None
+                for node in script_tree.body:
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "MOBILE_WORKFLOWS" for target in node.targets
+                    ):
+                        try:
+                            workflow_values = ast.literal_eval(node.value)
+                        except (ValueError, TypeError):
+                            workflow_values = None
+                        break
+                if workflow_values != ("ios-internal-auto", "android-internal-auto"):
+                    errors.append("mobile internal build dispatcher script must declare both Codemagic mobile workflows")
+                main_function = next(
                     (
                         node
-                        for node in tree.body
+                        for node in script_tree.body
                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
                     ),
                     None,
                 )
                 has_dispatch_loop = False
-                if main is not None:
-                    for node in ast.walk(main):
+                if main_function is not None:
+                    for node in ast.walk(main_function):
                         if not isinstance(node, ast.For) or not isinstance(node.target, ast.Name):
                             continue
                         if node.target.id != "workflow_id":

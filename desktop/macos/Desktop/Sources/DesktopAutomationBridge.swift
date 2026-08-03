@@ -162,14 +162,6 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var snapshotStale: Bool = false
 }
 
-struct DesktopAutomationNavigationRequest: Codable {
-  let target: String
-  let settingsSection: String?
-  let highlightedSettingId: String?
-  let activateApp: Bool?
-  let settleMs: Int?
-}
-
 struct DesktopAutomationOpenConversationRequest: Codable {
   let conversationId: String
   let showTranscript: Bool?
@@ -583,7 +575,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
   }
 }
 
-private func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
+func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
   var snapshot = DesktopAutomationStateStore.shared.current()
   snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
   return snapshot
@@ -3981,7 +3973,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
-        let snapshot = try await waitForNavigationTarget(payload)
+        let snapshot = try await navigationSnapshot(for: payload)
         try await sleepForAutomationSettle(payload.settleMs)
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {

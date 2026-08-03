@@ -112,7 +112,8 @@ export async function deleteMemoriesPaced(
   let deleted = 0
   let failed = 0
   let firstError: string | undefined
-  for (const id of ids) {
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
     if (shouldStop?.()) break
     let ok = false
     let stopped = false
@@ -153,7 +154,12 @@ export async function deleteMemoriesPaced(
     if (ok) deleted++
     else failed++
     onResult(id, ok, { deleted, failed })
-    await waitInterruptible(1100, shouldStop) // stay under ~60/hour; Stop skips the tail
+    // Only pace before the *next* request. After the last id there is nothing
+    // left to space out, so serving this wait would just delay the caller
+    // (e.g. Memories.tsx's setDeleting(false) / completion toast) by ~1.1s.
+    if (i < ids.length - 1) {
+      await waitInterruptible(1100, shouldStop) // space out consecutive deletes; Stop skips the wait
+    }
   }
   return { deleted, failed, firstError }
 }

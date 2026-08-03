@@ -174,17 +174,17 @@ class AuthService {
     firebaseAuthAvailability.auth()
   }
 
-  // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
-  // No hardcoded fallback — if the key isn't available, auth operations will fail
-  // with a clear error instead of silently using a potentially wrong key.
   private var firebaseApiKey: String {
-    if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingCString: envKey), !key.isEmpty {
-      return key
-    }
+    let environmentKey = getenv("FIREBASE_API_KEY").map { String(validatingCString: $0) } ?? nil
+    let key = AppBuild.firebaseAPIKey(
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      environmentKey: environmentKey,
+      bundledKey: FirebaseApp.app()?.options.apiKey
+    )
+    if !key.isEmpty { return key }
     log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
     return ""
   }
-
   /// Resolve the Firebase Web API key or fail loudly (BL-019).
   ///
   /// The key is provisioned asynchronously (APIKeyService fetches it from the

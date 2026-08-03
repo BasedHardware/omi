@@ -1325,6 +1325,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
@@ -1482,6 +1483,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         class _AudioPrecacheResponse(BaseModel):
             pass
@@ -3015,6 +3017,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
@@ -3146,6 +3149,7 @@ class TestV2EndpointExecution:
 
         sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
         sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')

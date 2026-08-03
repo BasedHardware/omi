@@ -52,6 +52,83 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
   }
 
+  func testPromptTimelineCannotMutateTranscriptScrollerDuringLayout() throws {
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+    let timelineSource = try sourceFile("MainWindow/Components/ChatPromptTimeline.swift")
+
+    // omi-test-quality: source-inspection -- static contract: the prompt rail must stay an observational overlay; changing NSScrollView chrome from its visibility callbacks can re-enter transcript layout.
+    XCTAssertFalse(messagesSource.contains("hidesNativeScrollIndicator"))
+    XCTAssertFalse(messagesSource.contains("ChatTimelineScrollerSuppressionHost"))
+    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.hidden)"))
+    XCTAssertFalse(timelineSource.contains("onVisibilityChange"))
+  }
+
+  func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+
+    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
+    XCTAssertTrue(scrollSource.contains("inModes: [.common, .default, Self.eventTrackingRunLoopMode]"))
+    XCTAssertTrue(scrollSource.contains("private static let eventTrackingRunLoopMode"))
+    XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
+  }
+
+  func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+
+    // omi-test-quality: source-inspection -- AppKit representables must recover
+    // when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
+    XCTAssertTrue(scrollSource.contains("context.coordinator.setupScrollObserver(for: nsView)"))
+    XCTAssertTrue(scrollSource.contains("observedClipView"))
+    XCTAssertTrue(scrollSource.contains("context.coordinator.install(for: nsView)"))
+    XCTAssertTrue(scrollSource.contains("installedScrollView"))
+  }
+
+  func testChatStartsAtBottomOnLaunchButPreservesExplicitReaderScroll() throws {
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+
+    // omi-test-quality: source-inspection -- launch placement is owned by the
+    // cancelable state machine. An unconditional SwiftUI default anchor is a
+    // second authority that can pull an explicitly free-scrolled reader back.
+    XCTAssertFalse(messagesSource.contains(".defaultScrollAnchor(.bottom)"))
+    XCTAssertTrue(messagesSource.contains("ChatInitialRestoreState.afterDisappear"))
+    XCTAssertTrue(messagesSource.contains("cancelPendingScrollsForUserInteraction()"))
+    XCTAssertTrue(messagesSource.contains("initialRestoreState = .completed"))
+  }
+
+  func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {
+    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+
+    // omi-test-quality: source-inspection -- passive position updates and
+    // settled checks must both use the active-gesture fence before restoring
+    // live following. Wheel momentum is owned by AppKit's live-scroll
+    // lifecycle, never by a guessed wall-clock delay.
+    XCTAssertTrue(scrollSource.contains("private var settleWorkItem: DispatchWorkItem?"))
+    XCTAssertFalse(scrollSource.contains("for delay in [0.12, 0.36]"))
+    XCTAssertTrue(scrollSource.contains("NSScrollView.willStartLiveScrollNotification"))
+    XCTAssertTrue(scrollSource.contains("NSScrollView.didEndLiveScrollNotification"))
+    XCTAssertTrue(scrollSource.contains("scheduleDiscreteInputSettledBottomCheck"))
+    XCTAssertTrue(scrollSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
+    XCTAssertTrue(messagesSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
+  }
+
+  func testChatFirstShellUsesModernTopNavigation() throws {
+    let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
+    let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
+    XCTAssertTrue(shellSource.contains("DesktopTopBar("))
+    XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
+    XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
+    XCTAssertFalse(shellSource.contains("\n      ChatPage("))
+    XCTAssertTrue(dashboardSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(dashboardSource.contains("chatTranscriptFirstPageDidLoad()"))
+
+    let homeSource = try sourceFile("MainWindow/DesktopHomeView.swift")
+    XCTAssertTrue(homeSource.contains("if usesChatFirstShell,"))
+  }
+
   func testMainAndNotchChatShareTheTranscriptFade() throws {
     let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")

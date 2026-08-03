@@ -1,0 +1,3 @@
+{
+  "change": "Improved chat transcript responsiveness during long streaming conversations and added safeguards that catch slow navigation and Ask Omi feedback"
+}

@@ -41,6 +41,234 @@ private final class TasksStoreOperationProbe {
 }
 
 final class TasksStoreOwnerBoundaryTests: XCTestCase {
+  @MainActor
+  func testNoDeadlinePaginationUsesAPIConsumptionOffsetInsteadOfLocalPresentationCount() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let dated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    var requestedOffsets: [Int] = []
+    var pageNumber = 0
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in initialSurface },
+      fetchDatedTasks: { _ in [dated] },
+      fetchNoDeadlinePage: { offset, _, _ in
+        requestedOffsets.append(offset)
+        defer { pageNumber += 1 }
+        if pageNumber == 0 {
+          return .init(items: [firstPage[0], self.task(id: "undated-100")], hasMore: true)
+        }
+        return .init(items: [self.task(id: "undated-101")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    guard let nextAnchor = store.incompleteTasks.last else {
+      XCTFail("Expected the loaded tasks to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: nextAnchor, operations: operations)
+
+    XCTAssertEqual(requestedOffsets, [100, 102])
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt == nil }.count, 102)
+    XCTAssertEqual(Set(store.incompleteTasks.map(\.id)).count, store.incompleteTasks.count)
+  }
+
+  @MainActor
+  func testFullSyncReloadPreservesExpandedNoDeadlineWindowAndAllDatedRows() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let expanded = (0..<150).map { task(id: "undated-\($0)") }
+    store.incompleteTasks = expanded
+    let dated = (0..<3).map {
+      task(id: "dated-\($0)", dueAt: Date(timeIntervalSince1970: 1_700_000_100 + Double($0)))
+    }
+    var requestedLimit: Int?
+    let operations = TasksStore.OwnerBoundOperations(
+      loadIncompleteSurfaceForLimit: { _, limit in
+        requestedLimit = limit
+        return .init(
+          datedTasks: dated,
+          noDeadlineTasks: expanded,
+          hasMoreNoDeadline: true
+        )
+      }
+    )
+
+    await store.reloadIncompleteTaskSurfaceAfterFullSync(operations: operations)
+
+    XCTAssertEqual(requestedLimit, 150)
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt != nil }.map(\.id), dated.map(\.id))
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt == nil }.count, 150)
+    XCTAssertTrue(store.hasMoreIncompleteTasks)
+  }
+
+  @MainActor
+  func testReloadIncompleteTasksPreservesExpandedNoDeadlineAPICursor() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let dated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let secondPage = (100..<150).map { task(id: "undated-\($0)") }
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    let expandedSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage + secondPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 150
+    )
+    let refreshedSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    var requestedOffsets: [Int] = []
+    var pageNumber = 0
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in refreshedSurface },
+      fetchDatedTasks: { _ in [dated] },
+      fetchNoDeadlinePage: { offset, _, _ in
+        requestedOffsets.append(offset)
+        defer { pageNumber += 1 }
+        switch pageNumber {
+        case 0:
+          return .init(items: secondPage, hasMore: true)
+        case 1:
+          return .init(items: [self.task(id: "undated-150")], hasMore: false)
+        default:
+          return .init(items: [], hasMore: false)
+        }
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface },
+      loadIncompleteSurfaceForLimit: { _, limit in
+        XCTAssertEqual(limit, 150)
+        return expandedSurface
+      }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    XCTAssertEqual(requestedOffsets, [100])
+
+    requestedOffsets = []
+    pageNumber = 0
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let expandedAnchor = store.incompleteTasks.last(where: { $0.dueAt == nil }) else {
+      XCTFail("Expected a No Deadline pagination anchor after refresh")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: expandedAnchor, operations: operations)
+
+    XCTAssertEqual(requestedOffsets, [150])
+  }
+
+  @MainActor
+  func testNoDeadlinePaginationReplacesDatedProjectionWithServerFetch() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let staleDated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_000))
+    let freshDated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    store.incompleteTasks = [staleDated] + firstPage
+
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [staleDated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in initialSurface },
+      fetchDatedTasks: { _ in [freshDated] },
+      fetchNoDeadlinePage: { _, _, _ in
+        .init(items: [self.task(id: "undated-100")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let anchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: anchor, operations: operations)
+
+    let refreshedDated = store.incompleteTasks.first(where: { $0.id == "dated" })
+    XCTAssertEqual(refreshedDated?.dueAt, freshDated.dueAt)
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt != nil }.map(\.id), ["dated"])
+  }
+
+  @MainActor
+  func testOwnerFenceDuringNoDeadlinePageAlwaysClearsLoadingState() async {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let surface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true
+    )
+    let gate = TasksStorePauseGate()
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in surface },
+      fetchDatedTasks: { _ in [] },
+      fetchNoDeadlinePage: { _, _, _ in
+        await gate.pause()
+        return .init(items: [self.task(id: "late-owner-a")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in surface }
+    )
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    let load = Task { @MainActor in
+      await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    }
+    await gate.waitUntilStarted()
+    XCTAssertTrue(store.isLoadingMore)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
+    await gate.release()
+    await load.value
+
+    XCTAssertFalse(store.isLoadingMore)
+    XCTAssertFalse(store.incompleteTasks.contains { $0.id == "late-owner-a" })
+  }
+
   func testStaticGuardRetiredLocalStagingMigrationDoesNotWriteTaskRows() throws {
     let source = try productionSource("Rewind/Core/RewindDatabase.swift")
     let migrationMarker = "migrator.registerMigration(\"migrateAITasksToStaged\")"
@@ -807,12 +1035,13 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
-  private func task(id: String, completed: Bool = false) -> TaskActionItem {
+  private func task(id: String, completed: Bool = false, dueAt: Date? = nil) -> TaskActionItem {
     TaskActionItem(
       id: id,
       description: id,
       completed: completed,
-      createdAt: Date(timeIntervalSince1970: 0))
+      createdAt: Date(timeIntervalSince1970: 0),
+      dueAt: dueAt)
   }
 
   private func productionSource(_ relativePath: String) throws -> String {

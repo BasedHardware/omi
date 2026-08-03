@@ -1,0 +1,3 @@
+{
+  "change": "Hardened Tasks pagination, Memories archive loading, chat admission, and capture detail refresh so stale data and interrupted loads are less likely to appear in the desktop app"
+}

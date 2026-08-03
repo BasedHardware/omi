@@ -511,8 +511,10 @@ class SyncRecoveryWindowExceededException implements Exception {
 bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   if (response.statusCode != 422) return false;
   try {
-    final body = jsonDecode(response.body);
-    return body is Map && body['code'] == 'backfill_lookback_exceeded';
+    final body = wire.GeneratedSyncRecoveryWindowExceededResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'backfill_lookback_exceeded';
   } catch (_) {
     return false;
   }
@@ -552,8 +554,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+    ? SyncRateLimitKind.fairUse
+    : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).

@@ -314,4 +314,46 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertTrue(gate.configure(sample: nil, ownerID: "owner-a"))
     XCTAssertNil(gate.capability(for: .mainChat(chatId: nil), ownerID: "owner-a"))
   }
+
+  func testModernShellUsesTopBarHomeForChatAndMapsPrimaryDestinations() {
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.topBarIndex(for: .chat),
+      SidebarNavItem.dashboard.rawValue
+    )
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.topBarIndex(for: .conversations),
+      SidebarNavItem.conversations.rawValue
+    )
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.topBarIndex(for: .tasks),
+      SidebarNavItem.tasks.rawValue
+    )
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.route(forTopBarIndex: SidebarNavItem.dashboard.rawValue),
+      .chat
+    )
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.route(forTopBarIndex: SidebarNavItem.apps.rawValue),
+      .more(.apps)
+    )
+  }
+
+  func testExplicitLegacyDesignIsTheOnlyPathThatMountsTheSidebarShell() throws {
+    var sample = ChatFirstShellCapabilitySample()
+    sample.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesChatFirst(false, sample.variant)
+    )
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesChatFirst(true, sample.variant)
+    )
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesChatFirst(false, .legacy)
+    )
+  }
 }

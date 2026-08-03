@@ -3,16 +3,18 @@ title: Desktop update architecture
 description: Qualified desktop artifacts, explicit pointers, and recovery semantics.
 ---
 
-Desktop Beta is a server-side distribution channel, not a second app. Every
-qualified macOS release has one identity: `Omi.app` (bundle ID
-`com.omi.computer-macos`), `Omi.zip`, and lowercase `omi.dmg`. Beta and Stable
-are independent pointers and Sparkle feed channels over those same retained,
-signed bytes. Channel diagnostics and telemetry remain channel-specific; app
-storage, Keychain/TCC identity, package names, and backend identity do not.
+Each qualified macOS release carries two separately installable signed artifacts:
+Stable is `Omi.app` (`com.omi.computer-macos`), `Omi.zip`, and `omi.dmg`; Beta is
+`Omi Beta.app` (`com.omi.computer-macos.beta`), `Omi.Beta.zip`, and `omi-beta.dmg`.
+They share the production Firebase Auth/Firestore customer universe, while Beta
+uses the fixed development Python and desktop serving endpoints for full-stack
+dogfooding. Beta OAuth remains on the production identity authority. The bundle
+identities intentionally isolate local storage, Keychain/TCC state, package names,
+and telemetry without creating another customer account universe.
 
 ## Release model
 
-One Codemagic build signs and notarizes one `Omi.zip`/`omi.dmg` pair from one
+One Codemagic build signs and notarizes Stable and Beta artifact pairs from one
 source revision, then reserves its exact immutable `v...-macos` tag before
 creating an immutable, non-live GitHub candidate. The
 trusted macOS qualifier is dispatched on that immutable candidate tag, checks
