@@ -27,12 +27,12 @@ enum DesktopAutomationNavigationResponseMode: Equatable {
 
   static func snapshot<T: Sendable>(
     waitForVisibility: Bool?,
-    cached: @Sendable () async -> T,
+    cached: @Sendable () async throws -> T,
     mounted: @Sendable () async throws -> T
   ) async throws -> T {
     switch resolve(waitForVisibility: waitForVisibility) {
     case .routeAcknowledged:
-      return await cached()
+      return try await cached()
     case .mountedVisible:
       return try await mounted()
     }
@@ -56,7 +56,7 @@ extension DesktopAutomationBridge {
         // the shell cannot route: callers can otherwise treat a no-op as an
         // accepted navigation. Reject unknown targets before returning cached.
         try self.validateKnownNavigationTarget(payload)
-        return await self.cachedAutomationSnapshot()
+        return await cachedAutomationSnapshot()
       },
       mounted: { try await waitForNavigationTarget(payload) }
     )
