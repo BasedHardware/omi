@@ -1636,6 +1636,15 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # over it: their execution is a round trip to the client on this stream.
     callback = AsyncStreamingCallback()
 
+    stream_started_at = asyncio.get_running_loop().time()
+
+    def device_tool_timeout() -> int:
+        remaining = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - stream_started_at)
+        return min(
+            max(0, int(remaining)),
+            device_tool_timeout_for_stream_budget(remaining),
+        )
+
     # Device tools the client declared it can run. Appended after the fixed core
     # list so the cached tools prefix stays byte-stable for clients that declare
     # none, and stable per-client for those that do. Unlike app tools these are
@@ -1644,7 +1653,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         uid,
         set(device_tool_names or ()),
         callback,
-        timeout_seconds=device_tool_timeout_for_stream_budget(AGENT_STREAM_MAX_DURATION_SECONDS),
+        timeout_seconds=device_tool_timeout,
     )
     if device_tools:
         device_tool_list = ', '.join(sorted(t.name for t in device_tools))
@@ -1764,7 +1773,7 @@ user chose not to send; acknowledge that rather than retrying.
     # client, but the first-event clock below still bounds silence from the producer
     # (post-setup TTFT) separately from that setup progress.
     try:
-        started_at = asyncio.get_running_loop().time()
+        started_at = stream_started_at
         received_first_event = False
         while True:
             remaining_seconds = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - started_at)
