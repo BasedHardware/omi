@@ -13,6 +13,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskMultiSelection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskBulkOperationCoordinator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanelPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
 preconditions:
   - auth_ready
