@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
 import {
   createGoal,
   deleteGoal,
@@ -28,107 +30,105 @@ function messageFor(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function useGoals(): UseGoalsReturn {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+/**
+ * The goal list and its mutations, held in moonshine signals.
+ *
+ * A `createResource` would cover the load but is read-only, and this list is
+ * written optimistically. Signals also let rollback read the committed value
+ * synchronously at call time — capturing it inside a React state updater does
+ * not work, because React runs updaters during the next render, after a
+ * rejected request's `catch` has already run.
+ */
+export function createGoalsStore() {
+  const goals = createSignal<Goal[]>([]);
+  const loading = createSignal(true);
+  const error = createSignal<string | null>(null);
 
-  /**
-   * The last committed goal list.
-   *
-   * Rollback has to read the pre-write value at call time. Capturing it inside
-   * a `setGoals` updater does not work: React runs the updater during the next
-   * render, which is after a rejected request's `catch` has already run, so the
-   * captured value would still be undefined and the rollback would silently
-   * do nothing.
-   */
-  const committed = useRef<Goal[]>(goals);
-
-  useEffect(() => {
-    committed.current = goals;
-  }, [goals]);
-
-  const load = useCallback(async (isMounted: () => boolean) => {
+  const load = async () => {
+    loading.set(true);
     try {
-      const loaded = await getGoals();
-      if (!isMounted()) return;
-      setGoals(loaded);
-      setError(null);
+      goals.set(await getGoals());
+      error.set(null);
     } catch (err) {
       console.error('Failed to load goals:', err);
-      if (!isMounted()) return;
-      setError(messageFor(err, 'Failed to load goals'));
+      error.set(messageFor(err, 'Failed to load goals'));
     } finally {
-      if (isMounted()) setLoading(false);
+      loading.set(false);
     }
-  }, []);
+  };
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    await load(() => true);
-  }, [load]);
+  /** Apply a write optimistically and put the old row back if it fails. */
+  const optimistic = async (
+    id: string,
+    apply: (goal: Goal) => Goal,
+    request: () => Promise<Goal>,
+    failureMessage: string,
+  ) => {
+    const previous = goals.peek().find((goal) => goal.id === id);
+    goals.set((current) => current.map((goal) => (goal.id === id ? apply(goal) : goal)));
 
-  // The initial load starts here but every setState happens after an await, so
-  // mounting never triggers a synchronous cascading render, and a request that
-  // lands after unmount is dropped.
-  useEffect(() => {
-    let mounted = true;
-    void load(() => mounted);
-    return () => {
-      mounted = false;
-    };
-  }, [load]);
+    try {
+      const updated = await request();
+      goals.set((current) => current.map((goal) => (goal.id === id ? updated : goal)));
+      error.set(null);
+    } catch (err) {
+      console.error(failureMessage, err);
+      if (previous) {
+        goals.set((current) => current.map((goal) => (goal.id === id ? previous : goal)));
+      }
+      error.set(messageFor(err, failureMessage));
+    }
+  };
 
-  const addGoal = useCallback(async (params: CreateGoalParams): Promise<Goal | null> => {
+  const add = async (params: CreateGoalParams): Promise<Goal | null> => {
     try {
       const created = await createGoal(params);
-      setGoals((current) => [...current, created]);
-      setError(null);
+      goals.set((current) => [...current, created]);
+      error.set(null);
       return created;
     } catch (err) {
       console.error('Failed to create goal:', err);
-      setError(messageFor(err, 'Failed to create goal'));
+      error.set(messageFor(err, 'Failed to create goal'));
       return null;
     }
-  }, []);
+  };
 
-  /**
-   * Apply a server write optimistically and roll the row back if it fails, so a
-   * rejected write never leaves the UI showing a value the server does not have.
-   */
-  const applyOptimistic = useCallback(
-    async (
-      id: string,
-      optimistic: (goal: Goal) => Goal,
-      request: () => Promise<Goal>,
-      failureMessage: string,
-    ) => {
-      const previous = committed.current.find((goal) => goal.id === id);
-      setGoals((current) =>
-        current.map((goal) => (goal.id === id ? optimistic(goal) : goal)),
-      );
+  const remove = async (id: string) => {
+    const removed = goals.peek().find((goal) => goal.id === id);
+    goals.set((current) => current.filter((goal) => goal.id !== id));
 
-      try {
-        const updated = await request();
-        setGoals((current) => current.map((goal) => (goal.id === id ? updated : goal)));
-        setError(null);
-      } catch (err) {
-        console.error(failureMessage, err);
-        if (previous) {
-          const restored = previous;
-          setGoals((current) =>
-            current.map((goal) => (goal.id === id ? restored : goal)),
-          );
-        }
-        setError(messageFor(err, failureMessage));
+    try {
+      await deleteGoal(id);
+      error.set(null);
+    } catch (err) {
+      console.error('Failed to delete goal:', err);
+      if (removed) {
+        goals.set((current) => [...current, removed]);
       }
-    },
-    [],
-  );
+      error.set(messageFor(err, 'Failed to delete goal'));
+    }
+  };
+
+  return { goals, loading, error, load, optimistic, add, remove };
+}
+
+export function useGoals(): UseGoalsReturn {
+  const store = useMemo(() => createGoalsStore(), []);
+
+  // Loaded here rather than from the factory: useMemo may run more than once
+  // per commit (StrictMode renders twice), and loading in the factory would
+  // fetch once per discarded store. This writes signals, not React state.
+  useEffect(() => {
+    void store.load();
+  }, [store]);
+
+  const goals = useSignalValue(store.goals);
+  const loading = useSignalValue(store.loading);
+  const error = useSignalValue(store.error);
 
   const editGoal = useCallback(
-    async (id: string, updates: UpdateGoalParams) => {
-      await applyOptimistic(
+    (id: string, updates: UpdateGoalParams) =>
+      store.optimistic(
         id,
         (goal) => ({
           ...goal,
@@ -138,39 +138,20 @@ export function useGoals(): UseGoalsReturn {
         }),
         () => updateGoal(id, updates),
         'Failed to update goal',
-      );
-    },
-    [applyOptimistic],
+      ),
+    [store],
   );
 
   const setProgress = useCallback(
-    async (id: string, currentValue: number) => {
-      await applyOptimistic(
+    (id: string, currentValue: number) =>
+      store.optimistic(
         id,
         (goal) => ({ ...goal, current_value: currentValue }),
         () => updateGoalProgress(id, currentValue),
         'Failed to update progress',
-      );
-    },
-    [applyOptimistic],
+      ),
+    [store],
   );
-
-  const removeGoal = useCallback(async (id: string) => {
-    const removed = committed.current.find((goal) => goal.id === id);
-    setGoals((current) => current.filter((goal) => goal.id !== id));
-
-    try {
-      await deleteGoal(id);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to delete goal:', err);
-      if (removed) {
-        const restored = removed;
-        setGoals((current) => [...current, restored]);
-      }
-      setError(messageFor(err, 'Failed to delete goal'));
-    }
-  }, []);
 
   const sorted = useMemo(() => sortGoals(goals), [goals]);
 
@@ -178,10 +159,10 @@ export function useGoals(): UseGoalsReturn {
     goals: sorted,
     loading,
     error,
-    refresh,
-    addGoal,
+    refresh: store.load,
+    addGoal: store.add,
     editGoal,
     setProgress,
-    removeGoal,
+    removeGoal: store.remove,
   };
 }

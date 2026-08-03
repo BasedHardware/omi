@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Sparkles, X } from 'lucide-react';
 import { useGoalDetail } from '@/hooks/useGoalDetail';
@@ -21,14 +21,17 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
   const [target, setTarget] = useState('');
   const [unit, setUnit] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editedGoalId, setEditedGoalId] = useState<string | null>(null);
 
-  // Reset the edit fields whenever a different goal is opened.
-  useEffect(() => {
-    if (!goal) return;
+  // Reset the edit fields whenever a different goal is opened. Adjusting during
+  // render rather than in an effect avoids showing the previous goal's values
+  // for a frame.
+  if (goal && goal.id !== editedGoalId) {
+    setEditedGoalId(goal.id);
     setTitle(goal.title);
     setTarget(formatMetricValue(goal.target_value));
     setUnit(goal.unit ?? '');
-  }, [goal]);
+  }
 
   if (!goal) return null;
 

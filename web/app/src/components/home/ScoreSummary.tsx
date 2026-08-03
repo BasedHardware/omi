@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { describeScorePeriod, resolveDefaultTab } from '@/lib/goals';
-import type { ScoreTab, Scores } from '@/types/goals';
+import { describeScorePeriod, resolveDefaultTab } from '@/lib/scores';
+import type { ScoreTab, Scores } from '@/types/scores';
 
 const TABS: Array<{ id: ScoreTab; label: string }> = [
   { id: 'daily', label: 'Today' },
