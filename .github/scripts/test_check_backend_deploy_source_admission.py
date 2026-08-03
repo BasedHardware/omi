@@ -144,6 +144,7 @@ class WorkflowContractTests(unittest.TestCase):
             CHECKER.MANUAL_WORKFLOW_PATH,
             CHECKER.ADMISSION_VERIFIER_PATH,
             CHECKER.AUTO_ADMISSION_VERIFIER_PATH,
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
         ):
             source = ROOT / relative
             destination = temp / relative
@@ -155,8 +156,13 @@ class WorkflowContractTests(unittest.TestCase):
     def mutate(self, root: Path, relative: Path, old: str, new: str) -> None:
         path = root / relative
         text = path.read_text(encoding="utf-8")
-        self.assertIn(old, text)
-        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        if old in text:
+            path.write_text(text.replace(old, new, 1), encoding="utf-8")
+            return
+        composite = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION
+        composite_text = composite.read_text(encoding="utf-8")
+        self.assertIn(old, composite_text)
+        composite.write_text(composite_text.replace(old, new, 1), encoding="utf-8")
 
     def move_step_before(self, root: Path, relative: Path, name: str, before_name: str) -> None:
         path = root / relative
@@ -362,7 +368,7 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "old SHA checked out for deployment",
-                "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+                "ref: ${{ inputs.admitted_sha }}",
                 "ref: ${{ github.event.workflow_run.head_sha }}",
                 "auto backend deploy must check out the verified SHA before deployment",
             ),
@@ -527,8 +533,8 @@ class WorkflowContractTests(unittest.TestCase):
         root = self.fixture_root()
         self.mutate(
             root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
+            "ref: ${{ inputs.admitted_sha }}",
             "ref: ${{ github.sha }}",
         )
         errors = CHECKER.validate(root)
@@ -538,8 +544,8 @@ class WorkflowContractTests(unittest.TestCase):
         root = self.fixture_root()
         self.mutate(
             root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            '--commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"',
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
+            '--commit-sha "${{ inputs.admitted_sha }}"',
             '--commit-sha "${{ github.sha }}"',
         )
         errors = CHECKER.validate(root)
@@ -585,16 +591,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
-            "ref: ${{ github.event.inputs.release_sha }}",
+            "admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+            "admitted_sha: ${{ github.event.inputs.release_sha }}",
         )
-        self.assertIn("manual deployment must check out the admitted SHA", CHECKER.validate(root))
+        self.assertIn("manual deployment must pass the admitted SHA to the deploy composite action", CHECKER.validate(root))
 
         root = self.fixture_root()
         self.mutate(
             root,
-            CHECKER.MANUAL_WORKFLOW_PATH,
-            '--commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"',
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
+            '--commit-sha "${{ inputs.admitted_sha }}"',
             '--commit-sha "${{ github.event.inputs.release_sha }}"',
         )
         self.assertIn("manual deployment must bind every release vector to the admitted SHA", CHECKER.validate(root))
@@ -602,7 +608,7 @@ class WorkflowContractTests(unittest.TestCase):
         root = self.fixture_root()
         self.mutate(
             root,
-            CHECKER.MANUAL_WORKFLOW_PATH,
+            CHECKER.DEPLOY_BACKEND_STACK_ACTION,
             "ref: ${{ github.sha }}",
             "ref: ${{ github.event.inputs.release_sha }}",
         )

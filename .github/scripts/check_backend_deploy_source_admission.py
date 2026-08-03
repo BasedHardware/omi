@@ -140,7 +140,7 @@ def folded_job_condition(job: str) -> str | None:
     return "\n".join(line[6:] for line in match.group("condition").splitlines()).strip()
 
 
-def validate_auto_workflow(text: str) -> list[str]:
+def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     on_block = mapping_block(text, "on", 0)
     trigger_keys = (
@@ -379,17 +379,18 @@ def validate_auto_workflow(text: str) -> list[str]:
     elif re.search(r"(?m)^    if:", deploy_job):
         errors.append("auto backend deploy must not override source-admission dependency")
 
-    if "github.sha" in text:
-        errors.append("auto backend deploy must not use github.sha after workflow_run admission")
     if text.count(AUTO_PROOF_SHA) != 3:
         errors.append("auto backend deploy must use workflow_run.head_sha only in scope decision and current-main admission guard")
     if text.count(AUTO_PROOF_RUN_ATTEMPT) != 1:
         errors.append("auto backend deploy must use workflow_run.run_attempt only in the source-admission guard")
+    contract = backend_deploy_contract_text(text, root)
+    allowed_github_sha = "ref: ${{ github.sha }}\n        path: .workflow-source"
+    if "github.sha" in contract.replace(allowed_github_sha, ""):
+        errors.append("auto backend deploy must not use github.sha after workflow_run admission")
     if text.count(f"ref: {AUTO_FIRESTORE_ADMITTED_SHA}") != 1:
         errors.append("auto backend deploy must check out the verified SHA before Firestore readiness")
     if text.count(f"FIRESTORE_SOURCE_COMMIT: {AUTO_FIRESTORE_ADMITTED_SHA}") != 2:
         errors.append("auto backend deploy must bind Firestore readiness to the verified SHA")
-    contract = backend_deploy_contract_text(text)
     if contract.count('ref: ${{ inputs.admitted_sha }}') != 1:
         errors.append("auto backend deploy must check out the verified SHA before deployment")
     if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
@@ -397,7 +398,7 @@ def validate_auto_workflow(text: str) -> list[str]:
     return errors
 
 
-def validate_manual_workflow(text: str) -> list[str]:
+def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     on_block = mapping_block(text, "on", 0)
     trigger_keys = (
@@ -418,7 +419,7 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
         errors.append("manual backend deploy must not accept an arbitrary branch or ref")
-    contract = backend_deploy_contract_text(text)
+    contract = backend_deploy_contract_text(text, root)
     control_source_ref = "ref: ${{ github.sha }}"
     if contract.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in contract:
         errors.append("manual backend deploy must stage workflow-owned control scripts from github.sha")
@@ -508,7 +509,7 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
 
     deploy_job = mapping_block(text, "deploy", 2)
-    contract = backend_deploy_contract_text(text)
+    contract = backend_deploy_contract_text(text, root)
     if deploy_job is None:
         errors.append("manual backend deploy is missing its deployment job")
     else:
@@ -542,8 +543,8 @@ def validate(root: Path = ROOT) -> list[str]:
     missing = [str(path) for path in paths if not (root / path).is_file()]
     if missing:
         return [f"backend source-admission contract is missing: {path}" for path in missing]
-    errors = validate_auto_workflow((root / AUTO_WORKFLOW_PATH).read_text(encoding="utf-8"))
-    errors.extend(validate_manual_workflow((root / MANUAL_WORKFLOW_PATH).read_text(encoding="utf-8")))
+    errors = validate_auto_workflow((root / AUTO_WORKFLOW_PATH).read_text(encoding="utf-8"), root)
+    errors.extend(validate_manual_workflow((root / MANUAL_WORKFLOW_PATH).read_text(encoding="utf-8"), root))
     return errors
 
 
