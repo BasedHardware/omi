@@ -1,0 +1,3 @@
+{
+  "change": "People tab now asks you to confirm uncertain relationship matches (like similar names) instead of silently merging them, and lets you correct or fix facts by chat"
+}

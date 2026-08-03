@@ -231,7 +231,11 @@ done < <(
     -print0
 )
 
-node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+# SwiftPM emits either a versioned or a flat resource bundle depending on the
+# toolchain, so resolve node at whichever layout this build produced.
+resource_bundle="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+node_bin="$resource_bundle/Contents/Resources/node"
+[[ -e "$node_bin" ]] || node_bin="$resource_bundle/node"
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"

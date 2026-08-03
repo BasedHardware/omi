@@ -63,6 +63,29 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  // People intelligence: on-device connector gates + LinkedIn CSV import path.
+  case peopleIMessageExport = "peopleIMessageExport"
+  case peopleGraphBuild = "peopleGraphBuild"
+  case peopleConnectorsLinkedInCSVPath = "peopleConnectorsLinkedInCSVPath"
+  /// Throttle bookkeeping for the continuous People-graph sync: last time the
+  /// on-device graph rebuild / iMessage export actually ran (epoch seconds).
+  /// Lets frequent data-arrival triggers (app-active, new conversation) stay
+  /// cheap without re-running the pipeline more than once per throttle window.
+  case peopleGraphLastRebuild = "peopleGraphLastRebuild"
+  case peopleIMessageExportLastRun = "peopleIMessageExportLastRun"
+  /// Throttle bookkeeping for the on-device WhatsApp reader (epoch seconds).
+  /// Independent of the iMessage export throttle so each connector re-reads its
+  /// own database on its own cadence, even though both share the single Full Disk
+  /// Access grant and the `peopleIMessageExport` consent flag.
+  case peopleWhatsAppExportLastRun = "peopleWhatsAppExportLastRun"
+  /// Throttle bookkeeping for writing derived relationship-fact memories (epoch
+  /// seconds). Independent of the graph-rebuild throttle so the memory writer
+  /// runs on its own cadence after the graph settles.
+  case peopleMemoryLastWrite = "peopleMemoryLastWrite"
+  /// Throttle bookkeeping for routing substantial 1:1 message threads through the
+  /// conversation→memory pipeline (epoch seconds). Independent of the other
+  /// throttles so thread ingestion trickles on its own cadence.
+  case peopleThreadIngestLastRun = "peopleThreadIngestLastRun"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

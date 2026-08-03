@@ -107,6 +107,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
         SidebarNavItem.dashboard.rawValue,
         SidebarNavItem.conversations.rawValue,
         SidebarNavItem.tasks.rawValue,
+        SidebarNavItem.people.rawValue,
         SidebarNavItem.apps.rawValue,
       ]
     )

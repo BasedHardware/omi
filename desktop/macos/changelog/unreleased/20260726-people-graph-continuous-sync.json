@@ -1,0 +1,3 @@
+{
+  "change": "Improved the People graph to refresh continuously as new data arrives, not just when you open the People tab"
+}

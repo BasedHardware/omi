@@ -3368,6 +3368,31 @@ final class DesktopAutomationActionRegistry {
       ]
     }
     registerRewindArtifactRecoveryGauntlet()
+    // A person profile opens only by clicking a row in the People list, so no
+    // headless check can reach one. Same rationale as the Brain Map selection
+    // actions: expose the intent, not a synthetic cursor.
+    register(
+      name: "people_open_person",
+      summary: "Open a person's profile page by id or name",
+      params: ["personId", "name"]
+    ) { params in
+      let personID = params["personId"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let name = params["name"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !personID.isEmpty || !name.isEmpty else {
+        return ["error": "missing 'personId' or 'name'"]
+      }
+      await MainActor.run {
+        // Park the request first: People may not be mounted yet, and a bare
+        // notification would be delivered to nobody while still reporting success.
+        PeopleOpenRequestStore.request(
+          personID: personID.isEmpty ? nil : personID, name: name.isEmpty ? nil : name)
+        NotificationCenter.default.post(
+          name: .navigateToSidebarItem, object: nil,
+          userInfo: ["rawValue": SidebarNavItem.people.rawValue])
+        NotificationCenter.default.post(name: .peopleOpenPerson, object: nil)
+      }
+      return ["requested": personID.isEmpty ? name : personID]
+    }
     register(
       name: "navigate_via_shortcut",
       summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",

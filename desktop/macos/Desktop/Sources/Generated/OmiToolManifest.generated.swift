@@ -188,6 +188,48 @@ enum OmiToolManifest {
       ],
       required: [],
       annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
+    ),
+    LocalAgentTool(
+      name: "get_person",
+      description: "Look up one person in the user's on-device people graph. Returns what Omi knows about them: relationship, role, channels and recency, facts, open threads, shared groups (explained in plain English), affiliations, and who they know with the reason for each connection. This is the only tool that can read the people graph — it is not in omi.db, so execute_sql cannot reach it.",
+      properties: [
+        "name": [
+          "type": "string",
+          "description": "Person's name as the user said it. A first name, nickname, alias, Contacts name, or person id all work.",
+        ]
+      ],
+      required: [
+      "name"
+    ],
+      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
+    ),
+    LocalAgentTool(
+      name: "search_people",
+      description: "List or search the people in the user's on-device people graph. Answers 'who do I know at <company>', 'who is in <group>', 'who have I not spoken to lately', and 'who am I closest to'. Returns one compact line per person; use get_person for the detail on any of them.",
+      properties: [
+        "query": [
+          "type": "string",
+          "description": "Free text matched across names, relationship, role, facts, groups, and affiliations.",
+        ],
+        "affiliation": [
+          "type": "string",
+          "description": "Company, school, or organization name, e.g. 'Figma'.",
+        ],
+        "group": [
+          "type": "string",
+          "description": "Shared group or thread name.",
+        ],
+        "quiet_for_days": [
+          "type": "number",
+          "description": "Only people with no contact in this many days. Results come coldest first.",
+        ],
+        "limit": [
+          "type": "number",
+          "description": "Maximum people to return. Default 10, max 25.",
+        ]
+      ],
+      required: [],
+      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
     )
   ]
 }

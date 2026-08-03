@@ -1,0 +1,42 @@
+version: 2
+name: people
+tier: manual
+description: People tab smoke — open the People tab, verify the connectors and the on-device relationship map surface load (People Intelligence)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageExporter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleMemoryWriter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppReader.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageText.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to People
+    do: "Click the People button in the top nav bar (agent-swift find text 'People' click). Verify the People page loads with the title 'People' and a 'Connect your apps' section."
+    expect:
+      text_visible:
+        - People
+        - Connect your apps
+
+  - id: S2
+    name: Verify connector cards
+    do: "Verify the connector cards render: iMessage, WhatsApp, Telegram, X, LinkedIn. iMessage exposes a Grant / Enable / Open Settings action depending on Full Disk Access and opt-in; WhatsApp and Telegram show 'Coming soon'."
+    expect:
+      text_visible:
+        - iMessage
+        - WhatsApp
+        - Telegram
+        - X
+        - LinkedIn
+
+  - id: S3
+    name: Verify people surface or empty state
+    do: "Verify the People tab shows either the search field with people rows (when iMessage mapping is enabled on-device and data exists) or the neutral empty state 'Connect a source to start mapping your relationships'."
+    expect:
+      interactive_count: { min: 3 }

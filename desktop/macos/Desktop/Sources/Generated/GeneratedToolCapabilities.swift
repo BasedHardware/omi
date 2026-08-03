@@ -652,6 +652,34 @@ enum GeneratedToolCapabilities {
       "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
       "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]
+    ),
+    Capability(
+      toolName: "get_person",
+      title: "Get Person",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Read everything the on-device people graph knows about one person.",
+      bullets: [
+      "First choice for any question about a specific named person — the people graph is not in omi.db, so execute_sql cannot reach it.",
+      "Returns relationship, role, channels with recency, closeness, facts, open threads, shared groups with a plain-English explanation, affiliations, and who they know with the reason for each edge.",
+      "Accepts a first name, nickname, alias, Contacts name, or person id.",
+      "Names match at token boundaries: 'Sam' resolves 'Sam Altman' but never 'Samantha'. On an AMBIGUOUS result ask the user which person — never merge two people who share a first name.",
+      "The result distinguishes 'graph not built', 'person not found', and a real profile. Report the one you got; do not fill a gap from elsewhere and present it as people-graph knowledge."
+    ]
+    ),
+    Capability(
+      toolName: "search_people",
+      title: "Search People",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "List or filter the people in the on-device people graph.",
+      bullets: [
+      "Use when the person is not named: \"who do I know at <company>\", \"who is in <group>\", \"who have I not spoken to in months\", \"who am I closest to\".",
+      "Filters query, affiliation, group, quiet_for_days, and limit (default 10, max 25) all combine with AND.",
+      "Returns one compact line per person; follow up with get_person for the detail.",
+      "Combine filters to narrow: affiliation plus quiet_for_days answers 'who at work have I gone quiet on'.",
+      "Results are capped; the header reports how many matched in total, so say when there are more."
+    ]
     )
   ]
 

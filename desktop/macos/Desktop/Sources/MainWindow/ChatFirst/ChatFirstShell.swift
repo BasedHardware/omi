@@ -282,6 +282,8 @@ struct ChatFirstShell: View {
         connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
         handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete
       )
+    case .people:
+      PeoplePage(viewModel: viewModelContainer.peopleViewModel)
     case .permissions:
       PermissionsPage(appState: appState)
     case .help:
@@ -323,6 +325,7 @@ struct ChatFirstShell: View {
       case .insight: return .insight
       case .rewind: return .rewind
       case .apps: return .apps
+      case .people: return .people
       case .permissions: return .permissions
       case .help: return .help
       case .settings: return .settings

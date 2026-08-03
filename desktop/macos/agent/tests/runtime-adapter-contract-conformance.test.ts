@@ -179,8 +179,12 @@ function deliverOversizedFixture(adapterId: string): void {
     expect(Buffer.byteLength(frames[0]!, "utf8")).toBeLessThanOrEqual(MAX_RELAY_TOOL_RESULT_BYTES);
     const delivered = JSON.parse(frames[0]!);
     assertToolResultEnvelope(delivered.toolResultEnvelope);
+    // The delivered status is read from the contract fixture, not restated
+    // here: `contracts/v1/agent-runtime-contract.fixture.json` declares an
+    // oversized tool result as a succeeded, truncated, artifact-backed
+    // projection — the adapter boundary must not degrade it to a failure.
     expect(delivered.toolResultEnvelope).toMatchObject({
-      status: "failed",
+      status: contract.toolResultEnvelope.status,
       truncated: true,
       fullOutputRef: `artifact:artifact-${adapterId}-oversized`,
       provenance: {
@@ -190,6 +194,10 @@ function deliverOversizedFixture(adapterId: string): void {
         toolName: identity.toolName,
       },
     });
+    // A bounded projection is only worth delivering if it carries content.
+    expect(delivered.adapterId).toBe(adapterId);
+    expect(typeof delivered.sessions).toBe("string");
+    expect(delivered.sessions.length).toBeGreaterThan(0);
   } finally {
     rmSync(artifactRoot, { recursive: true, force: true });
   }

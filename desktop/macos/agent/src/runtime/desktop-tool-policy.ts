@@ -92,6 +92,9 @@ const LOCAL_READ_TOOLS = new Set([
   "get_action_items",
   "get_email_insights",
   "get_local_status",
+  // On-device people graph: read-only, local-only, never uploaded.
+  "get_person",
+  "search_people",
 ]);
 
 function isSqlWrite(sql: string): boolean {

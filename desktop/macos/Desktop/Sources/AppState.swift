@@ -858,6 +858,12 @@ extension Notification.Name {
   static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
+  /// Posted when People page finishes loading initial data
+  static let peoplePageDidLoad = Notification.Name("peoplePageDidLoad")
+  /// Opens a person's profile by id (userInfo "personId") or name ("name").
+  /// A profile is otherwise reachable only by clicking a row, which no headless
+  /// check can do — same rationale as the Brain Map selection actions.
+  static let peopleOpenPerson = Notification.Name("peopleOpenPerson")
   /// Posted when a goal is auto-created by GoalGenerationService
   static let goalAutoCreated = Notification.Name("goalAutoCreated")
   /// Posted when a goal is completed (current_value >= target_value)

@@ -584,6 +584,30 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ],
     ),
   },
+  get_person: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Get Person",
+      "Read everything the on-device people graph knows about one person.",
+      [
+        "First choice for any question about a specific named person — the people graph is not in omi.db, so execute_sql cannot reach it.",
+        "Returns relationship, role, channels with recency, closeness, facts, open threads, shared groups with a plain-English explanation, affiliations, and who they know with the reason for each edge.",
+        "Accepts a first name, nickname, alias, Contacts name, or person id.",
+      ],
+    ),
+  },
+  search_people: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Search People",
+      "List or filter the people in the on-device people graph.",
+      [
+        "Use when the person is not named: \"who do I know at <company>\", \"who is in <group>\", \"who have I not spoken to in months\", \"who am I closest to\".",
+        "Filters query, affiliation, group, quiet_for_days, and limit (default 10, max 25) all combine with AND.",
+        "Returns one compact line per person; follow up with get_person for the detail.",
+      ],
+    ),
+  },
   ask_higher_model: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc(
@@ -1400,6 +1424,81 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires local Rewind database; raw screenshot pixels still require separate approval."],
     adapters: piLocalApiAndScreenContextStdio(),
+  },
+  {
+    name: "get_person",
+    label: "Get Person",
+    description:
+      "Look up one person in the user's on-device people graph. Returns what Omi knows about them: relationship, role, channels and recency, facts, open threads, shared groups (explained in plain English), affiliations, and who they know with the reason for each connection. This is the only tool that can read the people graph — it is not in omi.db, so execute_sql cannot reach it.",
+    promptSnippet: "get_person - Look up what Omi knows about a specific person",
+    // Kept disjoint from capabilityDoc.bullets: the generator concatenates both
+    // into the desktop prompt, so anything repeated is paid for twice.
+    promptGuidelines: [
+      "Names match at token boundaries: 'Sam' resolves 'Sam Altman' but never 'Samantha'. On an AMBIGUOUS result ask the user which person — never merge two people who share a first name.",
+      "The result distinguishes 'graph not built', 'person not found', and a real profile. Report the one you got; do not fill a gap from elsewhere and present it as people-graph knowledge.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        name: {
+          type: "string",
+          description:
+            "Person's name as the user said it. A first name, nickname, alias, Contacts name, or person id all work.",
+        },
+      },
+      ["name"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires the on-device people graph (people_intelligence.json), built by the People tab. Returns an explicit not-built result when it is absent.",
+    ],
+    adapters: {
+      ...piAndStdio(),
+      "local-agent-api": { advertised: true },
+    },
+  },
+  {
+    name: "search_people",
+    label: "Search People",
+    description:
+      "List or search the people in the user's on-device people graph. Answers 'who do I know at <company>', 'who is in <group>', 'who have I not spoken to lately', and 'who am I closest to'. Returns one compact line per person; use get_person for the detail on any of them.",
+    promptSnippet: "search_people - Find people in the user's people graph by company, group, topic, or staleness",
+    promptGuidelines: [
+      "Combine filters to narrow: affiliation plus quiet_for_days answers 'who at work have I gone quiet on'.",
+      "Results are capped; the header reports how many matched in total, so say when there are more.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      query: {
+        type: "string",
+        description:
+          "Free text matched across names, relationship, role, facts, groups, and affiliations.",
+      },
+      affiliation: {
+        type: "string",
+        description: "Company, school, or organization name, e.g. 'Figma'.",
+      },
+      group: { type: "string", description: "Shared group or thread name." },
+      quiet_for_days: {
+        type: "number",
+        description: "Only people with no contact in this many days. Results come coldest first.",
+      },
+      limit: { type: "number", description: "Maximum people to return. Default 10, max 25." },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires the on-device people graph (people_intelligence.json), built by the People tab. Returns an explicit not-built result when it is absent.",
+    ],
+    adapters: {
+      ...piAndStdio(),
+      "local-agent-api": { advertised: true },
+    },
   },
 ];
 
