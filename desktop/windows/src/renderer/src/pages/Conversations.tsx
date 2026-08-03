@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   GanttChartSquare,
   Mic,
@@ -40,6 +40,7 @@ import {
   NO_DATE_RANGE
 } from '../lib/conversations/filtering'
 import { fetchFolders, loadCachedFolders } from '../lib/conversations/folders'
+import { isConversationsPanelActive } from '../lib/conversations/conversationsPanelActivity'
 import {
   removeRows,
   restoreRows,
@@ -133,6 +134,8 @@ function ConversationSkeleton(): React.JSX.Element {
 }
 
 export function Conversations(): React.JSX.Element {
+  const { pathname } = useLocation()
+  const panelIsActive = isConversationsPanelActive(pathname)
   const navigate = useNavigate()
   // Seed the shared cache from the per-uid cold-start snapshot before the initial
   // state is read, so the list paints last-known rows immediately on app restart
@@ -297,6 +300,7 @@ export function Conversations(): React.JSX.Element {
 
   // Load folders: cached first (instant paint), then reconcile from the backend.
   useEffect(() => {
+    if (!panelIsActive) return
     void loadCachedFolders()
       .then((f) => {
         if (f.length) setFolders(f)
@@ -305,13 +309,14 @@ export function Conversations(): React.JSX.Element {
     void fetchFolders()
       .then(setFolders)
       .catch(() => {})
-  }, [])
+  }, [panelIsActive])
 
   // (Re)fetch when the folder/date filter changes. Skip the fetch only on the very
   // first mount when the default view is already warm in the shared cache (instant
   // paint from the useState seed); every filter change after that fetches fresh.
   const didInitRef = useRef(false)
   useEffect(() => {
+    if (!panelIsActive) return
     const firstMount = !didInitRef.current
     didInitRef.current = true
     const defaultView = isDefaultView(folderFilter, dateRange)
@@ -330,20 +335,22 @@ export function Conversations(): React.JSX.Element {
     const haveSnapshot = firstMount && defaultView && (conversationsCache.rows?.length ?? 0) > 0
     void loadAll(!haveSnapshot)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- folder/date read once for the first-mount check; loadAll owns the fetch + its own deps
-  }, [loadAll])
+  }, [loadAll, panelIsActive])
 
   // The continuous-recording host (and session-end) request a cloud re-fetch when
   // the backend publishes a new conversation; re-run the full fetch in place.
   useEffect(() => {
+    if (!panelIsActive) return
     return subscribeCloudRefresh(() => {
       void loadAll()
     })
-  }, [loadAll])
+  }, [loadAll, panelIsActive])
 
   // Live refresh: when the local store changes (e.g. an Omi chat is being saved as
   // it streams), re-read local conversations and merge with the already-loaded
   // cloud rows — no extra cloud fetch — so the list updates in real time.
   useEffect(() => {
+    if (!panelIsActive) return
     return subscribeConversations(() => {
       // The account this refresh belongs to (teardown fires this same channel via
       // invalidateConversationsCache, so guard it too — otherwise a switch would
@@ -370,7 +377,7 @@ export function Conversations(): React.JSX.Element {
         })
         .catch((e) => console.error('Live local refresh failed:', e))
     })
-  }, [folderFilter, dateRange])
+  }, [folderFilter, dateRange, panelIsActive])
 
   // Legacy local-only recordings eligible for backfill; recomputed only when the
   // local set actually changes.
