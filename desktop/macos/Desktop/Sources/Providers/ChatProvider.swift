@@ -5116,9 +5116,27 @@ class ChatProvider: ObservableObject {
       // a fast/single-chunk success response still renders progressively
       // instead of jumping to the full settled text.
       while streamingBuffer.hasPendingSegments {
+        guard
+          ChatQueryResultAuthority.acceptsContinuation(
+            currentGeneration: sendGeneration,
+            turnGeneration: sendGen,
+            turnAcceptsResult: turnLifecycle.acceptsResult
+          )
+        else {
+          throw BridgeError.stopped
+        }
         flushStreamingBuffer(revealAll: false)
         if streamingBuffer.hasPendingSegments {
           try? await Task.sleep(nanoseconds: 35_000_000)
+          guard
+            ChatQueryResultAuthority.acceptsContinuation(
+              currentGeneration: sendGeneration,
+              turnGeneration: sendGen,
+              turnAcceptsResult: turnLifecycle.acceptsResult
+            )
+          else {
+            throw BridgeError.stopped
+          }
         }
       }
       streamingBuffer.cancelPendingFlush()
@@ -5938,10 +5956,11 @@ class ChatProvider: ObservableObject {
     } else {
       streamingBuffer.flushMetered(
         messages: &messages,
-        normalizeText: Self.normalizeStreaming
-      ) { [weak self] in
-        self?.flushStreamingBuffer(revealAll: false)
-      }
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
+        }
+      )
     }
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
@@ -5969,7 +5988,10 @@ class ChatProvider: ObservableObject {
         toolUseId: toolUseId,
         input: input,
         messages: &messages,
-        normalizeText: Self.normalizeStreaming
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
+        }
       )
     else { return }
     if status == .completed {

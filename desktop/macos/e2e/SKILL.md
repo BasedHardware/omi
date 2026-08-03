@@ -529,7 +529,8 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | `flows/apps-marketplace.yaml` | Apps tab — Imports, Exports, search, filters | 5 | Category filter, Installed view, Create App |
 | `flows/settings-basic.yaml` | Settings — all 9 sections | 11 | General through About, verify each loads |
 | `flows/rewind.yaml` | Rewind overlay — View menu access, permission gate | 4 | ⌘⌥R shortcut, search, date picker, Grant Permission |
-| `flows/chat-hermetic.yaml` | Home chat with Rust `OMI_LLM_STUB=1` | 6 | Hermetic chat send/receive in Home tab |
+| `flows/chat-hermetic.yaml` | Home chat with Rust `OMI_LLM_STUB=1` | 11 | Hermetic chat send/receive in Home tab, including paced and fast terminal reveal |
+| `flows/task-thread-continuity.yaml` | Kernel-backed task thread | 9 | Task-thread admission, paced reveal, fast terminal reveal, and settled snapshots |
 | `flows/language.yaml` | Settings → Transcription language config | 5 | Language mode toggle, voice assistant languages |
 | `flows/screen-recording-permission.yaml` | Rewind permission flow | 7 | Grant Permission button, Capture status |
 | `flows/audio-recording.yaml` | Audio capture, mic source, transcription | 7 | Start/Stop Recording, BT/mic selection |

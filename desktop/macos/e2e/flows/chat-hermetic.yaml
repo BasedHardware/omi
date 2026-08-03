@@ -92,8 +92,10 @@ steps:
       params:
         timeoutMs: "10000"
         pollMs: "25"
+        expectedPrefix: "Paced"
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.visible_assistant_prefix: "Paced"
       result.detail.is_streaming: "true"
 
   - id: S5
@@ -136,8 +138,10 @@ steps:
       params:
         timeoutMs: "10000"
         pollMs: "25"
+        expectedPrefix: "Fast"
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.visible_assistant_prefix: "Fast"
       result.detail.is_streaming: "true"
 
   - id: S10

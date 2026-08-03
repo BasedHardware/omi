@@ -199,6 +199,7 @@ final class ToolCallStatusTests: XCTestCase {
       input: ["command": "pwd"],
       messages: &messages
     )
+    buffer.flush(messages: &messages)
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
@@ -206,6 +207,26 @@ final class ToolCallStatusTests: XCTestCase {
     else {
       return XCTFail("Expected text before the tool call")
     }
+  }
+
+  func testStreamingBufferDefersToolActivityUntilRevealBacklogFlushes() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {})
+    buffer.applyToolActivity(
+      messageId: messageId,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-1",
+      input: ["command": "pwd"],
+      messages: &messages
+    )
+
+    XCTAssertTrue(messages[0].contentBlocks.isEmpty)
+    buffer.flush(messages: &messages)
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
   }
 
   func testStreamingBufferPreservesThinkingBeforeTextOrder() {
