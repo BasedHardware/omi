@@ -569,6 +569,16 @@ esac
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+    def test_release_process_guard_tracks_mobile_dispatcher_sources(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "desktop-release-process-guards")
+        self.assertTrue(
+            {
+                ".github/workflows/mobile_internal_build.yml",
+                ".github/scripts/dispatch_mobile_internal_builds.py",
+            }.issubset(check.triggers)
+        )
+
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

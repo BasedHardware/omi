@@ -61,6 +61,10 @@ class TestUrlExtraction:
         messages = [_message('Fetch https://example.com/releases/v1.0.')]
         assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.']
 
+    def test_extracted_terminal_url_punctuation_matches_literal_allowlist(self):
+        url = extract_user_turn_urls([_message('Fetch https://example.com/releases/v1.0.')])[0]
+        assert is_url_allowlisted(url, [url])
+
     def test_extract_user_turn_urls_bounds_overflow_scan(self):
         messages = [_message(' '.join(f'https://example.com/{index}' for index in range(1000)))]
         assert len(extract_user_turn_urls(messages, max_urls=11)) == 11
