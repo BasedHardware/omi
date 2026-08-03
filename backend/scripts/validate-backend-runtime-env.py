@@ -572,9 +572,31 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
+        # L2 / required-processing must not fall back to direct OpenAI on the job.
+        'OMI_LLM_GATEWAY_URL',
+        'OMI_LLM_GATEWAY_FEATURE_MODE',
+        'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
     ):
         if required_env not in job_env:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
+    gateway_mode = (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_FEATURE_MODE') or '').strip().lower()
+    if gateway_mode and gateway_mode not in {'gateway', '1', 'true', 'yes'}:
+        errors.append(
+            ValidationError(
+                scope,
+                f'OMI_LLM_GATEWAY_FEATURE_MODE must be gateway (got {gateway_mode!r})',
+            )
+        )
+    direct_exc = (
+        (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION') or '').strip().lower()
+    )
+    if direct_exc in {'1', 'true', 'yes'}:
+        errors.append(
+            ValidationError(
+                scope,
+                'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION must be false on memory-maintenance-job',
+            )
+        )
     for required_secret in (
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
@@ -582,6 +604,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'PINECONE_API_KEY',
         'TYPESENSE_HOST',
         'TYPESENSE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     ):
         if required_secret not in job_secrets:
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))

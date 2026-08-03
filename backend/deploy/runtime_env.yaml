@@ -741,6 +741,19 @@ environments:
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
               category: memory_rollout
+            # Required-processing / L2 promotion uses get_llm("memory_l2").
+            # Match request-path backends: gateway feature mode + ILB URL (VPC).
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              # Workflow injects the ingress-derived address; sentinel is not routable.
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -759,6 +772,9 @@ environments:
               version: latest
             TYPESENSE_API_KEY:
               secret: TYPESENSE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
   prod:
     gcp_project: based-hardware
@@ -1411,6 +1427,21 @@ environments:
             PINECONE_INDEX_NAME:
               value: memories-backend
               category: memory_rollout
+            # Keep gateway wiring present even while MEMORY_MODE=off so a later
+            # maintenance enable does not ship a direct-OpenAI L2 path.
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -1429,4 +1460,7 @@ environments:
               version: latest
             TYPESENSE_API_KEY:
               secret: TYPESENSE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest

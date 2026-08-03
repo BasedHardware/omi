@@ -67,6 +67,8 @@ jobs:
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          # Required for memory_l2 / required-processing via the LLM gateway.
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env dev --job memory-maintenance-job >> "$GITHUB_OUTPUT"
 
