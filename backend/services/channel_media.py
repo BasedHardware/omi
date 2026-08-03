@@ -155,7 +155,7 @@ async def build_media_context(uid: str, attachments: Iterable[Dict[str, Any]]) -
         try:
             data, mime_type, filename = await _download_attachment(attachment)
             if mime_type.startswith('image/') and len(data) <= CHANNEL_MEDIA_MAX_VISION_BYTES:
-                description = await describe_image(uid, base64.b64encode(data).decode('ascii'))
+                description = await describe_image(uid, base64.b64encode(data).decode('ascii'), mime_type)
                 contexts.append(
                     f'[Image attachment: {filename} ({mime_type})]\n{description or "No visual description was available."}'
                 )

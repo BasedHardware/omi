@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -421,8 +422,9 @@ def test_media_context_describes_images_without_exposing_provider_urls(monkeypat
     async def fake_download(_attachment):
         return b'image-bytes', 'image/jpeg', 'photo.jpg'
 
-    async def fake_describe(_uid, encoded):
+    async def fake_describe(_uid, encoded, mime_type):
         assert encoded
+        assert mime_type == 'image/jpeg'
         return 'A diagram on a white background.'
 
     import services.channel_media as channel_media
@@ -437,3 +439,21 @@ def test_media_context_describes_images_without_exposing_provider_urls(monkeypat
     )
     assert 'A diagram on a white background.' in result
     assert 'file-1' not in result
+
+
+def test_describe_image_preserves_mime_type_in_data_url(monkeypatch):
+    captured = {}
+
+    class FakeVisionModel:
+        async def ainvoke(self, messages, *, config):
+            captured.update({'messages': messages, 'config': config})
+            return SimpleNamespace(content='A test image.')
+
+    import utils.llm.openglass as openglass
+
+    monkeypatch.setattr(openglass, 'get_llm', lambda _feature: FakeVisionModel())
+    monkeypatch.setattr(openglass, 'track_usage', lambda *_args, **_kwargs: nullcontext())
+    result = asyncio.run(openglass.describe_image('uid-1', 'encoded', 'image/png'))
+
+    assert result == 'A test image.'
+    assert captured['messages'][0]['content'][1]['image_url']['url'] == 'data:image/png;base64,encoded'
