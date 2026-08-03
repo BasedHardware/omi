@@ -35,6 +35,7 @@ def test_health_and_root_preserve_release_identity(monkeypatch):
         "backend_release_sha": "a" * 40,
         "backend_release_channel": "development",
         "chat_contract_version": "1",
+        "runtime_implementation": "python",
     }
 
     assert client.get("/").json() == expected

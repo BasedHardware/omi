@@ -248,10 +248,14 @@ actor GeminiClient {
       switch self {
       case .apiError(let message):
         let lower = message.lowercased()
+        if lower.contains("\"retryable\":false") || lower.contains("\"retryable\": false") {
+          return false
+        }
         return isTransient && !Self.isTimeoutLike(lower)
-      case .networkError(let error):
-        let nsError = error as NSError
-        return !(nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut)
+      case .networkError:
+        // A transport error after dispatch is ambiguous. Only a typed backend
+        // response may authorize replay.
+        return false
       case .invalidResponse, .missingAPIKey:
         return false
       }
@@ -405,14 +409,13 @@ actor GeminiClient {
     }
   }
 
-  /// Check if an error is transient and worth retrying
-  private func isTransientError(_ error: Error) -> Bool {
+  /// Replay only outcomes whose typed backend contract says they are safe.
+  static func shouldAutoRetry(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
       return geminiError.shouldAutoRetry
     }
-    // URLSession network errors are transient
-    let nsError = error as NSError
-    return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorTimedOut
+    // Raw URLSession errors are ambiguous after dispatch and must not be replayed.
+    return false
   }
 
   /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
@@ -476,12 +479,12 @@ actor GeminiClient {
   }
 
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
-  private func retryBackoff(attempt: Int, error: Error) async {
+  private func retryBackoff(attempt: Int, error: Error) async throws {
     let delaySec = [2, 8][min(attempt, 1)]
     log(
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
-    try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+    try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
   /// Send a request to the Gemini API with an image
@@ -560,12 +563,12 @@ actor GeminiClient {
         lastError = error
 
         // Don't retry non-transient errors (e.g. safety filter / invalidResponse)
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
 
         // Backoff: 1s after first failure, 2s after second
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -633,10 +636,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -705,10 +708,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -1031,10 +1034,10 @@ extension GeminiClient {
           )
         } catch {
           lastError = error
-          guard attempt < maxRetries && isTransientError(error) else {
+          guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
             // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
             // if the failure is transient and a fallback model remains.
-            if modelIndex < models.count - 1 && isTransientError(error) {
+            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
               DesktopDiagnosticsManager.shared.recordFallback(
                 area: "gemini_model",
                 from: Self.bucketGeminiModel(activeModel),
@@ -1047,7 +1050,7 @@ extension GeminiClient {
             }
             throw error
           }
-          await retryBackoff(attempt: attempt, error: error)
+          try await retryBackoff(attempt: attempt, error: error)
         }
       }
     }

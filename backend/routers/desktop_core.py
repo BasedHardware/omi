@@ -27,6 +27,7 @@ def health_response() -> dict[str, str]:
         "service": DESKTOP_BACKEND_SERVICE,
         "version": DESKTOP_BACKEND_VERSION,
         "chat_contract_version": CHAT_CONTRACT_VERSION,
+        "runtime_implementation": "python",
     }
     for response_field, environment_name in (
         ("release_tag", "OMI_DESKTOP_RELEASE_TAG"),

@@ -5,6 +5,7 @@ The probe is deliberately bounded and content-free in its evidence. It proves:
 
 * the tagged candidate reports the admitted backend source identity;
 * readiness dependencies are healthy;
+* the candidate is the Python runtime and its Gemini proxy reaches a provider;
 * the versioned desktop chat contract is advertised on health and responses;
 * a public-web turn completes; and
 * an ordinary follow-up completes in the same history, so web routing from the
@@ -32,6 +33,7 @@ MAX_CHAT_SECONDS = 70
 MAX_FIRST_EVENT_SECONDS = 20
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CONTRACT_PATTERN = re.compile(r"^[1-9][0-9]{0,5}$")
+REAL_GEMINI_PROVIDER_ROUTES = frozenset({"vertex_ai", "ai_studio", "ai_studio_byok"})
 
 
 class ProbeError(RuntimeError):
@@ -51,6 +53,13 @@ def _require_object(value: object, *, stage: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ProbeError(f"{stage}: expected a JSON object")
     return value
+
+
+def _require_real_gemini_provider(value: object) -> str:
+    provider = value if isinstance(value, str) else ""
+    if provider not in REAL_GEMINI_PROVIDER_ROUTES:
+        raise ProbeError("gemini_proxy: response did not come from an admitted provider route")
+    return provider
 
 
 def validate_compatibility(
@@ -93,6 +102,7 @@ def validate_health(
     expected = {
         "backend_release_sha": expected_sha,
         "backend_release_channel": expected_channel,
+        "runtime_implementation": "python",
     }
     mismatches = {
         key: {"expected": wanted, "actual": health.get(key)}
@@ -104,6 +114,7 @@ def validate_health(
     return {
         "backend_release_channel": expected_channel,
         "backend_release_sha": expected_sha,
+        "runtime_implementation": "python",
         **compatibility,
     }
 
@@ -212,6 +223,52 @@ def _require_firestore_read(base_url: str, *, timeout: int = HTTP_TIMEOUT_SECOND
     return {"status": "passed"}
 
 
+def _gemini_request(
+    base_url: str,
+    *,
+    token: str,
+    timeout: int = HTTP_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Exercise the actual Gemini proxy without retaining generated content."""
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": "Reply with OK."}]}],
+        "generationConfig": {"maxOutputTokens": 16, "thinkingConfig": {"thinkingBudget": 0}},
+    }
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-Omi-Request-Id": f"candidate-probe-{int(time.time())}",
+        },
+        method="POST",
+    )
+    started_at = time.monotonic()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_payload = _require_object(json.loads(response.read().decode("utf-8")), stage="gemini_proxy")
+            candidates = response_payload.get("candidates")
+            if not isinstance(candidates, list) or not candidates:
+                raise ProbeError("gemini_proxy: provider response has no candidates")
+            provider = _require_real_gemini_provider(response.headers.get("x-omi-provider"))
+            request_id = response.headers.get("x-omi-request-id") or response.headers.get("x-request-id")
+            if not request_id:
+                raise ProbeError("gemini_proxy: typed proxy headers are missing")
+    except ProbeError:
+        raise
+    except urllib.error.HTTPError as error:
+        failure_class = error.headers.get("x-omi-error-class") if error.headers else None
+        raise ProbeError(f"gemini_proxy: HTTP {error.code} ({failure_class or 'untyped'})") from error
+    except (urllib.error.URLError, OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProbeError("gemini_proxy: request failed") from error
+    elapsed = time.monotonic() - started_at
+    if elapsed > MAX_CHAT_SECONDS:
+        raise ProbeError(f"gemini_proxy: exceeded {MAX_CHAT_SECONDS}s response budget")
+    return {"elapsed_seconds": round(elapsed, 3), "provider_route": provider, "status": "passed"}
+
+
 def _chat_request(
     base_url: str,
     *,
@@ -302,6 +359,7 @@ def probe_candidate(
     )
     readiness = validate_readiness(_request_json(f"{base_url.rstrip('/')}/ready"))
     firestore = _require_firestore_read(base_url)
+    gemini = _gemini_request(base_url, token=token)
 
     initial_prompt = "Reply with one concise sentence confirming that the desktop chat service is available."
     initial_result = _chat_request(
@@ -339,6 +397,7 @@ def probe_candidate(
             "ordinary_follow_up_seconds": round(follow_up_result.elapsed_seconds, 3),
         },
         "firestore_read": firestore,
+        "gemini_proxy": gemini,
         "readiness": readiness,
         "target": {
             "candidate_tag": candidate_tag,

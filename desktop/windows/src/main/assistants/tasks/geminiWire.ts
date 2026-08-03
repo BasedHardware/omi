@@ -50,19 +50,20 @@ export const TASK_REQUEST_TIMEOUT_MS = 300_000
 /** 3 attempts per model round. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]
 
-/** Carries only the status — never a body (which can echo the prompt/frame). */
+/** Carries typed response metadata only — never a body (which can echo the prompt/frame). */
 export class GeminiHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly retryable: boolean
+  ) {
     super(`gemini proxy HTTP ${status}`)
     this.name = 'GeminiHttpError'
   }
 }
 
-/** 5xx/429/timeout/network are retryable; a session sign-out (AbortError) is
- *  terminal — the token is dead. A 4xx fails identically every time. */
+/** Replay only when the backend explicitly marks the response retryable. */
 function isTransient(e: unknown): boolean {
-  if (e instanceof GeminiHttpError) return e.status === 429 || e.status >= 500
-  return !(e instanceof Error && e.name === 'AbortError')
+  return e instanceof GeminiHttpError && e.retryable
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -209,19 +210,19 @@ async function callModel(model: string, opts: TurnOpts): Promise<ToolTurn> {
           signal
         }
       )
-      if (!res.ok) throw new GeminiHttpError(res.status)
+      if (!res.ok)
+        throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return parseTurn(await res.json())
     },
     opts.external
   )
 }
 
-/** One tool-loop turn over the wire: retry the primary model on transient errors,
- *  then run a fresh fallback-model round. A non-transient error throws immediately
- *  (no retry, no fallback) — Mac's exact policy. */
+/** One tool-loop turn. Duplicate model IDs collapse to one round, and only
+ *  explicitly retryable backend outcomes are replayed. */
 async function sendToolTurn(opts: TurnOpts): Promise<ToolTurn> {
   let lastError: unknown
-  for (const model of [TASK_MODEL, TASK_FALLBACK_MODEL]) {
+  for (const model of [...new Set([TASK_MODEL, TASK_FALLBACK_MODEL])]) {
     for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
       try {
         return await callModel(model, opts)

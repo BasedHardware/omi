@@ -62,4 +62,16 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
     XCTAssertFalse(error.isTransient)
     XCTAssertEqual(error.localizedDescription, "AI features require an active plan or BYOK keys.")
   }
+
+  func testGeminiRetryRequiresTypedBackendAuthorization() {
+    let authorized = GeminiClient.GeminiClientError.apiError(
+      #"HTTP 429: {"error":"provider_rate_limited","retryable":true}"#)
+    let denied = GeminiClient.GeminiClientError.apiError(
+      #"HTTP 502: {"error":"provider_unavailable","retryable":false}"#)
+
+    XCTAssertTrue(GeminiClient.shouldAutoRetry(authorized))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(denied))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.networkConnectionLost)))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.timedOut)))
+  }
 }
