@@ -42,6 +42,14 @@ extension SettingsContentView {
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(isConnectingGoogleOAuth)
+
+            if !(GoogleOAuth.clientId ?? "").isEmpty {
+              Button("Edit") {
+                promptGoogleOAuthClientId()
+              }
+              .buttonStyle(.plain)
+              .foregroundColor(OmiColors.textSecondary)
+            }
           }
 
           if let googleOAuthMessage {
@@ -337,9 +345,7 @@ extension SettingsContentView {
     guard !trimmedID.isEmpty else { return }
     GoogleOAuth.clientId = trimmedID
     let trimmedSecret = secretField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !trimmedSecret.isEmpty {
-      GoogleOAuth.clientSecret = trimmedSecret
-    }
+    GoogleOAuth.clientSecret = trimmedSecret.isEmpty ? nil : trimmedSecret
   }
 
   func readGmail() async {

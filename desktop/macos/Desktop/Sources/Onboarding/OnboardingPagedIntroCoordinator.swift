@@ -127,6 +127,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var showingGmailAccountPicker = false
   @Published var gmailAwaitingSelection = false
   private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
+  private var gmailSelectionCancelled = false
+  private var googleAccountSelectionTask: Task<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -208,6 +210,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     if let nameObserver {
       NotificationCenter.default.removeObserver(nameObserver)
     }
+    googleAccountSelectionTask?.cancel()
     gmailTask?.cancel()
     calendarTask?.cancel()
     appleNotesTask?.cancel()
@@ -863,12 +866,22 @@ func loadGmailAccounts() async {
   func selectGmailAccount(_ cookiePath: String?, label: String) {
     GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
     showingGmailAccountPicker = false
+    gmailAwaitingSelection = false
     resumeGmailSelection()
   }
 
   private func awaitGmailAccountSelectionIfNeeded() async {
-    guard !GmailSelectionStore.hasMadeChoice else { return }
+    guard !GoogleOAuthConnectionManager.shared.hasGrants() else { return }
     let accounts = (try? await GmailAccountProbe.availableAccounts()) ?? []
+    if let selectedPath = GmailSelectionStore.selectedCookiePath {
+      if accounts.contains(where: { $0.id == selectedPath }) { return }
+      if accounts.count == 1, let account = accounts.first {
+        GmailSelectionStore.persist(cookiePath: account.id, label: account.email ?? account.browserName)
+        return
+      }
+    } else if GmailSelectionStore.hasMadeChoice {
+      return
+    }
     guard accounts.count > 1 else { return }
     gmailAccounts = accounts
     gmailAwaitingSelection = true
@@ -876,12 +889,18 @@ func loadGmailAccounts() async {
     // gmailAwaitingSelection, so without this the gmail background task would
     // suspend forever and onboarding research would never finish.
     showingGmailAccountPicker = true
+    gmailSelectionCancelled = false
     await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
-        gmailSelectionWaiter = continuation
+        if Task.isCancelled || gmailSelectionCancelled {
+          continuation.resume()
+        } else {
+          gmailSelectionWaiter = continuation
+        }
       }
     } onCancel: {
       Task { @MainActor in
+        self.gmailSelectionCancelled = true
         self.resumeGmailSelection()
       }
     }
@@ -890,6 +909,7 @@ func loadGmailAccounts() async {
   private func resumeGmailSelection() {
     guard let waiter = gmailSelectionWaiter else { return }
     gmailSelectionWaiter = nil
+    gmailSelectionCancelled = false
     gmailAwaitingSelection = false
     waiter.resume()
   }
@@ -898,6 +918,8 @@ func loadGmailAccounts() async {
   /// background task: fall back to the automatic (first readable) account.
   func cancelGmailAccountSelection() {
     showingGmailAccountPicker = false
+    gmailSelectionCancelled = true
+    gmailAwaitingSelection = false
     resumeGmailSelection()
   }
 
@@ -941,11 +963,14 @@ func loadGmailAccounts() async {
     // profile-level reads, while this onboarding gate prevents two import
     // processes from racing the one user-visible authorization prompt.
     let googleInsightGate = OnboardingGoogleInsightGate()
+    let accountSelectionTask = Task {
+      await self.awaitGmailAccountSelectionIfNeeded()
+    }
+    googleAccountSelectionTask = accountSelectionTask
 
     gmailTask = Task {
+      await accountSelectionTask.value
       await googleInsightGate.waitForCalendar()
-      guard !Task.isCancelled else { return }
-      await self.awaitGmailAccountSelectionIfNeeded()
       guard !Task.isCancelled else { return }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
@@ -1005,6 +1030,7 @@ func loadGmailAccounts() async {
     }
 
     calendarTask = Task {
+      await accountSelectionTask.value
       defer {
         Task { await googleInsightGate.markCalendarFinished() }
       }
