@@ -213,7 +213,9 @@ async def sentry_webhook(request: Request) -> dict[str, str]:
         return {"status": "ok"}
     body = await request.body()
     secret = os.getenv("SENTRY_WEBHOOK_SECRET")
-    if secret and not _sentry_signature_matches(secret, body, request.headers.get("sentry-hook-signature")):
+    if not secret:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+    if not _sentry_signature_matches(secret, body, request.headers.get("sentry-hook-signature")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     try:
         payload = await request.json()
