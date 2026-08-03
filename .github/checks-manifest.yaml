@@ -41,7 +41,7 @@ checks:
     reason: "make setup provisions no app toolchain while .github/checks-manifest.yaml is a ROUTING_INPUTS entry that wakes the Flutter codegen lane, so a docs-only PR hit 'run flutter pub get' with no mention of PRE_PUSH_SKIP_FLUTTER_GENERATED; actionlint's branch had the same omission, and a hatch nobody can find is not a hatch"
   - id: setup-pre-push-prerequisites
     command: ["bash", "scripts/test-make-setup.sh"]
-    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/repair-git-primary-worktree.sh", "scripts/setup-refresh-main.sh", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/repair-git-primary-worktree.sh", "scripts/setup-refresh-main.sh", "scripts/test-make-setup.sh", ".cursor/worktrees.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: pre-push-worktree-fallback
@@ -385,6 +385,11 @@ checks:
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]
     lanes: ["local", "ci"]
     reason: "backend tests or their isolation allowlist changed"
+  - id: backend-runtime-env-compose
+    command: ["bash", "scripts/dev-harness/run-python.sh", "backend/deploy/compose_runtime_env.py", "--check"]
+    triggers: ["backend/deploy/runtime_env/_base.yaml", "backend/deploy/runtime_env/dev.overlay.yaml", "backend/deploy/runtime_env/prod.overlay.yaml", "backend/deploy/compose_runtime_env.py", "backend/deploy/_generate_runtime_env_sources.py", "backend/deploy/runtime_env.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
   - id: backend-workflow-contracts
     command: ["python3", "backend/scripts/check_workflow_contracts.py", "--changed-files", "{changed_files}"]
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]

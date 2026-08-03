@@ -132,7 +132,7 @@ def load_manifest_from_text(text: str) -> Manifest:
         path.unlink(missing_ok=True)
 
 
-def manifest_changed_check_ids(root: Path, base: str, head: str) -> set[str]:
+def manifest_changed_check_ids(root: Path, base: str, head: str, *, include_worktree: bool = False) -> set[str]:
     """Return check ids whose manifest entries differ between base and head."""
     manifest_path = root / MANIFEST_RELATIVE_PATH
     head_manifest = load_manifest(manifest_path)
@@ -144,11 +144,24 @@ def manifest_changed_check_ids(root: Path, base: str, head: str) -> set[str]:
     base_manifest = load_manifest_from_text(base_text)
     head_by_id = {check.id: check for check in head_manifest.checks}
     base_by_id = {check.id: check for check in base_manifest.checks}
-    return {
+    changed = {
         check_id
         for check_id in set(head_by_id) | set(base_by_id)
         if head_by_id.get(check_id) != base_by_id.get(check_id)
     }
+    if include_worktree and head == "HEAD":
+        try:
+            committed_text = run_git(root, "show", f"HEAD:{MANIFEST_RELATIVE_PATH}")
+        except subprocess.CalledProcessError:
+            return changed
+        committed_manifest = load_manifest_from_text(committed_text)
+        committed_by_id = {check.id: check for check in committed_manifest.checks}
+        changed |= {
+            check_id
+            for check_id in set(head_by_id) | set(committed_by_id)
+            if head_by_id.get(check_id) != committed_by_id.get(check_id)
+        }
+    return changed
 
 
 def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
@@ -216,6 +229,7 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -485,7 +499,12 @@ def main() -> int:
             else changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
         )
         manifest_changed_ids = (
-            manifest_changed_check_ids(root, resolved_base, args.head)
+            manifest_changed_check_ids(
+                root,
+                resolved_base,
+                args.head,
+                include_worktree=args.lane == "local",
+            )
             if MANIFEST_RELATIVE_PATH in files
             else None
         )

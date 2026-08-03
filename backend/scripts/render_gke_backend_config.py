@@ -14,6 +14,55 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 
+LEGACY_GKE_CONFIG_KEYS: dict[str, tuple[str, ...]] = {
+    'dev': (
+        'CONVERSATION_SUMMARIZED_APP_IDS',
+        'GOOGLE_CLIENT_ID',
+        'MCP_AUTHORIZATION_SERVER_URL',
+        'MCP_OAUTH_CHATGPT_CLIENT_ID',
+        'MCP_OAUTH_CHATGPT_REDIRECT_URIS',
+        'MCP_OAUTH_PUBLIC_CLIENT_ID',
+        'MCP_OAUTH_PUBLIC_REDIRECT_URIS',
+        'MCP_RESOURCE_URL',
+        'RAPID_API_HOST',
+        'REDIS_DB_HOST',
+        'STT_PRERECORDED_MODEL',
+        'STT_SERVICE_MODELS',
+        'TYPESENSE_HOST',
+        'TWILIO_ACCOUNT_SID',
+        'TWILIO_API_KEY_SID',
+        'TWILIO_TWIML_APP_SID',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+    ),
+    'prod': (
+        'CONVERSATION_SUMMARIZED_APP_IDS',
+        'GOOGLE_CLIENT_ID',
+        'MCP_AUTHORIZATION_SERVER_URL',
+        'MCP_OAUTH_CHATGPT_CLIENT_ID',
+        'MCP_OAUTH_CHATGPT_REDIRECT_URIS',
+        'MCP_OAUTH_PUBLIC_CLIENT_ID',
+        'MCP_OAUTH_PUBLIC_REDIRECT_URIS',
+        'MCP_RESOURCE_URL',
+        'RAPID_API_HOST',
+        'REDIS_DB_HOST',
+        'STT_PRERECORDED_MODEL',
+        'STT_SERVICE_MODELS',
+        'TYPESENSE_HOST',
+        'TWILIO_ACCOUNT_SID',
+        'TWILIO_API_KEY_SID',
+        'TWILIO_TWIML_APP_SID',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+        'ACCOUNT_DELETION_HANDLER_URL',
+        'MCP_OAUTH_CLAUDE_CLIENT_ID',
+        'MCP_OAUTH_CLAUDE_CLIENT_NAME',
+        'MCP_OAUTH_CLAUDE_REDIRECT_URIS',
+        'SYNC_TASKS_HANDLER_URL',
+        'SYNC_TASKS_INVOKER_SA',
+    ),
+}
+
 ConfigDict = dict[str, Any]
 
 
@@ -29,6 +78,22 @@ def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
 
 
+def _legacy_config_map_entries(env: str) -> tuple[str, dict[str, str]]:
+    """Support admitted older runtime manifests that predate gke.config_map metadata."""
+    keys = LEGACY_GKE_CONFIG_KEYS[env]
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    for key in keys:
+        value = os.environ.get(key)
+        if value is None or value == '':
+            missing.append(key)
+            continue
+        resolved[key] = value
+    if missing:
+        raise ValueError(f'Missing required non-secret deployment variables: {" ".join(missing)}')
+    return f'{env}-omi-backend-config', resolved
+
+
 def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tuple[str, dict[str, str]]:
     manifest = _load_yaml(manifest_path)
     environments = _as_config_dict(manifest.get('environments')) or {}
@@ -39,7 +104,7 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
     gke = _as_config_dict(env_config.get('gke')) or {}
     config_map = _as_config_dict(gke.get('config_map'))
     if config_map is None:
-        raise ValueError(f'environments.{env}.gke.config_map is required')
+        return _legacy_config_map_entries(env)
 
     name = config_map.get('name')
     if not isinstance(name, str) or not name:

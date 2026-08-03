@@ -479,6 +479,21 @@ esac
         }
         self.assertIn("rayban-dat-build-wrapper", selected)
 
+    def test_manifest_worktree_edit_selects_only_changed_check_entry(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "local",
+                platform="macos",
+                manifest_changed_ids={"backend-runtime-env-compose"},
+            )
+        }
+        self.assertIn("backend-runtime-env-compose", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
     def test_posix_contracts_skip_windows_without_dropping_linux_ci(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         expected_by_path = {
