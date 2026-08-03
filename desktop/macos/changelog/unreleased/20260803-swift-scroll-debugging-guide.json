@@ -1,0 +1,3 @@
+{
+  "change": "Added a SwiftUI and AppKit scroll-debugging playbook covering intent ownership, native event routing, geometry stability, mounted regression tests, and named-bundle verification"
+}
