@@ -16,6 +16,8 @@ from database.redis_db import (
 )
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
+from utils.push.base import DISABLED
+from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -181,6 +183,8 @@ def _send_to_user(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    if resolve_push_backend() == DISABLED:
+        return 0
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -216,6 +220,8 @@ async def _send_to_user_async(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    if resolve_push_backend() == DISABLED:
+        return 0
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
@@ -369,6 +375,8 @@ def send_training_data_submitted_notification(user_id: str) -> None:
 
 async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
     """Send notification to multiple users in batches."""
+    if resolve_push_backend() == DISABLED:
+        return
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)
