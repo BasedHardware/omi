@@ -980,7 +980,40 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
     vi.mocked(spawn).mockClear();
     await adapter.setToolProjection({
+      surfaceKind: "main_chat",
+      chatFirstUi: false,
+      controlGeneration: null,
+    });
+    await adapter.start();
+    const [, , legacyMainChatOptions] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> },
+    ];
+    expect(legacyMainChatOptions.env.OMI_SURFACE_KIND).toBe("main_chat");
+    expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
+    expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
+    await adapter.stop();
+
+    vi.mocked(spawn).mockClear();
+    await adapter.setToolProjection({
       surfaceKind: "floating_chat",
+      chatFirstUi: false,
+      controlGeneration: null,
+    });
+    await adapter.start();
+    const [, , floatingOptions] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> },
+    ];
+    expect(floatingOptions.env.OMI_SURFACE_KIND).toBe("floating_chat");
+    expect(floatingOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
+    await adapter.stop();
+
+    vi.mocked(spawn).mockClear();
+    await adapter.setToolProjection({
+      surfaceKind: "task_chat",
       chatFirstUi: true,
       controlGeneration: 7,
     });
