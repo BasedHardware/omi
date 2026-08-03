@@ -80,11 +80,7 @@ class DeviceToolsService: NSObject {
           "error": error?.localizedDescription ?? "",
         ])
       } else {
-        result(
-          Self.failure(
-            reason: "authorization_denied",
-            message: error?.localizedDescription ?? "Omi needs Contacts access to resolve names to phone numbers.",
-            permission: "contacts"))
+        result(contactsPermissionFailure(status: status, message: error?.localizedDescription))
       }
     }
   }
@@ -141,11 +137,7 @@ class DeviceToolsService: NSObject {
           return
         }
         guard Self.contactsAccessUsable(granted) else {
-          result(
-            self.failure(
-              reason: "authorization_denied",
-              message: "Omi needs Contacts access to resolve names to phone numbers.",
-              permission: "contacts"))
+          result(self.contactsPermissionFailure(status: granted, message: nil))
           return
         }
         self.searchGrantedContacts(query: query, limit: limit, result: result)
@@ -153,11 +145,7 @@ class DeviceToolsService: NSObject {
       return
     }
     guard Self.contactsAccessUsable(status) else {
-      result(
-        failure(
-          reason: "authorization_denied",
-          message: "Omi needs Contacts access to resolve names to phone numbers.",
-          permission: "contacts"))
+      result(contactsPermissionFailure(status: status, message: nil))
       return
     }
     searchGrantedContacts(query: query, limit: limit, result: result)
@@ -222,7 +210,8 @@ class DeviceToolsService: NSObject {
       result(failure(reason: "empty_body", message: "Provide the message text to propose."))
       return
     }
-    let recipients = (args["to"] as? [String])?.filter { !$0.isEmpty }
+    let recipients =
+      (args["to"] as? [String])?.filter { !$0.isEmpty }
       ?? (args["to"] as? String).map { [$0] }?.filter { !$0.isEmpty }
       ?? []
     guard !recipients.isEmpty else {
@@ -307,6 +296,22 @@ class DeviceToolsService: NSObject {
 
   private func failure(reason: String, message: String, permission: String? = nil) -> [String: Any] {
     Self.failure(reason: reason, message: message, permission: permission)
+  }
+
+  private func contactsPermissionFailure(status: CNAuthorizationStatus, message: String?) -> [String: Any] {
+    let detail = message ?? "Omi needs Contacts access to resolve names to phone numbers."
+    guard status == .denied || status == .restricted else {
+      return failure(reason: "authorization_denied", message: detail, permission: "contacts")
+    }
+    let openedSettings: Bool
+    if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+      openedSettings = UIApplication.shared.open(settingsURL)
+    } else {
+      openedSettings = false
+    }
+    var payload = failure(reason: "authorization_denied", message: "Enable Contacts access in Settings and try again.")
+    payload["settings_opened"] = openedSettings
+    return payload
   }
 
   /// The shared failure shape. A permission failure also names the tool that

@@ -226,7 +226,9 @@ function hasAllowGrant(request: DesktopToolPolicyRequest, bundle: DesktopCoordin
   const nowMs = request.nowMs ?? Date.now();
   return (request.grants ?? []).some((grant) => {
     if (grant.effect !== "allow" || grant.bundle !== bundle || grant.expiresAtMs <= nowMs) return false;
-    if (bundle === "desktop.messaging.send" && !grant.resourceRef) return false;
+    if ((bundle === "desktop.messaging.send" || bundle === "desktop.automation.act") && !grant.resourceRef) {
+      return false;
+    }
     if (grant.operation && grant.operation !== request.operation) return false;
     if (grant.resourceRef && grant.resourceRef !== request.resourceRef) return false;
     return true;

@@ -120,6 +120,40 @@ describe("desktop tool policy", () => {
     expect(dev.decision).toBe("dispatch_required");
   });
 
+  it("requires an exact resource for automation grants", () => {
+    const base = {
+      requestedBundles: ["desktop.automation.act"] as const,
+      selectedBundles: ["desktop.automation.act"] as const,
+      operation: "run_applescript",
+      resourceRef: "tell application \\\"Finder\\\" to activate",
+      nowMs: 1_000,
+    };
+
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        grants: [{
+          bundle: "desktop.automation.act" as const,
+          operation: "run_applescript",
+          effect: "allow" as const,
+          expiresAtMs: 2_000,
+        }],
+      }).decision,
+    ).toBe("dispatch_required");
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        grants: [{
+          bundle: "desktop.automation.act" as const,
+          operation: "run_applescript",
+          resourceRef: base.resourceRef,
+          effect: "allow" as const,
+          expiresAtMs: 2_000,
+        }],
+      }).decision,
+    ).toBe("allow");
+  });
+
   it("treats a macOS permission request as a production user-approved capability", () => {
     const base = {
       toolName: "request_permission",
