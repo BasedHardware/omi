@@ -1,0 +1,22 @@
+docs/product/paper/SPEC.md
+  s_6d4a9488ea3cd2::t_c26495857bfb54 1-123,128-164
+  s_6d4a9488ea3cd2::t_b4daeff3b81210 124-127
+docs/product/paper/FOUNDER-GUIDELINES.md
+  s_6d4a9488ea3cd2::t_34052b32a156af 1-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ccb968eb197c732c83639d605ab4acfec92f349e",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
