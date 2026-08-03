@@ -1,0 +1,48 @@
+web/paper/.env.template
+  s_6d4a9488ea3cd2::t_eea94ac6058f69 1-17
+web/paper/src/app/today/EditionView.tsx
+  s_6d4a9488ea3cd2::t_f08cf815c01679 1-74
+web/paper/src/lib/edition.ts
+  s_6d4a9488ea3cd2::t_1aab4e28e753fa 1-98
+web/paper/README.md
+  s_6d4a9488ea3cd2::t_29d09655aa6689 3-21,24-36
+web/paper/src/lib/firebase.ts
+  s_6d4a9488ea3cd2::t_b2c01cc566684a 1-89
+web/paper/src/app/login/page.tsx
+  s_6d4a9488ea3cd2::t_fe40becd8e113b 1-66
+web/paper/src/app/globals.css
+  s_6d4a9488ea3cd2::t_a0fd622d781ca7 194-325
+  s_6d4a9488ea3cd2::t_aaa5dcae00a082 326-337
+web/paper/src/app/today/page.tsx
+  s_6d4a9488ea3cd2::t_ad6b8f74ab61cd 1-114,116-134
+  s_6d4a9488ea3cd2::t_563c0f6da40b5c 115
+  s_6d4a9488ea3cd2::t_436c87ad48c2ff 135-137
+  s_6d4a9488ea3cd2::t_29b9a59bb5c484 138
+web/paper/.gitignore
+  s_6d4a9488ea3cd2::t_f3b879f8e4ab20 35
+web/paper/AGENTS.md
+  s_6d4a9488ea3cd2::t_c316dd1199a9b6 3-4,6-13
+web/paper/src/app/api/proxy/[...path]/route.ts
+  s_6d4a9488ea3cd2::t_708c29eff25759 1-54
+  s_6d4a9488ea3cd2::t_6e38f50ce2d3b9 55-57
+web/paper/package-lock.json
+  s_6d4a9488ea3cd2::t_4c645bb7ef3074 11,457-1095,1892-1948,2956-2964,3390-3403,4334-4345,4389-4424,4526-4534,4779-4790,5043-5051,5739-5744,5752-5757,6318-6340,6444-6452,6552-6571,6859-6878,6993-7004,7437-7465,7581-7606,7614-7640
+web/paper/package.json
+  s_6d4a9488ea3cd2::t_432d84e471df6b 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4d3470a6ef44c3ce1c554ee6f3789d88e712335b",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
