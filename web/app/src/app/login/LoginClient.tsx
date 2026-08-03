@@ -8,6 +8,34 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
+function getAuthErrorMessage(error: unknown, provider: 'Google' | 'Apple'): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String(error.code)
+      : '';
+  if (code === 'auth/unauthorized-domain') {
+    return 'This sign-in link is not enabled for this web address yet.';
+  }
+  if (code === 'auth/popup-blocked') {
+    return 'Your browser blocked the sign-in window. Allow pop-ups and try again.';
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return 'The sign-in window was closed before sign-in finished.';
+  }
+  return `Failed to sign in with ${provider}. Please try again.`;
+}
+
+const omiMarkDots = [
+  { finalX: 0, finalY: -23, startX: -38, startY: -48 },
+  { finalX: 16, finalY: -16, startX: 42, startY: -35 },
+  { finalX: 23, finalY: 0, startX: 48, startY: 4 },
+  { finalX: 16, finalY: 16, startX: 37, startY: 42 },
+  { finalX: 0, finalY: 23, startX: 3, startY: 52 },
+  { finalX: -16, finalY: 16, startX: -43, startY: 39 },
+  { finalX: -23, finalY: 0, startX: -52, startY: -3 },
+  { finalX: -16, finalY: -16, startX: -36, startY: -42 },
+] as const;
+
 export function LoginClient() {
   const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
@@ -41,7 +69,7 @@ export function LoginClient() {
       await signInWithGoogle();
       router.push(signedInDestination);
     } catch (err) {
-      setError('Failed to sign in with Google. Please try again.');
+      setError(getAuthErrorMessage(err, 'Google'));
       console.error(err);
     } finally {
       setIsSigningIn(null);
@@ -55,7 +83,7 @@ export function LoginClient() {
       await signInWithApple();
       router.push(signedInDestination);
     } catch (err) {
-      setError('Failed to sign in with Apple. Please try again.');
+      setError(getAuthErrorMessage(err, 'Apple'));
       console.error(err);
     } finally {
       setIsSigningIn(null);
@@ -66,7 +94,7 @@ export function LoginClient() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-primary">
-        <div className="w-16 h-16 border-4 border-purple-primary/30 border-t-purple-primary rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
       </div>
     );
   }
@@ -106,7 +134,7 @@ export function LoginClient() {
           priority
         />
         {/* Darker overlay for better contrast */}
-        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-black/70" />
       </motion.div>
 
       {/* Vignette effect - darkens edges */}
@@ -125,13 +153,13 @@ export function LoginClient() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="w-full max-w-sm flex flex-col items-center">
+          <div className="w-full max-w-xs flex flex-col items-center">
             {/* Headline */}
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
-              className="text-3xl font-display font-semibold text-text-primary mb-2"
+              className="text-2xl font-display font-semibold text-text-primary mb-1"
             >
               Omi
             </motion.h1>
@@ -141,40 +169,47 @@ export function LoginClient() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.3 }}
-              className="text-text-tertiary text-lg mb-28"
+              className="text-text-tertiary text-sm mb-8"
             >
-              thought to action
+              {channel && code ? 'Connect your chat' : 'thought to action'}
             </motion.p>
 
             {/* Logo with glow and hover animation */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.05, rotate: 10 }}
+              whileHover={{ scale: 1.03 }}
               transition={{ duration: 0.3 }}
-              className="mb-14"
+              className="mb-8"
             >
-              <div className="w-28 h-28 relative group">
+              <div className="w-16 h-16 relative group" role="img" aria-label="Omi">
                 {/* Blue glow effect - outer */}
-                <div className="absolute inset-[-20px] rounded-full bg-blue-500/30 blur-2xl group-hover:bg-blue-500/50 transition-all duration-500" />
+                <div className="absolute inset-[-10px] rounded-full bg-blue-500/15 blur-xl group-hover:bg-blue-500/25 transition-all duration-500" />
                 {/* Purple glow effect - inner */}
-                <div className="absolute inset-0 rounded-full bg-purple-primary/20 blur-xl group-hover:bg-purple-primary/40 transition-all duration-500" />
-                <Image
-                  src="/logo.png"
-                  alt="Omi"
-                  fill
-                  className="object-contain relative z-10 drop-shadow-[0_0_25px_rgba(59,130,246,0.6)] group-hover:drop-shadow-[0_0_35px_rgba(59,130,246,0.8)] transition-all duration-300"
-                  priority
-                />
+                <div className="absolute inset-0 rounded-full bg-white/10 blur-lg group-hover:bg-white/15 transition-all duration-500" />
+                {omiMarkDots.map((dot, index) => (
+                  <motion.span
+                    key={`omi-mark-dot-${index}`}
+                    initial={{ opacity: 0, scale: 0.5, x: dot.startX, y: dot.startY }}
+                    animate={{ opacity: 1, scale: 1, x: dot.finalX, y: dot.finalY }}
+                    transition={{
+                      duration: 0.85,
+                      delay: 0.2 + index * 0.06,
+                      ease: 'easeOut',
+                    }}
+                    style={{ marginLeft: -4, marginTop: -4 }}
+                    className="absolute left-1/2 top-1/2 z-10 h-2 w-2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.85)]"
+                  />
+                ))}
               </div>
             </motion.div>
 
             {/* Auth buttons */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
-              className="w-full space-y-4"
+              transition={{ duration: 0.5, delay: 1.25, ease: 'easeOut' }}
+              className="w-full space-y-2"
             >
               {/* Apple Sign In */}
               <button
@@ -182,12 +217,12 @@ export function LoginClient() {
                 disabled={isSigningIn !== null}
                 aria-label="Sign in with Apple"
                 className={cn(
-                  'w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl',
+                  'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
                   'bg-black text-white font-medium border border-white/10',
                   'transition-all duration-150',
-                  'hover:bg-gray-900 hover:scale-[1.02]',
+                  'hover:bg-gray-900',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {isSigningIn === 'apple' ? (
@@ -208,12 +243,12 @@ export function LoginClient() {
                 disabled={isSigningIn !== null}
                 aria-label="Sign in with Google"
                 className={cn(
-                  'w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl',
+                  'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
                   'bg-white text-black font-medium',
                   'transition-all duration-150',
-                  'hover:bg-gray-100 hover:scale-[1.02]',
+                  'hover:bg-gray-100',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {isSigningIn === 'google' ? (
@@ -245,40 +280,12 @@ export function LoginClient() {
             </motion.div>
 
             {/* App download message - for users without accounts */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3, delay: 0.4 }}
-              className="mt-6 text-center"
-            >
-              <p className="text-sm text-text-tertiary">
-                New to Omi?{' '}
-                <a
-                  href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-text-secondary hover:text-text-primary transition-colors underline decoration-text-secondary/40 hover:decoration-text-primary/60"
-                >
-                  iOS
-                </a>
-                {' · '}
-                <a
-                  href="https://play.google.com/store/apps/details?id=com.friend.ios"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-text-secondary hover:text-text-primary transition-colors underline decoration-text-secondary/40 hover:decoration-text-primary/60"
-                >
-                  Android
-                </a>
-              </p>
-            </motion.div>
-
             {/* Error message */}
             {error && (
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mt-4 text-error text-sm text-center"
+                className="mt-3 w-full rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-error text-sm text-center"
               >
                 {error}
               </motion.p>
@@ -292,7 +299,7 @@ export function LoginClient() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.5 }}
-        className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-4 text-sm text-text-tertiary"
+        className="absolute bottom-3 left-0 right-0 z-30 flex justify-center gap-3 text-xs text-text-tertiary"
       >
         <a
           href="https://www.omi.me/"
