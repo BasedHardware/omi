@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
+import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';

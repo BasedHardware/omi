@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useSearchParams } from '@tschk/moonshine-next/navigation';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';

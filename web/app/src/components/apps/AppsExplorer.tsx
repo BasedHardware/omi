@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {

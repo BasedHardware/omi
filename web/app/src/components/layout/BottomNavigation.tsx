@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { usePathname, useRouter } from '@tschk/moonshine-next/navigation';
+import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
 import { GanttChartSquare, MessageCircle, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
