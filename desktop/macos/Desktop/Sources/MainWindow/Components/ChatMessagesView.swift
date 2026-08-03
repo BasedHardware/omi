@@ -265,7 +265,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   @ViewBuilder
   private func scrollContent(proxy: ScrollViewProxy) -> some View {
     ScrollView {
-      LazyVStack(spacing: OmiSpacing.lg) {
+      // Keep transcript rows eagerly measured. LazyVStack estimates the heights
+      // of off-screen rich Markdown rows; as those rows materialize during a
+      // fast gesture, its document height can change by tens of thousands of
+      // points and AppKit preserves the wrong visual anchor. The transcript is
+      // already capped by ChatTranscriptWindow, so stable geometry is the more
+      // important optimization here.
+      VStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         messageContent
       }
@@ -279,10 +285,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
 
-      // Invisible anchor lives OUTSIDE the LazyVStack so it is always
-      // eagerly rendered. Inside LazyVStack it may not exist in the view
-      // hierarchy when scrollTo is first called (lazy evaluation), causing
-      // the scroll to jump to an estimated — often empty — position.
+      // Keep the live-edge anchor outside the message stack so it remains a
+      // stable, dedicated target for ScrollViewReader.
       if !messages.isEmpty {
         Color.clear
           .frame(height: 1)

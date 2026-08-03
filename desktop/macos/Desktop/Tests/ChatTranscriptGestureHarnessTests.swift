@@ -192,6 +192,29 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     )
   }
 
+  func testFastTraversalKeepsTheTranscriptDocumentHeightStable() throws {
+    let harness = try makeHarness(messageCount: 120)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    var measuredHeights = [harness.documentHeight]
+    for _ in 0..<20 {
+      harness.performUpwardGesture(events: 8, pumpPerEvent: 0.004)
+      harness.pump(0.03)
+      measuredHeights.append(harness.documentHeight)
+    }
+
+    let minimumHeight = try XCTUnwrap(measuredHeights.min())
+    let maximumHeight = try XCTUnwrap(measuredHeights.max())
+    XCTAssertEqual(
+      maximumHeight,
+      minimumHeight,
+      accuracy: 4,
+      "materializing off-screen rows during a fast gesture must not re-estimate "
+        + "the transcript document height (observed \(minimumHeight)...\(maximumHeight))"
+    )
+  }
+
   func testDeliberateReturnToTheLiveEdgeResumesFollowing() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
