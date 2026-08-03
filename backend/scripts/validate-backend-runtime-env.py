@@ -55,11 +55,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
-    '--task-timeout': '3600s',
-    '--cpu': '2',
-    '--memory': '2Gi',
-}
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {'--task-timeout': '3600s', '--cpu': '2', '--memory': '2Gi'}
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
     'OMI_LLM_GATEWAY_URL',
     'OMI_LLM_GATEWAY_FEATURE_MODE',
