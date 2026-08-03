@@ -32,6 +32,8 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
   case getWorkContext = "get_work_context"
+  case getPerson = "get_person"
+  case searchPeople = "search_people"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -45,8 +47,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:63a4895fd703c99bd01ea56ed74a06c003ffe23d5dd20a18c1499975a7b04e34"
-  static let chatFirstManifestDigest = "sha256:eb4878f3e2a98d3e51130e3b4a7c06b644b7c1c84eb87c72f3ba870b1a4e86ba"
+  static let manifestDigest = "sha256:52c1a04f2f508d65044ba989871b3ee1d38cb2aab61c14ca43bd94607b053a5a"
+  static let chatFirstManifestDigest = "sha256:8407d83f063a1123a76f035f5f6ac4b8c1c678e2413d1b43905cd187cd73eb81"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -85,6 +87,8 @@ enum GeneratedToolExecutors {
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
     .getWorkContext: .chatToolExecutor,
+    .getPerson: .chatToolExecutor,
+    .searchPeople: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -145,6 +149,8 @@ enum GeneratedToolExecutors {
     case getEmailInsights
     case createCalendarEvent
     case getWorkContext
+    case getPerson
+    case searchPeople
     case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
@@ -182,6 +188,8 @@ enum GeneratedToolExecutors {
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
     case .getWorkContext: return .getWorkContext
+    case .getPerson: return .getPerson
+    case .searchPeople: return .searchPeople
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks

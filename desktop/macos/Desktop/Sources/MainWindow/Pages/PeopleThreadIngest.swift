@@ -129,6 +129,10 @@ enum PeopleThreadIngest {
   /// A fully-prepared submission: the transcript segments plus the dedupe/idempotency keys.
   struct Submission {
     let windowKey: String
+    /// The thread's stable per-person key, recorded in the ledger on success so the People engine
+    /// can tell which people's history has really been ingested (`history_grounded`). The window
+    /// key alone is a hash and cannot answer that.
+    let personKey: String
     let clientConversationId: String
     let startedAt: String?
     let segments: [APIClient.UploadSegment]
@@ -161,6 +165,7 @@ enum PeopleThreadIngest {
     // both trips the from-segments rate limiter and floods the backend's best-effort indexing, which
     // silently drops the conversations' vectors (created but unsearchable).
     var submitted: Set<String> = []
+    var submittedPeople: Set<String> = []
     for (index, submission) in plan.submissions.enumerated() {
       if index > 0 {
         try? await Task.sleep(nanoseconds: interSubmitDelayNanoseconds)
@@ -176,6 +181,7 @@ enum PeopleThreadIngest {
         )
         _ = try await APIClient.shared.createConversationFromSegments(request)
         submitted.insert(submission.windowKey)
+        submittedPeople.insert(submission.personKey)
       } catch {
         // Stop the run on the first failure — typically a 429 once the shared from-segments budget is
         // spent, or offline/auth. Un-submitted windows are NOT ledgered, so they retry on a later
@@ -186,8 +192,9 @@ enum PeopleThreadIngest {
       }
     }
     guard !submitted.isEmpty else { return }
+    let groundedPeople = submittedPeople
     await Task.detached(priority: .utility) {
-      appendLedger(directory: plan.directory, keys: submitted)
+      appendLedger(directory: plan.directory, keys: submitted, personKeys: groundedPeople)
     }.value
     log("PeopleThreadIngest: submitted \(submitted.count) thread transcript(s) for relationship understanding")
   }
@@ -223,6 +230,7 @@ enum PeopleThreadIngest {
       submissions.append(
         Submission(
           windowKey: windowKey,
+          personKey: candidate.personKey,
           clientConversationId: clientConversationId(personKey: candidate.personKey, windowKey: windowKey),
           startedAt: built.startedAt,
           segments: built.segments
@@ -517,24 +525,39 @@ enum PeopleThreadIngest {
   private struct Ledger: Codable {
     var version: Int
     var keys: [String]
+    /// Per-person keys whose thread has been ingested at least once, in any window. Additive:
+    /// a ledger written before this field existed decodes as nil, which reads as "nothing
+    /// grounded" — the conservative direction, and it refills on the next successful run.
+    var personKeys: [String]?
   }
 
   /// Set of already-ingested window keys. A missing / corrupt ledger reads as empty (worst case a
   /// window is re-ingested, which the backend de-dupes via `client_conversation_id`).
   static func loadLedger(directory: URL) -> Set<String> {
-    let url = directory.appendingPathComponent(ledgerFileName)
-    guard let data = try? Data(contentsOf: url),
-      let ledger = try? JSONDecoder().decode(Ledger.self, from: data)
-    else { return [] }
-    return Set(ledger.keys)
+    Set(readLedger(directory: directory)?.keys ?? [])
   }
 
-  /// Merge newly-submitted window keys into the on-disk ledger. Best-effort atomic write; a failure
-  /// only means those windows are re-evaluated next run.
-  static func appendLedger(directory: URL, keys: Set<String>) {
-    let merged = loadLedger(directory: directory).union(keys)
+  /// People whose 1:1 thread has actually been submitted at least once. This is what makes
+  /// `history_grounded` on a person card an honest claim rather than an assumption: the window
+  /// keys are content hashes and cannot be traced back to a person.
+  static func ingestedPersonKeys(directory: URL) -> Set<String> {
+    Set(readLedger(directory: directory)?.personKeys ?? [])
+  }
+
+  private static func readLedger(directory: URL) -> Ledger? {
     let url = directory.appendingPathComponent(ledgerFileName)
-    let ledger = Ledger(version: 1, keys: merged.sorted())
+    guard let data = try? Data(contentsOf: url) else { return nil }
+    return try? JSONDecoder().decode(Ledger.self, from: data)
+  }
+
+  /// Merge newly-submitted window keys (and the people they belong to) into the on-disk ledger.
+  /// Best-effort atomic write; a failure only means those windows are re-evaluated next run.
+  static func appendLedger(directory: URL, keys: Set<String>, personKeys: Set<String> = []) {
+    let merged = loadLedger(directory: directory).union(keys)
+    let mergedPeople = ingestedPersonKeys(directory: directory).union(personKeys)
+    let url = directory.appendingPathComponent(ledgerFileName)
+    let ledger = Ledger(
+      version: 1, keys: merged.sorted(), personKeys: mergedPeople.isEmpty ? nil : mergedPeople.sorted())
     do {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

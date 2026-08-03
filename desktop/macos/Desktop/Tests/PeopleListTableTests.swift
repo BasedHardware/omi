@@ -16,39 +16,6 @@ final class PeopleListTableTests: XCTestCase {
     try jsons.map(person)
   }
 
-  // MARK: - Scope
-
-  func testSpokenWithMatchesVoiceByKeyOrLabel() throws {
-    let byKey = try person(
-      #"{"id":"a","name":"Ada","channels":[{"key":"voice","label":"Omi","count":2}]}"#)
-    let byLabel = try person(
-      #"{"id":"b","name":"Bo","channels":[{"key":"omi_capture","label":"Voice","count":1}]}"#)
-    let messagesOnly = try person(
-      #"{"id":"c","name":"Cy","channels":[{"key":"imessage","label":"iMessage","count":40}]}"#)
-
-    XCTAssertTrue(PeopleListOrder.hasSpoken(byKey))
-    XCTAssertTrue(PeopleListOrder.hasSpoken(byLabel))
-    XCTAssertFalse(
-      PeopleListOrder.hasSpoken(messagesOnly),
-      "someone we have only exchanged messages with has not been spoken with")
-  }
-
-  func testScopeEveryoneKeepsEveryoneAndMetFilters() throws {
-    let rows = try people([
-      #"{"id":"a","name":"Ada","channels":[{"key":"voice","label":"Voice","count":2}]}"#,
-      #"{"id":"c","name":"Cy","channels":[{"key":"imessage","label":"iMessage","count":40}]}"#,
-    ])
-
-    XCTAssertEqual(PeopleListOrder.scoped(rows, to: .everyone).map(\.id), ["a", "c"])
-    XCTAssertEqual(PeopleListOrder.scoped(rows, to: .met).map(\.id), ["a"])
-  }
-
-  func testPersonWithNoChannelsIsNeverCountedAsSpokenWith() throws {
-    let ghost = try person(#"{"id":"g","name":"Gale"}"#)
-    XCTAssertFalse(PeopleListOrder.hasSpoken(ghost))
-    XCTAssertTrue(PeopleListOrder.scoped([ghost], to: .met).isEmpty)
-  }
-
   // MARK: - Reach
 
   func testReachSumsEveryChannel() throws {

@@ -77,6 +77,8 @@ describe("omi tool manifest", () => {
       "request_permission",
       "screenshot",
       "get_work_context",
+      "get_person",
+      "search_people",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });

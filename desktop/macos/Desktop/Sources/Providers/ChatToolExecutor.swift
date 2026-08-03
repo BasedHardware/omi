@@ -428,6 +428,18 @@ class ChatToolExecutor {
         context: telemetryContext,
         expectedOwnerID: expectedOwnerID)
 
+    // On-device people graph. Local, read-only, never uploaded — the file IO
+    // happens off the main actor inside the tool.
+    case .getPerson:
+      let result = await PeopleGraphChatTool.getPerson(toolCall.arguments)
+      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      return result
+
+    case .searchPeople:
+      let result = await PeopleGraphChatTool.searchPeople(toolCall.arguments)
+      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      return result
+
     case .fillCloudConnectorForm:
       guard
         let result = await performOwnerBoundAsyncPhysicalEffect(

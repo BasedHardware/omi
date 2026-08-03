@@ -38,15 +38,30 @@ merges into `people_intelligence.json`, which the People tab reads. **Re-runs on
 | Communities + category | yes | **shipped (iMessage)** | `PeopleGraphBuilder` |
 | Continuous re-sync on new data | yes | **in this PR** | `PeopleGraphBuilder.syncIfNeeded` |
 | WhatsApp group co-membership | yes | **next (Phase 2)** | Swift `WhatsAppReader` → engine |
-| Affiliations (orgs) from group names + LinkedIn + email | yes | **next (Phase 2)** | Swift `AffiliationInference` |
+| Affiliations (orgs) from group names + email | yes | **shipped** | `PeopleIntelDerivation.affiliations` |
+| Relationship label (reach tier + group category) | yes | **shipped** | `PeopleIntelDerivation.relationshipLabels` |
+| Group-chat meanings (`community_meanings`) | yes | **shipped** | `PeopleIntelDerivation.communityMeanings` |
+| Edge derivation (`connections[].how`) | yes | **shipped** | `PeopleIntelDerivation.connectionHow` |
+| `history_grounded` (thread really ingested) | yes | **shipped** | `PeopleThreadIngest.ingestedPersonKeys` |
+| Affiliations from LinkedIn | yes | **next (Phase 2)** | LinkedIn CSV → engine |
 | Co-mentions from message text | yes | **next (Phase 2)** | reader dumps bounded text → engine |
-| Relationship type inference | no (model) | **Phase 3** | model-backed layer |
+| Relationship type inference (`connections[].type`) | no (model) | **Phase 3** | model-backed layer |
 | "What's happened between us" narrative | no (model) | **Phase 3** | model-backed layer |
 | Telegram / full LinkedIn / X content into the graph | yes | **Phase 4** | per-connector readers |
 
 Deterministic layers (Phase 2) are pure Swift ports of the reference pipeline in
 `~/omi-people-intel-demo/engine/` (`build_edges.py`, `build_communities.py`, affiliation agent) and
 carry no model dependency — they ship to every user as soon as ported and unit-tested.
+
+**Conservatism rule for the deterministic layers.** A Phase-2 field is emitted only when the signal
+behind it is real; where it is not, the key is left **absent** so the profile shows its honest
+empty state instead of a plausible guess. In practice that means: an organization needs two
+independent signals (an email domain plus a matching chat name, or the same name across two chats)
+— a lone work-ish chat name produces nothing; the categorizer's `social` fallback bucket gets no
+`community_meanings` gloss, because that bucket means "we could not tell"; and a relationship label
+is a rank plus a category ("close · work"), never a sentence. Phase-3 keys (`who`, `now`,
+`overall`, `facts`, `activities`, `openThreads`, `role`, `connections[].type`, `network_insights`)
+are never written by the deterministic layers at all.
 
 ## Model-backed layer (Phase 3) — privacy contract
 

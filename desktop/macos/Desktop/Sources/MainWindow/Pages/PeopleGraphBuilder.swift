@@ -40,13 +40,19 @@ enum PeopleGraphBuilder {
   static func syncIfNeeded(uid: String?, force: Bool = false) async {
     // Names for iMessage-only 1:1 threads (which store phone numbers only) come from Contacts, so a
     // grant here is what lets those threads be labelled and deep-ingested by PeopleThreadIngest.
-    // Fire-and-forget so the permission prompt NEVER blocks the export/graph/ingest pipeline — the
-    // grant is picked up on the next sync. A denial is fine (WhatsApp names still apply).
-    requestContactsAccessIfNeeded()
+    // The prompt is raised here and **awaited before the naming pass**: fire-and-forget meant a
+    // first run always beat the user's answer and labelled every iMessage person by phone number,
+    // which then cost them every derived fact and every ingested thread. It is started in parallel
+    // so it overlaps the (slow) message exports instead of serializing in front of them, and it
+    // gives up after a bounded wait so an unanswered prompt can never stall the pipeline — a late
+    // "Allow" re-runs the naming pass by itself. A denial is fine and terminal (WhatsApp names
+    // still apply) and is surfaced to the UI instead of silently listing phone numbers.
+    async let contactsAccess = PeopleContactsAccess.prepareForNaming(uid: uid)
     await IMessageExporter.exportIfRequested(force: force)
     // WhatsApp shares the single Full Disk Access grant and the same `peopleIMessageExport` consent
     // flag, so opting in to on-device message mapping re-reads it too. Own throttle; off-main.
     await WhatsAppReader.exportIfRequested(force: force)
+    _ = await contactsAccess
     await rebuildIfNeeded(uid: uid, force: force)
     // Write derived graph-structural relationship facts (who-knows-whom via shared groups/circles)
     // into the user's memory store. Self-gated on the same iMessage consent flag and its own
@@ -132,19 +138,27 @@ enum PeopleGraphBuilder {
     // ---- 3. communities (named group chats → category) ----
     let communities = buildCommunities(root: root, people: people)
 
-    // ---- 4. write outputs + create-or-merge ----
+    // ---- 4. contact photos (already-granted Contacts only, thumbnails, unchanged ones skipped) ----
+    let photoPaths = PeopleContactPhotos.syncFromContacts(idByPhone: people.idByPhone, userDir: userDir)
+
+    // ---- 5. write outputs + create-or-merge ----
     writeSocial(graph: graph, to: userDir.appendingPathComponent("people_social.json"))
     writeCommunities(communities, to: userDir.appendingPathComponent("people_communities.json"))
     let peopleURL = userDir.appendingPathComponent("people_intelligence.json")
+    // Which people's message history the deep ingest has actually submitted — the only honest
+    // source for `history_grounded`.
+    let ingestedPersonKeys = PeopleThreadIngest.ingestedPersonKeys(directory: userDir)
     if hasExistingPeople(at: peopleURL) {
       // A backend-written people file already exists: fold graph fields onto it, non-destructively.
       mergeIntoPeopleIntelligence(
-        graph: graph, communities: communities, people: people, at: peopleURL)
+        graph: graph, communities: communities, people: people,
+        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, at: peopleURL)
     } else {
       // Fresh, backend-less user (file missing or its `people` array empty): CREATE the People
       // list from the on-device canonical people so the tab is populated with no backend at all.
       createPeopleIntelligence(
-        graph: graph, communities: communities, people: people, at: peopleURL)
+        graph: graph, communities: communities, people: people,
+        ingestedPersonKeys: ingestedPersonKeys, photoPaths: photoPaths, at: peopleURL)
     }
 
     log(
@@ -571,13 +585,19 @@ enum PeopleGraphBuilder {
         .prefix(topConn)
       graph.connectionsByID[node] = top.map { b, w in
         let key = Pair(node, b)
-        return [
+        let sources = (edgeSrc[key].map { Array($0).sorted() }) ?? []
+        let context = topLabels(edgeCtx[key] ?? [:], 4)
+        var connection: [String: Any] = [
           "id": b,
           "name": people.name(b),
           "weight": round2(w),
-          "sources": (edgeSrc[key].map { Array($0).sorted() }) ?? [],
-          "context": topLabels(edgeCtx[key] ?? [:], 4),
+          "sources": sources,
+          "context": context,
         ]
+        // Deterministic plain-English derivation of the edge (Phase 2). The model-backed
+        // `type`/`confidence` on a connection stay absent — those are Phase 3.
+        connection["how"] = PeopleIntelDerivation.connectionHow(context: context, sources: sources)
+        return connection
       }
     }
 
@@ -733,8 +753,28 @@ enum PeopleGraphBuilder {
   /// on more than one connector gets one card with a channel entry per connector (that is the
   /// multi-channel view); `closeness` is a proxy = total `message_count` across channels. Sorted by
   /// closeness desc (id as a stable tiebreak).
-  static func createPeople(people: People, graph: Graph, communities: Communities) -> [[String: Any]] {
-    people.canonByID.values
+  ///
+  /// `ingestedPersonKeys` comes from `PeopleThreadIngest`'s ledger and is the only input that is
+  /// not derived from the export itself; it decides `history_grounded`. Defaulting it to empty
+  /// keeps the function callable (and testable) with graph inputs alone — an empty set simply
+  /// means nobody's thread has been ingested yet.
+  ///
+  /// `photoPaths` is `person id -> on-device contact-photo path` from `PeopleContactPhotos`. It
+  /// defaults to empty so graph-only callers (and tests) stay unchanged; an absent entry simply
+  /// means that person has no contact photo, and the avatar falls back to initials.
+  static func createPeople(
+    people: People, graph: Graph, communities: Communities, ingestedPersonKeys: Set<String> = [],
+    photoPaths: [String: String] = [:]
+  ) -> [[String: Any]] {
+    // Deterministic Phase-2 enrichment, computed once for the whole list (the relationship tier is
+    // a rank across everyone, so it cannot be computed per person in isolation).
+    let relationships = PeopleIntelDerivation.relationshipLabels(people: people, communities: communities)
+    let affiliations = PeopleIntelDerivation.affiliations(people: people, communities: communities)
+    let grounded = PeopleIntelDerivation.historyGroundedIDs(
+      people: people, ingestedPersonKeys: ingestedPersonKeys)
+
+    return
+      people.canonByID.values
       .map { canon -> [String: Any] in
         let id = canon.id
         // One channel entry per connector this person was seen on, biggest first (stable by key).
@@ -769,6 +809,16 @@ enum PeopleGraphBuilder {
         if let conns = graph.connectionsByID[id] { person["connections"] = conns }
         if let chip = graph.circleChipByID[id] { person["circle"] = chip }
         if let gs = communities.groupsByPersonID[id] { person["groups"] = gs }
+        // The contact photo this run wrote, if any. The People UI reads the same folder by id, so
+        // this is a shortcut, not a second source of truth.
+        if let photo = photoPaths[id] { person["photoPath"] = photo }
+        // Deterministic Phase-2 fields. Each is omitted rather than blanked when there is no
+        // honest value, so "absent" always means "we could not tell" and never "we said no".
+        if let relationship = relationships[id] { person["relationship"] = relationship }
+        if let orgs = affiliations[id], !orgs.isEmpty {
+          person["affiliations"] = orgs.map(\.json)
+        }
+        if grounded.contains(id) { person["history_grounded"] = true }
         return person
       }
       .sorted { a, b in
@@ -784,9 +834,12 @@ enum PeopleGraphBuilder {
   /// Weak-signal review items and the user's saved corrections are folded in before writing, so
   /// the tab never silently asserts an uncertain identity/fact and user truth always wins.
   private static func createPeopleIntelligence(
-    graph: Graph, communities: Communities, people: People, at url: URL
+    graph: Graph, communities: Communities, people: People, ingestedPersonKeys: Set<String>,
+    photoPaths: [String: String], at url: URL
   ) {
-    let persons = createPeople(people: people, graph: graph, communities: communities)
+    let persons = createPeople(
+      people: people, graph: graph, communities: communities, ingestedPersonKeys: ingestedPersonKeys,
+      photoPaths: photoPaths)
     let overrides = PeopleOverridesStore.load(directory: url.deletingLastPathComponent())
     let result = annotateAndReview(persons: persons, overrides: overrides)
     let finalPeople = result.people
@@ -805,22 +858,32 @@ enum PeopleGraphBuilder {
       ],
       "people": finalPeople,
       "reviewQueue": result.reviewQueue,
+      // Plain-English gloss per shared group chat, rendered under "Shared groups" on a profile.
+      "community_meanings": PeopleIntelDerivation.communityMeanings(communities),
     ]
     writeJSON(doc, to: url)
   }
 
   /// Non-destructively fold `connections` / `circle` / `groups` onto the matching person in an
   /// existing `people_intelligence.json`. Uses `JSONSerialization` (not a rigid Codable model)
-  /// so every field the backend wrote is preserved untouched. People are matched by id equality
+  /// so every field the backend wrote is preserved untouched. Internal (not private) so the
+  /// non-destructive contract is covered by a real test against a real file rather than by review.
+  /// People are matched by id equality
   /// first, then by normalized name / contactName / alias.
-  private static func mergeIntoPeopleIntelligence(
-    graph: Graph, communities: Communities, people: People, at url: URL
+  static func mergeIntoPeopleIntelligence(
+    graph: Graph, communities: Communities, people: People, ingestedPersonKeys: Set<String>,
+    photoPaths: [String: String] = [:], at url: URL
   ) {
     guard let data = try? Data(contentsOf: url),
       let obj = try? JSONSerialization.jsonObject(with: data),
       var doc = obj as? [String: Any],
       var persons = doc["people"] as? [[String: Any]]
     else { return }
+
+    let relationships = PeopleIntelDerivation.relationshipLabels(people: people, communities: communities)
+    let affiliations = PeopleIntelDerivation.affiliations(people: people, communities: communities)
+    let grounded = PeopleIntelDerivation.historyGroundedIDs(
+      people: people, ingestedPersonKeys: ingestedPersonKeys)
 
     var nameToID: [String: String] = [:]
     for id in people.canonByID.keys.sorted() {
@@ -852,9 +915,33 @@ enum PeopleGraphBuilder {
         if let conns = graph.connectionsByID[id] { p["connections"] = conns }
         if let chip = graph.circleChipByID[id] { p["circle"] = chip }
         if let gs = communities.groupsByPersonID[id] { p["groups"] = gs }
+        // Deterministic Phase-2 fields FILL IN, they do not overwrite: a richer value already on
+        // the card (a model-written relationship, a curated affiliation list) always wins over a
+        // rank-and-category restatement. `history_grounded` only ever goes false → true.
+        if (p["relationship"] as? String)?.trimmingCharacters(in: .whitespaces).isEmpty ?? true,
+          let relationship = relationships[id]
+        {
+          p["relationship"] = relationship
+        }
+        if (p["affiliations"] as? [[String: Any]])?.isEmpty ?? true, let orgs = affiliations[id],
+          !orgs.isEmpty
+        {
+          p["affiliations"] = orgs.map(\.json)
+        }
+        if grounded.contains(id) { p["history_grounded"] = true }
+        // Same fill-in rule for the avatar: a photo the backend already provided always wins.
+        if p["photoPath"] as? String == nil, let photo = photoPaths[id] { p["photoPath"] = photo }
       }
       persons[i] = p
     }
+
+    // Same fill-in rule for the file-level group glossary: an existing meaning is never replaced.
+    var meanings = (doc["community_meanings"] as? [String: String]) ?? [:]
+    for (name, meaning) in PeopleIntelDerivation.communityMeanings(communities)
+    where (meanings[name]?.isEmpty ?? true) {
+      meanings[name] = meaning
+    }
+    if !meanings.isEmpty { doc["community_meanings"] = meanings }
 
     // Flag weak-signal identities/facts and fold the user's saved corrections in (user truth wins)
     // before persisting, so a backend-written card is never surfaced as certain when it isn't.
@@ -1163,19 +1250,22 @@ enum PeopleGraphBuilder {
 
   // MARK: - Contacts (only when already authorized — never prompts)
 
-  /// Builds a `phone_last10 → display name` map from the local Contacts store, but **only** when
-  /// access is already granted. Status is checked explicitly so this never triggers a TCC prompt.
-  /// Shared with `PeopleThreadIngest` (which resolves counterpart names the same way).
-  /// Request Contacts access once the user has opted into on-device message mapping, so iMessage-only
-  /// 1:1 threads (phone numbers only) can be named and deep-ingested. Fire-and-forget: it prompts
-  /// only when the status is undecided and never blocks the caller — the grant is applied on the next
-  /// sync. A denial is a no-op (WhatsApp names and any existing grant still apply).
-  static func requestContactsAccessIfNeeded() {
-    guard UserDefaults.standard.bool(forKey: .peopleIMessageExport) else { return }
-    guard CNContactStore.authorizationStatus(for: .contacts) == .notDetermined else { return }
-    CNContactStore().requestAccess(for: .contacts) { _, _ in }
+  /// The user allowed Contacts *after* a run had already labelled iMessage people by phone number
+  /// (`PeopleContactsAccess.prepareForNaming` stopped waiting). Re-runs only the naming-dependent
+  /// stages, forced past their throttles, so the names, facts and photos appear without waiting for
+  /// the next sync window. The message exports are deliberately not re-run — the on-disk export is
+  /// already current — and the rate-limited thread ingest keeps its own throttle. This never
+  /// prompts, so it cannot loop.
+  static func renameAfterContactsGrant(uid: String?) async {
+    await rebuildIfNeeded(uid: uid, force: true)
+    await PeopleMemoryWriter.writeIfNeeded(uid: uid, force: true)
+    await PeopleThreadIngest.ingestIfNeeded(uid: uid, force: false)
   }
 
+  /// Builds a `phone_last10 → display name` map from the local Contacts store, but **only** when
+  /// access is already granted. Status is checked explicitly so this never triggers a TCC prompt —
+  /// `PeopleContactsAccess` owns the one prompt. Shared with `PeopleThreadIngest` (which resolves
+  /// counterpart names the same way).
   static func loadContactsByPhone() -> [String: String] {
     guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else { return [:] }
     var map: [String: String] = [:]
@@ -1245,7 +1335,9 @@ enum PeopleGraphBuilder {
 
   /// Last 10 digits of a phone-like string (stable cross-format key), or nil for emails / short
   /// codes with fewer than 10 digits — same rule the exporter uses for `phone_last10`.
-  private static func last10(_ s: String?) -> String? {
+  /// Internal (not private) so `PeopleContactPhotos` keys contact phone numbers exactly the way
+  /// `People.idByPhone` is keyed — two normalizers would silently drop photos.
+  static func last10(_ s: String?) -> String? {
     guard let s, !s.contains("@") else { return nil }
     let digits = s.filter { $0.isNumber }
     guard digits.count >= 10 else { return nil }

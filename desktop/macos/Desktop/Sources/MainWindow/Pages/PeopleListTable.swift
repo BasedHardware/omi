@@ -20,40 +20,8 @@ enum PeopleListSort: String, CaseIterable, Identifiable, Sendable {
   }
 }
 
-enum PeopleListScope: String, CaseIterable, Identifiable, Sendable {
-  case everyone, met
-
-  var id: String { rawValue }
-
-  var title: String {
-    switch self {
-    case .everyone: return "Everyone"
-    case .met: return "Spoken with"
-    }
-  }
-}
-
 /// Pure list shaping, kept out of the view so it can be tested directly.
 enum PeopleListOrder {
-  /// "Spoken with" means a real conversation happened — a voice channel — as
-  /// opposed to everyone Omi has merely seen a message from.
-  static func hasSpoken(_ person: PeopleIntelPerson) -> Bool {
-    person.channels.contains { channel in
-      let key = channel.key.lowercased()
-      let label = channel.label.lowercased()
-      return key.contains("voice") || label.contains("voice")
-    }
-  }
-
-  static func scoped(_ people: [PeopleIntelPerson], to scope: PeopleListScope)
-    -> [PeopleIntelPerson]
-  {
-    switch scope {
-    case .everyone: return people
-    case .met: return people.filter(hasSpoken)
-    }
-  }
-
   static func reach(_ person: PeopleIntelPerson) -> Int {
     person.channels.reduce(0) { $0 + $1.count }
   }
@@ -94,6 +62,9 @@ struct PeopleListTable: View {
   let onSelect: (PeopleIntelPerson) -> Void
 
   @Environment(\.sbTheme) private var sb
+  /// Why names may be missing. Resolved off the main actor on appear; `.authorized` until then so
+  /// the notice never flashes for the (normal) case where names are fine.
+  @State private var namesAccess: PeopleContactsAccess = .authorized
 
   private var rows: [PeopleIntelPerson] {
     PeopleListOrder.sorted(people, by: sort, descending: descending)
@@ -101,6 +72,9 @@ struct PeopleListTable: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      // Without Contacts, iMessage people are listed by phone number. Say so, once, instead of
+      // leaving a wall of numbers unexplained.
+      if let notice = namesAccess.notice { namesNotice(notice) }
       header
       Divider().overlay(sb.ink(.w09))
       ScrollView {
@@ -114,6 +88,49 @@ struct PeopleListTable: View {
       }
     }
     .padding(.horizontal, 28)
+    .task { await refreshNamesAccess() }
+    // Coming back from System Settings is the one moment this can change while the tab is open.
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      Task { await refreshNamesAccess() }
+    }
+  }
+
+  private func refreshNamesAccess() async {
+    namesAccess = await Task.detached(priority: .utility) { PeopleContactsAccess.current() }.value
+  }
+
+  private func namesNotice(_ text: String) -> some View {
+    HStack(alignment: .center, spacing: 8) {
+      Image(systemName: "person.crop.circle.badge.questionmark")
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(sb.ink(.w45))
+      Text(text)
+        .geist(size: 11.5)
+        .foregroundStyle(sb.ink(.w6))
+        .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 8)
+      // Only offered when System Settings is actually where the fix lives; a pending prompt is
+      // answered in place, and we never re-ask (macOS ignores a second request after a denial).
+      if namesAccess.canOpenSettings {
+        Button {
+          PeopleContactsAccess.openSettings()
+        } label: {
+          Text("Open Settings")
+            .geist(size: 11, weight: .semibold)
+            .foregroundStyle(sb.ink(.w75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(sb.ink(.w08)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("people-contacts-open-settings")
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 9)
+    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sb.ink(.w05)))
+    .padding(.bottom, 10)
+    .accessibilityIdentifier("people-contacts-names-notice")
   }
 
   private var header: some View {

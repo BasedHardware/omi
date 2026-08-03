@@ -1,11 +1,17 @@
 import Foundation
 
-// The people-intelligence pipeline already writes several per-person fields to
-// `people_intelligence.json` that `PeopleIntelPerson` does not decode: `role`,
-// `history_grounded`, `affiliations`, `groups`, and the richer `how`/`type`/
-// `confidence` on each connection. The profile page needs them, so they are
-// decoded here in a companion pass rather than by widening the People page's
-// decoder — that file sits at its product line-count ratchet baseline.
+// Companion decoder for per-person fields `PeopleIntelPerson` does not read:
+// `role`, `history_grounded`, `affiliations`, `groups`, and the richer
+// `how`/`type`/`confidence` on each connection.
+//
+// What actually writes them (see `docs/people-intelligence-productization.md`):
+//   - `groups`, `affiliations`, `history_grounded`, `connections[].how` — the in-repo
+//     on-device engine (`PeopleGraphBuilder` + `PeopleIntelDerivation`, Phase 2,
+//     deterministic).
+//   - `role` and `connections[].type`/`.confidence` — Phase 3, model-backed and NOT
+//     implemented here; today they appear only in files produced out-of-tree.
+// Every field is therefore optional and the profile page must render correctly without
+// any of them. Do not treat their presence as guaranteed.
 
 /// An organization this person is associated with, and why we believe it.
 struct PersonAffiliation: Decodable, Identifiable, Equatable, Sendable {

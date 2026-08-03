@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 // MARK: - People Intelligence Models
 //
 // Decoded from `~/Library/Application Support/Omi/users/<uid>/people_intelligence.json`,
-// which the backend writes offline. The JSON mixes snake_case (`generated_at`) with
+// which `PeopleGraphBuilder` writes on this device — there is no backend producer
+// and the file is never uploaded. The JSON mixes snake_case (`generated_at`) with
 // camelCase (`lastTouch`, `openThreads`, `contactName`), so each type maps keys
 // explicitly and tolerates missing/optional fields rather than trusting a global
 // key-decoding strategy.
@@ -38,22 +39,18 @@ struct PeopleIntelligenceFile: Decodable, Sendable {
 
 struct PeopleStats: Decodable, Equatable, Sendable {
   let people: Int
-  let featured: Int
   let multichannel: Int
   let channels: Int
-  let dropped: Int
 
   enum CodingKeys: String, CodingKey {
-    case people, featured, multichannel, channels, dropped
+    case people, multichannel, channels
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     people = (try c.decodeIfPresent(Int.self, forKey: .people)) ?? 0
-    featured = (try c.decodeIfPresent(Int.self, forKey: .featured)) ?? 0
     multichannel = (try c.decodeIfPresent(Int.self, forKey: .multichannel)) ?? 0
     channels = (try c.decodeIfPresent(Int.self, forKey: .channels)) ?? 0
-    dropped = (try c.decodeIfPresent(Int.self, forKey: .dropped)) ?? 0
   }
 }
 
@@ -352,6 +349,8 @@ final class PeopleViewModel: ObservableObject {
   @Published var reviewQueue: [PeopleReviewItem] = []
 
   private var hasLoaded = false
+  /// Modification date of the file behind the current contents.
+  private var lastLoadedModified: Date?
 
   private var uid: String? { UserDefaults.standard.string(forKey: .authUserId) }
 
@@ -392,6 +391,40 @@ final class PeopleViewModel: ObservableObject {
     load()
   }
 
+  /// Reload only when the pipeline has rewritten the file since we last read it.
+  ///
+  /// The pipeline writes `people_intelligence.json` from background tasks that
+  /// finish long after `load()` returns — a graph rebuild, or a late Contacts
+  /// grant renaming everyone from phone numbers. Nothing watched the file, so
+  /// those results stayed invisible until the app was relaunched. Comparing the
+  /// modification date keeps the unchanged case free.
+  func reloadIfFileChanged() {
+    guard hasLoaded, !isLoading else { return }
+    let seen = lastLoadedModified
+    Task { [weak self] in
+      guard let modified = await Self.fileModified(), modified != seen else { return }
+      self?.reload()
+    }
+  }
+
+  /// Records the file's modification date for `reloadIfFileChanged` to compare against.
+  private func stampLoadedModified() {
+    Task { [weak self] in
+      let modified = await Self.fileModified()
+      self?.lastLoadedModified = modified
+    }
+  }
+
+  /// A stat is still IO, so it stays off the main actor like every other read here.
+  private nonisolated static func fileModified() async -> Date? {
+    await Task.detached(priority: .utility) { () -> Date? in
+      guard let url = resolveFileURL(),
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+      else { return nil }
+      return attributes[.modificationDate] as? Date
+    }.value
+  }
+
   func load() {
     hasLoaded = true
     isLoading = true
@@ -409,6 +442,7 @@ final class PeopleViewModel: ObservableObject {
   }
 
   private func apply(_ outcome: LoadOutcome) {
+    stampLoadedModified()
     isLoading = false
     switch outcome {
     case .loaded(let file):
@@ -712,7 +746,6 @@ struct PeoplePage: View {
   @Environment(\.sbTheme) private var sb
   /// The fact review item currently being edited (drives the correction sheet).
   @State private var editingItem: PeopleReviewItem?
-  @State private var listScope: PeopleListScope = .everyone
   @State private var listSort: PeopleListSort = .lastTouch
   @State private var listDescending = true
 
@@ -738,6 +771,7 @@ struct PeoplePage: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       connectors.refreshFullDiskAccess()
+      viewModel.reloadIfFileChanged()
     }
     .peopleOpenRequests { viewModel.openPerson(personID: $0, name: $1) }
     // Opting in to iMessage mapping runs the on-device pipeline; reload so its output surfaces.
@@ -769,10 +803,7 @@ struct PeoplePage: View {
       VStack(alignment: .leading, spacing: 20) {
         header
         connectorSection
-        HStack(spacing: 10) {
-          searchField
-          scopePicker
-        }
+        searchField
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 28)
@@ -1077,31 +1108,9 @@ struct PeoplePage: View {
     }
   }
 
-  /// Everyone Omi has seen, versus the people an actual conversation happened
-  /// with. The distinction matters at a few hundred contacts.
-  private var scopePicker: some View {
-    HStack(spacing: 4) {
-      ForEach(PeopleListScope.allCases) { scope in
-        let selected = scope == listScope
-        Button {
-          withAnimation(SBMotion.standard) { listScope = scope }
-        } label: {
-          Text(scope.title)
-            .geist(size: 11, weight: selected ? .semibold : .medium)
-            .foregroundStyle(selected ? sb.inkInverted : sb.ink(.w55))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(selected ? sb.ink : sb.ink(.w06)))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("people-scope-\(scope.rawValue)")
-      }
-    }
-  }
-
   private var peopleList: some View {
     PeopleListTable(
-      people: PeopleListOrder.scoped(viewModel.filteredPeople, to: listScope),
+      people: viewModel.filteredPeople,
       sort: $listSort,
       descending: $listDescending,
       onSelect: { person in

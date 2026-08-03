@@ -118,7 +118,7 @@ enum PersonHandleResolver {
   // MARK: - Contacts
 
   /// Reads the address book, but only when access is already granted — this never prompts.
-  /// (`PeopleGraphBuilder.requestContactsAccessIfNeeded()` owns the one-time request.)
+  /// (`PeopleContactsAccess.prepareForNaming()` owns the one-time request.)
   private nonisolated static func loadContacts() -> [ContactHandleRecord] {
     guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else { return [] }
     let keys: [CNKeyDescriptor] = [
