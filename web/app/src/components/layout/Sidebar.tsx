@@ -23,6 +23,7 @@ import {
   Code,
   Settings,
   Shield,
+  LifeBuoy,
   Bell,
   Mic,
   MessageSquare,
@@ -469,8 +470,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })()}
 
-        {/* Feedback & Discord links */}
+        {/* Help, Feedback & Discord links */}
         <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
+          <Link
+            href="/help"
+            title={!showText ? 'Help' : undefined}
+            className={cn(
+              'flex items-center rounded-lg transition-colors',
+              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
+            )}
+          >
+            <LifeBuoy className="w-4 h-4 flex-shrink-0" />
+            {showText && <span className="text-sm">Help</span>}
+          </Link>
           <a
             href="https://feedback.omi.me"
             target="_blank"
