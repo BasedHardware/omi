@@ -3382,10 +3382,14 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing 'personId' or 'name'"]
       }
       await MainActor.run {
-        var info: [String: String] = [:]
-        if !personID.isEmpty { info["personId"] = personID }
-        if !name.isEmpty { info["name"] = name }
-        NotificationCenter.default.post(name: .peopleOpenPerson, object: nil, userInfo: info)
+        // Park the request first: People may not be mounted yet, and a bare
+        // notification would be delivered to nobody while still reporting success.
+        PeopleOpenRequestStore.request(
+          personID: personID.isEmpty ? nil : personID, name: name.isEmpty ? nil : name)
+        NotificationCenter.default.post(
+          name: .navigateToSidebarItem, object: nil,
+          userInfo: ["rawValue": SidebarNavItem.people.rawValue])
+        NotificationCenter.default.post(name: .peopleOpenPerson, object: nil)
       }
       return ["requested": personID.isEmpty ? name : personID]
     }

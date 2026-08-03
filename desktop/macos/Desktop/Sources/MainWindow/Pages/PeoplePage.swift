@@ -739,11 +739,7 @@ struct PeoplePage: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       connectors.refreshFullDiskAccess()
     }
-    .onReceive(NotificationCenter.default.publisher(for: .peopleOpenPerson)) { note in
-      viewModel.openPerson(
-        personID: note.userInfo?["personId"] as? String,
-        name: note.userInfo?["name"] as? String)
-    }
+    .peopleOpenRequests { viewModel.openPerson(personID: $0, name: $1) }
     // Opting in to iMessage mapping runs the on-device pipeline; reload so its output surfaces.
     .onChange(of: connectors.imessageMappingEnabled) { _, enabled in
       if enabled { viewModel.reload() }
