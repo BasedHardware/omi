@@ -57,23 +57,25 @@ extension ChatToolExecutor {
     ]
   }
 
-  private static func requestEventKitAccess(_ entityType: EKEntityType) async -> Bool {
-    let store = EKEventStore()
-    do {
-      switch entityType {
-      case .event: return try await store.requestFullAccessToEvents()
-      case .reminder: return try await store.requestFullAccessToReminders()
-      @unknown default: return false
+  private static func requestEventKitAccess(_ entityType: EKEntityType) async -> Bool? {
+    await awaitCancellableAsyncRequest {
+      let store = EKEventStore()
+      do {
+        switch entityType {
+        case .event: return try await store.requestFullAccessToEvents()
+        case .reminder: return try await store.requestFullAccessToReminders()
+        @unknown default: return false
+        }
+      } catch {
+        return false
       }
-    } catch {
-      return false
     }
   }
 
-  private static func requestPhotosAccess() async -> Bool {
-    await withCheckedContinuation { continuation in
+  private static func requestPhotosAccess() async -> Bool? {
+    await awaitCancellablePermissionRequest { completion in
       PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-        continuation.resume(returning: status == .authorized || status == .limited)
+        completion(status == .authorized || status == .limited)
       }
     }
   }
@@ -81,17 +83,27 @@ extension ChatToolExecutor {
   /// Handles the device-tool permission types. Each of these has a real system
   /// prompt on first ask; a prior denial can only be undone in System Settings,
   /// which is what the pending message tells the user.
-  static func requestDeviceToolPermission(_ type: String) async -> String {
-    AnalyticsManager.shared.permissionRequested(permission: type)
+  static func requestDeviceToolPermission(
+    _ type: String,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async -> String {
+    guard isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+      return authorizedOwnerChangedResult()
+    }
 
-    let granted: Bool
+    let granted: Bool?
     let settingsPane: String
     switch type {
     case "contacts":
       if CNContactStore.authorizationStatus(for: .contacts) == .authorized {
         granted = true
       } else {
-        granted = await ContactsReaderService.requestAccess()
+        granted = await awaitCancellablePermissionRequest { completion in
+          Task {
+            completion(await ContactsReaderService.requestAccess())
+          }
+        }
       }
       settingsPane = "Privacy_Contacts"
     case "calendars":
@@ -109,7 +121,15 @@ extension ChatToolExecutor {
         message: "\(type) is not a device tool permission.")
     }
 
+    guard
+      let granted,
+      isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
+
     if !granted {
+      guard isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
       openPrivacySettingsPane(settingsPane)
     }
 

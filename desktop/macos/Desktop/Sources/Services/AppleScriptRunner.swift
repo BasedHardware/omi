@@ -21,6 +21,7 @@ enum AppleScriptRunnerError: LocalizedError {
   /// UI scripting refused for want of Accessibility, which is a different
   /// System Settings pane and a different grant from Automation.
   case assistiveAccessDenied(detail: String)
+  case outputLimitExceeded
   case executionFailed(detail: String)
 
   var errorDescription: String? {
@@ -31,6 +32,8 @@ enum AppleScriptRunnerError: LocalizedError {
     case .assistiveAccessDenied(let detail):
       return
         "macOS refused UI scripting. Grant Omi Accessibility permission in System Settings > Privacy & Security > Accessibility, then try again. Detail: \(detail)"
+    case .outputLimitExceeded:
+      return "AppleScript output exceeded the capture limit."
     case .executionFailed(let detail):
       return "AppleScript failed: \(detail)"
     }
@@ -40,6 +43,7 @@ enum AppleScriptRunnerError: LocalizedError {
     switch self {
     case .notPermitted: return "automation_not_permitted"
     case .assistiveAccessDenied: return "accessibility_not_permitted"
+    case .outputLimitExceeded: return "output_limit_exceeded"
     case .executionFailed: return "execution_failed"
     }
   }
@@ -52,6 +56,7 @@ enum AppleScriptRunnerError: LocalizedError {
     switch self {
     case .notPermitted: return "automation"
     case .assistiveAccessDenied: return "accessibility"
+    case .outputLimitExceeded: return "automation"
     case .executionFailed: return "automation"
     }
   }
@@ -78,7 +83,8 @@ enum AppleScriptRunner {
   static func run(
     script: String,
     arguments: [String] = [],
-    timeoutSeconds: TimeInterval = 30
+    timeoutSeconds: TimeInterval = 30,
+    cancellationCheck: @escaping @Sendable () -> Bool = { false }
   ) throws -> AppleScriptResult {
     let bounded = max(1, min(timeoutSeconds, 120))
     let result: PipeProcessResult
@@ -86,7 +92,8 @@ enum AppleScriptRunner {
       result = try PipeProcessRunner.run(
         executableURL: osascriptURL,
         arguments: ["-e", script] + (arguments.isEmpty ? [] : ["--"] + arguments),
-        timeoutSeconds: bounded)
+        timeoutSeconds: bounded,
+        cancellationCheck: cancellationCheck)
     } catch let error as PipeProcessRunnerError {
       // PipeProcessRunner throws on timeout rather than returning a result with
       // timedOut set, so the branch below could never be reached and a hung
@@ -95,8 +102,13 @@ enum AppleScriptRunner {
       // hung, and a clean-looking failure invites the model to retry and send
       // the message twice. Translated back into the ambiguous result the
       // callers are written to handle.
-      guard case .timedOut = error else { throw error }
-      return AppleScriptResult(output: "", errorOutput: error.localizedDescription, exitCode: -1, timedOut: true)
+      if case .timedOut = error {
+        return AppleScriptResult(output: "", errorOutput: error.localizedDescription, exitCode: -1, timedOut: true)
+      }
+      if case .outputLimitExceeded = error {
+        throw AppleScriptRunnerError.outputLimitExceeded
+      }
+      throw error
     }
 
     let output = String(data: result.stdout, encoding: .utf8) ?? ""

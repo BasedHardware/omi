@@ -183,6 +183,7 @@ actor AppleMailReaderService {
   struct EnvelopeSchema: Sendable {
     let hasFlags: Bool
     let hasSenderComment: Bool
+    let hasInboxMailbox: Bool
   }
 
   static func probeSchema(_ db: Database, path: String) throws -> EnvelopeSchema {
@@ -205,9 +206,24 @@ actor AppleMailReaderService {
       throw AppleMailReaderError.schemaUnavailable(path: path, detail: "addresses.address is missing")
     }
 
+    let tableNames = Set(
+      try String.fetchAll(
+        db,
+        sql: "SELECT name FROM sqlite_master WHERE type = 'table'"))
+    let mailboxColumns = tableNames.contains("mailboxes") ? try columns(of: "mailboxes") : []
+    guard
+      messageColumns.contains("mailbox"),
+      tableNames.contains("mailboxes"),
+      mailboxColumns.contains("url"),
+      mailboxColumns.contains("displayName")
+    else {
+      throw AppleMailReaderError.schemaUnavailable(path: path, detail: "inbox mailbox mapping is missing")
+    }
+
     return EnvelopeSchema(
       hasFlags: messageColumns.contains("flags"),
-      hasSenderComment: addressColumns.contains("comment"))
+      hasSenderComment: addressColumns.contains("comment"),
+      hasInboxMailbox: true)
   }
 
   // MARK: - Reads
@@ -240,6 +256,9 @@ actor AppleMailReaderService {
         let schema = try Self.probeSchema(db, path: url.path)
         let comment = schema.hasSenderComment ? "COALESCE(a.comment, '')" : "''"
         let flags = schema.hasFlags ? "COALESCE(m.flags, 0)" : "0"
+        guard schema.hasInboxMailbox else {
+          throw AppleMailReaderError.schemaUnavailable(path: url.path, detail: "inbox mailbox mapping is missing")
+        }
 
         let rows = try Row.fetchAll(
           db,
@@ -254,6 +273,9 @@ actor AppleMailReaderService {
             FROM messages m
             LEFT JOIN subjects s ON m.subject = s.ROWID
             LEFT JOIN addresses a ON m.sender = a.ROWID
+            JOIN mailboxes b ON b.ROWID = m.mailbox
+            WHERE lower(COALESCE(b.url, '')) LIKE '%/inbox'
+              OR lower(COALESCE(b.displayName, '')) = 'inbox'
             ORDER BY m.date_received DESC
             LIMIT ?
             """,

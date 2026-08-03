@@ -18,6 +18,7 @@ import UIKit
 /// the paired Mac.
 class DeviceToolsService: NSObject {
   private var pendingComposeResult: FlutterResult?
+  private weak var pendingComposeController: MFMessageComposeViewController?
 
   func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -30,6 +31,8 @@ class DeviceToolsService: NSObject {
       result(["ok": true, "status": contactsPermissionStatus()])
     case "requestContactsPermission":
       requestContactsPermission(result: result)
+    case "cancelPendingCompose":
+      cancelPendingCompose(result: result)
     case "searchContacts":
       searchContacts(call: call, result: result)
     case "proposeMessage":
@@ -70,11 +73,19 @@ class DeviceToolsService: NSObject {
   private func requestContactsPermission(result: @escaping FlutterResult) {
     Self.requestContactsAccess { status, error in
       let usable = Self.contactsAccessUsable(status)
-      result([
-        "ok": usable,
-        "status": Self.describe(status),
-        "error": error?.localizedDescription ?? "",
-      ])
+      if usable {
+        result([
+          "ok": true,
+          "status": Self.describe(status),
+          "error": error?.localizedDescription ?? "",
+        ])
+      } else {
+        result(
+          Self.failure(
+            reason: "authorization_denied",
+            message: error?.localizedDescription ?? "Omi needs Contacts access to resolve names to phone numbers.",
+            permission: "contacts"))
+      }
     }
   }
 
@@ -263,8 +274,22 @@ class DeviceToolsService: NSObject {
       }
 
       self.pendingComposeResult = result
+      self.pendingComposeController = composer
       presenter.present(composer, animated: true)
     }
+  }
+
+  private func cancelPendingCompose(result: @escaping FlutterResult) {
+    guard let callback = pendingComposeResult else {
+      result(["ok": true, "status": "none"])
+      return
+    }
+    pendingComposeResult = nil
+    let composer = pendingComposeController
+    pendingComposeController = nil
+    composer?.dismiss(animated: true)
+    callback(["ok": false, "status": "cancelled"])
+    result(["ok": true, "status": "cancelled"])
   }
 
   private static func topViewController() -> UIViewController? {
@@ -307,6 +332,7 @@ extension DeviceToolsService: MFMessageComposeViewControllerDelegate {
   ) {
     let callback = pendingComposeResult
     pendingComposeResult = nil
+    pendingComposeController = nil
 
     let status: String
     switch result {

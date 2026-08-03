@@ -113,7 +113,8 @@ enum MessagesSenderService {
     text: String,
     service: MessageSendService,
     filePath: String?,
-    timeoutSeconds: TimeInterval = 30
+    timeoutSeconds: TimeInterval = 30,
+    cancellationCheck: @escaping @Sendable () -> Bool = { false }
   ) throws -> MessageSendOutcome {
     let trimmedHandle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedHandle.isEmpty else { throw MessagesSenderError.emptyRecipient }
@@ -135,7 +136,8 @@ enum MessagesSenderService {
         let result = try AppleScriptRunner.run(
           script: sendScript(serviceType: serviceType),
           arguments: [trimmedHandle, text, attachment],
-          timeoutSeconds: timeoutSeconds)
+          timeoutSeconds: timeoutSeconds,
+          cancellationCheck: cancellationCheck)
         if result.succeeded {
           // The body reached the recipient but the attachment did not. Retrying
           // on another service would send the body twice, so this stops here and

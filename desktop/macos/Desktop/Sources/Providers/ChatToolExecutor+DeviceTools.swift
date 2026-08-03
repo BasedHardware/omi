@@ -18,7 +18,7 @@ extension ChatToolExecutor {
   /// production log on ordinary use. These log their shape instead — enough to
   /// debug a malformed call, nothing anyone would mind keeping.
   private static let sensitiveArgumentTools: Set<String> = [
-    "send_message", "run_applescript", "read_message_history", "list_mail_messages",
+    "send_message", "run_applescript", "read_message_history", "list_mail_messages", "search_contacts",
   ]
 
   static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
@@ -94,9 +94,11 @@ extension ChatToolExecutor {
   /// stop it. The owner checks stay at the physical-effect boundary; only the
   /// waiting moves.
   private static func offMainActor<T: Sendable>(
-    _ work: @escaping @Sendable () throws -> T
+    _ work: @escaping @Sendable (@escaping @Sendable () -> Bool) throws -> T
   ) async throws -> T {
-    try await Task.detached(priority: .userInitiated) { try work() }.value
+    try await Task.detached(priority: .userInitiated) {
+      try work { Task.isCancelled }
+    }.value
   }
 
   /// Reads a chat identifier, accepting the JSON shapes a model actually emits.
@@ -108,7 +110,9 @@ extension ChatToolExecutor {
     if let value = args["chat_id"] as? Int64 { return value }
     if let value = args["chat_id"] as? Int { return Int64(value) }
     if let value = args["chat_id"] as? Double {
-      guard value.isFinite, value >= Double(Int64.min), value <= Double(Int64.max) else { return nil }
+      guard value.isFinite, value.rounded() == value, value >= Double(Int64.min), value <= Double(Int64.max) else {
+        return nil
+      }
       return Int64(value)
     }
     if let value = args["chat_id"] as? String {
@@ -295,7 +299,12 @@ extension ChatToolExecutor {
 
     do {
       let outcome = try await offMainActor {
-        try MessagesSenderService.send(to: to, text: text, service: service, filePath: filePath)
+        try MessagesSenderService.send(
+          to: to,
+          text: text,
+          service: service,
+          filePath: filePath,
+          cancellationCheck: $0)
       }
       return deviceToolJSON([
         "ok": true,
@@ -331,7 +340,7 @@ extension ChatToolExecutor {
 
     do {
       let result = try await offMainActor {
-        try AppleScriptRunner.run(script: script, timeoutSeconds: timeout)
+        try AppleScriptRunner.run(script: script, timeoutSeconds: timeout, cancellationCheck: $0)
       }
       if result.timedOut {
         return deviceToolFailure(
