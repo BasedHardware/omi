@@ -110,6 +110,14 @@ enum AppBuild {
     productionFamilyBundleIdentifiers.contains(bundleIdentifier)
   }
 
+  static func firebaseAPIKey(bundleIdentifier: String, environmentKey: String?, bundledKey: String?) -> String {
+    // Shipped Beta shares production Firebase identity even while serving through dev.
+    if productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
+      return bundledKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+    return environmentKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  }
+
   /// The separately-installable "Omi Beta" app. Its update channel is pinned to beta
   /// and it keeps its own isolated on-disk state, so it can run beside stable.
   static var isBetaProductionBundle: Bool {

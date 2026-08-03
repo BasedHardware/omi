@@ -53,6 +53,7 @@ struct TaskChatPanel: View {
         // input field changed height.
         ChatMessagesView(
           messages: taskState.messages,
+          conversationIdentity: coordinator.activeTaskId ?? "task-chat-none",
           isSending: taskState.isSending,
           hasMoreMessages: false,
           isLoadingMoreMessages: false,

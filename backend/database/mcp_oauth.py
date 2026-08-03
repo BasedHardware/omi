@@ -17,7 +17,11 @@ def _store():
     return get_document_store()
 
 
-MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "https://api.omi.me/v1/mcp/sse")
+PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
+# Omi Beta intentionally serves MCP data from dev while retaining the production
+# OAuth authority and its production Firestore grants.
+BETA_MCP_RESOURCE_URL = "https://api.omiapi.com/v1/mcp/sse"
+MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", PRODUCTION_MCP_RESOURCE_URL)
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
 DEFAULT_CLIENT_NAME = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_NAME", "ChatGPT")
 DEFAULT_CLAUDE_CLIENT_ID = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "omi-claude-prod")
@@ -41,6 +45,7 @@ REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
 PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
+PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 
@@ -253,12 +258,19 @@ def _finalize_client(client: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any
     """Apply built-in provider defaults to configured and generated clients."""
     if not client:
         return None
-    if client.get("id") not in PUBLIC_CHATGPT_CLIENT_IDS:
-        return client
-    prefixes: List[str] = list(client.get("allowed_redirect_uri_prefixes") or [])
-    if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
-        prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
-    return {**client, "allowed_redirect_uri_prefixes": prefixes}
+    finalized = dict(client)
+    client_id = finalized.get("id")
+    if client_id in PUBLIC_CHATGPT_CLIENT_IDS:
+        prefixes: List[str] = list(finalized.get("allowed_redirect_uri_prefixes") or [])
+        if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
+            prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
+        finalized["allowed_redirect_uri_prefixes"] = prefixes
+    if client_id in PRODUCTION_CROSS_PLANE_CLIENT_IDS and MCP_RESOURCE_URL == PRODUCTION_MCP_RESOURCE_URL:
+        resources = _csv_values(finalized.get("allowed_resources")) or [MCP_RESOURCE_URL]
+        if BETA_MCP_RESOURCE_URL not in resources:
+            resources.append(BETA_MCP_RESOURCE_URL)
+        finalized["allowed_resources"] = resources
+    return finalized
 
 
 def _default_public_client() -> Optional[Dict[str, Any]]:

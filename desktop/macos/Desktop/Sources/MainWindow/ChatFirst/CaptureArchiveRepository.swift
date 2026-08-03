@@ -107,6 +107,7 @@ final class CaptureArchiveRepository: ObservableObject {
   private let remote: any CaptureArchiveRemoteDataSource
   private let local: any CaptureArchiveLocalDataSource
   private var hasLoaded = false
+  private var activeDetailRequestID: String?
 
   init(
     remote: any CaptureArchiveRemoteDataSource = LiveCaptureArchiveRemoteDataSource(),
@@ -172,14 +173,15 @@ final class CaptureArchiveRepository: ObservableObject {
   /// Detail always revalidates from the source-scoped list's selected capture.
   /// It never falls back to a generic list request if the detail read fails.
   func loadDetail(id: String) async -> ServerConversation? {
+    activeDetailRequestID = id
     if let cached = try? await local.detail(id: id), cached.isOmiCaptureArchiveRecord {
-      guard selectedCapture == nil || selectedCapture?.id == id else { return nil }
+      guard activeDetailRequestID == id else { return nil }
       selectedCapture = cached
     }
 
     do {
       let detail = try await remote.detail(id: id)
-      guard selectedCapture == nil || selectedCapture?.id == id else { return nil }
+      guard activeDetailRequestID == id else { return nil }
       guard detail.isOmiCaptureArchiveRecord else {
         errorMessage = "This capture is no longer available."
         return nil
@@ -193,6 +195,7 @@ final class CaptureArchiveRepository: ObservableObject {
       try? await local.store(detail)
       return detail
     } catch {
+      guard activeDetailRequestID == id else { return nil }
       errorMessage = "This Omi-device capture is unavailable. Refresh to try again."
       return nil
     }

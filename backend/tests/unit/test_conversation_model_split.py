@@ -215,6 +215,46 @@ class TestSerializationRoundTrip:
         assert eic2.text == "test content"
         assert eic2.text_source == ExternalIntegrationConversationSource.message
 
+    def test_legacy_transcript_segment_ids_are_deterministic_per_conversation(self):
+        from models.conversation import Conversation
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        raw_segments = [
+            {
+                "text": "legacy",
+                "speaker": "SPEAKER_00",
+                "is_user": False,
+                "start": 0.0,
+                "end": 1.0,
+            },
+            {
+                "id": "explicit-segment-id",
+                "text": "explicit",
+                "speaker": "SPEAKER_01",
+                "is_user": False,
+                "start": 1.0,
+                "end": 2.0,
+            },
+        ]
+        fields = {
+            "id": "conversation-with-legacy-segments",
+            "created_at": now,
+            "started_at": now,
+            "finished_at": now,
+            "structured": Structured(),
+            "transcript_segments": raw_segments,
+        }
+
+        first = Conversation(**fields)
+        second = Conversation(**fields)
+
+        assert first.transcript_segments[0].id == second.transcript_segments[0].id
+        assert first.transcript_segments[0].id
+        assert first.transcript_segments[0].id != first.transcript_segments[1].id
+        assert first.transcript_segments[1].id == "explicit-segment-id"
+        assert "id" not in raw_segments[0]
+
 
 class TestHelperMethods:
     """Helper methods on moved models must work correctly."""

@@ -43,6 +43,8 @@ terminate_process_tree() {
 run_suite() {
   local log_dir="$1"
   local suite="$2"
+  local build_path="$3"
+  local runtime_path="$4"
   local log_path="$log_dir/$suite.log"
   local status_path="$log_dir/$suite.status"
   local timeout_path="$log_dir/$suite.timeout"
@@ -55,12 +57,22 @@ run_suite() {
   if [ "$PREBUILD" = "1" ]; then
     build_args+=("--skip-build")
   fi
-  local -a command=(xcrun swift test --package-path "$PACKAGE_PATH" "${build_args[@]}" --filter "${suite}/")
+  local -a command=(
+    xcrun swift test --package-path "$PACKAGE_PATH" --scratch-path "$build_path" "${build_args[@]}" --filter "${suite}/"
+  )
   if [ "${#skip_args[@]}" -gt 0 ]; then
     command+=("${skip_args[@]}")
   fi
   set +e
-  "${command[@]}" >"$log_path" 2>&1 &
+  # XCTest launches every filtered suite in the same `xctest` host bundle, so
+  # its standard UserDefaults domain and user-domain paths would otherwise be
+  # shared even when the SwiftPM scratch directories are distinct. Keep every
+  # worker's preferences, Application Support, and temporary files separate.
+  # CFFIXED_USER_HOME makes CoreFoundation preferences and Foundation's
+  # user-domain directories (Application Support, Caches) follow the worker
+  # home without changing the shell HOME used by package dependencies.
+  env CFFIXED_USER_HOME="$runtime_path/home" TMPDIR="$runtime_path/tmp" \
+    "${command[@]}" >"$log_path" 2>&1 &
   local command_pid=$!
   (
     # Parallel workers share one SwiftPM `.build` lock, so `swift test` can block
@@ -104,8 +116,29 @@ run_suite() {
   exit "$status"
 }
 
+run_worker() {
+  local log_dir="$1"
+  local suite_list="$2"
+  local build_path="$3"
+  local runtime_path="$4"
+  local suite
+
+  # Suites retain their process isolation, but a worker owns one cloned SwiftPM
+  # scratch directory. This avoids the shared `.build` lock that made CI's
+  # original parallel runner report queued suites as false timeouts. The
+  # worker also owns its process-global Foundation state.
+  while IFS= read -r suite; do
+    "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$build_path" "$runtime_path" || true
+  done <"$suite_list"
+}
+
 if [ "${1:-}" = "__run_suite" ]; then
-  run_suite "$2" "$3"
+  run_suite "$2" "$3" "$4" "$5"
+fi
+
+if [ "${1:-}" = "__run_worker" ]; then
+  run_worker "$2" "$3" "$4" "$5"
+  exit 0
 fi
 
 [[ "$WORKERS" =~ ^[0-9]+$ ]] || fail "worker count must be a positive integer, got '$WORKERS'"
@@ -146,9 +179,17 @@ done < <(find "$TESTS_ROOT" -type f -name '*.swift' -print0 \
 
 cd "$MACOS_DIR"
 suite_log_dir="$(mktemp -d)"
-trap 'rm -rf "$suite_log_dir"' EXIT
+suite_worker_dir="$(mktemp -d)"
+trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
 failed_suites=""
 suite_count="${#suites[@]}"
+worker_count=0
+
+if [[ "$PACKAGE_PATH" = /* ]]; then
+  package_root="$PACKAGE_PATH"
+else
+  package_root="$MACOS_DIR/$PACKAGE_PATH"
+fi
 
 if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   echo "Prebuilding Swift test bundle before parallel suite execution..."
@@ -156,8 +197,44 @@ if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
 fi
 
 if [ "$suite_count" -gt 0 ]; then
-  printf '%s\0' "${suites[@]}" \
-    | xargs -0 -n1 -P "$WORKERS" "$SCRIPT_PATH" __run_suite "$suite_log_dir" || true
+  worker_count="$WORKERS"
+  if [ "$worker_count" -gt "$suite_count" ]; then
+    worker_count="$suite_count"
+  fi
+
+  declare -a worker_lists=()
+  declare -a worker_build_paths=()
+  declare -a worker_runtime_paths=()
+  declare -a worker_args=()
+  for ((worker = 0; worker < worker_count; worker++)); do
+    worker_lists+=("$suite_worker_dir/worker-$worker.suites")
+    : >"${worker_lists[$worker]}"
+    worker_build_paths+=("$suite_worker_dir/worker-$worker.build")
+    worker_runtime_paths+=("$suite_worker_dir/worker-$worker.runtime")
+  done
+
+  for ((suite_index = 0; suite_index < suite_count; suite_index++)); do
+    worker=$((suite_index % worker_count))
+    printf '%s\n' "${suites[$suite_index]}" >>"${worker_lists[$worker]}"
+  done
+
+  for ((worker = 0; worker < worker_count; worker++)); do
+    worker_build_path="${worker_build_paths[$worker]}"
+    worker_runtime_path="${worker_runtime_paths[$worker]}"
+    if [ "$PREBUILD" = "1" ]; then
+      # `cp -c` requires a copy-on-write clone rather than silently creating
+      # full physical copies. The hosted macOS runners use APFS; fail closed if
+      # that contract changes so suite parallelism never raises runner minutes.
+      cp -cR "$package_root/.build" "$worker_build_path"
+    else
+      mkdir -p "$worker_build_path"
+    fi
+    mkdir -p "$worker_runtime_path/home" "$worker_runtime_path/tmp"
+    worker_args+=("${worker_lists[$worker]}" "$worker_build_path" "$worker_runtime_path")
+  done
+
+  printf '%s\0' "${worker_args[@]}" \
+    | xargs -0 -n3 -P "$worker_count" "$SCRIPT_PATH" __run_worker "$suite_log_dir" || true
 fi
 
 for suite in "${suites[@]}"; do
@@ -175,7 +252,7 @@ for suite in "${suites[@]}"; do
   fi
 done
 
-echo "Ran $suite_count Swift suites in isolation with $WORKERS worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
+echo "Ran $suite_count Swift suites in isolation with $worker_count worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
 
 if [ -n "$failed_suites" ]; then
   echo "FAILED Swift suites:$failed_suites"

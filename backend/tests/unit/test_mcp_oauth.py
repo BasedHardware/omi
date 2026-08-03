@@ -221,6 +221,9 @@ def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix(
         client = mcp_oauth.get_client('omi-chatgpt-prod')
 
         assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/new-custom-app-id')
+        assert mcp_oauth.validate_resource(client, mcp_oauth.MCP_RESOURCE_URL)
+        assert mcp_oauth.validate_resource(client, mcp_oauth.BETA_MCP_RESOURCE_URL)
+        assert not mcp_oauth.validate_resource(client, 'https://attacker.example/v1/mcp/sse')
         assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/new-custom-app-id?x=1')
         assert not mcp_oauth.validate_redirect_uri(
             client, 'https://chatgpt.com.evil.test/connector/oauth/new-custom-app-id'
@@ -236,6 +239,7 @@ def test_claude_prod_client_is_registered_for_cloud_connector_callback():
     assert client['token_endpoint_auth_method'] == 'none'
     assert mcp_oauth.verify_client_auth(client, None)
     assert not mcp_oauth.verify_client_auth(client, 'unexpected-secret')
+    assert mcp_oauth.validate_resource(client, mcp_oauth.BETA_MCP_RESOURCE_URL)
     assert mcp_oauth.validate_redirect_uri(client, 'https://claude.ai/api/mcp/auth_callback')
     assert not mcp_oauth.validate_redirect_uri(client, 'https://claude.ai/api/mcp/auth_callback?next=x')
     assert not mcp_oauth.validate_redirect_uri(client, 'https://example.com/api/mcp/auth_callback')

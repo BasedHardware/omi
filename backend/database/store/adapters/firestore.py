@@ -215,8 +215,13 @@ class FirestoreDocumentStore:
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:
-            # Keyset cursor (single order_by) with a document-id tiebreak so ties never skip/duplicate.
-            query = query.order_by('__name__', direction=_DIRECTION[specs[0][1]])
+            # Keyset cursor with a document-id tiebreak so ties never skip/duplicate — unless the
+            # caller already ordered by ``__name__`` explicitly (a composite keyset, e.g. the
+            # canonical graph's ``updated_at DESC, __name__ DESC``), where adding it again is a
+            # duplicate-order_by error. The caller's explicit ``__name__`` also fixes the tie order
+            # on the *first* page (no cursor), matching upstream's always-present tiebreak.
+            if not any(_field == '__name__' for _field, _ in specs):
+                query = query.order_by('__name__', direction=_DIRECTION[specs[0][1]])
             query = query.start_after([start_after['value'], start_after['id']])
         if fields is not None:
             query = query.select(list(fields))

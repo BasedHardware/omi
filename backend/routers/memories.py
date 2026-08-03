@@ -375,11 +375,12 @@ def _canonical_write_enabled_or_fail_closed(uid: str) -> bool:
 def _mirror_delete_into_legacy(uid: str, memory_ids: List[str]) -> None:
     """Mirror a canonical delete into legacy while the user still reads legacy.
 
-    Canonical writes turn on at MEMORY_MODE=write, but GET /v3/memories keeps reading
-    legacy until MEMORY_MODE=read. In that dual-write stage a canonical-only delete is
-    invisible: the client drops the row optimistically and the next refresh re-reads
-    legacy, where it still exists, so the memory "comes back" seconds later (#10446).
-    Deleting is symmetric with dual-write, so mirror it until read cutover.
+    Canonical writes can become ready in persisted control state before canonical
+    reads pass their control/head/grant/projection checks. In that convergence
+    window a canonical-only delete is invisible: the client drops the row
+    optimistically and the next refresh re-reads legacy, where it still exists,
+    so the memory "comes back" seconds later (#10446). Deleting is symmetric
+    with dual-write, so mirror it until read cutover.
 
     Best-effort by design: canonical is already authoritative and its delete has
     committed, so a legacy cleanup failure must not fail the request the user
@@ -426,10 +427,11 @@ def _purge_legacy_memories(uid: str) -> None:
 def _mirror_delete_all_into_legacy(uid: str) -> None:
     """Mirror a canonical delete-all into legacy while the user still reads legacy.
 
-    Same window and reasoning as _mirror_delete_into_legacy: at MEMORY_MODE=write the
-    canonical wipe is invisible because GET /v3/memories still reads legacy, so "delete
-    everything" leaves the user's list intact on the next refresh (#10446). No-ops after
-    read cutover, and best-effort because canonical is authoritative and already
+    Same window and reasoning as _mirror_delete_into_legacy: when persisted
+    write readiness precedes read cutover, the canonical wipe is invisible
+    because GET /v3/memories still reads legacy, so "delete everything" leaves
+    the user's list intact on the next refresh (#10446). No-ops after read
+    cutover, and best-effort because canonical is authoritative and already
     committed.
     """
     if canonical_read_enabled(uid):

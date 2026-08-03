@@ -13,6 +13,7 @@ struct ChatFirstShell: View {
   @Binding var highlightedSettingID: String?
   @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
   @StateObject private var automationRuntime: ChatFirstAutomationRuntime
+  @State private var conversationsSelectionGeneration = 0
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
   @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
@@ -82,6 +83,10 @@ struct ChatFirstShell: View {
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
+      memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
+      navigation.selectPrimary(.memories)
+    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }
       promptMaterializationCoordinator.mainWindowDidBecomeForeground()
@@ -127,18 +132,22 @@ struct ChatFirstShell: View {
       }
       .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
-      CaptureArchivePage(
+      ChatFirstConversationsHost(
         navigation: navigation,
+        appState: appState,
         chatProvider: viewModelContainer.chatProvider,
-        automationRuntime: automationRuntime
+        automationRuntime: automationRuntime,
+        explicitSelectionGeneration: conversationsSelectionGeneration
       )
       .accessibilityIdentifier("chat-first-route-conversations")
       .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
-      ChatFirstTasksPage(
+      ChatFirstRestoredTasksHost(
         navigation: navigation,
+        viewModel: viewModelContainer.tasksViewModel,
         tasksStore: viewModelContainer.tasksStore,
         chatProvider: viewModelContainer.chatProvider,
+        chatCoordinator: viewModelContainer.taskChatCoordinator,
         automationRuntime: automationRuntime
       )
       .accessibilityIdentifier("chat-first-route-tasks")
@@ -154,10 +163,15 @@ struct ChatFirstShell: View {
       .accessibilityIdentifier("chat-first-route-goals")
       .onAppear { navigation.markRouteVisible(.goals) }
     case .memories:
-      MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-        .accessibilityIdentifier("chat-first-route-memories")
-        .onAppear { navigation.markRouteVisible(.memories) }
-        .task(id: pendingMemoryFocusID) { await resolvePendingMemoryFocus() }
+      MemoryHubPage(
+        appState: appState,
+        viewModelContainer: viewModelContainer,
+        memoriesViewModel: viewModelContainer.memoriesViewModel,
+        destinationRawValue: $memoryDestinationRawValue
+      )
+      .accessibilityIdentifier("chat-first-route-memories")
+      .onAppear { navigation.markRouteVisible(.memories) }
+      .task(id: pendingMemoryFocusID) { await resolvePendingMemoryFocus() }
     case .more(let page):
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
@@ -203,6 +217,9 @@ struct ChatFirstShell: View {
         if rawValue == SidebarNavItem.conversations.rawValue {
           let destination =
             MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+          if destination == .conversations {
+            conversationsSelectionGeneration &+= 1
+          }
           navigation.selectPrimary(destination == .conversations ? .conversations : .memories)
           return
         }
@@ -220,14 +237,19 @@ struct ChatFirstShell: View {
   }
 
   private func syncMemoryDestination(for route: ChatFirstRoute) {
-    switch route {
-    case .memories:
+    if route == .memories, case .memory = navigation.pendingFocus {
       memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
-    case .conversations:
-      memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
-    default:
-      break
+      return
     }
+    guard
+      let destination = ChatFirstMemoryRoutePolicy.destination(
+        afterSelecting: route,
+        current: MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+      )
+    else {
+      return
+    }
+    memoryDestinationRawValue = destination.rawValue
   }
 
   @ViewBuilder
@@ -306,6 +328,179 @@ struct ChatFirstShell: View {
       case .settings: return .settings
       }
     }
+  }
+}
+
+enum ChatFirstMemoryRoutePolicy {
+  static func destination(
+    afterSelecting route: ChatFirstRoute,
+    current: MemoryHubDestination
+  ) -> MemoryHubDestination? {
+    switch route {
+    case .memories:
+      return current == .brainMap ? .brainMap : .memories
+    case .conversations:
+      return .conversations
+    default:
+      return nil
+    }
+  }
+}
+
+/// The chat-first shell changes chrome, not destination capability. Keep the
+/// established Conversations page as the one feature owner and adapt only its
+/// typed route/deep-link and non-production automation contracts here.
+@MainActor
+private struct ChatFirstConversationsHost: View {
+  @ObservedObject var navigation: ChatFirstShellNavigation
+  let appState: AppState
+  let chatProvider: ChatProvider
+  let automationRuntime: ChatFirstAutomationRuntime?
+  let explicitSelectionGeneration: Int
+  @State private var showsCaptureArchive = false
+
+  private var pendingCaptureToken: String {
+    guard case .capture(let id, let momentTimestamp) = navigation.pendingFocus else { return "none" }
+    let moment = momentTimestamp.map { String($0) } ?? ""
+    return "\(id):\(moment)"
+  }
+
+  var body: some View {
+    Group {
+      if showsCaptureArchive || pendingCaptureToken != "none" {
+        // Capture links retain their specialized playback/timestamp owner;
+        // ordinary Conversations navigation uses the established full editor.
+        CaptureArchivePage(
+          navigation: navigation,
+          chatProvider: chatProvider,
+          automationRuntime: automationRuntime
+        )
+      } else {
+        ConversationsPageHost(appState: appState)
+      }
+    }
+    .onAppear {
+      if pendingCaptureToken != "none" { showsCaptureArchive = true }
+    }
+    .onChange(of: pendingCaptureToken) { _, token in
+      if token != "none" { showsCaptureArchive = true }
+    }
+    .onChange(of: explicitSelectionGeneration) { _, _ in
+      showsCaptureArchive = false
+    }
+  }
+}
+
+/// The mature Tasks page remains the sole owner of editing, drag/reorder,
+/// nesting, keyboard, suggested-task, and task-thread behavior. This adapter
+/// carries only chat-first routing and automation state.
+@MainActor
+private struct ChatFirstRestoredTasksHost: View {
+  @ObservedObject var navigation: ChatFirstShellNavigation
+  @ObservedObject var viewModel: TasksViewModel
+  @ObservedObject var tasksStore: TasksStore
+  let chatProvider: ChatProvider
+  let chatCoordinator: TaskChatCoordinator
+  let automationRuntime: ChatFirstAutomationRuntime?
+
+  private var pendingFocusToken: String {
+    switch navigation.pendingFocus {
+    case .task(let id): return "task:\(id)"
+    case .goal(let id): return "goal:\(id)"
+    default: return "none"
+    }
+  }
+
+  var body: some View {
+    TasksPage(
+      viewModel: viewModel,
+      chatCoordinator: chatCoordinator,
+      chatProvider: chatProvider
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task(id: pendingFocusToken) {
+      await viewModel.loadTasksForFirstUse()
+      switch navigation.pendingFocus {
+      case .task(let id):
+        guard let task = await taskForFocus(id: id) else { return }
+        await reveal(task, acknowledging: .task(id: id))
+      case .goal(let id):
+        var task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+        if task == nil {
+          await tasksStore.loadCompletedTasks()
+          task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+        }
+        if task == nil,
+          let detail = try? await APIClient.shared.getCanonicalGoalDetail(goalID: id),
+          let relatedTaskID = detail.tasks.first?.id
+        {
+          task = await taskForFocus(id: relatedTaskID)
+        }
+        guard let task else { return }
+        await reveal(task, acknowledging: .goal(id: id))
+      default:
+        return
+      }
+    }
+    .onAppear { registerAutomationActions() }
+    .onDisappear { automationRuntime?.unregisterTasksPage() }
+  }
+
+  private func taskForFocus(id: String) async -> TaskActionItem? {
+    if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
+      return task
+    }
+    if let task = try? await APIClient.shared.getActionItem(id: id), task.deleted != true {
+      return task
+    }
+    await tasksStore.loadCompletedTasks()
+    return tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true })
+  }
+
+  private func reveal(_ task: TaskActionItem, acknowledging focus: ChatFirstPendingFocus) async {
+    viewModel.revealTaskForNavigation(task)
+    await Task.yield()
+    guard viewModel.displayTasks.contains(where: { $0.id == task.id }) else { return }
+    viewModel.keyboardSelectedTaskId = task.id
+    guard await waitForScrollProxy(timeoutMs: 1_500) else { return }
+    guard let scrollProxy = viewModel.scrollProxy else { return }
+    scrollProxy.scrollTo(task.id, anchor: .center)
+    try? await Task.sleep(nanoseconds: 100_000_000)
+    guard !Task.isCancelled, viewModel.keyboardSelectedTaskId == task.id else { return }
+    _ = navigation.acknowledgeFocus(focus)
+  }
+
+  /// Poll until TasksPage mounts and assigns its ScrollViewReader proxy.
+  private func waitForScrollProxy(timeoutMs: Int) async -> Bool {
+    if viewModel.scrollProxy != nil { return true }
+    let steps = max(1, timeoutMs / 50)
+    for _ in 0..<steps {
+      guard !Task.isCancelled else { return false }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if viewModel.scrollProxy != nil { return true }
+    }
+    return viewModel.scrollProxy != nil
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerTasksPage(
+      toggleTask: {
+        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else {
+          return false
+        }
+        let intendedCompletion = !task.completed
+        AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
+        await tasksStore.toggleTask(task)
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+        AnalyticsManager.shared.chatFirst(
+          .taskMutation(
+            lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,
+            mutation: .completion
+          )
+        )
+        return reconciled?.completed == intendedCompletion
+      }
+    )
   }
 }
 

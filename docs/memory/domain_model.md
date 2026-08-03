@@ -404,9 +404,11 @@ Authoritative record of the §10 blocking decisions. Ratified by product owner b
 **WS-I scope consequence of Q1+Q2:** WS-I is NOT a dual-write add-on. For the canonical cohort it must
 make the `CanonicalMemoryBackend` real for **both write and read**, route `process_conversation`
 extraction to canonical-only, and route the cohort's read path (at least `/v3` GET) to canonical — so a
-canonical user is fully self-consistent. The canonical cohort stays **empty in production**
-(`CANONICAL_MEMORY_USERS` empty in `memory_system.py`); only explicitly-added test users are affected. Legacy-cohort behavior
-must remain byte-unchanged.
+canonical user is fully self-consistent. The canonical cohort stays code-owned
+in `backend/config/canonical_memory_cohort.py` and intentionally small; only
+explicitly reviewed users and isolated fixtures are affected. Runtime rollout
+flags do not grant entitlement. Legacy-cohort behavior must remain
+byte-unchanged.
 
 ### Backfill & reversibility directive (locked 2026-06-23)
 

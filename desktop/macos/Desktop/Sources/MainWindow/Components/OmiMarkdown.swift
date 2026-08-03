@@ -144,6 +144,7 @@ struct OmiMarkdownContent: View, Equatable {
           .font(.system(size: codeFontSize, design: .monospaced))
           .foregroundColor(Self.baseColor(for: style))
           .if_available_writingToolsNone()
+          .background(VerticalWheelPassthrough())
       }
     }
     .padding(OmiSpacing.md)
@@ -253,6 +254,111 @@ struct OmiMarkdownContent: View, Equatable {
 
       return processed
     }.joined(separator: "\n")
+  }
+}
+
+/// A fenced code block scrolls horizontally, but it lives inside the vertical
+/// transcript scroller. AppKit otherwise lets the inner `NSScrollView` consume
+/// an entire trackpad gesture even when the gesture is vertical, stranding the
+/// transcript at whichever code block happens to pass under the pointer.
+/// Preserve horizontal code navigation while routing vertical intent to the
+/// enclosing transcript.
+struct VerticalWheelPassthrough: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView(frame: .zero)
+    context.coordinator.scheduleAttachment(for: view)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.scheduleAttachment(for: nsView)
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.stop()
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator() }
+
+  @MainActor
+  final class Coordinator {
+    private var monitor: Any?
+    private weak var innerScrollView: NSScrollView?
+    private weak var outerScrollView: NSScrollView?
+
+    func scheduleAttachment(for view: NSView) {
+      for delay in [0.0, 0.05] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak view] in
+          guard let self, let view else { return }
+          self.install(for: view)
+        }
+      }
+    }
+
+    func install(for view: NSView) {
+      guard
+        let inner = Self.enclosingScrollView(for: view),
+        let outer = Self.enclosingScrollView(above: inner)
+      else {
+        stop()
+        return
+      }
+      guard innerScrollView !== inner || outerScrollView !== outer else { return }
+      stop()
+      innerScrollView = inner
+      outerScrollView = outer
+      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
+        self?.handle(event) ?? event
+      }
+    }
+
+    func handle(_ event: NSEvent) -> NSEvent? {
+      guard
+        let innerScrollView,
+        let outerScrollView,
+        event.window === innerScrollView.window,
+        abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX),
+        event.scrollingDeltaY != 0
+      else { return event }
+      let location = innerScrollView.convert(event.locationInWindow, from: nil)
+      guard innerScrollView.bounds.contains(location) else { return event }
+      NotificationCenter.default.post(
+        name: .chatVerticalWheelPassthrough,
+        object: outerScrollView,
+        userInfo: ["event": event]
+      )
+      outerScrollView.scrollWheel(with: event)
+      return nil
+    }
+
+    func stop() {
+      if let monitor { NSEvent.removeMonitor(monitor) }
+      monitor = nil
+      innerScrollView = nil
+      outerScrollView = nil
+    }
+
+    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
+      var candidate: NSView? = view
+      while let current = candidate {
+        if let scrollView = current as? NSScrollView { return scrollView }
+        candidate = current.superview
+      }
+      return nil
+    }
+
+    private static func enclosingScrollView(above inner: NSScrollView) -> NSScrollView? {
+      var candidate = inner.superview
+      while let current = candidate {
+        if let scrollView = current as? NSScrollView { return scrollView }
+        candidate = current.superview
+      }
+      return nil
+    }
+
+    deinit {
+      MainActor.assumeIsolated { stop() }
+    }
   }
 }
 

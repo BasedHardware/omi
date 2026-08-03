@@ -11,10 +11,12 @@ Mongo unchanged. Transactions use the port's ``run_transaction(fn)``: ``fn`` rec
 transaction handle (``get/set/update/delete`` by path string).
 """
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from database.store import get_document_store
 from database.store.records import StoredDocument
+
+Filter = Tuple[str, str, Any]
 
 
 def _store() -> Any:
@@ -60,6 +62,35 @@ def stream_collection_where(
     limit: Optional[int] = None,
 ) -> List[StoredDocument]:
     return _store().query(path, filters=[(field, op, value)], limit=limit)
+
+
+def query_collection(
+    path: str,
+    *,
+    filters: Optional[Iterable[Filter]] = None,
+    order_by: Optional[Any] = None,
+    direction: str = "asc",
+    limit: Optional[int] = None,
+    start_after: Optional[Dict[str, Any]] = None,
+) -> List[StoredDocument]:
+    """Neutral multi-filter / ordered / keyset-cursor read (the full port query surface).
+
+    ``order_by`` is a field name (single) or a sequence of ``(field, direction)`` pairs;
+    ``start_after`` is a keyset ``{"value": <order-field value>, "id": <document id>}``.
+    """
+    return _store().query(
+        path,
+        filters=filters,
+        order_by=order_by,
+        direction=direction,
+        limit=limit,
+        start_after=start_after,
+    )
+
+
+def get_many_documents(path: str, ids: Sequence[str]) -> List[StoredDocument]:
+    """Batch-read the documents named ``ids`` under the collection at ``path``."""
+    return _store().get_many(path, ids)
 
 
 # --- transactions ---------------------------------------------------------------------

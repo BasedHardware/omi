@@ -37,6 +37,7 @@ SCHEMA_GROUPS = {
             'SearchConversationsResponse',
             'SyncLocalFilesResultResponse',
             'SyncJobStartResponse',
+            'SyncRecoveryWindowExceededResponse',
             'SyncJobStatusResponse',
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',

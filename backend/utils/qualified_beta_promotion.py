@@ -490,7 +490,10 @@ async def build_qualified_beta_manifest(
     }
     if names & RETIRED_ASSET_NAMES or disallowed_beta:
         _fail("candidate contains a retired desktop identity")
-    has_beta_identity = sanctioned_beta.issubset(names)
+    beta_present = names & sanctioned_beta
+    if beta_present and beta_present != sanctioned_beta:
+        _fail("candidate contains an incomplete Omi Beta artifact pair")
+    has_beta_identity = beta_present == sanctioned_beta
     zip_asset, dmg_asset = _asset(assets, "Omi.zip"), _asset(assets, "omi.dmg")
     source_sha = await _read_github(source, "tag_sha", tag)
     if not isinstance(source_sha, str):

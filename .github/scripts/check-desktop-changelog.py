@@ -66,6 +66,11 @@ EXEMPT_DESKTOP_PATH_PREFIXES = (
     # a changelog fragment, and — like tests/ above — the post-merge push run
     # would otherwise redden main. Same directory the swift-format linter skips.
     "desktop/macos/Desktop/Sources/Generated/",
+    # E2E flow definitions and their docs are CI/harness test artifacts that never
+    # ship in the desktop app. Registering a new source file in a flow's `covers:`
+    # is exactly the kind of internal-only edit that reddened main on the merge
+    # push for #11039.
+    "desktop/macos/e2e/",
 )
 
 

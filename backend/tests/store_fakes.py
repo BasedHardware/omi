@@ -205,11 +205,28 @@ class FakeDocumentStore:
                     )
                 ]
         else:
-            # Multi-field order_by: [(field, direction), ...]. Stable sorts applied most-significant
-            # last, with an ascending path (id) tiebreak first (mirrors the adapters' _id/__name__).
+            # Multi-field order_by: [(field, direction), ...]. ``__name__`` means the document id
+            # (its full path), matching the adapters. Stable sorts applied most-significant last over
+            # a composite key; the keyset ``start_after`` filters on (primary field value, id).
+            def _sort_val(pd, field):
+                return pd[0] if field == "__name__" else pd[1].get(field)
+
             rows.sort(key=lambda pd: pd[0])
             for field, fdir in reversed(list(order_by)):
-                rows.sort(key=lambda pd, f=field: pd[1].get(f), reverse=(fdir == "desc"))
+                rows.sort(key=lambda pd, f=field: _sort_val(pd, f), reverse=(fdir == "desc"))
+            if start_after is not None:
+                primary_field, primary_dir = order_by[0]
+                primary_reverse = primary_dir == "desc"
+                cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
+                rows = [
+                    pd
+                    for pd in rows
+                    if (
+                        (_sort_val(pd, primary_field), pd[0]) < cursor_key
+                        if primary_reverse
+                        else (_sort_val(pd, primary_field), pd[0]) > cursor_key
+                    )
+                ]
         if offset is not None:
             rows = rows[offset:]
         if limit is not None:

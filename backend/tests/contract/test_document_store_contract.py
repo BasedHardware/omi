@@ -246,6 +246,31 @@ def test_query_keyset_start_after_is_tie_safe(store, uid, direction):
     assert len(seen) == len(set(seen))  # none duplicated across pages
 
 
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_query_explicit_name_tiebreak_pages_consistently(store, uid, direction):
+    # The canonical-graph read pattern: an explicit ``__name__`` (document id) tiebreak field so the
+    # FIRST page shares the paginated pages' total order. Firestore's implicit __name__ is ASC only,
+    # so the adapter must honour the explicit id order (and not double it under start_after). All
+    # rows tie on ``rank``, so the id direction alone determines the sequence — both backends must agree.
+    base = f"users/{uid}/people"
+    for pid in ("p1", "p2", "p3", "p4", "p5"):
+        store.set(f"{base}/{pid}", {"rank": 7, "name": pid})
+
+    order = [("rank", direction), ("__name__", direction)]
+    seen = []
+    cursor = None
+    for _ in range(10):  # bounded; a broken keyset would loop or skip
+        page = store.query(base, order_by=order, limit=2, start_after=cursor)
+        if not page:
+            break
+        seen.extend(d.id for d in page)
+        last = page[-1]
+        cursor = {"value": last.to_dict()["rank"], "id": last.id}
+
+    # First page + cursor pages form one total order (rank tie -> id in the chosen direction).
+    assert seen == sorted(["p1", "p2", "p3", "p4", "p5"], reverse=(direction == "desc"))
+
+
 def test_query_is_scoped_to_the_collection(store, uid):
     other = f"u_{uuid.uuid4().hex}"
     store.set(f"users/{uid}/people/p1", {"name": "mine"})

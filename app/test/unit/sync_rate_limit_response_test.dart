@@ -57,6 +57,13 @@ void main() {
 
     test('does not widen to other 422s, other statuses, or unparseable bodies', () {
       expect(isSyncRecoveryWindowExceededResponse(http.Response('{"code":"validation_error"}', 422)), isFalse);
+      expect(
+        isSyncRecoveryWindowExceededResponse(
+          http.Response('{"detail":"Recording is older than the automatic recovery window"}', 422),
+        ),
+        isFalse,
+        reason: 'the bounded terminal discriminator must be present',
+      );
       expect(isSyncRecoveryWindowExceededResponse(http.Response('<html>Unprocessable</html>', 422)), isFalse);
       expect(isSyncRecoveryWindowExceededResponse(http.Response('', 422)), isFalse);
       expect(

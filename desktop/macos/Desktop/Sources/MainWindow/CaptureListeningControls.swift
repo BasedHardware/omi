@@ -29,6 +29,24 @@ struct CaptureListeningControls: View {
     HStack(spacing: OmiSpacing.sm) {
       captureButton
 
+      listeningControlSlot
+    }
+    .onAppear(perform: syncCaptureState)
+    .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
+      syncCaptureState()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
+      syncCaptureState()
+    }
+  }
+
+  private var transcriptionUnavailable: Bool { appState.transcriptionServiceError != nil }
+
+  /// Listening reveals a mode toggle on hover. Keep that extra width inside a
+  /// reserved trailing slot so the right edge of the control group stays fixed
+  /// and Capture never moves while the secondary affordance fades in.
+  private var listeningControlSlot: some View {
+    ZStack(alignment: .trailing) {
       HomeListeningStatusButton(
         title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
         systemImage: transcriptionUnavailable
@@ -42,16 +60,8 @@ struct CaptureListeningControls: View {
         modeAction: toggleListeningMode
       )
     }
-    .onAppear(perform: syncCaptureState)
-    .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
-      syncCaptureState()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
-      syncCaptureState()
-    }
+    .frame(width: CaptureListeningControlsLayout.listeningSlotWidth, alignment: .trailing)
   }
-
-  private var transcriptionUnavailable: Bool { appState.transcriptionServiceError != nil }
 
   // MARK: Capture button + hover Rewind affordance
 
@@ -140,4 +150,10 @@ struct CaptureListeningControls: View {
     CaptureListeningLogic.syncCaptureState(
       screenAnalysisEnabled: $screenAnalysisEnabled, isCaptureMonitoring: $isCaptureMonitoring)
   }
+}
+
+enum CaptureListeningControlsLayout {
+  /// Resting Listening is about 104pt wide; reserve room for its 31pt hover
+  /// affordance without changing the control group's measured width.
+  static let listeningSlotWidth: CGFloat = 136
 }
