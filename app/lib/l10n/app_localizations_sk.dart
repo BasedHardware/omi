@@ -1471,7 +1471,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get payYourSttProvider => 'Voľne používajte omi. Platíte len svojmu poskytovateľovi STT priamo.';
 
   @override
-  String get freeMinutesMonth => '1 200 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
+  String get freeMinutesMonth => '300 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1793,20 +1793,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Páči sa vám Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Pomôžte nám osloviť viac ľudí tým, že zanecháte recenziu v App Store. Vaša spätná väzba pre nás znamená celý svet!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomôžte nám osloviť viac ľudí tým, že zanecháte recenziu v Google Play Store. Vaša spätná väzba pre nás znamená celý svet!';
-
-  @override
-  String get rateOnAppStore => 'Ohodnotiť v App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Ohodnotiť v Google Play';
 
   @override
   String get maybeLater => 'Možno neskôr';
@@ -2144,6 +2130,18 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Upraviť pamäť';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';
@@ -4705,7 +4703,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
 
   @override
-  String get basicPlanDescription => '1 200 prémiových minút + neobmedzené na zariadení';
+  String get basicPlanDescription => '300 prémiových minút + neobmedzené na zariadení';
 
   @override
   String get minutes => 'minút';
@@ -5997,7 +5995,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+      '300 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
 
   @override
   String get viewUsage => 'Zobraziť využitie';
@@ -6079,7 +6077,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+      '300 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9772,4 +9770,7 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Príliš staré na synchronizáciu — Omi ho nemôže prijať';
 }

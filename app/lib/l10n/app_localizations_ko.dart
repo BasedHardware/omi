@@ -1761,18 +1761,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get lovingOmi => 'Omi가 마음에 드시나요?';
 
   @override
-  String get leaveReviewIos => 'App Store에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get leaveReviewAndroid => 'Google Play 스토어에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get rateOnAppStore => 'App Store에서 평가하기';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play에서 평가하기';
-
-  @override
   String get maybeLater => '나중에';
 
   @override
@@ -2099,6 +2087,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ 메모리 편집';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
@@ -9617,4 +9617,7 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       '끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.';
+
+  @override
+  String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
 }

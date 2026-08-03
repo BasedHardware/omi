@@ -25,6 +25,7 @@ covers:
   - desktop/macos/Desktop/Sources/APIKeyService.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
+  - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopDevRuntimeManifest.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
@@ -37,6 +38,7 @@ covers:
   - desktop/macos/Desktop/Sources/ViewExporter.swift
   - desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
   - desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
+  - desktop/macos/Desktop/Sources/Startup/StartupSystemMaintenancePolicy.swift
 preconditions:
   - automation_bridge_ready
 

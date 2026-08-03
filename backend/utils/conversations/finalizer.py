@@ -19,6 +19,8 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.log_sanitizer import sanitize_pii
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,8 @@ async def finalize_persisted_conversation(
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
+        persistence: dict[str, bool] = {'owned': True}
+        derived_effects: list = []
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
@@ -99,17 +103,29 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 force_process=force_process,
-                defer_memory_extraction=True,
+                defer_derived_effects=True,
+                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                derived_effects_observer=derived_effects.append,
             )
-        if not getattr(conversation, 'discarded', False):
-            # A finalization job owns a durable lease. Keep canonical memory
-            # extraction inside that lease so a temporary fail-closed gate
-            # leaves the job retryable instead of dropping the source.
-            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
-        # This is deliberately the only fanout admission read. The lifecycle
+        # If lifecycle persistence lost to discard/terminal state, no canonical
+        # memory or derived side effect may happen.  process_conversation
+        # reports this through the observer and returns without side effects;
+        # the finalizer must honour that result before touching memories.
+        if not persistence['owned']:
+            logger.info(
+                'persisted conversation finalization fenced: lifecycle persistence lost uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
+            return ConversationFinalizationDisposition.fenced
+
+        # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
         # lease, so a discard or superseding generation cannot slip between a
-        # stale pre-read and the integration side effect.
+        # stale pre-read and the derived-effect bundle.  This fence must
+        # precede every derived effect (calendar, usage/app, vector,
+        # action/goal, audio, webhook, memory) so a losing finalizer produces
+        # zero canonical side effects (#10468 r5).
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -117,31 +133,65 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
-        if fanout['status'] == 'claimed':
-            await trigger_external_integrations(
-                uid,
-                conversation,
-                idempotency_key=fanout['fanout_key'],
-                require_delivery=True,
-            )
-            fanout_completed = await run_blocking(
-                db_executor,
-                lifecycle_service.complete_finalization_fanout,
-                finalization_job_id,
-                dispatch_generation,
-                lease_epoch,
-            )
-            if not fanout_completed:
-                raise ConversationFinalizationError('fanout_completion_conflict')
-        elif fanout['status'] == 'fenced':
+        if fanout['status'] == 'completed':
+            return ConversationFinalizationDisposition.completed
+        if fanout['status'] == 'fenced':
             logger.info(
-                'persisted conversation finalization fenced before fanout uid=%s conversation=%s',
+                'persisted conversation finalization fenced before memory extraction uid=%s conversation=%s',
                 uid,
                 conversation_id,
             )
             return ConversationFinalizationDisposition.fenced
-        elif fanout['status'] != 'completed':
+        if fanout['status'] != 'claimed':
             raise ConversationFinalizationError('fanout_lease_conflict')
+
+        # Ownership is now proven.  Emit every derived side effect — calendar,
+        # usage/app, vector, action/goal, audio artifact/enqueue, webhook, and
+        # memory extraction — only behind the winning claim.  A processing
+        # conversation hands the bundle back from process_conversation; an
+        # already-completed replay re-extracts memories behind the proven claim.
+        if derived_effects:
+            await run_blocking(postprocess_executor, derived_effects[0])
+        elif not getattr(conversation, 'discarded', False):
+            # A finalization job owns a durable lease. Keep canonical memory
+            # extraction inside that lease so a temporary fail-closed gate
+            # leaves the job retryable instead of dropping the source.
+            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
+        await trigger_external_integrations(
+            uid,
+            conversation,
+            idempotency_key=fanout['fanout_key'],
+            require_delivery=True,
+        )
+        fanout_completed = await run_blocking(
+            db_executor,
+            lifecycle_service.complete_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if not fanout_completed:
+            raise ConversationFinalizationError('fanout_completion_conflict')
+        # The conversation and all derived effects are now durably finalized.
+        # Persist the content-free capture-arrival intent only after that
+        # commit, and keep this product hint failure-isolated from the source
+        # finalization outcome.
+        source = getattr(conversation, 'source', None)
+        if getattr(source, 'value', source) == 'omi':
+            try:
+                structured = getattr(conversation, 'structured', None)
+                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
+                persist_capture_arrival_intent(
+                    uid,
+                    conversation_id=conversation_id,
+                    summary=summary,
+                )
+            except Exception as error:
+                logger.warning(
+                    'chat-first capture arrival intent failed after finalization uid=%s error=%s',
+                    sanitize_pii(uid),
+                    type(error).__name__,
+                )
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.

@@ -6,8 +6,12 @@ QUALIFIER="$SCRIPT_DIR/../scripts/qualify-desktop-beta.sh"
 CORE_HARNESS="$SCRIPT_DIR/../scripts/desktop-core-harness.sh"
 PROFILE_PREP="$SCRIPT_DIR/../scripts/prepare-qualification-profile.sh"
 SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
+LEASE_COMMAND="$SCRIPT_DIR/../scripts/qualification-lease-command.sh"
+SELF_CLEAN="$SCRIPT_DIR/../scripts/qualification-runner-self-clean.py"
+WATCHDOG="$SCRIPT_DIR/../scripts/qualification-watchdog.py"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
+WORKFLOW="$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
 
 require_text() {
   local pattern="$1"
@@ -47,9 +51,59 @@ require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PR
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'
-require_text 'terminate_qualification_desktop "$BUNDLE"'
+# omi-test-quality: source-inspection -- static contract: detached qualification
+# launches must persist token-bound provenance and can never fall back to broad
+# bundle-id/app-name termination; an isolated live macOS launcher is not portable.
+require_text 'OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN"'
+require_text 'secrets.token_urlsafe(24)'
+require_text 'record_owned_qualification_desktop'
+require_text 'validated_qualification_desktop_pid'
+require_text 'stop_recorded_qualification_desktop'
+require_text 'stat.S_IMODE(signal.stat().st_mode) != 0o600'
+require_text 'target.chmod(0o600)'
+require_text 'command_sha256'
+require_text 'lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN'
+require_text 'qualification automation port remains bound after owned app cleanup'
+require_text 'kill -KILL "$pid"'
+require_text 'refusing unproven qualification app cleanup'
+require_text 'cleanup failed (non-gating after behavioral pass); continuing to evidence registration'
+require_text 'cleanup failed (non-gating on EXIT); preserving residual lease for later reclaim'
+if grep -Eq 'osascript|pkill|kill_process_tree|quit app id' "$QUALIFIER"; then
+  echo "FAIL: qualification cleanup must not use broad app-name or bundle-id termination" >&2
+  exit 1
+fi
+require_order "$QUALIFIER" \
+  'if ! record_owned_qualification_desktop; then' \
+  './scripts/desktop-core-harness.sh --tier 2' \
+  'if ! run_qualification_cleanup; then' \
+  'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
+require_text 'automation bridge healthy on port $port (authenticated; token=$token_file)'
+require_text 'automation_token_lib'
+require_text 'OMI_AUTOMATION_TOKEN_FILE' "$RUN_SH"
+require_text 'OMI_AUTOMATION_TOKEN_FILE="$OMI_AUTOMATION_TOKEN_FILE"'
+require_text 'omi_automation_token_file'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
-require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" prepare'
+require_text 'QUALIFICATION_CACHE_LEASE_ID'
+require_text 'QUALIFICATION_CACHE_LEASE_TOKEN'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" release'
+require_text 'qualification-cache-reclaim.py' "$SWIFT_CACHE"
+require_text 'qualification-runner-self-clean.py' "$WORKFLOW"
+require_text 'qualification-watchdog.py' "$WORKFLOW"
+require_text '--current-run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' "$WORKFLOW"
+require_text '--max-reclaim-kib 134217728' "$WORKFLOW"
+require_text 'runner-hygiene.json' "$WORKFLOW"
+require_text '--label m1-desktop-qualification' "$WORKFLOW"
+require_text '--heartbeat-seconds 45' "$WORKFLOW"
+require_text '--timeout-seconds 14400' "$WORKFLOW"
+require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
+require_text 'acquire)' "$LEASE_COMMAND"
+require_text 'preflight-fault-cleanup)' "$LEASE_COMMAND"
+require_text 'release)' "$LEASE_COMMAND"
+require_text 'qualification-lease-command.sh' "$QUALIFIER"
+require_text 'OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"'
+require_text 'OMI_AUTOMATION_PORT="$((47777 + QUALIFICATION_PORT_OFFSET))"'
+require_text 'QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"'
 if grep -Fq 'worktree add' "$QUALIFIER" || grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
   echo "FAIL: qualification must use the persistent exact-SHA source directly" >&2
   exit 1
@@ -59,12 +113,15 @@ require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
 
 # Acceleration changes bootstrap only. The signed-artifact, static self-check,
 # Tier-2, fault-suite, evidence, and newest-candidate gates remain mandatory.
+# Runner-hygiene final-cleanup is best-effort after those behavioral gates
+# (must not fence a green T2+fault solely on lease-lineage cleanup).
+require_text 'non-gating after behavioral pass'
 require_text 'python3 "$KEYVALUE_PY" preflight-release'
 require_text './scripts/desktop-core-harness.sh --self-check --skip-backend-contracts'
 require_text './scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack'
 require_text 'python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"'
 require_text './scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"'
-require_text 'manifest.get("passed") is not True or manifest.get("tier") != "fault"'
+require_text 'python3 "$KEYVALUE_PY" check-fault-manifest "$FAULT_EVIDENCE/manifest.json"'
 require_text 'evidence["automatic_gates"] = ["signed-artifact", "static-self-check", "tier-2", "fault-suite"]'
 require_text 'if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]'
 require_text 'python3 "$KEYVALUE_PY" update-qualified-beta'
@@ -96,10 +153,43 @@ require_order "$QUALIFIER" \
   'wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"' \
   'SECONDS=0' \
   'wait_for_bridge "$AUTOMATION_PORT"'
+# The middle needle carries the env-forwarding expansion added by 4a68e31c83,
+# which is what broke the previous literal `open "$APP_PATH"`. The contract is
+# unchanged and still exact: run.sh dispatches an `open` of the built bundle
+# between announcing the start and signalling that the launch went out.
 require_order "$RUN_SH" \
   'step "Starting app..."' \
-  'open "$APP_PATH"' \
+  'open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH"' \
   'signal_desktop_launch'
+
+# Runner-only listener cleanup must prove its exact token/PID/port lineage before
+# the expensive app build or any user-flow suite. Unknown listeners still fail
+# closed, and phase timings make the 20-minute target measurable without
+# weakening artifact, Tier-2, or fault evidence.
+require_order "$QUALIFIER" \
+  'phase_begin "fault-listener-preflight" "runner-hygiene-cleanup"' \
+  '"$LEASE_COMMAND" preflight-fault-cleanup' \
+  'phase_begin "desktop-preparation" "runner-hygiene-cleanup"' \
+  'phase_begin "tier-2-user-flows" "user-visible-behavioral-fault"' \
+  'phase_begin "fault-user-flow" "user-visible-behavioral-fault"' \
+  'phase_begin "final-cleanup" "runner-hygiene-cleanup"'
+require_text '"target_seconds": 1200'
+require_text 'OMI_QUALIFICATION_TIMINGS_FILE' "$QUALIFIER"
+require_text 'OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT' "$QUALIFIER"
+require_text '/phase-timings.json' "$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
+require_text '/fault-listener-preflight.json' "$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
+
+# The canonical qualification owns the only M1 qualification lease lifecycle.
+# Its ordered preflight/final cleanup is retained as artifact evidence; no
+# standalone local-proof job may create an earlier duplicate lease.
+if grep -Fq 'local-proof-m1' "$WORKFLOW" || grep -Fq 'qualification-local-proof.sh' "$WORKFLOW"; then
+  echo "FAIL: qualification workflow must not retain a duplicate local-proof lifecycle" >&2
+  exit 1
+fi
+require_order "$WORKFLOW" \
+  'qualify-m1-studio:' \
+  'fault-listener-preflight.json' \
+  'phase-timings.json'
 
 if [[ ! -x "$PROFILE_PREP" ]]; then
   echo "FAIL: missing executable qualification profile preparation helper" >&2
@@ -107,6 +197,14 @@ if [[ ! -x "$PROFILE_PREP" ]]; then
 fi
 if [[ ! -x "$SWIFT_CACHE" ]]; then
   echo "FAIL: missing executable exact-source qualification Swift cache helper" >&2
+  exit 1
+fi
+if [[ ! -x "$LEASE_COMMAND" ]]; then
+  echo "FAIL: missing executable qualification lease command helper" >&2
+  exit 1
+fi
+if [[ ! -x "$SELF_CLEAN" || ! -x "$WATCHDOG" ]]; then
+  echo "FAIL: missing executable qualification self-clean/watchdog helper" >&2
   exit 1
 fi
 

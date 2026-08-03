@@ -36,6 +36,7 @@ extension SettingsContentView {
           if isToggling {
             ProgressView()
               .scaleEffect(0.8)
+              .frame(width: 36, height: 20)
           } else {
             Toggle(
               "",
@@ -49,6 +50,7 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }
@@ -81,6 +83,7 @@ extension SettingsContentView {
           if isTogglingTranscription {
             ProgressView()
               .scaleEffect(0.8)
+              .frame(width: 36, height: 20)
           } else {
             Toggle(
               "",
@@ -94,6 +97,7 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }

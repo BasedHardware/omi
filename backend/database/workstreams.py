@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
+
+from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1 import FieldFilter
 import database.goals as goals_db
 from database._client import get_firestore_client
@@ -13,7 +15,7 @@ from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
 from models.goal import GoalResponse, GoalStatus
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 from models.workstream import (
     ArtifactDescriptor,
     ArtifactDescriptorCreate,
@@ -150,7 +152,7 @@ def _begin_mutation(
     firestore_client: Any,
 ) -> tuple[Any, Optional[dict[str, Any]], str]:
     control_snapshot = _control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
-    _validate_control(control_snapshot, account_generation=account_generation)
+    _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
     receipt_ref = _mutation_receipt_ref(
         uid,
         operation=operation,
@@ -185,14 +187,14 @@ def _finish_mutation(
     )
 
 
-def _validate_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise WorkstreamConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise WorkstreamGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise WorkstreamConflictError('canonical workflow writes are disabled')
 
 
 def _assert_workstream_generation(snapshot: Any, *, account_generation: int) -> None:
@@ -463,7 +465,7 @@ def append_workstream_event(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
@@ -861,7 +863,7 @@ def resolve_workstream_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise WorkstreamNotFoundError(candidate.candidate_id)
@@ -994,7 +996,7 @@ def resolve_work_intent(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if receipt_snapshot.exists:
             stored = _snapshot_dict(receipt_snapshot)
@@ -1196,7 +1198,7 @@ def import_task_goal_links(
     @firestore.transactional
     def reserve(write_transaction):
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if receipt_snapshot.exists:
             receipt = _snapshot_dict(receipt_snapshot)
@@ -1227,7 +1229,7 @@ def import_task_goal_links(
         @firestore.transactional
         def apply(write_transaction):
             control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-            _validate_control(control_snapshot, account_generation=account_generation)
+            _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
             receipt_snapshot = receipt_ref.get(transaction=write_transaction)
             if not receipt_snapshot.exists:
                 raise WorkstreamConflictError('migration receipt disappeared')
@@ -1300,7 +1302,7 @@ def import_task_goal_links(
     @firestore.transactional
     def complete(write_transaction):
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _validate_control(control_snapshot, account_generation=account_generation)
+        _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
         receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if not receipt_snapshot.exists:
             raise WorkstreamConflictError('migration receipt disappeared')

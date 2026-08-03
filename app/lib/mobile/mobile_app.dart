@@ -1,4 +1,3 @@
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -103,7 +102,6 @@ class _PermissionsGateState extends State<_PermissionsGate> {
     if (_permissionsGranted!) {
       return const HomePageWrapper();
     }
-    PlatformManager.instance.analytics.permissionsInterstitialShown();
     return const PermissionsInterstitialPage();
   }
 }

@@ -14,8 +14,8 @@
 // signal). The full packaged proof that the chain LOADS lives in
 // scripts/verify-kgworker-packaged.mjs (heavy; run on a real build).
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import builderConfig from '../electron-builder.config.mjs'
 import {
@@ -34,12 +34,18 @@ const ROOT = 'better-sqlite3'
 // large tree are dead weight at runtime. Keep this list tiny and justified.
 const INSTALL_TIME_ONLY = new Set(['prebuild-install'])
 
-// Resolve a package dir by walking node_modules up from `fromDir` (node's algorithm).
-function resolvePkgDir(name) {
-  let dir = WIN_ROOT
+// Resolve a package dir by walking node_modules up from `fromDir` (Node's
+// algorithm). The CI install can retain a transitive dependency below its
+// consumer even though the packaged app later re-flattens it at the root.
+function resolvePkgDir(name, fromDir) {
+  let dir = fromDir
   for (;;) {
-    const candidate = join(dir, 'node_modules', name)
-    if (existsSync(join(candidate, 'package.json'))) return candidate
+    // At a node_modules directory, Node goes to its parent before adding the
+    // next lookup candidate; it never probes node_modules/node_modules.
+    if (basename(dir) !== 'node_modules') {
+      const candidate = join(dir, 'node_modules', name)
+      if (existsSync(join(candidate, 'package.json'))) return realpathSync(candidate)
+    }
     const parent = dirname(dir)
     if (parent === dir) return null
     dir = parent
@@ -51,18 +57,20 @@ function resolvePkgDir(name) {
 // the worker; it may safely over-approximate the exact require() closure (extra
 // unpacked files are harmless) but must never under-approximate.
 function walkDeclaredRuntimeClosure() {
-  const seen = new Set()
-  const queue = [ROOT]
+  const locations = new Map()
+  const queue = [{ name: ROOT, fromDir: WIN_ROOT }]
   while (queue.length) {
-    const name = queue.shift()
-    if (seen.has(name) || INSTALL_TIME_ONLY.has(name)) continue
-    seen.add(name)
-    const dir = resolvePkgDir(name)
-    if (!dir) continue // unresolved names still surface in `seen` → equality fails loud
+    const { name, fromDir } = queue.shift()
+    if (locations.has(name) || INSTALL_TIME_ONLY.has(name)) continue
+    const dir = resolvePkgDir(name, fromDir)
+    locations.set(name, dir)
+    if (!dir) continue // unresolved names still surface in `locations` → equality fails loud
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-    for (const dep of Object.keys(pkg.dependencies ?? {})) queue.push(dep)
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      queue.push({ name: dep, fromDir: dir })
+    }
   }
-  return seen
+  return locations
 }
 
 describe('kgWorker native-module closure', () => {
@@ -75,12 +83,13 @@ describe('kgWorker native-module closure', () => {
     }
   })
 
-  it('every declared closure package resolves in node_modules', () => {
+  it('every declared closure package resolves from its runtime consumer', () => {
+    const locations = walkDeclaredRuntimeClosure()
     for (const name of KGWORKER_NATIVE_PACKAGES) {
       expect(
-        existsSync(join(WIN_ROOT, 'node_modules', name, 'package.json')),
+        locations.get(name),
         `${name} not installed — the closure references a package that no longer exists`
-      ).toBe(true)
+      ).toBeTruthy()
     }
   })
 
@@ -89,7 +98,7 @@ describe('kgWorker native-module closure', () => {
     // bindings for node-gyp-build, or bindings adds a new pure-JS dep — the walked
     // set diverges from the pinned list and this goes RED. Re-derive
     // KGWORKER_NATIVE_PACKAGES (and re-run pnpm verify:kgworker) when it does.
-    const walked = [...walkDeclaredRuntimeClosure()].sort()
+    const walked = [...walkDeclaredRuntimeClosure().keys()].sort()
     expect(
       walked,
       'better-sqlite3’s declared runtime deps changed — re-derive KGWORKER_NATIVE_PACKAGES ' +

@@ -161,11 +161,12 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
 
     resolve_index = workflow.index("- name: Resolve production pusher runtime targets")
     reconcile_index = workflow.index("- name: Apply non-secret pusher runtime config")
-    preflight_index = workflow.index("- name: Preflight pusher ConfigMap and Secret references")
+    existing_preflight_index = workflow.index("- name: Preflight existing pusher ConfigMap and Secret references")
+    preflight_index = workflow.index("- name: Verify reconciled pusher ConfigMap and Secret references")
     helm_index = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
     reconcile = workflow[reconcile_index:preflight_index]
 
-    assert resolve_index < reconcile_index < preflight_index < helm_index
+    assert resolve_index < existing_preflight_index < reconcile_index < preflight_index < helm_index
     assert all(f"          {name}:" in reconcile for name in required_config | prod_only_config)
     assert "backend/scripts/deploy-backend-config.sh" in reconcile
     assert "secrets." not in reconcile
@@ -178,8 +179,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
-        "STT_PRERECORDED_MODEL": "modulate-velma-2,parakeet",
+        "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}

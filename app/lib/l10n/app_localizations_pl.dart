@@ -1794,20 +1794,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get lovingOmi => 'Podoba Ci się Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w App Store. Twoja opinia wiele dla nas znaczy!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w Google Play Store. Twoja opinia wiele dla nas znaczy!';
-
-  @override
-  String get rateOnAppStore => 'Oceń w App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Oceń w Google Play';
-
-  @override
   String get maybeLater => 'Może później';
 
   @override
@@ -2142,6 +2128,18 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edytuj wspomnienie';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Lubię jeść lody...';
@@ -9807,4 +9805,7 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Zbyt stare, aby zsynchronizować — Omi nie może tego przyjąć';
 }

@@ -18,9 +18,21 @@ BACKEND_PORT = 8000
 DESKTOP_BACKEND_PORT = 10201
 REDIS_PORT = 6380
 TYPESENSE_PORT = 8108
+# The official container listens on its internal default unless an explicit
+# --api-port is supplied. Harness instances vary only the loopback host port.
+TYPESENSE_CONTAINER_PORT = 8108
 TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
+PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
+PORT_OVERRIDE_ENVS = {
+    "firestore": "OMI_HARNESS_FIRESTORE_PORT",
+    "auth": "OMI_HARNESS_AUTH_PORT",
+    "backend": "OMI_HARNESS_BACKEND_PORT",
+    "desktop_backend": "OMI_HARNESS_DESKTOP_BACKEND_PORT",
+    "redis": "OMI_HARNESS_REDIS_PORT",
+    "typesense": "OMI_HARNESS_TYPESENSE_PORT",
+}
 PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = (
     "OPENAI_API_KEY",
@@ -46,12 +58,29 @@ class HarnessConfig:
     layout: safety.HarnessLayout
     project_id: str = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
     database_id: str = safety.DEFAULT_FIRESTORE_DATABASE_ID
-    firestore_host: str = f"127.0.0.1:{FIRESTORE_PORT}"
-    auth_host: str = f"127.0.0.1:{AUTH_PORT}"
-    backend_host: str = f"127.0.0.1:{BACKEND_PORT}"
-    desktop_backend_host: str = f"127.0.0.1:{DESKTOP_BACKEND_PORT}"
+    firestore_port: int = FIRESTORE_PORT
+    auth_port: int = AUTH_PORT
+    backend_port: int = BACKEND_PORT
+    desktop_backend_port: int = DESKTOP_BACKEND_PORT
     redis_host: str = "127.0.0.1"
     redis_port: int = REDIS_PORT
+    typesense_port: int = TYPESENSE_PORT
+
+    @property
+    def firestore_host(self) -> str:
+        return f"127.0.0.1:{self.firestore_port}"
+
+    @property
+    def auth_host(self) -> str:
+        return f"127.0.0.1:{self.auth_port}"
+
+    @property
+    def backend_host(self) -> str:
+        return f"127.0.0.1:{self.backend_port}"
+
+    @property
+    def desktop_backend_host(self) -> str:
+        return f"127.0.0.1:{self.desktop_backend_port}"
 
     @property
     def redis_url(self) -> str:
@@ -76,6 +105,43 @@ def repo_root_from(path: Path) -> Path:
 
 def provider_mode_from_env(env: Mapping[str, str] | None = None) -> str:
     return providers.provider_mode_from_env(env)
+
+
+def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
+    raw = source.get(PORT_OVERRIDE_ENVS[name], "").strip()
+    try:
+        value = int(raw) if raw else default + offset
+    except ValueError as exc:
+        raise safety.SafetyError(f"{PORT_OVERRIDE_ENVS[name]} must be an integer, got {raw!r}") from exc
+    if not 1 <= value <= 65535:
+        raise safety.SafetyError(f"{PORT_OVERRIDE_ENVS[name]} resolved outside valid port range: {value}")
+    return value
+
+
+def harness_ports_from_env(env: Mapping[str, str] | None = None) -> dict[str, int]:
+    """Resolve one isolated loopback port set while preserving dev defaults."""
+
+    source = os.environ if env is None else env
+    raw_offset = source.get(PORT_OFFSET_ENV, "0").strip()
+    try:
+        offset = int(raw_offset)
+    except ValueError as exc:
+        raise safety.SafetyError(f"{PORT_OFFSET_ENV} must be an integer, got {raw_offset!r}") from exc
+    if not 0 <= offset <= 50000:
+        raise safety.SafetyError(f"{PORT_OFFSET_ENV} must be between 0 and 50000, got {offset}")
+    defaults = {
+        "firestore": FIRESTORE_PORT,
+        "auth": AUTH_PORT,
+        "backend": BACKEND_PORT,
+        "desktop_backend": DESKTOP_BACKEND_PORT,
+        "redis": REDIS_PORT,
+        "typesense": TYPESENSE_PORT,
+    }
+    ports = {name: _port_from_env(source, name, default, offset) for name, default in defaults.items()}
+    duplicates = sorted(port for port in set(ports.values()) if list(ports.values()).count(port) > 1)
+    if duplicates:
+        raise safety.SafetyError(f"Harness ports must be distinct; duplicate values: {duplicates}")
+    return ports
 
 
 def secrets_file_path(cfg: HarnessConfig) -> Path:
@@ -159,7 +225,19 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         if create_layout
         else safety.layout_for_instance(repo_root, instance, source)
     )
-    cfg = HarnessConfig(repo_root=repo_root.resolve(), instance=instance, provider_mode=provider_mode, layout=layout)
+    ports = harness_ports_from_env(source)
+    cfg = HarnessConfig(
+        repo_root=repo_root.resolve(),
+        instance=instance,
+        provider_mode=provider_mode,
+        layout=layout,
+        firestore_port=ports["firestore"],
+        auth_port=ports["auth"],
+        backend_port=ports["backend"],
+        desktop_backend_port=ports["desktop_backend"],
+        redis_port=ports["redis"],
+        typesense_port=ports["typesense"],
+    )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
         provider_mode = provider_mode_from_env({**dict(source), **parsed.secrets})
@@ -168,6 +246,12 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             instance=cfg.instance,
             provider_mode=provider_mode,
             layout=cfg.layout,
+            firestore_port=cfg.firestore_port,
+            auth_port=cfg.auth_port,
+            backend_port=cfg.backend_port,
+            desktop_backend_port=cfg.desktop_backend_port,
+            redis_port=cfg.redis_port,
+            typesense_port=cfg.typesense_port,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
@@ -213,6 +297,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
         "MEMORY_CANONICAL_USERS": canonical_users,
+        "MEMORY_MODE": "read",
+        "MEMORY_ENABLED_USERS": canonical_users,
+        "MEMORY_CANONICAL_CONSOLIDATION_ENABLED": "true",
         "REDIS_DB_HOST": cfg.redis_host,
         "REDIS_DB_PORT": str(cfg.redis_port),
         "REDIS_DB_PASSWORD": "",
@@ -220,7 +307,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "ENCRYPTION_SECRET": "omi_local_dev_harness_32_byte_test_secret_not_prod",
         "ADMIN_KEY": "local-dev-admin-key-",
         "TYPESENSE_HOST": "127.0.0.1",
-        "TYPESENSE_HOST_PORT": str(TYPESENSE_PORT),
+        "TYPESENSE_HOST_PORT": str(cfg.typesense_port),
         "TYPESENSE_API_KEY": LOCAL_TYPESENSE_API_KEY,
         "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
@@ -231,7 +318,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
 def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     extra = {
         **_harness_service_extra(cfg),
-        "PORT": str(BACKEND_PORT),
+        "PORT": str(cfg.backend_port),
         "PYTHONUNBUFFERED": "1",
         "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }
@@ -246,7 +333,7 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
 def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     extra = {
         **_harness_service_extra(cfg),
-        "PORT": str(DESKTOP_BACKEND_PORT),
+        "PORT": str(cfg.desktop_backend_port),
         "USE_VERTEX_AI": "false",
         "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }

@@ -7,9 +7,11 @@ umask 077
 
 usage() {
   cat <<'USAGE'
-Usage: qualification-swift-cache.sh prepare <40-char-source-sha> <source-repository>
+Usage:
+  qualification-swift-cache.sh prepare <40-char-source-sha> <source-repository> <lease-id> <owner-pid>
+  qualification-swift-cache.sh release <40-char-source-sha> <lease-id> <owner-pid> <lease-token>
 
-Prints the persistent exact-SHA source path on stdout. Diagnostics go to stderr.
+Prepare prints a JSON source/lease capability on stdout. Diagnostics go to stderr.
 
 Environment (test overrides are intentionally explicit):
   OMI_QUALIFICATION_SWIFT_CACHE_ROOT   Root (default: ~/Library/Caches/OmiDesktop/qualification-swiftpm-v2)
@@ -20,19 +22,53 @@ Environment (test overrides are intentionally explicit):
 USAGE
 }
 
-[[ $# -eq 3 && "$1" == "prepare" ]] || { usage >&2; exit 2; }
+[[ $# -eq 5 ]] || { usage >&2; exit 2; }
+ACTION="$1"
 SOURCE_SHA="$2"
-SOURCE_REPOSITORY="$3"
 [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
   echo "qualification Swift cache: invalid source SHA: $SOURCE_SHA" >&2
   exit 2
 }
+if [[ "$ACTION" == "prepare" ]]; then
+  SOURCE_REPOSITORY="$3"
+  LEASE_ID="$4"
+  OWNER_PID="$5"
+else
+  LEASE_ID="$3"
+  OWNER_PID="$4"
+  LEASE_TOKEN="$5"
+fi
+[[ "$LEASE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,95}$ ]] || {
+  echo "qualification Swift cache: invalid lease ID: $LEASE_ID" >&2
+  exit 2
+}
+[[ "$OWNER_PID" =~ ^[1-9][0-9]*$ ]] || {
+  echo "qualification Swift cache: invalid owner PID: $OWNER_PID" >&2
+  exit 2
+}
+
+CACHE_ROOT="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
+CACHE_CONTROL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/qualification-cache-reclaim.py"
+
+if [[ "$ACTION" == "release" ]]; then
+  [[ -x "$CACHE_CONTROL" ]] || {
+    echo "qualification Swift cache: missing cache lease authority: $CACHE_CONTROL" >&2
+    exit 1
+  }
+  python3 "$CACHE_CONTROL" lease-release \
+    --cache-root "$CACHE_ROOT" \
+    --source-sha "$SOURCE_SHA" \
+    --lease-id "$LEASE_ID" \
+    --owner-pid "$OWNER_PID" \
+    --token "$LEASE_TOKEN"
+  exit 0
+fi
+[[ "$ACTION" == "prepare" ]] || { usage >&2; exit 2; }
 git -C "$SOURCE_REPOSITORY" rev-parse --git-dir >/dev/null 2>&1 || {
   echo "qualification Swift cache: source repository is not Git: $SOURCE_REPOSITORY" >&2
   exit 1
 }
 
-CACHE_ROOT="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
 CACHE_DIR="$CACHE_ROOT/$SOURCE_SHA"
 PERSISTENT_SOURCE="$CACHE_DIR/source"
 PACKAGE_DIR="$PERSISTENT_SOURCE/desktop/macos/Desktop"
@@ -102,6 +138,11 @@ PY
   echo "qualification Swift cache: refusing symlinked cache path component: $symlinked_component" >&2
   exit 1
 }
+[[ -x "$CACHE_CONTROL" ]] || {
+  echo "qualification Swift cache: missing cache lease authority: $CACHE_CONTROL" >&2
+  exit 1
+}
+python3 "$CACHE_CONTROL" wait-for-reclaim --cache-root "$CACHE_ROOT" --timeout-seconds 60
 LOCK_DIR="$CACHE_ROOT/.${SOURCE_SHA}.lock"
 for _ in {1..1200}; do
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -138,17 +179,108 @@ if [[ -e "$CACHE_DIR" && ! -d "$CACHE_DIR" ]]; then
   exit 1
 fi
 
+# Materialize an exact-SHA detached checkout into $1.
+# Prefer a local no-hardlinks clone of the Actions/worktree source (fast, offline).
+# Trusted M1 Actions checkouts are often partial/promisor clones; cloning them
+# locally inherits the promisor and fails checkout with:
+#   could not fetch … from promisor remote / possible repository corruption (exit 128)
+# Fall back to fetching the exact SHA from the source's origin URL when local
+# materialization fails and origin is configured (incident #10809 / v0.12.143).
+materialize_exact_source_checkout() {
+  local dest="$1"
+  local err_log="$TEMP_DIR/materialize-exact-source.err"
+  local origin_url=""
+  local force_origin=0
+
+  case "${OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE:-auto}" in
+    origin) force_origin=1 ;;
+    local | auto) ;;
+    *)
+      echo "qualification Swift cache: invalid OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE=${OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE}" >&2
+      return 2
+      ;;
+  esac
+
+  rm -rf "$dest"
+  : >"$err_log"
+
+  # A blobless/promisor source can make `git checkout` report success and set HEAD
+  # while tracked blobs are still missing (worktree paths deleted / invalid objects).
+  # Reject that incomplete materialization so auto mode can fall back to origin.
+  local_checkout_is_complete() {
+    local tree="$1"
+    [[ "$(git -C "$tree" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]] || return 1
+    # Worktree must match HEAD (missing blobs often surface as deleted paths).
+    git -C "$tree" diff-index --quiet HEAD -- 2>>"$err_log" || return 1
+    # Critical package identity must resolve as a real blob + regular file.
+    git -C "$tree" cat-file -e "HEAD:desktop/macos/Desktop/Package.swift" 2>>"$err_log" || return 1
+    [[ -f "$tree/desktop/macos/Desktop/Package.swift" ]] || return 1
+    if git -C "$SOURCE_REPOSITORY" cat-file -e "$SOURCE_SHA:desktop/macos/Desktop/Package.resolved" 2>/dev/null; then
+      git -C "$tree" cat-file -e "HEAD:desktop/macos/Desktop/Package.resolved" 2>>"$err_log" || return 1
+      [[ -f "$tree/desktop/macos/Desktop/Package.resolved" ]] || return 1
+    fi
+    return 0
+  }
+
+  try_local_clone() {
+    rm -rf "$dest"
+    git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$dest" 2>>"$err_log" || return 1
+    # Reject checkout failures explicitly (do not treat partial success as OK).
+    if ! git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log"; then
+      return 1
+    fi
+    local_checkout_is_complete "$dest"
+  }
+
+  try_origin_fetch() {
+    origin_url="$(git -C "$SOURCE_REPOSITORY" remote get-url origin 2>/dev/null || true)"
+    if [[ -z "$origin_url" ]]; then
+      echo "qualification Swift cache: cannot fall back to origin fetch; source has no origin remote" >&2
+      return 1
+    fi
+    echo "qualification Swift cache: materializing exact source via origin fetch" >&2
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    git -C "$dest" init -q
+    git -C "$dest" remote add origin "$origin_url"
+    # Prefer a single-SHA fetch; widen only if the host rejects depth on that ref.
+    if ! git -C "$dest" fetch --quiet --depth=1 origin "$SOURCE_SHA" 2>>"$err_log"; then
+      git -C "$dest" fetch --quiet origin "$SOURCE_SHA" 2>>"$err_log" || return 1
+    fi
+    git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log" || return 1
+    local_checkout_is_complete "$dest"
+  }
+
+  if [[ "$force_origin" -eq 1 ]]; then
+    try_origin_fetch || {
+      echo "qualification Swift cache: origin exact-source materialization failed for $SOURCE_SHA" >&2
+      cat "$err_log" >&2 || true
+      return 1
+    }
+  elif try_local_clone; then
+    :
+  else
+    echo "qualification Swift cache: local exact-source clone failed; trying origin fetch fallback" >&2
+    cat "$err_log" >&2 || true
+    : >"$err_log"
+    try_origin_fetch || {
+      echo "qualification Swift cache: exact-source materialization failed for $SOURCE_SHA" >&2
+      cat "$err_log" >&2 || true
+      return 1
+    }
+  fi
+
+  [[ "$(git -C "$dest" rev-parse HEAD)" == "$SOURCE_SHA" ]] || {
+    echo "qualification Swift cache: cloned source SHA does not match candidate $SOURCE_SHA" >&2
+    return 1
+  }
+}
+
 CACHE_STATE="HIT"
 if [[ ! -e "$CACHE_DIR" ]]; then
   CACHE_STATE="MISS"
   TEMP_DIR="$(mktemp -d "$CACHE_ROOT/.${SOURCE_SHA}.prepare.XXXXXX")"
-  mkdir "$TEMP_DIR/source"
-  git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$TEMP_DIR/source"
-  git -C "$TEMP_DIR/source" checkout --quiet --detach "$SOURCE_SHA"
-  [[ "$(git -C "$TEMP_DIR/source" rev-parse HEAD)" == "$SOURCE_SHA" ]] || {
-    echo "qualification Swift cache: cloned source SHA does not match candidate $SOURCE_SHA" >&2
-    exit 1
-  }
+  materialize_exact_source_checkout "$TEMP_DIR/source" || exit 1
   mkdir -p "$TEMP_DIR/source/desktop/macos/Desktop/.build"
   CACHE_DIR="$TEMP_DIR"
   PERSISTENT_SOURCE="$CACHE_DIR/source"
@@ -246,5 +378,12 @@ else
   PERSISTENT_SOURCE="$CACHE_DIR/source"
 fi
 
+LEASE_JSON="$(
+  python3 "$CACHE_CONTROL" lease-acquire \
+    --cache-root "$CACHE_ROOT" \
+    --source-sha "$SOURCE_SHA" \
+    --lease-id "$LEASE_ID" \
+    --owner-pid "$OWNER_PID"
+)"
 echo "qualification Swift cache $CACHE_STATE: source=$SOURCE_SHA path=$PERSISTENT_SOURCE" >&2
-printf '%s\n' "$PERSISTENT_SOURCE"
+printf '%s\n' "$LEASE_JSON"

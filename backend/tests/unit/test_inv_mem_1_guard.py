@@ -47,11 +47,19 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "user_root",
         "memory_items",
         "memory_operations",
+        # Immutable source-replacement receipts are journal metadata, not a
+        # second product-memory collection or product tier.
+        "memory_source_replacements",
         "memory_outbox",
         "memory_control_state",
+        # Migration checkpoint under memory_control (not a product-memory tier store).
+        "legacy_canonical_backfill_checkpoint",
         "memory_apply_control_state",
         "memory_lineage",
         "memory_evidence",
+        "memory_graph_assertions",
+        # Existing review surface, now centralized through MemoryCollections.
+        "memory_review_queue",
         "memory_runs",
         "memory_import_runs",
         "memory_import_artifacts",
@@ -145,7 +153,7 @@ def _vector_hit(item: MemoryItem, *, score: float = 0.9) -> SearchVectorHit:
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id="commit_proj",
+        projection_commit_id=item.ledger_commit_id or "commit_proj",
         vector_updated_at=item.updated_at,
         uid=item.uid,
         account_generation=item.account_generation,

@@ -28,6 +28,7 @@ export type Memory = {
   manually_added?: boolean
   capture_confidence?: number | null
   app_id?: string | null
+  evidence?: Array<{ source_type?: string | null }>
 }
 
 // Axios lowercases response header keys.
@@ -38,17 +39,9 @@ const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
 
-// Fetch EVERY memory for the page, not just the first server page. The backend
-// forces limit=5000 whenever offset is 0, so the old single
-// `GET /v3/memories?limit=500&offset=0` call silently capped the page at the
-// server's first ~5000 rows and never requested a second page — an account with
-// more than 5000 memories would never see the tail (while bulk export/purge,
-// which already paged via fetchAllMemories, reached all of them). Reuse the one
-// shared pager so display and bulk paths can't drift, and read the
-// canonical-lifecycle capability header off the first response to gate the
-// tier/device filters. Then sort newest-first: the server doesn't return
-// memories in created_at order, so freshly created/imported ones would
-// otherwise land mid-list and look "missing".
+// Fetch EVERY memory for the page via the shared pager (server page cap 500).
+// Read canonical-lifecycle capability header off the first response; sort
+// newest-first because the server does not guarantee created_at order.
 async function fetchMemories(): Promise<Memory[]> {
   const list = await fetchAllMemoriesPaged((r) => {
     const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]

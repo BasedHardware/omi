@@ -1,3 +1,0 @@
-{
-  "change": "Fixed sign-in and sign-out crashing when the app's Firebase configuration is unavailable"
-}

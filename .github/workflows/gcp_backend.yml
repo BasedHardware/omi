@@ -113,7 +113,7 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
         run: |
@@ -167,7 +167,7 @@ jobs:
     permissions:
       actions: 'read'
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
       break_glass: ${{ steps.admitted_source.outputs.break_glass }}
@@ -338,7 +338,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
         run: |
@@ -418,10 +418,15 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
+          # Match auto-dev: complete tag-only targets (revision+tag+https URL, no
+          # percent) are not serving traffic. Without this flag the verifier
+          # misreports them as "non-integer Cloud Run traffic percentage" and
+          # blocks manual deploys whenever diagnostic tags remain on the service.
           python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_ledger_fence_transition.py" \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE" \
+            --allow-tagged-no-percent-targets
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -594,6 +599,7 @@ jobs:
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
             --vpc-egress private-ranges-only \
             --lane omi:auto:public-shared-conversation-chat \
+            --lane omi:auto:memory-l2 \
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Reject an inert gateway endpoint when source-controlled gateway mode is requested
@@ -657,6 +663,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             ${{ github.event.inputs.environment == 'development' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
+            --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -691,7 +698,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -755,7 +762,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
@@ -862,7 +869,7 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
           STT_SERVICE_MODELS: modulate-velma-2,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}

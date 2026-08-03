@@ -1,7 +1,9 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readFile } from 'fs/promises'
-import { resolve, sep } from 'path'
-import { getPrimarySourceId } from '../rewind/sourceId'
+import {
+  getPrimarySourceId,
+  getRewindCaptureSourceId,
+  isCurrentRewindCaptureSource
+} from '../rewind/sourceId'
 import {
   listRewindFrames,
   listRewindFramesSampled,
@@ -24,6 +26,7 @@ import { getCaptureDirective } from '../rewind/captureDirective'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
+import { readRewindFrame } from '../rewind/frameFile'
 import type { RewindSettings } from '../../shared/types'
 
 /** How many semantic neighbours to pull before the similarity floor + the
@@ -120,12 +123,7 @@ export function registerRewindHandlers(): void {
     getRewindFrameOcrLines(frameId)
   )
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
-    const root = resolve(rewindRoot())
-    const full = resolve(imagePath)
-    if (full !== root && !full.startsWith(root + sep)) {
-      throw new Error('invalid frame path')
-    }
-    const buf = await readFile(full)
+    const buf = await readRewindFrame(rewindRoot(), imagePath)
     return `data:image/jpeg;base64,${buf.toString('base64')}`
   })
   ipcMain.handle('rewind:getSettings', async () => getRewindSettings())
@@ -151,9 +149,28 @@ export function registerRewindHandlers(): void {
   // take several seconds on some machines, so it's prewarmed at startup; this
   // is an instant cache hit in the normal case.
   ipcMain.handle('rewind:primarySourceId', async () => getPrimarySourceId())
+  // Rewind follows the foreground window across displays while retaining one
+  // persistent stream. Source enumeration is cached; each lookup is cheap.
+  ipcMain.handle('rewind:captureSourceId', async () => getRewindCaptureSourceId())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
-  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array) =>
-    ingestRewindFrame(Buffer.from(data))
-  )
+  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array, sourceId: string) => {
+    // Foreground focus can move again while getUserMedia opens a new display.
+    // Never attach the new window's metadata/privacy decision to stale pixels.
+    if (!(await isCurrentRewindCaptureSource(sourceId))) {
+      return { captured: false, reason: 'display-changed' }
+    }
+    const result = await ingestRewindFrame(Buffer.from(data))
+    // A stored frame bumps the all-time frame count. Tell open windows so the
+    // Hub's "Screenshots" stat re-reads live instead of freezing at whatever it
+    // was when the Hub mounted (it fetches the count once and has no other
+    // refresh trigger). Only fire when a frame was actually stored — deduped /
+    // idle / locked frames don't change the count.
+    if (result.captured) {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) w.webContents.send('rewind:captured')
+      }
+    }
+    return result
+  })
 }

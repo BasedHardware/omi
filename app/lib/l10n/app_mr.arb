@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "App Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store वर रेट करा",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play वर रेट करा",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "कदाचित नंतर",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "१,२०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
+    "basicPlanDescription": "३०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -10583,6 +10567,7 @@
     "syncStatusWaiting": "सिंक होण्याची प्रतीक्षा",
     "syncStatusRetrying": "प्रक्रिया करता आली नाही — पुन्हा प्रयत्न",
     "syncStatusFailed": "अयशस्वी — Retry दाबा",
+    "syncStatusTooOld": "सिंक करण्यासाठी खूप जुने — Omi ते स्वीकारू शकत नाही",
     "syncStatusFileUnavailable": "फाइल उपलब्ध नाही",
     "syncStatusUploaded": "अपलोड झाले · Omi वर प्रक्रिया सुरू",
     "noRecordingsYet": "अद्याप कोणतीही रेकॉर्डिंग नाही",

@@ -80,8 +80,9 @@ interface SubscriptionTrendPoint {
 interface SubscriptionCounts {
   totalSubscriptions: number;
   partial?: boolean;
-  priceIdOne: { count: number; priceId: string };
-  priceIdTwo: { count: number; priceId: string };
+  monthly: number;
+  annual: number;
+  trialing: number;
 }
 
 interface ConversationCount {
@@ -481,8 +482,8 @@ export default function AnalyticsPage() {
   const mrr = revenue?.mrr ?? 0;
   const arr = revenue?.arr ?? 0;
   const totalSubs = subCounts?.totalSubscriptions ?? 0;
-  const monthlySubs = subCounts?.priceIdOne?.count ?? 0;
-  const annualSubs = subCounts?.priceIdTwo?.count ?? 0;
+  const monthlySubs = subCounts?.monthly ?? 0;
+  const annualSubs = subCounts?.annual ?? 0;
   const hasPartialData = !!(revenue?.partial || subCounts?.partial || (mrrTrends as any)?.partial || (subTrends as any)?.partial);
   const totalConversations = convCount?.totalConversations ?? 0;
   const mrrData = mrrTrends?.data ?? [];

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Safely activate Smart Tasks for the single approved dogfood account.
+"""Safely configure Smart Tasks and Chat-first UI for one approved dogfood account.
 
 The default is a dry-run.  An apply is deliberately limited to the existing
 canonical-memory dogfood UID, requires explicit UID/mode/generation
-confirmations, and writes only that user's task-intelligence control document.
+confirmations plus an exact Chat-first UI confirmation, and writes only that
+user's task-intelligence control document.
 """
 
 from __future__ import annotations
@@ -157,6 +158,8 @@ def _firestore_value(value: object) -> object:
         return raw
     if kind == 'integerValue' and isinstance(raw, str) and raw.isdigit():
         return int(raw)
+    if kind == 'booleanValue' and isinstance(raw, bool):
+        return raw
     raise RuntimeError('Firestore control field has an unsupported type')
 
 
@@ -197,7 +200,10 @@ def read_control_with_gcloud_user_token(
     return _control_snapshot_from_firestore_document(payload)
 
 
-def build_activation_plan(uid: str, current: TaskWorkflowControl) -> ActivationPlan:
+def build_activation_plan(
+    uid: str,
+    current: TaskWorkflowControl,
+) -> ActivationPlan:
     require_dogfood_uid(uid)
     target = TaskWorkflowControl(
         workflow_mode=TaskWorkflowMode.read,
@@ -206,8 +212,8 @@ def build_activation_plan(uid: str, current: TaskWorkflowControl) -> ActivationP
     return ActivationPlan(
         uid=uid,
         document_path=control_path(uid),
-        current_control=current.model_dump(mode='json'),
-        target_control=target.model_dump(mode='json'),
+        current_control=current.persisted_payload(),
+        target_control=target.persisted_payload(),
         canonical_memory_whitelisted=True,
     )
 
@@ -248,13 +254,13 @@ def apply_activation(
         )
         if current == target:
             return False
-        transaction.set(ref, target.model_dump(mode='json'))
+        transaction.set(ref, target.persisted_payload())
         return True
 
     return activate(db_client.transaction())
 
 
-def _firestore_control_fields(control: TaskWorkflowControl) -> dict[str, dict[str, str]]:
+def _firestore_control_fields(control: TaskWorkflowControl) -> dict[str, dict[str, str | bool]]:
     return {
         'workflow_mode': {'stringValue': control.workflow_mode.value},
         'account_generation': {'integerValue': str(control.account_generation)},
@@ -333,19 +339,22 @@ def build_report(
         'credential_source': credential_source,
         'plan': asdict(plan),
         'applied': applied,
-        'verified_control': verified_control.model_dump(mode='json') if verified_control is not None else None,
+        'verified_control': verified_control.persisted_payload() if verified_control is not None else None,
         'operator_notes': [
             'This tool is restricted to the one approved Smart Tasks dogfood UID.',
             'It writes only users/{uid}/task_intelligence_control/state when --apply is supplied.',
             'It does not change the canonical-memory cohort, runtime environment, or any other user.',
             'The transaction preserves account_generation and rejects a stale expected generation.',
+            'Chat-first derives only from the code-owned canonical-memory cohort; this tool has no UI flag.',
             'The gcloud-user source obtains a short-lived token without including it in output or reports.',
         ],
     }
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Dry-run/apply Smart Tasks read mode for the approved dogfood UID.')
+    parser = argparse.ArgumentParser(
+        description='Dry-run/apply Smart Tasks read-mode metadata for the approved dogfood UID.'
+    )
     parser.add_argument('--uid', default=TASK_INTELLIGENCE_DOGFOOD_UID)
     parser.add_argument('--firestore-project', help='Required for --inspect-existing or --apply.')
     parser.add_argument(
@@ -443,7 +452,7 @@ def main() -> int:
             workflow_mode=TaskWorkflowMode.read,
             account_generation=current.account_generation,
         ):
-            raise RuntimeError('post-apply control verification did not match the requested read-mode control')
+            raise RuntimeError('post-apply control verification did not match the requested control')
     print(
         json.dumps(
             build_report(

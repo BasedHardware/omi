@@ -54,6 +54,9 @@ done
 
 BETA_APP="$BUILD_DIR/$BETA_APP_NAME.app"
 PLIST="$BETA_APP/Contents/Info.plist"
+BETA_ENV_FILE="$BETA_APP/Contents/Resources/.env"
+BETA_PYTHON_API_URL="https://api.omiapi.com/"
+BETA_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
 
 notarize_and_staple() {
   local artifact="$1"
@@ -95,6 +98,16 @@ echo "== Patching identity"
 # installs keep the plain URL and their current update behavior.
 /usr/libexec/PlistBuddy -c \
   "Set :SUFeedURL https://api.omi.me/v2/desktop/appcast.xml?identity=beta" "$PLIST"
+
+# Beta shares the production Firebase/Auth/Firestore account universe, but is
+# the dogfood channel for the development Python and desktop serving endpoints.
+# Patch the copied stable .env before signing so artifact smoke can assert the
+# immutable Beta authorities. Auth itself remains hard-pinned in Swift.
+[[ -f "$BETA_ENV_FILE" ]] || { echo "ERROR: beta bundle .env missing" >&2; exit 1; }
+sed -i '' "s|^OMI_PYTHON_API_URL=.*|OMI_PYTHON_API_URL=$BETA_PYTHON_API_URL|" "$BETA_ENV_FILE"
+sed -i '' "s|^OMI_DESKTOP_API_URL=.*|OMI_DESKTOP_API_URL=$BETA_DESKTOP_API_URL|" "$BETA_ENV_FILE"
+grep -Fqx "OMI_PYTHON_API_URL=$BETA_PYTHON_API_URL" "$BETA_ENV_FILE"
+grep -Fqx "OMI_DESKTOP_API_URL=$BETA_DESKTOP_API_URL" "$BETA_ENV_FILE"
 
 echo "== Re-signing outer bundle (nested signatures unchanged)"
 codesign --force --options runtime --timestamp \

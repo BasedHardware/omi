@@ -119,6 +119,15 @@ function makeErrorTurnEndEvent(errorMessage: string) {
   };
 }
 
+type PublicWebRoutingContractFixture = {
+  version: number;
+  cases: Array<{
+    name: string;
+    prompt: string;
+    requiresPublicWeb: boolean;
+  }>;
+};
+
 describe("PiMonoAdapter prompt correlation", () => {
   it("forwards tool execution updates as content-free progress activity", async () => {
     const { adapter, events } = createAdapter();
@@ -183,8 +192,28 @@ describe("PiMonoAdapter prompt correlation", () => {
     for (const message of [
       "search my calendar for weather in NYC",
       "what did I say today about the current weather?",
+      "what did I do today?",
     ]) {
       expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("matches the cross-runtime public-web routing contract", () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../../../../backend/desktop_fixtures/public-web-routing-contract.fixture.json", import.meta.url)
+        ),
+        "utf8"
+      )
+    ) as PublicWebRoutingContractFixture;
+
+    expect(fixture.version).toBe(1);
+    for (const testCase of fixture.cases) {
+      const routed = routePromptForPublicWeb(testCase.prompt);
+      expect(routed.includes("<omi_retrieval_policy>"), testCase.name).toBe(
+        testCase.requiresPublicWeb
+      );
     }
   });
 
@@ -257,11 +286,21 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     (adapter as any).handleMessageUpdate({
-      assistantMessageEvent: { type: "text_delta", delta: response },
+      assistantMessageEvent: { type: "text_delta", delta: "I don't have direct internet/" },
     });
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([]);
+    (adapter as any).handleMessageUpdate({
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: "web access, but I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.",
+      },
+    });
+    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: expected },
+    ]);
     (adapter as any).handleTurnEnd(makeTurnEndEvent(response));
 
-    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
     await expect(prompt).resolves.toMatchObject({ text: expected });
     expect(events.filter((event) => event.type === "text_delta")).toEqual([
       { type: "text_delta", text: expected },
@@ -626,6 +665,31 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it("normalizes bare provider HTTP status errors before surfacing them", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "fail with backend 5xx" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleEvent(JSON.stringify(makeErrorTurnEndEvent('500 "omi-fault-inject"')));
+
+    await expect(prompt).rejects.toThrow('HTTP 500 "omi-fault-inject"');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: 'HTTP 500 "omi-fault-inject"',
+        adapterSessionId: "session-1",
+      })
+    );
+  });
+
   it("does not report success after a required agent-control operation fails", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -766,6 +830,44 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect(events).toEqual([]);
     expect((adapter as any).pendingRequests.size).toBe(0);
   });
+
+  it("cancels blocking extension_ui_request and ignores fire-and-forget UI events", async () => {
+    const { adapter } = createAdapter();
+    await adapter.start();
+    const stdin = (adapter as any).process.stdin as PassThrough;
+    const chunks: string[] = [];
+    stdin.on("data", (buf: Buffer) => chunks.push(buf.toString("utf8")));
+
+    (adapter as any).handleEvent(
+      JSON.stringify({
+        type: "extension_ui_request",
+        id: "ui-status-1",
+        method: "setStatus",
+        statusKey: "working",
+        statusText: "…",
+      })
+    );
+    (adapter as any).handleEvent(
+      JSON.stringify({
+        type: "extension_ui_request",
+        id: "ui-select-1",
+        method: "select",
+        title: "Pick one",
+        options: ["a", "b"],
+      })
+    );
+
+    await new Promise((r) => setImmediate(r));
+    const written = chunks.join("");
+    expect(written).not.toContain("ui-status-1");
+    expect(written).toContain(
+      JSON.stringify({
+        type: "extension_ui_response",
+        id: "ui-select-1",
+        cancelled: true,
+      })
+    );
+  });
 });
 
 describe("PiMonoAdapter restart lifecycle", () => {
@@ -808,7 +910,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     vi.mocked(spawn).mockClear();
   });
 
-  it("does not pass --no-extensions to the subprocess", async () => {
+  it("keeps user extensions enabled while loading the Omi extension", async () => {
     const config: HarnessConfig = {
       authToken: "test-token",
     };
@@ -820,10 +922,9 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(cmd).toBe("/fake/pi");
     expect(args).toContain("--mode");
     expect(args).toContain("rpc");
+    expect(args).not.toContain("--no-extensions");
     expect(args).toContain("-e");
     expect(args).toContain("/fake/ext.ts");
-    // Auto-discovery must be enabled: --no-extensions must NOT be present
-    expect(args).not.toContain("--no-extensions");
 
     await adapter.stop();
   });
@@ -859,6 +960,39 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     // Upstream secret must be scrubbed
     expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
 
+    await adapter.stop();
+  });
+
+  it("projects chat-first tools into the child env only for an enabled main Chat", async () => {
+    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+    await adapter.setToolProjection({
+      surfaceKind: "main_chat",
+      chatFirstUi: true,
+      controlGeneration: 7,
+    });
+    await adapter.start();
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.OMI_SURFACE_KIND).toBe("main_chat");
+    expect(options.env.OMI_CHAT_FIRST_UI).toBe("true");
+    expect(options.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBe("7");
+    await adapter.stop();
+
+    vi.mocked(spawn).mockClear();
+    await adapter.setToolProjection({
+      surfaceKind: "floating_chat",
+      chatFirstUi: true,
+      controlGeneration: 7,
+    });
+    await adapter.start();
+    const [, , legacyOptions] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> },
+    ];
+    expect(legacyOptions.env.OMI_SURFACE_KIND).toBeUndefined();
+    expect(legacyOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
+    expect(legacyOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
     await adapter.stop();
   });
 });

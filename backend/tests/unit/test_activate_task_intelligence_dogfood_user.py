@@ -20,6 +20,11 @@ def load_script():
     return module
 
 
+@pytest.fixture
+def script():
+    return load_script()
+
+
 class _Snapshot:
     def __init__(self, data=None):
         self._data = data
@@ -85,8 +90,7 @@ class _HttpResponse:
         return json.dumps(self._payload).encode('utf-8')
 
 
-def test_missing_control_plans_explicit_read_at_default_generation():
-    script = load_script()
+def test_missing_control_plans_explicit_read_at_default_generation(script):
     db = _Db()
 
     current = script.read_control(db, uid=script.TASK_INTELLIGENCE_DOGFOOD_UID)
@@ -182,4 +186,5 @@ def test_gcloud_user_transport_uses_current_document_precondition_and_never_repo
     assert 'currentDocument.updateTime=2026-07-12T00%3A00%3A00.000000Z' in patch_request.full_url
     assert b'"workflow_mode": {"stringValue": "read"}' in patch_request.data
     assert b'"account_generation": {"integerValue": "7"}' in patch_request.data
+    assert b'chat_first_ui_enabled' not in patch_request.data
     assert b'short-lived-token' not in patch_request.data

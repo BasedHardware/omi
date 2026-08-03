@@ -3,24 +3,28 @@ import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+// Sleep in short slices, returning as soon as shouldStop() flips. A single
+// `await sleep(retryAfterMs)` is unobservable, so a Stop pressed during a pause
+// cannot take effect until the whole wait has elapsed. Callers with no
+// cancellation get the original single timer, unsliced.
+const STOP_POLL_MS = 250
+async function waitInterruptible(ms: number, shouldStop?: () => boolean): Promise<void> {
+  if (!shouldStop) return sleep(ms)
+  for (let waited = 0; waited < ms; waited += STOP_POLL_MS) {
+    if (shouldStop()) return
+    await sleep(Math.min(STOP_POLL_MS, ms - waited))
+  }
+}
+
 // A raw axios response, narrowed to just what the pager's onResponse hook reads
 // (headers) — avoids coupling this module to the full axios type surface.
 type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
 
-// Page through every memory. GET /v3/memories clamps `limit` to at most 5000
-// and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
-// whenever offset is 0, regardless of the requested limit (see
-// _legacy_get_memories and the canonical branch of get_memories in
-// backend/routers/memories.py). We request the server's max page (5000) on
-// every page so a >5000-memory account resumes in 5000-row strides instead of
-// small hops — a 12k-memory account is 3 requests, not dozens. Advance `offset`
-// by the number of items actually received (not a fixed step) so the next
-// request picks up where the server really left off — a fixed step would
-// re-request already-seen ids from inside a forced/clamped page and hit the
-// dedup guard early, silently truncating the tail. Dedupes by id and stops when
-// a page is empty or adds nothing new — guards against a server that ignores
-// `offset` entirely.
-const MEMORIES_PAGE_LIMIT = 5000
+// Page through every memory. GET /v3/memories clamps `limit` to at most 500
+// (no first-page 5000 expansion — that caused prod GET 504s). Request the
+// server max page on every call and advance `offset` by items actually received.
+// Dedupes by id; stops on empty page or zero new ids.
+const MEMORIES_PAGE_LIMIT = 500
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
 // can read capability headers off the first page — e.g.
@@ -96,8 +100,10 @@ export type BulkDeleteTally = { deleted: number; failed: number; firstError?: st
 // Delete memories by id, paced under the server's 60-per-hour delete cap: one at
 // a time at ~1.1s, waiting out 429s (honoring Retry-After) and retrying the same
 // id rather than failing. 404 = already gone (idempotent). `onResult` fires after
-// each id so the UI can drop the row and show progress. `shouldStop` lets the
-// caller cancel between ids.
+// each id so the UI can drop the row and show progress. `shouldStop` is
+// rechecked after every wait, rate-limit pauses included. An id cancelled
+// mid-retry counts as neither deleted nor failed and fires no `onResult`,
+// because it still exists.
 export async function deleteMemoriesPaced(
   ids: string[],
   onResult: (id: string, ok: boolean, tally: { deleted: number; failed: number }) => void,
@@ -106,9 +112,11 @@ export async function deleteMemoriesPaced(
   let deleted = 0
   let failed = 0
   let firstError: string | undefined
-  for (const id of ids) {
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
     if (shouldStop?.()) break
     let ok = false
+    let stopped = false
     for (let attempt = 0; attempt < 30; attempt++) {
       try {
         // __noRetry: this loop owns 429 handling, so the axios interceptor's
@@ -126,19 +134,32 @@ export async function deleteMemoriesPaced(
         }
         if (status === 429) {
           const ra = Number(resp?.headers?.['retry-after'])
-          await sleep(
-            Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+          await waitInterruptible(
+            Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000),
+            shouldStop
           )
+          // Without this recheck the pause ends and the retry deletes one more
+          // memory after the user already asked to stop.
+          if (shouldStop?.()) {
+            stopped = true
+            break
+          }
           continue
         }
         if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message
         break
       }
     }
+    if (stopped) break // cancelled mid-retry: neither deleted nor failed
     if (ok) deleted++
     else failed++
     onResult(id, ok, { deleted, failed })
-    await sleep(1100) // stay under ~60/hour
+    // Only pace before the *next* request. After the last id there is nothing
+    // left to space out, so serving this wait would just delay the caller
+    // (e.g. Memories.tsx's setDeleting(false) / completion toast) by ~1.1s.
+    if (i < ids.length - 1) {
+      await waitInterruptible(1100, shouldStop) // space out consecutive deletes; Stop skips the wait
+    }
   }
   return { deleted, failed, firstError }
 }

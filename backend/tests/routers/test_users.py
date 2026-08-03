@@ -44,6 +44,31 @@ def test_delete_account_maps_unexpected_service_error_to_500():
     assert exc.value.detail == 'Could not delete account. Please try again.'
 
 
+def test_invalid_geolocation_is_ignored_without_cache_access():
+    cache_read = MagicMock()
+    cache_write = MagicMock()
+
+    with patch.object(users_router, 'get_cached_user_geolocation', cache_read), patch.object(
+        users_router, 'cache_user_geolocation', cache_write
+    ):
+        result = users_router.set_user_geolocation(
+            users_router.GeolocationInput(latitude=90.1, longitude=0), uid='uid1'
+        )
+
+    assert result == {'status': 'ok', 'message': 'Location ignored because its coordinates are invalid.'}
+    cache_read.assert_not_called()
+    cache_write.assert_not_called()
+
+
+def test_location_context_consent_requires_disclosure_before_enabling():
+    with pytest.raises(HTTPException) as exc:
+        users_router.set_location_context_consent(
+            users_router.LocationContextConsentUpdate(enabled=True, disclosure_accepted=False), uid='uid1'
+        )
+
+    assert exc.value.status_code == 422
+
+
 def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     calls = []
 
@@ -74,12 +99,14 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1',)),
+        (users_router.background_wipe_user_data, ('uid1', 0, False)),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    background_args = []
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -88,6 +115,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
         if fn is users_router.background_wipe_user_data:
+            background_args.append(args)
             return False
         if fn is users_router.release_job_run_lock:
             return None
@@ -104,6 +132,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
+    assert background_args == [('uid1', 1, True)]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
@@ -231,12 +260,16 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     state = {'status': None, 'job_id': None, 'enqueue_attempts': 0, 'wipe_runs': 0}
 
     def persist_intent(_uid):
+        if state['job_id']:
+            return {'wipe_job_id': state['job_id'], 'dispatch_claimed': False}
         state['status'] = 'deleting_auth'
         state['job_id'] = 'job-1'
-        return state['job_id']
+        return {'wipe_job_id': state['job_id'], 'dispatch_claimed': True}
 
-    def mark_started(_uid):
+    def mark_started(_uid, job_id):
+        assert job_id == state['job_id']
         state['status'] = 'pending'
+        return True
 
     def mark_failed(_uid):
         state['status'] = 'failed'
@@ -262,8 +295,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
-    with pytest.raises(RuntimeError, match='lost create-task acknowledgement'):
-        users_router.start_account_deletion('uid1')
+    assert users_router.start_account_deletion('uid1')['status'] == 'ok'
 
     assert state == {'status': 'failed', 'job_id': 'job-1', 'enqueue_attempts': 1, 'wipe_runs': 0}
 

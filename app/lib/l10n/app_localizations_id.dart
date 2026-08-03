@@ -1472,7 +1472,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT Anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '1.200 menit gratis/bulan termasuk. Tanpa batas dengan ';
+  String get freeMinutesMonth => '300 menit gratis/bulan termasuk. Tanpa batas dengan ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1794,20 +1794,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Menyukai Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di App Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di Google Play Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get rateOnAppStore => 'Beri Nilai di App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Beri Nilai di Google Play';
 
   @override
   String get maybeLater => 'Mungkin nanti';
@@ -2145,6 +2131,18 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edit Memori';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Saya suka makan es krim...';
@@ -4721,7 +4719,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tidak ada akses data spesifik yang dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '1.200 menit premium + tak terbatas di perangkat';
+  String get basicPlanDescription => '300 menit premium + tak terbatas di perangkat';
 
   @override
   String get minutes => 'menit';
@@ -6016,7 +6014,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
+      '300 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6098,7 +6096,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
+      '300 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9790,4 +9788,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya';
 }

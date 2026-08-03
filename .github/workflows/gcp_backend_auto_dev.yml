@@ -27,7 +27,7 @@ jobs:
     # support a safe workflow-level paths filter, so inspect its immutable SHA.
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:
@@ -148,7 +148,7 @@ jobs:
     environment: development
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
@@ -200,6 +200,21 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Verify read-only Firestore credentials target the development runtime project
+        env:
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          credential_project="$(gcloud config get-value project 2>/dev/null)"
+          if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
+            echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
+            exit 1
+          fi
+          if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but RUNTIME_GCP_PROJECT_ID is $RUNTIME_GCP_PROJECT_ID."
+            exit 1
+          fi
+
       - name: Verify serving Firestore indexes
         id: firestore_readiness
         env:
@@ -244,7 +259,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
@@ -385,6 +400,7 @@ jobs:
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
             --vpc-egress private-ranges-only \
             --lane omi:auto:public-shared-conversation-chat \
+            --lane omi:auto:memory-l2 \
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Smoke LLM Gateway
@@ -445,6 +461,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -481,7 +498,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -515,7 +532,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
@@ -642,7 +659,7 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
           STT_SERVICE_MODELS: modulate-velma-2,parakeet
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}

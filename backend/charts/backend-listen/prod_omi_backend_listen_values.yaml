@@ -128,13 +128,13 @@ env:
   - name: OMI_ENV_STAGE
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
-    value: "off"
+    value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -146,9 +146,7 @@ env:
     value: ""
   - name: MEMORY_V3_GET_ENABLED
     value: "false"
-  - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
-    value: "false"
-  - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: FAL_KEY
     valueFrom:
@@ -291,13 +289,13 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
-    value: "modulate-velma-2,parakeet"
+    value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,google"
+    value: "nllb,gemini"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -357,7 +355,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.1"
+    value: "gpt-5.6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS
@@ -386,6 +384,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
+  - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
+    value: "900"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -393,8 +393,8 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 1.5
-    memory: 2Gi
+    cpu: 1
+    memory: 1.5Gi
   limits:
     cpu: 2
     memory: 3.5Gi

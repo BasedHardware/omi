@@ -10,14 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Mapping, Protocol, TypeAlias, cast
 
-from config.memory_rollout import (
-    MemoryRolloutMode,
-    MemoryRolloutConfig,
-    parse_enabled_users,
-    rollout_enabled_users_env_raw,
-    rollout_mode_env_value,
-    rollout_v3_get_enabled_env_value,
-)
 from database import memory_compatibility_projection as projection_db
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.account_generation_source import V3TrustedAccountGenerationResult
@@ -49,6 +41,7 @@ from utils.memory.v3.cursor import (
     parse_v3_cursor,
 )
 from utils.memory.v3.projection_reader_contract import V3ProjectionCursor, V3ProjectionPage, V3ProjectionReadRequest
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 V3GetSourceDecision: TypeAlias = Literal['disabled', 'legacy_primary', 'memory_read']
 MemoryDbItem: TypeAlias = dict[str, Any]
@@ -89,7 +82,6 @@ class V3GetRuntime:
 class _RuntimeConfig:
     uid: str
     db_client: object
-    rollout_config: MemoryRolloutConfig
     cursor_secret: bytes | None
     cursor_policy_version: str
     cursor_secret_version: str
@@ -118,7 +110,6 @@ class _ProductionV3Adapters:
         control = read_v3_control(
             uid=self.config.uid,
             db_client=self.config.db_client,
-            rollout_config=self.config.rollout_config,
         )
         if not control.cohort_enrolled:
             self._last_control = control
@@ -372,54 +363,24 @@ def _cursor_ttl_from_env(env: EnvMapping) -> int:
         return _DEFAULT_CURSOR_TTL_SECONDS
 
 
-def _v3_get_route_enabled(env: EnvMapping) -> bool:
-    return rollout_v3_get_enabled_env_value(env)
-
-
-def _runtime_enabled(rollout_config: MemoryRolloutConfig) -> bool:
-    return rollout_config.mode == MemoryRolloutMode.read and bool(rollout_config.enabled_users)
-
-
-def _rollout_config_from_env(env: EnvMapping) -> MemoryRolloutConfig:
-    try:
-        mode = MemoryRolloutMode(rollout_mode_env_value(env))
-    except (TypeError, ValueError):
-        return MemoryRolloutConfig()
-    return MemoryRolloutConfig(
-        enabled_users=parse_enabled_users(rollout_enabled_users_env_raw(env)),
-        mode=mode,
-    )
-
-
-def _source_decision_for_uid(
-    *, uid: str, db_client: object, rollout_config: MemoryRolloutConfig
-) -> V3GetSourceDecision:
-    if not _runtime_enabled(rollout_config):
-        return 'disabled'
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
-    if not control.cohort_enrolled:
+def _source_decision_for_uid(*, uid: str, db_client: object) -> V3GetSourceDecision:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return 'legacy_primary'
-    if control.state is not None and control.state.effective_mode != MemoryRolloutMode.read:
+    control = read_v3_control(uid=uid, db_client=db_client)
+    if not control.cohort_enrolled:
         return 'legacy_primary'
     return 'memory_read'
 
 
 def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping | None = None) -> V3GetRuntime:
     effective_env = env if env is not None else os.environ
-    if not _v3_get_route_enabled(effective_env):
-        return V3GetRuntime(enabled=False, source_decision='disabled')
-    rollout_config = _rollout_config_from_env(effective_env)
-    if not _runtime_enabled(rollout_config):
-        return V3GetRuntime(enabled=False, source_decision='disabled')
-
-    source_decision = _source_decision_for_uid(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    source_decision = _source_decision_for_uid(uid=uid, db_client=db_client)
     if source_decision == 'legacy_primary':
-        return V3GetRuntime(enabled=True, source_decision='legacy_primary')
+        return V3GetRuntime(enabled=False, source_decision='legacy_primary')
 
     config = _RuntimeConfig(
         uid=uid,
         db_client=db_client,
-        rollout_config=rollout_config,
         cursor_secret=_cursor_secret_from_env(effective_env),
         cursor_policy_version=effective_env.get('MEMORY_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,
         cursor_secret_version=effective_env.get('MEMORY_V3_CURSOR_SECRET_VERSION') or _DEFAULT_CURSOR_SECRET_VERSION,
@@ -431,7 +392,7 @@ def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping 
         source_decision='memory_read',
         service=compose_v3_get,
         adapters=adapters.as_composed_adapters(),
-        source_selector='server_side_rollout_config_and_control_state',
+        source_selector='canonical_memory_selector_and_control_state',
         control_reader=read_v3_control,
         projection_reader=_projection_reader,
         cursor_codec='v3_hmac_cursor',

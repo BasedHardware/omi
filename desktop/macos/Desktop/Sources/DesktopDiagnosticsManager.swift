@@ -21,6 +21,7 @@ enum DesktopHealthEventName: String {
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case realtimeProviderCloseResolution = "realtime_provider_close_resolution"
   case userVisibleIssue = "user_visible_issue"
   case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
@@ -29,6 +30,35 @@ enum DesktopHealthEventName: String {
 enum DesktopFallbackOutcome: String {
   case recovered
   case degraded
+  case exhausted
+}
+
+enum DesktopStateAuthoritySeam: String {
+  case chatTranscriptProjection = "chat_transcript_projection"
+  case onboardingSetupState = "onboarding_setup_state"
+  case connectorStatus = "connector_status"
+}
+
+/// The immediate customer-turn/recovery decision made after a realtime transport
+/// closes. This is deliberately separate from the raw close event: the close is
+/// captured before the controller chooses a replacement, failover, or terminal
+/// path, while this closed set records that decision without provider payloads.
+enum RealtimeProviderCloseTurnOutcome: String {
+  case notInterrupted = "not_interrupted"
+  case failed
+  case pendingReplacement = "pending_replacement"
+}
+
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
   case exhausted
 }
 
@@ -70,6 +100,11 @@ final class DesktopDiagnosticsManager {
   /// hub's transport key. A start/stop timer for `voice_tool_latency`; cleared
   /// on turn reset so it can't grow unbounded.
   private var voiceToolStarts: [String: Date] = [:]
+  private var realtimeProviderCloseAttemptID = 0
+  /// State-authority checks can sit on hot UI projection/read paths. Emit each
+  /// bounded seam/direction/subject at most once per process while still keeping
+  /// the check itself cheap enough to run at every authoritative read point.
+  private var reportedStateAuthoritySignals: Set<String> = []
   private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
@@ -402,19 +437,38 @@ final class DesktopDiagnosticsManager {
       ],
       trackRemotely: false)
   }
+
+  /// Terminal shared-capture failure for listen, manual recording, and Quick Note.
+  /// The event intentionally carries only a bounded retry count; the incident attachment is
+  /// produced by the common privacy-redacted Sentry path.
+  func recordTranscriptionSilentCaptureExhausted(recoveryAttempts: Int) {
+    recordUserVisibleIssue(
+      area: "transcription",
+      failureClass: "silent_capture",
+      phase: "audio_capture",
+      extra: [
+        "capture_path": "shared",
+        "recovery_attempts": recoveryAttempts,
+        "recovery_action": "stop_and_surface_error",
+        "recovery_result": "exhausted",
+      ])
+  }
   /// Record one bounded PTT attempt lifecycle snapshot (see
   /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
-  /// attachment path; the event is remote (PostHog) only for non-committed
-  /// terminations so successful turns stay local-only (matching
-  /// `recordPTTStarted` / `recordPTTCommitted`). This is the causal-correlation
-  /// complement to the late `recordPTTSilentTurn` snapshot: same attempt context,
-  /// but with the capture-start / first-audio / first-usable-frame / recovery
-  /// boundaries that the silent-turn snapshot cannot see.
+  /// attachment path. Emitted remotely (PostHog) for EVERY terminal disposition —
+  /// including `failureClass == .committed` — so a release-health query has the
+  /// full attempt denominator (success + the causally distinct excluded/failure
+  /// classes), not only classified failures. Short tap / quiet discard / user
+  /// cancel are bounded `failure_class` values distinct from `capture_never_operational`,
+  /// so they cannot inflate a capture-failure rate. This is the authoritative,
+  /// privacy-bounded PTT terminal-outcome funnel (#10425); the ambiguous
+  /// `floating_bar_ptt_ended` `had_transcript` event is retained only for backward
+  /// compatibility and must not be read as a success/failure denominator.
   func recordPTTAttemptLifecycle(_ snapshot: PTTAttemptLifecycleRecorder.Snapshot) {
     record(
       .pttAudioCaptureLifecycle,
       properties: snapshot.properties,
-      trackRemotely: snapshot.failureClass != .committed)
+      trackRemotely: true)
   }
 
   /// Records a typed chat failure as a fleet-health metric. The existing bounded
@@ -455,23 +509,28 @@ final class DesktopDiagnosticsManager {
   func recordBetaLogError(
     message: String,
     error: Error?,
+    failureDiagnostics: [String: Any]? = nil,
     enabled: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) {
     guard enabled else { return }
     let nsError = error as NSError?
+    var trailProperties: [String: Any] = [
+      "component": betaComponent(for: message),
+      "operation": "error",
+      "phase": "handling",
+      "outcome": "failed",
+      "failure_class": betaFailureClass(for: nsError),
+      "error_domain": betaErrorDomain(nsError?.domain),
+      "error_code": betaErrorCode(nsError?.code),
+    ]
+    if let failureDiagnostics {
+      trailProperties.merge(sanitizedDiagnosticValues(failureDiagnostics)) { _, new in new }
+    }
     let snapshot = DesktopHealthSnapshot(
       timestamp: Date(),
       event: .betaDiagnosticTrail,
       properties: commonProperties().merging(
-        sanitized([
-          "component": betaComponent(for: message),
-          "operation": "error",
-          "phase": "handling",
-          "outcome": "failed",
-          "failure_class": betaFailureClass(for: nsError),
-          "error_domain": betaErrorDomain(nsError?.domain),
-          "error_code": betaErrorCode(nsError?.code),
-        ])
+        sanitized(trailProperties)
       ) { _, new in new })
     lock.lock()
     betaTrailSnapshots.append(snapshot)
@@ -592,6 +651,55 @@ final class DesktopDiagnosticsManager {
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
   }
 
+  /// Detects silent ownership disagreement without changing which state wins.
+  /// `subject` must be a closed product enum (for example a connector kind), not
+  /// a user, message, turn, file, or session identifier.
+  @discardableResult
+  func recordStateAuthoritySignal(
+    seam: DesktopStateAuthoritySeam,
+    from: String,
+    to: String,
+    direction: String,
+    subject: String? = nil
+  ) -> Bool {
+    let safeFrom = safeFallbackLabel(from, default: "none")
+    let safeTo = safeFallbackLabel(to, default: "none")
+    let safeDirection = safeFallbackLabel(direction, default: "other")
+    let safeSubject = subject.map { safeFallbackLabel($0, default: "other") }
+    let dedupeKey = [seam.rawValue, safeFrom, safeTo, safeDirection, safeSubject ?? "none"]
+      .joined(separator: "|")
+
+    lock.lock()
+    let inserted = reportedStateAuthoritySignals.insert(dedupeKey).inserted
+    lock.unlock()
+    guard inserted else { return false }
+
+    var extra: [String: Any] = [
+      "seam": seam.rawValue,
+      "direction": safeDirection,
+      "signal_scope": "process",
+      "failure_class": "FC-split-mutation-authority",
+    ]
+    if let safeSubject {
+      extra["subject"] = safeSubject
+    }
+    recordFallback(
+      area: "state_authority",
+      from: from,
+      to: to,
+      reason: seam == .connectorStatus ? "status_inferred" : "state_divergence",
+      outcome: .degraded,
+      extra: extra)
+    return true
+  }
+
+  /// Realtime token-mint failure. `phase` is bucketed to a closed set (`warm` =
+  /// background pre-warm vs `barge_in_replacement` = replacement during an active
+  /// turn) so a release-health query has a bounded warm-vs-active dimension (#10425).
+  /// `outcome`/`mintAttemptId` are optional: a mint failure is point-in-time, so its
+  /// terminal fate (recovered/degraded/exhausted) is carried by the correlated
+  /// `fallback_triggered`{area=realtime_hub} event; `mint_attempt_id` lets a query
+  /// join the two without provider/time heuristics.
   func recordRealtimeTokenMintFailed(
     provider: String,
     reason: String,
@@ -600,12 +708,14 @@ final class DesktopDiagnosticsManager {
     backendRoute: String? = nil,
     upstreamStatusCode: Int? = nil,
     providerCode: String? = nil,
-    retryable: Bool? = nil
+    retryable: Bool? = nil,
+    outcome: DesktopFallbackOutcome? = nil,
+    mintAttemptId: String? = nil
   ) {
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
       "reason": reason,
-      "phase": phase,
+      "phase": bucketRealtimePhase(phase),
     ]
     if let httpStatusCode {
       properties["http_status_code"] = httpStatusCode
@@ -622,11 +732,18 @@ final class DesktopDiagnosticsManager {
     if let retryable {
       properties["retryable"] = retryable
     }
+    if let outcome {
+      properties["outcome"] = outcome.rawValue
+    }
+    if let mintAttemptId, !mintAttemptId.isEmpty {
+      properties["mint_attempt_id"] = mintAttemptId
+    }
     record(
       .realtimeTokenMintFailed,
       properties: properties)
   }
 
+  @discardableResult
   func recordRealtimeProviderClose(
     provider: String,
     category: String?,
@@ -634,7 +751,11 @@ final class DesktopDiagnosticsManager {
     activeTurn: Bool,
     authMode: CredentialAuthMode?,
     failureClass: CredentialFailureClass?
-  ) {
+  ) -> Int {
+    lock.lock()
+    realtimeProviderCloseAttemptID += 1
+    let closeAttemptID = realtimeProviderCloseAttemptID
+    lock.unlock()
     let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
     let event: DesktopHealthEventName
     switch normalizedCategory {
@@ -648,11 +769,21 @@ final class DesktopDiagnosticsManager {
     default:
       event = .realtimeProviderSessionError
     }
+    // Bounded release-health dimension: a single `expected` flag + `lifecycle_class`
+    // so a release-regression rollup can exclude normal idle teardown / planned
+    // session rotation without enumerating the two `realtime_provider_expected_*`
+    // event names (#10425). Expected lifecycle stays inspectable, never an error.
+    let expectedLifecycle =
+      event == .realtimeProviderExpectedIdleTeardown
+      || event == .realtimeProviderExpectedSessionRotation
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
       "category": normalizedCategory,
       "alive_for_seconds": Int(aliveFor),
       "active_turn": activeTurn,
+      "close_attempt_id": closeAttemptID,
+      "expected": expectedLifecycle,
+      "lifecycle_class": expectedLifecycle ? "expected" : "error",
     ]
     if normalizedCategory == RealtimeHubCloseCategory.expectedSessionRotation.rawValue {
       properties["recovery_action"] = "rotate_realtime_session"
@@ -670,6 +801,31 @@ final class DesktopDiagnosticsManager {
     record(
       event,
       properties: properties)
+    return closeAttemptID
+  }
+
+  /// Pair a provider-close event with the controller's immediate lifecycle
+  /// decision. `closeAttemptID` is a process-local monotonic counter, useful
+  /// only to join bounded events from one analytics session; it is not a user,
+  /// device, turn, or provider-session identifier.
+  func recordRealtimeProviderCloseResolution(
+    closeAttemptID: Int,
+    provider: String,
+    activeTurn: Bool,
+    turnOutcome: RealtimeProviderCloseTurnOutcome,
+    recoveryAction: RealtimeProviderCloseRecoveryAction,
+    recoveryResult: RealtimeProviderCloseRecoveryResult
+  ) {
+    record(
+      .realtimeProviderCloseResolution,
+      properties: [
+        "close_attempt_id": closeAttemptID,
+        "provider": safeProvider(provider),
+        "active_turn": activeTurn,
+        "turn_outcome": turnOutcome.rawValue,
+        "recovery_action": recoveryAction.rawValue,
+        "recovery_result": recoveryResult.rawValue,
+      ])
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
@@ -711,6 +867,8 @@ final class DesktopDiagnosticsManager {
       snapshot.event == .userVisibleIssue
       || snapshot.event == .pttAudioCaptureWatchdogTriggered
       || snapshot.event == .pttAudioCaptureLifecycle
+      || snapshot.event == .realtimeProviderSessionError
+      || snapshot.event == .realtimeProviderCloseResolution
       || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
     guard includesTypedIncidentContext else {
       return result
@@ -728,8 +886,10 @@ final class DesktopDiagnosticsManager {
     "area", "failure_class", "phase", "build", "build_number", "os_version", "device_model",
     "source", "mode", "hub_active", "turn_audio_seconds", "voiced_audio_seconds", "peak", "rms",
     "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
-    "input_device_class", "recovery_action", "recovery_result", "threshold",
+    "input_device_class", "close_attempt_id", "turn_outcome", "recovery_action", "recovery_result",
+    "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
+    "path_class", "database_file_size_bytes", "volume_free_bytes", "volume_total_bytes",
     "osstatus", "keycode", "modifiers",
     // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
     "attempt_id", "capture_start_outcome", "capture_start_status_class",
@@ -738,6 +898,16 @@ final class DesktopDiagnosticsManager {
     "input_route_class", "input_route_source", "route_changed_during_attempt",
     "recovery_triggered", "recovery_attempt_id", "recovery_outcome_of_next_turn",
     "judgeable", "telemetry_schema_version",
+  ]
+  /// Exact-match property keys that must never appear on a health snapshot
+  /// (local ring buffer or remote PostHog). Bounded cousins like
+  /// `transcript_length`, `failure_class`, or `error_code` are intentionally NOT
+  /// listed and survive the filter.
+  private static let contentBearingPropertyKeys: Set<String> = [
+    "transcript", "transcript_text", "audio", "audio_data", "pcm", "prompt", "prompt_text",
+    "response", "response_text", "message", "error_message", "error_description", "error_desc",
+    "localized_description", "description", "detail", "detail_reason", "detail_message",
+    "reason_detail", "content", "title", "notification_title", "window_title", "screen_title",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {
@@ -938,17 +1108,17 @@ final class DesktopDiagnosticsManager {
     return result
   }
 
-  #if DEBUG
-    func resetForTests() {
-      lock.lock()
-      snapshots.removeAll()
-      betaTrailSnapshots.removeAll()
-      consecutiveNearZeroPTTTurns = 0
-      lastPTTWatchdogIncidentAt = nil
-      lastUserVisibleSentryIncidentAt.removeAll()
-      lock.unlock()
-    }
-  #endif
+  func resetForTests() {
+    lock.lock()
+    snapshots.removeAll()
+    betaTrailSnapshots.removeAll()
+    reportedStateAuthoritySignals.removeAll()
+    realtimeProviderCloseAttemptID = 0
+    consecutiveNearZeroPTTTurns = 0
+    lastPTTWatchdogIncidentAt = nil
+    lastUserVisibleSentryIncidentAt.removeAll()
+    lock.unlock()
+  }
 
   private func shouldCaptureIncident(area: String, failureClass: String) -> Bool {
     let key = "\(area):\(failureClass)"
@@ -1046,10 +1216,17 @@ final class DesktopDiagnosticsManager {
     properties: [String: Any],
     trackRemotely: Bool = true
   ) {
+    // Defense-in-depth privacy guard (#10425): no health snapshot — local ring buffer
+    // or remote PostHog `desktop_health_event` — may carry raw transcript/audio/
+    // prompt/response/free-form text. Drop any content-bearing key a caller might
+    // accidentally thread through `extra`. Exact-match only so bounded keys like
+    // `transcript_length` survive; this is the single chokepoint for every emit.
+    let safeProperties = commonProperties().merging(sanitized(properties)) { _, new in new }
+      .filter { !DesktopDiagnosticsManager.contentBearingPropertyKeys.contains($0.key) }
     let snapshot = DesktopHealthSnapshot(
       timestamp: Date(),
       event: event,
-      properties: commonProperties().merging(sanitized(properties)) { _, new in new })
+      properties: safeProperties)
 
     lock.lock()
     snapshots.append(snapshot)
@@ -1103,6 +1280,8 @@ final class DesktopDiagnosticsManager {
         safe[key] = String(string.prefix(96))
       case let int as Int:
         safe[key] = int
+      case let int64 as Int64:
+        safe[key] = Int(clamping: int64)
       case let double as Double:
         safe[key] = rounded(double)
       case let bool as Bool:
@@ -1112,6 +1291,10 @@ final class DesktopDiagnosticsManager {
       }
     }
     return safe
+  }
+
+  private func sanitizedDiagnosticValues(_ properties: [String: Any]) -> [String: Any] {
+    sanitized(properties)
   }
 
   private func rounded(_ value: Double) -> Double {
@@ -1178,7 +1361,7 @@ final class DesktopDiagnosticsManager {
 
   private func safeIncidentArea(_ area: String) -> String {
     switch area {
-    case "ptt", "chat", "realtime", "crash", "startup": return area
+    case "ptt", "chat", "realtime", "crash", "startup", "transcription": return area
     default: return "other"
     }
   }
@@ -1204,7 +1387,8 @@ final class DesktopDiagnosticsManager {
     "source", "mode", "hub_active",
     "turn_audio_seconds", "voiced_audio_seconds",
     "peak", "rms", "is_near_zero", "watchdog_eligible", "consecutive_silent_turns",
-    "tcc_microphone_granted", "input_device_class", "recovery_action", "recovery_result",
+    "tcc_microphone_granted", "input_device_class", "capture_path", "recovery_attempts",
+    "recovery_action", "recovery_result",
     "osstatus", "keycode", "modifiers",
   ]
 
@@ -1232,6 +1416,19 @@ final class DesktopDiagnosticsManager {
     "automation_bridge",
     "transcription_retry",
     "task_reconcile",
+    // Named owners for paths that previously collapsed into `area=other` (#10425):
+    // screen-capture health flap, memory device-scope, desktop update policy,
+    // out-of-turn TTS, task workflow control, and auth-token storage. Keeping them
+    // out of `other` lets a release-health query separate a benign screen-capture
+    // flap from a genuinely degraded path.
+    "screen_capture",
+    "memory_scope",
+    "desktop_update",
+    "tts_fallback",
+    "task_workflow",
+    "auth_storage",
+    "state_authority",
+    "ptt_input_routing",
     "other",
   ]
 
@@ -1263,6 +1460,8 @@ final class DesktopDiagnosticsManager {
     "ble_decode_failed",
     "bind_failed",
     "db_backoff",
+    "state_divergence",
+    "status_inferred",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
@@ -1273,6 +1472,19 @@ final class DesktopDiagnosticsManager {
   private func bucketFallbackReason(_ reason: String) -> String {
     let label = safeFallbackLabel(reason, default: "other")
     return Self.allowedFallbackReasons.contains(label) ? label : "other"
+  }
+  /// Closed set for the realtime token-mint `phase` dimension (#10425): a release
+  /// query can rely on `warm` (background pre-warm) vs `barge_in_replacement`
+  /// (socket replacement during an active turn) instead of an open string.
+  private static let allowedRealtimeMintPhases: Set<String> = [
+    "warm",
+    "barge_in_replacement",
+    "other",
+  ]
+
+  private func bucketRealtimePhase(_ phase: String) -> String {
+    let label = safeFallbackLabel(phase, default: "other")
+    return Self.allowedRealtimeMintPhases.contains(label) ? label : "other"
   }
 
   private func safeFallbackLabel(_ value: String, default defaultValue: String) -> String {

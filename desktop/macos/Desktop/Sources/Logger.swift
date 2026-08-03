@@ -573,8 +573,28 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
   }
 }
 
+/// Bounded, non-PII fields that may accompany a shared `logError` Sentry event.
+/// Callers must construct these from enums, booleans, and numeric measurements;
+/// paths, exception messages, identifiers, and user content do not belong here.
+/// `Sendable` because these are produced on whichever actor detected the
+/// failure and consumed on another (`AgentRuntimeProcess` -> `@MainActor`
+/// ChatProvider). The element type is `any Sendable` rather than `Any` so the
+/// compiler enforces the scalar-only contract above at every construction site.
+struct DesktopErrorDiagnosticContext: Sendable {
+  let values: [String: any Sendable]
+
+  init(_ values: [String: any Sendable]) {
+    self.values = values
+  }
+}
+
 /// Log an error and capture it in Sentry
-func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fileID) {
+func logError(
+  _ message: String,
+  error: Error? = nil,
+  context: DesktopErrorDiagnosticContext? = nil,
+  fileID: StaticString = #fileID
+) {
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
@@ -592,6 +612,7 @@ func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fi
   DesktopDiagnosticsManager.shared.recordBetaLogError(
     message: message,
     error: error,
+    failureDiagnostics: context?.values,
     enabled: enhancedBetaDiagnostics)
 
   // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
@@ -633,6 +654,9 @@ func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fi
         "error_domain": telemetry.errorDomain,
         "error_code": telemetry.errorCode,
       ], key: "app_context")
+    if let context {
+      scope.setContext(value: context.values, key: "failure_diagnostics")
+    }
     if let attachmentURL {
       scope.addAttachment(
         Attachment(

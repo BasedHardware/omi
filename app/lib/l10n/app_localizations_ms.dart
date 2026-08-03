@@ -1797,20 +1797,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get lovingOmi => 'Suka Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Bantu kami menjangkau lebih ramai orang dengan meninggalkan ulasan di App Store. Maklum balas anda sangat bermakna bagi kami!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Bantu kami menjangkau lebih ramai orang dengan meninggalkan ulasan di Google Play Store. Maklum balas anda sangat bermakna bagi kami!';
-
-  @override
-  String get rateOnAppStore => 'Nilai di App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Nilai di Google Play';
-
-  @override
   String get maybeLater => 'Mungkin nanti';
 
   @override
@@ -2147,6 +2133,18 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edit Memori';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Saya suka makan ais krim...';
@@ -9805,4 +9803,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Terlalu lama untuk disegerakkan — Omi tidak boleh menerimanya';
 }

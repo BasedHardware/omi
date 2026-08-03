@@ -101,6 +101,17 @@ class _NotificationMessage:
         return dict(message.__dict__)
 
 
+class _UnsafeWebhookURLError(Exception):
+    """Isolated stand-in for ``utils.http_client.UnsafeWebhookURLError``.
+
+    Production's SSRF guard catches this to reject non-public webhook URLs
+    without tripping the circuit breaker, so the stub must expose a genuine
+    exception class — the ``AutoMockModule`` default is a non-exception
+    ``MagicMock`` that the production ``except`` clause can neither raise nor
+    match, turning the guard into a ``TypeError``.
+    """
+
+
 @pytest.fixture
 def integration_harness() -> Iterator[SimpleNamespace]:
     process_mentor_notification = MagicMock(return_value=None)
@@ -208,6 +219,8 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_webhook_semaphore=MagicMock(return_value=asyncio.Semaphore(1)),
             latest_wins_start=MagicMock(return_value=1),
             latest_wins_check=MagicMock(return_value=True),
+            safe_request_target=MagicMock(side_effect=lambda url: (url, {'headers': {}, 'extensions': {}})),
+            UnsafeWebhookURLError=_UnsafeWebhookURLError,
         ),
         'utils.executors': _module(
             'utils.executors',
@@ -481,3 +494,34 @@ async def test_realtime_notification_failure_remains_fail_soft(integration_harne
 
     assert result == []
     integration_harness.add_app_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_realtime_non_public_webhook_rejected_fail_soft(integration_harness):
+    """The SSRF guard rejects a non-public webhook URL before any delivery.
+
+    This pins the isolation-stub contract the realtime coordinator depends
+    on: ``utils.http_client`` must expose a genuine ``UnsafeWebhookURLError``
+    exception class — the production ``except`` clause cannot match the
+    ``AutoMockModule`` default ``MagicMock`` — and a ``safe_request_target``
+    whose ``(pinned_url, {headers, extensions})`` return shape the webhook
+    delivery path unpacks.
+    """
+    app = integration_harness.app
+    # A non-exception default would make the production except clause raise
+    # TypeError instead of matching; this assert fails first if the stub
+    # regresses to the AutoMockModule default.
+    assert issubclass(app.UnsafeWebhookURLError, BaseException)
+
+    external_app = _realtime_app()
+    client = AsyncMock()
+
+    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
+        app, 'process_mentor_notification', return_value=None
+    ), patch.object(app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')), patch.object(
+        app, 'get_webhook_client', return_value=client
+    ):
+        result = await app.trigger_realtime_integrations('user-ssrf', [{'text': 'hi'}], 'conv-ssrf')
+
+    assert result == []
+    client.post.assert_not_called()

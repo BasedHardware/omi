@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor
 extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
+    var segmentsToPersist = [TranscriptionService.BackendSegment]()
+
     for segment in segments {
       guard !segment.text.isEmpty else { continue }
 
@@ -43,13 +45,37 @@ extension AppState {
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
+        segmentsToPersist.append(segment)
+      } else if sttSession.useLocalSTT {
+        switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
+        case .accept:
+          appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+
+        case .suppressIncoming:
+          log(
+            "Transcript [DEDUP] Suppressed mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+
+        case .replaceExisting(let existingSegmentId):
+          guard let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == existingSegmentId }) else {
+            appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+            continue
+          }
+
+          let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
+          let newWords = newSeg.text.split(separator: " ").count
+          totalWordCount += newWords - oldWords
+
+          var replacement = newSeg
+          replacement.segmentId = existingSegmentId
+          speakerSegments[existingIdx] = replacement
+          segmentsToPersist.append(segmentWithID(segment, id: existingSegmentId))
+          log(
+            "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+        }
       } else {
-        totalWordCount += newSeg.text.split(separator: " ").count
-        speakerSegments.append(newSeg)
-        totalSegmentCount += 1
-        log(
-          "Transcript [ADD] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
-        )
+        appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
       }
     }
 
@@ -67,12 +93,56 @@ extension AppState {
     LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
 
     // Persist segments to DB for crash safety (upsert by backend segment ID)
-    if let sessionId = currentSessionId {
-      let segmentsToPersist = segments
-      Task {
-        await persistBackendSegmentsToStorage(segmentsToPersist, sessionId: sessionId)
-      }
+    if let sessionId = currentSessionId, !segmentsToPersist.isEmpty {
+      enqueueTranscriptPersistence(segmentsToPersist, sessionId: sessionId)
     }
+  }
+
+  private func appendNewTranscriptSegment(
+    _ newSegment: SpeakerSegment,
+    segment: TranscriptionService.BackendSegment,
+    to segmentsToPersist: inout [TranscriptionService.BackendSegment]
+  ) {
+    totalWordCount += newSegment.text.split(separator: " ").count
+    speakerSegments.append(newSegment)
+    totalSegmentCount += 1
+    segmentsToPersist.append(segment)
+    log(
+      "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
+    )
+  }
+
+  private func segmentWithID(
+    _ segment: TranscriptionService.BackendSegment,
+    id: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: segment.is_user,
+      person_id: segment.person_id,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
+    )
+  }
+
+  private func enqueueTranscriptPersistence(
+    _ segments: [TranscriptionService.BackendSegment],
+    sessionId: Int64
+  ) {
+    let previous = transcriptPersistenceTail
+    transcriptPersistenceTail = Task { @MainActor [weak self] in
+      await previous?.value
+      guard let self else { return }
+      await self.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
+    }
+  }
+
+  func flushTranscriptPersistence() async {
+    await transcriptPersistenceTail?.value
   }
 
   func persistBackendSegmentsToStorage(

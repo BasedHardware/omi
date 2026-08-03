@@ -290,13 +290,18 @@ extension RealtimeHubController {
             ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+        let fallbackStarted =
+          !error.healthError.failureClass.isAccountWide
+          && self.failoverToAlternateProvider(
+            reason: self.failoverReason(for: error.healthError.failureClass),
+            mintAttemptId: String(mintGeneration))
         self.recordRealtimeMintFailure(
-          error, provider: providerParam, phase: "warm", context: "realtime_mint")
+          error, provider: providerParam, phase: "warm", context: "realtime_mint",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
         if error.healthError.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.healthError.failureClass))
-        {
+        } else if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -308,16 +313,21 @@ extension RealtimeHubController {
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
+        let fallbackStarted =
+          !error.failureClass.isAccountWide
+          && self.failoverToAlternateProvider(
+            reason: self.failoverReason(for: error.failureClass),
+            mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "warm",
-          httpStatusCode: error.failureClass.httpStatusCode)
+          httpStatusCode: error.failureClass.httpStatusCode,
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.failureClass))
-        {
+        } else if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -331,11 +341,14 @@ extension RealtimeHubController {
         let typed = CredentialHealthError.backendTransient(
           statusCode: nil, message: error.localizedDescription)
         CredentialHealthManager.shared.record(typed, context: "realtime_mint")
+        let fallbackStarted = self.failoverToAlternateProvider(mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "warm")
-        if !self.failoverToAlternateProvider() {
+          phase: "warm",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -769,18 +782,6 @@ extension RealtimeHubController {
         message: message))
   }
 
-  @discardableResult
-  func enqueueTurnPersistence(
-    idempotencyKey: String,
-    retainingReceipt: Bool = false,
-    _ operation: @escaping @MainActor () async -> Bool
-  ) -> Task<Bool, Never> {
-    turnPersistenceLedger.enqueue(
-      continuityKey: idempotencyKey,
-      retainingReceipt: retainingReceipt,
-      operation)
-  }
-
   /// A deterministic screen-verification failure becomes visible before the provider can
   /// continue. Successful reports do not use this path: they keep provider narration open.
   /// Register its canonical journal obligation through the same retained receipt
@@ -822,6 +823,33 @@ extension RealtimeHubController {
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
       kernelTurnIDs: prefetchedVoiceContextTurnIDs)
+    if acceptedSpawnOwnerID == ownerID
+      || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
+    {
+      return await RealtimeTurnJournalAuthority.persist(
+        turnOwnerID: ownerID,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        kernelOwnsExchange: kernelOwnsExchange,
+        refreshAcceptedSpawn: {
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
+          return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+        },
+        recordProviderExchange: { false })
+    }
+
+    switch await finalizeStreamingRealtimeProjection(
+      ownerID: ownerID,
+      userText: userText,
+      assistantText: assistantText,
+      continuityKey: idempotencyKey
+    ) {
+    case .completed(let accepted):
+      return accepted
+    case .absent, .recordRejected:
+      break
+    }
+
     return await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: ownerID,
       acceptedSpawnOwnerID: acceptedSpawnOwnerID,
@@ -903,15 +931,6 @@ extension RealtimeHubController {
     legacyVoiceJournalImportTask = nil
   }
 
-  func awaitTurnPersistenceFence() async {
-    while !Task.isCancelled {
-      let observedGeneration = turnPersistenceLedger.generation
-      await turnPersistenceLedger.awaitPendingObligations()
-      guard observedGeneration == turnPersistenceLedger.generation else { continue }
-      return
-    }
-  }
-
   /// Completes the reducer-owned journal fence only after the canonical kernel
   /// has acknowledged this turn's stable idempotency key. Merely enqueueing the
   /// durable outbox entry is not logical success.
@@ -962,7 +981,9 @@ extension RealtimeHubController {
     // identity fence that guarded the original PTT turn.
     voiceResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: preservingReconnectAudio,
-      pendingReconnect: reconnectAudioBuffer)
+      pendingReconnect: reconnectAudioBuffer,
+      preservingBargeInReplacement: preservingBargeInReplacement,
+      pendingBargeInReplacement: replacementAudioBuffer)
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil
@@ -1184,16 +1205,20 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        let fallbackStarted =
+          self.shouldFailoverToAlternate(for: error.healthError.failureClass)
+          && self.failoverBargeInReplacement(
+            from: provider,
+            reason: self.failoverReason(for: error.healthError.failureClass),
+            mintAttemptId: String(mintGeneration))
         self.recordRealtimeMintFailure(
           error,
           provider: providerParam,
           phase: "barge_in_replacement",
-          context: "realtime_barge_in_mint")
-        if self.shouldFailoverToAlternate(for: error.healthError.failureClass),
-          self.failoverBargeInReplacement(
-            from: provider,
-            reason: self.failoverReason(for: error.healthError.failureClass))
-        {
+          context: "realtime_barge_in_mint",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
@@ -1211,16 +1236,20 @@ extension RealtimeHubController {
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
+        let fallbackStarted =
+          self.shouldFailoverToAlternate(for: error.failureClass)
+          && self.failoverBargeInReplacement(
+            from: provider,
+            reason: self.failoverReason(for: error.failureClass),
+            mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "barge_in_replacement",
-          httpStatusCode: error.failureClass.httpStatusCode)
-        if self.shouldFailoverToAlternate(for: error.failureClass),
-          self.failoverBargeInReplacement(
-            from: provider,
-            reason: self.failoverReason(for: error.failureClass))
-        {
+          httpStatusCode: error.failureClass.httpStatusCode,
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
@@ -1237,11 +1266,17 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        let fallbackStarted = self.failoverBargeInReplacement(
+          from: provider,
+          reason: "other",
+          mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "barge_in_replacement")
-        if self.failoverBargeInReplacement(from: provider, reason: "other") {
+          phase: "barge_in_replacement",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)

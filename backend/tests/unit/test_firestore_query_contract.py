@@ -7,9 +7,28 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.action_items as action_items_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
-from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY, firebase_index_manifest
+from database.firestore_index_registry import (
+    ACTIVE_ATTENTION_OVERRIDE_QUERY,
+    CANONICAL_CONSOLIDATION_QUERY,
+    CONVERSATION_SOURCE_MEMORY_QUERY,
+    DUE_MEMORY_OUTBOX_QUERY,
+    EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
+    INDEX_ONLY_REQUIREMENTS,
+    REVIEW_QUEUE_BY_CONFLICT_QUERY,
+    REVIEW_QUEUE_BY_FACT_QUERY,
+    REVIEW_QUEUE_BY_STATUS_QUERY,
+    REVIEW_QUEUE_BY_STATUS_ID_QUERY,
+    REVIEW_QUEUE_ORDERED_QUERY,
+    REQUIRED_MEMORY_PROCESSING_QUERY,
+    SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+    SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    firebase_index_manifest,
+)
 from scripts import firestore_query_coverage, generate_firestore_indexes
 
 
@@ -91,6 +110,149 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
     assert query.filters == [('account_generation', '==', 4), ('expires_at', '>', now)]
 
 
+@pytest.mark.parametrize(
+    ("spec", "values", "expected"),
+    [
+        (
+            REQUIRED_MEMORY_PROCESSING_QUERY,
+            {
+                "tier": "short_term",
+                "status": "active",
+                "processing_state": "pending",
+                "required": True,
+                "processing_statuses": ["pending_processing", "processing_failed_retryable"],
+            },
+            [
+                ("tier", "==", "short_term"),
+                ("status", "==", "active"),
+                ("processing_state", "==", "pending"),
+                ("promotion.required", "==", True),
+                (
+                    "promotion.processing_status",
+                    "in",
+                    ["pending_processing", "processing_failed_retryable"],
+                ),
+            ],
+        ),
+        (
+            CANONICAL_CONSOLIDATION_QUERY,
+            {
+                "tier": "short_term",
+                "status": "active",
+                "processing_state": "processed",
+                "source_state": "active",
+            },
+            [
+                ("tier", "==", "short_term"),
+                ("status", "==", "active"),
+                ("processing_state", "==", "processed"),
+                ("source_state", "==", "active"),
+            ],
+        ),
+        (
+            CONVERSATION_SOURCE_MEMORY_QUERY,
+            {"source_id": "conversation-a"},
+            [("source_ids", "array_contains", "conversation-a")],
+        ),
+        (
+            SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+            {
+                "status": "superseded",
+                "target_memory_ids": ["memory-a", "memory-b"],
+            },
+            [
+                ("status", "==", "superseded"),
+                ("canonical_memory_id", "in", ["memory-a", "memory-b"]),
+            ],
+        ),
+        (
+            SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+            {
+                "status": "superseded",
+                "target_memory_ids": ["memory-a", "memory-b"],
+            },
+            [
+                ("status", "==", "superseded"),
+                ("superseded_by", "in", ["memory-a", "memory-b"]),
+            ],
+        ),
+        (
+            EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+            {
+                "tier": "short_term",
+                "status": "active",
+                "processing_state": "processed",
+                "expires_at": "2026-07-28T12:00:00+00:00",
+            },
+            [
+                ("tier", "==", "short_term"),
+                ("status", "==", "active"),
+                ("processing_state", "==", "processed"),
+                ("expires_at", "<=", "2026-07-28T12:00:00+00:00"),
+            ],
+        ),
+        (
+            DUE_MEMORY_OUTBOX_QUERY,
+            {"status": "pending", "available_at": "2026-07-28T12:00:00+00:00"},
+            [
+                ("status", "==", "pending"),
+                ("available_at", "<=", "2026-07-28T12:00:00+00:00"),
+            ],
+        ),
+        (
+            EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
+            {
+                "event_type": "projection_sync",
+                "status": "processing",
+                "lease_expires_at": "2026-07-28T12:00:00+00:00",
+            },
+            [
+                ("event_type", "==", "projection_sync"),
+                ("status", "==", "processing"),
+                ("lease_expires_at", "<=", "2026-07-28T12:00:00+00:00"),
+            ],
+        ),
+        (
+            REVIEW_QUEUE_BY_FACT_QUERY,
+            {"fact_ids": ["memory-a", "memory-b"]},
+            [("fact_id", "in", ["memory-a", "memory-b"])],
+        ),
+        (
+            REVIEW_QUEUE_BY_CONFLICT_QUERY,
+            {"conflict_ids": ["memory-a", "memory-b"]},
+            [("conflict_with", "array_contains_any", ["memory-a", "memory-b"])],
+        ),
+        (
+            REVIEW_QUEUE_BY_STATUS_QUERY,
+            {"status": "pending"},
+            [("status", "==", "pending")],
+        ),
+        (
+            REVIEW_QUEUE_ORDERED_QUERY,
+            {},
+            [],
+        ),
+        (
+            REVIEW_QUEUE_BY_STATUS_ID_QUERY,
+            {"status": "pending"},
+            [("status", "==", "pending")],
+        ),
+        (
+            STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+            {"status": "in_progress"},
+            [("status", "==", "in_progress")],
+        ),
+    ],
+)
+def test_registered_memory_maintenance_queries_build_the_real_filter_chains(spec, values, expected):
+    query = _RecordingQuery()
+
+    built = spec.build(query, values, field_filter_factory=FieldFilter)
+
+    assert built is query
+    assert query.filters == expected
+
+
 def test_what_matters_now_route_executes_the_registered_attention_override_query(monkeypatch):
     now = datetime(2026, 7, 14, tzinfo=timezone.utc)
     database = _OverrideFirestore(
@@ -130,30 +292,54 @@ def test_what_matters_now_route_executes_the_registered_attention_override_query
 
 def test_generated_firestore_manifest_matches_the_checked_in_contract():
     manifest_path = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
-
-    assert manifest_path.read_text(encoding='utf-8') == generate_firestore_indexes.render_manifest()
-    assert firebase_index_manifest()['indexes'][-1] == {
-        'collectionGroup': 'task_attention_overrides',
+    expected_conversations_status_finished = {
+        'collectionGroup': 'conversations',
         'queryScope': 'COLLECTION',
         'fields': [
-            {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
-            {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': 'status', 'order': 'ASCENDING'},
+            {'fieldPath': 'finished_at', 'order': 'ASCENDING'},
             {'fieldPath': '__name__', 'order': 'ASCENDING'},
         ],
     }
 
+    assert manifest_path.read_text(encoding='utf-8') == generate_firestore_indexes.render_manifest()
+    assert any(
+        requirement.identifier == 'conversations_status_finished'
+        and requirement.to_manifest() == expected_conversations_status_finished
+        for requirement in INDEX_ONLY_REQUIREMENTS
+    )
+    assert (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.index_requirement.to_manifest() == expected_conversations_status_finished
+    )
+    assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
+
 
 @pytest.mark.slow
-def test_query_inventory_registers_the_migrated_attention_override_shape():
+def test_query_inventory_registers_the_migrated_query_shapes():
     report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
 
-    matching = [
-        query for query in report['queries'] if query['registered_spec'] == ACTIVE_ATTENTION_OVERRIDE_QUERY.identifier
-    ]
-    assert len(matching) == 1
-    assert matching[0]['classification'] == 'registered'
-    assert matching[0]['collection_group'] == 'task_attention_overrides'
-    assert report['counts']['serving']['registered'] >= 1
+    for spec in (
+        DUE_MEMORY_OUTBOX_QUERY,
+        EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
+        REVIEW_QUEUE_BY_FACT_QUERY,
+        REVIEW_QUEUE_BY_CONFLICT_QUERY,
+        REVIEW_QUEUE_BY_STATUS_QUERY,
+        REVIEW_QUEUE_ORDERED_QUERY,
+        REVIEW_QUEUE_BY_STATUS_ID_QUERY,
+        REQUIRED_MEMORY_PROCESSING_QUERY,
+        CANONICAL_CONSOLIDATION_QUERY,
+        CONVERSATION_SOURCE_MEMORY_QUERY,
+        SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+        SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+        EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+        ACTIVE_ATTENTION_OVERRIDE_QUERY,
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    ):
+        matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
+        assert len(matching) == 1
+        assert matching[0]['classification'] == 'registered'
+        assert matching[0]['collection_group'] == spec.collection_group
+    assert report['counts']['serving']['registered'] >= 14
 
 
 def test_inventory_finds_a_direct_compound_chain_wrapped_by_list():
@@ -218,6 +404,89 @@ def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
     report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
 
     assert firestore_query_coverage.check_ratchet(report, committed) == []
+
+
+class _StreamRecordingQuery:
+    """One Firestore query chain that records itself when production code streams it."""
+
+    def __init__(self, recorder, filters=(), orders=()):
+        self._recorder = recorder
+        self._filters = tuple(filters)
+        self._orders = tuple(orders)
+
+    def where(self, *, filter):
+        return _StreamRecordingQuery(
+            self._recorder, (*self._filters, (filter.field_path, filter.op_string)), self._orders
+        )
+
+    def order_by(self, field_path, direction):
+        return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
+
+    def stream(self):
+        self._recorder.append((self._filters, self._orders))
+        return []
+
+
+class _StreamRecordingUserRef:
+    def __init__(self, recorder):
+        self._recorder = recorder
+
+    def collection(self, name):
+        assert name == 'action_items'
+        return _StreamRecordingQuery(self._recorder)
+
+
+class _StreamRecordingFirestore:
+    def __init__(self, recorder):
+        self._recorder = recorder
+
+    def collection(self, name):
+        assert name == 'users'
+        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
+
+
+def _required_index_signature(collection_group, filters, orders):
+    """The composite index Firestore requires for one equality-plus-ordering chain."""
+    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
+    fields.extend(orders)
+    fields.append(('__name__', orders[-1][1]))
+    return (collection_group, 'COLLECTION', tuple(fields))
+
+
+def _declared_index_signatures():
+    return {
+        (
+            index['collectionGroup'],
+            index['queryScope'],
+            tuple((field['fieldPath'], field.get('order') or field.get('arrayConfig')) for field in index['fields']),
+        )
+        for index in firebase_index_manifest()['indexes']
+    }
+
+
+@pytest.mark.parametrize('completed', [None, False, True])
+def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(monkeypatch, completed):
+    """A due-range read orders due_at ascending; without the matching index prod 500s.
+
+    Regression for #10777: chat's get_action_items tool and GET /v1/action-items both
+    raised FailedPrecondition because only (completed ASC, due_at DESC) was deployed.
+    """
+    recorder = []
+    monkeypatch.setattr(action_items_db, 'db', _StreamRecordingFirestore(recorder))
+
+    action_items_db.get_action_items(
+        'index-contract-user',
+        completed=completed,
+        due_start_date=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        due_end_date=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        limit=50,
+    )
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, 'due-date filtered reads no longer build an equality + ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _required_index_signature('action_items', filters, orders) in declared
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():

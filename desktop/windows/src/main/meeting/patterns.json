@@ -30,7 +30,11 @@
     "arc.exe"
   ],
   "titles": [
-    { "id": "meet-web", "name": "Google Meet", "pattern": "^Meet\\s+[-–—]\\s" },
+    {
+      "id": "meet-web",
+      "name": "Google Meet",
+      "pattern": "^(?:Google\\s+)?Meet(?:\\s+[-–—]\\s|$)"
+    },
     { "id": "zoom-web", "name": "Zoom", "pattern": "Zoom Meeting" },
     { "id": "teams-web", "name": "Microsoft Teams", "pattern": "\\| Microsoft Teams" },
     { "id": "webex-web", "name": "Webex", "pattern": "\\bWebex\\b" }

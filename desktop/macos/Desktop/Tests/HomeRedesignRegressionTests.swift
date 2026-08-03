@@ -92,3 +92,25 @@ final class ChatBubbleMetadataRevealTests: XCTestCase {
       ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: true))
   }
 }
+
+final class ChatTranscriptWindowTests: XCTestCase {
+  func testKeepsOnlyTheNewestFiveHundredMessagesInChronologicalOrder() {
+    let messages = (0...500).map { index in
+      ChatMessage(id: "message-\(index)", text: "Message \(index)", sender: .user)
+    }
+
+    let visible = ChatTranscriptWindow.recentMessages(in: messages)
+
+    XCTAssertEqual(visible.count, 500)
+    XCTAssertEqual(visible.first?.id, "message-1")
+    XCTAssertEqual(visible.last?.id, "message-500")
+  }
+
+  func testStopsLoadingEarlierMessagesAtTheVisibleWindowLimit() {
+    let belowLimit = (0..<499).map { ChatMessage(id: "message-\($0)", text: "", sender: .user) }
+    let atLimit = (0..<500).map { ChatMessage(id: "message-\($0)", text: "", sender: .user) }
+
+    XCTAssertTrue(ChatTranscriptWindow.allowsLoadingEarlier(for: belowLimit))
+    XCTAssertFalse(ChatTranscriptWindow.allowsLoadingEarlier(for: atLimit))
+  }
+}

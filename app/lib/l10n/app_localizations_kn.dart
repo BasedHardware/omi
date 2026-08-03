@@ -1793,20 +1793,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get lovingOmi => 'Omi ಪಸಂದ ಮಾಡುತ್ತಿದ್ದೀರೆ?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get rateOnAppStore => 'App Store ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
-
-  @override
   String get maybeLater => 'ಬಹುಶಃ ನಂತರ';
 
   @override
@@ -2144,6 +2130,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ ಸ್ಮೃತಿ ಸಂಪಾದಿಸಿ';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
@@ -9812,4 +9810,7 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.';
+
+  @override
+  String get syncStatusTooOld => 'ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ';
 }

@@ -428,13 +428,17 @@ struct ConversationRowView: View {
         onTap()
       }
     }) {
-      if isCompactView {
-        // Compact mode: single line with all info
-        compactRowContent
-      } else {
-        // Expanded mode: title + overview with metadata below
-        expandedRowContent
+      Group {
+        if isCompactView {
+          // Compact mode: single line with all info
+          compactRowContent
+        } else {
+          // Expanded mode: title + overview with metadata below
+          expandedRowContent
+        }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .onHover { hovering in

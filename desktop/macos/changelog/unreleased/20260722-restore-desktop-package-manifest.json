@@ -1,3 +1,0 @@
-{
-  "change": "Restored the desktop Swift package manifest (Package.swift/Package.resolved) that a stray test fixture had replaced with a stub, unblocking desktop release builds"
-}

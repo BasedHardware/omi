@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-vendor-policy-lookup-masks-fault",
+  "violated_contract": "A recovery decision that reads a policy object out of a vendor SDK must resolve it from a binding that SDK actually populates, and must still return a decision when the policy is absent — the lookup's own AttributeError must never replace the provider fault it was supposed to classify.",
+  "canonical_prevention": "Resolve vendor policy objects at one SDK boundary, through the accessor the vendor populates (here the transport's wrapped-method table) with the documented attribute as the first choice; when nothing resolves, fall back to a decision that surfaces the original error. Pin the vendor's real object shape in a behavioral test so a binding change fails the suite instead of production.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_firestore_query_stream_retry.py"
+  ],
+  "evidence_prs": [10739],
+  "scope_hints": [
+    "backend/database/_client.py"
+  ],
+  "status": "open"
+}

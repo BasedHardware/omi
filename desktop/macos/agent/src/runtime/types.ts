@@ -106,6 +106,24 @@ export type ConversationContentBlock =
   | { type: "thinking"; id: string; text: string }
   | { type: "discoveryCard"; id: string; title: string; summary: string; fullText: string }
   | {
+      type: "questionCard";
+      id: string;
+      questionId: string;
+      text: string;
+      subject: { kind: "task" | "goal" | "capture" | "cold_start"; id: string };
+      options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>;
+      /** Explicit local script identity; never inferred from question text. */
+      coldStartSequence?: { sequenceId: string; step: 1 | 2 | 3; retired?: true };
+      /**
+       * Kernel-owned selection receipt. A question remains readable after an
+       * answer, but this durable value retires its options on every projection.
+       */
+      selectedOptionId?: string;
+    }
+  | { type: "taskCard"; id: string; taskId: string }
+  | { type: "goalLink"; id: string; goalId: string; summary: string }
+  | { type: "captureLink"; id: string; conversationId: string; momentTimestampMs?: number; summary: string }
+  | {
       type: "agentSpawn";
       id: string;
       pillId?: string;

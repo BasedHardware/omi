@@ -12,7 +12,7 @@ from llm_gateway.gateway.providers import (
     ProviderFailure,
 )
 from llm_gateway.gateway import providers as providers_mod
-from llm_gateway.gateway.schemas import FailureClass, ProviderRef
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 
 
 @pytest.mark.asyncio
@@ -192,7 +192,7 @@ async def test_openai_compatible_provider_maps_transport_error(monkeypatch):
 @pytest.mark.parametrize(
     ('status_code', 'failure_class'),
     [
-        (400, FailureClass.CAPABILITY_MISMATCH),
+        (400, FailureClass.PROVIDER_INVALID_REQUEST),
         (401, FailureClass.INVALID_CONFIG),
         (403, FailureClass.INVALID_CONFIG),
         (408, FailureClass.TIMEOUT_BEFORE_OUTPUT),
@@ -219,6 +219,68 @@ async def test_openai_compatible_provider_maps_status_without_leaking_body(monke
 
     assert exc_info.value.failure_class == failure_class
     assert raw_body not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('error', 'failure_class', 'provider_rejection'),
+    [
+        (
+            {
+                'code': 'unsupported_parameter',
+                'param': 'reasoning_effort',
+                'message': 'private provider detail',
+            },
+            FailureClass.CAPABILITY_MISMATCH,
+            ProviderRejection.UNSUPPORTED_REASONING_EFFORT,
+        ),
+        (
+            {
+                'code': 'context_length_exceeded',
+                'param': 'messages',
+                'message': 'private provider detail',
+            },
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.CONTEXT_LENGTH_EXCEEDED,
+        ),
+        (
+            {
+                'code': 'invalid_value',
+                'param': 'customer-secret-field',
+                'message': 'private provider detail',
+            },
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.INVALID_OTHER,
+        ),
+    ],
+)
+async def test_openai_provider_classifies_bounded_rejection_without_leaking_body(
+    monkeypatch,
+    error,
+    failure_class,
+    provider_rejection,
+):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(400, json={'error': {**error, 'sensitive': 'must-not-leak'}})
+            )
+        ),
+    )
+
+    with pytest.raises(ProviderFailure) as exc_info:
+        await provider.create_chat_completion(
+            {'model': 'gpt-5.4-nano', 'messages': [{'role': 'user', 'content': 'secret'}], 'stream': False},
+            provider_ref=ProviderRef(provider='openai', model='gpt-5.4-nano'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=8000,
+        )
+
+    assert exc_info.value.failure_class == failure_class
+    assert exc_info.value.provider_rejection == provider_rejection
+    assert 'private provider detail' not in str(exc_info.value)
+    assert 'customer-secret-field' not in exc_info.value.provider_rejection.value
 
 
 @pytest.mark.asyncio

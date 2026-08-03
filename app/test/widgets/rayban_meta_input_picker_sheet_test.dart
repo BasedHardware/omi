@@ -23,11 +23,7 @@ void main() {
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
-        body: RayBanMetaInputPickerSheet(
-          inputLoader: inputLoader,
-          connector: connector,
-          onConnected: onConnected,
-        ),
+        body: RayBanMetaInputPickerSheet(inputLoader: inputLoader, connector: connector, onConnected: onConnected),
       ),
     );
   }
@@ -56,9 +52,7 @@ void main() {
   });
 
   testWidgets('shows the localized empty state when iOS reports no Bluetooth microphones', (tester) async {
-    await tester.pumpWidget(
-      buildPicker(inputLoader: () async => [], connector: (_) async {}, onConnected: () {}),
-    );
+    await tester.pumpWidget(buildPicker(inputLoader: () async => [], connector: (_) async {}, onConnected: () {}));
     await tester.pumpAndSettle();
 
     expect(

@@ -1,6 +1,16 @@
 import OmiSupport
 import SwiftUI
 
+/// The lifecycle of the currently selected marketplace filter query. `filteredApps == nil`
+/// is not enough to distinguish a query that has not produced a result from a completed
+/// query with no matches.
+enum AppFilterResultsQueryState: Equatable {
+  case unknown
+  case loading
+  case completed
+  case failed
+}
+
 /// State management for apps/plugins functionality
 @MainActor
 class AppProvider: ObservableObject {
@@ -18,13 +28,34 @@ class AppProvider: ObservableObject {
   @Published var isSearching = false
   @Published var appLoadingStates: [String: Bool] = [:]
 
-  @Published var searchQuery = ""
-  @Published var selectedCategory: String?
-  @Published var selectedCapability: String?
-  @Published var showInstalledOnly = false
+  @Published var searchQuery = "" {
+    didSet {
+      guard searchQuery != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var selectedCategory: String? {
+    didSet {
+      guard selectedCategory != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var selectedCapability: String? {
+    didSet {
+      guard selectedCapability != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var showInstalledOnly = false {
+    didSet {
+      guard showInstalledOnly != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
 
   @Published var errorMessage: String?
   @Published var filteredApps: [OmiApp]?
+  @Published private(set) var filteredAppsQueryState: AppFilterResultsQueryState = .unknown
   @Published var hasMoreFilteredApps = false
   @Published var isLoadingMore = false
 
@@ -96,6 +127,7 @@ class AppProvider: ObservableObject {
 
     errorMessage = nil
     filteredApps = nil
+    filteredAppsQueryState = .unknown
     hasMoreFilteredApps = false
     isLoadingMore = false
     filteredAppsOffset = 0
@@ -252,6 +284,7 @@ class AppProvider: ObservableObject {
       if !marketplaceApps.isEmpty {
         apps = marketplaceApps
         filteredApps = nil
+        filteredAppsQueryState = .unknown
         updateDerivedLists()
         return
       }
@@ -265,10 +298,12 @@ class AppProvider: ObservableObject {
       filteredApps = cached.apps
       filteredAppsOffset = cached.offset
       hasMoreFilteredApps = cached.hasMore
+      filteredAppsQueryState = .completed
       return
     }
 
     isSearching = true
+    filteredAppsQueryState = .loading
     errorMessage = nil
     defer { isSearching = false }
 
@@ -285,6 +320,7 @@ class AppProvider: ObservableObject {
       guard currentFilterKey == cacheKey else { return }
       filteredApps = results
       hasMoreFilteredApps = results.count >= filteredAppsPageSize
+      filteredAppsQueryState = .completed
       cacheFilteredApps(
         FilterCacheEntry(
           apps: results,
@@ -294,9 +330,11 @@ class AppProvider: ObservableObject {
         for: cacheKey
       )
     } catch {
+      guard currentFilterKey == cacheKey else { return }
       logError("Failed to search apps", error: error)
       errorMessage = "Search failed: \(error.localizedDescription)"
       hasMoreFilteredApps = false
+      filteredAppsQueryState = .failed
     }
   }
 
@@ -355,6 +393,7 @@ class AppProvider: ObservableObject {
     filteredApps = nil
     filteredAppsOffset = 0
     hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
   }
 
   /// Fetch user's enabled apps
@@ -453,6 +492,13 @@ class AppProvider: ObservableObject {
     list = updatedList
   }
 
+  private func invalidateFilteredAppsQuery() {
+    filteredApps = nil
+    filteredAppsOffset = 0
+    hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
+  }
+
   private func cachedFilteredApps(for key: FilterKey) -> FilterCacheEntry? {
     guard let cached = filteredAppsCache[key] else { return nil }
     filteredAppsCacheOrder.removeAll { $0 == key }
@@ -523,5 +569,6 @@ class AppProvider: ObservableObject {
     filteredApps = nil
     filteredAppsOffset = 0
     hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
   }
 }

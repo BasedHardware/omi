@@ -441,8 +441,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     color: Colors.white,
                                                     borderRadius: BorderRadius.circular(10),
                                                   ),
-                                                  child: const FaIcon(FontAwesomeIcons.xmark,
-                                                      size: 10, color: Colors.black),
+                                                  child: const FaIcon(
+                                                    FontAwesomeIcons.xmark,
+                                                    size: 10,
+                                                    color: Colors.black,
+                                                  ),
                                                 ),
                                               ),
                                             ),

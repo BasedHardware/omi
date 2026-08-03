@@ -162,6 +162,19 @@ void main() {
     expect(provider.hasTranscripts, true);
   });
 
+  test('active capture identity survives deletion of the first segment', () {
+    final provider = CaptureProvider();
+    provider.testSessionStartSeconds = 12345;
+    provider.segments = [_segment('first', 'one'), _segment('second', 'two')];
+
+    final captureIdentity = provider.activeCaptureSessionId;
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['first']));
+
+    expect(captureIdentity, 'live-12345');
+    expect(provider.activeCaptureSessionId, captureIdentity);
+    expect(provider.segments.single.id, 'second');
+  });
+
   group('metricsNotifyEnabled', () {
     test('defaults to not notifying on metrics update', () {
       final provider = CaptureProvider();
@@ -1118,6 +1131,40 @@ void main() {
 
       expect(provider.isPaused, isTrue);
       expect(SharedPreferencesUtil().deviceMuted, isTrue);
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage for issue #6311: before this change
+  // `transcriptServiceReady` was `_transcriptServiceReady && _isConnected`, so a
+  // transient ConnectivityService flicker (WiFi↔cellular handoff, brief DNS
+  // hiccup) flipped the header to "Recording, reconnecting" even while the
+  // transcript WebSocket was alive and segments were flowing. The socket
+  // lifecycle is the authoritative signal; a connectivity change must never
+  // change transcript-service readiness.
+  group('transcriptServiceReady is socket-driven, not connectivity-driven (#6311)', () {
+    test('connectivity flicker does not toggle readiness of a ready socket', () {
+      final provider = CaptureProvider();
+
+      // Drive the provider into the socket-subscribed state (the scenario the
+      // old getter got wrong): onConnected mirrors the transcript WebSocket
+      // subscribing, which sets _transcriptServiceReady = true.
+      provider.onConnected();
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A connectivity flicker must not toggle readiness off. Before the fix
+      // this ANDed _isConnected=false into the getter and manufactured a false
+      // "Recording, reconnecting" over a healthy socket.
+      provider.onConnectionStateChanged(false);
+      expect(provider.transcriptServiceReady, isTrue, reason: 'ready socket must survive a connectivity flicker');
+
+      // And it must not depend on connectivity coming back either.
+      provider.onConnectionStateChanged(true);
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A socket close is the only thing that should end readiness.
+      provider.onClosed();
+      expect(provider.transcriptServiceReady, isFalse, reason: 'socket close must end transcript readiness');
       provider.dispose();
     });
   });

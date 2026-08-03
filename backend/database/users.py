@@ -1,15 +1,28 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from ._client import db, document_id_from_seed
+from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
-from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
-from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from database.redis_db import (
+    delete_cached_user_geolocation,
+    try_acquire_client_device_write_lock,
+    try_acquire_user_platform_write_lock,
+)
+from models.users import (
+    LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+    LOCATION_CONTEXT_PURPOSE,
+    LocationContextConsent,
+    LocationContextConsentStatus,
+    Subscription,
+    PlanLimits,
+    PlanType,
+    SubscriptionStatus,
+)
 from models.other import Person
 from utils.subscription import get_default_basic_subscription
 import logging
@@ -18,11 +31,19 @@ logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
+LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 
 
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
+
+
+class DeletionWipeIntent(TypedDict):
+    """Result of creating or joining an account-deletion wipe authority."""
+
+    wipe_job_id: str
+    dispatch_claimed: bool
 
 
 # Conservative low-risk user projections. Do NOT use these policies for
@@ -292,24 +313,6 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-def mark_user_deletion_wipe_started(uid: str):
-    """Mark that the background data wipe has been queued but not yet completed.
-
-    Persisted in the top-level ``account_deletions`` collection so it survives a
-    deploy or pod restart. A reconciliation worker can query for documents where
-    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes.
-
-    The worker transitions the marker to ``'running'`` (via
-    ``mark_user_deletion_wipe_running``) as soon as it actually starts
-    executing, so the reconciler can distinguish a genuinely orphaned queued
-    wipe from one that is actively executing but slow.
-    """
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
-
-
 def mark_user_deletion_wipe_running(uid: str):
     """Transition a queued wipe marker to ``running`` once the worker starts.
 
@@ -330,7 +333,24 @@ def mark_user_deletion_wipe_running(uid: str):
 
 
 @transactional
-def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> str:
+def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> DeletionWipeIntent:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        data = snapshot.to_dict() or {}
+        existing_job_id = data.get('wipe_job_id')
+        # A repeat request must join the existing durable deletion authority,
+        # never reset a claimed/running/completed job backwards.
+        if isinstance(existing_job_id, str) and existing_job_id:
+            status = data.get('wipe_status')
+            # A retry can recover a request that crashed after intent was
+            # committed but before it promoted that exact job to pending. The
+            # promotion below is itself job-id-fenced and transactional, so
+            # concurrent retries can race safely: exactly one gets ``True``
+            # and dispatches.
+            if status == 'deleting_auth':
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
+            if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
     transaction.set(
         doc_ref,
         {
@@ -340,25 +360,54 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
         },
         merge=True,
     )
-    return wipe_job_id
+    return {'wipe_job_id': wipe_job_id, 'dispatch_claimed': True}
 
 
-def mark_user_deletion_wipe_intent(uid: str) -> str:
-    """Persist a non-actionable deletion intent *before* auth deletion.
+def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
+    """Create or join the durable account-deletion authority.
 
-    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
-    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
-    auth user is actually gone, so a crash between this write and the confirmed
-    auth deletion cannot trigger a premature data wipe for a user whose Firebase
-    account still exists.
+    Repeated requests reuse an existing active job id rather than moving a
+    claimed, running, failed, or completed wipe backwards. An existing
+    ``deleting_auth`` intent remains eligible for the job-id-fenced promotion
+    so a retry can recover a crash before queue acceleration; exactly one
+    concurrent request can win that promotion. The claimed worker is the only
+    path that deletes Firebase Auth or user data.
 
-    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
-    actionable ``'pending'`` state once auth deletion is confirmed.
+    ``deleting_auth`` remains a legacy recovery state for records written by
+    older workers; new request handling promotes it immediately.
     """
     wipe_job_id = uuid.uuid4().hex
     doc_ref = db.collection('account_deletions').document(uid)
     transaction = db.transaction()
     return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
+
+
+@transactional
+def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str) -> bool:
+    """Promote a newly-created intent to pending exactly once.
+
+    The status and opaque job id are checked in the same transaction as the
+    write. This fences a retry/repeated request from moving an already claimed,
+    running, failed, or completed wipe backwards before it can enqueue again.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('wipe_status') != 'deleting_auth' or data.get('wipe_job_id') != wipe_job_id:
+        return False
+    transaction.update(
+        doc_ref,
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+    )
+    return True
+
+
+def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
+    """Atomically promote one newly-created wipe intent to queue-pending."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
 
 
 def mark_user_deletion_wipe_completed(uid: str):
@@ -1115,42 +1164,25 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     return True
 
 
-def _delete_collection_recursive(collection_ref, batch_size: int = 450):
-    """Delete every document under a collection, descending into nested subcollections first."""
-    while True:
-        docs = list(collection_ref.limit(batch_size).stream())
-        if not docs:
-            return
-
-        for doc in docs:
-            for sub in doc.reference.collections():
-                _delete_collection_recursive(sub, batch_size)
-
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-        batch.commit()
-
-        if len(docs) < batch_size:
-            return
-
-
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return {'status': 'error', 'message': 'User not found'}
+    root_exists = user_ref.get().exists
 
-    # Enumerate subcollections live instead of hardcoding a list — picks up
+    # Enumerate subcollections live even when the root document is missing.
+    # Firestore permits immediate children to survive a parent deletion; an
+    # early "User not found" return would falsely mark the deletion complete.
+    # This picks up
     # everything the user has written (conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
     # messages, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        _delete_collection_recursive(sub)
+        delete_collection_recursive(sub, client=db)
 
-    logger.info(f"Deleting user document: {uid}")
-    user_ref.delete()
+    if root_exists:
+        logger.info(f"Deleting user document: {uid}")
+        user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 
@@ -1479,6 +1511,66 @@ def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict() or {}
     return user_data.get('training_data_opt_in', None)
+
+
+def get_user_location_context_consent(
+    uid: str, *, firestore_client: Any | None = None
+) -> Optional[LocationContextConsent]:
+    """Read the uncached, server-owned city-context consent record fail-closed."""
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(['location_context_consent'])
+    user_data = snapshot.to_dict() or {}
+    if not isinstance(user_data, dict):
+        return None
+    raw_consent = user_data.get('location_context_consent')
+    if not isinstance(raw_consent, dict):
+        return None
+    return parse_snapshot_or_none(
+        LocationContextConsent,
+        snapshot,
+        payload_from_snapshot=lambda _snapshot: raw_consent,
+    )
+
+
+def set_user_location_context_consent(
+    uid: str,
+    *,
+    enabled: bool,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> LocationContextConsent:
+    """Persist the only authority for city-context disclosure and revoke fail-closed."""
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        raise ValueError('location-context consent timestamp must be timezone-aware')
+
+    if enabled:
+        consent = LocationContextConsent(
+            status=LocationContextConsentStatus.granted,
+            purpose=LOCATION_CONTEXT_PURPOSE,
+            disclosed_providers=LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+            granted_at=current_time,
+            expires_at=current_time + LOCATION_CONTEXT_CONSENT_TTL,
+        )
+    else:
+        consent = LocationContextConsent(
+            status=LocationContextConsentStatus.revoked,
+            purpose=LOCATION_CONTEXT_PURPOSE,
+            disclosed_providers=LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+            granted_at=current_time,
+            expires_at=current_time,
+            revoked_at=current_time,
+        )
+
+    client = firestore_client or get_firestore_client()
+    client.collection('users').document(uid).set({'location_context_consent': consent.model_dump()}, merge=True)
+    if not enabled:
+        try:
+            delete_cached_user_geolocation(uid)
+        except Exception as error:
+            # The persisted revocation is the read gate; Redis cleanup is a best-effort reduction of retained cache.
+            logger.warning('location-context cache deletion failed uid=%s error_type=%s', uid, type(error).__name__)
+    return consent
 
 
 def set_user_training_data_opt_in(uid: str, status: str):

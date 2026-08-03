@@ -9,7 +9,7 @@ Metrics: chrF++ (primary, robust for CJK), BLEU (secondary), COMET (optional).
 Results are labeled per model and saved as JSON + CSV for cross-model comparison.
 
 Prerequisites:
-    pip install sacrebleu httpx google-cloud-translate
+    pip install sacrebleu httpx (legacy: google-cloud-translate if comparing with Cloud Translation V3)
 
 Usage:
     # Dry run — validate dataset loading and dependencies
@@ -213,9 +213,9 @@ def translate_nllb_batch(
 def translate_google_batch(texts: List[str], target_lang: str, cache_dir: str) -> Tuple[List[str], float]:
     """Call Google Cloud Translation V3. Caches responses to avoid re-billing."""
     try:
-        from google.cloud import translate_v3
+        from google.cloud import translate_v3  # legacy: only needed for Cloud Translation V3 comparison
     except ImportError:
-        logger.error("Install: pip install google-cloud-translate")
+        logger.error("legacy: pip install google-cloud-translate for Cloud Translation V3 comparison")
         return [""] * len(texts), 0.0
 
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")

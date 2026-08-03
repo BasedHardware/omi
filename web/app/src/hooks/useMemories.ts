@@ -69,11 +69,19 @@ function getFromCache(key: string): CacheEntry | null {
   return cached ? cached.data : null;
 }
 
-function setToCache(key: string, memories: Memory[], offset: number, hasMore: boolean): void {
+function setToCache(
+  key: string,
+  memories: Memory[],
+  offset: number,
+  hasMore: boolean,
+): void {
   setCache<CacheEntry>(key, { memories, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
-function updateCacheMemories(key: string, updater: (memories: Memory[]) => Memory[]): void {
+function updateCacheMemories(
+  key: string,
+  updater: (memories: Memory[]) => Memory[],
+): void {
   updateCache<CacheEntry>(key, (entry) => ({
     ...entry,
     memories: updater(entry.memories),
@@ -89,7 +97,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const { limit = 25 } = options;
 
   const [activeCategories, setActiveCategories] = useState<MemoryCategory[]>(
-    options.categories || []
+    options.categories || [],
   );
 
   // Get cache key for current categories
@@ -110,17 +118,17 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const initializedRef = useRef(false);
 
   // Core fetch function
-  const doFetch = useCallback(async (
-    categories: MemoryCategory[],
-    currentOffset: number
-  ): Promise<Memory[]> => {
-    const result = await getMemories({
-      limit,
-      offset: currentOffset,
-      categories: categories.length > 0 ? categories : undefined,
-    });
-    return result;
-  }, [limit]);
+  const doFetch = useCallback(
+    async (categories: MemoryCategory[], currentOffset: number): Promise<Memory[]> => {
+      const result = await getMemories({
+        limit,
+        offset: currentOffset,
+        categories: categories.length > 0 ? categories : undefined,
+      });
+      return result;
+    },
+    [limit],
+  );
 
   // Initial load - check cache first (memory → IndexedDB → network)
   useEffect(() => {
@@ -161,7 +169,12 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           offsetRef.current = indexedDBMemories.length;
           setHasMore(indexedDBMemories.length >= limit);
           // Also update in-memory cache
-          setToCache(key, indexedDBMemories, indexedDBMemories.length, indexedDBMemories.length >= limit);
+          setToCache(
+            key,
+            indexedDBMemories,
+            indexedDBMemories.length,
+            indexedDBMemories.length >= limit,
+          );
           setLoading(false);
           // Continue to background refresh to get latest data
         } else {
@@ -195,7 +208,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           }
         }
 
-        const baseMessage = err instanceof Error ? err.message : 'Failed to load memories';
+        const baseMessage =
+          err instanceof Error ? err.message : 'Failed to load memories';
         if (hasAnyCachedData) {
           // Show that refresh failed but cached data is available
           setError(`${baseMessage} (showing cached data)`);
@@ -308,8 +322,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       setMemories((prev) => {
         // Deduplicate
-        const existingIds = new Set(prev.map(m => m.id));
-        const newMemories = result.filter(m => !existingIds.has(m.id));
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newMemories = result.filter((m) => !existingIds.has(m.id));
         const updated = [...prev, ...newMemories];
         // Update cache with new memories
         const newOffset = offsetRef.current + result.length;
@@ -353,59 +367,69 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   }, [activeCategories, doFetch, limit]);
 
   // Add memory
-  const addMemory = useCallback(async (
-    content: string,
-    visibility: MemoryVisibility = 'public'
-  ): Promise<Memory | null> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      const newMemory = await createMemory({ content, visibility, category: 'manual' });
-      setMemories((prev) => {
-        const updated = [newMemory, ...prev];
-        // Update cache
-        updateCacheMemories(key, () => updated);
-        return updated;
-      });
-      return newMemory;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create memory');
-      return null;
-    }
-  }, [activeCategories]);
+  const addMemory = useCallback(
+    async (
+      content: string,
+      visibility: MemoryVisibility = 'public',
+    ): Promise<Memory | null> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        const newMemory = await createMemory({ content, visibility, category: 'manual' });
+        setMemories((prev) => {
+          const updated = [newMemory, ...prev];
+          // Update cache
+          updateCacheMemories(key, () => updated);
+          return updated;
+        });
+        return newMemory;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create memory');
+        return null;
+      }
+    },
+    [activeCategories],
+  );
 
   // Edit memory
-  const editMemory = useCallback(async (id: string, content: string): Promise<boolean> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      await updateMemoryContent(id, content);
-      const updater = (prev: Memory[]) =>
-        prev.map((m) =>
-          m.id === id ? { ...m, content, edited: true, updated_at: new Date().toISOString() } : m
-        );
-      setMemories(updater);
-      updateCacheMemories(key, updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update memory');
-      return false;
-    }
-  }, [activeCategories]);
+  const editMemory = useCallback(
+    async (id: string, content: string): Promise<boolean> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        await updateMemoryContent(id, content);
+        const updater = (prev: Memory[]) =>
+          prev.map((m) =>
+            m.id === id
+              ? { ...m, content, edited: true, updated_at: new Date().toISOString() }
+              : m,
+          );
+        setMemories(updater);
+        updateCacheMemories(key, updater);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update memory');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
 
   // Remove memory
-  const removeMemory = useCallback(async (id: string): Promise<boolean> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      await deleteMemory(id);
-      const updater = (prev: Memory[]) => prev.filter((m) => m.id !== id);
-      setMemories(updater);
-      updateCacheMemories(key, updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete memory');
-      return false;
-    }
-  }, [activeCategories]);
-
+  const removeMemory = useCallback(
+    async (id: string): Promise<boolean> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        await deleteMemory(id);
+        const updater = (prev: Memory[]) => prev.filter((m) => m.id !== id);
+        setMemories(updater);
+        updateCacheMemories(key, updater);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete memory');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
 
   // Remove multiple memories via the batch API. IDs are sent in chunks of 100 (the
   // server's per-request cap) and each successful chunk is applied to the UI
@@ -440,58 +464,64 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   );
 
   // Toggle visibility
-  const toggleVisibility = useCallback(async (
-    id: string,
-    visibility: MemoryVisibility
-  ): Promise<boolean> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      await updateMemoryVisibility(id, visibility);
-      const updater = (prev: Memory[]) =>
-        prev.map((m) =>
-          m.id === id ? { ...m, visibility, updated_at: new Date().toISOString() } : m
-        );
-      setMemories(updater);
-      updateCacheMemories(key, updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update visibility');
-      return false;
-    }
-  }, [activeCategories]);
+  const toggleVisibility = useCallback(
+    async (id: string, visibility: MemoryVisibility): Promise<boolean> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        await updateMemoryVisibility(id, visibility);
+        const updater = (prev: Memory[]) =>
+          prev.map((m) =>
+            m.id === id ? { ...m, visibility, updated_at: new Date().toISOString() } : m,
+          );
+        setMemories(updater);
+        updateCacheMemories(key, updater);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update visibility');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
 
   // Accept memory
-  const acceptMemory = useCallback(async (id: string): Promise<boolean> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      await reviewMemory(id, true);
-      const updater = (prev: Memory[]) =>
-        prev.map((m) =>
-          m.id === id ? { ...m, reviewed: true, user_review: true } : m
-        );
-      setMemories(updater);
-      updateCacheMemories(key, updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to accept memory');
-      return false;
-    }
-  }, [activeCategories]);
+  const acceptMemory = useCallback(
+    async (id: string): Promise<boolean> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        await reviewMemory(id, true);
+        const updater = (prev: Memory[]) =>
+          prev.map((m) =>
+            m.id === id ? { ...m, reviewed: true, user_review: true } : m,
+          );
+        setMemories(updater);
+        updateCacheMemories(key, updater);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to accept memory');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
 
   // Reject memory
-  const rejectMemory = useCallback(async (id: string): Promise<boolean> => {
-    const key = getCacheKey(activeCategories);
-    try {
-      await reviewMemory(id, false);
-      const updater = (prev: Memory[]) => prev.filter((m) => m.id !== id);
-      setMemories(updater);
-      updateCacheMemories(key, updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reject memory');
-      return false;
-    }
-  }, [activeCategories]);
+  const rejectMemory = useCallback(
+    async (id: string): Promise<boolean> => {
+      const key = getCacheKey(activeCategories);
+      try {
+        await reviewMemory(id, false);
+        const updater = (prev: Memory[]) => prev.filter((m) => m.id !== id);
+        setMemories(updater);
+        updateCacheMemories(key, updater);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to reject memory');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
 
   // Set categories
   const setCategories = useCallback((categories: MemoryCategory[]) => {

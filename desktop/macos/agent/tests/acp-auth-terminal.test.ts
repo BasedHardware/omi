@@ -58,6 +58,7 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
     clientId: "client-1",
     ownerId: "owner",
     sessionId,
+    surfaceKind: "main_chat",
     prompt: "hello",
     mode: "act",
     ...overrides,

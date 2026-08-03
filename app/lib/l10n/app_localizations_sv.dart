@@ -1469,7 +1469,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get payYourSttProvider => 'Använd Omi fritt. Du betalar bara din STT-leverantör direkt.';
 
   @override
-  String get freeMinutesMonth => '1 200 gratis minuter/månad ingår. Obegränsat med ';
+  String get freeMinutesMonth => '300 gratis minuter/månad ingår. Obegränsat med ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1791,20 +1791,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Älskar du Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i App Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i Google Play Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get rateOnAppStore => 'Betygsätt i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Betygsätt i Google Play';
 
   @override
   String get maybeLater => 'Kanske senare';
@@ -2141,6 +2127,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Redigera minne';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Jag gillar att äta glass...';
@@ -4710,7 +4708,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuter + obegränsat på enheten';
+  String get basicPlanDescription => '300 premium-minuter + obegränsat på enheten';
 
   @override
   String get minutes => 'minuter';
@@ -6003,7 +6001,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
+      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
 
   @override
   String get viewUsage => 'Visa användning';
@@ -6084,7 +6082,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
+      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
 
   @override
   String get audioProcessedLocally => 'Ljud behandlas lokalt. Fungerar offline, mer privat, men använder mer batteri.';
@@ -9785,4 +9783,7 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.';
+
+  @override
+  String get syncStatusTooOld => 'För gammal för att synkas — Omi kan inte ta emot den';
 }

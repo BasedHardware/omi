@@ -50,7 +50,9 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       // DashboardPage's capture toggle now delegates to CaptureListeningLogic,
       // which owns the register-first screen-recording grant.
       "Sources/MainWindow/CaptureListeningLogic.swift",
-      "Sources/OmiApp.swift",
+      // OmiApp's menu-bar toggle now delegates to SystemCaptureControls, which owns the
+      // register-first screen-recording grant for both the menu bar and the notch cluster.
+      "Sources/FloatingControlBar/SystemCaptureControls.swift",
       "Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift",
       "Sources/MainWindow/RewindOnlyView.swift",
     ] {
@@ -140,58 +142,85 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
   }
 
-  /// The drag card pins directly beneath the Settings window (x-centered on it,
-  /// its top a fixed gap below the window's bottom edge) so it follows the window
-  /// and never covers the drop target.
+  /// Regression for the reported detached icon: the draggable source must begin
+  /// immediately beside the in-window permission list, not below the entire
+  /// System Settings window.
   @MainActor
-  func testDragCardSitsDirectlyUnderSettingsWindow() {
-    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-    let card = CGSize(width: 180, height: 164)
-    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+  func testDragCardStartsAdjacentToHighlightedPermissionList() {
+    let visible = CGRect(x: 0, y: 0, width: 1_600, height: 1_000)
+    let settings = CGRect(x: 600, y: 160, width: 800, height: 640)
+    let card = CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev")
+    let target = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: settings)
 
     let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: anchor, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(frame.midX, anchor.midX)
-    // Sits below the window's bottom edge (minY) with a 12pt gap, not covering it.
-    XCTAssertEqual(frame.maxY, anchor.minY - 12)
+      target: target, cardSize: card, visibleFrame: visible)
+    XCTAssertGreaterThan(target.midX, settings.midX, "target belongs in the Settings content pane")
+    XCTAssertEqual(frame.maxX, target.minX - 16, accuracy: 0.001)
+    XCTAssertEqual(frame.midY, target.midY, accuracy: 0.001)
+    XCTAssertTrue(frame.intersection(target).isEmpty, "source must never cover the drop list")
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardDirection(cardFrame: frame, targetFrame: target),
+      .right)
   }
 
-  /// When the Settings window sits too low to fit the card beneath it, the card
-  /// flips to just above the window rather than clamping back over the drop target.
+  /// Target and source geometry must follow a resized/moved System Settings
+  /// window instead of drifting to a screen-relative fallback position.
   @MainActor
-  func testDragCardFlipsAboveWhenNoRoomBelow() {
-    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-    let card = CGSize(width: 180, height: 164)
-    // Low, short window: no 164pt of room below its bottom edge (minY = 20).
-    let anchor = CGRect(x: 900, y: 20, width: 600, height: 200)
+  func testPermissionListTargetAndSourceFollowSettingsResize() {
+    let visible = CGRect(x: 0, y: 0, width: 1_800, height: 1_100)
+    let initialSettings = CGRect(x: 200, y: 140, width: 760, height: 620)
+    let movedSettings = CGRect(x: 680, y: 280, width: 920, height: 700)
+    let card = CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev")
+    let initialTarget = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: initialSettings)
+    let movedTarget = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: movedSettings)
+    let movedCard = CloudConnectorGuidanceOverlay.dragCardFrame(
+      target: movedTarget, cardSize: card, visibleFrame: visible)
 
-    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: anchor, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(frame.midX, anchor.midX)
-    XCTAssertGreaterThanOrEqual(frame.minY, anchor.maxY)
+    XCTAssertGreaterThan(movedTarget.width, initialTarget.width)
+    XCTAssertGreaterThan(movedTarget.minX, initialTarget.minX)
+    XCTAssertEqual(movedCard.maxX, movedTarget.minX - 16, accuracy: 0.001)
+    XCTAssertEqual(movedCard.midY, movedTarget.midY, accuracy: 0.001)
   }
 
-  /// With no Settings window detected yet, the card falls back to the bottom
-  /// quarter of the screen, centered horizontally.
   @MainActor
-  func testDragCardFallsBackToBottomQuarterWithoutAnchor() {
-    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-    let card = CGSize(width: 180, height: 164)
+  func testSettingsWindowFrameUsesWindowServerMetadataWithoutAccessibility() {
+    let settingsPID: pid_t = 42
+    let windows: [[String: Any]] = [
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(200), "Y": CGFloat(100), "Width": CGFloat(700), "Height": CGFloat(600),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(250), "Y": CGFloat(150), "Width": CGFloat(300), "Height": CGFloat(200),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: pid_t(99),
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: ["X": CGFloat(0), "Y": CGFloat(0), "Width": CGFloat(1200), "Height": CGFloat(900)],
+      ],
+    ]
 
-    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: nil, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(centered.midX, visible.midX)
-    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
+    let frame = CloudConnectorFormAutomation.appKitWindowFrame(pid: settingsPID, windows: windows)
+    XCTAssertEqual(frame?.minX, 200)
+    XCTAssertEqual(frame?.width, 700)
+    XCTAssertEqual(frame?.height, 600)
   }
 
   @MainActor
   func testDragCardExpandsForLongBundleDisplayNames() {
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev"),
-      CGSize(width: 180, height: 164))
+      CGSize(width: 220, height: 190))
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragCardSize(appName: "omi-tool-stall-reliability"),
-      CGSize(width: 240, height: 180))
+      CGSize(width: 260, height: 200))
   }
 
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {

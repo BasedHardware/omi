@@ -1477,7 +1477,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get payYourSttProvider => 'Utilitzeu omi lliurement. Només pagueu directament al vostre proveïdor STT.';
 
   @override
-  String get freeMinutesMonth => '1.200 minuts gratuïts/mes inclosos. Il·limitat amb ';
+  String get freeMinutesMonth => '300 minuts gratuïts/mes inclosos. Il·limitat amb ';
 
   @override
   String get omiUnlimited => 'Omi Il·limitat';
@@ -1800,20 +1800,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get lovingOmi => 'T\'agrada Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Ajudeu-nos a arribar a més gent deixant una ressenya a l\'App Store. Els vostres comentaris són molt importants per a nosaltres!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajudeu-nos a arribar a més gent deixant una ressenya a Google Play Store. Els vostres comentaris són molt importants per a nosaltres!';
-
-  @override
-  String get rateOnAppStore => 'Valorar a l\'App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Valorar a Google Play';
 
   @override
   String get maybeLater => 'Potser més tard';
@@ -2152,6 +2138,18 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edita memòria';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'M\'agrada menjar gelat...';
@@ -4737,7 +4735,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No hi ha accés a dades específic configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minuts premium + il·limitat al dispositiu';
+  String get basicPlanDescription => '300 minuts premium + il·limitat al dispositiu';
 
   @override
   String get minutes => 'minuts';
@@ -6034,7 +6032,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
+      '300 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
 
   @override
   String get viewUsage => 'Veure ús';
@@ -6116,7 +6114,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
+      '300 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9836,4 +9834,7 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Desactiva-ho per impedir que l\'àudio sense processar s\'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Massa antic per sincronitzar — Omi no el pot acceptar';
 }

@@ -24,11 +24,15 @@ import type { AssistantSettingsView } from '../../../../../shared/types'
 // (the MutationObserver still resolves the instant the DOM updates, so passing
 // tests aren't slowed) and restore it after the file so it can't bleed into
 // suites sharing the worker.
+// The test timeout is captured when `it()` registers, i.e. during collection of this
+// module, so it must be raised here at module scope — inside beforeAll it is a no-op
+// and each test keeps the 5000ms default, which fires before the asyncUtilTimeout
+// below can report the DOM it was waiting on.
+vi.setConfig({ testTimeout: 15000 })
 let prevAsyncUtilTimeout = 1000
 beforeAll(() => {
   prevAsyncUtilTimeout = getConfig().asyncUtilTimeout
   configure({ asyncUtilTimeout: 5000 })
-  vi.setConfig({ testTimeout: 15000 })
 })
 afterAll(() => {
   configure({ asyncUtilTimeout: prevAsyncUtilTimeout })

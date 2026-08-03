@@ -191,8 +191,6 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/staged-tasks',
     '/v1/staged-tasks/{param}',
     '/v1/staged-tasks/batch-scores',
-    '/v1/staged-tasks/migrate',
-    '/v1/staged-tasks/migrate-conversation-items',
     '/v1/staged-tasks/promote',
     '/v1/tools/action-items',
     '/v1/tools/action-items/{param}',

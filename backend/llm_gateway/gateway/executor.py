@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
@@ -17,6 +18,7 @@ from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
+    GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
@@ -32,6 +34,7 @@ from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
+monotonic = time.monotonic
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ async def execute_chat_completion(
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = serving_route is resolved_route.last_known_good_route
     _validate_credential_mode(serving_route, credential_context)
+    deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0
 
     first_failure: FailureClass | None = None
     last_error: GatewayError | None = None
@@ -97,6 +101,7 @@ async def execute_chat_completion(
             is_lkg=serving_is_lkg,
             fallback_reason=None,
             attempt_trace=attempt_trace,
+            deadline_monotonic=deadline_monotonic,
         )
     except GatewayError as exc:
         first_failure = exc.failure_class
@@ -117,6 +122,7 @@ async def execute_chat_completion(
                 is_lkg=True,
                 fallback_reason=first_failure,
                 attempt_trace=attempt_trace,
+                deadline_monotonic=deadline_monotonic,
             )
         except GatewayError as exc:
             last_error = exc
@@ -208,6 +214,7 @@ async def _execute_route(
     is_lkg: bool,
     fallback_reason: FailureClass | None,
     attempt_trace: AttemptTrace | None,
+    deadline_monotonic: float,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
@@ -234,6 +241,7 @@ async def _execute_route(
                 credential_context,
                 attempt_trace=attempt_trace,
                 fallback_reason=current_fallback_reason,
+                deadline_monotonic=deadline_monotonic,
             )
             if error is None:
                 if response is None:
@@ -270,6 +278,7 @@ async def _attempt_provider(
     *,
     attempt_trace: AttemptTrace | None,
     fallback_reason: FailureClass | None,
+    deadline_monotonic: float,
 ) -> tuple[ProviderResponse | None, GatewayError | None]:
     """Try a single provider up to ``route.retry.max_attempts`` times.
 
@@ -279,12 +288,18 @@ async def _attempt_provider(
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
+        timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
+        if timeout_ms <= 0:
+            return None, GatewayProviderFailureError(
+                'provider request deadline exhausted',
+                failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+            )
         try:
             response = await provider.create_chat_completion(
                 _provider_request(resolved_route, provider_ref, route=route),
                 provider_ref=provider_ref,
                 credentials=credential_context,
-                timeout_ms=route.timeouts.request_ms,
+                timeout_ms=timeout_ms,
             )
             if attempt_trace is not None:
                 attempt_trace.record(
@@ -299,7 +314,7 @@ async def _attempt_provider(
                 )
             return response, None
         except ProviderFailure as exc:
-            error = _map_provider_failure(exc, credential_context)
+            error = _map_provider_failure(exc, credential_context, provider_ref)
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -359,9 +374,37 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    if not provider_ref.model.startswith('gpt-5.6'):
+        _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     return provider_request
+
+
+def _remove_gpt56_cache_fields(provider_request: dict[str, Any]) -> None:
+    """Keep GPT-5.6 explicit-cache fields off a legacy route or fallback."""
+    provider_request.pop('prompt_cache_options', None)
+    raw_messages = provider_request.get('messages')
+    if not isinstance(raw_messages, list):
+        return
+    sanitized_messages: list[Any] = []
+    for message in raw_messages:
+        if not isinstance(message, Mapping):
+            sanitized_messages.append(message)
+            continue
+        sanitized_message = dict(message)
+        content = sanitized_message.get('content')
+        if isinstance(content, list):
+            sanitized_message['content'] = [
+                (
+                    {key: value for key, value in part.items() if key != 'prompt_cache_breakpoint'}
+                    if isinstance(part, Mapping)
+                    else part
+                )
+                for part in content
+            ]
+        sanitized_messages.append(sanitized_message)
+    provider_request['messages'] = sanitized_messages
 
 
 def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
@@ -458,22 +501,36 @@ def _unsupported_provider_error(
     return GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
 
 
-def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialContext) -> GatewayError:
+def _map_provider_failure(
+    exc: ProviderFailure,
+    credential_context: CredentialContext,
+    provider_ref: ProviderRef,
+) -> GatewayError:
     failure_class = exc.failure_class
     if failure_class == FailureClass.INVALID_CONFIG:
-        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if failure_class == FailureClass.CAPABILITY_MISMATCH:
-        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
-        return GatewayCredentialFailureError(
+        error: GatewayError = GatewayInvalidRouteConfigError(
+            _safe_failure_message(failure_class, exc.safe_message), param='provider'
+        )
+    elif failure_class == FailureClass.CAPABILITY_MISMATCH:
+        error = GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
+    elif failure_class == FailureClass.PROVIDER_INVALID_REQUEST:
+        error = GatewayProviderRequestRejectedError(_safe_failure_message(failure_class, exc.safe_message))
+    elif credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
+        error = GatewayCredentialFailureError(
             _safe_failure_message(failure_class, exc.safe_message),
             failure_class=failure_class,
             param='provider',
         )
-    return GatewayProviderFailureError(
-        _safe_failure_message(failure_class, exc.safe_message),
-        failure_class=failure_class,
-        param='provider',
+    else:
+        error = GatewayProviderFailureError(
+            _safe_failure_message(failure_class, exc.safe_message),
+            failure_class=failure_class,
+            param='provider',
+        )
+    return error.with_provider_context(
+        provider=provider_ref.provider,
+        model=provider_ref.model,
+        provider_rejection=exc.provider_rejection,
     )
 
 

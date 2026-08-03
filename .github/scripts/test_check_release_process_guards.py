@@ -62,6 +62,25 @@ def _load_parent_guard(tmp_path: Path, revision: str = REVIEWED_PARENT):
     return module
 
 
+def _copy_reviewed_parent_contract(tmp_path: Path) -> Path:
+    codemagic = tmp_path / "codemagic.yaml"
+    codemagic.write_bytes(
+        subprocess.check_output(
+            ["git", "show", f"{REVIEWED_PARENT}:codemagic.yaml"],
+            cwd=REPO_ROOT,
+        )
+    )
+    fixture = tmp_path / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_bytes(
+        subprocess.check_output(
+            ["git", "show", f"{REVIEWED_PARENT}:.github/scripts/fixtures/codemagic_workflow_contract/v1.json"],
+            cwd=REPO_ROOT,
+        )
+    )
+    return codemagic
+
+
 def _append_unreviewed_workflow(
     path: Path, script: str, *, credential_group: str = "alternate_release_credentials"
 ) -> None:
@@ -82,11 +101,9 @@ def _append_unreviewed_workflow(
 
 def _restore_parent_preview_credential_shape(path: Path) -> None:
     """Keep historical-parent regression probes independent of the temporary exception."""
-    _mutate(
-        path,
-        "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n",
-        "        - desktop_preview_secrets\n",
-    )
+    old = "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n"
+    if old in path.read_text(encoding="utf-8"):
+        _mutate(path, old, "        - desktop_preview_secrets\n")
     contract_path = _fixture_path(path.parent)
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     preview = yaml.safe_load(path.read_text(encoding="utf-8"))["workflows"]["omi-desktop-swift-preview"]
@@ -312,20 +329,32 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
 def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
-    _mutate(codemagic, old, new)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher, old, new)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return GUARDS.check_mobile_codemagic_release_triggers()
 
 
-def test_mobile_codemagic_triggers_are_native_and_production_safe(tmp_path, monkeypatch):
+def test_mobile_codemagic_dispatcher_is_production_safe(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     assert GUARDS.check_mobile_codemagic_release_triggers() == []
 
 
-def test_mobile_codemagic_trigger_guard_rejects_github_dispatcher(tmp_path, monkeypatch):
+def test_mobile_codemagic_trigger_guard_rejects_legacy_github_dispatcher(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
     dispatcher = tmp_path / ".github/workflows/mobile_internal_auto.yml"
@@ -338,19 +367,103 @@ def test_mobile_codemagic_trigger_guard_rejects_github_dispatcher(tmp_path, monk
     assert any("must not be dispatched through GitHub Actions" in error for error in errors), errors
 
 
+def _desktop_candidate_trigger_guard_root(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
+    codemagic = tmp_path / "codemagic.yaml"
+    candidate = tmp_path / ".github/workflows/desktop_auto_release.yml"
+    preview = tmp_path / ".github/workflows/desktop_publish_preview.yml"
+    candidate.parent.mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    shutil.copy2(REPO_ROOT / ".github/workflows/desktop_auto_release.yml", candidate)
+    shutil.copy2(REPO_ROOT / ".github/workflows/desktop_publish_preview.yml", preview)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return codemagic, candidate
+
+
+def test_desktop_candidate_trigger_guard_keeps_native_tag_lane_and_preview_exception(tmp_path, monkeypatch):
+    _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+
+    assert GUARDS.check_desktop_candidate_trigger_authority() == []
+
+
+def test_desktop_candidate_trigger_guard_rejects_non_tag_normal_trigger(tmp_path, monkeypatch):
+    codemagic, _ = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        "    triggering:\n      events:\n        - tag\n      tag_patterns:\n        - pattern: \"v*-macos\"\n          include: true\n",
+        "    triggering:\n      events:\n        - push\n      branch_patterns:\n        - pattern: main\n          include: true\n",
+    )
+
+    errors = GUARDS.check_desktop_candidate_trigger_authority()
+
+    assert any("must natively trigger on v*-macos tags" in error for error in errors), errors
+
+
+def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lane(tmp_path, monkeypatch):
+    _, candidate = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8")
+        + "\n# forbidden normal-candidate dispatcher\n# https://api.codemagic.io/builds\n",
+        encoding="utf-8",
+    )
+
+    errors = GUARDS.check_desktop_candidate_trigger_authority()
+
+    assert any("must not start Codemagic with a direct builds API POST" in error for error in errors), errors
+
+
 @pytest.mark.parametrize(
     ("old", "new"),
     (
-        ("        - push\n", "        - pull_request\n"),
-        ("        - pattern: main\n", "        - pattern: release/*\n"),
-        ("      cancel_previous_builds: true\n", "      cancel_previous_builds: false\n"),
-        ("          - 'app/**'\n", "          - 'desktop/**'\n"),
+        ("    branches: [main]\n", "    branches: [release]\n"),
+        ("    paths: ['app/**']\n", "    paths: ['desktop/**']\n"),
+        ("    - cron: '0 */3 * * *'\n", "    - cron: '0 */4 * * *'\n"),
+        ("cancel-in-progress: false", "cancel-in-progress: true"),
     ),
 )
 def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
     errors = _mobile_trigger_errors_after(tmp_path, monkeypatch, old, new)
 
-    assert any("must natively trigger" in error for error in errors), errors
+    assert any(
+        "main app/** pushes" in error
+        or "three-hour schedule" in error
+        or "workflow_dispatch" in error
+        or "must not cancel" in error
+        for error in errors
+    ), errors
+
+
+def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher, "python3 .github/scripts/dispatch_mobile_internal_builds.py", "python3 .github/scripts/other_dispatcher.py")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert errors == ["mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py"], errors
+
+
+def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher_script, 'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")', 'MOBILE_WORKFLOWS = ("ios-internal-auto",)')
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert errors == ["mobile internal build dispatcher script must declare both Codemagic mobile workflows"], errors
 
 
 @pytest.mark.parametrize(
@@ -403,9 +516,11 @@ def test_normal_release_gcp_authority_guard_ignores_harmless_source_comments(tmp
     ids=("shell-construction", "direct-wrapper", "python-construction", "variable-api-url"),
 )
 def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_rejects(tmp_path, monkeypatch, script):
-    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
-    _append_unreviewed_workflow(codemagic, script)
+    codemagic = _copy_reviewed_parent_contract(tmp_path)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     _restore_parent_preview_credential_shape(codemagic)
+    _approve_current_codemagic_document(tmp_path)
+    _append_unreviewed_workflow(codemagic, script)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
@@ -416,13 +531,15 @@ def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_r
 
 
 def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_global_lock_rejects(tmp_path, monkeypatch):
-    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    codemagic = _copy_reviewed_parent_contract(tmp_path)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    _restore_parent_preview_credential_shape(codemagic)
+    _approve_current_codemagic_document(tmp_path)
     _append_unreviewed_workflow(
         codemagic,
         'X=gh; $X release create "$CM_TAG"',
         credential_group="unrecognized_release_authority",
     )
-    _restore_parent_preview_credential_shape(codemagic)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
@@ -459,7 +576,10 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
     ids=("unrelated-workflow", "comment-bytes", "anchor-spelling", "top-level-field"),
 )
 def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeypatch, old, new, parent_accepts):
-    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    codemagic = _copy_reviewed_parent_contract(tmp_path)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    _restore_parent_preview_credential_shape(codemagic)
+    _approve_current_codemagic_document(tmp_path)
     _mutate(codemagic, old, new)
     if old == "&desktop_signed_artifact_steps":
         _mutate(codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
@@ -475,27 +595,21 @@ def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeyp
 
 
 def test_global_document_raw_lock_rejects_semantically_equivalent_yaml_rewrite(tmp_path, monkeypatch):
-    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    codemagic = _copy_reviewed_parent_contract(tmp_path)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    _restore_parent_preview_credential_shape(codemagic)
+    original_document = yaml.safe_load(codemagic.read_text(encoding="utf-8"))
+    _approve_current_codemagic_document(tmp_path)
     _mutate(
         codemagic,
         "    name: Auto Deploy iOS to Internal TestFlight\n",
         '    name: "Auto Deploy iOS to Internal TestFlight"\n',
     )
-    assert yaml.safe_load(codemagic.read_text(encoding="utf-8")) == yaml.safe_load(
-        (REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8")
-    )
+    assert yaml.safe_load(codemagic.read_text(encoding="utf-8")) == original_document
 
     parent = _load_parent_guard(tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
     assert parent.check_codemagic_release_publishers() == []
-
-    _mutate(
-        codemagic,
-        "        - desktop_preview_secrets\n",
-        "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n",
-    )
-    shutil.copy2(REPO_ROOT / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json", _fixture_path(tmp_path))
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("raw byte digest" in error for error in errors), errors
@@ -790,3 +904,50 @@ def test_global_document_lock_rejects_malformed_fixture_json(tmp_path, monkeypat
     errors = GUARDS.check_codemagic_release_publishers()
 
     assert any("invalid JSON" in error for error in errors), errors
+
+
+def test_firmware_release_metadata_uses_resolved_bash_and_converted_output(tmp_path, monkeypatch):
+    script = tmp_path / "omi/firmware/scripts/ci/make-release-body.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("# fixture\n", encoding="utf-8")
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        Path(kwargs["env"]["OUT"]).write_text(
+            "<!-- KEY_VALUE_START\n"
+            "release_firmware_version:9.8.7\n"
+            "minimum_firmware_required:3.0.6\n"
+            "minimum_app_version:1.0.74\n"
+            "minimum_app_version_code:438\n"
+            "is_legacy_secure_dfu:False\n"
+            "ota_update_steps:battery,internet\n"
+            "KEY_VALUE_END -->\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    monkeypatch.setattr(GUARDS, "bash_executable", lambda: "git-bash.exe")
+    monkeypatch.setattr(GUARDS, "bash_path", lambda value, _bash: str(value))
+    monkeypatch.setattr(GUARDS.subprocess, "run", fake_run)
+
+    assert GUARDS.check_firmware_release_metadata() == []
+    assert commands == [["git-bash.exe", str(script)]]
+
+
+def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_path, monkeypatch):
+    script = tmp_path / "omi/firmware/scripts/ci/make-release-body.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("# fixture\n", encoding="utf-8")
+
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    monkeypatch.setattr(GUARDS, "bash_executable", lambda: "git-bash.exe")
+    monkeypatch.setattr(GUARDS, "bash_path", lambda value, _bash: str(value))
+    monkeypatch.setattr(
+        GUARDS.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 9, stdout=None, stderr=None),
+    )
+
+    assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]

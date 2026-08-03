@@ -1480,7 +1480,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get payYourSttProvider => 'Utilisez Omi librement. Vous ne payez que votre fournisseur STT directement.';
 
   @override
-  String get freeMinutesMonth => '1 200 minutes gratuites/mois incluses. Illimité avec ';
+  String get freeMinutesMonth => '300 minutes gratuites/mois incluses. Illimité avec ';
 
   @override
   String get omiUnlimited => 'Omi Illimité';
@@ -1802,20 +1802,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Vous aimez Omi ?';
-
-  @override
-  String get leaveReviewIos =>
-      'Aidez-nous à atteindre plus de personnes en laissant un avis sur l\'App Store. Votre retour compte énormément pour nous !';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Aidez-nous à atteindre plus de personnes en laissant un avis sur le Google Play Store. Votre retour compte énormément pour nous !';
-
-  @override
-  String get rateOnAppStore => 'Noter sur l\'App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Noter sur Google Play';
 
   @override
   String get maybeLater => 'Peut-être plus tard';
@@ -2158,6 +2144,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Modifier le souvenir';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'J\'aime manger des glaces...';
@@ -4754,7 +4752,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Aucun accès aux données spécifique configuré.';
 
   @override
-  String get basicPlanDescription => '1 200 minutes premium + illimité sur l\'appareil';
+  String get basicPlanDescription => '300 minutes premium + illimité sur l\'appareil';
 
   @override
   String get minutes => 'minutes';
@@ -6054,7 +6052,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
+      '300 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
 
   @override
   String get viewUsage => 'Voir lutilisation';
@@ -6137,7 +6135,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 minutes premium/mois. Longlet Sur appareil offre une transcription gratuite illimitée. ';
+      '300 minutes premium/mois. Longlet Sur appareil offre une transcription gratuite illimitée. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9867,4 +9865,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Désactivez cette option pour empêcher l\'envoi de l\'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Trop ancien pour être synchronisé — Omi ne peut pas l\'accepter';
 }

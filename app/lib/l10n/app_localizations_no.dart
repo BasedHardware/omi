@@ -1467,7 +1467,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get payYourSttProvider => 'Bruk omi fritt. Du betaler bare STT-leverandøren direkte.';
 
   @override
-  String get freeMinutesMonth => '1 200 gratis minutter/måned inkludert. Ubegrenset med ';
+  String get freeMinutesMonth => '300 gratis minutter/måned inkludert. Ubegrenset med ';
 
   @override
   String get omiUnlimited => 'Omi Ubegrenset';
@@ -1789,20 +1789,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Liker du Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Hjelp oss med å nå flere personer ved å legge igjen en anmeldelse i App Store. Tilbakemeldingen din betyr alt for oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjelp oss med å nå flere personer ved å legge igjen en anmeldelse i Google Play Store. Tilbakemeldingen din betyr alt for oss!';
-
-  @override
-  String get rateOnAppStore => 'Vurder i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Vurder i Google Play';
 
   @override
   String get maybeLater => 'Kanskje senere';
@@ -2137,6 +2123,18 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediger minne';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Jeg liker å spise iskrem...';
@@ -4710,7 +4708,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen spesifikk datatilgang konfigurert.';
 
   @override
-  String get basicPlanDescription => '1 200 premium minutter + ubegrenset on-device';
+  String get basicPlanDescription => '300 premium minutter + ubegrenset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -9779,4 +9777,7 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.';
+
+  @override
+  String get syncStatusTooOld => 'For gammel til å synkroniseres — Omi kan ikke ta imot den';
 }

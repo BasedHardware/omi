@@ -1467,7 +1467,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get payYourSttProvider => 'Слободно користите omi. Плаћате само добављачу STT директно.';
 
   @override
-  String get freeMinutesMonth => '1.200 слободних минута/месец укључено. Неограничено са ';
+  String get freeMinutesMonth => '300 слободних минута/месец укључено. Неограничено са ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1789,20 +1789,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Волиш ли Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Помози нам да дође до више људи остављањем рецензије у App Store-у. Твој повратни информације значи много нам!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Помози нам да дође до више људи остављањем рецензије у Google Play Store-у. Твој повратни информације значи много нам!';
-
-  @override
-  String get rateOnAppStore => 'Оцени на App Store-у';
-
-  @override
-  String get rateOnGooglePlay => 'Оцени на Google Play';
 
   @override
   String get maybeLater => 'Можда касније';
@@ -2139,6 +2125,18 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Уреди сећање';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Волим да једем сладолед...';
@@ -4716,7 +4714,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Нема конфигурисаног специфичног приступа подаците.';
 
   @override
-  String get basicPlanDescription => '1.200 премиум минута + без ограничења на уређају';
+  String get basicPlanDescription => '300 премиум минута + без ограничења на уређају';
 
   @override
   String get minutes => 'минута';
@@ -6006,7 +6004,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.';
+      '300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.';
 
   @override
   String get viewUsage => 'Погледајте утрошак';
@@ -6088,7 +6086,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ';
+      '300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9794,4 +9792,7 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Искључите да бисте спречили слање необрађеног звука у Omi. Транскрипти и подаци потребни за функције у облаку и даље се могу слати у Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Превише стара за синхронизацију — Omi не може да је прихвати';
 }

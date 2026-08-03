@@ -14,6 +14,18 @@ from utils.task_intelligence import conversation_capture
 from models.action_item import EvidenceRef, TaskCreatePayload
 from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
+from utils.memory.memory_system import MemorySystem
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+
+def _enable_canonical(monkeypatch):
+    """Patch conversation_capture so user-1 resolves to the canonical cohort."""
+    set_canonical_cohort(monkeypatch, 'user-1')
+    monkeypatch.setattr(
+        conversation_capture,
+        'resolve_memory_system',
+        lambda uid, db_client=None: MemorySystem.CANONICAL,
+    )
 
 
 def _action(
@@ -341,24 +353,37 @@ def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completio
 
 
 def test_shadow_mode_uses_canonical_extraction_without_writing(monkeypatch):
+    _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='shadow', account_generation=3),
     )
     decisions = []
+
+    class _NoCandidateDecision:
+        candidate = None
+
     monkeypatch.setattr(
         conversation_capture,
         '_capture_decision',
-        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id)),
+        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id))
+        or _NoCandidateDecision(),
+    )
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'create_candidate',
+        lambda *a, **kw: pytest.fail('should not create candidate when decision.candidate is None'),
     )
 
     assert conversation_capture.capture_enabled('user-1') is True
-    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is False
+    # Canonical users route through process_before_legacy (returns True).
+    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is True
     assert decisions == [('Send budget', 'conversation-1')]
 
 
 def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notifications(monkeypatch):
+    _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
@@ -412,12 +437,13 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     assert records[1].status == 'pending'
 
 
-def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monkeypatch):
-    mode = {'value': 'off'}
+def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_writer(monkeypatch):
+    # Legacy (non-canonical) users keep the legacy writer untouched.
+    set_canonical_cohort(monkeypatch)  # empty cohort = everyone is legacy
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
-        lambda uid: TaskWorkflowControl(workflow_mode=mode['value'], account_generation=3),
+        lambda uid: TaskWorkflowControl(workflow_mode='off', account_generation=3),
     )
     monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
     monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: 0)
@@ -438,28 +464,7 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
     monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
-    candidates = {}
-    reconciled = []
 
-    def create(uid, proposal, **kwargs):
-        key = kwargs['idempotency_key']
-        candidates.setdefault(key, _record(proposal, len(candidates) + 1))
-        return candidates[key]
-
-    def reconcile(uid, candidate_id, **kwargs):
-        reconciled.append(kwargs)
-        record = next(item for item in candidates.values() if item.candidate_id == candidate_id)
-        record.status = CandidateStatus.accepted
-        record.result_task_id = kwargs['result_task_id']
-        record.resolved_at = datetime(2026, 7, 9, tzinfo=timezone.utc)
-        return record
-
-    monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
-    monkeypatch.setattr(
-        conversation_capture.candidates_db,
-        'reconcile_migrated_candidate',
-        reconcile,
-    )
     conversation = _conversation(
         _action(
             'Send the budget',
@@ -469,59 +474,56 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
         )
     )
 
+    # Legacy user: capture_enabled is False, so legacy writer runs.
+    assert conversation_capture.capture_enabled('user-1') is False
     process_conversation._save_action_items('user-1', conversation)
     assert len(writes) == 1
-    assert candidates == {}
 
-    mode['value'] = 'write'
-    process_conversation._save_action_items('user-1', conversation)
-    assert len(writes) == 2
+    # Canonical user: capture_enabled is True, process_before_legacy returns True.
+    _enable_canonical(monkeypatch)
+    candidates = {}
+
+    def create(uid, proposal, **kwargs):
+        key = kwargs['idempotency_key']
+        candidates.setdefault(key, _record(proposal, len(candidates) + 1))
+        return candidates[key]
+
+    monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: None,
+    )
+    assert conversation_capture.capture_enabled('user-1') is True
+    result = conversation_capture.process_before_legacy(
+        'user-1', 'conversation-1', conversation.structured.action_items
+    )
+    assert result is True
     assert len(candidates) == 1
-    assert reconciled[0]['status'] == 'accepted'
-    stable_ids = writes[1][1]['document_ids']
-    assert reconciled[0]['result_task_id'] == stable_ids[0]
-
-    process_conversation._save_action_items('user-1', conversation)
-    assert writes[2][1]['document_ids'] == stable_ids
-    assert len(candidates) == 1
-    assert len(reconciled) == 1
+    # reconcile_after_legacy is a no-op for canonical users.
+    assert conversation_capture.reconcile_after_legacy('user-1', 'conversation-1', [], []) is None
 
 
-def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projection(monkeypatch):
+def test_canonical_route_produces_single_pending_candidate(monkeypatch):
+    """Canonical users get one candidate per action item; no legacy projection."""
+    _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
-        lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=3),
+        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
     )
-    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
-    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: 0)
-    monkeypatch.setattr(
-        process_conversation.action_items_db, 'retire_action_items_for_conversation', lambda *args, **kwargs: 0
-    )
-    writes = []
-    monkeypatch.setattr(
-        process_conversation.action_items_db,
-        'create_action_items_batch',
-        lambda uid, rows, **kwargs: writes.append(kwargs['document_ids']) or kwargs['document_ids'],
-    )
-    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
     records = {}
 
     def create(uid, proposal, **kwargs):
         records.setdefault(kwargs['idempotency_key'], _record(proposal, len(records) + 1))
         return records[kwargs['idempotency_key']]
 
-    def reconcile(uid, candidate_id, **kwargs):
-        record = next(item for item in records.values() if item.candidate_id == candidate_id)
-        record.status = CandidateStatus.accepted
-        record.result_task_id = kwargs['result_task_id']
-        record.resolved_at = datetime(2026, 7, 9, tzinfo=timezone.utc)
-        return record
-
     monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
-    monkeypatch.setattr(conversation_capture.candidates_db, 'reconcile_migrated_candidate', reconcile)
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: None,
+    )
     action = _action(
         'Send the revised budget',
         capture_kind='direct_request',
@@ -529,102 +531,75 @@ def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projecti
         target_task_id='task-budget',
     )
 
-    process_conversation._save_action_items('user-1', _conversation(action))
-
-    mutation = next(record for record in records.values() if record.proposed_action.value == 'update')
-    projection = next(record for record in records.values() if record.proposed_action.value == 'create')
-    assert mutation.status == CandidateStatus.pending
-    assert mutation.task_id == 'task-budget'
-    assert projection.status == CandidateStatus.accepted
-    assert projection.source_surface == 'conversation_legacy_projection'
-    assert projection.result_task_id == writes[0][0]
+    result = conversation_capture.process_before_legacy('user-1', 'conversation-1', [action])
+    assert result is True
+    # One candidate for the mutation, no separate legacy projection.
+    assert len(records) == 1
 
 
-def test_write_mode_conversation_ids_survive_reorder_and_do_not_alias_refinements(monkeypatch):
-    monkeypatch.setattr(
-        conversation_capture.task_control_db,
-        'get_task_workflow_control',
-        lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=3),
-    )
-
-    first = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Send budget'), _action('Review forecast')]
-    )
-    reordered = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Review forecast'), _action('Send budget')]
-    )
-    inserted = conversation_capture.legacy_document_ids(
-        'user-1',
-        'conversation-1',
-        [_action('Call Sarah'), _action('Send budget'), _action('Review forecast')],
-    )
-    refined = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Send revised budget'), _action('Review forecast')]
-    )
-
-    assert reordered == [first[1], first[0]]
-    assert inserted[1:] == first
-    assert refined[0] != first[0]
-    assert refined[1] == first[1]
+def test_legacy_document_ids_returns_none_for_all_users(monkeypatch):
+    """legacy_document_ids is retired; canonical users bypass the legacy writer."""
+    _enable_canonical(monkeypatch)
     assert (
-        conversation_capture.legacy_replacement_map(
-            [
-                {'id': first[0], 'description': 'Send budget'},
-                {'id': first[1], 'description': 'Review forecast'},
-            ],
-            [_action('Send revised budget'), _action('Review forecast')],
-            refined,
+        conversation_capture.legacy_document_ids(
+            'user-1', 'conversation-1', [_action('Send budget'), _action('Review forecast')]
         )
-        == {}
+        is None
     )
+
+
+def test_legacy_replacement_map_links_only_explicit_refinement_targets():
+    """legacy_replacement_map still links extraction-provided update targets."""
+    first_id = 'task-budget'
+    second_id = 'task-forecast'
     explicit_refinement = _action(
         'Send revised budget',
         candidate_action='update',
-        target_task_id=first[0],
+        target_task_id=first_id,
     )
-    explicit_ids = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [explicit_refinement, _action('Review forecast')]
-    )
+    # Explicit refinement of a retired task links to the new ID.
     assert conversation_capture.legacy_replacement_map(
         [
-            {'id': first[0], 'description': 'Send budget'},
-            {'id': first[1], 'description': 'Review forecast'},
+            {'id': first_id, 'description': 'Send budget'},
+            {'id': second_id, 'description': 'Review forecast'},
         ],
         [explicit_refinement, _action('Review forecast')],
-        explicit_ids,
-    ) == {first[0]: explicit_ids[0]}
+        ['task-new-budget', second_id],
+    ) == {first_id: 'task-new-budget'}
+    # No update action → no replacement.
     assert (
         conversation_capture.legacy_replacement_map(
             [
-                {'id': first[0], 'description': 'Send budget'},
-                {'id': first[1], 'description': 'Review forecast'},
+                {'id': first_id, 'description': 'Send budget'},
+                {'id': second_id, 'description': 'Review forecast'},
             ],
             [_action('Send budget')],
-            [first[0]],
+            [first_id],
         )
         == {}
     )
-    unrelated = conversation_capture.legacy_document_ids('user-1', 'conversation-1', [_action('Book dentist')])
+    # Unrelated item → no replacement.
     assert (
         conversation_capture.legacy_replacement_map(
-            [{'id': first[0], 'description': 'Send budget'}],
+            [{'id': first_id, 'description': 'Send budget'}],
             [_action('Book dentist')],
-            unrelated,
+            ['task-dentist'],
         )
         == {}
     )
-    changed_entity = conversation_capture.legacy_document_ids('user-1', 'conversation-1', [_action('Email Bob')])
+    # Different entity with same action → no replacement.
     assert (
         conversation_capture.legacy_replacement_map(
-            [{'id': first[0], 'description': 'Email Alice'}],
+            [{'id': first_id, 'description': 'Email Alice'}],
             [_action('Email Bob')],
-            changed_entity,
+            ['task-bob'],
         )
         == {}
     )
 
 
 def test_repeated_descriptions_use_semantic_occurrences_without_order_dependent_candidate_keys(monkeypatch):
+    _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',

@@ -40,8 +40,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -57,6 +56,12 @@ _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
     '--cpu': '2',
     '--memory': '2Gi',
 }
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
+    'OMI_LLM_GATEWAY_URL',
+    'OMI_LLM_GATEWAY_FEATURE_MODE',
+    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
+}
+_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -517,10 +522,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     Also rejects:
     - canonical maintenance env/secrets on notifications-job (its workflow
       removes only those retired live bindings);
-    - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+    - request-path / other-job hosts keeping MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
       (ST→LT cron must run only on memory-maintenance-job);
-    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
-    - mismatched MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED between job and read surfaces.
+    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist.
     """
     errors: list[ValidationError] = []
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
@@ -570,9 +574,10 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'PINECONE_INDEX_NAME',
+        'TYPESENSE_HOST_PORT',
     ):
         if required_env not in job_env:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
@@ -588,11 +593,61 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))
 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
-    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
-    job_fast_track = (
-        (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '').strip().lower()
-    )
+    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
     job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    if job_cron == 'true':
+        for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
+            if required_env not in job_env:
+                errors.append(
+                    ValidationError(scope, f'missing gateway env {required_env} while canonical maintenance is enabled')
+                )
+        for required_secret in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS):
+            if required_secret not in job_secrets:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'missing gateway secret {required_secret} while canonical maintenance is enabled',
+                    )
+                )
+
+        gateway_url = _as_config_dict(job_env.get('OMI_LLM_GATEWAY_URL'))
+        if gateway_url is not None and gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
+                )
+            )
+        gateway_mode = (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_FEATURE_MODE') or '').strip().lower()
+        if gateway_mode != 'gateway':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_FEATURE_MODE must be gateway while canonical maintenance is enabled',
+                )
+            )
+        direct_exception = (
+            (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION') or '').strip().lower()
+        )
+        if direct_exception != 'false':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION must be false for canonical memory L2 maintenance',
+                )
+            )
+        if env == 'prod':
+            prod_allow = (
+                (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE') or '').strip().lower()
+            )
+            if prod_allow != 'true':
+                errors.append(
+                    ValidationError(
+                        scope,
+                        'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
+                    )
+                )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -601,13 +656,13 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         other_job = _as_config_dict(raw_other_job) or {}
         other_env = _as_config_dict(other_job.get('env')) or {}
         other_cron = (
-            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
         )
         if other_cron == 'true':
             errors.append(
                 ValidationError(
                     f'{env}/cloud_run/jobs/{other_job_name}',
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false; '
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false; '
                     'ST→LT cron is hosted only by memory-maintenance-job',
                 )
             )
@@ -616,13 +671,13 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
         surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
         surface_cron = (
-            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
         )
         if surface_cron == 'true':
             errors.append(
                 ValidationError(
                     surface_scope,
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false on request-path surfaces; '
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false on request-path surfaces; '
                     'ST→LT cron is hosted only by memory-maintenance-job',
                 )
             )
@@ -634,7 +689,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             errors.append(
                 ValidationError(
                     scope,
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false while MEMORY_MODE is off',
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_MODE is off',
                 )
             )
         for surface_scope, _surface_env, surface_mode in read_surfaces:
@@ -642,7 +697,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 ValidationError(
                     scope,
                     f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
-                    'MEMORY_MODE=read and MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true '
+                    'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
                     '(ST→LT is not hosted by notifications-job)',
                 )
             )
@@ -657,7 +712,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(
             ValidationError(
                 scope,
-                'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be true when MEMORY_MODE is not off '
+                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is not off '
                 '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
             )
         )
@@ -679,19 +734,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                     scope,
                     f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
                     '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
-                )
-            )
-        surface_fast_track = (
-            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '')
-            .strip()
-            .lower()
-        )
-        if surface_fast_track and job_fast_track and surface_fast_track != job_fast_track:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'{surface_scope} MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED={surface_fast_track!r} '
-                    f'must match memory-maintenance-job ({job_fast_track!r})',
                 )
             )
     return errors
@@ -1182,17 +1224,11 @@ def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict
         '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
         '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
         '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-        '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        '${{ vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
         ),
-        '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-        ),
-        '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-        ),
-        '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        '${{vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
         ),
     }
 

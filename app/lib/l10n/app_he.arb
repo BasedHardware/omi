@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-App Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-Google Play Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "דרג ב-App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "דרג ב-Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "אולי מאוחר יותר",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -10583,6 +10567,7 @@
     "syncStatusWaiting": "ממתין לסנכרון",
     "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
     "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusTooOld": "ישן מדי לסנכרון — Omi לא יכול לקבל אותו",
     "syncStatusFileUnavailable": "הקובץ אינו זמין",
     "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
     "noRecordingsYet": "אין הקלטות עדיין",

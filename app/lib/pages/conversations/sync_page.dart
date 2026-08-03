@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -74,6 +75,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusFailed);
       case WalSyncDisplayState.corrupted:
         return (Colors.redAccent, l.syncStatusFileUnavailable);
+      case WalSyncDisplayState.outsideRecoveryWindow:
+        return (Colors.redAccent, l.syncStatusTooOld);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -534,11 +537,7 @@ class _SyncPageState extends State<SyncPage> {
           break;
       }
     } else if (syncProvider.isRateLimited) {
-      title = switch (syncProvider.rateLimitReason) {
-        RateLimitReason.backendBusy => l.syncCardBackendBusy,
-        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToSync),
-        _ => l.syncCardRateLimited,
-      };
+      title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;

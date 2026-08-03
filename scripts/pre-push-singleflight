@@ -2,6 +2,26 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Git runs hooks with the working directory at the top of the invoking work
+# tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
+# work tree. In a linked worktree whose git context resolves to a git dir,
+# show-toplevel exits 128 and this script would otherwise abort the gate.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
-exec python3 .github/scripts/preflight_runner.py --name pre-push -- scripts/pre-push "$@"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+export PYTHON="$PYTHON_BIN"
+
+PREFLIGHT_COMMAND=(scripts/pre-push "$@")
+if dev_harness_python_uses_windows_paths "$PYTHON_BIN"; then
+  if ! command -v cygpath >/dev/null 2>&1; then
+    echo "FAIL: native Windows Python requires Git for Windows Bash (cygpath was not found)." >&2
+    exit 1
+  fi
+  GIT_BASH_NATIVE="$(cygpath -w "$(command -v bash)")"
+  PREFLIGHT_COMMAND=("$GIT_BASH_NATIVE" scripts/pre-push "$@")
+fi
+
+exec "$PYTHON_BIN" .github/scripts/preflight_runner.py --name pre-push -- "${PREFLIGHT_COMMAND[@]}"

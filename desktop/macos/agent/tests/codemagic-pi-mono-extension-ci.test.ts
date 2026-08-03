@@ -27,18 +27,13 @@ describe("macOS release CI", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
-    for (const manifestFile of [
-      "control-tool-manifest.ts",
-      "node-tools.ts",
-      "omi-tool-manifest.ts",
-    ]) {
-      expect(codemagic).toContain(
-        `cp -f agent/src/runtime/${manifestFile} "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-      expect(runScript).toContain(
-        `cp -f "$AGENT_DIR/src/runtime/${manifestFile}" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-    }
+    const extension = readFileSync(new URL("../../pi-mono-extension/index.ts", import.meta.url), "utf8");
+    expect(extension).toContain('../agent/dist/runtime/omi-tool-manifest.js');
+    expect(extension).toContain('../agent/dist/runtime/node-tools.js');
+    expect(codemagic).toContain('cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"');
+    expect(runScript).toContain('macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"');
+    expect(codemagic).not.toContain("agent/src/runtime/");
+    expect(runScript).not.toContain('$AGENT_DIR/src/runtime/');
     expect(codemagic).toContain(
       'cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"'
     );

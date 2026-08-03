@@ -218,12 +218,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
         outcome = LocalUploadOutcome.failed;
       } else {
-        final lane = syncUploadLaneForTimestamp(
-          rec.timerStart,
-          DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          hasServerCaptureProof: false,
-        );
-        final result = await SyncUploadGate.instance.upload([file], lane: lane);
+        final result = await SyncUploadGate.instance.upload([file]);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);

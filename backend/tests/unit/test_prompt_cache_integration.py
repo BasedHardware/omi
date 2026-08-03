@@ -12,6 +12,7 @@ actually import and call the real production functions to verify:
 6. Dynamic sections actually vary per user (otherwise the split is pointless)
 """
 
+import asyncio
 import os
 import sys
 import types
@@ -19,7 +20,7 @@ import importlib
 import importlib.util
 from datetime import timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -79,6 +80,8 @@ sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
+sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
+sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
 sys.modules["database.vector_db"].query_vectors_enhanced = MagicMock(return_value=[])
@@ -133,9 +136,6 @@ gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
 gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)
 
 gateway_serving_mod = _stub_module("utils.llm.gateway_serving")
-gateway_serving_mod.wrap_gateway_with_legacy_fallback = MagicMock(
-    side_effect=lambda *, gateway_model, **_kwargs: gateway_model
-)
 
 # --- langchain core stubs ---
 langchain_core_mod = _stub_module("langchain_core")
@@ -160,6 +160,10 @@ if not hasattr(obs_mod, "__path__"):
 langsmith_mod = _stub_module("utils.observability.langsmith")
 langsmith_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
 langsmith_mod.is_langsmith_enabled = MagicMock(return_value=False)
+# utils.observability.fallback is import-light (metrics counter + logging) and agentic.py calls
+# record_fallback on the provider-retry path, so the real module is loaded below (once
+# _load_module_from_file is defined) rather than hand-stubbed. test_chat_agent_provider_retry.py
+# asserts against its bounded reason set through the same sys.modules entry.
 langsmith_prompts_mod = _stub_module("utils.observability.langsmith_prompts")
 langsmith_prompts_mod.get_agentic_system_prompt_template = MagicMock(side_effect=Exception("not available"))
 langsmith_prompts_mod.render_prompt = MagicMock()
@@ -179,13 +183,20 @@ def _passthrough_timeit(fn):
 
 endpoints_mod.timeit = _passthrough_timeit
 
+conversations_mod = _stub_module("utils.conversations")
+if not hasattr(conversations_mod, "__path__"):
+    conversations_mod.__path__ = []
+location_mod = _stub_module("utils.conversations.location")
+location_mod.async_get_google_maps_city = AsyncMock(return_value=None)
+
 retrieval_mod = _stub_module("utils.retrieval")
 if not hasattr(retrieval_mod, "__path__"):
     retrieval_mod.__path__ = []
 
-safety_mod = _stub_module("utils.retrieval.safety")
-safety_mod.AgentSafetyGuard = MagicMock()
-safety_mod.SafetyGuardError = type("SafetyGuardError", (Exception,), {})
+# utils.retrieval.safety is import-light (typing/os/time/logging only) and its full public surface
+# is shared with test_chat_input_guard.py via the same sys.modules entry, so a partial hand-rolled
+# stub breaks under some collection orders. The REAL module is loaded below, once
+# _load_module_from_file is defined.
 
 boundaries_mod = _stub_module("utils.retrieval.tool_result_boundaries")
 setattr(
@@ -225,6 +236,14 @@ sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 # Load real model modules
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 _load_module_from_file("models.other", BACKEND_DIR / "models" / "other.py")
+
+# Real (import-light) safety module: exports AgentSafetyGuard, SafetyGuardError, fit_within_budget,
+# message_text, MAX_CHAT_INPUT_TOKENS, INPUT_TOO_LONG_MESSAGE. agentic.py imports several of these,
+# and test_chat_input_guard.py shares this same sys.modules entry.
+_load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrieval" / "safety.py")
+
+# Real (import-light) fallback telemetry: agentic.py imports record_fallback from it.
+_load_module_from_file("utils.observability.fallback", BACKEND_DIR / "utils" / "observability" / "fallback.py")
 
 # Stub firebase_admin (used by endpoints.py and auth)
 firebase_mod = _stub_module("firebase_admin")
@@ -855,6 +874,74 @@ def test_anthropic_cache_control_not_5min_default():
             assert "ttl" in line, f"cache_control line missing ttl field: {line.strip()}"
 
 
+async def test_anthropic_agent_loop_moves_automatic_cache_breakpoint_across_tool_iterations():
+    """The production loop asks Anthropic to cache the latest cacheable message on every call."""
+    agentic_mod = _get_agentic_module()
+    calls = []
+    responses = [
+        types.SimpleNamespace(
+            stop_reason="tool_use",
+            content=[
+                types.SimpleNamespace(
+                    type="tool_use",
+                    id="tool-1",
+                    name="lookup",
+                    input={"query": "omi"},
+                )
+            ],
+        ),
+        types.SimpleNamespace(stop_reason="end_turn", content=[]),
+    ]
+
+    class FakeStream:
+        def __init__(self, response):
+            self.response = response
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def __aiter__(self):
+            async def events():
+                if False:
+                    yield None
+
+            return events()
+
+        async def get_final_message(self):
+            return self.response
+
+    def stream(**kwargs):
+        calls.append(kwargs)
+        return FakeStream(responses[len(calls) - 1])
+
+    callback = agentic_mod.AsyncStreamingCallback()
+    safety_guard = MagicMock()
+    safety_guard.should_warn_user.return_value = None
+    safety_guard.get_stats.return_value = {}
+
+    with patch.object(agentic_mod.anthropic_client.messages, "stream", side_effect=stream), patch.object(
+        agentic_mod, "_execute_tool", new=AsyncMock(return_value="tool result")
+    ):
+        await agentic_mod._run_anthropic_agent_stream(
+            "SYSTEM",
+            [{"role": "user", "content": "question"}],
+            [],
+            {"lookup": MagicMock()},
+            callback,
+            [],
+            safety_guard,
+            {},
+        )
+
+    assert len(calls) == 2
+    assert all(call["cache_control"] == {"type": "ephemeral", "ttl": "1h"} for call in calls)
+    assert calls[0]["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert calls[1]["messages"][-1]["content"][0]["type"] == "tool_result"
+
+
 # ---------------------------------------------------------------------------
 # Tests: Current datetime is kept out of the cached system prefix
 # ---------------------------------------------------------------------------
@@ -923,6 +1010,19 @@ def test_current_datetime_block_carries_live_time():
 
     assert "<current_datetime>" in block
     assert "2024-01-19" in block, "Datetime block should contain the live date"
+
+
+def test_current_datetime_block_includes_city_without_coordinates():
+    chat_mod = _get_chat_module()
+    _set_user(chat_mod, "Alice", "America/New_York")
+
+    block = chat_mod.get_current_datetime_block(
+        "uid_alice", tz="America/New_York", location="New York, New York, United States"
+    )
+
+    assert "Current city-level location: New York, New York, United States" in block
+    assert "latitude" not in block.lower()
+    assert "longitude" not in block.lower()
 
 
 def test_datetime_injected_into_user_turn_not_system():

@@ -1466,7 +1466,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get payYourSttProvider => 'Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.';
 
   @override
-  String get freeMinutesMonth => '1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
+  String get freeMinutesMonth => '300 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1788,20 +1788,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Pidätkö Omista?';
-
-  @override
-  String get leaveReviewIos =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu App Storeen. Palautteesi on meille tärkeää!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu Google Play -kauppaan. Palautteesi on meille tärkeää!';
-
-  @override
-  String get rateOnAppStore => 'Arvostele App Storessa';
-
-  @override
-  String get rateOnGooglePlay => 'Arvostele Google Playssa';
 
   @override
   String get maybeLater => 'Ehkä myöhemmin';
@@ -2137,6 +2123,18 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Muokkaa muistia';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Pidän jäätelön syömisestä...';
@@ -4708,7 +4706,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
+  String get basicPlanDescription => '300 premium-minuuttia + rajoittamaton laitteella';
 
   @override
   String get minutes => 'minuuttia';
@@ -6000,7 +5998,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6082,7 +6080,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9781,4 +9779,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.';
+
+  @override
+  String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
 }

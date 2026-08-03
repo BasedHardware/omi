@@ -20,7 +20,34 @@ private actor SortOrderCommitGate {
 
 @MainActor
 private final class SortOrderSyncProbe {
+  nonisolated(unsafe) var storageIDs: [String] = []
+  nonisolated(unsafe) var storageCalls = 0
   nonisolated(unsafe) var backendWrites = 0
+  nonisolated(unsafe) var backendIDs: [String] = []
+}
+
+private actor SortOrderMigrationProbe {
+  private var storageCalls = 0
+  private var storageIDs: [String] = []
+  private var storageWaiter: CheckedContinuation<Void, Never>?
+
+  func recordStorage(_ ids: [String]) {
+    storageCalls += 1
+    storageIDs = ids
+    storageWaiter?.resume()
+    storageWaiter = nil
+  }
+
+  func waitForStorage() async {
+    if storageCalls > 0 { return }
+    await withCheckedContinuation { continuation in
+      storageWaiter = continuation
+    }
+  }
+
+  func snapshot() -> (calls: Int, ids: [String]) {
+    (storageCalls, storageIDs)
+  }
 }
 
 final class TasksSortOrderSyncFailureTests: XCTestCase {
@@ -63,6 +90,96 @@ final class TasksSortOrderSyncFailureTests: XCTestCase {
       "Task order was saved on this Mac, but not synced to Omi Cloud. Retry when your connection is available."
     )
     XCTAssertTrue(viewModel.hasPendingSortOrderRetry)
+  }
+
+  @MainActor
+  func testLocalOnlySortRanksPersistLocallyButNeverReachBackend() async {
+    let previousOwner = RuntimeOwnerIdentity.currentOwnerId()
+    await transition(to: "sort-local-rank-owner")
+
+    let probe = SortOrderSyncProbe()
+    let viewModel = TasksViewModel(
+      sortOrderSyncOperations: .init(
+        updateStorage: { updates, _ in
+          probe.storageCalls += 1
+          probe.storageIDs = updates.map(\.id)
+        },
+        updateBackend: { updates, _ in
+          probe.backendWrites += 1
+          probe.backendIDs = updates.map(\.id)
+        }
+      )
+    )
+    viewModel.recordSortOrderSyncFailure(
+      storageErrorDescription: nil,
+      backendErrorDescription: "retry",
+      updates: [
+        (id: "local_42", sortOrder: 125, indentLevel: 0),
+        (id: "cloud-task", sortOrder: 250, indentLevel: 0),
+      ]
+    )
+
+    await viewModel.retrySortOrderSync()?.value
+
+    XCTAssertEqual(probe.storageIDs, ["local_42", "cloud-task"])
+    XCTAssertEqual(probe.backendWrites, 1)
+    XCTAssertEqual(probe.backendIDs, ["cloud-task"])
+    XCTAssertFalse(viewModel.hasPendingSortOrderRetry)
+    await transition(to: previousOwner)
+  }
+
+  @MainActor
+  func testLegacyMigrationDoesNotMarkCompleteAfterPersistenceFailure() async throws {
+    let fixture = try await RewindStorageTestIsolation.setUp(
+      userIdPrefix: "sort-order-migration-failure")
+    addTeardownBlock {
+      await RewindStorageTestIsolation.tearDown(userDir: fixture.userDir)
+    }
+
+    let first = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "first legacy task", source: "test"),
+      authorization: .unrestricted
+    )
+    let second = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "second legacy task", source: "test"),
+      authorization: .unrestricted
+    )
+    let firstID = first.toTaskActionItem().id
+    let secondID = second.toTaskActionItem().id
+    let previousOwner = RuntimeOwnerIdentity.currentOwnerId()
+    await transition(to: "sort-migration-failure-owner")
+
+    let suite = "TasksSortOrderMigrationFailure.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set(
+      [TaskCategory.noDeadline.rawValue: [secondID, firstID]],
+      forKey: .tasksCategoryOrder
+    )
+
+    let probe = SortOrderMigrationProbe()
+    let viewModel = TasksViewModel(
+      ownerIDProvider: { "sort-migration-failure-owner" },
+      sortOrderSyncOperations: .init(
+        updateStorage: { updates, _ in
+          await probe.recordStorage(updates.map(\.id))
+          throw NSError(domain: "TasksSortOrderSyncFailureTests", code: 1)
+        },
+        updateBackend: { _, _ in }
+      ),
+      orderingDefaults: defaults
+    )
+    _ = viewModel
+
+    await probe.waitForStorage()
+    let snapshot = await probe.snapshot()
+
+    XCTAssertEqual(snapshot.calls, 1)
+    XCTAssertFalse(
+      defaults.bool(forKey: .tasksSortOrderMigrated(ownerID: "sort-migration-failure-owner")),
+      "a failed legacy write must retry on the next launch"
+    )
+    await transition(to: previousOwner)
   }
 
   @MainActor

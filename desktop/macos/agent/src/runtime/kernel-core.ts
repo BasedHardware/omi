@@ -17,6 +17,7 @@ import {
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
 import {
+  conversationIdForOwnedSurfaceSession,
   conversationIdForSession,
 } from "./conversation-turns.js";
 import {
@@ -24,10 +25,13 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
+  type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
 import {
   bindProducingJournalTurn,
+  searchJournalConversation,
   validateProducingJournalTurnAdmission,
 } from "./conversation-journal.js";
 import type {
@@ -140,6 +144,18 @@ import type {
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
+
+function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSession): Record<string, unknown> {
+  return {
+    ...(input.metadata ?? {}),
+    executionRole: session.executionRole,
+    providerBoundary: session.providerBoundary,
+    surfaceKind: session.surfaceKind,
+    chatFirstUi: input.admittedContextSnapshot?.capabilities.chatFirstUi === true,
+    chatFirstControlGeneration:
+      input.admittedContextSnapshot?.capabilities.chatFirstControlGeneration ?? null,
+  };
+}
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
@@ -172,6 +188,7 @@ export class KernelCore {
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
+  protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
@@ -239,6 +256,62 @@ export class KernelCore {
       throw new ExternalSurfaceAuthorityError(decision.code, decision.message);
     }
     return decision;
+  }
+
+  assertLiveRunToolCapability(input: { capabilityRef: string; activeOwnerId: string }) {
+    return this.toolCapabilities.assertLiveCapability(input.capabilityRef, input.activeOwnerId);
+  }
+
+  /**
+   * Parent-kernel dispatch for the chat-first local history tool. The stdio
+   * child only relays its request; this method requires the already-admitted
+   * one-use invocation before it can read the caller's journal.
+   */
+  searchAuthorizedChatHistory(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }) {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_chat_history"
+      || invocation.surfaceKind !== "main_chat"
+      || invocation.chatFirstUi !== true
+      || !Number.isSafeInteger(invocation.chatFirstControlGeneration)
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_chat_history requires an enabled main-Chat tool capability");
+    }
+    const toolInput = chatHistorySearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      if (session.surfaceKind !== "main_chat") {
+        throw new Error("search_chat_history requires the caller's main Chat session");
+      }
+      if (invocation.externalRefKind !== "chat" || !invocation.externalRefId) {
+        throw new Error("search_chat_history requires the caller's canonical Chat reference");
+      }
+      const conversationId = conversationIdForOwnedSurfaceSession(this.store, {
+        ownerId: invocation.ownerId,
+        sessionId: session.sessionId,
+        surfaceKind: "main_chat",
+        externalRefKind: invocation.externalRefKind,
+        externalRefId: invocation.externalRefId,
+      });
+      if (!conversationId) throw new Error("search_chat_history requires an exact canonical Chat conversation");
+      const matches = searchJournalConversation(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        ...toolInput,
+      });
+      lease.assertCurrentAuthority();
+      return { matches };
+    } finally {
+      lease.release();
+    }
   }
 
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
@@ -713,12 +786,14 @@ export class KernelCore {
         requestedAdapterId: session.defaultAdapterId,
       });
       const contextSnapshot = input.admittedContextSnapshot
-        ? inheritContextSnapshotForSession(
-            this.store,
-            input.admittedContextSnapshot,
-            session.sessionId,
-            session.ownerId,
-          )
+        ? input.admittedContextSnapshot.sessionId === session.sessionId
+          ? input.admittedContextSnapshot
+          : inheritContextSnapshotForSession(
+              this.store,
+              input.admittedContextSnapshot,
+              session.sessionId,
+              session.ownerId,
+            )
         : buildContextSnapshot(
             this.store,
             session.sessionId,
@@ -992,17 +1067,30 @@ export class KernelCore {
 
       let effectivePrompt = attemptInput.prompt;
       let effectivePromptBlocks = attemptInput.promptBlocks;
+      let nextContextDelivery: ContextDeliveryCursor | undefined;
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
         const attachments = input.attachments?.length
           ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
           : "";
-        effectivePrompt = `${renderContextSnapshot(
-          snapshot,
-          accepted.session.surfaceKind,
-          accepted.session.executionRole,
-        )}${attachments}\n\n# User Message\n${input.prompt}`;
+        const renderedContext = adapterId === "pi-mono" && handle.bindingId
+          ? renderContextSnapshotForBinding(
+              snapshot,
+              accepted.session.surfaceKind,
+              accepted.session.executionRole,
+              this.contextDeliveryByBinding.get(handle.bindingId),
+            )
+          : {
+              rendered: renderContextSnapshot(
+                snapshot,
+                accepted.session.surfaceKind,
+                accepted.session.executionRole,
+              ),
+              next: undefined,
+            };
+        nextContextDelivery = renderedContext.next;
+        effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
               block.type === "text" ? { ...block, text: effectivePrompt } : block,
@@ -1056,6 +1144,9 @@ export class KernelCore {
         });
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
+        if (handle.bindingId && nextContextDelivery) {
+          this.contextDeliveryByBinding.set(handle.bindingId, nextContextDelivery);
+        }
         if (
           (
             this.runStatus(accepted.run.runId) === "cancelling"
@@ -1656,11 +1747,7 @@ export class KernelCore {
           this.runtimeNodeId,
           input.input.cwd,
         ),
-        metadata: {
-          ...(input.input.metadata ?? {}),
-          executionRole: input.session.executionRole,
-          providerBoundary: input.session.providerBoundary,
-        },
+        metadata: runtimeAdapterMetadata(input.input, input.session),
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -1722,11 +1809,7 @@ export class KernelCore {
         this.runtimeNodeId,
         input.input.cwd,
       ),
-      metadata: {
-        ...(input.input.metadata ?? {}),
-        executionRole: input.session.executionRole,
-        providerBoundary: input.session.providerBoundary,
-      },
+      metadata: runtimeAdapterMetadata(input.input, input.session),
     });
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(
@@ -2114,6 +2197,7 @@ export class KernelCore {
   }
 
   protected markBindingStale(binding: AdapterBinding, attempt: RunAttempt, reason: string): void {
+    this.contextDeliveryByBinding.delete(binding.bindingId);
     const run = this.readRun(attempt.runId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2132,6 +2216,7 @@ export class KernelCore {
   }
 
   protected markEvictedBindingStale(bindingId: string, reason: string): void {
+    this.contextDeliveryByBinding.delete(bindingId);
     const binding = this.readBinding(bindingId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2662,6 +2747,31 @@ function requiredExternalIdentity(value: string, field: string): string {
     throw new ExternalSurfaceAuthorityError("invalid_external_request", `External surface ${field} is required`);
   }
   return normalized;
+}
+
+function chatHistorySearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+} {
+  if (typeof input.query !== "string") {
+    throw new Error("search_chat_history requires a query string");
+  }
+  const readOptionalString = (value: unknown, field: string): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") throw new Error(`search_chat_history ${field} must be a string`);
+    return value;
+  };
+  if (input.limit !== undefined && (typeof input.limit !== "number" || !Number.isSafeInteger(input.limit))) {
+    throw new Error("search_chat_history limit must be an integer");
+  }
+  return {
+    query: input.query,
+    startDate: readOptionalString(input.start_date, "start_date"),
+    endDate: readOptionalString(input.end_date, "end_date"),
+    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  };
 }
 
 function stableExternalSpawnPillId(invocationId: string): string {

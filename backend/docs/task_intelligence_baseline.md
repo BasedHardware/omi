@@ -2,6 +2,11 @@
 
 This file records the pre-implementation boundaries that the Ticket 01 fixtures and source manifest protect.
 
+Current entitlement boundary: the code-owned `CANONICAL_MEMORY_USERS` whitelist in
+`config/canonical_memory_cohort.py` is the only selector for canonical memory,
+task intelligence, and Chat-first. Persisted workflow/UI fields and memory
+environment variables are generation/readiness metadata, never product gates.
+
 - Backend conversation extraction can write directly to `action_items`; desktop screen extraction stages and ranks locally.
 - Desktop task discovery is coupled to proactive-task notification enablement.
 - The backend action-item contract drops desktop-only provenance, confidence, goal, recurrence, and agent fields.

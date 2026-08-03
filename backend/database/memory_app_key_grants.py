@@ -1,6 +1,5 @@
 """Canonical app/key memory grant Firestore reader (WS-G7)."""
 
-import sys
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
@@ -36,10 +35,6 @@ def _looks_like_grants_contract(state: object) -> bool:
 
 def _default_db_client(db_client: Optional[Any]) -> Any:
     return db_client if db_client is not None else getattr(db_client_module, "db", None)
-
-
-def _firestore_module() -> Any:
-    return sys.modules.get("google.cloud.firestore", firestore)
 
 
 def read_app_key_memory_grants_state(uid: str, db_client: Any) -> AppKeyMemoryGrantStateRead:
@@ -233,18 +228,22 @@ def remove_developer_api_key_memory_grant(
     if not doc_ref.get().exists:
         return
 
-    # UUID key ids contain hyphens; dotted field paths must use FieldPath so Firestore
-    # does not treat hyphen segments as invalid path components.
-    firestore_module = _firestore_module()
-    field_path = firestore_module.FieldPath(
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    # UUID key ids contain hyphens, so the nested path is escaped through FieldPath
+    # before being passed as an update key. ``update()`` only accepts string keys —
+    # a FieldPath instance raises — so the escaped API representation is used.
+    field_path = FieldPath(
         "grants",
         DEVELOPER_API_CONSUMER,
         "apps",
         DEVELOPER_API_DEFAULT_APP_ID,
         "keys",
         key_id,
-    )
-    doc_ref.update({field_path: firestore_module.DELETE_FIELD})
+    ).to_api_repr()
+    doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 
 __all__ = [

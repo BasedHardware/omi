@@ -20,6 +20,7 @@ from utils.memory.v3.composed_get_service import (
     compose_v3_get,
 )
 from utils.memory.v3.production_runtime import build_v3_production_runtime
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 @dataclass
@@ -85,6 +86,11 @@ class FakeDb:
 
     def collection(self, path):
         return FakeQuery(self, path)
+
+
+@pytest.fixture(autouse=True)
+def _canonical_uid(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'uid-a')
 
 
 def _control_doc(uid='uid-a'):
@@ -240,7 +246,7 @@ def _route_client(monkeypatch, db, legacy_calls):
 
 
 @pytest.mark.slow
-def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_off(monkeypatch):
+def test_real_router_ignores_v3_env_gate_for_an_enrolled_user(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
@@ -252,14 +258,14 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
 
     assert response.status_code == 200
     body = response.json()
-    assert body[0]['id'] == 'legacy-id'
-    assert 'layer' not in body[0]
-    assert 'memory_tier' not in body[0]
-    assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'false'
-    assert response.headers['x-omi-memory-device-scope-supported'] == 'false'
-    assert legacy_calls == [{'uid': 'uid-a', 'limit': 5000, 'offset': 0}]
-    assert db.reads == []
-    assert db.streams == []
+    assert body[0]['id'] == 'm1'
+    assert body[0]['layer'] == 'long_term'
+    assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'true'
+    assert response.headers['x-omi-memory-device-scope-supported'] == 'true'
+    assert legacy_calls == []
+    # The composed reader asks for the requested page plus its ten-row scan
+    # cushion, then the projection store asks for one cursor sentinel.
+    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 14)]
 
 
 @pytest.mark.slow
@@ -322,7 +328,7 @@ def test_real_router_cursor_read_requires_cursor_secret_and_never_calls_legacy(m
     assert db.writes == []
 
 
-def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
+def test_absent_memory_env_still_builds_an_enrolled_runtime(monkeypatch):
     monkeypatch.delenv('MEMORY_MODE', raising=False)
     monkeypatch.delenv('MEMORY_ENABLED_USERS', raising=False)
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
@@ -330,12 +336,11 @@ def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
 
     runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
 
-    assert runtime.enabled is False
-    assert runtime.source_decision == 'disabled'
-    assert db.reads == []
+    assert runtime.enabled is True
+    assert runtime.source_decision == 'memory_read'
 
 
-def test_route_specific_gate_is_default_false_even_when_global_memory_env_is_read(monkeypatch):
+def test_memory_env_cannot_disable_an_enrolled_runtime(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
@@ -343,12 +348,11 @@ def test_route_specific_gate_is_default_false_even_when_global_memory_env_is_rea
 
     runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
 
-    assert runtime.enabled is False
-    assert runtime.source_decision == 'disabled'
-    assert db.reads == []
+    assert runtime.enabled is True
+    assert runtime.source_decision == 'memory_read'
 
 
-def test_route_specific_gate_requires_exact_true(monkeypatch):
+def test_non_boolean_v3_env_cannot_disable_an_enrolled_runtime(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', '1')
@@ -356,12 +360,11 @@ def test_route_specific_gate_requires_exact_true(monkeypatch):
 
     runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
 
-    assert runtime.enabled is False
-    assert runtime.source_decision == 'disabled'
-    assert db.reads == []
+    assert runtime.enabled is True
+    assert runtime.source_decision == 'memory_read'
 
 
-def test_non_read_modes_and_malformed_mode_do_not_enable_runtime(monkeypatch):
+def test_memory_mode_values_cannot_disable_an_enrolled_runtime(monkeypatch):
     for mode in ('shadow', 'write', 'unknown'):
         monkeypatch.setenv('MEMORY_MODE', mode)
         monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -370,12 +373,12 @@ def test_non_read_modes_and_malformed_mode_do_not_enable_runtime(monkeypatch):
 
         runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
 
-        assert runtime.enabled is False
-        assert runtime.source_decision == 'disabled'
-        assert db.reads == []
+        assert runtime.enabled is True
+        assert runtime.source_decision == 'memory_read'
 
 
 def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'other-user')
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'other-user')
@@ -383,7 +386,7 @@ def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypat
 
     runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
 
-    assert runtime.enabled is True
+    assert runtime.enabled is False
     assert runtime.source_decision == 'legacy_primary'
     assert db.reads == []
 

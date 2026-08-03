@@ -16,6 +16,7 @@ class FirestoreReadFamily(StrEnum):
 
 class FirestoreReadMode(StrEnum):
     UNBOUNDED = 'unbounded'
+    BOUNDED = 'bounded'
 
 
 FIRESTORE_READ_OPERATIONS = Counter(

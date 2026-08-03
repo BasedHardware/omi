@@ -4,6 +4,7 @@ ARG UV_VERSION=0.11.13
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ARG UV_VERSION
+ENV LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be
 
 RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
@@ -21,7 +22,10 @@ RUN apt-get update && apt-get install -y \
 
 # Build liblc3 and create wheel
 WORKDIR /tmp
-RUN git clone https://github.com/google/liblc3.git && \
+RUN git init liblc3 && \
+    git -C liblc3 remote add origin https://github.com/google/liblc3.git && \
+    git -C liblc3 fetch --depth=1 origin "${LIBLC3_COMMIT}" && \
+    git -C liblc3 checkout --detach FETCH_HEAD && \
     cd liblc3 && \
     meson setup build && \
     cd build && \
@@ -45,7 +49,12 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && \
+    groupadd --system --gid 10001 pusher && \
+    useradd --system --uid 10001 --gid 10001 --home-dir /app pusher && \
+    mkdir -p _temp _samples _segments _speech_profiles && \
+    chown -R 10001:10001 _temp _samples _segments _speech_profiles && \
+    rm -rf /var/lib/apt/lists/*
 
 # jemalloc eliminates glibc malloc fragmentation that causes RSS to grow linearly
 # under high-churn bytearray allocations from WebSocket audio streams (#6938)
@@ -69,8 +78,10 @@ COPY backend/database/ ./database/
 COPY backend/models/ ./models/
 COPY backend/routers/ ./routers/
 COPY backend/services/ ./services/
+COPY backend/testing/parity_pack_v0/ ./testing/parity_pack_v0/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
 
 EXPOSE 8080
+USER 10001:10001
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]

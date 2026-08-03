@@ -1474,7 +1474,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get payYourSttProvider => 'Usa Omi liberamente. Paghi solo il tuo provider STT direttamente.';
 
   @override
-  String get freeMinutesMonth => '1.200 minuti gratuiti/mese inclusi. Illimitato con ';
+  String get freeMinutesMonth => '300 minuti gratuiti/mese inclusi. Illimitato con ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1796,20 +1796,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Ti piace Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Aiutaci a raggiungere più persone lasciando una recensione sull\'App Store. Il tuo feedback è prezioso per noi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Aiutaci a raggiungere più persone lasciando una recensione sul Google Play Store. Il tuo feedback è prezioso per noi!';
-
-  @override
-  String get rateOnAppStore => 'Valuta su App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Valuta su Google Play';
 
   @override
   String get maybeLater => 'Forse più tardi';
@@ -2148,6 +2134,18 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Modifica memoria';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Mi piace mangiare il gelato...';
@@ -4738,7 +4736,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nessun accesso ai dati specifico configurato.';
 
   @override
-  String get basicPlanDescription => '1.200 minuti premium + illimitato sul dispositivo';
+  String get basicPlanDescription => '300 minuti premium + illimitato sul dispositivo';
 
   @override
   String get minutes => 'minuti';
@@ -6035,7 +6033,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
+      '300 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
 
   @override
   String get viewUsage => 'Visualizza utilizzo';
@@ -6119,7 +6117,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
+      '300 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9837,4 +9835,7 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Disattiva per impedire l\'invio dell\'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Troppo vecchia per la sincronizzazione — Omi non può accettarla';
 }

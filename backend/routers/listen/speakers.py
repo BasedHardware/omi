@@ -13,6 +13,7 @@ import numpy as np
 from utils.audio import AudioRingBuffer
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
+from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
@@ -69,12 +70,16 @@ class SpeakerMatcher:
             for person in people:
                 if person.get('speech_samples'):
                     person = await maybe_migrate_person_samples(self.host.request.uid, person)
-                embedding = person.get('speaker_embedding')
-                if embedding and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
-                    self.person_embeddings[person['id']] = {
-                        'embedding': np.array(embedding, dtype=np.float32).reshape(1, -1),
-                        'name': person['name'],
-                    }
+                stored = person.get('speaker_embedding')
+                verified_samples = bool(person.get('speech_samples')) and (person.get('speech_samples_version', 1) >= 3)
+                vector: Optional[Any] = None
+                if verified_samples:
+                    if stored:
+                        vector = np.array(stored, dtype=np.float32).reshape(1, -1)
+                    else:
+                        vector = await self._recover_person_embedding(person)
+                if vector is not None:
+                    self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
             state.speaker_id_done.set()
@@ -99,6 +104,39 @@ class SpeakerMatcher:
                 self.tasks.add(task)
                 task.add_done_callback(self.tasks.discard)
         state.speaker_id_done.set()
+
+    async def _recover_person_embedding(self, person: Dict[str, Any]) -> Optional[Any]:
+        """Rebuild a taught person's missing embedding from their stored samples.
+
+        The teach path extracts the embedding inside a try/except that only logs, so a
+        failed extraction leaves a person holding samples with no embedding, and nothing
+        ever recomputes it. That person is then skipped here on every later session and
+        can never be matched no matter how many times the user teaches them (#10434) —
+        while the user's own profile self-heals through exactly this fallback above.
+
+        Only reached for `speech_samples_version >= 3` samples, which already passed
+        verify_and_transcribe_sample when they were stored, so this restores a lost
+        embedding without reopening the quality gate that deliberately drops bad samples.
+        """
+        person_id = person.get('id')
+        samples = person.get('speech_samples') or []
+        if not samples:
+            return None
+        try:
+            audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
+            if not audio:
+                return None
+            vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')
+            await self.host.persistence.call(
+                user_db.set_person_speaker_embedding, self.host.request.uid, person_id, vector.flatten().tolist()
+            )
+            logger.info('Speaker ID recovered missing person embedding person=%s', person_id)
+            return vector
+        except Exception as error:
+            logger.error(
+                'Speaker ID person embedding recovery failed person=%s type=%s', person_id, type(error).__name__
+            )
+            return None
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
         try:

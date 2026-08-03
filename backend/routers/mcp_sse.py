@@ -53,6 +53,7 @@ from utils.memory.memory_service import (
     resolve_external_memory_write_context,
 )
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -67,6 +68,7 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_denied_read_payload,
     mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
@@ -831,7 +833,7 @@ def execute_tool(
             filtered = collect_filtered_memories(
                 lambda batch_offset, batch_limit: [
                     m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
                 ],
                 limit=limit,
                 offset=offset,
@@ -864,6 +866,9 @@ def execute_tool(
         if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": memory_list_results.memories}
         if not mcp_legacy_read_authorized(memory_list_results):
+            denied = mcp_denied_read_payload(memory_list_results)
+            if denied is not None:
+                raise ToolExecutionError(str(denied), code=-32009)
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -924,6 +929,13 @@ def execute_tool(
             )
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
+
+        capture_memory_write(
+            principal_id=user_id,
+            source="mcp_tool_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
+        )
 
         exposure = (
             MemoryApiExposure.CANONICAL
@@ -1092,6 +1104,9 @@ def execute_tool(
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": vector_search_results.memories}
         if not mcp_legacy_read_authorized(vector_search_results):
+            denied = mcp_denied_read_payload(vector_search_results)
+            if denied is not None:
+                raise ToolExecutionError(str(denied), code=-32009)
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)

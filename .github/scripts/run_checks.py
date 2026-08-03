@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import glob
 import json
+import os
 import platform as _platform_mod
 import subprocess
 import sys
@@ -15,8 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
+from git_bash import bash_executable
 
-VALID_PLATFORMS = {"all", "macos", "linux"}
+VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 
 
 def detect_platform() -> str:
@@ -26,6 +29,8 @@ def detect_platform() -> str:
         return "macos"
     if system == "Linux":
         return "linux"
+    if system == "Windows":
+        return "windows"
     return system.lower()
 
 
@@ -50,6 +55,14 @@ class Exemption:
 class Manifest:
     checks: tuple[Check, ...]
     exempt: tuple[Exemption, ...]
+
+
+@dataclass(frozen=True)
+class CheckSelection:
+    """A manifest check together with the paths that selected it."""
+
+    check: Check
+    matched_paths: tuple[str, ...]
 
 
 def _parse_value(raw: str) -> Any:
@@ -103,8 +116,7 @@ def load_manifest(path: Path) -> Manifest:
         for item in raw.get("checks", [])
     )
     exempt = tuple(
-        Exemption(path=str(item.get("path", "")), reason=str(item.get("reason", "")))
-        for item in raw.get("exempt", [])
+        Exemption(path=str(item.get("path", "")), reason=str(item.get("reason", ""))) for item in raw.get("exempt", [])
     )
     return Manifest(checks=checks, exempt=exempt)
 
@@ -129,6 +141,8 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
         for pattern in check.triggers:
             if not pattern or pattern.count("[") != pattern.count("]"):
                 errors.append(f"{check.id}: invalid trigger glob: {pattern!r}")
+            elif pattern != "all" and not glob.has_magic(pattern) and not (root / pattern).exists():
+                errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
             errors.append(f"{check.id}: lanes must not be empty")
         invalid_lanes = sorted(set(check.lanes) - {"local", "ci"})
@@ -158,6 +172,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 
@@ -187,8 +202,44 @@ def trigger_matches(pattern: str, path: str) -> bool:
     return False
 
 
-def _platform_matches(check: Check, platform: str) -> bool:
+def _platform_matches(check: Check, platform: str, *, exclusive: bool = False) -> bool:
+    if exclusive:
+        # A macOS-exclusive query intentionally excludes portable checks.  Those
+        # remain owned by the Linux Repo Checks lane even though they could also
+        # execute on a Mac.
+        return set(check.platforms) == {platform}
     return not check.platforms or "all" in check.platforms or platform in check.platforms
+
+
+def matching_paths(check: Check, files: list[str]) -> tuple[str, ...]:
+    """Return changed paths that caused *check* to be selected."""
+    if "all" in check.triggers:
+        return tuple(files) if files else ("all",)
+    return tuple(path for path in files if any(trigger_matches(pattern, path) for pattern in check.triggers))
+
+
+def resolve_check_selections(
+    manifest: Manifest,
+    files: list[str],
+    lane: str,
+    *,
+    include_pr_body_checks: bool = True,
+    platform: str = "all",
+    exclusive_platform: bool = False,
+) -> list[CheckSelection]:
+    """Resolve checks with their manifest-owned path and reason evidence."""
+    selections: list[CheckSelection] = []
+    for check in manifest.checks:
+        if lane not in check.lanes:
+            continue
+        if not include_pr_body_checks and check.requires_pr_body:
+            continue
+        if not _platform_matches(check, platform, exclusive=exclusive_platform):
+            continue
+        paths = matching_paths(check, files)
+        if paths:
+            selections.append(CheckSelection(check=check, matched_paths=paths))
+    return selections
 
 
 def resolve_checks(
@@ -198,23 +249,47 @@ def resolve_checks(
     *,
     include_pr_body_checks: bool = True,
     platform: str = "all",
+    exclusive_platform: bool = False,
 ) -> list[Check]:
     return [
-        check
-        for check in manifest.checks
-        if lane in check.lanes
-        and (include_pr_body_checks or not check.requires_pr_body)
-        and _platform_matches(check, platform)
-        and (
-            "all" in check.triggers
-            or any(trigger_matches(pattern, path) for pattern in check.triggers for path in files)
+        selection.check
+        for selection in resolve_check_selections(
+            manifest,
+            files,
+            lane,
+            include_pr_body_checks=include_pr_body_checks,
+            platform=platform,
+            exclusive_platform=exclusive_platform,
         )
     ]
 
 
-def skipped_platform_checks(
-    manifest: Manifest, files: list[str], lane: str, platform: str
-) -> list[Check]:
+def resolve_explicit_checks(
+    manifest: Manifest,
+    check_ids: list[str],
+    lane: str,
+    *,
+    include_pr_body_checks: bool,
+    platform: str,
+) -> list[CheckSelection]:
+    """Resolve named manifest checks without duplicating their commands in callers."""
+    checks_by_id = {check.id: check for check in manifest.checks}
+    selections: list[CheckSelection] = []
+    for check_id in dict.fromkeys(check_ids):
+        check = checks_by_id.get(check_id)
+        if check is None:
+            raise ValueError(f"unknown check id: {check_id}")
+        if lane not in check.lanes:
+            raise ValueError(f"{check_id}: check is not available in the {lane} lane")
+        if not include_pr_body_checks and check.requires_pr_body:
+            raise ValueError(f"{check_id}: check requires pull-request metadata")
+        if not _platform_matches(check, platform):
+            raise ValueError(f"{check_id}: check does not support platform {platform}")
+        selections.append(CheckSelection(check=check, matched_paths=()))
+    return selections
+
+
+def skipped_platform_checks(manifest: Manifest, files: list[str], lane: str, platform: str) -> list[Check]:
     """Checks that match lane+triggers but are skipped due to platform."""
     return [
         check
@@ -253,6 +328,23 @@ def command_for_check(
     return command
 
 
+def command_for_host(
+    command: list[str],
+    *,
+    platform_name: str | None = None,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    platform = platform_name or os.name
+    if platform != "nt" or not command:
+        return command
+    if command[0] == "bash":
+        return [bash_executable(platform_name=platform), *command[1:]]
+    if command[0] == "python3":
+        return [python_executable or sys.executable, *command[1:]]
+    return command
+
+
 def execute_checks(
     root: Path,
     checks: list[Check],
@@ -275,6 +367,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
+        command = command_for_host(command)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
@@ -302,6 +395,12 @@ def parse_args() -> argparse.Namespace:
         help="Exclude checks declared as requiring pull-request metadata.",
     )
     parser.add_argument("--skip-changelog", action="store_true")
+    parser.add_argument(
+        "--check-id",
+        action="append",
+        default=[],
+        help="Run a named manifest check regardless of path triggers; repeat for multiple checks.",
+    )
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
     parser.add_argument(
@@ -309,6 +408,17 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(VALID_PLATFORMS),
         default=None,
         help="Platform filter (auto-detected if omitted). macOS-only checks are skipped on other platforms.",
+    )
+    parser.add_argument(
+        "--exclusive-platform",
+        action="store_true",
+        help="Select only checks scoped exclusively to --platform (for example macOS-only, not portable, checks).",
+    )
+    parser.add_argument(
+        "--output",
+        choices=("human", "json"),
+        default="human",
+        help="Selection output format. JSON implies --list and includes check IDs, matching paths, and reasons.",
     )
     return parser.parse_args()
 
@@ -332,21 +442,60 @@ def main() -> int:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
     detected_platform = args.platform or detect_platform()
-    checks = resolve_checks(
-        manifest,
-        files,
-        args.lane,
-        include_pr_body_checks=not args.skip_pr_body_checks,
-        platform=detected_platform,
-    )
+    try:
+        selections = (
+            resolve_explicit_checks(
+                manifest,
+                args.check_id,
+                args.lane,
+                include_pr_body_checks=not args.skip_pr_body_checks,
+                platform=detected_platform,
+            )
+            if args.check_id
+            else resolve_check_selections(
+                manifest,
+                files,
+                args.lane,
+                include_pr_body_checks=not args.skip_pr_body_checks,
+                platform=detected_platform,
+                exclusive_platform=args.exclusive_platform,
+            )
+        )
+    except ValueError as exc:
+        print(f"FAIL: could not select manifest checks: {exc}", file=sys.stderr)
+        return 2
+    checks = [selection.check for selection in selections]
+    if args.output == "json":
+        print(
+            json.dumps(
+                {
+                    "lane": args.lane,
+                    "platform": detected_platform,
+                    "exclusive_platform": args.exclusive_platform,
+                    "checks": [
+                        {
+                            "id": selection.check.id,
+                            "matched_paths": list(selection.matched_paths),
+                            "reason": selection.check.reason,
+                        }
+                        for selection in selections
+                    ],
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     print(
-        f"Check manifest: lane={args.lane} platform={detected_platform} "
+        f"Check manifest: lane={args.lane} platform={detected_platform} exclusive_platform={args.exclusive_platform} "
         f"base={resolved_base[:12]} head={args.head} files={len(files)}"
     )
     for check in checks:
         print(f"  SELECTED {check.id}: {check.reason}")
-    for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
-        print(f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})")
+    if not args.check_id:
+        for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
+            print(
+                f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})"
+            )
     if args.list:
         return 0
 

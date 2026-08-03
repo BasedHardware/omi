@@ -4,23 +4,19 @@ Replaces fragmented memory rollout flags with one explicit server-owned selector
 ``MemorySystem.LEGACY`` is the documented default — not an implicit None fallback.
 """
 
+import os
 from enum import Enum
 from typing import Any
 
-from config.memory_rollout import MemoryRolloutConfig
+from config import canonical_memory_cohort
 
 MEMORY_SYSTEM_FIELD = "memory_system"
 
 # Code-as-config canonical cohort whitelist (reviewable, diff-able, test-guarded).
 # Add Firebase UIDs here to enroll users in the canonical memory path.
 # Everyone not listed resolves to LEGACY.
-CANONICAL_MEMORY_USERS: frozenset[str] = frozenset(
-    {
-        "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com (prod Firebase: based-hardware)
-        # Next dogfood (re-enable soon):
-        # "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com (prod Firebase: based-hardware)
-    }
-)
+CANONICAL_MEMORY_USERS = canonical_memory_cohort.CANONICAL_MEMORY_USERS
+_LOCAL_FIXTURE_STAGES = frozenset({'local', 'offline'})
 
 
 class MemorySystem(str, Enum):
@@ -30,7 +26,7 @@ class MemorySystem(str, Enum):
 
 def _canonical_cohort_uids() -> frozenset[str]:
     """Return the code-defined canonical cohort set."""
-    return CANONICAL_MEMORY_USERS
+    return canonical_memory_cohort.CANONICAL_MEMORY_USERS
 
 
 def list_canonical_cohort_uids() -> list[str]:
@@ -38,35 +34,30 @@ def list_canonical_cohort_uids() -> list[str]:
     return sorted(_canonical_cohort_uids())
 
 
-def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
+def _local_fixture_canonical_uids() -> frozenset[str]:
+    """Return harness-selected users only for the isolated local/offline stages."""
+    if os.getenv('OMI_ENV_STAGE', '').strip().lower() not in _LOCAL_FIXTURE_STAGES:
+        return frozenset()
+    return frozenset(uid.strip() for uid in os.getenv('MEMORY_CANONICAL_USERS', '').split(',') if uid.strip())
+
+
+def resolve_memory_system(uid: object, *, db_client: Any = None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
-    Precedence (authoritative):
-      1. ``CANONICAL_MEMORY_USERS`` in this module — code-reviewed cohort membership.
-      2. ``MEMORY_ENABLED_USERS`` + ``MEMORY_MODE`` — environment-specific activation.
-      3. Absence from either list, or ``MEMORY_MODE=off`` → ``MemorySystem.LEGACY``.
+    ``CANONICAL_MEMORY_USERS`` is the production entitlement selector. The
+    isolated local/offline harness may add its seeded Firebase Auth UIDs through
+    ``MEMORY_CANONICAL_USERS`` so its advertised fixture path remains canonical.
+    Runtime rollout configuration and persisted control records may supply
+    readiness and concurrency fences after this selector has chosen
+    ``CANONICAL``; they must never reinterpret an enrolled account as
+    ``LEGACY``.
 
     A stale persisted ``memory_control/state.memory_system=canonical`` does **not** override
     whitelist removal — clearing the code whitelist is the global kill-switch (everyone legacy).
-
-    UID membership alone never activates canonical memory. This keeps the same
-    branch deployable to dev or prod while requiring each GCP/Firebase
-    environment to opt in explicitly through its own runtime env.
     """
     del db_client  # reserved for callers/tests; cohort is code-defined today
 
-    if not uid:
-        return MemorySystem.LEGACY
-
-    if uid not in _canonical_cohort_uids():
-        return MemorySystem.LEGACY
-
-    try:
-        rollout = MemoryRolloutConfig.from_env()
-    except ValueError:
-        return MemorySystem.LEGACY
-
-    if rollout.mode.value == "off" or uid not in rollout.enabled_users:
-        return MemorySystem.LEGACY
-
-    return MemorySystem.CANONICAL
+    is_canonical = canonical_memory_cohort.is_canonical_memory_user(uid) or (
+        isinstance(uid, str) and uid in _local_fixture_canonical_uids()
+    )
+    return MemorySystem.CANONICAL if is_canonical else MemorySystem.LEGACY

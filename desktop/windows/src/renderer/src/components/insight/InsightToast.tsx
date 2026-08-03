@@ -47,6 +47,9 @@ function WhatsNewCard({ p }: { p: WhatsNewPayload }): React.JSX.Element {
 
 function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
   const capturing = p.kind === 'capturing'
+  const starting = p.kind === 'starting'
+  const failed = p.kind === 'error'
+  const errorKind = p.errorKind ?? 'startup'
   return (
     <div
       className="insight-card"
@@ -64,23 +67,46 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
         </button>
       </div>
       <div className="insight-headline">
-        {capturing ? `Omi is capturing — ${p.appName}` : `${p.appName} looks like a meeting`}
+        {capturing
+          ? `Omi is capturing — ${p.appName}`
+          : starting
+            ? `Starting capture — ${p.appName}`
+            : failed
+              ? errorKind === 'runtime'
+                ? `Capture stopped — ${p.appName}`
+                : errorKind === 'save'
+                  ? `Capture couldn't be saved — ${p.appName}`
+                  : `Capture didn't start — ${p.appName}`
+              : `${p.appName} looks like a meeting`}
       </div>
       <div className="insight-advice">
         {capturing
           ? 'Audio is being transcribed into a conversation.'
-          : 'Capture and transcribe this meeting?'}
+          : starting
+            ? 'Connecting audio and transcription…'
+            : failed
+              ? errorKind === 'save'
+                ? 'The recording ended, but Omi could not save the local meeting transcript.'
+                : 'Check your sign-in, internet connection, and Windows microphone access, then retry.'
+              : 'Capture and transcribe this meeting?'}
       </div>
       {p.firstRun ? (
         <div className="insight-foot">First run — change this in Settings → General.</div>
       ) : null}
       <div className="meeting-actions">
-        {capturing ? (
+        {capturing || starting ? (
           <button
             className="meeting-btn"
             onClick={() => window.omi.meetingAction(p.meetingId, 'stop')}
           >
-            Stop
+            {starting ? 'Cancel' : 'Stop'}
+          </button>
+        ) : failed && errorKind === 'save' ? (
+          <button
+            className="meeting-btn"
+            onClick={() => window.omi.meetingAction(p.meetingId, 'dismiss')}
+          >
+            Dismiss
           </button>
         ) : (
           <>
@@ -88,7 +114,7 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
               className="meeting-btn meeting-btn-primary"
               onClick={() => window.omi.meetingAction(p.meetingId, 'start')}
             >
-              Start capturing
+              {failed ? 'Retry' : 'Start capturing'}
             </button>
             <button
               className="meeting-btn"

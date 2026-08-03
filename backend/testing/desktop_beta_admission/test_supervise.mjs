@@ -24,8 +24,8 @@ function isAlive(pid) {
   }
 }
 
-async function waitFor(check, description) {
-  const deadline = Date.now() + 3_000;
+async function waitFor(check, description, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
   while (!check()) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${description}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -127,17 +127,21 @@ test("each emulator config has explicit, isolated API and websocket ports", asyn
   }
 });
 
-for (const [label, trigger, expectedCode] of [
-  ["timeout", undefined, 124],
-  ["SIGTERM", { signal: "SIGTERM", readyFile: null }, 143],
+for (const [label, trigger, expectedCode, timeoutMs] of [
+  // Startup may be slow on macOS CI; the deadline must leave time for the owned fixture to become observable.
+  ["timeout", undefined, 124, 1_000],
+  // Give the parent enough time to install its signal handlers; a 100ms
+  // deadline races the test's readiness observation and can legitimately
+  // report the timeout exit instead of exercising SIGTERM cleanup.
+  ["SIGTERM", { signal: "SIGTERM", readyFile: null }, 143, 15_000],
 ]) {
   test(`${label} drains emulator children`, async () => {
     const temp = temporaryDirectory();
     const pidFile = join(temp, "child.pid");
-    const args = [supervisor, "--timeout-ms", "100", "--grace-ms", "100", "--", process.execPath, fixture, pidFile, "wait"];
+    const args = [supervisor, "--timeout-ms", String(timeoutMs), "--grace-ms", "100", "--", process.execPath, fixture, pidFile, "wait"];
     const child = spawn(process.execPath, args, { stdio: "ignore" });
     try {
-      await waitFor(() => existsSync(pidFile), "owned fixture readiness");
+      await waitFor(() => existsSync(pidFile), "owned fixture readiness", 15_000);
       if (trigger) child.kill(trigger.signal);
       const result = await new Promise((resolve, reject) => {
         child.once("error", reject);

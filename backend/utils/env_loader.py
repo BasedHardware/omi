@@ -53,6 +53,22 @@ def is_provider_secret_key(key: str) -> bool:
     return bool(_PROVIDER_SECRET_RE.search(key))
 
 
+def firebase_admin_options(environ: dict[str, str] | None = None) -> dict[str, str] | None:
+    """Return Firebase Admin options for the configured authentication project.
+
+    Dev services intentionally validate production Firebase identities while
+    their Google application credentials continue to select the dev data
+    project. Firebase Admin therefore needs the explicit auth project; Google
+    Cloud clients remain independently owned by ADC.
+    """
+
+    source = os.environ if environ is None else environ
+    project_id = source.get("FIREBASE_AUTH_PROJECT_ID", "").strip()
+    if not project_id:
+        return None
+    return {"projectId": project_id}
+
+
 def stage_from_env(environ: dict[str, str] | None = None) -> str | None:
     """Return the active stage name, or ``None`` when only ``backend/.env`` applies."""
 

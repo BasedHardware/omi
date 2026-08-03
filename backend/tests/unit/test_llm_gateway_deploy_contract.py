@@ -8,6 +8,8 @@ from typing import Any, cast
 
 import yaml
 
+from testing.shell import bash_command, bash_path
+
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 GATEWAY_DEPLOY_WORKFLOWS = (
@@ -111,9 +113,9 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
     assert (
         gke_env['OMI_LLM_GATEWAY_URL']['value'] == 'http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080'
     )
-    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
+    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
-    assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+    assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
     assert gke_env['USE_VERTEX_AI']['value'] == 'true'
     assert gke_env['GCP_LOCATION']['value'] == 'us-central1'
     assert gke_env['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
@@ -127,7 +129,7 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
         }
         assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
-        assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+        assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
         assert service_config['env']['GCP_LOCATION']['value'] == 'us-central1'
         assert service_config['env']['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
@@ -307,7 +309,6 @@ def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 
 def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     """Exercise each rendered workflow caller through the real probe parser with fake gcloud."""
-    probe = BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'
     calls = tmp_path / 'gcloud-calls.txt'
     fake_gcloud = tmp_path / 'gcloud'
     fake_gcloud.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n', encoding='utf-8')
@@ -318,16 +319,17 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
         step = _workflow_step_with_run(workflow, 'probe-llm-gateway-from-cloud-run.sh')
         environment = {
             **os.environ,
-            'FAKE_GCLOUD_CALLS': str(calls),
+            'FAKE_GCLOUD_CALLS': bash_path(calls, cwd=REPOSITORY_ROOT),
             'GITHUB_RUN_ATTEMPT': '1',
             'GITHUB_RUN_ID': '42',
             'GITHUB_SHA': 'abcdef0123456789',
-            'DEPLOY_CONTROL_SCRIPTS': str(BACKEND_ROOT / 'scripts'),
-            'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
+            'DEPLOY_CONTROL_SCRIPTS': bash_path(BACKEND_ROOT / 'scripts', cwd=REPOSITORY_ROOT),
+            'OMI_TEST_FAKE_BIN': bash_path(tmp_path, cwd=REPOSITORY_ROOT),
         }
+        run = f'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\n{_render_probe_workflow_run(str(step["run"]))}'
 
         result = subprocess.run(
-            ['bash', '-c', _render_probe_workflow_run(str(step['run']))],
+            bash_command('-c', run, cwd=REPOSITORY_ROOT),
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
@@ -345,11 +347,11 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
 
 def test_gateway_vpc_probe_rejects_equals_style_arguments():
     result = subprocess.run(
-        [
-            'bash',
+        bash_command(
             str(BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'),
             '--project=test-project',
-        ],
+            cwd=REPOSITORY_ROOT,
+        ),
         check=False,
         capture_output=True,
         text=True,

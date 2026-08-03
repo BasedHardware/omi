@@ -32,29 +32,6 @@ extension RealtimeHubController {
     return true
   }
 
-  func acceptsTurnEvent(
-    _ identity: RealtimeHubEventIdentity?,
-    source: RealtimeHubSession
-  ) -> Bool {
-    guard isCurrentSession(source), let identity else { return false }
-    guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: identity.turnID) != nil else {
-      log("RealtimeHub: dropping provider event after authenticated owner changed")
-      return false
-    }
-    guard identity.turnID == VoiceTurnCoordinator.shared.activeTurnID,
-      RealtimeHubEventOwnership.accepts(
-        identity,
-        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-        activeResponseID: voiceResponseID)
-    else {
-      log(
-        "RealtimeHub: dropping stale provider event turn=\(identity.turnID) "
-          + "response=\(identity.responseID)")
-      return false
-    }
-    return true
-  }
-
   func sendToolResultIfCurrent(
     source: RealtimeHubSession,
     callId: String,
@@ -370,6 +347,9 @@ extension RealtimeHubController {
             self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
+            // Cancel any streaming projection that may have started before the
+            // spawn receipt arrived; the spawn owns the canonical exchange now.
+            self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,
@@ -638,10 +618,18 @@ extension RealtimeHubController {
     authorizedRealtimeToolError(code: AuthorizedToolExecution.Rejection.ownerChangedDuringExecution.code)
   }
 
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+    NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+  }
+
   func hubDidConnect(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
+    AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
+    NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -795,6 +783,8 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      beginStreamingRealtimeProjectionIfNeeded()
+      scheduleStreamingRealtimeProjectionFlush(continuityKey: turnIdempotencyKey)
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
@@ -1018,7 +1008,7 @@ extension RealtimeHubController {
             sessionID: voiceSessionID,
             responseID: identity.responseID))
       }
-      source.resumeAfterToolOnlyCycle(identity: identity) { resumed in
+      source.resumeAfterToolOnlyCycle(identity: identity) { [self, source] resumed in
         DispatchQueue.main.async { [weak self, weak source] in
           guard let self, let source else { return }
           self.handlePostToolContinuationStart(
@@ -1329,21 +1319,37 @@ extension RealtimeHubController {
       provider: providerTag,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn)
-    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+    let shouldCaptureProviderCloseToSentry = RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory)
+    let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: providerTag,
       category: closeCategory?.rawValue,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn,
       authMode: authMode,
       failureClass: credentialFailureClass)
-    if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
-      // Keep the provider/system payload in the private local log. The Sentry
-      // message is constructed only from bounded enums and scalars.
-      log(reportingPlan.localMessage)
-      logError(reportingPlan.sentryMessage)
-    } else {
-      log(reportingPlan.localMessage)
+    func recordCloseResolution(
+      turnOutcome: RealtimeProviderCloseTurnOutcome,
+      recoveryAction: RealtimeProviderCloseRecoveryAction,
+      recoveryResult: RealtimeProviderCloseRecoveryResult
+    ) {
+      DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(
+        closeAttemptID: closeAttemptID,
+        provider: providerTag,
+        activeTurn: hasActiveTurn,
+        turnOutcome: turnOutcome,
+        recoveryAction: recoveryAction,
+        recoveryResult: recoveryResult)
+      // `logError` synchronously builds the Sentry attachment. Capture only after
+      // this paired decision exists so the incident carries its bounded recovery
+      // outcome as well as the raw provider-close classification.
+      if shouldCaptureProviderCloseToSentry {
+        logError(reportingPlan.sentryMessage)
+      }
     }
+    // Keep the provider/system payload in the private local log. The Sentry
+    // message is constructed only from bounded enums and scalars, after the
+    // recovery decision is available for its synchronous attachment.
+    log(reportingPlan.localMessage)
     log(
       "RealtimeHub: provider close terminal state tool=\(terminalToolName) "
         + "tool_error=\(terminalToolErrorCode) accepted_spawn=\(terminalHadAcceptedSpawn)"
@@ -1353,6 +1359,10 @@ extension RealtimeHubController {
       hasActiveTurn: hasActiveTurn)
     {
       recoverFromExpectedSessionRotation(sessionRotationPlan, activeTurn: activeTurn)
+      recordCloseResolution(
+        turnOutcome: sessionRotationPlan == .terminateActiveTurnAndRewarm ? .failed : .notInterrupted,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .started)
       return
     }
     if replacementAudioBuffer != nil, let failedProvider = provider {
@@ -1363,12 +1373,23 @@ extension RealtimeHubController {
           from: failedProvider,
           reason: replacementFailoverReason)
       {
+        recordCloseResolution(
+          turnOutcome: .pendingReplacement,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
         return
       }
       failBargeInReplacement(provider: failedProvider, reason: message)
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: .failed,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
+    let turnOutcome: RealtimeProviderCloseTurnOutcome =
+      ownsActiveHubTurn && !resolvedScreenProtocol && activeTurn?.providerFinished != true
+      ? .failed : .notInterrupted
     if ownsActiveHubTurn, !resolvedScreenProtocol, activeTurn?.providerFinished != true {
       terminateActiveHubTurn(activeTurn)
     }
@@ -1376,13 +1397,33 @@ extension RealtimeHubController {
     // context. Only switch for stable credential/quota classes; transient fast closes
     // re-warm the same provider and rely on the shared continuity packet.
     if case .providerAuthFailed = credentialFailureClass {
-      if aliveFor < 10, failoverToAlternateProvider(reason: "auth") { return }
+      if aliveFor < 10, failoverToAlternateProvider(reason: "auth") {
+        recordCloseResolution(
+          turnOutcome: turnOutcome,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
+        return
+      }
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
     if case .providerQuotaExceeded = credentialFailureClass {
-      if failoverToAlternateProvider(reason: "quota") { return }
+      if failoverToAlternateProvider(reason: "quota") {
+        recordCloseResolution(
+          turnOutcome: turnOutcome,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
+        return
+      }
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
@@ -1398,11 +1439,19 @@ extension RealtimeHubController {
     }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .exhausted)
       return
     }
     hubReconnectStrikes += 1
     reconnectPending = true
     replaceSessionAfterDrain(reconnectDelayNanoseconds: 1_500_000_000)
+    recordCloseResolution(
+      turnOutcome: turnOutcome,
+      recoveryAction: .sessionRewarm,
+      recoveryResult: .started)
   }
 
   /// OpenAI limits realtime sessions to sixty minutes. Rotation is a normal

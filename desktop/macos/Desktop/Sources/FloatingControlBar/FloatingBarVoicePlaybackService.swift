@@ -573,7 +573,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     outcome: DesktopFallbackOutcome
   ) {
     DesktopDiagnosticsManager.shared.recordFallback(
-      area: activePTTLease == nil ? "other" : "ptt_cascade",
+      area: activePTTLease == nil ? "tts_fallback" : "ptt_cascade",
       from: "openai_tts",
       to: to,
       reason: reason,
@@ -910,6 +910,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           return "\(title). \(objective)"
         case .agentCompletion(_, _, _, _, let title, _, let output, _):
           return "\(title). \(output)"
+        case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+          return nil
         case .toolCall, .thinking:
           return nil
         }

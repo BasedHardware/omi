@@ -450,6 +450,28 @@ class TestSyncJobsRedis:
         assert result.get('error') is None
         mock_redis.set.assert_not_called()
 
+    def test_never_dispatched_cloud_tasks_queued_job_goes_stale(self):
+        """#10033: a cloud_tasks job that never left 'queued' lost its task and
+        must become stale-eligible instead of zombieing until JOB_TTL expiry."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        base = {
+            'job_id': 'q-lost',
+            'uid': 'uid',
+            'status': 'queued',
+            'dispatch_mode': 'cloud_tasks',
+            'started_at': None,
+            'created_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+            'updated_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+        }
+        assert mod.is_sync_job_stale(dict(base)) is True
+        # Under the dispatch threshold: not stale yet.
+        assert mod.is_sync_job_stale({**base, 'updated_at': time.time() - 60}) is False
+        # Inline queued jobs keep the #7469 contract at any age.
+        assert mod.is_sync_job_stale({**base, 'dispatch_mode': 'inline'}) is False
+        # A pending Cloud Tasks retry (worker re-queued between attempts) must
+        # never be flipped terminal by a poll, however long its backoff.
+        assert mod.is_sync_job_stale({**base, 'attempt': 2, 'started_at': time.time() - 4000}) is False
+
     def test_finalize_sync_job_sets_status(self):
         """finalize_sync_job must set correct terminal status."""
         mod, mock_redis = self._load_sync_jobs_module()
@@ -1303,6 +1325,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
@@ -1460,6 +1483,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         class _AudioPrecacheResponse(BaseModel):
             pass
@@ -2193,8 +2217,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_releases_content_for_retry(self):
-        """VAD-positive empty STT must fail and leave the content ledger retryable."""
+    async def test_provider_empty_after_vad_completes_as_silence(self):
+        """A provider that returns no words for VAD-admitted audio is reporting
+        silence, not failing. The job completes, the content ledger is marked
+        done rather than left retryable, and no usage is billed — the client
+        stops re-uploading the same noise as a failed recording."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2212,11 +2239,11 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
             terminal_events = []
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.side_effect = (
-                lambda *_args: terminal_events.append('claim_released')
+            stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
+                terminal_events.append('content_completed') or True
             )
             stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args: (
-                terminal_events.append('job_finalized') or {'status': 'partial_failure'}
+                terminal_events.append('job_finalized') or {'status': 'completed'}
             )
 
             await module._run_full_pipeline_background_async(
@@ -2230,16 +2257,16 @@ class TestAsyncCoordinatorBehavioral:
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
-            assert result['failed_segments'] == 1
-            assert result['errors'] == ['stt_empty_unexpected']
-            assert result['outcome'] == 'empty_unexpected'
-            stubs['pipeline'].mark_sync_content_completed.assert_not_called()
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_called_once_with(
-                'uid', 'content-empty', 'j-empty'
-            )
+            assert result['failed_segments'] == 0
+            assert result['errors'] == []
+            assert result['outcome'] == 'success'
+            # Marked complete, not released for a retry that would repeat identically.
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
+            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
             stubs['pipeline'].release_sync_content_claim.assert_not_called()
-            assert terminal_events[:2] == ['job_finalized', 'claim_released']
-            stubs['sync_jobs'].add_processed_segment.assert_not_called()
+            # No transcript was produced, so nothing is billed.
+            stubs['pipeline'].record_usage.assert_not_called()
+            assert 'content_completed' in terminal_events
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -2990,6 +3017,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
@@ -3121,6 +3149,7 @@ class TestV2EndpointExecution:
 
         sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
         sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')

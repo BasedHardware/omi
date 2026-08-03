@@ -106,6 +106,16 @@ struct AIResponseView: View {
         return ["thinking", id, text].joined(separator: "\u{1E}")
       case .discoveryCard(let id, let title, let summary, let fullText):
         return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+      case .questionCard(let id, _, _, _, _, _, _):
+        return ["chatFirstQuestion", id].joined(separator: "\u{1E}")
+      case .taskCard(let id, _):
+        return ["chatFirstTask", id].joined(separator: "\u{1E}")
+      case .goalLink(let id, _, _):
+        return ["chatFirstGoal", id].joined(separator: "\u{1E}")
+      case .captureLink(let id, _, _, _):
+        return ["chatFirstCapture", id].joined(separator: "\u{1E}")
+      case .memoryLink(let id, _, _):
+        return ["chatFirstMemory", id].joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -180,7 +190,7 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          SelectableMarkdown(text: text, sender: .ai)
+          OmiMarkdown(text: text, sender: .ai)
             .textSelection(.enabled)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -198,6 +208,10 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
+        // The floating/notch surface never opts into rich chat-first controls.
+        // Keep journaled blocks inert if an older runtime projects them here.
+        case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+          EmptyView()
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
@@ -226,7 +240,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      SelectableMarkdown(text: message.text, sender: .ai)
+      OmiMarkdown(text: message.text, sender: .ai)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)

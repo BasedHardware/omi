@@ -6,6 +6,7 @@ import {
   normalizeOmiToolName,
   toolManifestEntry,
   toolsForAdapter,
+  toolsForSurface,
 } from "./omi-tool-manifest.js";
 import { executionRoleAllowsTool, type AgentExecutionRole } from "./execution-policy.js";
 import type { AgentEvent, AgentStore, AttemptStatus, RunStatus } from "./types.js";
@@ -22,6 +23,8 @@ import {
   type ToolInvocationIdentity,
   type ToolInvocationRetryPolicy,
 } from "./tool-invocation-ledger.js";
+
+const REALTIME_VOICE_SURFACE_KINDS = new Set(["realtime", "realtime_voice"]);
 
 const ACTIVE_RUN_STATUSES = new Set<RunStatus>([
   "queued",
@@ -80,6 +83,8 @@ export interface RunToolCapability {
   manifestVersion: number;
   manifestDigest: string;
   allowedToolNames: readonly string[];
+  chatFirstUi: boolean;
+  chatFirstControlGeneration: number | null;
   daemonBootEpoch: string;
   executionGeneration: number;
   registeredAtMs: number;
@@ -130,6 +135,8 @@ export interface AuthorizedRunToolInvocation {
   precedingAssistantText: string | null;
   runMode: RunMode;
   chatMode: string | null;
+  chatFirstUi: boolean;
+  chatFirstControlGeneration: number | null;
   canonicalToolName: string;
   tool: OmiToolManifestEntry;
 }
@@ -270,12 +277,29 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
+      surfaceKind: persisted.surfaceKind,
+      chatFirstUi: persisted.chatFirstUi,
+      controlGeneration: persisted.chatFirstControlGeneration,
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
-    const allowedToolNames = toolsForAdapter(adapterProjection, projectionContext)
-      .filter((tool) => executionRoleAllowsTool(persisted.profile.executionRole, tool.name))
-      .map((tool) => tool.name)
-      .sort();
+    // Realtime-voice runs invoke Swift-executed voice tools that no chat
+    // adapter advertises (ask_higher_model, point_click, …). Authorize the
+    // run's surface projection alongside the adapter projection so the
+    // allowlist matches the tools the surface actually offers the provider.
+    const surfaceTools = REALTIME_VOICE_SURFACE_KINDS.has(persisted.surfaceKind)
+      ? toolsForSurface("realtime_voice")
+      : [];
+    const allowedToolNames = [
+      ...new Set(
+        [...toolsForAdapter(adapterProjection, projectionContext), ...surfaceTools]
+          .filter((tool) => executionRoleAllowsTool(persisted.profile.executionRole, tool.name))
+          .map((tool) => tool.name)
+          .filter(
+            (name) =>
+              persisted.toolPolicyAllowedToolNames === null || persisted.toolPolicyAllowedToolNames.includes(name),
+          ),
+      ),
+    ].sort();
     const capability: RunToolCapability = Object.freeze({
       capabilityRef: `cap_${randomUUID().replaceAll("-", "")}`,
       ownerId: input.ownerId,
@@ -295,6 +319,8 @@ export class RunToolCapabilityBroker {
       manifestVersion: snapshot.manifestVersion,
       manifestDigest: snapshot.manifestDigest,
       allowedToolNames: Object.freeze(allowedToolNames),
+      chatFirstUi: persisted.chatFirstUi,
+      chatFirstControlGeneration: persisted.chatFirstControlGeneration,
       daemonBootEpoch: this.daemonBootEpoch,
       executionGeneration: ++this.executionGeneration,
       registeredAtMs: this.nowMs(),
@@ -431,6 +457,8 @@ export class RunToolCapabilityBroker {
       precedingAssistantText: capability.precedingAssistantText,
       runMode: capability.runMode,
       chatMode: capability.chatMode,
+      chatFirstUi: capability.chatFirstUi,
+      chatFirstControlGeneration: capability.chatFirstControlGeneration,
       canonicalToolName: tool.name,
       tool,
     };
@@ -580,6 +608,18 @@ export class RunToolCapabilityBroker {
     return state && !state.revoked ? state.capability : undefined;
   }
 
+  /** Verify a live capability without consuming its one-use tool invocation. */
+  assertLiveCapability(capabilityRef: string, activeOwnerId: string): RunToolCapability {
+    const state = this.states.get(capabilityRef);
+    if (!state) this.reject("capability_missing", "Unknown run tool capability");
+    if (state.revoked) {
+      const code = rejectCodeForRevocation(state.revocationReason ?? "explicit");
+      this.reject(code, "Run tool capability has been revoked");
+    }
+    this.assertLiveCapabilityAuthority(state, activeOwnerId);
+    return state.capability;
+  }
+
   private revokeRunCapabilities(
     runId: string,
     reason: RunToolCapabilityRevocationReason,
@@ -673,6 +713,10 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    chatFirstUi: boolean;
+    chatFirstControlGeneration: number | null;
+    /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
+    toolPolicyAllowedToolNames: string[] | null;
   } {
     const row = this.store.getRow(
       `SELECT s.*, r.session_id AS authoritative_session_id, r.status AS authoritative_run_status,
@@ -705,6 +749,18 @@ export class RunToolCapabilityBroker {
       && !Array.isArray(metadata.externalSurface)
       ? metadata.externalSurface as Record<string, unknown>
       : null;
+    const admitted = runInput.admittedContextSnapshot
+      && typeof runInput.admittedContextSnapshot === "object"
+      && !Array.isArray(runInput.admittedContextSnapshot)
+      ? runInput.admittedContextSnapshot as Record<string, unknown>
+      : {};
+    const admittedCapabilities = admitted.capabilities
+      && typeof admitted.capabilities === "object"
+      && !Array.isArray(admitted.capabilities)
+      ? admitted.capabilities as Record<string, unknown>
+      : {};
+    const chatFirstUi = admittedCapabilities.chatFirstUi === true && text(row.surface_kind) === "main_chat";
+    const controlGeneration = Number(admittedCapabilities.chatFirstControlGeneration);
     return {
       ownerId: text(row.owner_id),
       sessionId,
@@ -720,6 +776,11 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      chatFirstUi,
+      chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
+        ? controlGeneration
+        : null,
+      toolPolicyAllowedToolNames: admittedToolPolicyAllowedToolNames(metadata),
     };
   }
 
@@ -743,6 +804,23 @@ export class RunToolCapabilityBroker {
       inputHash: invocation.inputHash,
     };
   }
+}
+
+function admittedToolPolicyAllowedToolNames(metadata: Record<string, unknown>): string[] | null {
+  const rawToolPolicy = metadata.toolPolicy;
+  if (rawToolPolicy === undefined) return null;
+  // Present-but-malformed policy fails closed to an empty allowlist.
+  if (
+    rawToolPolicy === null
+    || typeof rawToolPolicy !== "object"
+    || Array.isArray(rawToolPolicy)
+    || !Array.isArray((rawToolPolicy as Record<string, unknown>).allowedToolNames)
+  ) {
+    return [];
+  }
+  return ((rawToolPolicy as Record<string, unknown>).allowedToolNames as unknown[]).filter(
+    (name): name is string => typeof name === "string",
+  );
 }
 
 function admittedScreenContext(runInput: Record<string, unknown>): boolean {

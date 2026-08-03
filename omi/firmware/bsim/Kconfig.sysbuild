@@ -1,0 +1,5 @@
+source "share/sysbuild/Kconfig"
+
+config NET_CORE_BOARD
+    string
+    default "nrf5340bsim/nrf5340/cpunet" if $(BOARD_TARGET_STRING) = "NRF5340BSIM_NRF5340_CPUAPP"

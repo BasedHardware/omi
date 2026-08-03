@@ -34,6 +34,18 @@ class PostHogManager {
 
     PostHogSDK.shared.setup(config)
 
+    // Release-identity super-properties (#10425): every captured event carries the
+    // app version + build + release channel, so PostHog (including
+    // `floating_bar_ptt_ended` and other per-event tracks that previously carried no
+    // identity) can be sliced by release cohort without per-event plumbing. These
+    // persist across sessions.
+    PostHogSDK.shared.register([
+      "platform": "macos",
+      "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+      "update_channel": AppBuild.currentUpdateChannel,
+    ])
+
     isInitialized = true
     log("PostHog: Initialized successfully")
   }
@@ -69,6 +81,8 @@ class PostHogManager {
     var properties: [String: Any] = [
       "platform": "macos",
       "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+      "update_channel": AppBuild.currentUpdateChannel,
     ]
 
     if let email = email {
@@ -83,10 +97,10 @@ class PostHogManager {
     log("PostHog: Identified user \(uid)")
   }
 
-  /// Set a specific user property
-  func setUserProperty(key: String, value: Any) {
+  /// Set person properties in one identify call.
+  func setUserProperties(_ properties: [String: Any]) {
     guard isInitialized else { return }
-    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: [key: value])
+    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: properties)
   }
 
   // MARK: - Event Tracking
@@ -787,6 +801,101 @@ extension PostHogManager {
       ])
   }
 
+  // MARK: - Memory Assistant Telemetry (proactive screen-context assistant)
+
+  /// Emitted on a user-initiated persisted change to one of the two MemoryAssistant
+  /// settings that gate analysis (`enabled`, `notifications_enabled`). Makes the true
+  /// activation denominator (monitoring users who also enabled memory notifications)
+  /// measurable. Closed schema only — bounded `setting` + boolean `value`.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    track(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+  }
+
+  /// Emitted once per actual Gemini analysis attempt (not per captured frame, and not
+  /// on disabled/gated paths) with a closed terminal `outcome`. Supplements — does not
+  /// replace — the existing `Memory Extracted` success terminal. Confidence is bucketed
+  /// to a coarse decile range; raw model material is never sent.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    track(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+  }
+
+  // MARK: - Suggestion Assistant Telemetry
+
+  func suggestionAssistantSettingChanged(setting: SuggestionAssistantTelemetry.Setting, value: Bool) {
+    track(
+      SuggestionAssistantTelemetry.settingChangedEventName,
+      properties: SuggestionAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+  }
+
+  func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    track(
+      SuggestionAssistantTelemetry.gateOutcomeEventName,
+      properties: SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
+    )
+  }
+
+  func suggestionAssistantEvaluationStarted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationStartedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationStartedPayload(identity: identity, shape: shape)
+    )
+  }
+
+  func suggestionAssistantEvaluationCompleted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    producedSuggestion: Bool
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationCompletedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationCompletedPayload(
+        identity: identity,
+        shape: shape,
+        latency: latency,
+        producedSuggestion: producedSuggestion
+      )
+    )
+  }
+
+  func suggestionAssistantEvaluationFailed(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationFailedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationFailedPayload(
+        identity: identity,
+        shape: shape,
+        latency: latency
+      )
+    )
+  }
+
+  func suggestionAssistantDeliveryOutcome(
+    _ outcome: SuggestionAssistantTelemetry.DeliveryOutcome,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity
+  ) {
+    track(
+      SuggestionAssistantTelemetry.deliveryOutcomeEventName,
+      properties: SuggestionAssistantTelemetry.deliveryOutcomePayload(outcome, identity: identity)
+    )
+  }
+
   func insightGenerated(category: String?) {
     var properties: [String: Any] = [:]
     if let cat = category { properties["category"] = cat }
@@ -878,40 +987,84 @@ extension PostHogManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationSent(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Sent",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationClicked(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Clicked",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationDismissed(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
+  }
+
+  private func notificationProperties(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String
+  ) -> [String: Any] {
+    [
+      "notification_id": notificationId,
+      "title_length": title.count,
+      "has_title": !title.isEmpty,
+      "assistant_id": assistantId,
+      "notification_surface": surface,
+    ]
+  }
+
+  private func appendSuggestionNotificationIdentity(
+    _ identity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    to properties: inout [String: Any]
+  ) {
+    guard let identity else { return }
+    properties.merge(SuggestionAssistantTelemetry.notificationPayload(identity)) { _, new in new }
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

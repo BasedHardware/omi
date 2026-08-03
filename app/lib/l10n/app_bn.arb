@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "অ্যাপ স্টোরে রেটিং দিন",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play তে রেটিং দিন",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "হয়তো পরে",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
+    "basicPlanDescription": "৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesInfo": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesMonth": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10583,6 +10567,7 @@
     "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
     "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
     "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusTooOld": "সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না",
     "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
     "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
     "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",

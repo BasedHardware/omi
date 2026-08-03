@@ -16,7 +16,7 @@ Future updateConvoDetailProvider(BuildContext context, ServerConversation conver
   return Future.microtask(() {
     if (!context.mounted) return;
     context.read<ConversationProvider>().addConversation(conversation);
-    var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+    var date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
     context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
   });
 }

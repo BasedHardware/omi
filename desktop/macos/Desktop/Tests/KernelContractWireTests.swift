@@ -102,6 +102,7 @@ final class KernelContractWireTests: XCTestCase {
       requestId: "request-1",
       ownerId: "owner-1",
       sessionId: "session-1",
+      surfaceKind: "main_chat",
       prompt: "Summarize this",
       mode: "act",
       imageData: Data([0x01, 0x02]),
@@ -126,13 +127,14 @@ final class KernelContractWireTests: XCTestCase {
       Set(message.keys),
       Set([
         "type", "protocolVersion", "requestId", "clientId", "ownerId",
-        "sessionId", "prompt", "mode", "imageBase64", "attachments",
+        "sessionId", "surfaceKind", "prompt", "mode", "imageBase64", "attachments",
         "producingTurnId",
         "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
         "expectedContextRendererFingerprint", "expectedCapabilityVersion",
       ]))
     XCTAssertEqual(message["type"] as? String, "query")
     XCTAssertEqual(message["sessionId"] as? String, "session-1")
+    XCTAssertEqual(message["surfaceKind"] as? String, "main_chat")
     XCTAssertEqual(message["producingTurnId"] as? String, "turn-assistant")
     XCTAssertEqual(message["expectedContextSnapshotVersion"] as? String, "snapshot-v2")
     XCTAssertEqual(message["expectedContextSnapshotGeneration"] as? Int, 7)
@@ -143,7 +145,7 @@ final class KernelContractWireTests: XCTestCase {
     XCTAssertEqual(attachment["sizeBytes"] as? Int, 42)
 
     for forbidden in [
-      "systemPrompt", "adapterId", "model", "cwd", "surfaceKind",
+      "systemPrompt", "adapterId", "model", "cwd",
       "externalRefKind", "externalRefId", "surfaceContextJson", "attachmentMetadataJson",
     ] {
       XCTAssertNil(message[forbidden], "query must not carry Swift authority field \(forbidden)")
@@ -156,6 +158,7 @@ final class KernelContractWireTests: XCTestCase {
       requestId: "request",
       ownerId: nil,
       sessionId: "session",
+      surfaceKind: "main_chat",
       prompt: "hello",
       mode: nil,
       imageData: nil,
@@ -173,6 +176,7 @@ final class KernelContractWireTests: XCTestCase {
       requestId: "request",
       ownerId: nil,
       sessionId: "session",
+      surfaceKind: "main_chat",
       prompt: "hello",
       mode: nil,
       imageData: nil,

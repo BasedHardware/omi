@@ -431,19 +431,26 @@ extension APIClient {
   struct UploadSegment: Encodable {
     let text: String
     let speaker: String
+    // swift-format-ignore
     let speaker_id: Int?
+    // swift-format-ignore
     let is_user: Bool
+    // swift-format-ignore
     let person_id: String?
     let start: Double
     let end: Double
   }
 
   struct CreateConversationFromSegmentsRequest: Encodable {
+    // swift-format-ignore
     let transcript_segments: [UploadSegment]
     let source: String
+    // swift-format-ignore
     let started_at: String?  // ISO8601
+    // swift-format-ignore
     let finished_at: String?  // ISO8601
     let language: String
+    // swift-format-ignore
     let client_conversation_id: String?
   }
 
@@ -525,7 +532,8 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
-    deviceScope: String? = nil
+    deviceScope: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -544,10 +552,20 @@ extension APIClient {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
     }
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: nil,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = OmiHTTPTransport.extractErrorDetail(from: data)
@@ -555,6 +573,7 @@ extension APIClient {
     }
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
+    try validateExpectedOwner(authPolicy)
     let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
     let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
@@ -631,6 +650,13 @@ extension APIClient {
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
   func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+    try await createMemoriesBatch(memories, authorizationSnapshot: nil)
+  }
+
+  func createMemoriesBatch(
+    _ memories: [MemoryBatchItem],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> BatchMemoriesResponse {
     precondition(
       memories.count <= Self.memoriesBatchMaxSize,
       "createMemoriesBatch received \(memories.count) memories, max is \(Self.memoriesBatchMaxSize)"
@@ -639,15 +665,26 @@ extension APIClient {
       let memories: [MemoryBatchItem]
     }
     let body = BatchRequest(memories: memories)
-    return try await post("v3/memories/batch", body: body)
+    return try await post("v3/memories/batch", body: body, authorizationSnapshot: authorizationSnapshot)
   }
 
   func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
+    try await createMemoryImportBatch(batch, authorizationSnapshot: nil)
+  }
+
+  func createMemoryImportBatch(
+    _ batch: ImportEvidenceBatch,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> ImportEvidenceBatchResponse {
     precondition(
       batch.items.count <= Self.memoryImportBatchMaxSize,
       "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
     )
-    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
+    return try await post(
+      "v3/memory-imports/batch",
+      body: batch,
+      includeBYOK: false,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes a memory by ID

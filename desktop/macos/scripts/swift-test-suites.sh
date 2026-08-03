@@ -15,17 +15,39 @@ PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
 # diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
 WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
+# The per-suite budget must clear the slowest legitimate suite, not the median
+# one: MemoryAtlasPerformanceHarnessTests runs 19 tests whose XCTest `measure`
+# blocks take ~245s in isolation, so a 120s local default reported it FAILED on
+# a clean main while CI (300s, see .github/workflows/desktop-swift-ci.yml) was
+# green. Keep this in sync with that workflow — the check below proves it.
+SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-300}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
 }
 
+terminate_process_tree() {
+  local pid="$1"
+  local signal="$2"
+  local children child
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    terminate_process_tree "$child" "$signal"
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "-$signal" "$pid" 2>/dev/null || true
+  fi
+}
+
 run_suite() {
   local log_dir="$1"
   local suite="$2"
+  local build_path="$3"
+  local runtime_path="$4"
   local log_path="$log_dir/$suite.log"
   local status_path="$log_dir/$suite.status"
+  local timeout_path="$log_dir/$suite.timeout"
   local -a skip_args=()
 
   while IFS= read -r skip_arg; do
@@ -35,20 +57,88 @@ run_suite() {
   if [ "$PREBUILD" = "1" ]; then
     build_args+=("--skip-build")
   fi
-  local -a command=(xcrun swift test --package-path "$PACKAGE_PATH" "${build_args[@]}" --filter "${suite}/")
+  local -a command=(
+    xcrun swift test --package-path "$PACKAGE_PATH" --scratch-path "$build_path" "${build_args[@]}" --filter "${suite}/"
+  )
   if [ "${#skip_args[@]}" -gt 0 ]; then
     command+=("${skip_args[@]}")
   fi
   set +e
-  "${command[@]}" >"$log_path" 2>&1
+  # XCTest launches every filtered suite in the same `xctest` host bundle, so
+  # its standard UserDefaults domain and user-domain paths would otherwise be
+  # shared even when the SwiftPM scratch directories are distinct. Keep every
+  # worker's preferences, Application Support, and temporary files separate.
+  # CFFIXED_USER_HOME makes CoreFoundation preferences and Foundation's
+  # user-domain directories (Application Support, Caches) follow the worker
+  # home without changing the shell HOME used by package dependencies.
+  env CFFIXED_USER_HOME="$runtime_path/home" TMPDIR="$runtime_path/tmp" \
+    "${command[@]}" >"$log_path" 2>&1 &
+  local command_pid=$!
+  (
+    # Parallel workers share one SwiftPM `.build` lock, so `swift test` can block
+    # on "Another instance of SwiftPM is already running ... waiting" before it
+    # executes anything. That queue time must not count against the per-suite run
+    # budget, or a merely-queued suite gets killed as if it hung. Spend the run
+    # budget only while the suite is NOT parked on the build lock (its log's last
+    # line is that wait message); a separate, generous cap still fails a suite
+    # that can never acquire the lock (e.g. a wedged holder).
+    local lock_wait_cap="${OMI_SWIFT_TEST_LOCK_WAIT_CAP_SECONDS:-1200}"
+    local remaining="$SUITE_TIMEOUT_SECONDS"
+    local lock_waited=0
+    while kill -0 "$command_pid" 2>/dev/null; do
+      sleep 1
+      if tail -n 1 "$log_path" 2>/dev/null | grep -q "Another instance of SwiftPM is already running"; then
+        lock_waited=$((lock_waited + 1))
+        [ "$lock_waited" -lt "$lock_wait_cap" ] && continue
+      else
+        lock_waited=0
+        remaining=$((remaining - 1))
+        [ "$remaining" -gt 0 ] && continue
+      fi
+      touch "$timeout_path"
+      terminate_process_tree "$command_pid" TERM
+      sleep 5
+      terminate_process_tree "$command_pid" KILL
+      exit 0
+    done
+  ) &
+  local watchdog_pid=$!
+  wait "$command_pid"
   local status=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  if [ -f "$timeout_path" ]; then
+    echo "suite timed out after ${SUITE_TIMEOUT_SECONDS}s" >>"$log_path"
+    status=124
+  fi
   set -e
   echo "$status" >"$status_path"
   exit "$status"
 }
 
+run_worker() {
+  local log_dir="$1"
+  local suite_list="$2"
+  local build_path="$3"
+  local runtime_path="$4"
+  local suite
+
+  # Suites retain their process isolation, but a worker owns one cloned SwiftPM
+  # scratch directory. This avoids the shared `.build` lock that made CI's
+  # original parallel runner report queued suites as false timeouts. The
+  # worker also owns its process-global Foundation state.
+  while IFS= read -r suite; do
+    "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$build_path" "$runtime_path" || true
+  done <"$suite_list"
+}
+
 if [ "${1:-}" = "__run_suite" ]; then
-  run_suite "$2" "$3"
+  run_suite "$2" "$3" "$4" "$5"
+fi
+
+if [ "${1:-}" = "__run_worker" ]; then
+  run_worker "$2" "$3" "$4" "$5"
+  exit 0
 fi
 
 [[ "$WORKERS" =~ ^[0-9]+$ ]] || fail "worker count must be a positive integer, got '$WORKERS'"
@@ -57,6 +147,11 @@ if [ "$WORKERS" -lt 1 ]; then
 fi
 if [ "$PREBUILD" != "0" ] && [ "$PREBUILD" != "1" ]; then
   fail "OMI_SWIFT_TEST_PREBUILD must be 0 or 1, got '$PREBUILD'"
+fi
+[[ "$SUITE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be a positive integer, got '$SUITE_TIMEOUT_SECONDS'"
+if [ "$SUITE_TIMEOUT_SECONDS" -lt 1 ]; then
+  fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be at least 1"
 fi
 
 # Static guardrails are part of the authoritative Swift component suite, not a
@@ -84,9 +179,17 @@ done < <(find "$TESTS_ROOT" -type f -name '*.swift' -print0 \
 
 cd "$MACOS_DIR"
 suite_log_dir="$(mktemp -d)"
-trap 'rm -rf "$suite_log_dir"' EXIT
+suite_worker_dir="$(mktemp -d)"
+trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
 failed_suites=""
 suite_count="${#suites[@]}"
+worker_count=0
+
+if [[ "$PACKAGE_PATH" = /* ]]; then
+  package_root="$PACKAGE_PATH"
+else
+  package_root="$MACOS_DIR/$PACKAGE_PATH"
+fi
 
 if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   echo "Prebuilding Swift test bundle before parallel suite execution..."
@@ -94,8 +197,44 @@ if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
 fi
 
 if [ "$suite_count" -gt 0 ]; then
-  printf '%s\0' "${suites[@]}" \
-    | xargs -0 -n1 -P "$WORKERS" "$SCRIPT_PATH" __run_suite "$suite_log_dir" || true
+  worker_count="$WORKERS"
+  if [ "$worker_count" -gt "$suite_count" ]; then
+    worker_count="$suite_count"
+  fi
+
+  declare -a worker_lists=()
+  declare -a worker_build_paths=()
+  declare -a worker_runtime_paths=()
+  declare -a worker_args=()
+  for ((worker = 0; worker < worker_count; worker++)); do
+    worker_lists+=("$suite_worker_dir/worker-$worker.suites")
+    : >"${worker_lists[$worker]}"
+    worker_build_paths+=("$suite_worker_dir/worker-$worker.build")
+    worker_runtime_paths+=("$suite_worker_dir/worker-$worker.runtime")
+  done
+
+  for ((suite_index = 0; suite_index < suite_count; suite_index++)); do
+    worker=$((suite_index % worker_count))
+    printf '%s\n' "${suites[$suite_index]}" >>"${worker_lists[$worker]}"
+  done
+
+  for ((worker = 0; worker < worker_count; worker++)); do
+    worker_build_path="${worker_build_paths[$worker]}"
+    worker_runtime_path="${worker_runtime_paths[$worker]}"
+    if [ "$PREBUILD" = "1" ]; then
+      # `cp -c` requires a copy-on-write clone rather than silently creating
+      # full physical copies. The hosted macOS runners use APFS; fail closed if
+      # that contract changes so suite parallelism never raises runner minutes.
+      cp -cR "$package_root/.build" "$worker_build_path"
+    else
+      mkdir -p "$worker_build_path"
+    fi
+    mkdir -p "$worker_runtime_path/home" "$worker_runtime_path/tmp"
+    worker_args+=("${worker_lists[$worker]}" "$worker_build_path" "$worker_runtime_path")
+  done
+
+  printf '%s\0' "${worker_args[@]}" \
+    | xargs -0 -n3 -P "$worker_count" "$SCRIPT_PATH" __run_worker "$suite_log_dir" || true
 fi
 
 for suite in "${suites[@]}"; do
@@ -113,7 +252,7 @@ for suite in "${suites[@]}"; do
   fi
 done
 
-echo "Ran $suite_count Swift suites in isolation with $WORKERS worker(s)."
+echo "Ran $suite_count Swift suites in isolation with $worker_count worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
 
 if [ -n "$failed_suites" ]; then
   echo "FAILED Swift suites:$failed_suites"

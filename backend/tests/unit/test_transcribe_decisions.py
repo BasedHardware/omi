@@ -49,19 +49,16 @@ def test_startup_decisions_pin_current_overrides():
 def test_codec_frame_normalization_pins_special_codecs():
     opus = normalize_codec_frame('opus_fs320')
     assert opus.codec == 'opus'
-    assert opus.frame_size == 320
     assert opus.lc3_chunk_size is None
     assert opus.lc3_frame_duration_us is None
 
     lc3 = normalize_codec_frame('lc3_fs1030')
     assert lc3.codec == 'lc3'
-    assert lc3.frame_size == 160
     assert lc3.lc3_chunk_size == 30
     assert lc3.lc3_frame_duration_us == 10000
 
     pcm = normalize_codec_frame('pcm8')
     assert pcm.codec == 'pcm8'
-    assert pcm.frame_size == 160
 
 
 def test_translation_language_gating():

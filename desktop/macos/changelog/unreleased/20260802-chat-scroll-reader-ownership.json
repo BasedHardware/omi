@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat scrolling so returning to the newest message resumes following again, and a message sent elsewhere no longer yanks you to the bottom while you are scrolling"
+}

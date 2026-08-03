@@ -18,7 +18,7 @@ from utils.stt.streaming import (
 
 
 def _exercise_abrupt_modulate_close():
-    audio_chunk = b'audio_chunk'
+    audio_chunk = b'audio_chunks'
     provider_frames = []
     audio_sent = asyncio.Event()
     send_loop_waiting_for_stop = asyncio.Event()
@@ -251,14 +251,14 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
             sock.set_wav_header(b'')
             sock._recv_task.cancel()
-            sock.send(b'audio_chunk')
+            sock.send(b'audio_chunks')
             sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
         try:
             result = loop.run_until_complete(run())
-            self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
+            self.assertIn(b'audio_chunks', result, 'audio_chunks was not sent')
             self.assertIn('', result, 'empty text frame EOS must be sent on drain')
             self.assertNotIn(b'__EOS__', result, 'EOS sentinel must not be forwarded to ws')
         finally:
@@ -268,7 +268,7 @@ class TestSafeModulateSocket(unittest.TestCase):
         """close() is an abrupt stop — no EOS frame sent to provider."""
         provider_frames = _exercise_abrupt_modulate_close()
 
-        self.assertEqual(provider_frames, [b'audio_chunk'], 'close must stop after real audio without sending EOS')
+        self.assertEqual(provider_frames, [b'audio_chunks'], 'close must stop after real audio without sending EOS')
 
     def test_send_queue_full_marks_dead(self):
         """QueueFull inside event loop callback must mark socket dead."""
@@ -879,10 +879,10 @@ class TestProcessAudioParakeet(unittest.TestCase):
 
                     allow_enter.set()
                     sock = await asyncio.wait_for(socket_task, timeout=1)
-                    self.assertTrue(sock.send(b'pcm'))
+                    self.assertTrue(sock.send(b'pcm0'))
                     await sock.drain_and_close()
 
-                self.assertEqual(ws.sent, [b'pcm', 'finalize'])
+                self.assertEqual(ws.sent, [b'pcm0', 'finalize'])
                 self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
                 return mock_ws_module.connect.call_args
 
@@ -1366,12 +1366,12 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_retired_model_routes_to_modulate_default(self):
+    def test_retired_model_routes_to_policy_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_modulate_routes_correctly(self):
@@ -1391,12 +1391,12 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'pt')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
-    def test_custom_retired_model_routes_to_modulate_default(self):
+    def test_custom_retired_model_routes_to_policy_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
     def test_multi_language_falls_through_to_parakeet_capability(self):
@@ -1409,18 +1409,18 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_factory_returns_modulate_for_retired_model(self):
-        from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
+    def test_factory_returns_policy_default_for_retired_model(self):
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, ModulatePrerecordedProvider)
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
     def test_factory_ignores_custom_retired_model(self):
-        from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, ModulatePrerecordedProvider)
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_factory_returns_modulate(self):
@@ -1430,13 +1430,20 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, ModulatePrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2', 'dg-nova-3'))
-    def test_unsupported_language_fails_closed_without_deepgram_fallback(self):
-        from utils.stt.pre_recorded import get_prerecorded_provider, get_prerecorded_service
+    def test_uncovered_language_reaches_velma_instead_of_failing_closed(self):
+        """Hindi is in neither the literal Velma set nor Parakeet's batch model."""
+        from utils.stt.pre_recorded import (
+            ModulatePrerecordedProvider,
+            PrerecordedSTTService,
+            get_prerecorded_provider,
+            get_prerecorded_service,
+        )
 
-        with self.assertRaises(RuntimeError):
-            get_prerecorded_service('hi')
-        with self.assertRaises(RuntimeError):
-            get_prerecorded_provider('hi')
+        svc, lang, model = get_prerecorded_service('hi')
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
+        self.assertEqual(lang, 'multi')
+        self.assertEqual(model, 'velma-2')
+        self.assertIsInstance(get_prerecorded_provider('hi'), ModulatePrerecordedProvider)
 
     def test_providers_implement_abc(self):
         from utils.stt.pre_recorded import (

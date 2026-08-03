@@ -1470,7 +1470,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get payYourSttProvider => 'Използвайте omi свободно. Плащате само на вашия STT доставчик директно.';
 
   @override
-  String get freeMinutesMonth => '1 200 безплатни минути/месец включени. Неограничено с ';
+  String get freeMinutesMonth => '300 безплатни минути/месец включени. Неограничено с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1793,20 +1793,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Обичате ли Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в App Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в Google Play Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get rateOnAppStore => 'Оценете в App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оценете в Google Play';
 
   @override
   String get maybeLater => 'Може би по-късно';
@@ -2143,6 +2129,18 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редактирай спомен';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Обичам да ям сладолед...';
@@ -4722,7 +4720,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 
   @override
-  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
+  String get basicPlanDescription => '300 премиум минути + неограничено на устройството';
 
   @override
   String get minutes => 'минути';
@@ -9817,4 +9815,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Твърде стар за синхронизиране — Omi не може да го приеме';
 }

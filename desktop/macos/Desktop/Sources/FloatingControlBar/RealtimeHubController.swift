@@ -92,10 +92,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
   /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
-  struct AcceptedSpawnJournalReceipt {
-    let ownerID: String
-    let receipt: RealtimeSpawnJournalReceipt
-  }
+  let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
+  var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
   /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
@@ -388,6 +386,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    cancelStreamingJournalWrites()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
     mintGeneration &+= 1
@@ -604,6 +603,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
         hasPendingOwnerWork: pendingSessionRefreshReason != nil
           || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
+          || streamingJournalWriteLedger.hasActiveProjections || !streamingJournalFlushTasks.isEmpty
           || voiceContextSingleFlight.isRunning
           || turnPreparationTask != nil
           || !detachedSessionsAwaitingDrain.isEmpty
@@ -668,27 +668,31 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Returns true if a failover was started. Only fires once per chain (primary →
   /// alternate); if the alternate also fails we stop and let PTT use the Claude cascade.
   @discardableResult
-  func failoverToAlternateProvider(reason: String = "other") -> Bool {
+  func failoverToAlternateProvider(reason: String = "other", mintAttemptId: String? = nil) -> Bool {
     guard fallbackProvider == nil else {
+      var exhaustedExtra: [String: Any] = ["user_visible": false]
+      if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: effectiveProvider.rawValue,
         to: "cascade",
         reason: reason,
         outcome: .exhausted,
-        extra: ["user_visible": false])
+        extra: exhaustedExtra)
       return false  // already on the alternate → cascade
     }
     let primary = RealtimeHubSettings.shared.provider
     fallbackProvider = primary.alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: primary.rawValue,
       to: primary.alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)"
     )
@@ -711,10 +715,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   @discardableResult
   func failoverBargeInReplacement(
     from provider: RealtimeHubProvider,
-    reason: String
+    reason: String,
+    mintAttemptId: String? = nil
   ) -> Bool {
-    guard fallbackProvider == nil,
-      let pendingTurn = replacementAudioBuffer,
+    guard fallbackProvider == nil else {
+      recordBargeInReplacementFailoverExhausted(
+        from: provider,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
+    guard let pendingTurn = replacementAudioBuffer,
       let replacementOwnerScope = pendingBargeInOwnerScope,
       isOwnerScopeCurrent(replacementOwnerScope),
       let responseID = voiceResponseID
@@ -723,13 +734,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let alternate = provider.alternate
     fallbackProvider = alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: provider.rawValue,
       to: alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
@@ -749,7 +762,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         ownerScope: replacementOwnerScope)
       return true
     }
-    guard AuthService.shared.isSignedIn else { return false }
+    guard AuthService.shared.isSignedIn else {
+      recordBargeInReplacementFailoverExhausted(
+        from: alternate,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
     pendingBargeInProvider = alternate
     // Marker only: a newer PTT can rotate continuity while the real alternate
     // one-use token is still minting. The start path always remints this case.
@@ -762,6 +781,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       rewarmAfterDrain: false)
     remintReplacementSessionForBargeIn(provider: alternate)
     return true
+  }
+
+  func recordBargeInReplacementFailoverExhausted(
+    from provider: RealtimeHubProvider,
+    reason: String,
+    mintAttemptId: String?
+  ) {
+    var exhaustedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: provider.rawValue,
+      to: "cascade",
+      reason: reason,
+      outcome: .exhausted,
+      extra: exhaustedExtra)
   }
 
   func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool {
@@ -778,7 +813,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     _ error: RealtimeTokenMintError,
     provider providerParam: String,
     phase: String,
-    context: String
+    context: String,
+    outcome: DesktopFallbackOutcome,
+    mintAttemptId: String? = nil
   ) {
     CredentialHealthManager.shared.record(error.healthError, context: context)
     DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
@@ -789,7 +826,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       backendRoute: error.payload?.backendRoute,
       upstreamStatusCode: error.payload?.upstreamStatusCode,
       providerCode: error.payload?.code,
-      retryable: error.payload?.retryable)
+      retryable: error.payload?.retryable,
+      outcome: outcome,
+      mintAttemptId: mintAttemptId)
   }
 
   /// PTT must distinguish a merely authenticated socket from a session that can

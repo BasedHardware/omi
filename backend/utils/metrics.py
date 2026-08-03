@@ -11,6 +11,23 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'Number of currently active WebSocket connections in pusher',
 )
 
+PUSHER_QUEUE_DROPS = Counter(
+    'pusher_queue_drops_total',
+    'Pusher queue items dropped by bounded queue name',
+    ['queue'],
+)
+
+PUSHER_QUEUE_DROPPED_BYTES = Counter(
+    'pusher_queue_dropped_bytes_total',
+    'Pusher queue bytes dropped by bounded queue name',
+    ['queue'],
+)
+
+PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS = Counter(
+    'pusher_private_cloud_upload_drops_total',
+    'Private cloud audio batches dropped after exhausting upload attempts',
+)
+
 PUSHER_CIRCUIT_BREAKER_STATE = Gauge(
     'pusher_circuit_breaker_state',
     'Pusher circuit breaker state (0=closed, 1=open, 2=half_open)',
@@ -53,7 +70,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _journey in ('chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'):
+for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
@@ -72,6 +89,12 @@ LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     ['status'],
 )
 
+LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
+    'listen_finalization_durable_jobs',
+    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    ['state'],
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -81,6 +104,17 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'listen_finalization_dead_letter_total',
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
+
+LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
+    'listen_finalization_stale_processing_reconciliations_total',
+    'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('completed', 'migrated', 'skipped', 'error'):
+    LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
@@ -218,8 +252,28 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
 
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
-    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
-    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+    'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
+)
+
+OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
+    'omi_live_stt_accepted_total',
+    'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
+)
+
+OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
+    'omi_live_stt_terminal_total',
+    'Terminal live-STT outcomes for accepted attempts by bounded labels',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
@@ -234,6 +288,12 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     ['event', 'subject_kind', 'code'],
 )
 
+CHAT_FIRST_PROACTIVE_TOTAL = Counter(
+    'chat_first_proactive_total',
+    'Chat-first proactive engine activity with no user content',
+    ['event', 'source'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',
@@ -245,6 +305,23 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     'Auth flow duration in seconds by provider and terminal state',
     ['provider', 'terminal_state'],
 )
+
+
+# Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
+# cheaply. Initialized to serving below so an idle healthy pod reads
+# pusher_ready=1 / pusher_drain_in_progress=0 and is distinguishable from a
+# missing scrape target (a labelless Gauge defaults to 0, which would wrongly
+# read as "draining"). utils.readiness.ReadinessGate flips these on drain.
+PUSHER_READY = Gauge(
+    'pusher_ready',
+    '1 = serving new traffic, 0 = draining',
+)
+PUSHER_DRAIN_IN_PROGRESS = Gauge(
+    'pusher_drain_in_progress',
+    '1 = drain initiated, readiness closed',
+)
+PUSHER_READY.set(1)
+PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 
 def metrics_response() -> Response:

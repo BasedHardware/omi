@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Focus monitoring assistant that detects when users are distracted
 actor FocusAssistant: ProactiveAssistant {
@@ -642,7 +643,8 @@ actor FocusAssistant: ProactiveAssistant {
       }
     } catch {
       consecutiveErrorCount += 1
-      let backoffSeconds = min(5.0 * pow(2.0, Double(consecutiveErrorCount - 1)), 300.0)  // 5s, 10s, 20s, 40s... cap 5min
+      // 5s, 10s, 20s, 40s... cap 5min
+      let backoffSeconds = min(5.0 * pow(2.0, Double(consecutiveErrorCount - 1)), 300.0)
       errorBackoffEndTime = Date().addingTimeInterval(backoffSeconds)
       logError(
         "Frame \(frame.frameNumber) error (consecutive: \(consecutiveErrorCount), backoff: \(Int(backoffSeconds))s)",
@@ -686,7 +688,15 @@ actor FocusAssistant: ProactiveAssistant {
         sections.append(lines.joined(separator: "\n"))
       }
     } catch {
-      logError("Focus: Failed to load goals for context", error: error)
+      logError(
+        "Focus: Failed to load goals for context",
+        error: error,
+        context: StorageFailureDiagnostics.context(
+          pathClass: "goals-db",
+          containingURL: DesktopLocalProfile.applicationSupportURL(),
+          databaseURL: nil,
+          error: error,
+          appIsTerminating: RewindDatabase.isTerminationInProgress))
     }
 
     // Top tasks by importance

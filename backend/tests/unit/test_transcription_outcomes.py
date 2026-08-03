@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 
 from config.prerecorded_stt import PrerecordedSTTConfigurationError
-from utils.observability.transcription import TranscriptionAttempt, record_live_stt_failure
+from utils.observability.transcription import LiveSTTAttempt, TranscriptionAttempt, record_live_stt_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -78,6 +78,37 @@ def test_attempt_records_one_accepted_and_exactly_one_terminal(mock_accepted, mo
     assert mock_completed.labels.call_args.kwargs['outcome'] == 'success'
 
 
+@patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_TOTAL')
+@patch('utils.observability.transcription.OMI_LIVE_STT_ACCEPTED_TOTAL')
+def test_live_stt_attempt_records_one_bounded_acceptance_and_terminal(mock_accepted, mock_terminal, monkeypatch):
+    accepted_child = MagicMock()
+    terminal_child = MagicMock()
+    mock_accepted.labels.return_value = accepted_child
+    mock_terminal.labels.return_value = terminal_child
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('K_REVISION', 'unbounded-revision-value')
+    monkeypatch.setenv('OMI_DEPLOYMENT_VERSION', 'another-unbounded-value')
+
+    attempt = LiveSTTAttempt(provider='deepgram', platform='ios')
+    attempt.finish('failure', phase='send')
+    attempt.finish('cancelled', phase='teardown')
+
+    assert mock_accepted.labels.call_args.kwargs == {
+        'provider': 'deepgram',
+        'client_platform': 'ios',
+        'deployment_environment': 'dev',
+    }
+    assert mock_terminal.labels.call_args.kwargs == {
+        'provider': 'deepgram',
+        'outcome': 'failure',
+        'client_platform': 'ios',
+        'deployment_environment': 'dev',
+        'phase': 'send',
+    }
+    accepted_child.inc.assert_called_once_with()
+    terminal_child.inc.assert_called_once_with()
+
+
 @patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL')
 def test_live_failure_labels_are_bounded(mock_counter):
     child = MagicMock()
@@ -94,7 +125,7 @@ def test_live_failure_labels_are_bounded(mock_counter):
         'provider': 'unknown',
         'outcome': 'upstream_error',
         'client_platform': 'unknown',
-        'deployment_version': 'unknown',
+        'deployment_environment': 'unknown',
         'phase': 'unknown',
     }
     child.inc.assert_called_once_with()

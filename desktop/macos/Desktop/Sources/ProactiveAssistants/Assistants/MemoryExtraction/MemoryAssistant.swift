@@ -9,6 +9,9 @@ private struct EventPayloadBox: @unchecked Sendable {
 
 /// Memory extraction assistant that identifies facts and wisdom from screen content
 actor MemoryAssistant: ProactiveAssistant {
+  typealias ExtractionOverride =
+    @Sendable (_ jpegData: Data, _ appName: String) async throws -> MemoryExtractionResult?
+
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "memory-extraction"
@@ -27,7 +30,9 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Properties
 
-  private let geminiClient: GeminiClient
+  private let geminiClient: GeminiClient?
+  private let extractionOverride: ExtractionOverride?
+  private let durabilityPipeline: MemoryAssistantDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
@@ -70,6 +75,10 @@ actor MemoryAssistant: ProactiveAssistant {
   init(apiKey: String? = nil) throws {
     // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
     self.geminiClient = try GeminiClient(apiKey: apiKey)
+    self.extractionOverride = nil
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
+      runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
+    )
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -79,6 +88,22 @@ actor MemoryAssistant: ProactiveAssistant {
     Task {
       await self.startProcessing()
     }
+  }
+
+  /// Hermetic analysis-attempt initializer. It uses the same `processFrame`
+  /// catch and analytics boundary as production without constructing a live
+  /// Gemini client or starting the background frame loop.
+  init(
+    extractionOverride: @escaping ExtractionOverride,
+    durabilityRunner: any MemoryAssistantDurabilityRunning
+  ) {
+    self.geminiClient = nil
+    self.extractionOverride = extractionOverride
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: durabilityRunner)
+
+    let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+    self.frameSignal = stream
+    self.frameSignalContinuation = continuation
   }
 
   // MARK: - Processing
@@ -168,6 +193,7 @@ actor MemoryAssistant: ProactiveAssistant {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
     // Check if AI found new memories
     guard memoryResult.hasNewMemory, !memoryResult.memories.isEmpty else {
+      await recordAnalysisOutcome(.noNewMemory, ownerID: ownerID)
       return
     }
 
@@ -183,6 +209,7 @@ actor MemoryAssistant: ProactiveAssistant {
     // Check confidence threshold
     guard memory.confidence >= threshold else {
       log("Memory: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(memory.content)\"")
+      await recordAnalysisOutcome(.filteredLowConfidence, confidence: memory.confidence, ownerID: ownerID)
       return
     }
 
@@ -194,40 +221,21 @@ actor MemoryAssistant: ProactiveAssistant {
       previousMemories.removeLast()
     }
 
-    // Save to SQLite first
-    let extractionRecord = await saveMemoryToSQLite(
-      memory: memory,
-      screenshotId: screenshotId,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID
+    let durability = await durabilityPipeline.persistSyncAndEmit(
+      MemoryAssistantDurabilityRequest(
+        memory: memory,
+        screenshotId: screenshotId,
+        contextSummary: memoryResult.contextSummary,
+        windowTitle: windowTitle,
+        ownerID: ownerID
+      ),
+      confidence: memory.confidence
     )
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-
-    // Sync to backend with full extraction data
-    if let backendMemory = await syncMemoryToBackend(
-      memory: memory,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID)
-    {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      // Update SQLite record with backend ID
-      if let recordId = extractionRecord?.id {
-        do {
-          try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-        } catch {
-          logError("Memory: Failed to update sync status", error: error)
-        }
-      }
-    }
-
-    // Track memory extracted
-    await MainActor.run {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      AnalyticsManager.shared.memoryExtracted(memoryCount: 1)
-    }
+    // A failed insert never reaches backend sync and must never be reported as
+    // the historical extraction success. The pipeline already recorded exactly
+    // one closed analysis terminal (and historical success where appropriate).
+    guard durability.shouldEmitMemoryExtracted else { return }
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
     // Send notification if enabled
@@ -255,70 +263,18 @@ actor MemoryAssistant: ProactiveAssistant {
       ])
   }
 
-  /// Save extracted memory to SQLite using MemoryStorage
-  private func saveMemoryToSQLite(
-    memory: ExtractedMemory,
-    screenshotId: Int64?,
-    contextSummary: String,
-    windowTitle: String? = nil,
+  /// Record one analysis-outcome telemetry event, gated on the owner not having
+  /// switched mid-analysis (a prior owner's attempt must never be attributed to the
+  /// current PostHog identity). Supplements — never replaces — `Memory Extracted`,
+  /// which continues to fire only on the local-persistence success terminal below.
+  private func recordAnalysisOutcome(
+    _ outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil,
     ownerID: String
-  ) async -> MemoryRecord? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    // Convert ExtractedMemory category to MemoryCategory string
-    let category = memory.category == .interesting ? "interesting" : "system"
-
-    let record = MemoryRecord(
-      backendSynced: false,
-      content: memory.content,
-      category: category,
-      source: "desktop",
-      screenshotId: screenshotId,
-      confidence: memory.confidence,
-      sourceApp: memory.sourceApp,
-      windowTitle: windowTitle,
-      contextSummary: contextSummary
-    )
-
-    do {
-      let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-      log("Memory: Saved to SQLite (id: \(inserted.id ?? -1))")
-      return inserted
-    } catch {
-      logError("Memory: Failed to save to SQLite", error: error)
-      return nil
-    }
-  }
-
-  /// Sync memory to backend API, returns backend ID if successful
-  private func syncMemoryToBackend(
-    memory: ExtractedMemory,
-    contextSummary: String? = nil,
-    windowTitle: String? = nil,
-    ownerID: String
-  ) async -> ServerMemory? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    do {
-      // Convert ExtractedMemory category to MemoryCategory
-      let category: MemoryCategory = memory.category == .interesting ? .interesting : .system
-
-      let response = try await APIClient.shared.createMemory(
-        content: memory.content,
-        visibility: "private",
-        category: category,
-        confidence: memory.confidence,
-        sourceApp: memory.sourceApp,
-        contextSummary: contextSummary,
-        windowTitle: windowTitle,
-        expectedOwnerId: ownerID
-      )
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-
-      log("Memory: Synced to backend (id: \(response.id))")
-      return response
-    } catch {
-      logError("Memory: Failed to sync to backend", error: error)
-      return nil
+  ) async {
+    await MainActor.run {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      AnalyticsManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
     }
   }
 
@@ -379,7 +335,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Analysis
 
-  private func processFrame(_ frame: CapturedFrame) async {
+  func processFrame(_ frame: CapturedFrame) async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let enabled = await isEnabled
     guard enabled else {
@@ -391,6 +347,7 @@ actor MemoryAssistant: ProactiveAssistant {
     do {
       guard let result = try await extractMemories(from: frame.jpegData, appName: frame.appName) else {
         log("Memory: Analysis returned no result")
+        await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
         return
       }
 
@@ -412,10 +369,18 @@ actor MemoryAssistant: ProactiveAssistant {
       }
     } catch {
       logError("Memory extraction error", error: error)
+      await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
     }
   }
 
   private func extractMemories(from jpegData: Data, appName: String) async throws -> MemoryExtractionResult? {
+    if let extractionOverride {
+      return try await extractionOverride(jpegData, appName)
+    }
+    guard let geminiClient else {
+      return nil
+    }
+
     // Build context with previous memories for deduplication
     var prompt = "Analyze this screenshot from \(appName).\n\n"
 
@@ -459,18 +424,13 @@ actor MemoryAssistant: ProactiveAssistant {
       required: ["has_new_memory", "memories", "context_summary", "current_activity"]
     )
 
-    do {
-      let responseText = try await geminiClient.sendRequest(
-        prompt: prompt,
-        imageData: jpegData,
-        systemPrompt: currentSystemPrompt,
-        responseSchema: responseSchema
-      )
+    let responseText = try await geminiClient.sendRequest(
+      prompt: prompt,
+      imageData: jpegData,
+      systemPrompt: currentSystemPrompt,
+      responseSchema: responseSchema
+    )
 
-      return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
-    } catch {
-      logError("Memory analysis error", error: error)
-      return nil
-    }
+    return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
   }
 }

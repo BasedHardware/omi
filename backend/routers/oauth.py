@@ -1,6 +1,9 @@
+import hmac
+import logging
 import os
+import secrets
 from typing import Optional
-from fastapi import APIRouter, Request, HTTPException, Form
+from fastapi import APIRouter, Cookie, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -9,10 +12,12 @@ import httpx
 
 from database.apps import get_app_by_id_db
 from utils.executors import critical_executor, db_executor, run_blocking
-from utils.http_client import get_auth_client
+from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["oauth"],
@@ -32,6 +37,17 @@ class OAuthTokenResponse(BaseModel):
 # Ensure the templates directory exists
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+
+# Double-submit CSRF protection for the authorize -> token exchange: /authorize
+# hands the browser the same random value two ways (an HttpOnly SameSite=Strict
+# cookie it never has to read, and a value embedded directly in the page it
+# loaded), and /token requires both to match. A cross-site page cannot forge
+# this — it has no way to read or set the cookie for our origin, and
+# SameSite=Strict keeps the cookie from being attached to a cross-site request
+# in the first place. This closes the "state accepted but never validated
+# server-side" gap without depending on the third-party app's own `state`
+# handling, which Omi's server has no way to verify.
+OAUTH_CSRF_COOKIE_NAME = 'omi_oauth_csrf'
 
 
 @router.get("/v1/oauth/authorize", response_class=HTMLResponse)
@@ -107,7 +123,8 @@ def oauth_authorize(
             seen_texts.add(perm["text"])
     permissions = unique_permissions
 
-    return templates.TemplateResponse(
+    csrf_token = secrets.token_urlsafe(32)
+    response = templates.TemplateResponse(
         request,
         "oauth_authenticate.html",
         {
@@ -115,16 +132,49 @@ def oauth_authorize(
             "app_name": app.name,
             "app_image": app.image,
             "state": state,
+            "csrf_token": csrf_token,
             "permissions": permissions,
             "firebase_api_key": os.getenv("FIREBASE_API_KEY"),
             "firebase_auth_domain": os.getenv("FIREBASE_AUTH_DOMAIN"),
             "firebase_project_id": os.getenv("FIREBASE_PROJECT_ID"),
         },
     )
+    response.set_cookie(
+        OAUTH_CSRF_COOKIE_NAME,
+        csrf_token,
+        max_age=600,
+        httponly=True,
+        secure=True,
+        samesite='strict',
+    )
+    return response
+
+
+def _setup_completed_from_payload(payload: object) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url body.
+
+    Mirrors `routers.apps._setup_completed_from_response`: the body is
+    developer-controlled, so a JSON scalar or array is as likely as the documented
+    object. Anything that is not an object carrying a truthy `is_setup_completed`
+    means setup is not completed. A non-JSON body still raises ValueError out of
+    `res.json()` and is answered with the 503 below.
+    """
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
 
 
 @router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
-async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
+async def oauth_token(
+    firebase_id_token: str = Form(...),
+    app_id: str = Form(...),
+    state: Optional[str] = Form(None),
+    csrf_token: str = Form(...),
+    oauth_csrf_cookie: Optional[str] = Cookie(default=None, alias=OAUTH_CSRF_COOKIE_NAME),
+):
+    if not oauth_csrf_cookie or not hmac.compare_digest(csrf_token, oauth_csrf_cookie):
+        raise HTTPException(
+            status_code=403,
+            detail='This authorization request is invalid or expired. Please restart the connection from the app.',
+        )
     try:
         decoded_token = await run_blocking(
             critical_executor,
@@ -157,14 +207,28 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         # Check Setup completes
         if app.works_externally() and app.external_integration.setup_completed_url:
             try:
+                pinned_url, pin_kwargs = await run_blocking(
+                    db_executor, safe_request_target, app.external_integration.setup_completed_url
+                )
                 client = get_auth_client()
-                res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                res = await client.get(
+                    pinned_url + f'?uid={uid}',
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
+                )
                 res.raise_for_status()
-                if not res.json().get('is_setup_completed', False):
+                if not _setup_completed_from_payload(res.json()):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',
                     )
+            except UnsafeWebhookURLError as e:
+                logger.warning(f'Rejected setup_completed_url for app {app_id}: {e}')
+                raise HTTPException(
+                    status_code=400,
+                    detail='This app is misconfigured (setup URL is not a public address). Please contact the app developer.',
+                )
             except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise HTTPException(
                     status_code=503,

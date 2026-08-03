@@ -115,7 +115,7 @@ export function useRecorder(): UseRecorder {
     try {
       // The two lanes are independent sockets — connect them concurrently so a
       // screen-session start pays one handshake latency, not the sum of two.
-      const [mic, system] = await Promise.all([
+      const [micResult, systemResult] = await Promise.allSettled([
         startTranscription(
           'mic',
           {
@@ -145,10 +145,18 @@ export function useRecorder(): UseRecorder {
               },
               mode
             )
-          : Promise.resolve(null)
+          : Promise.resolve<TranscriptionHandle | null>(null)
       ])
-      micRef.current = mic
-      systemRef.current = system
+      if (micResult.status === 'rejected' || systemResult.status === 'rejected') {
+        // Both starts run concurrently. If one fails after its sibling already
+        // opened, tear the sibling down before surfacing the startup failure.
+        if (micResult.status === 'fulfilled') micResult.value?.stop()
+        if (systemResult.status === 'fulfilled') systemResult.value?.stop()
+        if (micResult.status === 'rejected') throw micResult.reason
+        if (systemResult.status === 'rejected') throw systemResult.reason
+      }
+      micRef.current = micResult.value
+      systemRef.current = systemResult.value
     } catch (e) {
       micRef.current?.stop()
       micRef.current = null

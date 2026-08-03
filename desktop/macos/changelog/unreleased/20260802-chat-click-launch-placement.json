@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat opening scrolled to the top of your history after you clicked anywhere in the transcript while it was still loading"
+}

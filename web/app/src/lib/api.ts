@@ -452,7 +452,6 @@ export async function deleteMemory(id: string): Promise<void> {
   invalidateCache(invalidationPatterns.memories);
 }
 
-
 /**
  * Delete multiple memories in a single batch request (up to 100 per call).
  * Replaces N concurrent DELETE /v3/memories/{id} calls that triggered 429 rate limits.
@@ -1862,7 +1861,6 @@ const INTEGRATION_DEFINITIONS: Array<{
     name: 'Gmail',
     description: 'Email integrations',
     logo: '/integrations/gmail-logo.jpeg',
-    coming_soon: true,
   },
 ];
 

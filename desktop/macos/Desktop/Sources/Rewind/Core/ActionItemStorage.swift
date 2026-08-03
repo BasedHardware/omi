@@ -152,6 +152,26 @@ actor ActionItemStorage {
     }
   }
 
+  /// Get every non-deleted action item from the local cache. Reorder persistence
+  /// must use this complete set rather than a rendered page, search result, or
+  /// filtered subset so hidden rows keep their unique position in a category.
+  func getAllLocalActionItems(includeDeleted: Bool = false) async throws -> [TaskActionItem] {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      var query = ActionItemRecord.all()
+      if !includeDeleted {
+        query = query.filter(Column("deleted") == false)
+      }
+
+      let records =
+        try query
+        .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+        .fetchAll(database)
+      return records.map { $0.toTaskActionItem() }
+    }
+  }
+
   /// Check if a non-deleted action item with the given description exists
   func actionItemExists(description: String) async -> Bool {
     guard let db = try? await ensureInitialized() else { return false }
@@ -303,6 +323,34 @@ actor ActionItemStorage {
 
       return records.map { $0.toTaskActionItem() }
     }
+  }
+
+  /// Read the bounded incomplete-task surface used by the Tasks page.
+  ///
+  /// Dated rows are complete because Today/Tomorrow/Later are not pageable.
+  /// No Deadline rows are independently paged so this method never loads the
+  /// entire undated local universe merely to render the first page.
+  func getIncompleteTaskSurface(
+    noDeadlineLimit: Int = 100,
+    noDeadlineOffset: Int = 0
+  ) async throws -> (dated: [TaskActionItem], noDeadline: [TaskActionItem], hasMoreNoDeadline: Bool) {
+    let dated = try await getFilteredActionItems(
+      limit: Int.max,
+      offset: 0,
+      completedStates: [false],
+      dueDateIsNull: false
+    )
+    let noDeadlineLookahead = try await getFilteredActionItems(
+      limit: noDeadlineLimit + 1,
+      offset: noDeadlineOffset,
+      completedStates: [false],
+      dueDateIsNull: true
+    )
+    return (
+      dated: dated,
+      noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
+      hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
+    )
   }
 
   /// Search action items by description text (case-insensitive)
@@ -1560,6 +1608,31 @@ actor ActionItemStorage {
         .filter(Column("agentStatus") != nil)
         .filter(!(["completed", "failed"].contains(Column("agentStatus"))))
         .fetchAll(database)
+    }
+  }
+
+  /// Stamp when a background investigation last started for a task —
+  /// RecurringTaskScheduler's dedup gate. Leaves all other agent fields alone.
+  func updateAgentStartedAt(
+    taskId: String,
+    startedAt: Date,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else {
+          log("ActionItemStorage: updateAgentStartedAt - record not found for taskId \(taskId)")
+          return
+        }
+
+        rec.agentStartedAt = startedAt
+        try rec.update(database)
+        try authorization.require()
+      }
     }
   }
 

@@ -1790,20 +1790,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get lovingOmi => 'Omi ভালোবাসছেন?';
 
   @override
-  String get leaveReviewIos =>
-      'অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get rateOnAppStore => 'অ্যাপ স্টোরে রেটিং দিন';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play তে রেটিং দিন';
-
-  @override
   String get maybeLater => 'হয়তো পরে';
 
   @override
@@ -2138,6 +2124,18 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ স্মৃতি সম্পাদনা করুন';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'আমি আইসক্রিম খেতে পছন্দ করি...';
@@ -4714,7 +4712,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'কোনো নির্দিষ্ট ডেটা অ্যাক্সেস কনফিগার করা হয়নি।';
 
   @override
-  String get basicPlanDescription => '১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড';
+  String get basicPlanDescription => '৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড';
 
   @override
   String get minutes => 'মিনিট';
@@ -6006,7 +6004,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
+      'প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
 
   @override
   String get viewUsage => 'ব্যবহার দেখুন';
@@ -6088,7 +6086,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
+      'প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
 
   @override
   String get audioProcessedLocally =>
@@ -9786,4 +9784,7 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।';
+
+  @override
+  String get syncStatusTooOld => 'সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না';
 }

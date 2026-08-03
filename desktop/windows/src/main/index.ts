@@ -20,6 +20,7 @@ import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
+  isListenSessionOwnedBy,
   registerOmiListenHandlers,
   startTestListenSession,
   stopTestListenSession
@@ -122,6 +123,10 @@ import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
+import {
+  startRewindForegroundCaptureTrigger,
+  stopRewindForegroundCaptureTrigger
+} from './rewind/foregroundCaptureTrigger'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
@@ -149,7 +154,7 @@ import {
   destroyTray,
   isTrayCreated
 } from './tray'
-import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
+import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow, installUpdateNow } from './updater'
 import {
   registerRecordShortcut,
   setRecordAcceleratorForced,
@@ -410,6 +415,20 @@ if (gotSingleInstanceLock) initSentry()
 // losing duplicate process (same userData → same sentinel file) never reads or
 // rewrites the live instance's flag. The clean-exit write is in will-quit below.
 if (gotSingleInstanceLock) initCrashSentinel()
+
+// Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
+// cannot register global shortcuts (push-to-talk / overlay summon) and the X11
+// active-window path is blind, so XWayland gives the fullest experience. Set
+// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
+// the PipeWire capturer (portal screen share) and PulseAudio monitor-source
+// loopback for system-audio capture when pipewire-pulse/Pulse is present.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch(
+    'enable-features',
+    'WebRTCPipeWireCapturer,PulseaudioLoopbackForScreenShare'
+  )
+}
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -819,12 +838,18 @@ app.whenReady().then(async () => {
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
   ipcMain.handle('db:wipeUserData', async () => wipeUserData())
-  registerOmiListenHandlers()
+  registerOmiListenHandlers((ownerId) => {
+    const captureWc = getCaptureWc()
+    const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+    return ownerId === mainWc?.id || ownerId === captureWc?.id
+  })
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
   // command/event is missed. Reads the capture wc live so a respawn is picked up.
-  registerCaptureBridge(getCaptureWc, () =>
-    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+  registerCaptureBridge(
+    getCaptureWc,
+    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
+    isListenSessionOwnedBy
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
@@ -1135,6 +1160,10 @@ app.whenReady().then(async () => {
         // fresh install, and any change the user makes in Settings survives restarts.
         // OCR/retention loops are cheap no-ops until frames exist.
         { name: 'rewindCapture', run: () => startRewindCapture() },
+        {
+          name: 'rewindForegroundCapture',
+          run: () => startRewindForegroundCaptureTrigger()
+        },
         { name: 'rewindOcr', run: () => startRewindOcr() },
         // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
         // and the launch backfill only move once the renderer relays a Firebase
@@ -1346,6 +1375,9 @@ app.whenReady().then(async () => {
   // Query the staged update on demand (the update:ready event fires once,
   // usually while Settings isn't mounted — see updater.getPendingUpdate).
   ipcMain.handle('update:get-pending', () => getPendingUpdate())
+  // Install the staged update and relaunch (About → "Restart to update"). False
+  // means nothing was staged, so the UI must not pretend it restarted into it.
+  ipcMain.handle('update:install-now', () => installUpdateNow())
   // App identity for Settings → About.
   ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
   // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).
@@ -1480,6 +1512,7 @@ app.on('will-quit', () => {
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
+  stopRewindForegroundCaptureTrigger()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

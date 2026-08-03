@@ -38,6 +38,10 @@ chmod +x "$fakebin/file"
 cat > "$fakebin/strip" <<'EOF'
 #!/usr/bin/env bash
 target="${@: -1}"
+if [ "${FAKE_STRIP_CORRUPT:-0}" = "1" ]; then
+  printf 'corrupt' > "$target"
+  exit 0
+fi
 before="$(wc -c < "$target" | tr -d ' ')"
 after=$((before - 256))
 if [ "$after" -lt 1 ]; then
@@ -46,6 +50,15 @@ fi
 perl -e 'truncate $ARGV[0], $ARGV[1] or die "truncate: $!"' "$target" "$after"
 EOF
 chmod +x "$fakebin/strip"
+
+cat > "$fakebin/dyld_info" <<'EOF'
+#!/usr/bin/env bash
+if grep -q 'corrupt' "$2"; then
+  exit 1
+fi
+exit 0
+EOF
+chmod +x "$fakebin/dyld_info"
 
 head -c 4096 /dev/zero > "$main_binary"
 chmod +x "$main_binary"
@@ -62,6 +75,17 @@ if ! grep -q "Stripped main app executable:" <<< "$output"; then
 fi
 if ! grep -q "Prepared desktop bundle native dependencies" <<< "$output"; then
   fail "prepare script did not complete successfully"
+fi
+
+original_hash="$(shasum -a 256 "$main_binary" | awk '{print $1}')"
+output="$(FAKE_STRIP_CORRUPT=1 PATH="$fakebin:$PATH" "$MACOS_DIR/scripts/prepare-desktop-bundle-native-deps.sh" "$app_bundle" 2>&1)"
+restored_hash="$(shasum -a 256 "$main_binary" | awk '{print $1}')"
+
+if [ "$restored_hash" != "$original_hash" ]; then
+  fail "prepare script did not restore the malformed stripped executable"
+fi
+if ! grep -q "restored main app executable" <<< "$output"; then
+  fail "prepare script did not report malformed Mach-O restoration"
 fi
 
 echo "prepare-desktop-bundle-native-deps tests passed"

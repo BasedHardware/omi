@@ -23,6 +23,27 @@ on:
         description: 'Service to deploy'
         required: false
         default: 'pusher'
+      pusher_image_digest:
+        description: 'Production Pusher only: exact digest from a successful automatic development qualification'
+        required: false
+        default: ''
+      pusher_dev_qualification_run_id:
+        description: 'Production Pusher only: successful gcp_backend_pusher_auto_deploy.yml run ID that qualified the digest'
+        required: false
+        default: ''
+      skip_live_capacity_gate:
+        description: 'Break-glass: deploy without the live surge-capacity gate (still requires a merged main SHA and immutable digest)'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type skip-live-capacity-gate when skip_live_capacity_gate is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the live capacity gate is unavailable (required with skip_live_capacity_gate)'
+        required: false
+        default: ''
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -38,6 +59,7 @@ jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}
     permissions:
+      actions: 'read'
       contents: 'read'
       id-token: 'write'
 
@@ -55,6 +77,18 @@ jobs:
           fi
           if [[ "${{ env.SERVICE }}" == "llm-gateway" && "${{ github.event.inputs.environment }}" != "development" ]]; then
             echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
+            exit 1
+          fi
+
+      - name: Validate live-capacity-gate break-glass inputs
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
+        run: |
+          if [[ "${{ github.event.inputs.break_glass_confirm }}" != "skip-live-capacity-gate" ]]; then
+            echo "ERROR: skip_live_capacity_gate requires break_glass_confirm=skip-live-capacity-gate." >&2
+            exit 1
+          fi
+          if [[ -z "${{ github.event.inputs.break_glass_reason }}" ]]; then
+            echo "ERROR: skip_live_capacity_gate requires a non-empty break_glass_reason." >&2
             exit 1
           fi
 
@@ -83,6 +117,61 @@ jobs:
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Select development-qualified Pusher digest for production
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_DIGEST: ${{ github.event.inputs.pusher_image_digest }}
+          QUALIFICATION_RUN_ID: ${{ github.event.inputs.pusher_dev_qualification_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Production Pusher requires pusher_image_digest=sha256:<64 lowercase hex>." >&2
+            exit 1
+          fi
+          if [[ ! "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Production Pusher requires a numeric successful development qualification run ID." >&2
+            exit 1
+          fi
+          QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
+          mkdir -p "$QUALIFICATION_DIR"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"
+          EXPECTED_WORKFLOW_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/gcp_backend_pusher_auto_deploy.yml" --jq .id)"
+          gh run download "$QUALIFICATION_RUN_ID" -n pusher-dev-qualification --dir "$QUALIFICATION_DIR"
+          mapfile -t EVIDENCE_FILES < <(find "$QUALIFICATION_DIR" -type f -name pusher-dev-qualification.json -print)
+          if [[ "${#EVIDENCE_FILES[@]}" -ne 1 ]]; then
+            echo "Expected exactly one Pusher development qualification artifact." >&2
+            exit 1
+          fi
+          DEV_PUSHER_REPOSITORY="gcr.io/based-hardware-dev/pusher"
+          python3 backend/scripts/verify_pusher_promotion_evidence.py \
+            --evidence "${EVIDENCE_FILES[0]}" \
+            --run-json "$QUALIFICATION_DIR/run.json" \
+            --expected-digest "$REQUESTED_DIGEST" \
+            --expected-repository "$DEV_PUSHER_REPOSITORY" \
+            --expected-workflow-id "$EXPECTED_WORKFLOW_ID" \
+            --expected-run-id "$QUALIFICATION_RUN_ID"
+          QUALIFIED_SOURCE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "${EVIDENCE_FILES[0]}")"
+          if ! git cat-file -e "${QUALIFIED_SOURCE_SHA}^{commit}" || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
+            echo "Development qualification source is not a commit on fresh origin/main." >&2
+            exit 1
+          fi
+          # Compare the full Pusher image source closure, not a hardcoded subset.
+          # The Dockerfile COPYs backend/{config,database,models,routers,services,
+          # utils,pusher}/, so a change to any of those after qualification would
+          # silently ship a stale digest. Derive the paths from the Dockerfile
+          # itself so this never drifts from what the image actually baked in.
+          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py)
+          if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}"; then
+            echo "Current main changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
+            git diff --stat "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}" >&2 || true
+            exit 1
+          fi
+          {
+            echo "PUSHER_DEV_IMAGE_REPOSITORY=$DEV_PUSHER_REPOSITORY"
+            echo "PUSHER_IMAGE_DIGEST=$REQUESTED_DIGEST"
+          } >> "$GITHUB_ENV"
 
       - name: Google Auth
         id: auth
@@ -129,9 +218,11 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
+        if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'
         uses: docker/setup-buildx-action@v4
 
       - name: Build and Push Docker image
+        if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
             docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/Dockerfile .
@@ -145,6 +236,50 @@ jobs:
               --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
           fi
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
+
+      - name: Resolve immutable development Pusher image
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment != 'prod'
+        run: |
+          set -euo pipefail
+          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher"
+          PUSHER_IMAGE_DIGEST="$(gcloud container images describe "${PUSHER_IMAGE_REPOSITORY}:${IMAGE_TAG}" --format='value(image_summary.digest)')"
+          if [[ ! "$PUSHER_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Pusher image did not resolve to an exact digest after push." >&2
+            exit 1
+          fi
+          {
+            echo "PUSHER_IMAGE_REPOSITORY=$PUSHER_IMAGE_REPOSITORY"
+            echo "PUSHER_IMAGE_DIGEST=$PUSHER_IMAGE_DIGEST"
+            echo "PUSHER_IMAGE_REFERENCE=${PUSHER_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
+          } >> "$GITHUB_ENV"
+
+      - name: Promote qualified Pusher digest into the production registry
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          test -n "$PUSHER_DEV_IMAGE_REPOSITORY"
+          test -n "$PUSHER_IMAGE_DIGEST"
+          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher"
+          SOURCE_IMAGE="${PUSHER_DEV_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
+          PROMOTION_TAG="promotion-${PUSHER_IMAGE_DIGEST#sha256:}"
+          gcloud container images describe "$SOURCE_IMAGE" --format='value(image_summary.digest)' | grep -Fx "$PUSHER_IMAGE_DIGEST"
+          gcloud container images add-tag --quiet "$SOURCE_IMAGE" "${PUSHER_IMAGE_REPOSITORY}:${PROMOTION_TAG}"
+          PROMOTED_DIGEST="$(gcloud container images describe "${PUSHER_IMAGE_REPOSITORY}:${PROMOTION_TAG}" --format='value(image_summary.digest)')"
+          if [[ "$PROMOTED_DIGEST" != "$PUSHER_IMAGE_DIGEST" ]]; then
+            echo "Registry promotion did not preserve the development-qualified digest." >&2
+            exit 1
+          fi
+          {
+            echo "PUSHER_IMAGE_REPOSITORY=$PUSHER_IMAGE_REPOSITORY"
+            echo "PUSHER_IMAGE_REFERENCE=${PUSHER_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify Pusher static rollout controls
+        if: env.SERVICE == 'pusher'
+        run: |
+          python3 backend/scripts/verify_pusher_rollout_budget.py
+          python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -179,6 +314,13 @@ jobs:
             echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Preflight existing pusher ConfigMap and Secret references
+        if: env.SERVICE == 'pusher'
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend --render-only
+
       - name: Apply non-secret pusher runtime config
         if: env.SERVICE == 'pusher'
         env:
@@ -197,7 +339,7 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
           STT_SERVICE_MODELS: modulate-velma-2,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
@@ -209,12 +351,20 @@ jobs:
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
         run: backend/scripts/deploy-backend-config.sh
 
-      - name: Preflight pusher ConfigMap and Secret references
+      - name: Verify reconciled pusher ConfigMap and Secret references
         if: env.SERVICE == 'pusher'
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
+      - name: Verify live Pusher surge capacity and digest render
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
+        run: |
+          python3 backend/scripts/verify_pusher_live_deployment_gate.py \
+            --environment ${{ vars.ENV }} \
+            --namespace ${{ vars.ENV }}-omi-backend \
+            --image "$PUSHER_IMAGE_REFERENCE"
 
       - name: Deploy Pusher to GKE cluster using Helm
         env:
@@ -250,7 +400,7 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${IMAGE_TAG}"
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
             # Must cover the chart-derived Pusher rollout budget (fourteen
             # availability waves at the current production HPA ceiling).
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
@@ -344,6 +494,27 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
+
+      - name: Record live-capacity-gate break-glass use
+        if: always() && env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Match the repo's break-glass audit convention from gcp_backend.yml.
+          # The gate being unusable is the defect; this issue tracks fixing it.
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Pusher live capacity gate bypassed for ${CHECKED_OUT_SHA:0:10} (${{ github.event.inputs.environment }})" \
+            --body "$(printf '%s\n' \
+              "Pusher deploy ran without the live surge-capacity gate." \
+              "" \
+              "- SHA: \`${CHECKED_OUT_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${{ github.event.inputs.environment }}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${{ github.event.inputs.break_glass_reason }}" \
+              "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")" || true
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

@@ -8,15 +8,23 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from ._client import db
+from ._client import db, get_firestore_client
+from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+
+# Recovery uses one atomic create-if-absent batch per row. Keep the page small
+# enough that a user with a large historical migration never holds an HTTP
+# request open for an unbounded number of Firestore commits.
+LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE = 50
+LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES = 3
 
 
 def _user_col(uid: str, collection: str):
@@ -345,70 +353,99 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
-def migrate_ai_tasks(uid: str) -> dict:
-    """One-time migration: move excess AI tasks from action_items to staged_tasks.
+def restore_legacy_conversation_items(
+    uid: str,
+    *,
+    limit: int = LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+    cursor: Optional[str] = None,
+    firestore_client=None,
+) -> dict:
+    """Restore rows moved by the retired desktop conversation migration.
 
-    Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
-    Uses a 'source' field marker to identify AI-created tasks.
+    Only active ``conversation_migration`` rows qualify. Each row is restored
+    with an atomic create+delete batch, so an existing action item is never
+    overwritten; an action item created or restored concurrently wins. Results
+    are ordered by document ID and cursor-paginated so the client can finish a
+    large recovery without one request exceeding its Firestore deadline.
     """
-    col = _user_col(uid, 'action_items')
-    query = col.where(filter=FieldFilter('completed', '==', False))
 
-    all_items = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data['id'] = doc.id
-        if data.get('deleted'):
-            continue
-        all_items.append(data)
+    if limit < 1:
+        raise ValueError('limit must be positive')
 
-    # Separate AI-generated tasks from manual ones
-    ai_tasks = [item for item in all_items if 'screenshot' in (item.get('source') or '')]
-    if len(ai_tasks) <= 3:
-        return {'moved': 0, 'kept': len(ai_tasks)}
+    # Resolve the client at the call boundary. The legacy ``db`` proxy is safe
+    # for older helpers in this module, but recovery must be independently
+    # testable and must not capture a client during import.
+    client = firestore_client or get_firestore_client()
+    user_doc = client.collection('users').document(uid)
+    action_items_col = user_doc.collection('action_items')
+    staged_col = user_doc.collection('staged_tasks')
+    migrated_query = LEGACY_CONVERSATION_RECOVERY_QUERY.build(
+        staged_col,
+        {'source': 'conversation_migration'},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
+    if cursor:
+        migrated_query = migrated_query.start_after({'__name__': staged_col.document(cursor)})
+    # Read one look-ahead document so the caller can distinguish a complete
+    # recovery from a page that must be continued with ``next_cursor``.
+    migrated_rows = list(migrated_query.limit(limit + 1).stream())
+    page = migrated_rows[:limit]
+    has_more = len(migrated_rows) > limit
+    next_cursor = page[-1].id if has_more and page else None
+    restored = 0
+    skipped_existing = 0
 
-    # Sort by relevance_score ascending (best first). relevance_score is an int in
-    # 0-1000 where 0 is the most relevant, so only a genuinely missing (None) score
-    # should sort last: `or 999` would also demote a valid best score of 0.
-    ai_tasks.sort(key=lambda x: 999 if x.get('relevance_score') is None else x.get('relevance_score'))
-    keep = ai_tasks[:3]
-    to_move = ai_tasks[3:]
+    for staged_snapshot in page:
+        # Keep the marker check in addition to the indexed query so a permissive
+        # fake or future query refactor can never restore an ordinary staged row.
+        action_item_ref = action_items_col.document(staged_snapshot.id)
+        staged_ref = staged_col.document(staged_snapshot.id)
+        for attempt in range(LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1):
+            staged_row = staged_snapshot.to_dict() or {}
+            if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
+                break
 
-    staged_col = _user_col(uid, 'staged_tasks')
-    batch = db.batch()
-    batch_count = 0
-    for task in to_move:
-        batch.set(staged_col.document(task['id']), task)
-        batch.delete(col.document(task['id']))
-        batch_count += 2  # set + delete = 2 operations
-        batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
+            action_item = dict(staged_row)
+            # `id` is document identity and `source` is the recovery marker, not
+            # original action-item data. Recreating either would mutate the legacy
+            # task's meaning rather than restoring it.
+            action_item.pop('id', None)
+            action_item.pop('source', None)
 
-    return {'moved': len(to_move), 'kept': len(keep)}
+            batch = client.batch()
+            batch.create(action_item_ref, action_item)
+            # Keep the streamed staged row as the delete authority. If promotion
+            # or another recovery attempt updates it after the query, Firestore
+            # rejects the atomic batch instead of deleting the newer record.
+            delete_option = client.write_option(last_update_time=staged_snapshot.update_time)
+            batch.delete(staged_ref, option=delete_option)
+            try:
+                batch.commit()
+            except (AlreadyExists, Conflict):
+                # An action-item collision preserves both copies for the next
+                # recovery pass or manual inspection.
+                skipped_existing += 1
+                break
+            except FailedPrecondition:
+                # A stale-row update is not an identity collision: it may be a
+                # score or metadata write with no corresponding action item.
+                # Refresh the row and retry so recovery never acknowledges an
+                # arbitrary contention as complete. Exhaustion re-raises and
+                # leaves the sweep unacknowledged for a later request.
+                if attempt >= LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES:
+                    raise
+                refreshed_snapshot = staged_ref.get()
+                if not refreshed_snapshot.exists:
+                    break
+                staged_snapshot = refreshed_snapshot
+                continue
+            else:
+                restored += 1
+                break
 
-
-def migrate_conversation_items_to_staged(uid: str) -> dict:
-    """Move conversation-sourced action items (without 'source') to staged_tasks."""
-    col = _user_col(uid, 'action_items')
-    staged_col = _user_col(uid, 'staged_tasks')
-
-    batch = db.batch()
-    moved = 0
-    batch_count = 0
-    for doc in col.stream():
-        data = doc.to_dict()
-        if data.get('deleted') or data.get('completed'):
-            continue
-        if data.get('conversation_id') and not data.get('source'):
-            data['id'] = doc.id
-            data['source'] = 'conversation_migration'
-            batch.set(staged_col.document(doc.id), data)
-            batch.delete(col.document(doc.id))
-            moved += 1
-            batch_count += 2  # set + delete = 2 operations
-            batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
-
-    return {'moved': moved}
+    return {
+        'restored': restored,
+        'skipped_existing': skipped_existing,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+    }

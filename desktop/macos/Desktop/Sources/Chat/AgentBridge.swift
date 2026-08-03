@@ -1,24 +1,4 @@
-import CryptoKit
 import Foundation
-
-enum AgentContextRevision {
-  static func make(
-    source: AgentContextSource,
-    payload: [String: Any],
-    outcome: AgentContextSourceOutcome
-  ) throws -> String {
-    let material: [String: Any] = [
-      "source": source.rawValue,
-      "outcome": outcome.rawValue,
-      "payload": payload,
-    ]
-    guard JSONSerialization.isValidJSONObject(material) else {
-      throw BridgeError.agentError("Context source payload is not valid JSON")
-    }
-    let data = try JSONSerialization.data(withJSONObject: material, options: [.sortedKeys])
-    return "sha256:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-  }
-}
 
 struct AgentExecutionProfile: Equatable, Sendable {
   enum CredentialScope: String, Sendable {
@@ -708,8 +688,8 @@ actor AgentBridge {
 
   let harnessMode: String
 
-  private let clientId = UUID().uuidString
-  private let runtime: AgentRuntimeProcess
+  let clientId = UUID().uuidString
+  let runtime: AgentRuntimeProcess
   private var registered = false
   private var synchronizedRuntimeAuthorityEpoch: UInt64?
   private var synchronizedRuntimeAuthorityOwnerID: String?
@@ -751,7 +731,7 @@ actor AgentBridge {
     return snapshot
   }
 
-  private func resolveAuthorization(
+  func resolveAuthorization(
     _ supplied: RuntimeOwnerAuthorizationSnapshot?,
     expectedOwnerID: String? = nil
   ) throws -> RuntimeOwnerAuthorizationSnapshot {
@@ -810,7 +790,7 @@ actor AgentBridge {
     try await start(authorizationSnapshot: authorizationSnapshot, requiresCredentials: true)
   }
 
-  private func start(
+  func start(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     requiresCredentials: Bool = true
   ) async throws {
@@ -1194,26 +1174,6 @@ actor AgentBridge {
     )
   }
 
-  func resolveSurfaceSession(
-    _ surface: AgentSurfaceReference,
-    title: String? = nil,
-    creationProfile: AgentSessionCreationProfile? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws -> AgentSurfaceSession {
-    let authorization = try resolveAuthorization(authorizationSnapshot)
-    try await start(authorizationSnapshot: authorization)
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
-      throw BridgeError.authMissing
-    }
-    return try await runtime.resolveSurfaceSession(
-      clientId: clientId,
-      surface: surface,
-      title: title,
-      creationProfile: creationProfile,
-      authorizationSnapshot: authorization
-    )
-  }
-
   func migrateSessionExecutionProfile(
     sessionId: String,
     expectedProfileGeneration: Int,
@@ -1427,6 +1387,25 @@ actor AgentBridge {
       surface: surface,
       ownerID: ownerID,
       terminalization: terminalization,
+      authorizationSnapshot: authorization
+    )
+  }
+
+  func repairJournalTurns(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turnIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [KernelJournalTurn] {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.repairJournalTurns(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      turnIDs: turnIDs,
       authorizationSnapshot: authorization
     )
   }
@@ -2197,20 +2176,9 @@ enum BridgeError: LocalizedError {
   }
 
   private static func userFacingAgentErrorMessage(_ msg: String) -> String {
-    guard !msg.isEmpty else { return "Something went wrong. Please try again." }
-    let lower = msg.lowercased()
-    if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
-      || lower.contains("unauthorized") || lower.contains("permission denied")
-      || lower.contains("invalid key") || lower.contains("forbidden")
-    {
-      return "AI service authentication error. Please update the app to the latest version."
-    }
-    if lower.contains("quota") || lower.contains("rate limit") || lower.contains("resource exhausted") {
-      return "AI service is busy. Please try again in a moment."
-    }
-    if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error") {
-      return "AI service is temporarily unavailable. Please try again later."
-    }
-    return msg
+    // Classification owns the copy so "please try again" is only ever said for
+    // errors where retrying can help (unretryable causes previously produced
+    // retry storms — e.g. exhausted provider credits).
+    AgentErrorClassifier.classify(msg).userMessage
   }
 }

@@ -8,7 +8,7 @@ Tests every code path changed in the QoS profile refactor:
   P4: _effective_byok_provider() mapping
   P5: BYOK profile hardcoded to byok
   P6: Structured output compatibility on OpenAI (real .with_structured_output() call)
-  P7: Prompt caching (cache_key binding for gpt-5.4-mini)
+  P7: Prompt caching (cache_key binding for gpt-5.6-luna)
   P8: Streaming client construction and invocation
   P9: OpenRouter vendor prefix and temperature config
   P10: Anthropic client via get_model() + anthropic_client
@@ -38,7 +38,6 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
-    _CACHE_KEY_MODELS,
     _STRUCTURED_OUTPUT_FEATURES,
     _active_profile,
     _active_profile_name,
@@ -54,6 +53,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
@@ -119,7 +119,7 @@ class TestP3_CreateByokClient:
     """P3: _create_byok_client creates valid ChatOpenAI instances."""
 
     def test_openai_byok_client(self):
-        client = _create_byok_client('gpt-4.1-mini', 'openai', os.environ['OPENAI_API_KEY'])
+        client = _create_byok_client('gpt-5.6-luna', 'openai', os.environ['OPENAI_API_KEY'])
         assert client is not None
         response = client.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), "BYOK OpenAI client returned empty"
@@ -142,7 +142,7 @@ class TestP3_CreateByokClient:
         assert client is None
 
     def test_streaming_byok_client(self):
-        client = _create_byok_client('gpt-4.1-mini', 'openai', os.environ['OPENAI_API_KEY'], streaming=True)
+        client = _create_byok_client('gpt-5.6-luna', 'openai', os.environ['OPENAI_API_KEY'], streaming=True)
         assert client is not None
         response = client.invoke(SIMPLE_PROMPT)
         assert response.content.strip()
@@ -156,7 +156,7 @@ class TestP4_EffectiveBYOKProvider:
     """P4: Provider mapping for BYOK key type resolution."""
 
     def test_openai(self):
-        assert _effective_byok_provider('gpt-4.1-mini', 'openai') == 'openai'
+        assert _effective_byok_provider('gpt-5.6-luna', 'openai') == 'openai'
 
     def test_gemini(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
@@ -263,20 +263,20 @@ class TestP7_PromptCaching:
     """P7: cache_key binding works and produces valid responses."""
 
     def test_cache_key_with_cacheable_model(self):
-        """conv_structure uses gpt-5.4-mini (in _CACHE_KEY_MODELS) — cache_key should bind."""
+        """conv_structure uses Luna, so cache_key should bind."""
         llm = get_llm('conv_structure', cache_key='omi-test-cp9')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip()
         print(f"  P7 cache_key bound: {response.content.strip()[:60]}")
 
     def test_cache_key_ignored_for_non_cacheable(self):
-        """memories uses gpt-4.1-mini (not in _CACHE_KEY_MODELS) — cache_key is no-op."""
+        """memories uses Luna, so cache_key should bind."""
         llm_with = get_llm('memories', cache_key='omi-test-cp9')
         llm_without = get_llm('memories')
-        assert llm_with is llm_without  # same instance, cache_key was a no-op
+        assert llm_with is not llm_without
 
-    def test_cache_key_models_set(self):
-        assert _CACHE_KEY_MODELS == {'gpt-5.4', 'gpt-5.4-mini'}
+    def test_luna_supports_cache_key_routing(self):
+        assert supports_prompt_cache('gpt-5.6-luna')
 
 
 # ---------------------------------------------------------------------------
@@ -411,4 +411,4 @@ class TestP13_QosInfo:
     def test_pinned_features_included(self):
         info = get_qos_info()
         assert 'fair_use' in info
-        assert info['fair_use']['model'] == 'gpt-5.1'
+        assert info['fair_use']['model'] == 'gpt-5.6-luna'

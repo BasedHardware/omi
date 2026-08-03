@@ -1793,20 +1793,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get lovingOmi => 'Подобається Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Допоможіть нам охопити більше людей, залишивши відгук в App Store. Ваші відгуки дуже важливі для нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Допоможіть нам охопити більше людей, залишивши відгук в Google Play Store. Ваші відгуки дуже важливі для нас!';
-
-  @override
-  String get rateOnAppStore => 'Оцінити в App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оцінити в Google Play';
-
-  @override
   String get maybeLater => 'Можливо пізніше';
 
   @override
@@ -2143,6 +2129,18 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редагувати пам\'ять';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Мені подобається їсти морозиво...';
@@ -4714,7 +4712,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 
   @override
-  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
+  String get basicPlanDescription => '300 преміум хвилин + необмежено на пристрої';
 
   @override
   String get minutes => 'хвилин';
@@ -9800,4 +9798,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Занадто старий для синхронізації — Omi не може його прийняти';
 }

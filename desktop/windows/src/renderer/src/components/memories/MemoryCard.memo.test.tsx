@@ -80,4 +80,17 @@ describe('MemoryCard memoization (nav-snappiness regression)', () => {
     rerender(<Harness memory={makeMemory('b')} />)
     expect(dateSpy).toHaveBeenCalledTimes(2)
   })
+
+  it('shows the recorded source on the card', () => {
+    const { getByText } = render(
+      <ul>
+        <MemoryCard
+          memory={{ ...makeMemory('a'), conversation_id: 'conversation-1' }}
+          onOpen={noopOpen}
+        />
+      </ul>
+    )
+
+    expect(getByText('Conversation')).not.toBeNull()
+  })
 })

@@ -1475,7 +1475,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '300 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -1798,20 +1798,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Vă place Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajutați-ne să ajungem la mai multe persoane lăsând o recenzie în Google Play Store. Feedback-ul dvs. înseamnă enorm pentru noi!';
-
-  @override
-  String get rateOnAppStore => 'Evaluează în App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Evaluează pe Google Play';
 
   @override
   String get maybeLater => 'Poate mai târziu';
@@ -2149,6 +2135,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Editează amintirea';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Îmi place să mănânc înghețată...';
@@ -4732,7 +4730,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '300 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6027,8 +6025,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo => '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6111,7 +6108,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9827,4 +9824,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.';
+
+  @override
+  String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
 }

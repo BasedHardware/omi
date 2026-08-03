@@ -50,171 +50,61 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 #   byok     — same models as max (BYOK users pay their own API costs)
 # ---------------------------------------------------------------------------
 
+# All QoS profiles deliberately share this two-tier map. Keeping independent
+# copies below retains profile selection semantics while preventing a higher
+# tier or BYOK route from reintroducing a retired OpenAI text model.
+_TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
+    # OpenAI — default intelligence
+    'conv_action_items': ('gpt-5.6-luna', 'openai'),
+    'conv_structure': ('gpt-5.6-luna', 'openai'),
+    'conv_app_result': ('gpt-5.6-luna', 'openai'),
+    'daily_summary': ('gpt-5.6-luna', 'openai'),
+    'external_structure': ('gpt-5.6-luna', 'openai'),
+    'memories': ('gpt-5.6-luna', 'openai'),
+    'learnings': ('gpt-5.6-luna', 'openai'),
+    'memory_conflict': ('gpt-5.6-luna', 'openai'),
+    'knowledge_graph': ('gpt-5.6-luna', 'openai'),
+    'memory_l1': ('gpt-5.6-luna', 'openai'),
+    'memory_l2': ('gpt-5.6-luna', 'openai'),
+    'chat_responses': ('gpt-5.6-luna', 'openai'),
+    'chat_extraction': ('gpt-5.6-luna', 'openai'),
+    'chat_graph': ('gpt-5.6-luna', 'openai'),
+    'goals': ('gpt-5.6-luna', 'openai'),
+    'goals_advice': ('gpt-5.6-luna', 'openai'),
+    'notifications': ('gpt-5.6-luna', 'openai'),
+    'proactive_notification': ('gpt-5.6-luna', 'openai'),
+    'what_matters_now': ('gpt-5.6-luna', 'openai'),
+    'openglass': ('gpt-5.6-luna', 'openai'),
+    'app_generator': ('gpt-5.6-luna', 'openai'),
+    'persona_clone': ('gpt-5.6-luna', 'openai'),
+    'persona_chat_premium': ('gpt-5.6-luna', 'openai'),
+    # OpenAI — cheapest light/binary work
+    'conv_app_select': ('gpt-5-nano', 'openai'),
+    'conv_folder': ('gpt-5-nano', 'openai'),
+    'conv_discard': ('gpt-5-nano', 'openai'),
+    'daily_summary_simple': ('gpt-5-nano', 'openai'),
+    'memory_category': ('gpt-5-nano', 'openai'),
+    'smart_glasses': ('gpt-5-nano', 'openai'),
+    'persona_chat': ('gpt-5-nano', 'openai'),
+    # Non-OpenAI routes remain intentionally unchanged.
+    'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
+    'followup': ('gemini-2.5-flash-lite', 'gemini'),
+    'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
+    'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
+    'trends': ('gemini-2.5-flash-lite', 'gemini'),
+    'translation': ('gemini-2.5-flash-lite', 'gemini'),
+    'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
+    'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+    'web_search': ('sonar-pro', 'perplexity'),
+}
+
 MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
-    # -----------------------------------------------------------------------
-    # premium — maximize cost savings while preserving 80% of max quality.
-    # Uses gpt-5.4-mini (not gpt-5.4) for core features, gpt-4.1-mini (not gpt-4.1)
-    # for quality-sensitive tasks, gpt-4.1-nano for simple routing/classification,
-    # and Gemini flash-lite for low-complexity free-text (titles, followups, onboarding).
-    # -----------------------------------------------------------------------
-    'premium': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4-mini', 'openai'),
-        'conv_structure': ('gpt-5.4-mini', 'openai'),
-        'conv_app_result': ('gpt-5.4-mini', 'openai'),
-        'conv_app_select': ('gpt-4.1-nano', 'openai'),
-        'conv_folder': ('gpt-4.1-nano', 'openai'),
-        'conv_discard': ('gpt-4.1-nano', 'openai'),
-        'daily_summary': ('gpt-5.4-mini', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-nano', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('gpt-5.4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-nano', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4-mini', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1-mini', 'openai'),
-        'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4-mini', 'openai'),
-        'notifications': ('gpt-5.4-mini', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gemini-2.5-flash-lite', 'gemini'),
-        'smart_glasses': ('gpt-4.1-nano', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
-        'app_generator': ('gpt-5.4-mini', 'openai'),
-        'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
-        'persona_clone': ('gpt-5.4-mini', 'openai'),
-        'trends': ('gemini-2.5-flash-lite', 'gemini'),
-        # Anthropic (used via get_model() + anthropic_client)
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
-    # -----------------------------------------------------------------------
-    # max — 100% quality, best models available, no cost optimization.
-    # Uses gpt-5.4 for all core features, o4-mini for reasoning (learnings),
-    # gpt-4.1 for chat graph. Pure OpenAI for highest accuracy.
-    # -----------------------------------------------------------------------
-    'max': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4', 'openai'),
-        'conv_structure': ('gpt-5.4', 'openai'),
-        'conv_app_result': ('gpt-5.4', 'openai'),
-        'conv_app_select': ('gpt-4.1-mini', 'openai'),
-        'conv_folder': ('gpt-4.1-mini', 'openai'),
-        'conv_discard': ('gpt-4.1-mini', 'openai'),
-        'daily_summary': ('gpt-5.4', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('o4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-mini', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1', 'openai'),
-        'session_titles': ('gpt-4.1-mini', 'openai'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4', 'openai'),
-        'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gpt-4.1-mini', 'openai'),
-        'smart_glasses': ('gpt-4.1-mini', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gpt-4.1-mini', 'openai'),
-        'app_generator': ('gpt-5.4', 'openai'),
-        'app_integration': ('gpt-4.1-mini', 'openai'),
-        'persona_clone': ('gpt-5.4', 'openai'),
-        'trends': ('gpt-4.1-mini', 'openai'),
-        # Anthropic
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
-    # -----------------------------------------------------------------------
-    # byok — same models as max. BYOK users pay their own API costs so they
-    # get the same best-quality routing as max subscribers.
-    # -----------------------------------------------------------------------
-    'byok': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4', 'openai'),
-        'conv_structure': ('gpt-5.4', 'openai'),
-        'conv_app_result': ('gpt-5.4', 'openai'),
-        'conv_app_select': ('gpt-4.1-mini', 'openai'),
-        'conv_folder': ('gpt-4.1-mini', 'openai'),
-        'conv_discard': ('gpt-4.1-mini', 'openai'),
-        'daily_summary': ('gpt-5.4', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('o4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-mini', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1', 'openai'),
-        'session_titles': ('gpt-4.1-mini', 'openai'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4', 'openai'),
-        'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gpt-4.1-mini', 'openai'),
-        'smart_glasses': ('gpt-4.1-mini', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gpt-4.1-mini', 'openai'),
-        'app_generator': ('gpt-5.4', 'openai'),
-        'app_integration': ('gpt-4.1-mini', 'openai'),
-        'persona_clone': ('gpt-5.4', 'openai'),
-        'trends': ('gpt-4.1-mini', 'openai'),
-        # Anthropic
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
+    profile_name: dict(_TWO_TIER_MODEL_PROFILE) for profile_name in ('premium', 'max', 'byok')
 }
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1').strip() or 'gpt-5.1', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.6-luna').strip() or 'gpt-5.6-luna', 'openai'),
 }
 
 # Resolve active profile once at startup.
@@ -243,14 +133,14 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 # Prompt-cache capability detection.
 #
 # OpenAI prompt caching is a capability of whole model families, not of specific point
-# releases. Gating on exact names (e.g. {'gpt-5.4', 'gpt-5.4-mini'}) silently breaks the
-# moment a model is renamed or a new family member ships, so we detect by family prefix.
+# releases. Gating on exact model names silently breaks when a family member changes,
+# so we detect by family prefix.
 #
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
-#                                  gpt-4.1, gpt-5.x and o-series families.
+#                                  gpt-4o, gpt-5.x and o-series families.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
 #                                  gpt-5.x and o-series families.
-_CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4.1', 'gpt-4o', 'o1', 'o3', 'o4')
+_CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
 # Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
@@ -261,10 +151,11 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'external_structure',
     'trends',
     'what_matters_now',
+    'translation',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
-_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
+_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-5.6-luna', 'openai')
 DEFAULT_CONFIG = _DEFAULT_CONFIG
 
 # Future migration point for features that should call the gateway via an auto
@@ -300,7 +191,7 @@ def get_model(feature: str) -> str:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
 
     Returns:
-        Model name string (e.g. 'gpt-4.1-mini', 'claude-sonnet-4-6').
+        Model name string (e.g. 'gpt-5.6-luna', 'claude-sonnet-4-6').
     """
     return _get_model_config(feature)[0]
 
