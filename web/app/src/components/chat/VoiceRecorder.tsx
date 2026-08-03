@@ -151,15 +151,18 @@ export function InlineVoiceRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (!isSupported) return null;
-
-  // Clear error after 3 seconds
+  // Clear error after 3 seconds.
+  // Must stay above the isSupported early return: isSupported is computed from
+  // `navigator`, which is undefined during SSR and defined on the client, so a
+  // hook below the return would change the hook count between renders.
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  if (!isSupported) return null;
 
   return (
     <div className="flex items-center gap-2">
