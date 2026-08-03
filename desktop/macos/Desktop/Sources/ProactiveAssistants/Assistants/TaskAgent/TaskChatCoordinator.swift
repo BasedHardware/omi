@@ -701,11 +701,10 @@ final class TaskChatCoordinator: ObservableObject {
         let messagesBefore = state.messages.count
         let sendGenerationBefore = state.localSendToken.generation
         Task { await state.sendMessage(query) }
+        await Task.yield()
         let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline,
-          state.localSendToken.generation == sendGenerationBefore,
-          state.isSending
-        {
+        while Date() < deadline, state.localSendToken.generation == sendGenerationBefore {
+          guard state.isSending else { break }
           try? await Task.sleep(nanoseconds: 25_000_000)
         }
         guard state.localSendToken.generation > sendGenerationBefore else {

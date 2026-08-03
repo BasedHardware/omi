@@ -539,6 +539,37 @@ class TaskChatState: ObservableObject {
     await refreshJournal(lease: lease)
   }
 
+  private func recoverTerminalizedJournalMessage(
+    messageId: String,
+    lease: TaskChatOwnerLease,
+    producingRunId: String,
+    producingAttemptId: String
+  ) async -> Bool {
+    guard isCurrent(lease),
+      let message = messages.first(where: { $0.id == messageId })
+    else { return false }
+    guard
+      let turn = try? await TaskChatRuntime.terminalizeJournalMessage(
+        workstreamId: workstreamId,
+        ownerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot,
+        message: message,
+        producingRunId: producingRunId,
+        producingAttemptId: producingAttemptId
+      ),
+      isCurrent(lease),
+      turn.turnId == messageId,
+      turn.producingRunId == producingRunId,
+      turn.producingAttemptId == producingAttemptId,
+      turn.status == .completed || turn.status == .failed
+    else {
+      return false
+    }
+    projectJournalTurn(turn)
+    await refreshJournal(lease: lease)
+    return true
+  }
+
   // MARK: - Send Message
 
   func sendMessage(_ text: String, taskContext: String? = nil) async {
@@ -619,6 +650,8 @@ class TaskChatState: ObservableObject {
       generation: 0,
       lifecycle: ChatTurnLifecycle(),
       currentGeneration: { 0 })
+    var producingRunIdentity: (runID: String, attemptID: String)?
+    var terminalizationCompleted = false
 
     do {
       let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
@@ -682,6 +715,7 @@ class TaskChatState: ObservableObject {
       else {
         throw BridgeError.agentError("Agent result did not match the producing task-chat turn")
       }
+      producingRunIdentity = (queryResult.runId, queryResult.attemptId)
       let terminalDisposition = TaskChatTerminalDisposition.classify(queryResult.terminalStatus)
 
       // Keep the metered reveal draining until the visible backlog is
@@ -691,6 +725,20 @@ class TaskChatState: ObservableObject {
       while streamingBuffer.hasPendingSegments {
         guard isCurrent(lease), !isStopping else {
           streamingBuffer.discardAllPendingSegments()
+          if isStopping,
+            let producingRunIdentity,
+            let index = messages.firstIndex(where: { $0.id == aiMessageId })
+          {
+            messages[index].isStreaming = false
+            completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
+            terminalizationCompleted =
+              (try? await terminalizeJournalMessage(
+                messageId: aiMessageId,
+                lease: lease,
+                producingRunId: producingRunIdentity.runID,
+                producingAttemptId: producingRunIdentity.attemptID
+              )) != nil
+          }
           throw BridgeError.stopped
         }
         flushStreamingBuffer(revealAll: false)
@@ -736,6 +784,7 @@ class TaskChatState: ObservableObject {
         lease: lease,
         producingRunId: queryResult.runId,
         producingAttemptId: queryResult.attemptId)
+      terminalizationCompleted = true
       let canonicalSucceeded = terminalTurn.status == .completed
       guard (terminalDisposition == .succeeded) == canonicalSucceeded,
         terminalDisposition != .invalid
@@ -790,7 +839,20 @@ class TaskChatState: ObservableObject {
         }
       }
 
-      await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)
+      if let producingRunIdentity {
+        if terminalizationCompleted {
+          await refreshJournal(lease: lease)
+        } else {
+          _ = await recoverTerminalizedJournalMessage(
+            messageId: aiMessageId,
+            lease: lease,
+            producingRunId: producingRunIdentity.runID,
+            producingAttemptId: producingRunIdentity.attemptID
+          )
+        }
+      } else {
+        await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)
+      }
 
       if !failedByUserStop {
         errorMessage = error.localizedDescription

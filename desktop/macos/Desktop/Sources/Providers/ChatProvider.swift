@@ -5139,6 +5139,15 @@ class ChatProvider: ObservableObject {
           }
         }
       }
+      guard
+        ChatQueryResultAuthority.acceptsContinuation(
+          currentGeneration: sendGeneration,
+          turnGeneration: sendGen,
+          turnAcceptsResult: turnLifecycle.acceptsResult
+        )
+      else {
+        throw BridgeError.stopped
+      }
       streamingBuffer.cancelPendingFlush()
 
       // Determine the final text to display and save
@@ -5962,9 +5971,49 @@ class ChatProvider: ObservableObject {
         }
       )
     }
+    materializeCompletedSpawnProjections()
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
     }
+  }
+
+  private func materializeCompletedSpawnProjections() {
+    for index in messages.indices {
+      let toolUseIDs = messages[index].contentBlocks.compactMap { block -> String? in
+        guard case .toolCall(_, let name, let status, let toolUseId, _, let output) = block,
+          !status.isInFlight,
+          output != nil
+        else { return nil }
+        let normalizedName =
+          name.hasPrefix("mcp__")
+          ? String(name.split(separator: "__").last ?? Substring(name))
+          : name
+        return normalizedName == "spawn_agent" ? toolUseId : nil
+      }
+      for toolUseId in toolUseIDs {
+        guard
+          let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
+            in: &messages[index].contentBlocks,
+            toolUseId: toolUseId,
+            toolName: "spawn_agent"
+          ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty
+        else { continue }
+        upsertSpawnedAgentPill(spawnedAgent)
+      }
+    }
+  }
+
+  private func upsertSpawnedAgentPill(_ spawnedAgent: SpawnedAgentPillProjection) {
+    AgentPillsManager.shared.upsertSpawnedPill(
+      id: spawnedAgent.pillID,
+      query: spawnedAgent.objective,
+      title: spawnedAgent.title,
+      sessionId: spawnedAgent.sessionID,
+      runId: spawnedAgent.runID,
+      attemptId: nil,
+      provider: spawnedAgent.provider,
+      producingJournalSurface: mainChatSurfaceReference()
+    )
   }
 
   /// Add a tool call indicator to a streaming message
