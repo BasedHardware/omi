@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import Omi_Computer
@@ -63,5 +64,49 @@ final class OmiMarkdownThematicBreakTests: XCTestCase {
       OmiMarkdownInlineCode.segments(in: "Use ``literal ` tick`` here"),
       [.text("Use "), .code("literal ` tick"), .text(" here")]
     )
+  }
+
+  func testInlineCodeMaskingPreservesSurroundingMarkdownSemantics() throws {
+    let source = "**bold `omi`** and [docs `--help`](https://example.com/docs)"
+    let masked = try XCTUnwrap(OmiMarkdownInlineCode.maskedMarkdown(source))
+    XCTAssertEqual(masked.placeholders.map(\.code), ["omi", "--help"])
+    XCTAssertFalse(masked.markdown.contains("`"))
+
+    let attributed = try AttributedString(
+      markdown: masked.markdown,
+      options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+    )
+    let renderedLines = OmiMarkdownInlineCode.renderSegments(
+      in: attributed,
+      placeholders: masked.placeholders
+    )
+    let rendered = renderedLines.map { line in
+      line.map { segment in
+        switch segment {
+        case .text(let value):
+          String(value.characters)
+        case .code(let value):
+          value
+        }
+      }.joined()
+    }.joined(separator: "\n")
+
+    XCTAssertEqual(rendered, "bold omi and docs --help")
+    XCTAssertFalse(rendered.contains("**"))
+    XCTAssertFalse(rendered.contains("[docs"))
+
+    let boldRun = try XCTUnwrap(
+      attributed.runs.first { String(attributed[$0.range].characters).contains("bold") }
+    )
+    if let intent = boldRun.inlinePresentationIntent {
+      XCTAssertTrue(intent.contains(.stronglyEmphasized))
+    } else {
+      XCTFail("bold Markdown semantics were not preserved")
+    }
+
+    let linkRun = try XCTUnwrap(
+      attributed.runs.first { String(attributed[$0.range].characters).contains("docs") }
+    )
+    XCTAssertEqual(linkRun.link?.absoluteString, "https://example.com/docs")
   }
 }

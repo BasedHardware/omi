@@ -285,27 +285,35 @@ extension AppState {
       // -1744 = not determined, -600 = target not running. A status refresh is
       // observational only: do not launch System Events or send an Apple Event
       // just to improve a badge on startup.
+      let previousValue = await MainActor.run { self.hasAutomationPermission }
+      let projection = Self.automationPermissionProjection(
+        status: status,
+        previousPermission: previousValue
+      )
       if status == -600 {
-        log("AUTOMATION_CHECK: status=-600 (procNotFound); leaving System Events stopped")
-        await MainActor.run {
-          self.hasAutomationPermission = false
-          self.automationPermissionError = 0
-        }
-      } else {
-        let hasPermission = status == noErr
-        let previousValue = await MainActor.run { self.hasAutomationPermission }
-        if hasPermission != previousValue {
-          log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
-        }
+        log(
+          "AUTOMATION_CHECK: status=-600 (procNotFound); preserving last known grant and leaving System Events stopped")
+      } else if projection.hasPermission != previousValue {
+        log("AUTOMATION_CHECK: status=\(status), hasPermission=\(projection.hasPermission)")
+      }
 
-        await MainActor.run {
-          self.hasAutomationPermission = hasPermission
-          // Track unexpected errors (not denied/not-determined, which are normal states)
-          self.automationPermissionError =
-            (status == noErr || status == -1743 || status == -1744) ? 0 : status
-        }
+      await MainActor.run {
+        self.hasAutomationPermission = projection.hasPermission
+        self.automationPermissionError = projection.error
       }
     }
+  }
+
+  nonisolated static func automationPermissionProjection(
+    status: OSStatus,
+    previousPermission: Bool
+  ) -> (hasPermission: Bool, error: OSStatus) {
+    if status == -600 {
+      return (previousPermission, status)
+    }
+    let hasPermission = status == noErr
+    let error = (status == noErr || status == -1743 || status == -1744) ? 0 : status
+    return (hasPermission, error)
   }
 
   /// Query the TCC automation permission status for System Events without triggering a prompt

@@ -1380,6 +1380,10 @@ class ChatProvider: ObservableObject {
   @Published var claudeAuthUrl: String?
   /// Prevent duplicate browser launches for the same explicit User Claude flow.
   private var claudeAuthLaunchRequested = false
+  /// The current process has observed a successful explicit OAuth callback.
+  /// Passive settings refreshes must not erase that state when Claude stores the
+  /// token in its foreign Keychain item instead of the legacy config file.
+  private var claudeAuthSucceededInCurrentProcess = false
   /// Whether the user has a cached Claude OAuth token
   @Published var isClaudeConnected = false
   /// Cumulative tokens used in the current session via Omi account
@@ -2214,7 +2218,22 @@ class ChatProvider: ObservableObject {
       harness: activeBridgeHarness,
       bridgeMode: bridgeMode
     )
-    checkClaudeConnectionStatus()
+    markClaudeAuthSucceeded()
+  }
+
+  /// Record the result of an explicit OAuth flow without probing Claude's
+  /// Keychain item. The bridge owns that credential and the success event is
+  /// the authoritative signal for this process.
+  func markClaudeAuthSucceeded() {
+    claudeAuthSucceededInCurrentProcess = true
+    isClaudeConnected = true
+  }
+
+  nonisolated static func claudeConnectionStatus(
+    configToken: String?,
+    explicitAuthSucceeded: Bool
+  ) -> Bool {
+    explicitAuthSucceeded || (configToken?.isEmpty == false)
   }
 
   nonisolated static func validatedClaudeOAuthURL(_ urlString: String?) -> URL? {
@@ -2267,17 +2286,21 @@ class ChatProvider: ObservableObject {
   /// a login-keychain password sheet as soon as Settings appears. An explicit
   /// connect flow owns any credential request instead.
   func checkClaudeConnectionStatus() {
-    // Check config file
+    // Check the legacy config file, but preserve a successful explicit OAuth
+    // event when the current Claude flow stores credentials only in Keychain.
     let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+    var configToken: String?
     if FileManager.default.fileExists(atPath: configPath),
       let data = FileManager.default.contents(atPath: configPath),
       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let tokenCache = json["oauth:tokenCache"] as? String, !tokenCache.isEmpty
+      let tokenCache = json["oauth:tokenCache"] as? String
     {
-      isClaudeConnected = true
-      return
+      configToken = tokenCache
     }
-    isClaudeConnected = false
+    isClaudeConnected = Self.claudeConnectionStatus(
+      configToken: configToken,
+      explicitAuthSucceeded: claudeAuthSucceededInCurrentProcess
+    )
   }
 
   /// Disconnect from Claude: clear OAuth token, switch back to free mode via serialized path
@@ -2318,6 +2341,7 @@ class ChatProvider: ObservableObject {
     }
 
     // 3. Update state
+    claudeAuthSucceededInCurrentProcess = false
     isClaudeConnected = false
 
     // 4. Make piMono the default for future sessions without migrating or

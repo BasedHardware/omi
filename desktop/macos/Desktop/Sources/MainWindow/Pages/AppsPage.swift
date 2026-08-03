@@ -844,6 +844,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     var lastSyncedAt: Date?
     var lastDeltaCount: Int?
     var availabilityText: String?
+    var requiresVerification = false
   }
 
   struct Snapshot {
@@ -919,6 +920,7 @@ final class ImportConnectorStatusStore: ObservableObject {
       defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
     }
     metrics.lastSyncedAt = syncedAt
+    metrics.requiresVerification = false
     defaults.set(
       syncedAt.timeIntervalSince1970,
       forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
@@ -991,6 +993,11 @@ final class ImportConnectorStatusStore: ObservableObject {
         let timestamp = defaults.double(forKey: lastSyncedAtKey)
         if timestamp > 0 {
           metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+          // Apple Notes access is revocable and its security-scoped folder
+          // grant can disappear between launches. A persisted import proves
+          // history, not current readability, so require an explicit refresh
+          // before displaying it as connected.
+          metrics.requiresVerification = connector.id == "apple-notes"
         }
       }
       if defaults.bool(forKey: hasLastDeltaKey) {
@@ -1138,11 +1145,18 @@ final class ImportConnectorStatusStore: ObservableObject {
   }
 
   private func refreshAppleNotesMetrics() async {
-    // Apple Notes metrics are loaded from persisted connector state. Reading
-    // NoteStore.sqlite is reserved for the explicit Connect/Import action.
+    // Reading NoteStore.sqlite is reserved for the explicit Connect/Import
+    // action. Marking a persisted import as unverified keeps passive refreshes
+    // honest without opening the protected Notes store.
+    guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
+    metrics.requiresVerification = true
+    metricsByID["apple-notes"] = metrics
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
+    if metrics.requiresVerification {
+      return false
+    }
     if metrics.lastSyncedAt != nil {
       return true
     }
@@ -1155,6 +1169,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String {
+    if connector.id == "apple-notes", metrics.requiresVerification {
+      return "Reconnect to verify access"
+    }
+
     if let sourceCount = metrics.sourceCount {
       if let memoryCount = metrics.memoryCount, memoryCount > 0 {
         return
@@ -1181,6 +1199,12 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String? {
+    if connector.id == "apple-notes", metrics.requiresVerification,
+      let lastSyncedAt = metrics.lastSyncedAt
+    {
+      return "Last imported \(relativeTimestamp(lastSyncedAt))"
+    }
+
     if let lastSyncedAt = metrics.lastSyncedAt {
       var text = "Synced \(relativeTimestamp(lastSyncedAt))"
       if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {

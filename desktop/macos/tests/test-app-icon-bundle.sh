@@ -4,12 +4,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUN="$MACOS_DIR/run.sh"
+CHECKS_MANIFEST="$MACOS_DIR/../../.github/checks-manifest.yaml"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omi-app-icon.XXXXXX")"
 
 cleanup() {
   rm -rf "$TMP_ROOT"
 }
 trap cleanup EXIT
+
+grep -Fq -- '- id: desktop-app-icon-bundle' "$CHECKS_MANIFEST" \
+  || { echo "FAIL: app-icon regression test is missing from the checks manifest" >&2; exit 1; }
+grep -Fq -- 'command: ["bash", "desktop/macos/tests/test-app-icon-bundle.sh"]' "$CHECKS_MANIFEST" \
+  || { echo "FAIL: checks manifest does not execute the app-icon regression test" >&2; exit 1; }
 
 ICON_COPY_FUNCTION="$(sed -n '/^copy_app_icon()/,/^}/p' "$RUN")"
 if [[ -z "$ICON_COPY_FUNCTION" ]]; then

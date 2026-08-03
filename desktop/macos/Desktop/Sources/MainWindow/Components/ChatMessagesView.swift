@@ -161,6 +161,14 @@ enum ChatTranscriptWindow {
     return Array(messages.suffix(limit))
   }
 
+  static func prependAnchorID(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> String? {
+    visibleMessages(in: messages, policy: policy, presentation: presentation).first?.id
+  }
+
   /// Duplicate detection only needs to inspect rows this surface can render.
   /// Keeping the windowing at this boundary gives streaming body evaluations a
   /// deterministic O(visible-window) work budget even when the journal grows.
@@ -474,7 +482,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .onChange(of: isLoadingMoreMessages) { _, isLoading in
       if isLoading {
         // Capture the first message ID before the load begins
-        prependAnchorId = messages.first?.id
+        prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+          in: messages,
+          policy: effectiveTranscriptWindowPolicy,
+          presentation: transcriptWindowPresentation
+        )
       } else {
         // Load finished — restore prepend anchor if user hasn't scrolled
         restorePrependAnchor(proxy: proxy)
@@ -722,12 +734,20 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     if action != .none {
       Button {
         if action == .revealLocallyLoadedRows || action == .revealLocallyLoadedRowsAndLoadMore {
-          prependAnchorId = messages.first?.id
+          prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+            in: messages,
+            policy: effectiveTranscriptWindowPolicy,
+            presentation: transcriptWindowPresentation
+          )
           transcriptWindowPresentation = .expanded
         }
         if action == .loadMoreRows || action == .revealLocallyLoadedRowsAndLoadMore {
           if prependAnchorId == nil {
-            prependAnchorId = messages.first?.id
+            prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+              in: messages,
+              policy: effectiveTranscriptWindowPolicy,
+              presentation: transcriptWindowPresentation
+            )
           }
           Task {
             await onLoadMore()

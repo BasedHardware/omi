@@ -317,6 +317,161 @@ async def test_tool_loop_still_reaches_a_second_iteration(agentic_mod):
     assert ''.join(full_response) == 'done'
 
 
+async def test_gateway_agent_uses_openai_tools_and_continues_after_tool_call(agentic_mod, monkeypatch):
+    """Managed chat must use chat-completions tool history, not Anthropic content blocks."""
+
+    class GatewayChatModel:
+        def __init__(self):
+            self.bind_kwargs = None
+            self.calls = []
+            self.streams = [
+                [
+                    types.SimpleNamespace(
+                        content='',
+                        tool_call_chunks=[
+                            {'index': 0, 'id': 'call_1', 'name': 'lookup', 'args': '{"query":'},
+                        ],
+                    ),
+                    types.SimpleNamespace(
+                        content='',
+                        tool_call_chunks=[{'index': 0, 'args': '"omi"}'}],
+                    ),
+                ],
+                [types.SimpleNamespace(content='done', tool_call_chunks=[])],
+            ]
+
+        def bind(self, **kwargs):
+            self.bind_kwargs = kwargs
+            return self
+
+        async def astream(self, messages):
+            self.calls.append(messages)
+            for chunk in self.streams.pop(0):
+                yield chunk
+
+    gateway_model = GatewayChatModel()
+    monkeypatch.setattr(agentic_mod, 'get_llm', lambda *args, **kwargs: gateway_model)
+
+    safety_guard = MagicMock()
+    safety_guard.should_warn_user.return_value = None
+    safety_guard.get_stats.return_value = {}
+    callback = agentic_mod.AsyncStreamingCallback()
+    full_response = []
+    tool_schemas = agentic_mod._convert_anthropic_tools_to_openai(
+        [
+            agentic_mod.WEB_SEARCH_TOOL,
+            agentic_mod.TOOL_SEARCH_TOOL,
+            {
+                'name': 'lookup',
+                'description': 'Look something up',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {'query': {'type': 'string'}},
+                    'required': ['query'],
+                },
+            },
+        ]
+    )
+
+    with patch.object(agentic_mod, '_execute_tool', new=AsyncMock(return_value='tool result')):
+        result = await agentic_mod._run_openai_agent_stream(
+            'SYSTEM',
+            [{'role': 'user', 'content': 'question'}],
+            tool_schemas,
+            {'lookup': MagicMock()},
+            callback,
+            full_response,
+            safety_guard,
+            {'user_id': 'user-1'},
+        )
+
+    assert result is None
+    assert ''.join(full_response) == 'done'
+    assert len(gateway_model.calls) == 2
+    assert gateway_model.calls[0][0] == {'role': 'system', 'content': 'SYSTEM'}
+    assert gateway_model.calls[1][-2]['role'] == 'assistant'
+    assert gateway_model.calls[1][-2]['tool_calls'][0]['function']['name'] == 'lookup'
+    assert gateway_model.calls[1][-1] == {
+        'role': 'tool',
+        'tool_call_id': 'call_1',
+        'content': 'tool result',
+    }
+    assert [tool['function']['name'] for tool in gateway_model.bind_kwargs['tools']] == ['lookup']
+
+
+def test_gateway_tool_conversion_drops_anthropic_server_tools(agentic_mod):
+    converted = agentic_mod._convert_anthropic_tools_to_openai(
+        [
+            agentic_mod.WEB_SEARCH_TOOL,
+            agentic_mod.TOOL_SEARCH_TOOL,
+            {'name': 'lookup', 'input_schema': {'type': 'object'}},
+        ]
+    )
+
+    assert converted == [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'lookup',
+                'description': '',
+                'parameters': {'type': 'object'},
+            },
+        }
+    ]
+
+
+async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
+    callback_data = {}
+    seen = {}
+
+    async def fake_run_blocking(_executor, function, *_args, **_kwargs):
+        if function is agentic_mod.get_user_timezone:
+            return 'UTC'
+        if function is agentic_mod._get_agentic_qa_prompt:
+            return 'SYSTEM'
+        if function is agentic_mod.load_app_tools:
+            return []
+        raise AssertionError(f'unexpected blocking setup call: {function}')
+
+    async def openai_runner(system, messages, schemas, _registry, callback, full_response, _guard, _configurable):
+        seen.update({'system': system, 'messages': messages, 'schemas': schemas})
+        full_response.append('managed answer')
+        await callback.put_data('managed answer')
+        await callback.end()
+        return None
+
+    async def anthropic_runner(*_args):
+        raise AssertionError('gateway mode selected the Anthropic runner')
+
+    with patch.object(agentic_mod, 'should_route_features_through_gateway', return_value=True), patch.object(
+        agentic_mod, 'run_blocking', new=fake_run_blocking
+    ), patch.object(agentic_mod, '_convert_tools', return_value=([], {})), patch.object(
+        agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
+    ), patch.object(
+        agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages
+    ), patch.object(
+        agentic_mod, '_run_openai_agent_stream', new=openai_runner
+    ), patch.object(
+        agentic_mod, '_run_anthropic_agent_stream', new=anthropic_runner
+    ):
+        chunks = [
+            chunk
+            async for chunk in agentic_mod.execute_agentic_chat_stream(
+                'uid_test',
+                [_chat_message('hello')],
+                callback_data=callback_data,
+                current_datetime_block='<current_datetime/>',
+            )
+        ]
+
+    assert chunks == ['data: managed answer', None]
+    assert callback_data['answer'] == 'managed answer'
+    assert seen['system'].startswith('SYSTEM')
+    assert '<url_fetching_instructions>' in seen['system']
+    assert seen['messages'] == [{'role': 'user', 'content': 'hello'}]
+    assert seen['schemas'] == []
+
+
 async def test_safety_guard_message_becomes_the_answer(agentic_mod):
     """Guard text reached the client but not the answer, so the canned error overwrote it."""
     guard = MagicMock()
