@@ -70,9 +70,9 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-/** Per-request timeout composed with the external (session) abort. A timeout
- *  surfaces as a retryable 'TimeoutError'; the external signal stays an
- *  'AbortError' (terminal). Same seam as focus/gemini.ts. */
+/** Per-request timeout composed with the external (session) abort. A local
+ *  timeout surfaces as a terminal 'TimeoutError'; the external signal stays an
+ *  'AbortError' (also terminal). Only typed backend responses authorize replay. */
 async function withTimeout<T>(
   ms: number,
   fn: (signal: AbortSignal) => Promise<T>,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import sys
 import tempfile
 import unittest
@@ -26,6 +27,52 @@ def sse_event(payload: object) -> bytes:
 
 
 class CandidateProbeTests(unittest.TestCase):
+    def test_gemini_request_uses_unique_uuid_request_id(self) -> None:
+        class Response:
+            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
+
+        request_id = "12345678-1234-5678-1234-567812345678"
+        with mock.patch.object(PROBE.uuid, "uuid4", return_value=request_id), mock.patch.object(
+            PROBE.urllib.request, "urlopen", return_value=Response()
+        ) as urlopen:
+            PROBE._gemini_request("https://candidate.example", token="token")
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("X-omi-request-id"), f"candidate-probe-{request_id}")
+
+    @unittest.skipUnless(hasattr(signal, "SIGALRM"), "requires POSIX interval timers")
+    def test_gemini_response_read_is_interrupted_at_total_budget(self) -> None:
+        class DripFeedResponse:
+            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                handler = signal.getsignal(signal.SIGALRM)
+                if handler in (signal.SIG_DFL, signal.SIG_IGN):
+                    raise AssertionError("deadline handler was not installed")
+                handler(signal.SIGALRM, None)
+                raise AssertionError("deadline handler must interrupt the response read")
+
+        with mock.patch.object(PROBE.signal, "setitimer", return_value=(0.0, 0.0)), mock.patch.object(
+            PROBE.urllib.request, "urlopen", return_value=DripFeedResponse()
+        ):
+            with self.assertRaisesRegex(PROBE.ProbeError, "exceeded 70s response budget"):
+                PROBE._gemini_request("https://candidate.example", token="token")
+
     def test_gemini_probe_rejects_stub_or_unknown_provider_routes(self) -> None:
         for provider in ("offline_stub", "unknown", ""):
             with self.assertRaisesRegex(PROBE.ProbeError, "admitted provider"):

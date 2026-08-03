@@ -33,10 +33,8 @@ export class GeminiHttpError extends Error {
 /** Replay only when the backend explicitly marks the response retryable. */
 function isTransient(e: unknown): boolean {
   if (e instanceof GeminiHttpError) return e.retryable
-  // A per-request TIMEOUT (surfaced as 'TimeoutError') and a bare network error
-  // (TypeError from net.fetch) are both worth retrying. Only a genuine session
-  // sign-out — the external AbortSignal firing, surfaced as 'AbortError' — is
-  // terminal: the token is dead, so retrying is pointless.
+  // Local timeouts, bare network failures, and session cancellation are
+  // ambiguous after dispatch, so they fail closed instead of replaying.
   return false
 }
 

@@ -210,11 +210,11 @@ actor GeminiClient {
     case missingAPIKey
     case networkError(Error)
     case invalidResponse
-    case apiError(String)
+    case apiError(String, retryable: Bool? = nil)
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
-      if case .apiError(let msg) = self { return msg }
+      if case .apiError(let msg, _) = self { return msg }
       return nil
     }
 
@@ -223,7 +223,7 @@ actor GeminiClient {
     /// decisions and Sentry noise suppression (these flood without being actionable).
     var isTransient: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return Self.isTimeoutLike(lower)
           || lower.contains("service unavailable")
@@ -246,12 +246,8 @@ actor GeminiClient {
     /// the user waiting through several multi-minute attempts.
     var shouldAutoRetry: Bool {
       switch self {
-      case .apiError(let message):
-        let lower = message.lowercased()
-        if lower.contains("\"retryable\":false") || lower.contains("\"retryable\": false") {
-          return false
-        }
-        return isTransient && !Self.isTimeoutLike(lower)
+      case .apiError(_, let retryable):
+        return retryable == true
       case .networkError:
         // A transport error after dispatch is ambiguous. Only a typed backend
         // response may authorize replay.
@@ -265,7 +261,7 @@ actor GeminiClient {
     /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
     var isExpectedProductState: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return lower.contains("trial_expired")
           || lower.contains("trial expired")
@@ -290,7 +286,7 @@ actor GeminiClient {
         return "Could not reach AI service. Check your internet connection and try again."
       case .invalidResponse:
         return "AI service returned an unexpected response. Please try again."
-      case .apiError(let message):
+      case .apiError(let message, _):
         return Self.userFacingMessage(for: message)
       }
     }
@@ -397,15 +393,30 @@ actor GeminiClient {
     throw GeminiClientError.invalidResponse
   }
 
-  /// Check HTTP status code before attempting JSON decode.
-  /// Throws GeminiClientError.apiError for non-2xx responses so the error flows
-  /// through isTransientError() and userFacingMessage() instead of crashing JSONDecoder.
-  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
-    guard let httpResponse = response as? HTTPURLResponse else { return }
+  /// Convert a non-2xx response into a typed error while preserving the backend's
+  /// replay authorization. Missing or malformed retryability remains fail-closed.
+  static func httpError(response: URLResponse, data: Data) -> GeminiClientError? {
+    guard let httpResponse = response as? HTTPURLResponse else { return nil }
     let status = httpResponse.statusCode
-    guard (200..<300).contains(status) else {
-      let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
-      throw GeminiClientError.apiError("HTTP \(status): \(body)")
+    guard !(200..<300).contains(status) else { return nil }
+
+    let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+    let retryable: Bool?
+    switch httpResponse.value(forHTTPHeaderField: "X-Omi-Retryable")?.lowercased() {
+    case "true":
+      retryable = true
+    case "false":
+      retryable = false
+    default:
+      retryable = nil
+    }
+    return .apiError("HTTP \(status): \(body)", retryable: retryable)
+  }
+
+  /// Check HTTP status code before attempting JSON decode.
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    if let error = Self.httpError(response: response, data: data) {
+      throw error
     }
   }
 
@@ -436,7 +447,7 @@ actor GeminiClient {
           return "timeout"
         }
         return "other"
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         if lower.contains("upstream_timeout")
           || lower.contains("timed out")

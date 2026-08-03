@@ -7,7 +7,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 import httpx
@@ -442,21 +442,42 @@ async def _wait_for_disconnect(request: Request) -> None:
         await asyncio.sleep(_DISCONNECT_POLL_SECONDS)
 
 
+async def _await_value(awaitable: Awaitable[T]) -> T:
+    return await awaitable
+
+
 async def _cancel_on_disconnect(request: Request, awaitable: Awaitable[T]) -> T:
-    upstream_task = asyncio.create_task(awaitable, name='desktop-gemini-upstream')
+    upstream_task = asyncio.create_task(_await_value(awaitable), name='desktop-gemini-upstream')
     disconnect_task = asyncio.create_task(_wait_for_disconnect(request), name='desktop-gemini-disconnect')
     try:
         done, _ = await asyncio.wait((upstream_task, disconnect_task), return_when=asyncio.FIRST_COMPLETED)
         if upstream_task in done:
             return await upstream_task
+        raise ClientDisconnected
+    finally:
         upstream_task.cancel()
         with suppress(asyncio.CancelledError):
             await upstream_task
-        raise ClientDisconnected
-    finally:
         disconnect_task.cancel()
         with suppress(asyncio.CancelledError):
             await disconnect_task
+
+
+async def _read_request_body(request: Request) -> bytes:
+    content_length = request.headers.get('content-length')
+    if content_length is not None:
+        if not content_length.isascii() or not content_length.isdigit():
+            raise HTTPException(status_code=400, detail='Content-Length must be a non-negative integer')
+        declared_length = int(content_length)
+        if declared_length > _MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail='Request body is too large')
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail='Request body is too large')
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _response_headers(
@@ -598,7 +619,6 @@ async def _stream_provider(
     client = get_desktop_gemini_stream_client()
     semaphore = get_desktop_gemini_semaphore()
     context: Any | None = None
-    upstream: httpx.Response | None = None
     acquired = False
     opened = False
     try:
@@ -614,12 +634,12 @@ async def _stream_provider(
                 content=body,
                 headers={'Content-Type': 'application/json', **route.headers},
             )
-            upstream = await _cancel_on_disconnect(request, context.__aenter__())
+            upstream = cast(httpx.Response, await _cancel_on_disconnect(request, context.__aenter__()))
             opened = True
         telemetry.phase = 'first_byte'
         if upstream.status_code >= 400:
             response = _provider_error(upstream, telemetry)
-            event = json.loads(response.body)
+            event = json.loads(bytes(response.body))
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
         async for chunk in upstream.aiter_bytes():
@@ -653,12 +673,7 @@ async def _stream_provider(
 async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:
     telemetry = ProxyTelemetry(request, streaming=streaming)
     try:
-        content_length = request.headers.get('content-length')
-        if content_length and content_length.isdigit() and int(content_length) > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
-        body = await request.body()
-        if len(body) > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
+        body = await _read_request_body(request)
         telemetry.shape = _payload_shape(body)
         path, model, action = _path_parts(path)
         telemetry.model = model

@@ -317,6 +317,72 @@ async def test_disconnect_cancels_in_flight_provider_call():
 
 
 @pytest.mark.asyncio
+async def test_outer_cancellation_cleans_up_in_flight_provider_call():
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class ConnectedRequest:
+        async def is_disconnected(self):
+            return False
+
+    async def provider_call():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    task = asyncio.create_task(desktop_proxy._cancel_on_disconnect(ConnectedRequest(), provider_call()))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content_length", ["invalid", "-1"])
+async def test_request_body_rejects_malformed_content_length(content_length):
+    class RequestWithInvalidLength:
+        headers = {"content-length": content_length}
+
+        async def stream(self):
+            raise AssertionError("invalid Content-Length must be rejected before reading the body")
+            yield b""
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._read_request_body(RequestWithInvalidLength())
+
+    assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_request_body_bounds_chunked_stream_without_calling_body(monkeypatch):
+    streamed_chunks = 0
+
+    class ChunkedRequest:
+        headers = {}
+
+        async def stream(self):
+            nonlocal streamed_chunks
+            for chunk in (b"123", b"456"):
+                streamed_chunks += 1
+                yield chunk
+
+        async def body(self):
+            raise AssertionError("request.body() would aggregate an unbounded chunked request")
+
+    monkeypatch.setattr(desktop_proxy, "_MAX_BODY_BYTES", 5)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._read_request_body(ChunkedRequest())
+
+    assert error.value.status_code == 413
+    assert streamed_chunks == 2
+
+
+@pytest.mark.asyncio
 async def test_post_routing_validation_emits_one_typed_terminal_outcome(monkeypatch):
     async def meter(_uid, path, _model, _action):
         return path
@@ -397,12 +463,21 @@ async def test_proxy_bounds_concurrency_pool_wait_and_labels_phase(monkeypatch):
 @pytest.mark.asyncio
 async def test_streaming_defers_resource_acquisition_until_body_iteration(monkeypatch):
     streams_opened = 0
+    streams_closed = 0
+
+    class StreamContext:
+        async def __aenter__(self):
+            return httpx.Response(200, content=b'data: {"ok":true}\n\n')
+
+        async def __aexit__(self, *_args):
+            nonlocal streams_closed
+            streams_closed += 1
 
     class Client:
         def stream(self, *args, **kwargs):
             nonlocal streams_opened
             streams_opened += 1
-            raise AssertionError("stream must remain lazy before ASGI body iteration")
+            return StreamContext()
 
     async def meter(_uid, path, _model, _action):
         return path
@@ -413,8 +488,13 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
     monkeypatch.setattr(desktop_proxy, "_upstream", route)
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
 
     response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:streamGenerateContent", True, "user")
 
     assert response.status_code == 200
     assert streams_opened == 0
+    chunks = [chunk async for chunk in response.body_iterator]
+    assert chunks == [b'data: {"ok":true}\n\n']
+    assert streams_opened == 1
+    assert streams_closed == 1

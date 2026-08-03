@@ -20,13 +20,16 @@ import argparse
 import json
 import os
 import re
+import signal
 import stat
 import time
 import urllib.error
 import urllib.request
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 HTTP_TIMEOUT_SECONDS = 75
 MAX_CHAT_SECONDS = 70
@@ -47,6 +50,35 @@ class ChatResult:
     first_event_seconds: float
     saw_usage: bool
     web_search_requests: int
+
+
+@contextmanager
+def _total_response_budget(*, stage: str, started_at: float, max_elapsed_seconds: float) -> Iterator[None]:
+    """Interrupt blocking response reads when the end-to-end budget expires."""
+    remaining = max_elapsed_seconds - (time.monotonic() - started_at)
+    if remaining <= 0:
+        raise ProbeError(f"{stage}: exceeded {max_elapsed_seconds:g}s response budget")
+    if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
+        raise ProbeError(f"{stage}: total response deadline is unsupported on this runner")
+
+    alarm = signal.SIGALRM
+    previous_handler = signal.getsignal(alarm)
+    armed_at = time.monotonic()
+
+    def deadline_expired(_signum: int, _frame: object) -> None:
+        raise ProbeError(f"{stage}: exceeded {max_elapsed_seconds:g}s response budget")
+
+    signal.signal(alarm, deadline_expired)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, remaining)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(alarm, previous_handler)
+        previous_delay, previous_interval = previous_timer
+        if previous_delay > 0:
+            elapsed = time.monotonic() - armed_at
+            signal.setitimer(signal.ITIMER_REAL, max(previous_delay - elapsed, 1e-6), previous_interval)
 
 
 def _require_object(value: object, *, stage: str) -> dict[str, Any]:
@@ -241,21 +273,26 @@ def _gemini_request(
             "Accept": "application/json",
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "X-Omi-Request-Id": f"candidate-probe-{int(time.time())}",
+            "X-Omi-Request-Id": f"candidate-probe-{uuid.uuid4()}",
         },
         method="POST",
     )
     started_at = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_payload = _require_object(json.loads(response.read().decode("utf-8")), stage="gemini_proxy")
-            candidates = response_payload.get("candidates")
-            if not isinstance(candidates, list) or not candidates:
-                raise ProbeError("gemini_proxy: provider response has no candidates")
-            provider = _require_real_gemini_provider(response.headers.get("x-omi-provider"))
-            request_id = response.headers.get("x-omi-request-id") or response.headers.get("x-request-id")
-            if not request_id:
-                raise ProbeError("gemini_proxy: typed proxy headers are missing")
+        with _total_response_budget(
+            stage="gemini_proxy", started_at=started_at, max_elapsed_seconds=MAX_CHAT_SECONDS
+        ):
+            with urllib.request.urlopen(request, timeout=min(timeout, MAX_CHAT_SECONDS)) as response:
+                response_payload = _require_object(
+                    json.loads(response.read().decode("utf-8")), stage="gemini_proxy"
+                )
+                candidates = response_payload.get("candidates")
+                if not isinstance(candidates, list) or not candidates:
+                    raise ProbeError("gemini_proxy: provider response has no candidates")
+                provider = _require_real_gemini_provider(response.headers.get("x-omi-provider"))
+                request_id = response.headers.get("x-omi-request-id") or response.headers.get("x-request-id")
+                if not request_id:
+                    raise ProbeError("gemini_proxy: typed proxy headers are missing")
     except ProbeError:
         raise
     except urllib.error.HTTPError as error:
@@ -308,29 +345,30 @@ def _chat_request(
     )
     started_at = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_contract = response.headers.get("x-omi-chat-contract-version")
-            if response_contract != contract_version:
-                raise ProbeError(
-                    f"{stage}: response contract mismatch "
-                    f"(expected={contract_version}, actual={response_contract or 'missing'})"
+        with _total_response_budget(stage=stage, started_at=started_at, max_elapsed_seconds=MAX_CHAT_SECONDS):
+            with urllib.request.urlopen(request, timeout=min(timeout, MAX_CHAT_SECONDS)) as response:
+                response_contract = response.headers.get("x-omi-chat-contract-version")
+                if response_contract != contract_version:
+                    raise ProbeError(
+                        f"{stage}: response contract mismatch "
+                        f"(expected={contract_version}, actual={response_contract or 'missing'})"
+                    )
+                answer, _, web_search_requests, first_event_seconds, saw_usage = parse_sse(
+                    response,
+                    stage=stage,
+                    started_at=started_at,
+                    max_elapsed_seconds=MAX_CHAT_SECONDS,
                 )
-            answer, _, web_search_requests, first_event_seconds, saw_usage = parse_sse(
-                response,
-                stage=stage,
-                started_at=started_at,
-                max_elapsed_seconds=MAX_CHAT_SECONDS,
-            )
-            elapsed_seconds = time.monotonic() - started_at
-            if elapsed_seconds > MAX_CHAT_SECONDS:
-                raise ProbeError(f"{stage}: exceeded {MAX_CHAT_SECONDS}s response budget")
-            return ChatResult(
-                answer=answer,
-                elapsed_seconds=elapsed_seconds,
-                first_event_seconds=first_event_seconds,
-                saw_usage=saw_usage,
-                web_search_requests=web_search_requests,
-            )
+                elapsed_seconds = time.monotonic() - started_at
+                if elapsed_seconds > MAX_CHAT_SECONDS:
+                    raise ProbeError(f"{stage}: exceeded {MAX_CHAT_SECONDS}s response budget")
+                return ChatResult(
+                    answer=answer,
+                    elapsed_seconds=elapsed_seconds,
+                    first_event_seconds=first_event_seconds,
+                    saw_usage=saw_usage,
+                    web_search_requests=web_search_requests,
+                )
     except ProbeError:
         raise
     except urllib.error.HTTPError as error:
