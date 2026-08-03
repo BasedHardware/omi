@@ -1,0 +1,364 @@
+backend/utils/llm/people_dossier.py
+  s_0c099cae24c74c::t_ff4cb506e074b3 1-409
+  s_0c099cae24c74c::t_864787bc21b30f 410-427
+backend/tests/unit/test_backend_candidate_capture.py
+  s_0c099cae24c74c::t_73d084798eda97 31-40,50,64
+  s_0c099cae24c74c::t_7634811852ff5a 205,219,227,260,271,276,287,389
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonProfilePage.swift
+  s_0c099cae24c74c::t_2d2d85d5ea5765 514-517,531,533,537-542,544-545
+  s_0c099cae24c74c::t_382255c1cb4911 82-86
+  s_0c099cae24c74c::t_47a552a63cf913 87,504-511,521-524,529-530,532,534-536,543,546-550,560-590,593-597,599-618
+  s_0c099cae24c74c::t_de048717db9635 649-650,653
+  s_0c099cae24c74c::t_ade231d5e7423d 591-592,598
+  s_0c099cae24c74c::t_4056a755013eaa 551-559
+  s_0c099cae24c74c::t_932ea2111e05a9 498-503
+  s_0c099cae24c74c::t_3dd38e9f146094 42
+  s_0c099cae24c74c::t_d1a008768b1ab2 81,512,518,619-620,654
+backend/models/structured_extraction.py
+  s_0c099cae24c74c::t_b9d1759d21f7ca 19-25,41
+plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
+  s_0c099cae24c74c::t_09f41aa645dd80 60-63
+backend/main.py
+  s_0c099cae24c74c::t_f7a7977acc7122 64
+  s_0c099cae24c74c::t_d214004c2e1cd9 170
+desktop/macos/Desktop/Tests/PeopleContactPhotosTests.swift
+  s_0c099cae24c74c::t_6c75b5128fb1e0 88-183
+backend/routers/action_items.py
+  s_0c099cae24c74c::t_e32f152475fe4b 354-361,364-372,382-412
+desktop/macos/Desktop/Tests/PeopleSelectionTests.swift
+  s_0c099cae24c74c::t_eb5cb47f51ea38 1-396
+backend/utils/memory/legacy_keyword_search.py
+  s_0c099cae24c74c::t_e285f266a461ed 1-175
+desktop/macos/changelog/unreleased/20260803-people-narrative-layer.json
+  s_0c099cae24c74c::t_c919d123d04189 1-3
+backend/utils/llm/ARCHITECTURE.md
+  s_0c099cae24c74c::t_a0542923250a97 49-51
+desktop/macos/Desktop/Tests/PersonProfileShareTests.swift
+  s_0c099cae24c74c::t_cbdc56cfc8825c 150
+desktop/macos/Desktop/Tests/PeopleColdStartContractTests.swift
+  s_0c099cae24c74c::t_f2b04af9fc06eb 1-2,6-38
+  s_0c099cae24c74c::t_707a2a96f99e33 85-87,102-110
+  s_0c099cae24c74c::t_15b8c2fa863a54 202-208
+  s_0c099cae24c74c::t_158f31d42f5f76 79-84,88-101
+  s_0c099cae24c74c::t_ba275fdcc6866f 258
+  s_0c099cae24c74c::t_548a83ec821927 400-401
+  s_0c099cae24c74c::t_7738aa8007e0e8 686-707,709,711-714,716-717
+  s_0c099cae24c74c::t_b8454405d16355 3-5,39-78,111-192,217-243,246-248,259-323,330,332-333,362-399,402-540,557-685,708,710,715,718-754,756,758-772
+  s_0c099cae24c74c::t_2639f98a861ce7 244-245,249-257
+  s_0c099cae24c74c::t_bd1f4dccd4a4d8 324-329,331
+  s_0c099cae24c74c::t_1de8b9741ce65a 541-556
+  s_0c099cae24c74c::t_82e37560b3442e 334-361
+  s_0c099cae24c74c::t_133fa116a71277 755,757
+  s_0c099cae24c74c::t_adee03fa8abfb1 193-201,209-216
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonHandleResolver.swift
+  s_0c099cae24c74c::t_25d5403464db94 36-39,42,44,46-49,63,74,85,89-95,100-112,117-118,125-130
+  s_0c099cae24c74c::t_7011c61e19cd14 185-188,194
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonCommitments.swift
+  s_0c099cae24c74c::t_f05e143abf579c 1-162,210-302
+  s_0c099cae24c74c::t_b5911edb7b46b3 163-209
+backend/utils/retrieval/tool_services/memories.py
+  s_0c099cae24c74c::t_5b548ca207a69b 134-173,178,180-199,202
+  s_0c099cae24c74c::t_bbd459c5c197b3 215-220
+  s_0c099cae24c74c::t_0377400df42c76 13,16-17
+  s_0c099cae24c74c::t_ad0da3512450f2 241-246,257-269,271,274,277-278,289-296,302-308
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonMemories.swift
+  s_0c099cae24c74c::t_897e297a85f285 60,62-64,69-75,77-84
+  s_0c099cae24c74c::t_5fe47d65627f59 169-174
+  s_0c099cae24c74c::t_f5a0b098516301 145
+  s_0c099cae24c74c::t_6114a3c5d32909 223
+  s_0c099cae24c74c::t_033e60c173b4d9 6-19,23-25
+  s_0c099cae24c74c::t_9eb02713f0e963 275-280,282,284,287-309,313-314,316-319
+  s_0c099cae24c74c::t_bede72c7a7e1e6 142,144,149,154,168,222,229,233-237,239,241,253,274,322-323,325-327,332
+backend/tests/unit/test_tools_router.py
+  s_0c099cae24c74c::t_a223100b5a2b36 913-929
+  s_0c099cae24c74c::t_c2420f13cba161 123,126
+  s_0c099cae24c74c::t_4e63909d64aeaf 101
+  s_0c099cae24c74c::t_450938908d5c5f 179-183
+  s_0c099cae24c74c::t_71abface18a3c8 241-252
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  s_0c099cae24c74c::t_a44df75d9e7958 144-147
+  s_0c099cae24c74c::t_86d9aca3e301de 272-273
+  s_0c099cae24c74c::t_8eb5fcf1a1ef14 172,174
+  s_0c099cae24c74c::t_2de5caf5d76153 393
+  s_0c099cae24c74c::t_ed80ac493777d5 165-171,173,175-180
+  s_0c099cae24c74c::t_1b96b6522d6368 240-241,243-246
+  s_0c099cae24c74c::t_9298347c6cd6fd 331-341
+  s_0c099cae24c74c::t_f5f982c271d0b3 303-330
+  s_0c099cae24c74c::t_a3f790616fbc23 369-378
+  s_0c099cae24c74c::t_a511135d13a90a 248-250,255-259
+  s_0c099cae24c74c::t_af74f104767532 247
+backend/database/users.py
+  s_0c099cae24c74c::t_ecb844cf9a316d 761-783
+desktop/macos/Desktop/Tests/PeopleThreadIngestTests.swift
+  s_0c099cae24c74c::t_95249279818137 209-293
+backend/tests/unit/test_memory_entities.py
+  s_0c099cae24c74c::t_9a8c216545bcf4 22-53,55-77
+backend/route_policy_manifest.yaml
+  s_0c099cae24c74c::t_5e9fa7f9725432 450-473,1671-1677,1679,1684-1690
+  s_0c099cae24c74c::t_f6265d43997902 449
+  s_0c099cae24c74c::t_aac4fea4ce549f 1668-1670
+  s_0c099cae24c74c::t_5ae8e9d04a4512 1678
+  s_0c099cae24c74c::t_cb48c96837266f 1680-1683
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleIntelligenceDerivation.swift
+  s_0c099cae24c74c::t_5d9f7450d717cb 566-574,576-583
+  s_0c099cae24c74c::t_2d317485a8c076 613-617,621-622
+  s_0c099cae24c74c::t_d981fe4a8934bf 664-680,686-692
+  s_0c099cae24c74c::t_20152051c76c50 362-369,371-387,414-415,417,421,423,425
+  s_0c099cae24c74c::t_4913befbb59da5 174-276,279-281,283-315,325-337
+  s_0c099cae24c74c::t_750edf5f598ad3 10
+  s_0c099cae24c74c::t_fbe949d82a8bbb 631-645
+  s_0c099cae24c74c::t_908384e0ea983e 31-39,43-45
+  s_0c099cae24c74c::t_8742476fd26c62 277-278,282
+  s_0c099cae24c74c::t_030c71b4d050c0 402-406
+  s_0c099cae24c74c::t_6716bfe68b967b 444-450,454,457-459,466
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleSelection.swift
+  s_0c099cae24c74c::t_f7a20b08e0928a 139-142
+  s_0c099cae24c74c::t_a72f51414453ca 156
+  s_0c099cae24c74c::t_2bb7e73590277d 1-138,143-155,157-215,219-221,223-238,240-261,283-304
+  s_0c099cae24c74c::t_97a0c07baf93a1 305-310
+  s_0c099cae24c74c::t_af662637c50be9 262-270
+  s_0c099cae24c74c::t_31e4227069484e 216-218,222
+  s_0c099cae24c74c::t_de5bfc6d1db6fb 271-282
+  s_0c099cae24c74c::t_e03b1b925da401 239
+backend/tests/unit/test_action_item_person_attribution.py
+  s_0c099cae24c74c::t_dee8b424c9d434 128,130-133,141-142,145,154,156
+  s_0c099cae24c74c::t_5cd2387bcad837 1-127,129,134-140,143-144,146-153,155,157-467
+  s_0c099cae24c74c::t_05e4f7d1001b94 468-471
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleIdentity.swift
+  s_0c099cae24c74c::t_6ea1e6a9ea77ed 23,30-39
+  s_0c099cae24c74c::t_aab9e41e9472d8 1-22,24-29,40-133,150-209,238-279,281-283
+  s_0c099cae24c74c::t_8344cff98c67ed 134-149
+  s_0c099cae24c74c::t_3aec95b5a7b31c 280
+  s_0c099cae24c74c::t_1addccaf047f85 210-237
+desktop/macos/docs/people-intelligence-productization.md
+  s_0c099cae24c74c::t_c30dc9ed5aa143 104
+  s_0c099cae24c74c::t_652d259f6186b8 60-85
+  s_0c099cae24c74c::t_8ccf715bdabfb9 31-59
+  s_0c099cae24c74c::t_929288c8869ef9 136-152,154-165
+  s_0c099cae24c74c::t_6da5ea22058c28 153
+backend/database/firestore_index_registry.py
+  s_0c099cae24c74c::t_e6fe9dbdb15d90 509-534,536-537
+backend/models/structured.py
+  s_0c099cae24c74c::t_b9ef516b95f187 33-36
+backend/utils/llm/conversation_processing.py
+  s_0c099cae24c74c::t_a1d9d647c610df 727-743
+backend/routers/memories.py
+  s_0c099cae24c74c::t_239e5419eaf6be 14
+  s_0c099cae24c74c::t_70e120b3d26a76 877-914
+desktop/macos/Desktop/Sources/DefaultsKey.swift
+  s_0c099cae24c74c::t_46deb54fe28e26 93-96
+  s_0c099cae24c74c::t_b31814592d7203 89-92
+backend/routers/people_dossier.py
+  s_0c099cae24c74c::t_6f65d4e23b9e44 42
+  s_0c099cae24c74c::t_dbf9c4368fb049 1-41,43-143,145-217
+  s_0c099cae24c74c::t_016cc869693d24 144
+  s_0c099cae24c74c::t_2147f679f7f810 218
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleContactPhotos.swift
+  s_0c099cae24c74c::t_f930fef65deec1 69-138,143-145,147-157,159,169-171,173-175,179-198
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleIdentityBridge.swift
+  s_0c099cae24c74c::t_f134de947920d7 209-224,227-229
+  s_0c099cae24c74c::t_07ddafb42c0cb1 76-79,81-109,114-150,152-158,161-163,165,167,179-181,183,185-189
+  s_0c099cae24c74c::t_579a2df57d202a 1-75,80,159-160,164,166,168-178,182,184,190-208,225-226,230-246,248-257,263-265,269-323
+  s_0c099cae24c74c::t_667097ec9d9914 110-113
+  s_0c099cae24c74c::t_316742492e8ad0 151
+  s_0c099cae24c74c::t_39b3d54d3f0271 247,258-262,266-268
+backend/utils/conversations/subjects.py
+  s_0c099cae24c74c::t_bbf2a768ff007b 18-27,29-30,32-43
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleNarrative.swift
+  s_0c099cae24c74c::t_62eb0f7e4bf090 306-308,315
+  s_0c099cae24c74c::t_d9d9401d0f1b79 340-361
+  s_0c099cae24c74c::t_2f778d36bf1213 1-294,305,309-314,316-339,362-403,406-409,418-525
+  s_0c099cae24c74c::t_82814806c17841 404-405,410-417
+  s_0c099cae24c74c::t_e8fea400a6c034 295-304
+  s_0c099cae24c74c::t_a7b855547054e5 526-527
+backend/models/action_item.py
+  s_0c099cae24c74c::t_d60d2d05c2d08f 265-269,283-284
+  s_0c099cae24c74c::t_d73bc45fad1b85 122-123
+  s_0c099cae24c74c::t_dbb587054b4664 78-82
+  s_0c099cae24c74c::t_a11ca097076bad 195-198
+backend/tests/unit/test_person_scoped_memory_search.py
+  s_0c099cae24c74c::t_e473695b800ce8 368-372,377
+  s_0c099cae24c74c::t_4c3049bb782445 1-33,36-38,40-367,373-376,378-386,391-402,404,406-490
+  s_0c099cae24c74c::t_f23d5269caa4d4 387-390
+  s_0c099cae24c74c::t_e3c1477294bc48 34-35,39
+  s_0c099cae24c74c::t_8d7af04bd39359 403,405
+  s_0c099cae24c74c::t_adce1ce40278e9 491-548
+backend/utils/task_intelligence/conversation_capture.py
+  s_0c099cae24c74c::t_980b7147a77a86 8-9,11,15,20,23
+  s_0c099cae24c74c::t_87d81759fd9807 215
+  s_0c099cae24c74c::t_f2a69e74b75683 30-51,53-158
+  s_0c099cae24c74c::t_cfdff702de5172 52
+  s_0c099cae24c74c::t_5aee98b4392be9 24,192,199,211-214,228,237,239,336
+backend/utils/memory/ARCHITECTURE.md
+  s_0c099cae24c74c::t_9b4a160f6c7aa9 219-227
+  s_0c099cae24c74c::t_6b5709efe99593 250-251
+desktop/macos/Desktop/Tests/PersonCommitmentsTests.swift
+  s_0c099cae24c74c::t_b67afe3cdd0092 1-385
+backend/routers/tools.py
+  s_0c099cae24c74c::t_298cd3c224ad59 71-77
+  s_0c099cae24c74c::t_a8fe0f1875e2e8 204
+desktop/macos/Desktop/Tests/PeopleIntelligenceDerivationTests.swift
+  s_0c099cae24c74c::t_6b77851b1d4efd 184-185,190-197,203,214-293
+  s_0c099cae24c74c::t_94376ba1b4ca02 321-336,338-346
+  s_0c099cae24c74c::t_8905ee44d6103f 421,433-446
+  s_0c099cae24c74c::t_88ffbe9f8864c3 173-174,176,179
+  s_0c099cae24c74c::t_7ad824ee4ebdba 20,22,26-27,29-41,56-57,59,61,63,65,67,77-82,92-112
+  s_0c099cae24c74c::t_30fc0598a32eae 58,60,62,64,66,68,294
+backend/utils/llm/model_config.py
+  s_0c099cae24c74c::t_8cb291f839ebcb 87-91
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_0c099cae24c74c::t_bc94295aaf58de 659-666
+backend/routers/users.py
+  s_0c099cae24c74c::t_e9e35b57c2c110 616-618,620
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
+  s_0c099cae24c74c::t_049bc7e8de52fe 40-42,47-51,54-55,63-65
+  s_0c099cae24c74c::t_4783f2c0bd3635 403-408,411-412,931
+  s_0c099cae24c74c::t_8706c2e1133939 905-913,927-930
+  s_0c099cae24c74c::t_c551e34470d5b1 409-410
+  s_0c099cae24c74c::t_61a557c77924b4 248-249
+  s_0c099cae24c74c::t_6051993c86838b 211-216,223
+  s_0c099cae24c74c::t_9fafee467c1337 932
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+  s_0c099cae24c74c::t_56c89e1e875bc4 528-548
+backend/database/action_items.py
+  s_0c099cae24c74c::t_c724bba3832b6b 611
+  s_0c099cae24c74c::t_29ecbe4a43cc82 556-596,613-630
+  s_0c099cae24c74c::t_3b7c8f6e7ae04d 597-610,612
+  s_0c099cae24c74c::t_770f0e819f9b81 12
+.github/checks-manifest.yaml
+  s_0c099cae24c74c::t_fa7388ebf631d7 536-540
+backend/database/memories.py
+  s_0c099cae24c74c::t_4ae24ab8fe815a 232-307
+desktop/macos/Desktop/Tests/PeopleGraphBuilderTests.swift
+  s_0c099cae24c74c::t_e72a6ebc34ee50 94-104
+desktop/macos/Desktop/Tests/PeopleIdentityTests.swift
+  s_0c099cae24c74c::t_4816cbe830c001 1-293,443-601
+  s_0c099cae24c74c::t_e67c966f52b2cf 402
+  s_0c099cae24c74c::t_17b73315cf9383 294-401,403-424,427-442
+  s_0c099cae24c74c::t_01aa84a0d3ecc9 425-426
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
+  s_0c099cae24c74c::t_d32e9a9ad631ac 180,182-183
+  s_0c099cae24c74c::t_5013e2dcb327d7 408-416,420
+  s_0c099cae24c74c::t_35ef1bfc4de9f2 144-147,149
+  s_0c099cae24c74c::t_742fab1ae7b6f0 1021-1029,1040-1041
+  s_0c099cae24c74c::t_f3127ecb9a1502 1188-1190
+  s_0c099cae24c74c::t_54b02cfd3166e4 878-884,897
+  s_0c099cae24c74c::t_4ce466b12afcac 931-935
+  s_0c099cae24c74c::t_e835494554c690 557-564
+  s_0c099cae24c74c::t_0b0813bcfa98e5 587-588,598-608
+  s_0c099cae24c74c::t_9c63a177b16762 1058-1060,1062-1063
+  s_0c099cae24c74c::t_05c6afac0f167d 137-141,143,148
+  s_0c099cae24c74c::t_34b6f9d4a1d53c 678-679
+  s_0c099cae24c74c::t_cc66b99da70e00 885-888,891-892,894-896
+  s_0c099cae24c74c::t_af4ca6e1a889a4 212-218
+  s_0c099cae24c74c::t_02a0961b39fbb2 458,463-471,479-482,485,487-489,497-502,504-506,509-511,513-514,518-519,521-522,526-527,529-530
+  s_0c099cae24c74c::t_7056c8014817fa 975,978,983-984,992-1012
+  s_0c099cae24c74c::t_1bc1001f61d236 494-496,503,507-508,512,515
+  s_0c099cae24c74c::t_d0c3da16a7bd5a 1078
+  s_0c099cae24c74c::t_be3ee46e198161 973
+  s_0c099cae24c74c::t_e26ea67c09d354 230-231,241-242
+  s_0c099cae24c74c::t_1cbc030d95dd47 334-341
+  s_0c099cae24c74c::t_27318865bf6045 171,177
+  s_0c099cae24c74c::t_ff70db8b5fd674 430
+  s_0c099cae24c74c::t_71f96f2d26ac70 364-373
+  s_0c099cae24c74c::t_3437abaa9da389 57-61
+  s_0c099cae24c74c::t_ead30cb11d0f7c 907
+  s_0c099cae24c74c::t_2011575896ac7d 1113-1122,1137-1140
+  s_0c099cae24c74c::t_6ccde6399a1864 1032,1042
+  s_0c099cae24c74c::t_cb738106cfb372 389-391
+  s_0c099cae24c74c::t_33282b91f41601 1098-1108
+  s_0c099cae24c74c::t_65f7b13a9c4700 1013-1014,1277-1279
+docs/doc/developer/backend/task_candidate_lifecycle.mdx
+  s_0c099cae24c74c::t_b7665926d23e11 11-29
+desktop/macos/changelog/unreleased/20260803-person-memories-server-read.json
+  s_0c099cae24c74c::t_06ce7a7f52ceb2 1-3
+desktop/macos/Desktop/Tests/PersonMemoriesTests.swift
+  s_0c099cae24c74c::t_0773a0619cfe60 282-286,288,292-293,297-303,305,310
+  s_0c099cae24c74c::t_b1256a90df9b33 186-264
+backend/utils/rate_limit_config.py
+  s_0c099cae24c74c::t_3f902fed5a5627 94-98
+backend/tests/unit/test_people_dossier_grounding.py
+  s_0c099cae24c74c::t_d7a5e0ca8231de 1-229,231,233
+  s_0c099cae24c74c::t_3a60d622df80e5 230,232,234
+backend/tests/unit/test_people_dossier_router.py
+  s_0c099cae24c74c::t_fcac56fde86513 1-195
+desktop/macos/Desktop/Tests/PeopleNarrativeTests.swift
+  s_0c099cae24c74c::t_06d3ed1cd25b2e 218-219,221-222,225-249,253-254
+  s_0c099cae24c74c::t_7f55f0708a2d83 1-217,220,223-224,250-252,255-361
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
+  s_0c099cae24c74c::t_00bd4ee21467c3 6
+desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
+  s_0c099cae24c74c::t_971765af895013 35-44,49-50,64-67
+  s_0c099cae24c74c::t_fee8aeb1f347e0 81-89
+backend/utils/conversations/process_conversation.py
+  s_0c099cae24c74c::t_89ae7d3c9b1c54 1307-1309,1321
+backend/utils/llm/usage_tracker.py
+  s_0c099cae24c74c::t_0b92462db26709 208-209
+desktop/macos/scripts/check_people_intel_field_writers.py
+  s_0c099cae24c74c::t_87aea1c9d95da8 170-173
+  s_0c099cae24c74c::t_8c502512dabbbe 52-62
+  s_0c099cae24c74c::t_6cf59c66982649 1-51,63-169,174-214
+desktop/macos/Desktop/Sources/TaskActionItem.swift
+  s_0c099cae24c74c::t_25d41cea2f9d6c 48-54
+  s_0c099cae24c74c::t_e6737892eb7f8e 128-129,165-166,209-210,273-276
+.github/scripts/product_file_line_count_ratchet_baseline/backend-database.json
+  s_0c099cae24c74c::t_df7a53e6954957 5,10
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_0c099cae24c74c::t_966aab550f09cb 8
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_0c099cae24c74c::t_8398fb3b04cbbd 4-5,16-17,20,22
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_0c099cae24c74c::t_7677d27658ebe2 8,15
+app/lib/backend/schema/gen/action_items_folders_wire.g.dart
+  s_0c099cae24c74c::t_ace3655c9ff3f9 55-56,86-87,119-120,153-154,187-188,212-213,239-240,267-268,295-296,320-321,347-348,377-382
+app/lib/backend/schema/gen/conversation_wire.g.dart
+  s_0c099cae24c74c::t_e5610b8c59a4f2 98,115,134,154
+app/lib/backend/schema/gen/task_intelligence_wire.g.dart
+  s_0c099cae24c74c::t_a41bf9503fa10f 83-84,114-115,147-148,181-182,214-215,225-226,238-239,252-253,266-267,279-280,294-295,310-311
+backend/docs/llm/model_endpoint_inventory.yaml
+  s_0c099cae24c74c::t_5d0c3a2d0525e2 44
+backend/scripts/export_openapi.py
+  s_0c099cae24c74c::t_1937470f6d1ea3 76
+backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
+  s_0c099cae24c74c::t_02c5a6c63d137d 234
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_0c099cae24c74c::t_aaf111e33cae58 413
+backend/tests/unit/test_omi_qos_tiers.py
+  s_0c099cae24c74c::t_69470740b87073 277
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_0c099cae24c74c::t_a213e6986c9fd0 1-119
+desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  s_0c099cae24c74c::t_6218a57fccefad 153,170,189,198,207,220-221,245-246,272-273,296,298-299,326-327,357-358,390-391,420,422-423,456-457,481-482,510-515,578,580-581,611-620,3448-3449,3461-3462,3476-3477,3489-3491,3610-3611,3621-3622,3634-3635,3645-3647,4488,4518-4520,10699-10724,14336-14364,14719
+desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReviewAnnotation.swift
+  s_0c099cae24c74c::t_a645bf433850bb 1-287
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+PeopleDossiers.swift
+  s_0c099cae24c74c::t_ad740198e202cd 1-16
+desktop/windows/src/renderer/src/lib/omiApi.generated.ts
+  s_0c099cae24c74c::t_5f48fa497b5317 36,47-48,77-78,109-110,1614-1619,2624-2651,3099-3103,3322-3323,3361-3362,4147,4289-4292,4352,6894-6903,8294-8304,8453,13097-13117,15919-15940,16215
+docs/api-reference/app-client-openapi.json
+  s_0c099cae24c74c::t_bae426c0380b6b 228-239,330-357,589-616,882-909,10089-10113,15930-16079,18803-18820,20070-20097,20388-20415,23967,24109-24126,44425-44512,51719,57266-57371
+firestore.indexes.json
+  s_0c099cae24c74c::t_6f136338764d06 331-366
+web/admin/lib/services/omi-api/omiApi.generated.ts
+  s_0c099cae24c74c::t_b059d138ab5881 36,47-48,77-78,109-110,1614-1619,2624-2651,3099-3103,3322-3323,3361-3362,4147,4289-4292,4352,6894-6903,8294-8304,8453,13097-13117,15919-15940,16215
+web/app/src/lib/omiApi.generated.ts
+  s_0c099cae24c74c::t_35974c982b6aa4 36,47-48,77-78,109-110,1614-1619,2624-2651,3099-3103,3322-3323,3361-3362,4147,4289-4292,4352,6894-6903,8294-8304,8453,13097-13117,15919-15940,16215
+web/personas-open-source/src/lib/omiApi.generated.ts
+  s_0c099cae24c74c::t_5abf5f423d3724 36,47-48,77-78,109-110,1614-1619,2624-2651,3099-3103,3322-3323,3361-3362,4147,4289-4292,4352,6894-6903,8294-8304,8453,13097-13117,15919-15940,16215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "d8638ce50da6886a0944c69a8b4e1f01c3bfcb9c",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
