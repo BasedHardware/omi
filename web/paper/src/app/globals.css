@@ -1,0 +1,211 @@
+@import 'tailwindcss';
+
+/* PAPER — the landing page runs the same type system as the edition itself, so the
+   product and the pitch are visibly the same object. Warm paper, soft-black ink, one
+   serif for reading, one mono for furniture, one warm accent with one job. */
+
+:root {
+  --ink: #333333;
+  --ink-strong: #131313;
+  --meta: #757575;
+  --paper: #fffaf1;
+  --rule: #e2ded4;
+  --rule-strong: #131313;
+  --accent: #f09000;
+
+  --serif:
+    'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+.wrap {
+  max-width: 38rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.top {
+  padding-top: 5rem;
+}
+
+/* ---- masthead ---- */
+.masthead {
+  text-align: center;
+  color: var(--ink-strong);
+  font-size: clamp(3rem, 15vw, 5.25rem);
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-indent: 0.16em;
+}
+
+.dateline {
+  margin-top: 1.25rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  color: var(--meta);
+  text-transform: uppercase;
+}
+
+/* ---- the one claim ---- */
+.claim {
+  margin-top: 3.5rem;
+  font-size: clamp(1.625rem, 5.5vw, 2.25rem);
+  line-height: 1.22;
+  letter-spacing: -0.018em;
+  color: var(--ink-strong);
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+.claim span {
+  color: var(--meta);
+}
+
+.sub {
+  margin-top: 1.5rem;
+  text-wrap: pretty;
+}
+
+/* ---- calls to action ---- */
+.actions {
+  margin-top: 2.75rem;
+}
+
+.cta {
+  display: inline-block;
+  padding: 0.9rem 1.7rem;
+  background: var(--ink-strong);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+
+.cta:hover {
+  background: var(--accent);
+}
+
+.cta-secondary {
+  display: block;
+  margin-top: 1.5rem;
+  color: var(--meta);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.cta-secondary:hover {
+  color: var(--ink-strong);
+}
+
+/* ---- section furniture ---- */
+section {
+  margin-top: 5.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+}
+
+.label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--meta);
+}
+
+.stat {
+  margin-top: 1.75rem;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--ink-strong);
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+/* ---- the five blocks ---- */
+.blocks {
+  list-style: none;
+  margin-top: 1.75rem;
+}
+
+.blocks li {
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.blocks li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.blocks .name {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--meta);
+  margin-bottom: 0.35rem;
+}
+
+.blocks .what {
+  color: var(--ink-strong);
+}
+
+.fine {
+  margin-top: 1rem;
+  color: var(--meta);
+}
+
+/* ---- footer ---- */
+footer {
+  margin-top: 5.5rem;
+  padding: 1.4rem 0 4rem;
+  border-top: 1px solid var(--rule-strong);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--meta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

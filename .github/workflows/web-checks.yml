@@ -17,6 +17,7 @@ jobs:
     outputs:
       has_admin: ${{ steps.changes.outputs.has_admin }}
       has_frontend: ${{ steps.changes.outputs.has_frontend }}
+      has_paper: ${{ steps.changes.outputs.has_paper }}
       has_personas: ${{ steps.changes.outputs.has_personas }}
       has_web_app: ${{ steps.changes.outputs.has_web_app }}
       has_web_build: ${{ steps.changes.outputs.has_web_build }}
@@ -50,6 +51,7 @@ jobs:
           cache-dependency-path: |
             web/frontend/package-lock.json
             web/personas-open-source/package-lock.json
+            web/paper/package-lock.json
 
       - name: Lint Frontend
         if: needs.changes.outputs.has_frontend == 'true'
@@ -66,6 +68,13 @@ jobs:
           npm ci --legacy-peer-deps
           npm run lint
           npm test
+
+      - name: Lint Paper
+        if: needs.changes.outputs.has_paper == 'true'
+        working-directory: ./web/paper
+        run: |
+          npm ci
+          npm run lint
 
   build:
     name: Build
@@ -86,6 +95,7 @@ jobs:
           cache-dependency-path: |
             web/app/package-lock.json
             web/admin/package-lock.json
+            web/paper/package-lock.json
 
       - name: Build Web App
         if: needs.changes.outputs.has_web_app == 'true'
@@ -120,4 +130,11 @@ jobs:
           npm run lint
           npm run typecheck
           npm test
+          npm run build
+
+      - name: Build Paper
+        if: needs.changes.outputs.has_paper == 'true'
+        working-directory: ./web/paper
+        run: |
+          npm ci
           npm run build

@@ -67,7 +67,7 @@ STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.
 
 if [ -n "$STAGED_WEB_FILES" ]; then
   echo "Formatting staged web files with Prettier..."
-  for dir in web/frontend web/app web/personas-open-source; do
+  for dir in web/frontend web/app web/personas-open-source web/paper; do
     DIR_FILES=$(echo "$STAGED_WEB_FILES" | grep "^$dir/")
     if [ -z "$DIR_FILES" ]; then
       continue
