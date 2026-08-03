@@ -220,9 +220,9 @@ normal promotion admission.
 
 `backend/config/memory_rollout.py` owns the runtime contract:
 
-- `MEMORY_MODE` sets `off`, `shadow`, `write`, or `read`; composed GET requires `read`.
-- `MEMORY_ENABLED_USERS` is the environment cohort. `memory_system.py` also requires membership in the code-reviewed `CANONICAL_MEMORY_USERS` cohort for direct canonical routing.
-- `MEMORY_V3_GET_ENABLED` enables construction of the composed GET runtime.
+- `CANONICAL_MEMORY_USERS` in `config/canonical_memory_cohort.py` is the one product entitlement: it selects canonical memory, task intelligence, and Chat-first together.
+- `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` remain maintenance/readiness metadata only. Request routing must never use them to select or suppress a user.
+- An enrolled account whose canonical projection is unavailable fails closed; it never falls back to legacy memory.
 - `MEMORY_V3_CURSOR_SECRET`, `MEMORY_V3_CURSOR_TTL_SECONDS`, `MEMORY_V3_CURSOR_POLICY_VERSION`, and `MEMORY_V3_CURSOR_SECRET_VERSION` bind cursor behavior.
 - Persisted control state additionally gates rollout stage, default-memory grant, global reads, write convergence, account/projection generations, and projection readiness.
 - `MEMORY_CANONICAL_MAINTENANCE_ENABLED` gates scheduled maintenance; Cloud

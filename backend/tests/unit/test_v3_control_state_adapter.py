@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS
@@ -9,7 +11,8 @@ from utils.memory.v3.control_reader_contract import (
     V3ControlRouteFamily,
     decide_v3_control_route,
 )
-from utils.memory.v3.control_state_adapter import read_v3_control, resolve_v3_effective_mode
+from utils.memory.v3.control_state_adapter import read_v3_control
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 @dataclass
@@ -92,16 +95,21 @@ def _ready_docs(uid='uid-a', control_doc=None):
     }
 
 
+@pytest.fixture(autouse=True)
+def _canonical_uid(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'uid-a')
+
+
 def test_non_enrolled_returns_legacy_eligibility_without_firestore_read():
     db = FakeDb()
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config(enabled_users=()))
+    result = read_v3_control(uid='uid-other', db_client=db)
 
     assert result.cohort_enrolled is False
-    assert result.source_path == 'users/uid-a/memory_control/state'
+    assert result.source_path == 'users/uid-other/memory_control/state'
     assert result.state is None
     assert db.document_calls == []
     decision = decide_v3_control_route(
-        V3ControlReaderRequest('uid-a', 50, False, False),
+        V3ControlReaderRequest('uid-other', 50, False, False),
         result,
     )
     assert decision.route_family == V3ControlRouteFamily.LEGACY_PRIMARY
@@ -110,7 +118,7 @@ def test_non_enrolled_returns_legacy_eligibility_without_firestore_read():
 
 def test_enrolled_reads_exact_control_doc_once_with_existing_timeout_and_no_memory_items_touch():
     db = FakeDb(_ready_docs())
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', db_client=db)
 
     assert result.cohort_enrolled is True
     assert result.source_path == 'users/uid-a/memory_control/state'
@@ -120,24 +128,15 @@ def test_enrolled_reads_exact_control_doc_once_with_existing_timeout_and_no_memo
     assert all('memory_items' not in path for path in db.document_calls)
 
 
-def test_off_shadow_write_map_to_legacy_authoritative_and_do_not_read_global_gates():
+def test_persisted_legacy_modes_do_not_reclassify_an_enrolled_user():
     for mode in (MemoryRolloutMode.off, MemoryRolloutMode.shadow, MemoryRolloutMode.write):
-        db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode=mode.value)})
-        result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config(mode=MemoryRolloutMode.read))
+        db = FakeDb(_ready_docs(control_doc=_doc(mode=mode.value)))
+        result = read_v3_control(uid='uid-a', db_client=db)
 
-        assert result.state.effective_mode == mode
-        assert db.document_calls == ['users/uid-a/memory_control/state']
+        assert result.state.effective_mode == MemoryRolloutMode.read
         decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
-        assert decision.route_family == V3ControlRouteFamily.LEGACY_PRIMARY
-        assert decision.reason == V3ControlDecisionReason.ROLLOUT_LEGACY_AUTHORITATIVE
+        assert decision.route_family == V3ControlRouteFamily.MEMORY_PROJECTION
         assert decision.fallback_to_legacy_allowed is False
-
-
-def test_global_ceiling_never_elevates_lower_persisted_mode_and_caps_higher_persisted_mode():
-    assert resolve_v3_effective_mode(MemoryRolloutMode.read, MemoryRolloutMode.write) == MemoryRolloutMode.write
-    assert resolve_v3_effective_mode(MemoryRolloutMode.write, MemoryRolloutMode.read) == MemoryRolloutMode.write
-    assert resolve_v3_effective_mode('shadow', 'read') == MemoryRolloutMode.shadow
-    assert resolve_v3_effective_mode('off', 'read') == MemoryRolloutMode.off
 
 
 def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolean():
@@ -150,7 +149,7 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
         }
     )
     db = FakeDb(_ready_docs(control_doc=control_doc))
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', db_client=db)
 
     assert result.state.default_memory_grant is False
     assert result.state.archive_allowed is False
@@ -159,15 +158,16 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
     assert decision.http_status == 403
 
 
-def test_global_read_and_convergence_docs_are_read_only_for_effective_read_mode():
+def test_global_read_and_convergence_docs_are_read_for_every_enrolled_control_mode():
     read_db = FakeDb(_ready_docs())
-    read_v3_control(uid='uid-a', db_client=read_db, rollout_config=_config())
+    read_v3_control(uid='uid-a', db_client=read_db)
     assert 'memory_control/global_read_gate' in read_db.document_calls
     assert 'memory_control/write_convergence_gate' in read_db.document_calls
 
-    write_db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode='write')})
-    read_v3_control(uid='uid-a', db_client=write_db, rollout_config=_config())
-    assert write_db.document_calls == ['users/uid-a/memory_control/state']
+    write_db = FakeDb(_ready_docs(control_doc=_doc(mode='write')))
+    read_v3_control(uid='uid-a', db_client=write_db)
+    assert 'memory_control/global_read_gate' in write_db.document_calls
+    assert 'memory_control/write_convergence_gate' in write_db.document_calls
 
 
 def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failures_are_typed():
@@ -196,7 +196,7 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
     ]
 
     for db, reason in cases:
-        result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+        result = read_v3_control(uid='uid-a', db_client=db)
         decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
         assert decision.route_family == V3ControlRouteFamily.FAIL_CLOSED
         assert decision.reason == reason
@@ -205,7 +205,7 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
 
 def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared():
     db = FakeDb(_ready_docs(control_doc=_doc(mode_epoch=1, cutover_epoch=1, account_generation=50)))
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', db_client=db)
     decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
 
     assert result.state.mode_epoch == 1
@@ -215,7 +215,7 @@ def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared(
 
 def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403():
     db = FakeDb(_ready_docs(control_doc=_doc(grants={'omi_chat': {'default_memory': True}})))
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', db_client=db)
 
     assert result.state.archive_allowed is False
     decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False, True), result)
@@ -225,7 +225,7 @@ def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403():
 
 def test_stale_short_term_is_absent_from_adapter_state():
     db = FakeDb(_ready_docs())
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', db_client=db)
 
     assert result.state is not None
     assert not hasattr(result.state, 'short_term_freshness_default_visible')

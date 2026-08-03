@@ -449,24 +449,11 @@ class UploadFilesResult {
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
 /// 429 is backend capacity unless the response carries Omi's explicit reason.
-enum SyncRateLimitKind { fairUse, backfillPaced, backendCapacity }
-
-enum SyncUploadLane { fresh, backfill }
+enum SyncRateLimitKind { fairUse, backendCapacity }
 
 @visibleForTesting
-bool shouldRequestSyncCaptureManifest(String? conversationId, SyncUploadLane syncLane) =>
-    conversationId != null && syncLane == SyncUploadLane.fresh;
-
-/// The lane a batch actually uploads on once fresh-capture provenance resolved.
-///
-/// A batch with no capture manifest is exactly what the server classifies as
-/// backfill (`unbound_capture_time`), so it uploads on the paced backfill lane.
-/// Holding it back on the client instead strands the account: a manifest denial
-/// is often permanent (403 unverifiable provenance, 409 already claimed), so a
-/// client-side cooldown retries the same denial forever and never uploads.
-@visibleForTesting
-SyncUploadLane syncUploadLaneForCaptureManifest(SyncUploadLane requestedLane, String? captureManifest) =>
-    captureManifest == null ? SyncUploadLane.backfill : requestedLane;
+bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
+    conversationId != null && claimLiveCapture;
 
 Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
   final claims = <Map<String, String>>[];
@@ -489,9 +476,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -504,6 +489,35 @@ class SyncRateLimitedException implements Exception {
 
   @override
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+}
+
+/// Thrown when the server permanently refuses a recording because its capture
+/// time is older than the automatic-recovery window (HTTP 422
+/// `backfill_lookback_exceeded`). No amount of retrying can make this upload
+/// succeed, so callers must stop re-offering the file instead of spending the
+/// recording's retry budget on it.
+class SyncRecoveryWindowExceededException implements Exception {
+  const SyncRecoveryWindowExceededException();
+
+  @override
+  String toString() => 'SyncRecoveryWindowExceededException()';
+}
+
+/// Classifies a sync 422 as the backend's terminal lookback rejection.
+///
+/// Keyed on the bounded `code` the sync routes emit, never on human-readable
+/// detail text: any other 422 stays a generic retryable failure.
+@visibleForTesting
+bool isSyncRecoveryWindowExceededResponse(http.Response response) {
+  if (response.statusCode != 422) return false;
+  try {
+    final body = wire.GeneratedSyncRecoveryWindowExceededResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'backfill_lookback_exceeded';
+  } catch (_) {
+    return false;
+  }
 }
 
 /// A synchronous upload response that durably reached the server but did not
@@ -538,16 +552,10 @@ int? _parseRetryAfterSeconds(http.Response response) {
 ///
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
-SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
-  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
-  if (reason == 'fair_use') {
-    return SyncRateLimitKind.fairUse;
-  }
-  if (reason == 'backfill_paced' || reason == 'backfill_capacity') {
-    return SyncRateLimitKind.backfillPaced;
-  }
-  return SyncRateLimitKind.backendCapacity;
-}
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
+    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
+        ? SyncRateLimitKind.fairUse
+        : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -559,12 +567,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
-  SyncUploadLane syncLane = SyncUploadLane.fresh,
+  bool claimLiveCapture = false,
 }) async {
   String? captureManifest;
-  if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
+  if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-    syncLane = syncUploadLaneForCaptureManifest(syncLane, captureManifest);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
@@ -573,10 +580,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
-    headers: {
-      'X-Omi-Sync-Lane-Hint': syncLane.name,
-      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
-    },
+    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
     onUploadProgress: onUploadProgress,
   );
 
@@ -587,9 +591,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     final completed = SyncLocalFilesResponse.fromGenerated(
       wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
-    return UploadFilesResult.done(
-      requireCompleteSyncUpload(completed),
-    );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(
@@ -611,6 +613,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
     );
+  } else if (isSyncRecoveryWindowExceededResponse(response)) {
+    throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }

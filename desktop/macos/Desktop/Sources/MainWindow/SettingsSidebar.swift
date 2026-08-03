@@ -256,6 +256,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles",
       settingId: "floatingbar.show"),
     SettingsSearchItem(
+      name: "Notification Previews",
+      subtitle: "Show assistant notifications under the Floating Bar",
+      keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
+      section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
+    SettingsSearchItem(
       name: "Background Style", subtitle: "Toggle between solid and transparent background",
       keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.background"),

@@ -3002,6 +3002,7 @@
     "syncStatusWaiting": "Venter på synkronisering",
     "syncStatusRetrying": "Kunne ikke behandles — prøver igen",
     "syncStatusFailed": "Mislykkedes — tryk på Prøv igen",
+    "syncStatusTooOld": "For gammel til at synkronisere — Omi kan ikke acceptere den",
     "syncStatusFileUnavailable": "Filen er utilgængelig",
     "syncStatusUploaded": "Uploadet · behandles på Omi",
     "noRecordingsYet": "Ingen optagelser endnu",

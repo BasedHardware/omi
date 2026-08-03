@@ -19,6 +19,8 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.log_sanitizer import sanitize_pii
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,26 @@ async def finalize_persisted_conversation(
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
+        # The conversation and all derived effects are now durably finalized.
+        # Persist the content-free capture-arrival intent only after that
+        # commit, and keep this product hint failure-isolated from the source
+        # finalization outcome.
+        source = getattr(conversation, 'source', None)
+        if getattr(source, 'value', source) == 'omi':
+            try:
+                structured = getattr(conversation, 'structured', None)
+                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
+                persist_capture_arrival_intent(
+                    uid,
+                    conversation_id=conversation_id,
+                    summary=summary,
+                )
+            except Exception as error:
+                logger.warning(
+                    'chat-first capture arrival intent failed after finalization uid=%s error=%s',
+                    sanitize_pii(uid),
+                    type(error).__name__,
+                )
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.

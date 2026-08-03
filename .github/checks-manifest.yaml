@@ -244,6 +244,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT builds must strip mcumgr before CocoaPods and restore the exact default graph even after interruption"
+  - id: watch-recording-presentation
+    command: ["ruby", "app/ios/test/watch_recording_presentation_test.rb"]
+    triggers: ["app/ios/omiWatchApp/ContentView.swift", "app/ios/omiWatchApp/Localizable.xcstrings", "app/ios/omiWatchApp/RecordingPresentation.swift", "app/ios/omiWatchApp/WatchAudioRecorderViewModel.swift", "app/ios/omiWatchApp/WatchRecorderControlling.swift", "app/ios/omiWatchApp/omiwatchApp.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/watch_recording_presentation_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
@@ -449,6 +455,11 @@ checks:
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/scripts/test_check_codemagic_tag_intake.py", ".github/workflows/desktop_auto_release.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-179 requires bounded exact-tag evidence that native Codemagic intake selected the release workflow and immutable source"
+  - id: mobile-internal-build-cadence
+    command: ["python3", ".github/scripts/test_dispatch_mobile_internal_builds.py"]
+    triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "internal mobile builds are dispatched on a cadence, so who gets an instant build and when the batch fires must stay pinned rather than drift back to build-per-merge"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]

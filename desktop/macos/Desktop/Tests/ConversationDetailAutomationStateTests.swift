@@ -45,6 +45,15 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertFalse(state.transcriptDrawerOpen)
   }
 
+  func testTranscriptRequestForAlreadyOpenConversationPublishesDrawerState() {
+    let state = ConversationDetailAutomationState()
+    _ = state.syncPresentedDetail(conversationId: "conversation-1", transcriptDrawerOpen: false)
+
+    state.requestOpen(conversationId: "conversation-1", showTranscript: true)
+
+    XCTAssertTrue(state.transcriptDrawerOpen)
+  }
+
   func testSyncPresentedDetailReplacesAutomationOpenStateWhenSwiftUIReusesTheDetailView() {
     let state = ConversationDetailAutomationState()
 

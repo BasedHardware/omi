@@ -9823,4 +9823,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не може да се поврзе со тој микрофон. Проверете дали е поврзан во поставките на iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Премногу стар за синхронизација — Omi не може да го прифати';
 }

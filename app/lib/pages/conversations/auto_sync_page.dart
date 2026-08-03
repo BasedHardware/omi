@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
+import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -143,7 +144,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final hasAnyRecording = p.allWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimitedForPendingUploads;
+    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
 
     String title;
     String? progressText;
@@ -175,12 +176,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
       }
       action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
-    } else if (p.isRateLimitedForPendingUploads) {
-      title = switch (p.rateLimitReason) {
-        RateLimitReason.backendBusy => l.syncCardBackendBusy,
-        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToBackUp),
-        _ => l.syncCardRateLimited,
-      };
+    } else if (p.isRateLimited) {
+      title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
@@ -682,6 +679,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.syncStatusFailed);
       case WalSyncDisplayState.corrupted:
         return (Colors.redAccent, FontAwesomeIcons.triangleExclamation, context.l10n.syncStatusFileUnavailable);
+      case WalSyncDisplayState.outsideRecoveryWindow:
+        return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
     }
   }
 

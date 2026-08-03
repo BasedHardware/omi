@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from config.memory_rollout import MemoryRolloutConfig, MemoryRolloutMode
 from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
 from utils.memory.memory_system_pin import pin_memory_system
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
@@ -47,35 +46,11 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
             reason="missing_db_client",
         )
 
-    try:
-        rollout_config = MemoryRolloutConfig.from_env()
-    except ValueError:
-        if uid in set(list_canonical_cohort_uids()):
-            return CanonicalWriteDecision(
-                enabled=False,
-                memory_system=MemorySystem.CANONICAL,
-                fail_closed=True,
-                reason="invalid_rollout_config",
-            )
-        return CanonicalWriteDecision(
-            enabled=False,
-            memory_system=MemorySystem.LEGACY,
-            fail_closed=False,
-            reason="invalid_rollout_config",
-        )
-
     memory_system = pin_memory_system(uid, db_client=db_client)
     if memory_system != MemorySystem.CANONICAL:
         return CanonicalWriteDecision(enabled=False, memory_system=memory_system, reason="not_canonical")
-    if rollout_config.mode not in {MemoryRolloutMode.write, MemoryRolloutMode.read}:
-        return CanonicalWriteDecision(
-            enabled=False,
-            memory_system=memory_system,
-            fail_closed=True,
-            reason=f"mode_{rollout_config.mode.value}_not_writable",
-        )
 
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    control = read_v3_control(uid=uid, db_client=db_client)
     if not control.cohort_enrolled or control.state is None:
         reason = control.read_error_reason or "missing_state"
         logger.info("canonical_write disabled uid=%s reason=%s", uid, reason)
@@ -119,14 +94,7 @@ def canonical_read_enabled(
     if pin_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return False
 
-    try:
-        rollout_config = MemoryRolloutConfig.from_env()
-    except ValueError:
-        return False
-    if rollout_config.mode != MemoryRolloutMode.read:
-        return False
-
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    control = read_v3_control(uid=uid, db_client=db_client)
     trusted_generation = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     effective_env = env if env is not None else os.environ
     decision = decide_v3_control_route(

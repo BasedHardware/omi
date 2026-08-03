@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Laukiama sinchronizavimo",
     "syncStatusRetrying": "Nepavyko apdoroti — bandoma dar kartą",
     "syncStatusFailed": "Nepavyko — palieskite Bandyti dar kartą",
+    "syncStatusTooOld": "Per senas sinchronizuoti — „Omi“ negali jo priimti",
     "syncStatusFileUnavailable": "Failas nepasiekiamas",
     "syncStatusUploaded": "Įkelta · apdorojama Omi",
     "noRecordingsYet": "Įrašų dar nėra",

@@ -2998,6 +2998,7 @@
     "syncStatusWaiting": "Čaká na synchronizáciu",
     "syncStatusRetrying": "Spracovanie zlyhalo — opakuje sa",
     "syncStatusFailed": "Zlyhalo — ťuknite na Skúsiť znova",
+    "syncStatusTooOld": "Príliš staré na synchronizáciu — Omi ho nemôže prijať",
     "syncStatusFileUnavailable": "Súbor nie je dostupný",
     "syncStatusUploaded": "Nahraté · spracúva sa v Omi",
     "noRecordingsYet": "Zatiaľ žiadne nahrávky",

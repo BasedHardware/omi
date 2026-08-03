@@ -2962,6 +2962,7 @@
     "syncStatusWaiting": "Esperant a sincronitzar",
     "syncStatusRetrying": "No s'ha pogut processar — reintentant",
     "syncStatusFailed": "Ha fallat — toca Reintenta",
+    "syncStatusTooOld": "Massa antic per sincronitzar — Omi no el pot acceptar",
     "syncStatusFileUnavailable": "Fitxer no disponible",
     "syncStatusUploaded": "Pujat · processant-se a Omi",
     "noRecordingsYet": "Encara no hi ha enregistraments",

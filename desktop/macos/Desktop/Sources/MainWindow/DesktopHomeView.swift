@@ -42,6 +42,9 @@ struct DesktopHomeView: View {
 
   @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
+  /// The cohort shell owns typed navigation at the root, never through legacy
+  /// sidebar indices. It persists only route/collapse state, not enrollment.
+  @StateObject private var chatFirstNavigation = ChatFirstShellNavigation()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
@@ -67,7 +70,6 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
-  @State private var isShowingMemoryAtlasPage = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -82,6 +84,7 @@ struct DesktopHomeView: View {
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
   @State private var automationPresentationReadinessGate =
     DesktopAutomationPresentationReadinessGate()
+  @State private var chatFirstCapabilitySample = ChatFirstShellCapabilitySample()
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -96,56 +99,302 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
-  var body: some View {
-    Group {
-      if authState.isRestoringAuth {
-        // State 0: Restoring auth session - show loading
-        VStack(spacing: OmiSpacing.lg) {
-          if let nsImage = Self.heroLogoImage {
-            Image(nsImage: nsImage)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 64, height: 64)
+  private var shouldShowAuthEntryShell: Bool {
+    authState.isRestoringAuth || authState.sessionPhase == .recoveryRequired || !authState.isSignedIn
+      || !hasCompletedOnboardingAtAuthorityRead
+  }
+
+  private var authEntryShell: AnyView {
+    if authState.isRestoringAuth {
+      return AnyView(
+        Color.clear
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(OmiColors.backgroundPrimary)
+          .onAppear {
+            log("DesktopHomeView: Showing auth loading splash")
           }
-          ProgressView()
-            .scaleEffect(0.8)
-            .tint(.white.opacity(0.6))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-          log("DesktopHomeView: Showing auth loading splash")
-        }
-      } else if authState.sessionPhase == .recoveryRequired {
+      )
+    }
+    if authState.sessionPhase == .recoveryRequired {
+      return AnyView(
         SessionRecoveryView()
           .onAppear {
             log("DesktopHomeView: Showing recoverable auth state")
           }
-      } else if !authState.isSignedIn {
-        // State 1: Not signed in - show sign in
+      )
+    }
+    if !authState.isSignedIn {
+      return AnyView(
         SignInView(authState: authState)
           .onAppear {
             log("DesktopHomeView: Showing SignInView (not signed in)")
           }
-      } else if !hasCompletedOnboardingAtAuthorityRead {
-        // State 2: Signed in but onboarding not complete
-        if shouldSkipOnboarding() {
-          Color.clear.onAppear {
-            log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
-            appState.hasCompletedOnboarding = true
-          }
-        } else {
-          SBOnboardingView(
-            appState: appState,
-            chatProvider: viewModelContainer.chatProvider,
-            importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
-            onComplete: nil
-          )
-          .onAppear {
-            log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
+      )
+    }
+    if shouldSkipOnboarding() {
+      return AnyView(
+        Color.clear.onAppear {
+          log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
+          appState.hasCompletedOnboarding = true
+        }
+      )
+    }
+    return AnyView(
+      SBOnboardingView(
+        appState: appState,
+        chatProvider: viewModelContainer.chatProvider,
+        importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+        onComplete: nil
+      )
+      .onAppear {
+        log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
+      }
+    )
+  }
+
+  // State 3: Signed in and onboarded.
+  private var mainContentPresentation: AnyView {
+    AnyView(
+      mainContent
+        .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
+        .overlay {
+          if appState.showUsageLimitPopup {
+            UsageLimitPopupView(
+              reason: appState.usageLimitReason,
+              onUpgrade: {
+                appState.showUsageLimitPopup = false
+                selectedSettingsSection = .planUsage
+                // Plan and Usage now lives below Account on the merged
+                // "Account & Plan" page — scroll straight to the plan card.
+                highlightedSettingId = "planusage.current"
+                OmiMotion.withGated(Self.pageNavigationAnimation) {
+                  navigateToLegacyDestination(.settings)
+                }
+              },
+              onDismiss: {
+                appState.showUsageLimitPopup = false
+              },
+              onBringYourOwnKeys: {
+                appState.showUsageLimitPopup = false
+                selectedSettingsSection = .advanced
+                OmiMotion.withGated(Self.pageNavigationAnimation) {
+                  navigateToLegacyDestination(.settings)
+                }
+              }
+            )
           }
         }
+        .overlay(alignment: .top) {
+          if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
+            DesktopUpdatePolicyBanner(
+              policy: policy,
+              onDownload: { updatePolicyManager.openDownload(policy) },
+              onDismiss: { updatePolicyManager.dismiss(policy) }
+            )
+            .padding(.top, OmiSpacing.md)
+            .padding(.horizontal, OmiSpacing.xl)
+            .transition(.move(edge: .top).combined(with: .opacity))
+          }
+        }
+    )
+  }
+
+  private var mainContentStartupLifecycle: AnyView {
+    AnyView(
+      mainContentPresentation
+        .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
+          let reason = notification.userInfo?["reason"] as? String ?? ""
+          appState.triggerUsageLimitPopup(reason: reason)
+        }
+        .onAppear {
+          log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+          updatePolicyManager.refresh(force: true)
+          // Check all permissions on launch
+          appState.checkAllPermissions()
+
+          // For existing users who haven't indexed files yet, run a background scan
+          if !AppBuild.usesLazyDevPermissions
+            && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
+          {
+            scheduleInitialFileIndexing()
+          }
+
+          // Migration: one-time reset for users whose screenAnalysisEnabled
+          // was incorrectly set to false by a bug in syncMonitoringState() that
+          // persisted false whenever monitoring stopped for any reason.
+          // v2: re-run because the root cause (syncMonitoringState disabling the
+          // setting) was only fixed in this release, so v1 users got re-broken.
+          if !UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV2) {
+            UserDefaults.standard.set(true, forKey: .screenAnalysisEnabled)
+            AssistantSettings.shared.screenAnalysisEnabled = true
+            UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
+            log(
+              "DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled"
+            )
+            // Push true to server so syncFromServer() doesn't revert it
+            Task { await SettingsSyncManager.shared.syncToServer() }
+          }
+
+          // Named development bundles used to seed screen analysis off to
+          // avoid permission prompts. Screen capture no longer requests
+          // TCC during startup, so restore the default once: a granted
+          // named-bundle permission must actually begin storing frames.
+          if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
+            usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
+            migrationApplied: UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV3)
+          ) {
+            AssistantSettings.shared.screenAnalysisEnabled = true
+            UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV3)
+            log("DesktopHomeView: Restored screen capture default for quiet named bundle")
+          }
+
+          restorePersistedCaptureServices(reason: "launch")
+
+          // Start Crisp chat in background for notifications, scoped to the signed-in user
+          CrispManager.shared.start(
+            initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
+            sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
+          )
+
+          // Set up floating control bar. Product invariant: normal signed-in
+          // launches must show the enabled bar immediately; hide-until-PTT is
+          // only for explicit onboarding/demo/minimal-mode contexts.
+          FloatingControlBarManager.shared.setup(
+            appState: appState, chatProvider: viewModelContainer.chatProvider)
+          FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
+
+          // Set up push-to-talk voice input
+          if let barState = FloatingControlBarManager.shared.barState {
+            PushToTalkManager.shared.setup(barState: barState)
+          }
+        }
+        .task {
+          // Trigger eager data loading when main content appears
+          await viewModelContainer.loadAllData()
+          scheduleConversationWarmup()
+          scheduleAgentVMProvisioning()
+        }
+        // Refresh conversations when app becomes active (e.g. switching back from another app)
+        .onReceive(
+          NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+          // Cooldown: only refresh conversations if last activation was 60+ seconds ago
+          let now = Date()
+          if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
+            lastActivationRefresh = now
+            Task { await appState.refreshConversations() }
+          }
+          updatePolicyManager.refresh()
+          // Reconcile persisted intent after returning from System Settings or
+          // after a runtime service stopped while the app was inactive.
+          restorePersistedCaptureServices(reason: "app active")
+        }
+        .onChange(of: apiKeyService.isLoaded) { _, loaded in
+          guard loaded else { return }
+          log("DesktopHomeView: API keys loaded — retrying deferred services")
+          restorePersistedCaptureServices(reason: "key load")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+          reconcileCaptureServicesAfterSettingsSync()
+        }
+        // Cmd+R: refresh all data (conversations, chat, tasks, memories)
+        .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
+          Task { await appState.refreshConversations() }
+        }
+    )
+  }
+
+  private var mainContentWithLifecycle: AnyView {
+    AnyView(
+      mainContentStartupLifecycle
+        // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
+        // hasCompletedOnboarding must be set here (in a View) because @AppStorage
+        // on ObservableObject caches internally and ignores UserDefaults.removeObject().
+        // Stopping transcription here prevents FOREIGN KEY errors from an old
+        // transcription session writing to a new user's database.
+        .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+          log(
+            "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
+          )
+          chatFirstCapabilitySample.ownerDidChange(to: nil)
+          resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+          appState.conversationRepository.reset()
+          appState.folders = []
+          appState.selectedFolderId = nil
+          appState.selectedDateFilter = nil
+          appState.showStarredOnly = false
+          appState.totalConversationsCount = nil
+          appState.conversationsError = nil
+          appState.isLoadingConversations = false
+          appState.isLoadingFolders = false
+          appState.hasCompletedOnboarding = false
+          appState.stopTranscription()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
+          log(
+            "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
+          )
+          resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+          appState.hasCompletedOnboarding = false
+          onboardingStep = 0
+          onboardingFurthestStep = 0
+          onboardingJustCompleted = false
+          appState.stopTranscription()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+          log("DesktopHomeView: app terminating — cancelling startup warmups")
+          resetSessionScopedStartupWarmups(preserveCrispReadState: true)
+        }
+        // Handle transcription toggle from menu bar
+        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
+          notification in
+          if let enabled = notification.userInfo?["enabled"] as? Bool {
+            log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+            if enabled {
+              appState.startTranscription()
+            } else {
+              appState.stopTranscription()
+            }
+          }
+        }
+        // Periodic file re-scan (every 3 hours)
+        .task {
+          while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3 * 60 * 60))
+            guard !Task.isCancelled else { break }
+            guard !AppBuild.usesLazyDevPermissions else { continue }
+            guard UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing) else {
+              continue
+            }
+            log("DesktopHomeView: Triggering background file rescan")
+            await FileIndexerService.shared.backgroundRescan()
+          }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
+          // Background rescan — no loading screen needed
+          Task {
+            log(
+              "DesktopHomeView: File indexing triggered from settings, running background rescan"
+            )
+            await FileIndexerService.shared.backgroundRescan()
+          }
+        }
+    )
+  }
+
+  var body: some View {
+    Group {
+      if shouldShowAuthEntryShell {
+        authEntryShell
+      } else if case .unresolved = chatFirstCapabilitySample.variant {
+        // Hold the legacy shell until the server-authoritative cohort settles.
+        AnyView(
+          ChatFirstCapabilityLoadingView()
+            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+              await resolveChatFirstCapabilityIfNeeded()
+            }
+        )
       } else {
-        // State 3: Signed in and onboarded - show main content
         ZStack {
           // After onboarding completes, navigate to Tasks page
           Color.clear
@@ -153,225 +402,10 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — landing on Home")
-                // Land on Home in the chat-first layout with the old rail collapsed.
-                selectedIndex = SidebarNavItem.dashboard.rawValue
-                isSidebarCollapsed = true
+                navigateAfterOnboarding()
               }
             }
-          mainContent
-            .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
-            .overlay {
-              if appState.showUsageLimitPopup {
-                UsageLimitPopupView(
-                  reason: appState.usageLimitReason,
-                  onUpgrade: {
-                    appState.showUsageLimitPopup = false
-                    selectedSettingsSection = .planUsage
-                    // Plan and Usage now lives below Account on the merged
-                    // "Account & Plan" page — scroll straight to the plan card.
-                    highlightedSettingId = "planusage.current"
-                    OmiMotion.withGated(Self.pageNavigationAnimation) {
-                      selectedIndex = SidebarNavItem.settings.rawValue
-                    }
-                  },
-                  onDismiss: {
-                    appState.showUsageLimitPopup = false
-                  },
-                  onBringYourOwnKeys: {
-                    appState.showUsageLimitPopup = false
-                    selectedSettingsSection = .advanced
-                    OmiMotion.withGated(Self.pageNavigationAnimation) {
-                      selectedIndex = SidebarNavItem.settings.rawValue
-                    }
-                  }
-                )
-              }
-            }
-            .overlay(alignment: .top) {
-              if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
-                DesktopUpdatePolicyBanner(
-                  policy: policy,
-                  onDownload: { updatePolicyManager.openDownload(policy) },
-                  onDismiss: { updatePolicyManager.dismiss(policy) }
-                )
-                .padding(.top, OmiSpacing.md)
-                .padding(.horizontal, OmiSpacing.xl)
-                .transition(.move(edge: .top).combined(with: .opacity))
-              }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
-              let reason = notification.userInfo?["reason"] as? String ?? ""
-              appState.triggerUsageLimitPopup(reason: reason)
-            }
-            .onAppear {
-              log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
-              updatePolicyManager.refresh(force: true)
-              // Check all permissions on launch
-              appState.checkAllPermissions()
-
-              // For existing users who haven't indexed files yet, run a background scan
-              if !AppBuild.usesLazyDevPermissions
-                && !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
-              {
-                scheduleInitialFileIndexing()
-              }
-
-              // Migration: one-time reset for users whose screenAnalysisEnabled
-              // was incorrectly set to false by a bug in syncMonitoringState() that
-              // persisted false whenever monitoring stopped for any reason.
-              // v2: re-run because the root cause (syncMonitoringState disabling the
-              // setting) was only fixed in this release, so v1 users got re-broken.
-              let migrationKey = "screenAnalysisAutoStartFixed_v2"
-              if !UserDefaults.standard.bool(forKey: migrationKey) {
-                UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
-                AssistantSettings.shared.screenAnalysisEnabled = true
-                UserDefaults.standard.set(true, forKey: migrationKey)
-                log(
-                  "DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled"
-                )
-                // Push true to server so syncFromServer() doesn't revert it
-                Task { await SettingsSyncManager.shared.syncToServer() }
-              }
-
-              // Named development bundles used to seed screen analysis off to
-              // avoid permission prompts. Screen capture no longer requests
-              // TCC during startup, so restore the default once: a granted
-              // named-bundle permission must actually begin storing frames.
-              let quietBundleCaptureMigrationKey = "screenAnalysisAutoStartFixed_v3"
-              if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
-                usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
-                migrationApplied: UserDefaults.standard.bool(forKey: quietBundleCaptureMigrationKey)
-              ) {
-                AssistantSettings.shared.screenAnalysisEnabled = true
-                UserDefaults.standard.set(true, forKey: quietBundleCaptureMigrationKey)
-                log("DesktopHomeView: Restored screen capture default for quiet named bundle")
-              }
-
-              restorePersistedCaptureServices(reason: "launch")
-
-              // Start Crisp chat in background for notifications, scoped to the signed-in user
-              CrispManager.shared.start(
-                initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
-                sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
-              )
-
-              // Set up floating control bar. Product invariant: normal signed-in
-              // launches must show the enabled bar immediately; hide-until-PTT is
-              // only for explicit onboarding/demo/minimal-mode contexts.
-              FloatingControlBarManager.shared.setup(
-                appState: appState, chatProvider: viewModelContainer.chatProvider)
-              FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
-
-              // Set up push-to-talk voice input
-              if let barState = FloatingControlBarManager.shared.barState {
-                PushToTalkManager.shared.setup(barState: barState)
-              }
-            }
-            .task {
-              // Trigger eager data loading when main content appears
-              await viewModelContainer.loadAllData()
-              scheduleConversationWarmup()
-              scheduleAgentVMProvisioning()
-            }
-            // Refresh conversations when app becomes active (e.g. switching back from another app)
-            .onReceive(
-              NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-            ) { _ in
-              // Cooldown: only refresh conversations if last activation was 60+ seconds ago
-              let now = Date()
-              if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
-                lastActivationRefresh = now
-                Task { await appState.refreshConversations() }
-              }
-              updatePolicyManager.refresh()
-              // Reconcile persisted intent after returning from System Settings or
-              // after a runtime service stopped while the app was inactive.
-              restorePersistedCaptureServices(reason: "app active")
-            }
-            .onChange(of: apiKeyService.isLoaded) { _, loaded in
-              guard loaded else { return }
-              log("DesktopHomeView: API keys loaded — retrying deferred services")
-              restorePersistedCaptureServices(reason: "key load")
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
-              reconcileCaptureServicesAfterSettingsSync()
-            }
-            // Cmd+R: refresh all data (conversations, chat, tasks, memories)
-            .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
-              Task { await appState.refreshConversations() }
-            }
-            // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
-            // hasCompletedOnboarding must be set here (in a View) because @AppStorage
-            // on ObservableObject caches internally and ignores UserDefaults.removeObject().
-            // Stopping transcription here prevents FOREIGN KEY errors from an old
-            // transcription session writing to a new user's database.
-            .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
-              log(
-                "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
-              )
-              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversationRepository.reset()
-              appState.folders = []
-              appState.selectedFolderId = nil
-              appState.selectedDateFilter = nil
-              appState.showStarredOnly = false
-              appState.totalConversationsCount = nil
-              appState.conversationsError = nil
-              appState.isLoadingConversations = false
-              appState.isLoadingFolders = false
-              appState.hasCompletedOnboarding = false
-              appState.stopTranscription()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
-              log(
-                "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
-              )
-              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.hasCompletedOnboarding = false
-              onboardingStep = 0
-              onboardingFurthestStep = 0
-              onboardingJustCompleted = false
-              appState.stopTranscription()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-              log("DesktopHomeView: app terminating — cancelling startup warmups")
-              resetSessionScopedStartupWarmups(preserveCrispReadState: true)
-            }
-            // Handle transcription toggle from menu bar
-            .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
-              notification in
-              if let enabled = notification.userInfo?["enabled"] as? Bool {
-                log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
-                if enabled {
-                  appState.startTranscription()
-                } else {
-                  appState.stopTranscription()
-                }
-              }
-            }
-            // Periodic file re-scan (every 3 hours)
-            .task {
-              while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3 * 60 * 60))
-                guard !Task.isCancelled else { break }
-                guard !AppBuild.usesLazyDevPermissions else { continue }
-                guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else {
-                  continue
-                }
-                log("DesktopHomeView: Triggering background file rescan")
-                await FileIndexerService.shared.backgroundRescan()
-              }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-              // Background rescan — no loading screen needed
-              Task {
-                log(
-                  "DesktopHomeView: File indexing triggered from settings, running background rescan"
-                )
-                await FileIndexerService.shared.backgroundRescan()
-              }
-            }
+          mainContentWithLifecycle
 
           if !viewModelContainer.isInitialLoadComplete {
             VStack(spacing: OmiSpacing.xxl) {
@@ -469,6 +503,15 @@ struct DesktopHomeView: View {
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
     .onChange(of: authState.isRestoringAuth) { _, _ in reportAutomationState() }
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
+    .onChange(of: chatFirstCapabilitySample.variant) { _, _ in
+      consumePendingMainChatRequestForChatFirstShell()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      chatFirstCapabilitySample.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
+      // The provider's owner-bound gate rejects the previous sample for this
+      // owner; no replacement sample is persisted or inferred locally.
+      reportAutomationState()
+    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
@@ -497,11 +540,25 @@ struct DesktopHomeView: View {
         }
       }
     }
-    // "Continue in Omi" from the floating bar: switch to the Home tab; the
-    // dashboard consumes the pending request and opens the chat panel.
+    // "Continue in Omi" from the floating bar. The legacy Dashboard owns its
+    // existing pending-request consumption, while the Chat-first shell has no
+    // Dashboard chat panel to consume it on its behalf.
     .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
-      selectedIndex = SidebarNavItem.dashboard.rawValue
+      handleMainChatRequest()
     }
+  }
+
+  private func handleMainChatRequest() {
+    guard usesChatFirstShell else {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+      return
+    }
+    consumePendingMainChatRequestForChatFirstShell()
+  }
+
+  private func consumePendingMainChatRequestForChatFirstShell() {
+    guard usesChatFirstShell, MainChatNavigationRequestStore.shared.consume() else { return }
+    chatFirstNavigation.selectPrimary(.chat, origin: .chatDeeplink)
   }
 
   private func enforceMainWindowMinimumSize() {
@@ -589,6 +646,7 @@ struct DesktopHomeView: View {
 
   /// Redirect to conversations if current page isn't visible at the current tier level
   private func redirectIfPageHidden() {
+    guard !usesChatFirstShell else { return }
     // Tier 0 or tier 6+ shows everything — no redirect needed
     guard currentTierLevel > 0 && currentTierLevel < 6 else { return }
     // Don't redirect from settings/permissions/help pages
@@ -617,7 +675,7 @@ struct DesktopHomeView: View {
   }
 
   private var showsPrimarySidebar: Bool {
-    useLegacyHomeDesign && !hideSidebar
+    !usesChatFirstShell && useLegacyHomeDesign && !hideSidebar
   }
 
   /// The constant floating top bar (nav + new-item counts + Capture/Listening)
@@ -628,7 +686,6 @@ struct DesktopHomeView: View {
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
     guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    if isShowingMemoryAtlasPage { return false }
     return ![.permissions, .help].contains(item)
   }
 
@@ -679,19 +736,30 @@ struct DesktopHomeView: View {
     })
     let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
     let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
+    let chatFirstRoute = usesChatFirstShell ? chatFirstNavigation.route : nil
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
       bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
       appState: currentAppStateLabel,
-      selectedTab: SidebarNavItem(rawValue: selectedIndex)?.title,
-      selectedTabIndex: selectedIndex,
-      selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
+      selectedTab: chatFirstRoute?.title ?? SidebarNavItem(rawValue: selectedIndex)?.title,
+      selectedTabIndex: usesChatFirstShell ? nil : selectedIndex,
+      selectedSettingsSection: usesChatFirstShell
+        ? (chatFirstRoute == .more(.settings) ? selectedSettingsSection.rawValue : nil)
+        : (isInSettings ? selectedSettingsSection.rawValue : nil),
       highlightedSettingId: highlightedSettingId,
-      usesLegacyHomeDesign: useLegacyHomeDesign,
-      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
+      usesLegacyHomeDesign: !usesChatFirstShell && useLegacyHomeDesign,
+      homeMode: !usesChatFirstShell && onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
+      shellVariant: chatFirstCapabilitySample.variant.stableName,
+      chatFirstRoute: chatFirstRoute?.stableName,
+      visibleChatFirstRoute: usesChatFirstShell ? chatFirstNavigation.visibleRoute?.stableName : nil,
+      pendingFocusKind: chatFirstNavigation.pendingFocus?.stableName,
+      acknowledgedFocusKind: chatFirstNavigation.lastAcknowledgedFocusKind,
+      focusedEntityID: chatFirstNavigation.focusedEntityID,
+      isFocusedEntityAcknowledged: chatFirstNavigation.isFocusedEntityAcknowledged,
       showsPrimarySidebar: showsPrimarySidebar,
-      isSidebarCollapsed: isSidebarCollapsed,
+      isSidebarCollapsed: usesChatFirstShell
+        ? chatFirstNavigation.isSidebarCollapsed : isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
       isRestoringAuth: authState.isRestoringAuth,
@@ -737,8 +805,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if let item = resolvedAutomationTarget(target) {
-      selectedIndex = item.rawValue
+    if usesChatFirstShell,
+      let route = ChatFirstRoute.primaryAutomationDestination(named: target)
+    {
+      chatFirstNavigation.selectPrimary(route)
+    } else if let item = resolvedAutomationTarget(target) {
+      navigateToLegacyDestination(item)
     }
 
     reportAutomationState()
@@ -751,7 +823,7 @@ struct DesktopHomeView: View {
     if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
       window.makeKeyAndOrderFront(nil)
     }
-    selectedIndex = SidebarNavItem.apps.rawValue
+    navigateToLegacyDestination(.apps)
     reportAutomationState()
   }
 
@@ -1007,6 +1079,283 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.conversations.rawValue || index == SidebarNavItem.memories.rawValue
   }
 
+  private var usesChatFirstShell: Bool {
+    DesktopShellPresentationPolicy.usesChatFirst(useLegacyHomeDesign, chatFirstCapabilitySample.variant)
+  }
+
+  private func updateStoreActivityForCurrentShell() {
+    guard usesChatFirstShell else {
+      updateStoreActivity(for: selectedIndex)
+      return
+    }
+    viewModelContainer.tasksStore.isActive =
+      chatFirstNavigation.route == .tasks || chatFirstNavigation.route == .more(.dashboard)
+    viewModelContainer.memoriesViewModel.isActive = chatFirstNavigation.route == .memories
+  }
+
+  /// One fresh server read decides both the shell and the local runtime
+  /// projection. A failed response, missing owner, stale auth snapshot, or
+  /// owner change resolves legacy; there is no cached local enablement.
+  private func resolveChatFirstCapabilityIfNeeded() async {
+    guard case .unresolved = chatFirstCapabilitySample.variant else { return }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else {
+      chatFirstCapabilitySample.resolve(
+        control: nil,
+        requestedOwnerID: nil,
+        ownerIsStillCurrent: false
+      )
+      _ = viewModelContainer.chatProvider.configureChatFirstMainChatCapability(nil)
+      AnalyticsManager.shared.chatFirst(
+        .capabilityResolution(
+          outcome: .unavailable,
+          generationBucket: .none,
+          errorClass: .ownerChanged
+        )
+      )
+      reportAutomationState()
+      return
+    }
+
+    var capabilityErrorClass: ChatFirstAnalyticsEvent.CapabilityErrorClass = .none
+    do {
+      let control = try await APIClient.shared.getCandidateWorkflowControl(
+        expectedOwnerId: ownerID,
+        authorizationSnapshot: authorization
+      )
+      let current =
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        && RuntimeOwnerIdentity.currentOwnerId() == ownerID
+      chatFirstCapabilitySample.resolve(
+        control: control,
+        requestedOwnerID: ownerID,
+        ownerIsStillCurrent: current
+      )
+    } catch {
+      let current =
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        && RuntimeOwnerIdentity.currentOwnerId() == ownerID
+      chatFirstCapabilitySample.resolve(
+        control: nil,
+        requestedOwnerID: ownerID,
+        ownerIsStillCurrent: current
+      )
+      capabilityErrorClass = .unavailable
+      log("DesktopHomeView: chat-first control unavailable; using legacy shell")
+    }
+
+    let projectionConfigured = viewModelContainer.chatProvider.configureChatFirstMainChatCapability(
+      chatFirstCapabilitySample.variant.projection
+    )
+    if !projectionConfigured {
+      // A pre-existing Main Chat session cannot be retroactively upgraded with
+      // dynamic tools. Keep this launch on the byte-equivalent legacy path.
+      chatFirstCapabilitySample.failClosed()
+      capabilityErrorClass = .projectionRejected
+      log("DesktopHomeView: chat-first projection handoff rejected; using legacy shell")
+    }
+    let projection = chatFirstCapabilitySample.variant.projection
+    let capabilityOutcome: ChatFirstAnalyticsEvent.CapabilityOutcome
+    if capabilityErrorClass == .projectionRejected {
+      capabilityOutcome = .projectionRejected
+    } else if capabilityErrorClass == .unavailable {
+      capabilityOutcome = .unavailable
+    } else if projection != nil {
+      capabilityOutcome = .enabled
+    } else {
+      capabilityOutcome = .disabled
+    }
+    AnalyticsManager.shared.chatFirst(
+      .capabilityResolution(
+        outcome: capabilityOutcome,
+        generationBucket: .bucket(for: projection?.controlGeneration),
+        errorClass: capabilityErrorClass
+      )
+    )
+    reportAutomationState()
+  }
+
+  private func navigateAfterOnboarding() {
+    if usesChatFirstShell {
+      chatFirstNavigation.selectPrimary(.chat)
+      log("DesktopHomeView: Onboarding just completed — opening Chat")
+    } else {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+      log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
+    }
+  }
+
+  /// Existing menu, keyboard, and automation callers retain their legacy
+  /// names. This is the sole root adapter between those callers and typed
+  /// cohort navigation.
+  private func navigateToLegacyDestination(_ item: SidebarNavItem) {
+    if usesChatFirstShell {
+      chatFirstNavigation.selectLegacyDestination(item)
+    } else {
+      selectedIndex = item.rawValue
+    }
+  }
+
+  private var mainContent: some View {
+    mainContentWithLifecycle(
+      mainContentWithNotifications(
+        mainContentWithOverlays(shellContent)
+      )
+    )
+  }
+
+  /// Keep the type checker from attempting to infer every shell, overlay, and
+  /// event subscription in one expression. The functions deliberately retain
+  /// the existing modifier order; they are only compile-time seams.
+  private func mainContentWithOverlays<Content: View>(_ content: Content) -> some View {
+    content
+      .overlay {
+        // Goal completion celebration overlay
+        GoalCelebrationView()
+      }
+      .overlay {
+        if showTryAskingPopup {
+          let suggestions = PostOnboardingPromptSuggestions.suggestions()
+          if !suggestions.isEmpty {
+            TryAskingPopupView(
+              suggestions: suggestions,
+              onAsk: { suggestion in
+                showTryAskingPopup = false
+                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+              },
+              onDismiss: {
+                showTryAskingPopup = false
+                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                PostOnboardingPromptSuggestions.isDismissed = true
+              }
+            )
+          }
+        }
+      }
+  }
+
+  private func mainContentWithNotifications<Content: View>(_ content: Content) -> some View {
+    content
+      .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+        showTryAskingPopup = true
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
+        selectedSettingsSection = .rewind
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
+        if let url = URL(string: "https://www.omi.me") {
+          NSWorkspace.shared.open(url)
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
+        selectedSettingsSection = .advanced
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+        selectedSettingsSection = .floatingBar
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
+        selectedSettingsSection = .advanced
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
+        log("DesktopHomeView: Received navigateToRewind notification")
+        navigateToLegacyDestination(.rewind)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
+        navigateToLegacyDestination(.rewind)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+        if usesChatFirstShell {
+          chatFirstNavigation.selectPrimary(.chat)
+        } else {
+          // Legacy Home owns the historic Chat notification contract.
+          selectedIndex = SidebarNavItem.dashboard.rawValue
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
+        navigateToLegacyDestination(.tasks)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
+        if let rawValue = notification.userInfo?["rawValue"] as? Int,
+          let item = SidebarNavItem(rawValue: rawValue)
+        {
+          navigateToLegacyDestination(item)
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
+        memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
+        selectedIndex = SidebarNavItem.conversations.rawValue
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
+        memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
+        navigateToLegacyDestination(.conversations)
+      }
+  }
+
+  private func mainContentWithLifecycle<Content: View>(_ content: Content) -> some View {
+    content
+      .onChange(of: selectedIndex) { oldValue, newValue in
+        if newValue == SidebarNavItem.settings.rawValue
+          && oldValue != SidebarNavItem.settings.rawValue
+        {
+          previousIndexBeforeSettings = oldValue
+        }
+        updateStoreActivity(for: newValue)
+      }
+      .onChange(of: chatFirstNavigation.route) { _, _ in
+        updateStoreActivityForCurrentShell()
+        reportAutomationState()
+      }
+      .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
+      .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
+      .onChange(of: useLegacyHomeDesign) { _, newValue in
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+          isSidebarCollapsed = !newValue
+        }
+      }
+      .onAppear {
+        if case .legacy = chatFirstCapabilitySample.variant {
+          isSidebarCollapsed = !useLegacyHomeDesign
+        }
+        updateStoreActivityForCurrentShell()
+        restorePreChatWindowWidth()
+      }
+  }
+
+  /// Keep the legacy HStack out of the chat-first branch's SwiftUI generic
+  /// expression. The runtime choice is already immutable for this app session;
+  /// this is only an erased rendering boundary, not a second state owner.
+  private var shellContent: AnyView {
+    if case (true, .chatFirst(let capability)) = (usesChatFirstShell, chatFirstCapabilitySample.variant) {
+      return AnyView(
+        ChatFirstShell(
+          navigation: chatFirstNavigation,
+          appState: appState,
+          viewModelContainer: viewModelContainer,
+          capability: capability,
+          selectedSettingsSection: $selectedSettingsSection,
+          highlightedSettingID: $highlightedSettingId
+        )
+      )
+    }
+    return AnyView(legacyMainContent)
+  }
+
+  private var legacyMainContent: some View {
+    HStack(spacing: 0) {
+      sidebarSlot
+      mainContentContainer
+    }
+  }
+
   // Sidebar slot: settings sidebar overlays main sidebar
   // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
   // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
@@ -1107,8 +1456,7 @@ struct DesktopHomeView: View {
           memoryDestinationRawValue: $memoryDestinationRawValue,
           selectedSettingsSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
-          selectedTabIndex: $selectedIndex,
-          isShowingMemoryAtlasPage: $isShowingMemoryAtlasPage
+          selectedTabIndex: $selectedIndex
         )
       }
       .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
@@ -1117,162 +1465,12 @@ struct DesktopHomeView: View {
     .padding(OmiSpacing.md)
   }
 
-  // The "Try asking" popup overlay content, split out so the overlay closure
-  // above it stays a small expression for the type checker.
-  @ViewBuilder
-  private var tryAskingPopupOverlay: some View {
-    if showTryAskingPopup {
-      let suggestions = PostOnboardingPromptSuggestions.suggestions()
-      if !suggestions.isEmpty {
-        TryAskingPopupView(
-          suggestions: suggestions,
-          onAsk: { suggestion in
-            showTryAskingPopup = false
-            PostOnboardingPromptSuggestions.shouldShowPopup = false
-            FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
-          },
-          onDismiss: {
-            showTryAskingPopup = false
-            PostOnboardingPromptSuggestions.shouldShowPopup = false
-            PostOnboardingPromptSuggestions.isDismissed = true
-          }
-        )
-      }
-    }
-  }
-
-  private var mainContentWithOverlays: some View {
-    HStack(spacing: 0) {
-      sidebarSlot
-      mainContentContainer
-    }
-    .overlay {
-      // Goal completion celebration overlay
-      GoalCelebrationView()
-    }
-    .overlay {
-      tryAskingPopupOverlay
-    }
-  }
-
-  // The full `.onReceive`/`.onChange`/`.onAppear` chain below is, together with
-  // `mainContentWithOverlays`, one enormous SwiftUI expression for the `some
-  // View` type checker. Splitting it across several intermediate `some View`
-  // properties (rather than one long chain) keeps each link small enough to
-  // type-check in reasonable time — see "unable to type-check this expression"
-  // in Swift's SwiftUI diagnostics for this well-known compiler limitation.
-  private var mainContentWithNavigationNotifications: some View {
-    mainContentWithOverlays
-      .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
-        showTryAskingPopup = true
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
-        // Set the section directly and navigate to settings
-        selectedSettingsSection = .rewind
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-        if let url = URL(string: "https://www.omi.me") {
-          NSWorkspace.shared.open(url)
-        }
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
-        // Navigate to settings > advanced > task assistant subsection
-        selectedSettingsSection = .advanced
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-        selectedSettingsSection = .floatingBar
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
-  }
-
-  private var mainContentWithRewindAndMemoryNotifications: some View {
-    mainContentWithNavigationNotifications
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
-        selectedSettingsSection = .advanced
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
-        // Navigate to Rewind page (index 6) - triggered by global hotkey Cmd+Option+R
-        log(
-          "DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))"
-        )
-        selectedIndex = SidebarNavItem.rewind.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
-        selectedIndex = SidebarNavItem.rewind.rawValue
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
-        }
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
-        // Chat now lives on the Dashboard page.
-        selectedIndex = SidebarNavItem.dashboard.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
-        selectedIndex = SidebarNavItem.tasks.rawValue
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
-        selectedIndex = SidebarNavItem.memories.rawValue
-        isShowingMemoryAtlasPage = true
-      }
-  }
-
-  private var mainContentWithSidebarItemNotifications: some View {
-    mainContentWithRewindAndMemoryNotifications
-      .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
-        if let rawValue = notification.userInfo?["rawValue"] as? Int,
-          let item = SidebarNavItem(rawValue: rawValue)
-        {
-          if let destination = MemoryHubDestination.destination(for: item) {
-            memoryDestinationRawValue = destination.rawValue
-          }
-          selectedIndex = item.rawValue
-        }
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
-        // Conversations now live behind the Memory menu. Route at
-        // the owning shell before the detail page mounts; its retained request is
-        // then consumed by ConversationsPage on appearance.
-        memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
-        selectedIndex = SidebarNavItem.conversations.rawValue
-      }
-  }
-
-  private var mainContent: some View {
-    mainContentWithSidebarItemNotifications
-      .onChange(of: selectedIndex) { oldValue, newValue in
-        if newValue != SidebarNavItem.memories.rawValue {
-          isShowingMemoryAtlasPage = false
-        }
-        // Track the previous index when navigating to settings
-        if newValue == SidebarNavItem.settings.rawValue
-          && oldValue != SidebarNavItem.settings.rawValue
-        {
-          previousIndexBeforeSettings = oldValue
-        }
-        // Only auto-refresh stores when their pages are visible
-        updateStoreActivity(for: newValue)
-      }
-      .onChange(of: useLegacyHomeDesign) { _, newValue in
-        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-          isSidebarCollapsed = !newValue
-        }
-      }
-      .onAppear {
-        isSidebarCollapsed = !useLegacyHomeDesign
-        updateStoreActivity(for: selectedIndex)
-        // Restore window width if the user quit with task chat panel open.
-        // The chat panel is never open on startup (showChatPanel defaults to false),
-        // but macOS restores the expanded window frame from the previous session.
-        restorePreChatWindowWidth()
-      }
-  }
-
   private func navigateHomeOnEscapeIfNeeded() -> Bool {
-    if isShowingMemoryAtlasPage {
-      isShowingMemoryAtlasPage = false
+    if usesChatFirstShell {
+      guard chatFirstNavigation.route != .chat else { return false }
+      OmiMotion.withGated(Self.pageNavigationAnimation) {
+        chatFirstNavigation.selectPrimary(.chat)
+      }
       return true
     }
     guard
@@ -1285,6 +1483,68 @@ struct DesktopHomeView: View {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
     return true
+  }
+}
+
+private struct ChatFirstCapabilityLoadingView: View {
+  var body: some View {
+    VStack(spacing: OmiSpacing.md) {
+      ProgressView()
+        .controlSize(.small)
+      Text("Preparing Omi…")
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundStyle(OmiColors.textSecondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(OmiColors.backgroundPrimary)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Preparing Omi")
+  }
+}
+
+private struct PageChromeBar: View {
+  let onHome: () -> Void
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
+      Spacer()
+    }
+    .frame(height: 34)
+  }
+}
+
+private struct PageChromeButton: View {
+  let title: String
+  let systemImage: String
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: OmiSpacing.xs) {
+        Image(systemName: systemImage)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        Text(title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
+      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        Capsule(style: .continuous)
+          .fill(.ultraThinMaterial)
+      )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
   }
 }
 
@@ -1325,7 +1585,7 @@ private struct HubSegmentedControl: View {
   }
 }
 
-private struct MemoryHubPage: View {
+struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
   /// Observed, not just read through the container: the canonical lifecycle
@@ -1483,7 +1743,6 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
-  @Binding var isShowingMemoryAtlasPage: Bool
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
   /// content in a centered, width-capped column so wide monitors get calm
@@ -1529,36 +1788,16 @@ private struct PageContentView: View {
           onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
-        if isShowingMemoryAtlasPage {
-          CanonicalMemoryAtlasPage(
-            viewModel: viewModelContainer.memoryGraphViewModel,
-            onBack: { isShowingMemoryAtlasPage = false },
-            evidenceProvider: { memoryIds in
-              MemoryAtlasEvidence.resolve(
-                memoryIds,
-                in: await viewModelContainer.memoriesViewModel.memories(withIDs: memoryIds))
-            },
-            onOpenMemory: { memoryId in
-              Task { @MainActor in
-                guard await viewModelContainer.memoriesViewModel.openMemory(id: memoryId) else {
-                  return
-                }
-                isShowingMemoryAtlasPage = false
-              }
-            }
+        // Same rule as the hub's Memories destination: the readable-width
+        // cap yields while the detail panel is open so the panel takes new
+        // space instead of eating the list's column.
+        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+          .frame(
+            maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
+              ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
+            maxHeight: .infinity
           )
-        } else {
-          // Same rule as the hub's Memories destination: the readable-width
-          // cap yields while the detail panel is open so the panel takes new
-          // space instead of eating the list's column.
-          MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-            .frame(
-              maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
-                ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
-              maxHeight: .infinity
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       case 4:
         constrainedListPage(
           TasksPage(
@@ -1606,7 +1845,7 @@ private struct PageContentView: View {
 
 /// Hosts the standalone Conversations page with its own selection state
 /// so tapping a row navigates to the detail view.
-private struct ConversationsPageHost: View {
+struct ConversationsPageHost: View {
   let appState: AppState
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared

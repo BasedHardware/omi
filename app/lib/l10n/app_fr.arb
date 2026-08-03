@@ -3028,6 +3028,7 @@
     "syncStatusWaiting": "En attente de synchronisation",
     "syncStatusRetrying": "Échec du traitement — nouvelle tentative",
     "syncStatusFailed": "Échec — appuyez sur Réessayer",
+    "syncStatusTooOld": "Trop ancien pour être synchronisé — Omi ne peut pas l'accepter",
     "syncStatusFileUnavailable": "Fichier indisponible",
     "syncStatusUploaded": "Envoyé · traitement sur Omi",
     "noRecordingsYet": "Aucun enregistrement pour l'instant",

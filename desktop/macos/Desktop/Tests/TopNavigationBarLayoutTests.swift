@@ -112,6 +112,20 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
     XCTAssertEqual(TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap])
   }
+
+  func testNavigationLaneUsesTheComposerWidthAndInsetsAtNarrowSizes() {
+    XCTAssertEqual(ChatComposerLayout.contentLaneMaxWidth, 900)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 900)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 768)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 8)
+  }
+
+  func testListeningHoverControlsHaveAStableReservedSlot() {
+    // The secondary mode toggle is conditional on hover, so the slot—not the
+    // conditional child—owns the measured width used by the right nav group.
+    XCTAssertEqual(CaptureListeningControlsLayout.listeningSlotWidth, 136)
+    XCTAssertGreaterThan(CaptureListeningControlsLayout.listeningSlotWidth, 104)
+  }
 }
 
 private enum TopNavigationLayoutSlot: Hashable {

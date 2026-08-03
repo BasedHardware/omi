@@ -6,6 +6,13 @@ set -e
 # a non-English locale (e.g. de_DE.UTF-8 expects a comma separator).
 export LC_NUMERIC=C
 
+# Codex, launchd, and other non-login shells may not inherit Homebrew's bin
+# directory. Keep the launcher self-contained so tools such as pkg-config are
+# discoverable on both Apple Silicon and Intel Macs.
+# shellcheck source=launcher-bootstrap.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/launcher-bootstrap.sh"
+omi_configure_homebrew_path
+
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
@@ -476,7 +483,7 @@ sign_app_bundle() {
             substep "Signing libwebp"
             codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
-        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
             codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
@@ -963,7 +970,8 @@ substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 
 # Copy Sparkle framework
-SPARKLE_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sparkle.framework"
+SWIFTPM_DEBUG_PRODUCTS_DIR="Desktop/.build/debug"
+SPARKLE_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sparkle.framework"
 if [ -d "$SPARKLE_FRAMEWORK" ]; then
     substep "Copying Sparkle framework ($(du -sh "$SPARKLE_FRAMEWORK" 2>/dev/null | cut -f1))"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
@@ -971,7 +979,7 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
 fi
 
 # Copy Sentry framework
-SENTRY_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sentry.framework"
+SENTRY_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sentry.framework"
 if [ -d "$SENTRY_FRAMEWORK" ]; then
     substep "Copying Sentry framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
@@ -979,7 +987,7 @@ if [ -d "$SENTRY_FRAMEWORK" ]; then
 fi
 
 # Copy onnxruntime framework
-ONNX_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/onnxruntime.framework"
+ONNX_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/onnxruntime.framework"
 if [ -d "$ONNX_FRAMEWORK" ]; then
     substep "Copying onnxruntime framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
@@ -1024,10 +1032,16 @@ fi
 /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID $BUNDLE_ID" "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist" 2>/dev/null || true
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
-RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
+RESOURCE_BUNDLE="$SWIFTPM_DEBUG_PRODUCTS_DIR/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
     macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
+    # SwiftPM places Resources/node at the resource-bundle root, while the
+    # app runtime and signed-artifact audit use the app-style nested layout.
+    # Move the universal runtime within the disposable bundle so we do not
+    # package a second 200+ MiB copy.
+    omi_normalize_packaged_resource_bundle \
+        "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
 substep "Copying agent"
@@ -1041,10 +1055,6 @@ if [ -d "$AGENT_DIR/dist" ]; then
         exit 1
     fi
     macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
