@@ -868,6 +868,7 @@ struct PeoplePage: View {
           linkedInCard
         }
         .padding(.vertical, 1)
+        .fixedSize(horizontal: false, vertical: true)
       }
     }
   }

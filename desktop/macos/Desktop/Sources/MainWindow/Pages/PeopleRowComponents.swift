@@ -112,7 +112,11 @@ struct ConnectorCard: View {
       }
     }
     .padding(11)
-    .frame(width: 148, height: 118, alignment: .topLeading)
+    // Height comes from content, never a constant: the status line can wrap to
+    // two lines (X shows "@handle · synced 1w ago") and a fixed height clipped
+    // the action button. maxHeight lets every card match the tallest in the row.
+    .frame(width: 152, alignment: .topLeading)
+    .frame(maxHeight: .infinity, alignment: .topLeading)
     .sbCard(radius: 14)
   }
 }
