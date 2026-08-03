@@ -126,7 +126,7 @@ PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py
 # the SHA only after proving it is still current, same-repository main; retain
 # that output expression so release-vector gates cannot bypass admission with
 # workflow_run or workflow execution context SHAs.
-AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
+AUTO_DEPLOY_ADMITTED_SHA = '${{ inputs.admitted_sha }}'
 
 
 class PolicyError(ValueError):
@@ -392,7 +392,11 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
     if not any(
         marker in snapshot_step
-        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture')
+        for marker in (
+            "backend/scripts/cloud_run_traffic_snapshot.py capture",
+            'cloud_run_traffic_snapshot.py" capture',
+            "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py capture",
+        )
     ):
         errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
     for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
@@ -401,7 +405,11 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
 
     if not any(
         marker in "\n".join(profile_restore)
-        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore')
+        for marker in (
+            "backend/scripts/cloud_run_traffic_snapshot.py restore",
+            'cloud_run_traffic_snapshot.py" restore',
+            "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py restore",
+        )
     ):
         errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
     for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
@@ -850,23 +858,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - uses: ./.github/actions/deploy-backend-stack
       - run: >-
-          python3 backend/scripts/verify_backend_release_vector.py
+          $DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py
           --candidate
-          --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"
+          --commit-sha "${{ inputs.admitted_sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
           --environment dev
       - name: Capture exact no-traffic candidate URLs
-      - run: python3 backend/scripts/run_dev_candidate_acceptance.py
+      - run: $DEPLOY_CONTROL_SCRIPTS/run_dev_candidate_acceptance.py
       - name: Shift Cloud Run traffic to validated revisions
 """
-    if validate_auto_deploy_acceptance(in_deploy_acceptance):
+    if validate_auto_deploy_acceptance("fixture.yml", in_deploy_acceptance):
         raise PolicyError("valid in-deploy candidate acceptance was rejected")
 
     for wrong_sha in ("${{ github.sha }}", "${{ github.event.workflow_run.head_sha }}"):
         wrong_source = in_deploy_acceptance.replace(AUTO_DEPLOY_ADMITTED_SHA, wrong_sha)
-        if not any("commit-sha" in error for error in validate_auto_deploy_acceptance(wrong_source)):
+        if not any("commit-sha" in error for error in validate_auto_deploy_acceptance("fixture.yml", wrong_source)):
             raise PolicyError(f"unadmitted {wrong_sha} satisfied the candidate acceptance contract")
 
     serving_vector = """name: fixture
@@ -885,13 +894,14 @@ jobs:
   deploy:
     steps:
       - name: Accept no-traffic Cloud Run candidate
-        run: python3 backend/scripts/verify_backend_release_vector.py --candidate --cloud-run-only
+        run: $DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py --candidate --cloud-run-only
       - name: Apply non-secret backend runtime config
       - name: Deploy backend-secrets to GKE
       - name: Deploy ${{ env.SERVICE }}-listen to GKE
       - name: Capture Cloud Run pre-promotion traffic snapshot
+        id: cloud-run-traffic-snapshot
         run: |-
-          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \\
+          $DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py capture \\
             --service backend \\
             --service backend-sync \\
             --service backend-sync-backfill \\
@@ -901,10 +911,11 @@ jobs:
         id: shift-cloud-run-traffic
       - name: Verify serving backend release vector
         id: verify-serving-release-vector
+        run: $DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py --environment dev
       - name: Restore Cloud Run traffic snapshot after failed promotion
-        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') && inputs.deploy_profile == 'auto-dev' }}
         run: |-
-          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \\
+          $DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py restore \\
             --evidence-path cloud-run-traffic-restore.json
 """
     if validate_phase_aware_backend_promotion("fixture.yml", phase_aware_promotion):
