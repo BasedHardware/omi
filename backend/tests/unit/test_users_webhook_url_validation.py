@@ -122,12 +122,36 @@ def test_missing_url_returns_422():
 
 
 def test_valid_url_sets():
-    with patch.object(users_mod, 'set_user_webhook_db') as setdb, patch.object(users_mod, 'disable_user_webhook_db'):
+    with (
+        patch.object(users_mod, 'set_user_webhook_db') as setdb,
+        patch.object(users_mod, 'disable_user_webhook_db'),
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+    ):
         result = users_mod.set_user_webhook_endpoint(
             wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
         )
     assert result['status'] == 'ok'
     setdb.assert_called_once()
+    enable.assert_called_once_with('u1', 'audio_bytes')
+    reset_health.assert_called_once_with('u1', 'audio_bytes')
+
+
+def test_empty_url_disables_without_resetting_health():
+    with (
+        patch.object(users_mod, 'set_user_webhook_db') as setdb,
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+    ):
+        result = users_mod.set_user_webhook_endpoint(
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=''), uid='u1'
+        )
+    assert result['status'] == 'ok'
+    disable.assert_called_once_with('u1', 'audio_bytes')
+    setdb.assert_called_once_with('u1', 'audio_bytes', '')
+    enable.assert_not_called()
+    reset_health.assert_not_called()
 
 
 def test_get_missing_webhook_url_validates_as_nullable_response():
