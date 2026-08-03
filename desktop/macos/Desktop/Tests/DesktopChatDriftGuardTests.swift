@@ -116,9 +116,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- the cohort shell must share the
-    // modern top-navigation and Dashboard/Home chat surfaces and must not
-    // resurrect either its retired rail or ChatPage's nested header.
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
     XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))

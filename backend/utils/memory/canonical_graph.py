@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -23,19 +23,16 @@ from utils.memory.v3.cursor import (
     create_v3_cursor,
     parse_v3_cursor,
 )
+from utils.memory.v3.keyset_datetime import KeysetTimeUnit, decode_keyset_time, encode_keyset_time
 
 DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT = 200
 MAX_CANONICAL_GRAPH_PAGE_LIMIT = 500
-CANONICAL_GRAPH_ASSERTION_BATCH_SIZE = 100
 CANONICAL_GRAPH_CURSOR_SOURCE = 'canonical_memory_graph'
 CANONICAL_GRAPH_CURSOR_READ_MODE = 'canonical_graph'
 CANONICAL_GRAPH_CURSOR_FILTER = 'canonical_graph_v1:updated_at_desc:memory_id_desc'
 CANONICAL_GRAPH_CURSOR_TTL_SECONDS = 600
-# V3 cursors expose an integer timestamp slot. Preserve Firestore's microsecond
-# precision here so a page boundary cannot move backward when tied timestamps
-# differ below millisecond precision.
-CANONICAL_GRAPH_CURSOR_TIME_SCALE = 1_000_000
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
+CANONICAL_GRAPH_REVISION_READ_RETRIES = 2
 
 
 class CanonicalGraphCursorError(ValueError):
@@ -48,6 +45,21 @@ class CanonicalGraphCursorError(ValueError):
 
 class CanonicalGraphReadUnavailable(RuntimeError):
     """Raised when the canonical graph cannot establish its trusted read fence."""
+
+
+@dataclass(frozen=True)
+class CanonicalKnowledgeGraphPage:
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    has_more: bool
+    next_cursor: Optional[str]
+
+
+@dataclass(frozen=True)
+class _CanonicalGraphCursorBoundary:
+    item: Dict[str, Any]
+    updated_at: datetime
+    memory_id: str
 
 
 @dataclass(frozen=True)
@@ -127,27 +139,16 @@ def _canonical_graph_cursor_context(
 
 
 def _canonical_graph_cursor_time(value: datetime) -> int:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise CanonicalGraphCursorError('malformed_cursor_boundary')
-    utc_value = value.astimezone(timezone.utc)
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    delta = utc_value - epoch
-    cursor_time = (
-        delta.days * 24 * 60 * 60 * CANONICAL_GRAPH_CURSOR_TIME_SCALE
-        + delta.seconds * CANONICAL_GRAPH_CURSOR_TIME_SCALE
-        + delta.microseconds
-    )
-    if cursor_time < 0:
-        raise CanonicalGraphCursorError('malformed_cursor_boundary')
-    return cursor_time
+    try:
+        return encode_keyset_time(value, KeysetTimeUnit.MICROSECONDS)
+    except ValueError as exc:
+        raise CanonicalGraphCursorError('malformed_cursor_boundary') from exc
 
 
 def _canonical_graph_time_from_cursor(value: Any) -> datetime:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise CanonicalGraphCursorError('malformed_cursor_boundary')
     try:
-        return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=value)
-    except (OverflowError, ValueError) as exc:
+        return decode_keyset_time(value, KeysetTimeUnit.MICROSECONDS)
+    except ValueError as exc:
         raise CanonicalGraphCursorError('malformed_cursor_boundary') from exc
 
 
@@ -228,87 +229,50 @@ def _canonical_graph_query_item_is_eligible(
     )
 
 
-def _load_assertions_for_canonical_graph_items(
+def _canonical_graph_snapshot_item(
     uid: str,
-    items: Iterable[Dict[str, Any]],
+    snapshot: Any,
     *,
-    db_client: Any,
     account_generation: int,
-) -> List[Tuple[Dict[str, Any], MemoryGraphAssertion]]:
-    # Repeat every query eligibility fence before reading assertions. This
-    # protects against malformed fakes, stale snapshots, and future query
-    # changes accidentally widening the accepted assertion universe.
-    ordered_items = [
-        item
-        for item in items
-        if _canonical_graph_query_item_is_eligible(
-            uid,
-            item,
-            account_generation=account_generation,
-        )
-    ]
-    if not ordered_items:
-        return []
-    user_ref = db_client.collection(kg_db.users_collection).document(uid)
-    item_by_id = {
-        cast(str, item['memory_id']): item
-        for item in ordered_items
-        if isinstance(item.get('memory_id'), str) and item.get('memory_id')
-    }
-    assertion_refs = [
-        user_ref.collection(kg_db.memory_graph_assertions_collection).document(memory_id)
-        for memory_id in sorted(item_by_id)
-    ]
-    assertions_by_id: Dict[str, MemoryGraphAssertion] = {}
-    for start in range(0, len(assertion_refs), CANONICAL_GRAPH_ASSERTION_BATCH_SIZE):
-        batch_refs = assertion_refs[start : start + CANONICAL_GRAPH_ASSERTION_BATCH_SIZE]
-        for snapshot in db_client.get_all(batch_refs):
-            memory_id = getattr(snapshot, 'id', None)
-            if not isinstance(memory_id, str) or memory_id not in item_by_id:
-                continue
-            assertion = kg_db.parse_snapshot_or_none(
-                MemoryGraphAssertion,
-                snapshot,
-                payload_from_snapshot=_typed_doc,
-            )
-            if assertion is None or assertion.uid != uid or assertion.memory_id != memory_id:
-                continue
-            item = item_by_id[memory_id]
-            if _canonical_graph_query_item_is_eligible(
-                uid,
-                item,
-                account_generation=account_generation,
-            ) and kg_db.assertion_matches_active_item(uid, assertion, item):
-                assertions_by_id[memory_id] = assertion
-    return [
-        (item, assertions_by_id[cast(str, item['memory_id'])])
-        for item in ordered_items
-        if cast(str, item['memory_id']) in assertions_by_id
-    ]
+) -> Optional[Dict[str, Any]]:
+    item = _typed_doc(snapshot)
+    snapshot_id = getattr(snapshot, 'id', None)
+    if snapshot_id != item.get('memory_id') or _canonical_graph_item_order_key(item) is None:
+        return None
+    if not _canonical_graph_query_item_is_eligible(
+        uid,
+        item,
+        account_generation=account_generation,
+    ):
+        return None
+    return item
 
 
-CANONICAL_GRAPH_REVISION_READ_RETRIES = 2
+def _canonical_graph_cursor_boundary_from_snapshot(snapshot: Any) -> _CanonicalGraphCursorBoundary:
+    cursor_item = _typed_doc(snapshot)
+    if (
+        getattr(snapshot, 'id', None) != cursor_item.get('memory_id')
+        or _canonical_graph_item_order_key(cursor_item) is None
+    ):
+        raise CanonicalGraphReadUnavailable('malformed_cursor_boundary')
+    cursor_updated_at = cursor_item.get('updated_at')
+    cursor_memory_id = cursor_item.get('memory_id')
+    if not isinstance(cursor_updated_at, datetime) or not isinstance(cursor_memory_id, str):
+        raise CanonicalGraphReadUnavailable('malformed_cursor_boundary')
+    return _CanonicalGraphCursorBoundary(
+        item=cursor_item,
+        updated_at=cursor_updated_at,
+        memory_id=cursor_memory_id,
+    )
 
 
-def _read_canonical_graph_page_once(
+def _build_canonical_graph_items_query(
+    client: Any,
     uid: str,
+    revision: _CanonicalGraphRevision,
     *,
-    db_client: Any = None,
-    limit: int = DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
-    cursor: Optional[str] = None,
-) -> Dict[str, Any]:
-    client = _firestore_client(db_client)
-    secret = _canonical_graph_cursor_secret()
-    revision = _read_canonical_graph_revision(uid, db_client=client)
-    cursor_boundary: Optional[Tuple[datetime, str]] = None
-    if cursor is not None:
-        cursor_boundary = _canonical_graph_decode_cursor(
-            cursor,
-            uid=uid,
-            revision=revision,
-            secret=secret,
-        )
-
+    cursor_boundary: Optional[Tuple[datetime, str]],
+):
     items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
     query = CANONICAL_GRAPH_READ_QUERY.build(
         items_ref,
@@ -332,41 +296,116 @@ def _read_canonical_graph_page_once(
                 KNOWLEDGE_GRAPH_DOCUMENT_ORDER: items_ref.document(cursor_boundary[1]),
             }
         )
+    return query
 
-    snapshots = list(query.limit(limit + 1).stream())
-    has_more = len(snapshots) > limit
-    consumed_snapshots = snapshots[:limit]
-    candidate_items: List[Dict[str, Any]] = []
-    for snapshot in consumed_snapshots:
-        item = _typed_doc(snapshot)
-        snapshot_id = getattr(snapshot, 'id', None)
-        if snapshot_id != item.get('memory_id') or _canonical_graph_item_order_key(item) is None:
-            continue
-        if _canonical_graph_query_item_is_eligible(
-            uid,
-            item,
-            account_generation=revision.account_generation,
-        ):
-            candidate_items.append(item)
 
-    accepted_items = _load_assertions_for_canonical_graph_items(
-        uid,
-        candidate_items,
-        db_client=client,
-        account_generation=revision.account_generation,
-    )
-    cursor_item: Optional[Dict[str, Any]] = None
-    if has_more:
-        if not consumed_snapshots:
-            raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
-        cursor_snapshot = consumed_snapshots[-1]
-        cursor_item = _typed_doc(cursor_snapshot)
-        if (
-            getattr(cursor_snapshot, 'id', None) != cursor_item.get('memory_id')
-            or _canonical_graph_item_order_key(cursor_item) is None
-        ):
-            # Never return has_more without an advancing keyset cursor.
-            raise CanonicalGraphReadUnavailable('malformed_cursor_boundary')
+def _read_canonical_graph_page_once(
+    uid: str,
+    *,
+    db_client: Any,
+    limit: int,
+    cursor: Optional[str],
+) -> CanonicalKnowledgeGraphPage:
+    client = _firestore_client(db_client)
+    secret = _canonical_graph_cursor_secret()
+    revision = _read_canonical_graph_revision(uid, db_client=client)
+    cursor_boundary: Optional[Tuple[datetime, str]] = None
+    if cursor is not None:
+        cursor_boundary = _canonical_graph_decode_cursor(
+            cursor,
+            uid=uid,
+            revision=revision,
+            secret=secret,
+        )
+
+    accepted_assertions: List[MemoryGraphAssertion] = []
+    pending_snapshots: List[Any] = []
+    pending_window_has_more = False
+    last_consumed_snapshot: Any = None
+    query_boundary = cursor_boundary
+
+    while True:
+        while len(accepted_assertions) < limit:
+            if not pending_snapshots:
+                query = _build_canonical_graph_items_query(
+                    client,
+                    uid,
+                    revision,
+                    cursor_boundary=query_boundary,
+                )
+                snapshots = list(query.limit(limit + 1).stream())
+                if not snapshots:
+                    pending_window_has_more = False
+                    break
+                pending_window_has_more = len(snapshots) > limit
+                pending_snapshots = list(snapshots)
+
+            snapshot = pending_snapshots.pop(0)
+            last_consumed_snapshot = snapshot
+
+            eligible_batch: List[Dict[str, Any]] = []
+            while True:
+                item = _canonical_graph_snapshot_item(
+                    uid,
+                    snapshot,
+                    account_generation=revision.account_generation,
+                )
+                if item is not None:
+                    eligible_batch.append(item)
+                if len(accepted_assertions) + len(eligible_batch) >= limit or not pending_snapshots:
+                    break
+                snapshot = pending_snapshots.pop(0)
+                last_consumed_snapshot = snapshot
+
+            if eligible_batch:
+                memory_ids = [cast(str, item['memory_id']) for item in eligible_batch]
+                loaded_assertions = kg_db.load_fenced_assertions_for_memory_items(
+                    uid,
+                    memory_ids,
+                    account_generation=revision.account_generation,
+                    db_client=client,
+                )
+                for assertion in loaded_assertions:
+                    accepted_assertions.append(assertion)
+                    if len(accepted_assertions) >= limit:
+                        break
+
+            if len(accepted_assertions) >= limit:
+                break
+            if not pending_snapshots and not pending_window_has_more:
+                break
+
+            if not pending_snapshots and pending_window_has_more:
+                if last_consumed_snapshot is None:
+                    raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
+                boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
+                query_boundary = (boundary.updated_at, boundary.memory_id)
+                pending_window_has_more = False
+
+        if pending_snapshots:
+            has_more = True
+        elif pending_window_has_more:
+            if last_consumed_snapshot is None:
+                raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
+            boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
+            probe_query = _build_canonical_graph_items_query(
+                client,
+                uid,
+                revision,
+                cursor_boundary=(boundary.updated_at, boundary.memory_id),
+            )
+            has_more = bool(list(probe_query.limit(1).stream()))
+        else:
+            has_more = False
+
+        if accepted_assertions or not has_more:
+            break
+        if last_consumed_snapshot is None:
+            break
+        boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
+        query_boundary = (boundary.updated_at, boundary.memory_id)
+        pending_snapshots = []
+        pending_window_has_more = False
 
     # Refuse to return a page assembled across two canonical revisions. The
     # second head read is bounded and makes the signed cursor's revision fence
@@ -376,29 +415,28 @@ def _read_canonical_graph_page_once(
         raise CanonicalGraphReadUnavailable('canonical_revision_changed_during_read')
 
     next_cursor: Optional[str] = None
-    if has_more and cursor_item is not None:
-        cursor_updated_at = cursor_item.get('updated_at')
-        cursor_memory_id = cursor_item.get('memory_id')
-        if not isinstance(cursor_updated_at, datetime) or not isinstance(cursor_memory_id, str):
-            raise CanonicalGraphReadUnavailable('malformed_cursor_boundary')
+    if has_more:
+        if last_consumed_snapshot is None:
+            raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
+        boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
         next_cursor = _canonical_graph_encode_cursor(
             uid=uid,
             revision=revision,
-            updated_at=cursor_updated_at,
-            memory_id=cursor_memory_id,
+            updated_at=boundary.updated_at,
+            memory_id=boundary.memory_id,
             secret=secret,
         )
 
     merged = kg_db.merge_knowledge_graph_records(
         {'nodes': [], 'edges': []},
-        [assertion for _, assertion in accepted_items],
+        accepted_assertions,
     )
-    return {
-        'nodes': merged['nodes'],
-        'edges': merged['edges'],
-        'has_more': has_more,
-        'next_cursor': next_cursor,
-    }
+    return CanonicalKnowledgeGraphPage(
+        nodes=merged['nodes'],
+        edges=merged['edges'],
+        has_more=has_more,
+        next_cursor=next_cursor,
+    )
 
 
 def get_canonical_knowledge_graph(
@@ -407,7 +445,7 @@ def get_canonical_knowledge_graph(
     db_client: Any = None,
     limit: int = DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
     cursor: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> CanonicalKnowledgeGraphPage:
     """Return one bounded, revision-fenced page of the canonical memory graph."""
     if isinstance(limit, bool) or limit < 1 or limit > MAX_CANONICAL_GRAPH_PAGE_LIMIT:
         raise ValueError(f'canonical graph limit must be between 1 and {MAX_CANONICAL_GRAPH_PAGE_LIMIT}')

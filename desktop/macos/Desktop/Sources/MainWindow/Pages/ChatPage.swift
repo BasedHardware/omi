@@ -395,7 +395,7 @@ struct ChatPage: View {
   private var messagesView: some View {
     ChatMessagesView(
       messages: chatProvider.messages,
-      conversationIdentity: chatProvider.currentSessionId ?? "main-chat-default",
+      conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
       isSending: chatProvider.isSending,
       hasMoreMessages: chatProvider.hasMoreMessages,
       isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
