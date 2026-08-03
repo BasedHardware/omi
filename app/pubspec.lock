@@ -2261,6 +2261,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.1"
+  unifiedpush:
+    dependency: "direct main"
+    description:
+      name: unifiedpush
+      sha256: "6dbed5a6305ca33f1865c7a3d814ae39476b79a2d23ca76a5708f023f405730f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.2"
+  unifiedpush_android:
+    dependency: transitive
+    description:
+      name: unifiedpush_android
+      sha256: "7443dece0a850ae956514f809983eb2b39fc518c2c7d24dbfe817198bec89134"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.0"
+  unifiedpush_platform_interface:
+    dependency: transitive
+    description:
+      name: unifiedpush_platform_interface
+      sha256: dd588d78a8b2bfc10430e30035526e98caa543d0b7364a6344b5eb4815721c6d
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.2"
   universal_io:
     dependency: transitive
     description:

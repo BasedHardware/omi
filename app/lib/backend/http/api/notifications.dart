@@ -21,3 +21,22 @@ Future<void> saveFcmTokenServer({required String token, required String timeZone
     Logger.debug("Failed to save token");
   }
 }
+
+/// Register a UnifiedPush endpoint URL with the backend (ADR-0011 on-prem push).
+/// Parallel to [saveFcmTokenServer]; the device platform/hash headers added by makeApiCall let the
+/// backend key the endpoint per-device.
+Future<void> saveUnifiedPushEndpointServer({required String endpoint, required String timeZone}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/unifiedpush-endpoint',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'endpoint': endpoint, 'time_zone': timeZone}),
+  );
+
+  Logger.debug('saveUnifiedPushEndpoint: ${response?.body}');
+  if (response?.statusCode == 200) {
+    Logger.debug('UnifiedPush endpoint saved successfully');
+  } else {
+    Logger.debug('Failed to save UnifiedPush endpoint');
+  }
+}

@@ -81,6 +81,8 @@ dependencies:
   envied: 1.1.1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
+  # Self-hosted push (ADR-0011): UnifiedPush for a Firebase-free on-prem deployment (Android).
+  unifiedpush: ^5.0.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3

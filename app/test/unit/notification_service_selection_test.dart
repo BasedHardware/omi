@@ -7,21 +7,49 @@ import 'package:omi/services/notifications/notification_service.dart';
 void main() {
   group('selectNotificationBackend', () {
     test('fcm on an FCM-capable platform -> fcm (default behaviour)', () {
-      expect(selectNotificationBackend(backend: 'fcm', fcmSupported: true), NotificationBackend.fcm);
+      expect(
+        selectNotificationBackend(backend: 'fcm', fcmSupported: true, unifiedPushSupported: true),
+        NotificationBackend.fcm,
+      );
     });
 
     test('local -> local even on an FCM-capable platform (on-prem, no remote push)', () {
-      expect(selectNotificationBackend(backend: 'local', fcmSupported: true), NotificationBackend.local);
+      expect(
+        selectNotificationBackend(backend: 'local', fcmSupported: true, unifiedPushSupported: true),
+        NotificationBackend.local,
+      );
     });
 
     test('fcm on a platform without FCM support -> local (e.g. Windows/desktop)', () {
-      expect(selectNotificationBackend(backend: 'fcm', fcmSupported: false), NotificationBackend.local);
+      expect(
+        selectNotificationBackend(backend: 'fcm', fcmSupported: false, unifiedPushSupported: false),
+        NotificationBackend.local,
+      );
     });
 
-    test('any non-fcm value falls back to local (incl. future unifiedpush until its adapter lands)', () {
-      expect(selectNotificationBackend(backend: 'unifiedpush', fcmSupported: true), NotificationBackend.local);
-      expect(selectNotificationBackend(backend: '', fcmSupported: true), NotificationBackend.local);
-      expect(selectNotificationBackend(backend: 'anything', fcmSupported: true), NotificationBackend.local);
+    test('unifiedpush where a distributor exists (Android) -> unifiedpush', () {
+      expect(
+        selectNotificationBackend(backend: 'unifiedpush', fcmSupported: false, unifiedPushSupported: true),
+        NotificationBackend.unifiedpush,
+      );
+    });
+
+    test('unifiedpush where UnifiedPush is unsupported (iOS/desktop) -> local', () {
+      expect(
+        selectNotificationBackend(backend: 'unifiedpush', fcmSupported: true, unifiedPushSupported: false),
+        NotificationBackend.local,
+      );
+    });
+
+    test('any unknown value falls back to local', () {
+      expect(
+        selectNotificationBackend(backend: '', fcmSupported: true, unifiedPushSupported: true),
+        NotificationBackend.local,
+      );
+      expect(
+        selectNotificationBackend(backend: 'anything', fcmSupported: true, unifiedPushSupported: true),
+        NotificationBackend.local,
+      );
     });
   });
 }
