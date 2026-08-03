@@ -248,6 +248,7 @@ class TestModelQosProfiles:
             'conv_structure',
             'conv_app_result',
             'daily_summary',
+            'paper',
             'external_structure',
             'memories',
             'learnings',
