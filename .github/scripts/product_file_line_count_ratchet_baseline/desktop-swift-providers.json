@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6275,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2965
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2991
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "ACP authentication terminalizes the active turn with an explicit disposition instead of awaiting OAuth, failed bridge starts consume typed runtime diagnostics at the sole user-facing error surface to avoid a duplicate Sentry event, and owner transitions clear the previous account's chat error presentation; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "update_action_item accepts the realtime `id` alias and backend task writes refresh TasksStore so agent-created tasks appear immediately; permission opens and local-file scans both stay bound to their authorized owner. Swift 6: explicit @preconcurrency import ApplicationServices for AX APIs used by tool execution path. The on-device tool surface adds only its dispatch cases and permission-type lists here \u2014 every executor body lives in ChatToolExecutor+DeviceTools.swift and ChatToolExecutor+DeviceToolPermissions.swift."
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "update_action_item accepts the realtime `id` alias and backend task writes refresh TasksStore so agent-created tasks appear immediately; permission opens and local-file scans both stay bound to their authorized owner. Swift 6: explicit @preconcurrency import ApplicationServices for AX APIs used by tool execution path. The on-device tool surface adds dispatch cases, owner-bound cancellation adapters, and permission-type lists here \u2014 every executor body lives in ChatToolExecutor+DeviceTools.swift and ChatToolExecutor+DeviceToolPermissions.swift."
   },
   "threshold": 1500
 }
