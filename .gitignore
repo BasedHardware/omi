@@ -113,6 +113,8 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 *.lock
+# After *.lock: the last matching pattern wins, so a re-include must follow it.
+!web/app/bun.lock
 *.log
 *.swo
 *.swp

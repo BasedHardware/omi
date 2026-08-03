@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Plus, Target } from 'lucide-react';
 import { useGoals } from '@/hooks/useGoals';
 import { useScores } from '@/hooks/useScores';
+import { useHubStats } from '@/hooks/useHubStats';
 import { GoalCard } from './GoalCard';
+import { HubStatRibbon } from './HubStatRibbon';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
 import { ScoreSummary } from './ScoreSummary';
@@ -20,10 +22,11 @@ export function HomePage() {
   // Track the goal by id, not by value, so the sheet keeps showing live data
   // after an optimistic write replaces the object.
   const openGoal = goals.find((goal) => goal.id === openGoalId) ?? null;
+  const stats = useHubStats();
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
-      <header className="flex items-center justify-between gap-4">
+      <header className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold text-text-primary">Home</h1>
         <button
           type="button"
@@ -36,11 +39,15 @@ export function HomePage() {
       </header>
 
       <div className="mt-6">
+        <HubStatRibbon counts={stats} />
+      </div>
+
+      <div className="mt-4">
         <ScoreSummary scores={scores} loading={scoresLoading} />
       </div>
 
       <section className="mt-8">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-text-quaternary">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
           Goals
         </h2>
 

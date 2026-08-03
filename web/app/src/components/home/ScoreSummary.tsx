@@ -24,7 +24,7 @@ export function ScoreSummary({ scores, loading }: ScoreSummaryProps) {
   return (
     <section className="rounded-card border border-stroke bg-bg-raised p-6">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-text-quaternary">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
           Score
         </h2>
         <div className="flex gap-1 rounded-control bg-bg-tertiary p-1">
@@ -51,10 +51,10 @@ export function ScoreSummary({ scores, loading }: ScoreSummaryProps) {
         <div className="mt-6 h-12 w-32 animate-pulse rounded-control bg-bg-tertiary" />
       ) : period ? (
         <div className="mt-6 flex items-end gap-3">
-          <span className="text-5xl font-semibold leading-none text-text-primary">
+          <span className="font-display text-[52px] font-semibold leading-none tabular-nums text-text-primary">
             {Math.round(period.score)}
           </span>
-          <span className="pb-1 text-sm text-text-quaternary">
+          <span className="pb-1.5 text-sm text-text-quaternary">
             {describeScorePeriod(period)}
           </span>
         </div>
