@@ -205,6 +205,7 @@ private final class TestOwner {
   }
 }
 
+@MainActor
 private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked Sendable {
   enum FakeError: Error {
     case missing
@@ -224,17 +225,20 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
   var goalRequestOwnerIDs: [String?] = []
   var goalFetchError: FakeError?
   var holdGoalFetches = false
+  private(set) var isGoalFetchHeld = false
   private var hasFocused = false
   private var heldGoalFetches: [([OmiAPI.GoalResponse], CheckedContinuation<[OmiAPI.GoalResponse], Error>)] = []
   private var goalFetchWaiters: [CheckedContinuation<Void, Never>] = []
   private var focusMutationWaiters: [CheckedContinuation<Void, Never>] = []
 
   func waitForHeldGoalFetch() async {
+    if isGoalFetchHeld { return }
     guard heldGoalFetches.isEmpty else { return }
     await withCheckedContinuation { goalFetchWaiters.append($0) }
   }
 
   func releaseHeldGoalFetches() {
+    isGoalFetchHeld = false
     let held = heldGoalFetches
     heldGoalFetches.removeAll()
     for (response, continuation) in held {
@@ -261,6 +265,7 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked S
       response = goals
     }
     if holdGoalFetches {
+      isGoalFetchHeld = true
       let waiters = goalFetchWaiters
       goalFetchWaiters.removeAll()
       for waiter in waiters {

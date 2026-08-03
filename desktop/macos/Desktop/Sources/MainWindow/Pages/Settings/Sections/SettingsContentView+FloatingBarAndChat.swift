@@ -28,6 +28,22 @@ extension SettingsContentView {
         }
       }
 
+      settingsCard(settingId: "floatingbar.notificationpreviews") {
+        HStack(spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Notification Previews")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Show assistant notifications under the Floating Bar. When off, notifications use macOS banners instead.")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: $shortcutSettings.floatingBarNotificationPreviewsEnabled)
+            .toggleStyle(OmiToggleStyle())
+        }
+      }
+
       settingsCard(settingId: "floatingbar.background") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           Text("Background Style")

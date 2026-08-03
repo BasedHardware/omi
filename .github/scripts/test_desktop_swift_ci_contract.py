@@ -19,6 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
+SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -37,6 +38,10 @@ def _workflow_text() -> str:
 
 def _runner_text() -> str:
     return RUNNER_PATH.read_text(encoding="utf-8")
+
+
+def _suite_runner_text() -> str:
+    return SUITE_RUNNER_PATH.read_text(encoding="utf-8")
 
 
 def _job_text(workflow_text: str, job_id: str) -> str:
@@ -196,12 +201,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("always() && !cancelled()", job)
         self.assertIn("Require independent macOS phase verdicts", job)
 
-    def test_ci_uses_one_worker_for_the_shared_swiftpm_build_directory(self):
-        """#10507: parallel --skip-build invocations contend on Desktop/.build."""
+    def test_ci_uses_isolated_swiftpm_build_directories_for_two_workers(self):
+        """#10507: parallel suites require isolated build and runtime state."""
         verify_job = self.jobs["desktop-swift-verify"]
+        suite_runner = _suite_runner_text()
 
-        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "1"', verify_job)
-        self.assertIn("shares Desktop/.build", verify_job)
+        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "2"', verify_job)
+        self.assertIn("copy-on-write clone", verify_job)
+        self.assertIn("--scratch-path", suite_runner)
+        self.assertIn("cp -cR", suite_runner)
+        self.assertIn("CFFIXED_USER_HOME", suite_runner)
+        self.assertIn('TMPDIR="$runtime_path/tmp"', suite_runner)
         self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-4}"', _runner_text())
 
     def test_later_main_push_cannot_cancel_exact_sha_release_evidence(self):
@@ -293,14 +303,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("~/.cache/omi-swift-format", job)
         self.assertIn("~/.cache/omi-swiftlint", job)
 
-    def test_cache_saves_completed_build_state_after_a_test_failure(self):
-        """A retry should reuse SwiftPM's validated incremental build state."""
+    def test_cache_keeps_dependencies_but_not_pr_scoped_build_products(self):
+        """A retry retains dependency downloads without uploading Desktop/.build."""
         job = self.jobs["desktop-swift-verify"]
         self.assertIn("id: swiftpm-cache", job)
         self.assertIn("uses: actions/cache/restore@v6", job)
         self.assertIn("uses: actions/cache/save@v6", job)
         self.assertIn("always()", job)
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
+        self.assertIn("~/Library/Caches/org.swift.swiftpm", job)
+        self.assertNotIn("desktop/macos/Desktop/.build", job)
 
     # --- changed-file gate assertions --------------------------------------
 

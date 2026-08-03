@@ -20,9 +20,9 @@ HOOKS_DIR := $(shell git rev-parse --git-path hooks)
 # harness targets still resolve this checkout's backend venv, while retaining
 # explicit command-line and environment overrides for callers.
 ifeq ($(origin PYTHON),default)
-PYTHON := $(shell bash -c 'source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON := $(shell bash -c 'cd -P "$$PWD"; source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 else
-PYTHON ?= $(shell bash -c 'source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON ?= $(shell bash -c 'cd -P "$$PWD"; source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 endif
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path

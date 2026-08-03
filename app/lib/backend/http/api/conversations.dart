@@ -511,8 +511,10 @@ class SyncRecoveryWindowExceededException implements Exception {
 bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   if (response.statusCode != 422) return false;
   try {
-    final body = jsonDecode(response.body);
-    return body is Map && body['code'] == 'backfill_lookback_exceeded';
+    final body = wire.GeneratedSyncRecoveryWindowExceededResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'backfill_lookback_exceeded';
   } catch (_) {
     return false;
   }
