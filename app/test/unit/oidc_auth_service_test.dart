@@ -29,6 +29,8 @@ class _OidcEnvFields implements EnvFields {
   String? get oidcClientId => 'omi-app';
   @override
   String? get oidcRedirectScheme => 'omiauth';
+  @override
+  String? get notificationsBackend => 'fcm';
 
   @override
   String? get openAIAPIKey => null;

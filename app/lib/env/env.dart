@@ -85,6 +85,14 @@ abstract class Env {
   static String? get oidcClientId => _instance.oidcClientId;
 
   static String? get oidcRedirectScheme => _instance.oidcRedirectScheme;
+
+  /// Client notification delivery backend, symmetric to the server's NOTIFICATIONS_BACKEND (ADR-0011).
+  /// 'fcm' (default) keeps Firebase Cloud Messaging / APNs remote push untouched; 'local' uses
+  /// local-only notifications (awesome_notifications) with no remote push and no FirebaseMessaging at
+  /// runtime — for a Firebase-push-free on-prem deployment.
+  static String get notificationsBackend => _instance.notificationsBackend ?? 'fcm';
+
+  static bool get useFcmNotifications => notificationsBackend == 'fcm';
 }
 
 abstract class EnvFields {
@@ -117,4 +125,6 @@ abstract class EnvFields {
   String? get oidcClientId;
 
   String? get oidcRedirectScheme;
+
+  String? get notificationsBackend;
 }

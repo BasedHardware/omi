@@ -150,8 +150,8 @@ Future _init() async {
   await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
-  // Register FCM background message handler
-  if (PlatformManager().isFCMSupported) {
+  // Register FCM background message handler (only when the FCM notification backend is selected).
+  if (Env.useFcmNotifications && PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 

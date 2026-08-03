@@ -38,6 +38,8 @@ class _TestEnvFields implements EnvFields {
   String? get oidcClientId => null;
   @override
   String? get oidcRedirectScheme => null;
+  @override
+  String? get notificationsBackend => 'fcm';
 }
 
 void main() {

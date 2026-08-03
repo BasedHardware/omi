@@ -117,4 +117,14 @@ class _TestEnvFields implements EnvFields {
 
   @override
   bool? get useWebAuth => false;
+  @override
+  String? get authBackend => 'firebase';
+  @override
+  String? get oidcIssuer => null;
+  @override
+  String? get oidcClientId => null;
+  @override
+  String? get oidcRedirectScheme => null;
+  @override
+  String? get notificationsBackend => 'fcm';
 }

@@ -68,4 +68,9 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'OIDC_REDIRECT_SCHEME', obfuscate: false, defaultValue: '')
   final String? oidcRedirectScheme = _DevEnv.oidcRedirectScheme;
+
+  // Client notification delivery backend (ADR-0011). Default 'fcm' → existing FCM/APNs push untouched.
+  @override
+  @EnviedField(varName: 'NOTIFICATIONS_BACKEND', obfuscate: false, defaultValue: 'fcm')
+  final String? notificationsBackend = _DevEnv.notificationsBackend;
 }
