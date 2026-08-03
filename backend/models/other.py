@@ -13,6 +13,15 @@ class FcmTokenResponse(BaseModel):
     status: str
 
 
+class SaveUnifiedPushEndpointRequest(BaseModel):
+    endpoint: str
+    time_zone: str
+
+
+class UnifiedPushEndpointResponse(BaseModel):
+    status: str
+
+
 class SendNotificationRequest(BaseModel):
     uid: str
     title: str

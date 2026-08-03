@@ -12,6 +12,11 @@ Backend-neutral persistence via the storage port (WP2, ADR-0002). FCM tokens liv
 per-user ``fcm_tokens`` subcollection; ``remove_invalid_token`` / ``remove_bulk_tokens`` run
 cross-parent collection-group queries over the ``fcm_tokens`` group (backends must index the
 ``token`` field accordingly).
+
+UnifiedPush endpoints (ADR-0011 on-prem push) mirror the same model in the per-user
+``unifiedpush_endpoints`` subcollection (``{endpoint, created_at, time_zone}``);
+``remove_bulk_endpoints`` runs the same collection-group cleanup over the ``unifiedpush_endpoints``
+group (backends must index the ``endpoint`` field).
 """
 
 import logging
@@ -281,6 +286,70 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
                 count = 0
 
         # Commit remaining deletes
+        if count > 0:
+            batch.commit()
+
+
+def save_endpoint(uid: str, data: Dict[str, Any]) -> None:
+    """Store a UnifiedPush endpoint URL keyed by device (ADR-0011 on-prem push).
+
+    Structure: users/{uid}/unifiedpush_endpoints/{device_key}. Mirrors ``save_token`` but has no
+    legacy top-level field to migrate. ``time_zone`` is also mirrored onto the user document so the
+    daily-summary timezone queries work regardless of the active push backend.
+    """
+    device_key = data.get('device_key', 'unknown_default')
+    endpoint = data.get('endpoint')
+    time_zone = data.get('time_zone')
+
+    store = _store()
+    user_path = f'users/{uid}'
+    store.set(
+        f'{user_path}/unifiedpush_endpoints/{device_key}',
+        {'endpoint': endpoint, 'time_zone': time_zone, 'created_at': SERVER_TIMESTAMP},
+        merge=True,
+    )
+
+    # Also update time_zone in main user document (parity with save_token, for tz queries)
+    if time_zone:
+        store.set(user_path, {'time_zone': time_zone}, merge=True)
+
+
+def get_all_endpoints(uid: str) -> list[str]:
+    """Get all UnifiedPush endpoint URLs registered for a user."""
+    endpoints: List[str] = []
+    for doc in _store().query(f'users/{uid}/unifiedpush_endpoints'):
+        value = _typed_doc(doc).get('endpoint')
+        if value:
+            endpoints.append(str(value))
+    return endpoints
+
+
+def remove_bulk_endpoints(endpoints: list[str]) -> None:
+    """Remove dead UnifiedPush endpoints (HTTP 404/410) via collection-group IN queries + batch deletes."""
+    if not endpoints:
+        return
+
+    store = _store()
+
+    # IN queries support up to 30 items
+    chunk_size = 30
+    endpoint_chunks = [endpoints[i : i + chunk_size] for i in range(0, len(endpoints), chunk_size)]
+
+    for chunk in endpoint_chunks:
+        docs = store.query_group('unifiedpush_endpoints', filters=[('endpoint', 'in', chunk)])
+
+        batch = store.batch()
+        count = 0
+
+        for doc in docs:
+            batch.delete(doc.path)
+            count += 1
+
+            if count >= 500:
+                batch.commit()
+                batch = store.batch()
+                count = 0
+
         if count > 0:
             batch.commit()
 
