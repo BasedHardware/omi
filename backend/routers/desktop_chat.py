@@ -579,7 +579,7 @@ async def _stream_gateway(
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
-                    status_error = SimpleNamespace(status_code=response.status_code)
+                    status_error = HTTPException(status_code=response.status_code)
                     transport_failure = is_gateway_transport_failure(status_error)
                     if transport_failure:
                         gateway_circuit.record_transport_failure()
