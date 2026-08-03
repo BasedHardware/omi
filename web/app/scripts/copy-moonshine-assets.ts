@@ -27,13 +27,35 @@ await Bun.write(
 );
 
 const server = `import { createRequestHandler } from '@tschk/moonshine-server';
-import { reactRenderer } from '@tschk/moonshine-react';
+import { reactRenderer, registerRouteModules } from '@tschk/moonshine-react';
 import { createBunServer } from '@tschk/moonshine-deploy-bun';
 import { resolve } from 'node:path';
 import manifest from './manifest.json' with { type: 'json' };
 import { modules } from './dist/server.js';
 
 const projectDir = resolve(import.meta.dir, '..');
+
+// The renderer keeps its own route-module registry, separate from the modules
+// the request pipeline receives, and nothing populates it for us. Without it the
+// renderer falls back to \`await import(routeFile)\` — the route's SOURCE path —
+// which the runtime image does not ship, so every server-rendered route 500s
+// with "Cannot find module .../src/app/page.tsx". Only client-shell routes
+// survive, which is why \`/\` broke while \`/login\` looked fine.
+//
+// The bundle keys those modules by their BUILD-TIME absolute paths, so handing
+// them over as-is only works when the build and runtime directories happen to
+// be identical. Re-key them against the manifest's relative route files and
+// this runtime's own project directory.
+// Every source-file key is rewritten from the build machine's root onto this
+// one. Both consumers need it: the renderer's registry AND the request
+// pipeline, which resolves layouts, middleware, and the page itself out of the
+// same map.
+const runtimeModules = {};
+for (const [key, mod] of Object.entries(modules)) {
+  const marker = key.lastIndexOf('/src/');
+  runtimeModules[marker === -1 ? key : resolve(projectDir, key.slice(marker + 1))] = mod;
+}
+registerRouteModules(runtimeModules);
 const abs = (path) => (path ? resolve(projectDir, path) : undefined);
 const resolvedManifest = {
   ...manifest,
@@ -79,7 +101,7 @@ const renderer = {
 
 const handler = createRequestHandler({
   manifest: resolvedManifest,
-  modules,
+  modules: runtimeModules,
   renderer,
   staticDir: import.meta.dir + '/public',
 });
