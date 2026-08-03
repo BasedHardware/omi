@@ -1,53 +1,52 @@
-"""Transactional persistence for canonical-memory migration control state.
+"""Fenced persistence for canonical-memory migration jobs.
 
-The in-memory implementation is intentionally strict and is used by unit
-tests.  ``FirestoreMigrationStore`` mirrors the same compare-and-set and lease
-rules at the document boundary; callers never perform an un-fenced read/write
-sequence themselves.
+The store owns leases, immutable page receipts, certificates, and the final
+cutover CAS.  It intentionally does not own item outcomes: the canonical
+operation ledger remains the only mutation/idempotency authority.
 """
 
 from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+from uuid import uuid4
 
 from database.read_boundary import parse_snapshot_strict
 from models.memory_migration import (
-    CanonicalMigrationCheckpoint,
-    CanonicalMigrationManifest,
-    CanonicalMigrationWorkRecord,
-    MigrationLease,
+    CanonicalMigrationJob,
+    MigrationClaim,
+    MigrationPageReceipt,
+    MigrationState,
+    MigrationVerificationCertificate,
 )
 
 try:
-    from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
-except ImportError:  # pragma: no cover - lightweight unit tests mock Firestore.
+    from google.cloud.firestore_v1 import transactional as _firestore_transactional
+except ImportError:  # pragma: no cover
     _firestore_transactional = None
 
-MIGRATION_CONTROL_DOC = "memory_control/canonical_migration"
-MIGRATION_MANIFEST_COLLECTION = "canonical_migration_manifests"
-MIGRATION_WORK_COLLECTION = "canonical_migration_work"
+MIGRATION_JOB_COLLECTION = "canonical_memory_migrations"
 
 
 class MigrationStoreError(RuntimeError):
-    """Base class for durable migration store failures."""
+    pass
 
 
 class MigrationCheckpointConflict(MigrationStoreError):
-    """The checkpoint version changed since the caller's read."""
+    pass
 
 
 class MigrationLeaseUnavailable(MigrationStoreError):
-    """Another owner currently holds a non-expired lease."""
+    pass
 
 
 class MigrationLeaseLost(MigrationStoreError):
-    """The owner or ownership epoch no longer matches."""
+    pass
 
 
 class MigrationFenceConflict(MigrationStoreError):
-    """A write attempted to change an immutable migration fence."""
+    pass
 
 
 def _now() -> datetime:
@@ -55,451 +54,309 @@ def _now() -> datetime:
 
 
 class InMemoryMigrationStore:
-    """Thread-safe fake with production-like CAS and lease semantics."""
-
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._checkpoints: Dict[str, CanonicalMigrationCheckpoint] = {}
-        self._leases: Dict[str, MigrationLease] = {}
-        self._manifests: Dict[tuple[str, str], CanonicalMigrationManifest] = {}
-        self._work: Dict[tuple[str, str, str], CanonicalMigrationWorkRecord] = {}
+        self._jobs: Dict[tuple[str, str], CanonicalMigrationJob] = {}
+        self._pages: Dict[tuple[str, str, str], MigrationPageReceipt] = {}
 
-    def read_checkpoint(self, uid: str) -> Optional[CanonicalMigrationCheckpoint]:
+    def read_job(self, uid: str, job_id: str) -> Optional[CanonicalMigrationJob]:
         with self._lock:
-            return self._checkpoints.get(uid)
+            return self._jobs.get((uid, job_id))
 
-    # Short aliases make the store convenient for controller adapters.
-    read = read_checkpoint
-
-    def create_checkpoint(self, checkpoint: CanonicalMigrationCheckpoint) -> CanonicalMigrationCheckpoint:
+    def create_job(self, job: CanonicalMigrationJob) -> CanonicalMigrationJob:
         with self._lock:
-            if checkpoint.uid in self._checkpoints:
-                raise MigrationCheckpointConflict("checkpoint already exists")
-            self._checkpoints[checkpoint.uid] = checkpoint
-            return checkpoint
+            key = (job.uid, job.job_id)
+            if key in self._jobs:
+                raise MigrationCheckpointConflict("migration job already exists")
+            self._jobs[key] = job
+            return job
 
-    def compare_and_set_checkpoint(
-        self,
-        uid: str,
-        expected_version: int,
-        checkpoint: CanonicalMigrationCheckpoint,
-        *,
-        owner_id: Optional[str] = None,
-        ownership_epoch: Optional[int] = None,
-    ) -> CanonicalMigrationCheckpoint:
-        with self._lock:
-            if checkpoint.uid != uid:
-                raise MigrationFenceConflict("checkpoint uid mismatch")
-            current = self._checkpoints.get(uid)
-            if current is None:
-                if expected_version != -1:
-                    raise MigrationCheckpointConflict("checkpoint does not exist")
-            elif current.version != expected_version:
-                raise MigrationCheckpointConflict(
-                    f"checkpoint version mismatch: expected {expected_version}, current {current.version}"
-                )
-            if checkpoint.uid != uid:
-                raise MigrationFenceConflict("checkpoint uid mismatch")
-            if current is not None and checkpoint.fence != current.fence:
-                raise MigrationFenceConflict("migration fence is immutable")
-            self._assert_lease(checkpoint.uid, owner_id=owner_id, ownership_epoch=ownership_epoch)
-            written = checkpoint.model_copy(update={"version": expected_version + 1, "updated_at": _now()})
-            self._checkpoints[uid] = written
-            return written
-
-    cas_checkpoint = compare_and_set_checkpoint
-
-    def acquire_lease(self, uid: str, owner_id: str, *, ttl_seconds: float = 60.0) -> MigrationLease:
+    def claim_job(
+        self, uid: str, job_id: str, owner_instance_id: str, *, ttl_seconds: float = 60
+    ) -> CanonicalMigrationJob:
         if ttl_seconds <= 0:
-            raise ValueError("lease ttl must be positive")
+            raise ValueError("claim ttl must be positive")
         with self._lock:
+            job = self._require(uid, job_id)
+            prior = job.claim
             now = _now()
-            prior = self._leases.get(uid)
-            if prior and not prior.is_expired(now) and prior.owner_id != owner_id:
-                raise MigrationLeaseUnavailable("migration lease is held by another owner")
-            epoch = (
-                prior.ownership_epoch
-                if prior and prior.owner_id == owner_id and not prior.is_expired(now)
-                else (prior.ownership_epoch + 1 if prior else 1)
-            )
-            lease = MigrationLease(
-                uid=uid,
-                owner_id=owner_id,
-                ownership_epoch=epoch,
+            if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
+                raise MigrationLeaseUnavailable("migration claim is held by another owner")
+            epoch = (prior.claim_epoch if prior else 0) + 1
+            claim = MigrationClaim(
+                owner_instance_id=owner_instance_id,
+                claim_epoch=epoch,
+                claim_id=uuid4().hex,
                 renewed_at=now,
                 expires_at=now + timedelta(seconds=ttl_seconds),
             )
-            self._leases[uid] = lease
-            return lease
-
-    def renew_lease(
-        self, uid: str, owner_id: str, ownership_epoch: int, *, ttl_seconds: float = 60.0
-    ) -> MigrationLease:
-        if ttl_seconds <= 0:
-            raise ValueError("lease ttl must be positive")
-        with self._lock:
-            current = self._leases.get(uid)
-            if current is None or current.owner_id != owner_id or current.ownership_epoch != ownership_epoch:
-                raise MigrationLeaseLost("migration lease owner/epoch mismatch")
-            renewed = current.renewed(owner_id=owner_id, ownership_epoch=ownership_epoch, ttl_seconds=ttl_seconds)
-            self._leases[uid] = renewed
-            return renewed
-
-    def release_lease(self, uid: str, owner_id: str, ownership_epoch: int) -> None:
-        with self._lock:
-            current = self._leases.get(uid)
-            if current is None:
-                return
-            if current.owner_id != owner_id or current.ownership_epoch != ownership_epoch:
-                raise MigrationLeaseLost("migration lease owner/epoch mismatch")
-            # Retain an expired lease as the durable epoch fence.  Deleting it
-            # would let the next owner restart at epoch 1 and allow an old
-            # worker to look current after a release/takeover cycle.
-            expired = current.model_copy(update={"expires_at": _now(), "renewed_at": _now()})
-            self._leases[uid] = expired
-            checkpoint = self._checkpoints.get(uid)
-            if checkpoint is not None and checkpoint.lease == current:
-                self._checkpoints[uid] = checkpoint.model_copy(update={"lease": expired, "updated_at": _now()})
-
-    acquire_user_lease = acquire_lease
-    renew_user_lease = renew_lease
-    release_user_lease = release_lease
-
-    def write_manifest(self, manifest: CanonicalMigrationManifest) -> CanonicalMigrationManifest:
-        with self._lock:
-            if not manifest.uid.strip():
-                raise MigrationFenceConflict("manifest uid must not be blank")
-            key = (manifest.uid, manifest.manifest_id)
-            prior = self._manifests.get(key)
-            if prior is not None and prior != manifest:
-                raise MigrationCheckpointConflict("manifest id already contains different data")
-            self._manifests[key] = manifest
-            return manifest
-
-    def read_manifest(self, uid: str, manifest_id: str) -> Optional[CanonicalMigrationManifest]:
-        with self._lock:
-            return self._manifests.get((uid, manifest_id))
-
-    def upsert_work_record(self, record: CanonicalMigrationWorkRecord) -> CanonicalMigrationWorkRecord:
-        with self._lock:
-            if not record.uid.strip() or not record.manifest_id.strip() or not record.item_id.strip():
-                raise MigrationFenceConflict("work record identity must not be blank")
-            key = (record.uid, record.manifest_id, record.item_id)
-            prior = self._work.get(key)
-            if prior is not None:
-                if (prior.uid, prior.manifest_id, prior.item_id) != (record.uid, record.manifest_id, record.item_id):
-                    raise MigrationFenceConflict("work record identity mismatch")
-                if (
-                    prior.item_revision,
-                    prior.content_hash,
-                    prior.evidence_ids,
-                    prior.account_generation,
-                    prior.source_generation,
-                ) != (
-                    record.item_revision,
-                    record.content_hash,
-                    record.evidence_ids,
-                    record.account_generation,
-                    record.source_generation,
-                ):
-                    raise MigrationFenceConflict("work record item fence is immutable")
-            self._work[key] = record
-            return record
-
-    def read_work_records(self, uid: str, manifest_id: str) -> List[CanonicalMigrationWorkRecord]:
-        with self._lock:
-            return sorted(
-                [
-                    value
-                    for (record_uid, record_manifest, _), value in self._work.items()
-                    if (record_uid, record_manifest) == (uid, manifest_id)
-                ],
-                key=lambda value: value.item_id,
+            return self._write(
+                job.model_copy(
+                    update={
+                        "claim": claim,
+                        "state": MigrationState.running,
+                        "version": job.version + 1,
+                        "updated_at": now,
+                    }
+                )
             )
 
-    def _assert_lease(self, uid: str, *, owner_id: Optional[str], ownership_epoch: Optional[int]) -> None:
-        if owner_id is None and ownership_epoch is None:
-            return
-        current = self._leases.get(uid)
-        if (
-            current is None
-            or current.owner_id != owner_id
-            or current.ownership_epoch != ownership_epoch
-            or current.is_expired()
-        ):
-            raise MigrationLeaseLost("migration lease owner/epoch mismatch or expired")
+    def renew_claim(
+        self, uid: str, job_id: str, claim: MigrationClaim, *, ttl_seconds: float = 60
+    ) -> CanonicalMigrationJob:
+        with self._lock:
+            job = self._require(uid, job_id)
+            self._assert_claim(job, claim)
+            return self._write(
+                job.model_copy(
+                    update={
+                        "claim": claim.renew(ttl_seconds=ttl_seconds),
+                        "version": job.version + 1,
+                        "updated_at": _now(),
+                    }
+                )
+            )
+
+    def write_page_receipt(
+        self, uid: str, job_id: str, claim: MigrationClaim, receipt: MigrationPageReceipt
+    ) -> MigrationPageReceipt:
+        with self._lock:
+            self._assert_claim(self._require(uid, job_id), claim)
+            key = (uid, job_id, receipt.page_id)
+            prior = self._pages.get(key)
+            if prior and prior != receipt:
+                raise MigrationFenceConflict("page receipt is immutable")
+            self._pages[key] = prior or receipt
+            return self._pages[key]
+
+    def attach_certificate(
+        self, uid: str, job_id: str, claim: MigrationClaim, certificate: MigrationVerificationCertificate
+    ) -> CanonicalMigrationJob:
+        with self._lock:
+            job = self._require(uid, job_id)
+            self._assert_claim(job, claim)
+            if certificate.required_surfaces != job.required_surfaces:
+                raise MigrationFenceConflict("certificate surfaces differ from job")
+            return self._write(
+                job.model_copy(
+                    update={
+                        "certificate": certificate,
+                        "state": MigrationState.soaking,
+                        "version": job.version + 1,
+                        "updated_at": _now(),
+                    }
+                )
+            )
+
+    def cutover(
+        self, uid: str, job_id: str, claim: MigrationClaim, *, expected_head_commit_id: str
+    ) -> CanonicalMigrationJob:
+        with self._lock:
+            job = self._require(uid, job_id)
+            self._assert_claim(job, claim)
+            certificate = job.certificate
+            if certificate is None or certificate.canonical_head_commit_id != expected_head_commit_id:
+                raise MigrationFenceConflict("fresh certificate/head is required for cutover")
+            return self._write(
+                job.model_copy(
+                    update={
+                        "cutover_head_commit_id": expected_head_commit_id,
+                        "state": MigrationState.complete,
+                        "version": job.version + 1,
+                        "updated_at": _now(),
+                    }
+                )
+            )
+
+    def _require(self, uid: str, job_id: str) -> CanonicalMigrationJob:
+        job = self._jobs.get((uid, job_id))
+        if job is None:
+            raise MigrationCheckpointConflict("migration job does not exist")
+        return job
+
+    def _assert_claim(self, job: CanonicalMigrationJob, claim: MigrationClaim) -> None:
+        if job.claim != claim or claim.expired():
+            raise MigrationLeaseLost("migration claim is stale or lost")
+
+    def _write(self, job: CanonicalMigrationJob) -> CanonicalMigrationJob:
+        self._jobs[(job.uid, job.job_id)] = job
+        return job
 
 
 class FirestoreMigrationStore:
-    """Firestore adapter using a transaction for every checkpoint/lease CAS."""
+    """Firestore implementation with claim checks and writes in one transaction."""
 
-    def __init__(self, firestore_client: Any):
-        self._db = firestore_client
+    def __init__(self, db_client: Any):
+        self._db = db_client
+
+    def _ref(self, uid: str, job_id: str) -> Any:
+        return self._db.document(f"users/{uid}/{MIGRATION_JOB_COLLECTION}/{job_id}")
+
+    def _page_ref(self, uid: str, job_id: str, page_id: str) -> Any:
+        return self._db.document(f"users/{uid}/{MIGRATION_JOB_COLLECTION}/{job_id}/pages/{page_id}")
+
+    def read_job(self, uid: str, job_id: str) -> Optional[CanonicalMigrationJob]:
+        snapshot = self._ref(uid, job_id).get()
+        return parse_snapshot_strict(CanonicalMigrationJob, snapshot) if getattr(snapshot, "exists", False) else None
+
+    def _run(self, callback: Any) -> Any:
+        tx = self._db.transaction()
+        if _firestore_transactional is not None and tx.__class__.__module__.startswith("google.cloud.firestore"):
+            return _firestore_transactional(callback)(tx)
+        if hasattr(tx, "_begin"):
+            tx._begin()
+        try:
+            result = callback(tx)
+            if hasattr(tx, "_commit"):
+                tx._commit()
+            return result
+        except Exception:
+            if hasattr(tx, "_rollback"):
+                tx._rollback()
+            raise
+        finally:
+            if hasattr(tx, "_clean_up"):
+                tx._clean_up()
 
     @staticmethod
-    def _control_path(uid: str) -> str:
-        return f"users/{uid}/{MIGRATION_CONTROL_DOC}"
-
-    @staticmethod
-    def _manifest_path(uid: str, manifest_id: str) -> str:
-        return f"users/{uid}/{MIGRATION_MANIFEST_COLLECTION}/{manifest_id}"
-
-    @staticmethod
-    def _work_path(uid: str, manifest_id: str, item_id: str) -> str:
-        return f"users/{uid}/{MIGRATION_WORK_COLLECTION}/{manifest_id}/items/{item_id}"
-
-    def _ref(self, path: str) -> Any:
-        return self._db.document(path)
-
-    def _decode_checkpoint(self, uid: str, snapshot: Any) -> Optional[CanonicalMigrationCheckpoint]:
+    def _decode(snapshot: Any) -> CanonicalMigrationJob:
         if not getattr(snapshot, "exists", False):
-            return None
-        checkpoint = parse_snapshot_strict(CanonicalMigrationCheckpoint, snapshot)
-        if checkpoint.uid != uid:
-            raise MigrationFenceConflict("checkpoint uid does not match requested user")
-        return checkpoint
+            raise MigrationCheckpointConflict("migration job does not exist")
+        return parse_snapshot_strict(CanonicalMigrationJob, snapshot)
 
-    def read_checkpoint(self, uid: str) -> Optional[CanonicalMigrationCheckpoint]:
-        return self._decode_checkpoint(uid, self._ref(self._control_path(uid)).get())
+    @staticmethod
+    def _assert_claim(job: CanonicalMigrationJob, claim: MigrationClaim) -> None:
+        if job.claim != claim or claim.expired():
+            raise MigrationLeaseLost("migration claim is stale or lost")
 
-    read = read_checkpoint
+    def create_job(self, job: CanonicalMigrationJob) -> CanonicalMigrationJob:
+        ref = self._ref(job.uid, job.job_id)
 
-    def create_checkpoint(self, checkpoint: CanonicalMigrationCheckpoint) -> CanonicalMigrationCheckpoint:
-        return self.compare_and_set_checkpoint(checkpoint.uid, -1, checkpoint)
+        def write(tx: Any) -> CanonicalMigrationJob:
+            if getattr(ref.get(transaction=tx), "exists", False):
+                raise MigrationCheckpointConflict("migration job already exists")
+            if hasattr(tx, "create"):
+                tx.create(ref, job.model_dump(mode="python"))
+            else:
+                tx.set(ref, job.model_dump(mode="python"))
+            return job
 
-    def compare_and_set_checkpoint(
-        self,
-        uid: str,
-        expected_version: int,
-        checkpoint: CanonicalMigrationCheckpoint,
-        *,
-        owner_id: Optional[str] = None,
-        ownership_epoch: Optional[int] = None,
-    ) -> CanonicalMigrationCheckpoint:
-        transaction = self._db.transaction()
-        ref = self._ref(self._control_path(uid))
+        return self._run(write)
 
-        def body(tx: Any) -> CanonicalMigrationCheckpoint:
-            snapshot = ref.get(transaction=tx)
-            current = self._decode_checkpoint(uid, snapshot)
-            if checkpoint.uid != uid:
-                raise MigrationFenceConflict("checkpoint uid mismatch")
-            if (current is None and expected_version != -1) or (
-                current is not None and current.version != expected_version
-            ):
-                raise MigrationCheckpointConflict("checkpoint version mismatch")
-            if current is not None and current.fence != checkpoint.fence:
-                raise MigrationFenceConflict("migration fence is immutable")
-            if current is not None and (owner_id is not None or ownership_epoch is not None):
-                if owner_id is None:
-                    raise MigrationLeaseUnavailable("owner id is required when checking lease ownership")
-                self._check_snapshot_lease(current, owner_id=owner_id, ownership_epoch=ownership_epoch)
-            written = checkpoint.model_copy(update={"version": expected_version + 1, "updated_at": _now()})
-            tx.set(ref, written.model_dump(mode="python"))
-            return written
-
-        return self._transactional(transaction, body)
-
-    cas_checkpoint = compare_and_set_checkpoint
-
-    def acquire_lease(self, uid: str, owner_id: str, *, ttl_seconds: float = 60.0) -> MigrationLease:
+    def claim_job(
+        self, uid: str, job_id: str, owner_instance_id: str, *, ttl_seconds: float = 60
+    ) -> CanonicalMigrationJob:
         if ttl_seconds <= 0:
-            raise ValueError("lease ttl must be positive")
-        transaction = self._db.transaction()
-        ref = self._ref(self._control_path(uid))
+            raise ValueError("claim ttl must be positive")
+        ref = self._ref(uid, job_id)
 
-        def body(tx: Any) -> MigrationLease:
-            snapshot = ref.get(transaction=tx)
-            current_checkpoint = self._decode_checkpoint(uid, snapshot)
-            prior = current_checkpoint.lease if current_checkpoint else None
+        def claim(tx: Any) -> CanonicalMigrationJob:
+            job = self._decode(ref.get(transaction=tx))
+            prior = job.claim
             now = _now()
-            if prior and not prior.is_expired(now) and prior.owner_id != owner_id:
-                raise MigrationLeaseUnavailable("migration lease is held by another owner")
-            epoch = (
-                prior.ownership_epoch
-                if prior and prior.owner_id == owner_id and not prior.is_expired(now)
-                else (prior.ownership_epoch + 1 if prior else 1)
-            )
-            lease = MigrationLease(
-                uid=uid,
-                owner_id=owner_id,
-                ownership_epoch=epoch,
+            if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
+                raise MigrationLeaseUnavailable("migration claim is held by another owner")
+            next_claim = MigrationClaim(
+                owner_instance_id=owner_instance_id,
+                claim_epoch=(prior.claim_epoch if prior else 0) + 1,
+                claim_id=uuid4().hex,
                 renewed_at=now,
                 expires_at=now + timedelta(seconds=ttl_seconds),
             )
-            if current_checkpoint is not None:
-                tx.set(
-                    ref,
-                    current_checkpoint.model_copy(update={"lease": lease, "updated_at": now}).model_dump(mode="python"),
-                )
-            return lease
-
-        return self._transactional(transaction, body)
-
-    def renew_lease(
-        self, uid: str, owner_id: str, ownership_epoch: int, *, ttl_seconds: float = 60.0
-    ) -> MigrationLease:
-        if ttl_seconds <= 0:
-            raise ValueError("lease ttl must be positive")
-        transaction = self._db.transaction()
-        ref = self._ref(self._control_path(uid))
-
-        def body(tx: Any) -> MigrationLease:
-            snapshot = ref.get(transaction=tx)
-            checkpoint = self._decode_checkpoint(uid, snapshot)
-            if checkpoint is None or checkpoint.lease is None:
-                raise MigrationLeaseLost("migration lease is absent")
-            self._check_snapshot_lease(checkpoint, owner_id=owner_id, ownership_epoch=ownership_epoch)
-            lease = checkpoint.lease.renewed(
-                owner_id=owner_id, ownership_epoch=ownership_epoch, ttl_seconds=ttl_seconds
+            written = job.model_copy(
+                update={
+                    "claim": next_claim,
+                    "state": MigrationState.running,
+                    "version": job.version + 1,
+                    "updated_at": now,
+                }
             )
-            tx.set(ref, checkpoint.model_copy(update={"lease": lease, "updated_at": _now()}).model_dump(mode="python"))
-            return lease
+            tx.set(ref, written.model_dump(mode="python"))
+            return written
 
-        return self._transactional(transaction, body)
+        return self._run(claim)
 
-    def release_lease(self, uid: str, owner_id: str, ownership_epoch: int) -> None:
-        transaction = self._db.transaction()
-        ref = self._ref(self._control_path(uid))
+    def renew_claim(
+        self, uid: str, job_id: str, claim: MigrationClaim, *, ttl_seconds: float = 60
+    ) -> CanonicalMigrationJob:
+        ref = self._ref(uid, job_id)
 
-        def body(tx: Any) -> None:
-            checkpoint = self._decode_checkpoint(uid, ref.get(transaction=tx))
-            if checkpoint is None or checkpoint.lease is None:
-                return
-            self._check_snapshot_lease(checkpoint, owner_id=owner_id, ownership_epoch=ownership_epoch)
-            # Keep a visibly expired lease as an ownership-epoch tombstone so
-            # a later owner always advances the fence instead of reusing 1.
-            expired = checkpoint.lease.model_copy(update={"expires_at": _now(), "renewed_at": _now()})
-            tx.set(
-                ref, checkpoint.model_copy(update={"lease": expired, "updated_at": _now()}).model_dump(mode="python")
+        def renew(tx: Any) -> CanonicalMigrationJob:
+            job = self._decode(ref.get(transaction=tx))
+            self._assert_claim(job, claim)
+            written = job.model_copy(
+                update={"claim": claim.renew(ttl_seconds=ttl_seconds), "version": job.version + 1, "updated_at": _now()}
             )
+            tx.set(ref, written.model_dump(mode="python"))
+            return written
 
-        self._transactional(transaction, body)
+        return self._run(renew)
 
-    acquire_user_lease = acquire_lease
-    renew_user_lease = renew_lease
-    release_user_lease = release_lease
+    def write_page_receipt(
+        self, uid: str, job_id: str, claim: MigrationClaim, receipt: MigrationPageReceipt
+    ) -> MigrationPageReceipt:
+        job_ref, page_ref = self._ref(uid, job_id), self._page_ref(uid, job_id, receipt.page_id)
 
-    def write_manifest(self, manifest: CanonicalMigrationManifest) -> CanonicalMigrationManifest:
-        if not manifest.uid.strip() or not manifest.manifest_id.strip():
-            raise MigrationFenceConflict("manifest identity must not be blank")
-        transaction = self._db.transaction()
-        ref = self._ref(self._manifest_path(manifest.uid, manifest.manifest_id))
-
-        def body(tx: Any) -> CanonicalMigrationManifest:
-            snapshot = ref.get(transaction=tx)
+        def write(tx: Any) -> MigrationPageReceipt:
+            self._assert_claim(self._decode(job_ref.get(transaction=tx)), claim)
+            snapshot = page_ref.get(transaction=tx)
             if getattr(snapshot, "exists", False):
-                prior = parse_snapshot_strict(CanonicalMigrationManifest, snapshot)
-                if prior.uid != manifest.uid or prior.manifest_id != manifest.manifest_id:
-                    raise MigrationFenceConflict("manifest identity mismatch")
-                if prior != manifest:
-                    raise MigrationCheckpointConflict("manifest id already contains different data")
+                prior = parse_snapshot_strict(MigrationPageReceipt, snapshot)
+                if prior != receipt:
+                    raise MigrationFenceConflict("page receipt is immutable")
                 return prior
-            (
-                tx.create(ref, manifest.model_dump(mode="python"))
-                if hasattr(tx, "create")
-                else tx.set(ref, manifest.model_dump(mode="python"))
+            if hasattr(tx, "create"):
+                tx.create(page_ref, receipt.model_dump(mode="python"))
+            else:
+                tx.set(page_ref, receipt.model_dump(mode="python"))
+            return receipt
+
+        return self._run(write)
+
+    def attach_certificate(
+        self, uid: str, job_id: str, claim: MigrationClaim, certificate: MigrationVerificationCertificate
+    ) -> CanonicalMigrationJob:
+        return self._update_with_claim(
+            uid,
+            job_id,
+            claim,
+            lambda job: job.model_copy(update={"certificate": certificate, "state": MigrationState.soaking}),
+            certificate,
+        )
+
+    def cutover(
+        self, uid: str, job_id: str, claim: MigrationClaim, *, expected_head_commit_id: str
+    ) -> CanonicalMigrationJob:
+        def mutation(job: CanonicalMigrationJob) -> CanonicalMigrationJob:
+            if job.certificate is None or job.certificate.canonical_head_commit_id != expected_head_commit_id:
+                raise MigrationFenceConflict("fresh certificate/head is required for cutover")
+            return job.model_copy(
+                update={"cutover_head_commit_id": expected_head_commit_id, "state": MigrationState.complete}
             )
-            return manifest
 
-        return self._transactional(transaction, body)
+        return self._update_with_claim(uid, job_id, claim, mutation)
 
-    def read_manifest(self, uid: str, manifest_id: str) -> Optional[CanonicalMigrationManifest]:
-        snapshot = self._ref(self._manifest_path(uid, manifest_id)).get()
-        manifest = (
-            parse_snapshot_strict(CanonicalMigrationManifest, snapshot) if getattr(snapshot, "exists", False) else None
-        )
-        if manifest is not None and (manifest.uid != uid or manifest.manifest_id != manifest_id):
-            raise MigrationFenceConflict("manifest identity does not match requested path")
-        return manifest
+    def _update_with_claim(
+        self,
+        uid: str,
+        job_id: str,
+        claim: MigrationClaim,
+        mutation: Any,
+        certificate: Optional[MigrationVerificationCertificate] = None,
+    ) -> CanonicalMigrationJob:
+        ref = self._ref(uid, job_id)
 
-    def upsert_work_record(self, record: CanonicalMigrationWorkRecord) -> CanonicalMigrationWorkRecord:
-        if not record.uid.strip() or not record.manifest_id.strip() or not record.item_id.strip():
-            raise MigrationFenceConflict("work record identity must not be blank")
-        transaction = self._db.transaction()
-        ref = self._ref(self._work_path(record.uid, record.manifest_id, record.item_id))
+        def update(tx: Any) -> CanonicalMigrationJob:
+            job = self._decode(ref.get(transaction=tx))
+            self._assert_claim(job, claim)
+            if certificate is not None and certificate.required_surfaces != job.required_surfaces:
+                raise MigrationFenceConflict("certificate surfaces differ from job")
+            updated = mutation(job).model_copy(update={"version": job.version + 1, "updated_at": _now()})
+            tx.set(ref, updated.model_dump(mode="python"))
+            return updated
 
-        def body(tx: Any) -> CanonicalMigrationWorkRecord:
-            snapshot = ref.get(transaction=tx)
-            if getattr(snapshot, "exists", False):
-                prior = parse_snapshot_strict(CanonicalMigrationWorkRecord, snapshot)
-                if (prior.uid, prior.manifest_id, prior.item_id) != (record.uid, record.manifest_id, record.item_id):
-                    raise MigrationFenceConflict("work record identity mismatch")
-                if (
-                    prior.item_revision,
-                    prior.content_hash,
-                    prior.evidence_ids,
-                    prior.account_generation,
-                    prior.source_generation,
-                ) != (
-                    record.item_revision,
-                    record.content_hash,
-                    record.evidence_ids,
-                    record.account_generation,
-                    record.source_generation,
-                ):
-                    raise MigrationFenceConflict("work record item fence is immutable")
-            tx.set(ref, record.model_dump(mode="python"))
-            return record
-
-        return self._transactional(transaction, body)
-
-    def read_work_records(self, uid: str, manifest_id: str) -> List[CanonicalMigrationWorkRecord]:
-        parent = self._ref(f"users/{uid}/{MIGRATION_WORK_COLLECTION}/{manifest_id}")
-        items = parent.collection("items").stream()
-        return sorted(
-            [self._decode_work_record(uid, manifest_id, snapshot) for snapshot in items],
-            key=lambda value: value.item_id,
-        )
-
-    @staticmethod
-    def _decode_work_record(uid: str, manifest_id: str, snapshot: Any) -> CanonicalMigrationWorkRecord:
-        record = parse_snapshot_strict(CanonicalMigrationWorkRecord, snapshot)
-        if record.uid != uid or record.manifest_id != manifest_id:
-            raise MigrationFenceConflict("work record identity does not match requested path")
-        return record
-
-    @staticmethod
-    def _check_snapshot_lease(
-        checkpoint: CanonicalMigrationCheckpoint, *, owner_id: str, ownership_epoch: Optional[int]
-    ) -> None:
-        lease = checkpoint.lease
-        if (
-            lease is None
-            or lease.owner_id != owner_id
-            or lease.ownership_epoch != ownership_epoch
-            or lease.is_expired()
-        ):
-            raise MigrationLeaseLost("migration lease owner/epoch mismatch or expired")
-
-    @staticmethod
-    def _transactional(transaction: Any, body: Any) -> Any:
-        if _firestore_transactional is not None:
-            return _firestore_transactional(body)(transaction)
-        if hasattr(transaction, "_begin"):
-            transaction._begin()
-        try:
-            result = body(transaction)
-            if hasattr(transaction, "_commit"):
-                transaction._commit()
-            return result
-        finally:
-            if hasattr(transaction, "_clean_up"):
-                transaction._clean_up()
+        return self._run(update)
 
 
-# Conventional names for dependency injection in tests/callers.
 MemoryMigrationStore = FirestoreMigrationStore
 InMemoryCheckpointStore = InMemoryMigrationStore
-
-__all__ = [
-    "FirestoreMigrationStore",
-    "InMemoryCheckpointStore",
-    "InMemoryMigrationStore",
-    "MemoryMigrationStore",
-    "MigrationCheckpointConflict",
-    "MigrationFenceConflict",
-    "MigrationLeaseLost",
-    "MigrationLeaseUnavailable",
-    "MigrationStoreError",
-]

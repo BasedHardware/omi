@@ -215,6 +215,10 @@ def _projection_fences(uid: str, head: dict[str, Any], *, ready: bool) -> dict[s
         "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
         "source": V3_COMPATIBILITY_PROJECTION_SOURCE,
         "ready": ready,
+        # This admits canonical outbox writers while ``ready`` remains the
+        # independent reader/cutover gate.  A rebuild therefore cannot lose
+        # writes that arrive after its initial scan.
+        "writer_admission_ready": True,
         "account_generation": generation,
         "projection_generation": generation,
         "freshness_fence_generation": generation,

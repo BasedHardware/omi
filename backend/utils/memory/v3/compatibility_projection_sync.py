@@ -66,7 +66,11 @@ def _validated_projection_fences(
         state.get("uid") != uid
         or state.get("schema_version") != V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION
         or state.get("source") != V3_COMPATIBILITY_PROJECTION_SOURCE
-        or state.get("ready") is not True
+        # Serving readiness is a read gate.  Rebuilds must be able to keep it
+        # false while normal canonical outbox writers continue to converge.
+        # Older enrolled state has no separate admission field, where its
+        # historical ``ready`` value remains the conservative fallback.
+        or state.get("writer_admission_ready", state.get("ready")) is not True
         or state.get("projection_version") != V3_COMPATIBILITY_PROJECTION_VERSION
     ):
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")

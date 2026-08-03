@@ -1,144 +1,143 @@
-from datetime import datetime, timezone
-
+from datetime import timedelta
 import pytest
-
 from database.memory_migration_store import (
     InMemoryMigrationStore,
-    MigrationCheckpointConflict,
+    MigrationFenceConflict,
+    MigrationLeaseLost,
     MigrationLeaseUnavailable,
 )
 from models.memory_migration import (
-    CanonicalMigrationCheckpoint,
-    CanonicalMigrationManifest,
-    MigrationFence,
-    MigrationInventory,
-    MigrationPhase,
-    MigrationTransitionError,
-    validate_migration_transition,
+    CanonicalMigrationJob,
+    MigrationPageReceipt,
+    MigrationSurface,
+    MigrationVerificationCertificate,
 )
-from utils.memory.canonical_migration_controller import _projection_matches_item, verify_migration_postconditions
-from utils.memory.graph_enrichment import GraphEnrichmentPlan
+from utils.memory.canonical_migration_controller import CanonicalMigrationReconciler
+from utils.memory.v3.compatibility_projection_sync import _validated_projection_fences
 
 
-def _inventory(*, stable: bool = True) -> MigrationInventory:
-    return MigrationInventory(
+def _job():
+    return CanonicalMigrationJob.new(
         uid="u1",
-        inventory_id="inv1",
-        fingerprint="fp1",
-        account_generation=1,
-        source_generation=2,
-        head_commit_id="head1",
-        head_sequence=4,
-        item_ids=["m1"],
-        item_revisions={"m1": 3},
-        item_content_hashes={"m1": "hash-m1"},
-        item_evidence_ids={"m1": ["e1"]},
-        stable=stable,
+        transform_version="legacy-v1",
+        policy_version="policy-v1",
+        source_adapter_version="source-v1",
+        account_generation=2,
+        source_generation=3,
+        required_surfaces=list(MigrationSurface),
+        job_id="job1",
     )
 
 
-def test_transition_validation_does_not_allow_staging_to_verified_or_cutover_skip():
-    validate_migration_transition(MigrationPhase.inventoried, MigrationPhase.write_enrolled)
-    with pytest.raises(MigrationTransitionError):
-        validate_migration_transition(MigrationPhase.staged, MigrationPhase.verified)
-    with pytest.raises(MigrationTransitionError):
-        validate_migration_transition(MigrationPhase.read_cutover, MigrationPhase.failed)
+def _certificate():
+    return MigrationVerificationCertificate(
+        canonical_head_commit_id="head-9",
+        canonical_head_sequence=9,
+        source_snapshot_token="snapshot-9",
+        source_digest="digest-9",
+        required_surfaces=list(MigrationSurface),
+        converged_surfaces=list(MigrationSurface),
+    )
 
 
-def test_checkpoint_cas_and_lease_epoch_reject_races():
+def test_each_claim_gets_a_new_epoch_and_random_claim_id_even_for_same_owner():
     store = InMemoryMigrationStore()
-    inventory = _inventory()
-    fence = MigrationFence(
-        account_generation=1,
-        source_generation=2,
-        inventory_id=inventory.inventory_id,
-        inventory_fingerprint=inventory.fingerprint,
-        observed_head_commit_id=inventory.head_commit_id,
-        observed_head_sequence=inventory.head_sequence,
-    )
-    checkpoint = CanonicalMigrationCheckpoint(uid="u1", fence=fence)
-    store.compare_and_set_checkpoint("u1", -1, checkpoint)
-    lease = store.acquire_lease("u1", "worker-a")
-    current = store.read_checkpoint("u1")
-    assert current is not None
-    owned = store.compare_and_set_checkpoint(
-        "u1",
-        current.version,
-        current.model_copy(update={"lease": lease}),
-        owner_id="worker-a",
-        ownership_epoch=lease.ownership_epoch,
-    )
-    with pytest.raises(MigrationCheckpointConflict):
-        store.compare_and_set_checkpoint("u1", owned.version - 1, owned)
+    store.create_job(_job())
+    first = store.claim_job("u1", "job1", "worker-a")
+    first_claim = first.claim
+    assert first_claim is not None
+    first = store.renew_claim("u1", "job1", first_claim)
+    second = store.claim_job("u1", "job1", "worker-a")
+    assert second.claim is not None and second.claim.claim_epoch == first_claim.claim_epoch + 1
+    assert second.claim.claim_id != first_claim.claim_id
+
+
+def test_stale_or_other_worker_cannot_write_page_receipt():
+    store = InMemoryMigrationStore()
+    store.create_job(_job())
+    claimed = store.claim_job("u1", "job1", "worker-a")
+    claim = claimed.claim
+    assert claim is not None
     with pytest.raises(MigrationLeaseUnavailable):
-        store.acquire_lease("u1", "worker-b")
-    store.release_lease("u1", "worker-a", lease.ownership_epoch)
-    takeover = store.acquire_lease("u1", "worker-b")
-    assert takeover.ownership_epoch > lease.ownership_epoch
-
-
-def test_graph_plan_rejects_non_snake_case_predicate():
-    with pytest.raises(ValueError):
-        GraphEnrichmentPlan(subject_entity_id="self", predicate="LIKES-FOOD", arguments={"value": "x"})
-
-
-def test_projection_freshness_uses_compatibility_payload_and_migration_fence():
-    fence = MigrationFence(
-        account_generation=1,
-        source_generation=2,
-        inventory_id="inv1",
-        inventory_fingerprint="fp1",
-        observed_head_commit_id="head1",
-        observed_head_sequence=4,
+        store.claim_job("u1", "job1", "worker-b")
+    receipt = MigrationPageReceipt(
+        page_id="p1", source_cursor="cursor-1", source_digest="digest-1", operation_ids=["op-1"]
     )
-    item = {
-        "uid": "u1",
-        "memory_id": "m1",
-        "item_revision": 3,
-        "content_hash": "hash-m1",
-        "content": "current text",
-        "tier": "short_term",
-    }
-    row = {
+    store.write_page_receipt("u1", "job1", claim, receipt)
+    replacement = store.claim_job("u1", "job1", "worker-a")
+    with pytest.raises(MigrationLeaseLost):
+        store.write_page_receipt("u1", "job1", claim, receipt)
+    assert replacement.claim is not None
+
+
+def test_page_receipts_are_create_only_and_do_not_store_source_records():
+    store = InMemoryMigrationStore()
+    store.create_job(_job())
+    job = store.claim_job("u1", "job1", "worker-a")
+    claim = job.claim
+    assert claim is not None
+    stored = store.write_page_receipt(
+        "u1",
+        "job1",
+        claim,
+        MigrationPageReceipt(
+            page_id="p1",
+            source_cursor="cursor",
+            source_digest="digest",
+            operation_ids=["op-1"],
+            terminal_outcome_count=1,
+        ),
+    )
+    assert stored.operation_ids == ["op-1"]
+    with pytest.raises(MigrationFenceConflict):
+        store.write_page_receipt("u1", "job1", claim, stored.model_copy(update={"source_digest": "other"}))
+
+
+def test_cutover_is_fenced_by_an_exact_fresh_certificate():
+    store = InMemoryMigrationStore()
+    store.create_job(_job())
+    job = store.claim_job("u1", "job1", "worker-a")
+    claim = job.claim
+    assert claim is not None
+    with pytest.raises(MigrationFenceConflict):
+        store.cutover("u1", "job1", claim, expected_head_commit_id="head-9")
+    reconciler = CanonicalMigrationReconciler(store)
+    result = reconciler.certify_and_cutover(job, claim, _certificate())
+    assert result.job.state.value == "complete" and result.job.cutover_head_commit_id == "head-9"
+
+
+def test_certificate_rejects_missing_surface_or_mismatch():
+    with pytest.raises(ValueError):
+        MigrationVerificationCertificate(
+            canonical_head_commit_id="h",
+            canonical_head_sequence=1,
+            source_snapshot_token="s",
+            source_digest="d",
+            required_surfaces=list(MigrationSurface),
+            converged_surfaces=[MigrationSurface.canonical],
+        )
+
+
+def test_projection_writer_admission_is_independent_from_reader_readiness():
+    state = {
         "uid": "u1",
         "schema_version": 1,
         "source": "memory_items_projection",
-        "memory_id": "m1",
-        "account_generation": 1,
-        "projection_generation": 1,
-        "source_commit_id": "head1",
-        "projection_commit_id": "commit-head1",
-        "projection_evidence_fence": "head-head1",
+        "ready": False,
+        "writer_admission_ready": True,
+        "projection_version": "v3_memorydb_compatibility",
+        "account_generation": 2,
+        "projection_generation": 2,
+        "freshness_fence_generation": 2,
+        "tombstone_fence_generation": 2,
+        "vector_cleanup_fence_generation": 2,
+        "source_commit_id": "head-2",
+        "projection_commit_id": "commit-head-2",
+        "projection_evidence_fence": "head-head-2",
+        "source_evidence_fence": "head-head-2",
+        "source_version": "v1",
         "write_convergence_complete": True,
         "delete_convergence_complete": True,
         "tombstone_convergence_complete": True,
-        "memorydb": {"content": "current text", "memory_tier": "short_term"},
     }
-
-    assert _projection_matches_item(row, item, fence)
-    assert not _projection_matches_item({**row, "source_commit_id": "older-head"}, item, fence)
-    assert not _projection_matches_item(
-        {**row, "memorydb": {"content": "stale", "memory_tier": "short_term"}}, item, fence
-    )
-
-
-def test_final_verifier_blocks_unstable_inventory_and_missing_graph_projection():
-    manifest = CanonicalMigrationManifest.from_inventory(_inventory(stable=False))
-    result = verify_migration_postconditions(
-        manifest=manifest,
-        canonical_items=[
-            {
-                "memory_id": "m1",
-                "tier": "long_term",
-                "status": "active",
-                "processing_state": "processed",
-                "sensitivity_labels": [],
-                "promotion": {"user_review": True},
-            }
-        ],
-        graph_assertions=[],
-        compatibility_projection=[],
-        outbox_events=[],
-    )
-    assert not result.passed
-    assert any(block.code.value == "inventory_unstable" for block in result.blocking)
+    assert _validated_projection_fences(uid="u1", account_generation=2, state=state)["source_commit_id"] == "head-2"
