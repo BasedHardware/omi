@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Literal, Optional, cast
 
 from database import knowledge_graph as kg_db
-from database._client import get_firestore_client
+from database import _client
 
 
 class MissingKnowledgeGraphEndpointsError(ValueError):
@@ -107,7 +107,7 @@ def _local_kg_edge_to_firestore(row: Dict[str, Any], source_namespace: str) -> O
 
 
 def _existing_node_ids(uid: str, endpoint_ids: Iterable[str], *, db_client: Any = None) -> set[str]:
-    client = db_client if db_client is not None else get_firestore_client()
+    client = db_client if db_client is not None else _client.get_firestore_client()
     nodes_ref = client.collection(kg_db.users_collection).document(uid).collection(kg_db.knowledge_nodes_collection)
     refs = [nodes_ref.document(node_id) for node_id in sorted(set(endpoint_ids))]
     return {snapshot.id for snapshot in client.get_all(refs) if snapshot.exists}

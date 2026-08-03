@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import importlib
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 import uuid
 
@@ -9,7 +10,7 @@ from models.memory_contracts import deterministic_contract_id
 from models.memory_promotion import PROMOTION_GRAPH_ASSERTION_V2_VERSION, MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
-from ._client import db, get_firestore_client, run_transactional
+_client = importlib.import_module(f"{__package__}._client")
 from .read_boundary import parse_snapshot_or_none
 
 users_collection = 'users'
@@ -30,7 +31,7 @@ KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
 def _firestore_client(db_client: Any = None) -> Any:
-    return db_client if db_client is not None else db
+    return db_client if db_client is not None else _client.db
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -320,7 +321,7 @@ def _merge_knowledge_node_data(
 def merge_knowledge_nodes_batch(
     uid: str, node_data: Iterable[Dict[str, Any]], *, db_client: Any = None
 ) -> List[Dict[str, Any]]:
-    client = db_client if db_client is not None else get_firestore_client()
+    client = db_client if db_client is not None else _client.get_firestore_client()
     nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
     values = {data['id']: dict(data) for data in node_data}
     refs = [nodes_ref.document(node_id) for node_id in values]
@@ -340,7 +341,7 @@ def merge_knowledge_nodes_batch(
                 transaction.set(nodes_ref.document(data['id']), data)
             return merged
 
-        return run_transactional(client, transact)
+        return _client.run_transactional(client, transact)
 
     merged = merge_snapshots(client.get_all(refs))
     batch = client.batch()
@@ -434,7 +435,7 @@ def _merge_knowledge_edge_data(
 def merge_knowledge_edges_batch(
     uid: str, edge_data: Iterable[Dict[str, Any]], *, db_client: Any = None
 ) -> List[Dict[str, Any]]:
-    client = db_client if db_client is not None else get_firestore_client()
+    client = db_client if db_client is not None else _client.get_firestore_client()
     edges_ref = client.collection(users_collection).document(uid).collection(knowledge_edges_collection)
     values = {data['id']: dict(data) for data in edge_data}
     refs = [edges_ref.document(edge_id) for edge_id in values]
@@ -454,7 +455,7 @@ def merge_knowledge_edges_batch(
                 transaction.set(edges_ref.document(data['id']), data)
             return merged
 
-        return run_transactional(client, transact)
+        return _client.run_transactional(client, transact)
 
     merged = merge_snapshots(client.get_all(refs))
     batch = client.batch()
@@ -1030,7 +1031,7 @@ def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
 
 
 def delete_namespaced_knowledge_graph(uid: str, namespace: str, *, db_client: Any = None) -> int:
-    client = db_client if db_client is not None else get_firestore_client()
+    client = db_client if db_client is not None else _client.get_firestore_client()
     user_ref = client.collection(users_collection).document(uid)
     deleted = 0
 
