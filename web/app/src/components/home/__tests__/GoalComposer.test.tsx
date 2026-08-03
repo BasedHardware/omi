@@ -14,48 +14,42 @@ describe('GoalComposer', () => {
     const { onCreate, user } = setup();
 
     await user.type(screen.getByLabelText('Goal'), 'Read 12 books');
-    await user.clear(screen.getByLabelText('Target'));
     await user.type(screen.getByLabelText('Target'), '12');
     await user.type(screen.getByLabelText('Unit'), 'books');
     await user.click(screen.getByRole('button', { name: 'Set goal' }));
 
+    // Matches the desktop create body exactly: title, target, unit only when
+    // given. No goal_type/min/max — those are web inventions the desktop
+    // clients never send.
     expect(onCreate).toHaveBeenCalledWith({
       title: 'Read 12 books',
-      goal_type: 'numeric',
       target_value: 12,
-      current_value: 0,
-      min_value: 0,
-      max_value: 12,
       unit: 'books',
     });
   });
 
-  it('drops the target and unit inputs for a yes/no goal', async () => {
+  it('defaults a blank target to 1, as desktop does', async () => {
     const { onCreate, user } = setup();
 
     await user.type(screen.getByLabelText('Goal'), 'Ship the launch');
-    await user.click(screen.getByRole('button', { name: 'Yes / no' }));
-
-    expect(screen.queryByLabelText('Target')).not.toBeInTheDocument();
-
     await user.click(screen.getByRole('button', { name: 'Set goal' }));
 
-    expect(onCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Ship the launch',
-        goal_type: 'boolean',
-        target_value: 1,
-      }),
-    );
+    expect(onCreate).toHaveBeenCalledWith({
+      title: 'Ship the launch',
+      target_value: 1,
+    });
   });
 
-  it('sends no unit when the field is left blank', async () => {
+  it('omits unit entirely when the field is left blank', async () => {
     const { onCreate, user } = setup();
 
     await user.type(screen.getByLabelText('Goal'), 'Run 100 miles');
     await user.click(screen.getByRole('button', { name: 'Set goal' }));
 
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ unit: null }));
+    expect(onCreate).toHaveBeenCalledWith({
+      title: 'Run 100 miles',
+      target_value: 1,
+    });
   });
 
   it('trims the title rather than sending the backend blank-title input', async () => {
@@ -78,15 +72,17 @@ describe('GoalComposer', () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 
-  it('refuses a target of zero, which the backend would reject', async () => {
+  it('coerces a zero or invalid target to 1 rather than letting the API 422', async () => {
     const { onCreate, user } = setup();
 
     await user.type(screen.getByLabelText('Goal'), 'Read books');
-    await user.clear(screen.getByLabelText('Target'));
     await user.type(screen.getByLabelText('Target'), '0');
+    await user.click(screen.getByRole('button', { name: 'Set goal' }));
 
-    expect(screen.getByRole('button', { name: 'Set goal' })).toBeDisabled();
-    expect(onCreate).not.toHaveBeenCalled();
+    expect(onCreate).toHaveBeenCalledWith({
+      title: 'Read books',
+      target_value: 1,
+    });
   });
 
   it('closes on success', async () => {

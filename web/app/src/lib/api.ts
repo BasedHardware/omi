@@ -34,7 +34,7 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
-import type { Goal, GoalHistoryEntry, GoalType } from '@/types/goals';
+import type { Goal, GoalHistoryEntry } from '@/types/goals';
 import type { Scores } from '@/types/scores';
 import type {
   App,
@@ -73,10 +73,13 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
 
   const url = `${API_BASE_URL}${endpoint}`;
   const deviceIdHash = await getWebDeviceIdHash();
-  const headers = new Headers({
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  });
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  // FormData must set its own Content-Type so fetch can add the multipart
+  // boundary; forcing application/json here produces a body the server cannot
+  // parse.
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
   if (deviceIdHash) {
@@ -513,22 +516,24 @@ export async function getGoals(includeEnded = false): Promise<Goal[]> {
   return Array.isArray(goals) ? goals : [];
 }
 
+/**
+ * Create body, matching what the desktop apps send
+ * (`desktop/windows/src/renderer/src/pages/Goals.tsx` saveNew): title, a
+ * required positive target, and unit only when the user gave one.
+ *
+ * `target_value` is required — the backend 422s without it — so a title-only
+ * goal defaults to 1, which completes on a single tick.
+ */
 export interface CreateGoalParams {
   title: string;
-  goal_type: GoalType;
   target_value: number;
-  current_value?: number;
-  min_value?: number;
-  max_value?: number;
-  unit?: string | null;
-  desired_outcome?: string;
-  why_it_matters?: string;
+  unit?: string;
 }
 
 export async function createGoal(params: CreateGoalParams): Promise<Goal> {
   const goal = await fetchWithAuth<Goal>('/v1/goals', {
     method: 'POST',
-    body: JSON.stringify({ ...params, source: 'user' }),
+    body: JSON.stringify(params),
   });
   invalidateCache(invalidationPatterns.goals);
   return goal;
@@ -607,6 +612,29 @@ export async function getGoalAdvice(id: string): Promise<string> {
  */
 export async function getOrCreatePersona(): Promise<App> {
   return fetchWithAuth<App>('/v1/user/persona', { method: 'POST' });
+}
+
+export interface UpdatePersonaParams {
+  name?: string;
+  username?: string;
+  description?: string;
+}
+
+/**
+ * Update the signed-in user's persona.
+ *
+ * `PATCH /v1/personas/{id}` is multipart: the JSON body travels in a
+ * `persona_data` form field alongside an optional image. Only the fields sent
+ * are touched — the route no longer re-claims the handle or regenerates the
+ * description for fields the caller omitted.
+ */
+export async function updatePersona(
+  id: string,
+  updates: UpdatePersonaParams,
+): Promise<void> {
+  const form = new FormData();
+  form.append('persona_data', JSON.stringify(updates));
+  await fetchWithAuth(`/v1/personas/${id}`, { method: 'PATCH', body: form });
 }
 
 /** Daily, weekly, and overall task-completion scores. */

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from '@tschk/moonshine-next/image';
 import { ExternalLink, User } from 'lucide-react';
-import { getOrCreatePersona } from '@/lib/api';
+import { getOrCreatePersona, updatePersona } from '@/lib/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
 import { isPersonaPublic, personaPublicUrl, personaStatusLabel } from '@/lib/persona';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
@@ -14,6 +14,7 @@ export default function PersonaPage() {
     data: persona,
     loading,
     error,
+    refresh,
   } = useAsyncResource('persona', getOrCreatePersona, {
     fallbackMessage: 'Failed to load persona',
   });
@@ -21,6 +22,46 @@ export default function PersonaPage() {
   useEffect(() => {
     MixpanelManager.pageView('Persona');
   }, []);
+
+  const [draft, setDraft] = useState<{ name: string; username: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const startEditing = () => {
+    if (!persona) return;
+    setSaveError(null);
+    setDraft({ name: persona.name, username: persona.username ?? '' });
+  };
+
+  const save = async () => {
+    if (!persona || !draft) return;
+    // Send only what changed: the route claims a handle when username is
+    // present and rewrites the description when the name moves.
+    const updates: { name?: string; username?: string } = {};
+    if (draft.name.trim() && draft.name.trim() !== persona.name) {
+      updates.name = draft.name.trim();
+    }
+    if (draft.username.trim() && draft.username.trim() !== (persona.username ?? '')) {
+      updates.username = draft.username.trim();
+    }
+    if (Object.keys(updates).length === 0) {
+      setDraft(null);
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updatePersona(persona.id, updates);
+      setDraft(null);
+      await refresh();
+    } catch (err) {
+      console.error('Failed to update persona:', err);
+      setSaveError(err instanceof Error ? err.message : 'Could not save');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10">
@@ -83,9 +124,70 @@ export default function PersonaPage() {
             </a>
           )}
 
-          <p className="mt-6 border-t border-stroke pt-4 text-xs text-text-quaternary">
-            Editing your persona is available in the Omi desktop and mobile apps.
-          </p>
+          <div className="mt-6 border-t border-stroke pt-4">
+            {draft ? (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wide text-text-quaternary">
+                    Name
+                  </span>
+                  <input
+                    value={draft.name}
+                    aria-label="Persona name"
+                    maxLength={200}
+                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wide text-text-quaternary">
+                    Handle
+                  </span>
+                  <input
+                    value={draft.username}
+                    aria-label="Persona handle"
+                    maxLength={64}
+                    onChange={(event) =>
+                      setDraft({ ...draft, username: event.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                  />
+                </label>
+
+                {saveError && <p className="text-sm text-error">{saveError}</p>}
+
+                <p className="text-xs text-text-quaternary">
+                  Changing the name rewrites the generated description.
+                </p>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDraft(null)}
+                    className="rounded-control px-4 py-2 text-sm text-text-quaternary transition-colors hover:text-text-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={saving}
+                    className="rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="rounded-control bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary"
+              >
+                Edit persona
+              </button>
+            )}
+          </div>
         </section>
       ) : null}
     </div>
