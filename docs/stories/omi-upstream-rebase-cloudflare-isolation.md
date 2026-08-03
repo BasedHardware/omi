@@ -108,17 +108,17 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 
 ### release_note
 
-- `release_note`: Cloudflare連携は設定済みの場合だけ表示するread-only list/detailである。Worker deployやiPhone実機E2Eを完了として告知せず、WAL upload-ack-deleteを含む書込み機能は提供しない。
+- Cloudflare連携は設定済みの場合だけ表示するread-only list/detailである。Worker deployやiPhone実機E2Eを完了として告知せず、WAL upload-ack-deleteを含む書込み機能は提供しない。
 
 ### rollout_plan
 
-- `rollout_plan`: operatorはdart-definesでWorker URLとtokenを設定するだけである。URL/token未設定時はdisabledとなり、既存Omi機能に影響しない。Workerのdeployやproduction rolloutはこのStoryの実行手順ではない。
+- operatorはdart-definesでWorker URLとtokenを設定するだけである。URL/token未設定時はdisabledとなり、既存Omi機能に影響しない。Workerのdeployやproduction rolloutはこのStoryの実行手順ではない。
 
 ### rollback_instruction
 
-- `rollback_instruction`: dart-definesからWorker URLまたはtokenを外してdisabledへ戻す。read-only UIを外す場合も既存Omiのデータ経路を変更せず、Cloudflareへのupload、ack、deleteを実行しない。
+- dart-definesからWorker URLまたはtokenを外してdisabledへ戻す。read-only UIを外す場合も既存Omiのデータ経路を変更せず、Cloudflareへのupload、ack、deleteを実行しない。
 
 ### observability_evidence
 
-- `observability_evidence`: 観測証拠はscoped UI errorと、検証時のcurrent-headにbindしたVibePro artifacts/test logsに限定する。docs変更後は新HEADで再検証してbindし直すまで、既存artifactをruntime証明へ昇格させない。
+- 観測証拠はscoped UI errorと、検証時のcurrent-headにbindしたVibePro artifacts/test logsに限定する。docs変更後は新HEADで再検証してbindし直すまで、既存artifactをruntime証明へ昇格させない。
 - production telemetry、Worker runtime、iPhone実機E2E、WAL upload-ack-deleteの観測は主張しない。
