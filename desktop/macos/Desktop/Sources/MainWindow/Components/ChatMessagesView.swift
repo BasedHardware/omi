@@ -333,8 +333,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - React to isSending (send started)
     .onChange(of: isSending) { oldValue, newValue in
       if newValue && !oldValue && localSendToken == nil {
+        // A send is deliberate, so it may reclaim the live edge — but not out
+        // from under a reader whose gesture is still in flight. Clearing the
+        // latch unconditionally let a send this reader did not make (poll,
+        // sync, another surface) teleport them to the bottom mid-scroll.
+        guard !userIsScrolling else {
+          hasActivityBelow = true
+          return
+        }
         cancelPendingScrollsForUserInteraction()
-        userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
         scrollToBottom(proxy: proxy)
@@ -465,11 +472,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// view unless the user explicitly scrolls away.
   private func handleLocalSend(proxy: ScrollViewProxy) {
     guard !messages.isEmpty else { return }
+    // The reader typed and hit send, so following is what they asked for —
+    // unless a gesture is genuinely in flight, in which case their hand is
+    // still on the trackpad and the viewport is still theirs.
+    guard !userIsScrolling else {
+      hasActivityBelow = true
+      return
+    }
 
     cancelPendingScrollsForUserInteraction()
     scrollMode = .followingBottom
     hasActivityBelow = false
-    userIsScrolling = false
     scrollToBottom(proxy: proxy)
     scheduleInitialScroll(proxy: proxy, delay: 0.1)
   }
@@ -683,6 +696,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         userScrollEndWorkItem = endWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
       } onScrollSettledAtBottom: {
+        // The detector reports a settle only once the input that produced it
+        // genuinely finished: AppKit's `didEndLiveScroll` for wheel/trackpad
+        // (momentum included), or the bounded timer for keyboard and scrollbar
+        // input. Both are stronger evidence than the wall-clock
+        // `userIsScrolling` latch, which exists only to stop programmatic
+        // scrolls fighting a gesture still in flight. Consulting the latch here
+        // made this resume unreachable: `didEndLiveScroll` delivers on the very
+        // next main-thread turn, ~0.3s before the latch clears, so a reader who
+        // returned to the live edge could never resume live following.
+        userScrollEndWorkItem?.cancel()
+        userScrollEndWorkItem = nil
+        userIsScrolling = false
         guard
           ChatScrollLiveEdge.canResumeFollowing(
             source: .settledUserScroll,
@@ -691,7 +716,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           ), scrollMode == .freeScrolling
         else { return }
         cancelAllPendingScrolls()
-        userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
         transcriptGeometry.setFollowingLiveEdge(true)

@@ -727,6 +727,12 @@ struct ChatScrollContainer<Content: View>: View {
       userScrollEndWorkItem = endWork
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
     } onScrollSettledAtBottom: {
+      // Same contract as ChatMessagesView: the detector only reports a settle
+      // once the input finished, so release the wall-clock latch here rather
+      // than consulting it — it is still true on this very run-loop turn.
+      userScrollEndWorkItem?.cancel()
+      userScrollEndWorkItem = nil
+      userIsScrolling = false
       guard
         ChatScrollLiveEdge.canResumeFollowing(
           source: .settledUserScroll,
@@ -735,7 +741,6 @@ struct ChatScrollContainer<Content: View>: View {
         ), scrollMode == .freeScrolling
       else { return }
       cancelAllPendingScrolls()
-      userIsScrolling = false
       scrollMode = .followingBottom
       hasActivityBelow = false
     }

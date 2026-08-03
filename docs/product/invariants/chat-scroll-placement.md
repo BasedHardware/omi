@@ -15,6 +15,11 @@ at the top.
 - Treat explicit wheel, trackpad, keyboard, mouse, or prompt-rail movement as
   reader authority and preserve that viewport across later content/layout
   updates.
+- Let a reader who deliberately returns to the live edge resume live following.
+  The end-of-input signal (AppKit's `didEndLiveScroll`, or the bounded settle
+  timer for discrete input) is the authority for "the gesture finished"; a
+  wall-clock activity latch must be released by that signal, never consulted as
+  a veto against it.
 - Reset launch placement only for a genuinely new conversation presentation.
 
 ## MUST NOT
@@ -24,6 +29,9 @@ at the top.
   an explicitly selected position.
 - Persist a second scroll-position authority outside the transcript view's
   lifecycle state.
+- Let a send the reader did not initiate (poll, sync, or another surface
+  flipping `isSending`) seize a viewport while the reader's gesture is still in
+  flight.
 
 ## Surfaces
 
@@ -34,6 +42,11 @@ at the top.
 
 ## Guard tests
 
+- `desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift` —
+  mounts the real transcript in an `NSHostingView` and drives it with real
+  `NSEvent` scroll wheels through `NSApplication.sendEvent`. The coordinator-
+  level suites below cannot see a regression that lives in the transcript's own
+  `@State`, because they never instantiate the view.
 - `desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift`
 - `desktop/macos/Desktop/Tests/DesktopChatDriftGuardTests.swift`
 - `desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift`
@@ -44,6 +57,7 @@ at the top.
 - `desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift`
 - `desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift`
 - `desktop/macos/Desktop/Tests/DesktopChatDriftGuardTests.swift`
+- `desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift`
 
 ## PR rule
 
