@@ -94,9 +94,58 @@ class TestSchedulingIsolation:
 
     def test_scheduled_after_audio_files_are_durable(self):
         """Enrolment reads audio_files back, so the write must already have happened."""
-        audio_write = SOURCE.index("conversations_db.create_audio_files_from_chunks")
-        schedule = SOURCE.index("schedule_speaker_resolution(uid, cast(Conversation, conversation))")
-        assert audio_write < schedule
+        conversation = _conversation()
+        conversation.folder_id = 'folder-1'
+        conversation.private_cloud_sync_enabled = True
+        finalized = []
+        events = []
+
+        class AudioFile:
+            def dict(self):
+                return {'id': 'audio-1'}
+
+        def create_audio_files(*args):
+            events.append('audio_create')
+            return [AudioFile()]
+
+        def update_conversation(*args, **kwargs):
+            if 'audio_files' in args[2]:
+                events.append('audio_write')
+
+        def schedule(*args, **kwargs):
+            events.append('schedule')
+
+        with patch.object(pc, '_get_structured', return_value=(conversation.structured, False)), patch.object(
+            pc, '_get_conversation_obj', return_value=conversation
+        ), patch.object(pc.redis_db, 'get_conversation_meeting_id', return_value=None), patch.object(
+            pc.lifecycle_service, 'persist_processed_conversation', return_value=True
+        ), patch.object(
+            pc, 'submit_with_context'
+        ), patch.object(
+            pc, '_trigger_apps'
+        ), patch.object(
+            pc.conversations_db, 'create_audio_files_from_chunks', side_effect=create_audio_files
+        ), patch.object(
+            pc.conversations_db, 'update_conversation', side_effect=update_conversation
+        ), patch.object(
+            pc, 'precache_conversation_audio'
+        ), patch.object(
+            pc, 'is_audio_merge_dispatch_enabled', return_value=False
+        ), patch.object(
+            pc, 'schedule_speaker_resolution', side_effect=schedule
+        ):
+            pc.process_conversation(
+                'uid',
+                'en',
+                conversation,
+                defer_memory_extraction=True,
+                defer_derived_effects=True,
+                derived_effects_observer=finalized.append,
+            )
+            assert len(finalized) == 1
+            finalized[0]()
+
+        assert events == ['audio_create', 'audio_write', 'schedule']
 
 
 class TestScheduleSpeakerResolution:

@@ -681,7 +681,8 @@ def write_path(monkeypatch):
         if not state['persisted']:
             return {}
         applied = {}
-        for speaker_id, person_id in assignments:
+        for assignment in assignments:
+            speaker_id, person_id = assignment[:2]
             speaker_segments = [s for s in state['stored'] if s.get('speaker_id') == speaker_id]
             if not speaker_segments:
                 continue
@@ -812,7 +813,7 @@ class TestApplyPlanRespectsStoredState:
         )
 
         assert [name for _, name in outcome.assigned] == ["Ben"]
-        assert write_path.state['written'] == [(2, outcome.assigned[0][0])]
+        assert write_path.state['written'] == [(2, outcome.assigned[0][0], 'Ben')]
 
     def test_the_write_names_speakers_rather_than_carrying_a_segment_array(self, write_path):
         """The array is the race. Whoever computes it has already gone stale.
@@ -827,7 +828,7 @@ class TestApplyPlanRespectsStoredState:
 
         outcome = run_apply(write_path, segments, [suggestion(segment_ids=("s1",))])
 
-        assert write_path.state['written'] == [(1, outcome.assigned[0][0])]
+        assert write_path.state['written'] == [(1, outcome.assigned[0][0], 'Alex')]
         assert not hasattr(sys.modules['database.conversations'], 'update_conversation_segments')
 
     def test_every_segment_of_the_bound_speaker_is_written_not_just_the_snapshots(self, write_path):
@@ -1242,6 +1243,19 @@ class TestConditionalSegmentAssignment:
 
         assert applied == {1: ['s1', 's2']}
         assert [s['person_id'] for s in self.stored_segments(database)] == ['person-alex', 'person-alex', None]
+
+    def test_a_cached_person_with_a_changed_name_is_not_reused(self):
+        database = self.store([stored_segment('s1')])
+        database.rows[('users', 'uid-1', 'people', 'person-alex')] = {'id': 'person-alex', 'name': 'Bea'}
+
+        assert self.assign(database, [(1, 'person-alex', 'Alex')]) == {}
+        assert self.stored_segments(database)[0]['person_id'] is None
+
+    def test_a_missing_cached_person_is_not_reused(self):
+        database = self.store([stored_segment('s1')])
+
+        assert self.assign(database, [(1, 'person-alex', 'Alex')]) == {}
+        assert self.stored_segments(database)[0]['person_id'] is None
 
     def test_a_speaker_resolved_between_the_callers_read_and_the_write_is_refused(self):
         database = self.store([stored_segment('s1', person_id='person-user-chose'), stored_segment('s2')])
