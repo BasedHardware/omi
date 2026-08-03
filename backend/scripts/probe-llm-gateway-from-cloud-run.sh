@@ -46,7 +46,9 @@ JOB_NAME="llm-gateway-vpc-probe-${NAME_SUFFIX}"
 SMOKE_ARGS=(scripts/smoke-llm-gateway.py --url "$GATEWAY_URL")
 for lane in "${LANES[@]}"; do
   [[ -n "$lane" ]] || continue
-  SMOKE_ARGS+=(--lane "$lane")
+  # `gcloud run jobs deploy --args` rejects a repeated list element, so pass each
+  # lane as a single `--lane=<lane>` token instead of a repeated `--lane` flag.
+  SMOKE_ARGS+=("--lane=$lane")
 done
 SMOKE_ARGS_CSV="$(IFS=,; echo "${SMOKE_ARGS[*]}")"
 cleanup() {

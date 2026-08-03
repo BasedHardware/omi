@@ -311,7 +311,30 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     """Exercise each rendered workflow caller through the real probe parser with fake gcloud."""
     calls = tmp_path / 'gcloud-calls.txt'
     fake_gcloud = tmp_path / 'gcloud'
-    fake_gcloud.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n', encoding='utf-8')
+    # Real gcloud parses --args as a unique list and exits 2 on a repeated element,
+    # so the fake rejects duplicates the same way instead of accepting any payload.
+    fake_gcloud.write_text(
+        '#!/usr/bin/env bash\n'
+        'printf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n'
+        'for argument in "$@"; do\n'
+        '  case "$argument" in\n'
+        '    --args=*)\n'
+        '      IFS="," read -r -a items <<< "${argument#--args=}"\n'
+        '      for item in "${items[@]}"; do\n'
+        '        count=0\n'
+        '        for other in "${items[@]}"; do\n'
+        '          [[ "$item" == "$other" ]] && count=$((count + 1))\n'
+        '        done\n'
+        '        if (( count > 1 )); then\n'
+        '          echo "ERROR: argument --args: \\"$item\\" cannot be specified multiple times" >&2\n'
+        '          exit 2\n'
+        '        fi\n'
+        '      done\n'
+        '      ;;\n'
+        '  esac\n'
+        'done\n',
+        encoding='utf-8',
+    )
     fake_gcloud.chmod(0o755)
 
     for workflow_name in VPC_PROBE_WORKFLOWS:
