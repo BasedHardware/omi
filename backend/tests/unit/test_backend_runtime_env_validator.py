@@ -1708,6 +1708,65 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_contract_is_present():
+    validator = load_validator()
+    retired = {
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    }
+    env_config = {
+        'cloud_run': {
+            'jobs': {
+                'memory-maintenance-job': {
+                    'env': {name: {'value': 'true', 'category': 'memory_rollout'} for name in retired}
+                }
+            }
+        }
+    }
+
+    errors = validator.validate_retired_memory_manifest('dev', env_config)
+
+    actual = {(error.scope, error.message) for error in errors}
+    expected = {
+        (
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            f'retired canonical memory env {name} is forbidden; use the minimal maintenance contract',
+        )
+        for name in retired
+    }
+    assert expected <= actual
+
+
+def test_live_cloud_run_state_rejects_retired_promotion_env():
+    validator = load_validator()
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {}},
+            'services': {'backend': {'env': {}, 'secrets': {}}},
+        }
+    }
+    cloud_run_state = {
+        'services': {
+            'backend': {
+                'env': [{'name': 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED', 'value': 'true'}],
+                'flags': {},
+            }
+        }
+    }
+
+    errors = validator._validate_cloud_run(env_config, cloud_run_state, strict_provisional=False)
+
+    assert (
+        validator.ValidationError(
+            'cloud_run/backend',
+            'retired canonical memory env MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED is forbidden; '
+            'use the minimal maintenance contract',
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
     validator = load_validator()
     job = memory_maintenance_job_block()

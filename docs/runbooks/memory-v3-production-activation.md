@@ -9,7 +9,10 @@ Candidate `1294773c8 feat(memory): wire default-off v3 rollout runtime` is clear
 
 Production activation remains NO-GO.
 
-A production deployment with `MEMORY_V3_GET_ENABLED` absent or false is a dark deployment only. It does not prove enabled behavior and must not be cited as functional proof.
+A production deployment that declares `MEMORY_V3_GET_ENABLED=false` is
+approved only as a dark deployment. This env value does not control request
+routing and cannot prove darkness by itself; the code cohort and persisted
+control/head/grant state must also remain unactivated.
 
 ## Preconditions before this runbook can execute
 
@@ -43,8 +46,9 @@ The enabled Scheduler trigger does not itself activate canonical production
 memory. While the checked-in prod job has `MEMORY_MODE=off`, an empty
 `MEMORY_ENABLED_USERS`, and
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`, each hourly execution exits
-without processing a user. Gate 3 still requires an explicit, approved runtime
-gate change; do not pause or delete the Scheduler to represent product
+without processing a user. These values are maintenance/readiness controls,
+not product entitlement; Gate 3 also requires the reviewed code cohort and
+persisted controls. Do not pause or delete the Scheduler to represent product
 disablement.
 
 ## Production-only evidence required
@@ -70,9 +74,10 @@ disablement.
 5. Prepare explicit rollback/kill-switch plan.
 6. Obtain named human approval.
 7. Apply the smallest possible production activation delta:
-   - exact `MEMORY_V3_GET_ENABLED=true` only when approved;
-   - exact `MEMORY_MODE=read` only when approved;
-   - one/small approved allowlist entry only;
+   - declare `MEMORY_V3_GET_ENABLED=true` only when its proof is approved;
+   - declare `MEMORY_MODE=read` only when the deployment is ready;
+   - add the tiny cohort to the code-owned entitlement and mirror it in the
+     runtime inventory only through reviewed changes;
    - required server-owned control/grant/head/projection docs only through approved production path;
    - **required:** flip the same `MEMORY_*` values on
      `cloud_run.jobs.memory-maintenance-job`
@@ -96,7 +101,10 @@ disablement.
 10. Exercise kill switch / rollback observation as approved.
 11. Record evidence and final decision.
 
-`backend/scripts/validate-backend-runtime-env.py` mechanically rejects `MEMORY_MODE=read` on request-path surfaces while `memory-maintenance-job` remains off/cron-false. Do not bypass that check for Gate 3.
+`backend/scripts/validate-backend-runtime-env.py` mechanically rejects a
+`MEMORY_MODE=read` readiness declaration on request-path surfaces while
+`memory-maintenance-job` remains off/maintenance-false. This validates rollout
+coordination; it is not the request router. Do not bypass the check for Gate 3.
 
 ## Non-claims
 

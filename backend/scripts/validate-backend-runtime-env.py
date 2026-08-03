@@ -28,6 +28,10 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_memory_contract import (
+    validate_retired_memory_env,
+    validate_retired_memory_manifest,
+)  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -51,11 +55,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
-    '--task-timeout': '3600s',
-    '--cpu': '2',
-    '--memory': '2Gi',
-}
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {'--task-timeout': '3600s', '--cpu': '2', '--memory': '2Gi'}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -286,7 +286,7 @@ def _get_env_config(manifest: ConfigDict, env: str) -> ConfigDict:
 
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_manifest(env, env_config)
     for key in ('gcp_project', 'region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))
@@ -1205,7 +1205,7 @@ def _validate_env_entries(
     strict_provisional: bool,
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors = validate_retired_memory_env(scope=scope, actual=actual)
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}

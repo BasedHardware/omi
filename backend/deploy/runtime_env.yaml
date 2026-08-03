@@ -705,6 +705,8 @@ environments:
         memory-maintenance-job:
           # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
           # These must not rely on a prior Cloud Run revision retaining live-only patches.
+          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
+          # Retired names remain only in --remove-env-vars to clean stale revisions.
           flags:
             --task-timeout: 3600s
             --cpu: '2'
@@ -1381,6 +1383,8 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          # Dark prod template only; this declaration does not prove a live job exists.
+          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
           flags:
             --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
