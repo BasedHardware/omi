@@ -224,6 +224,7 @@ app/android/.kotlin/
 
 CLAUDE.md
 web/app/next-env.d.ts
+web/app/tsconfig.tsbuildinfo
 .claude/settings.local.json
 .claude/worktrees/
 .mcp.json
