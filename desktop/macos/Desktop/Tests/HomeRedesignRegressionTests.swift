@@ -93,6 +93,60 @@ final class ChatBubbleMetadataRevealTests: XCTestCase {
   }
 }
 
+final class ChatBubbleLayoutRegressionTests: XCTestCase {
+  func testCollapsedReplyKeepsEllipsisAsTheInlineShowMoreAnchor() {
+    let source = String(repeating: "reply ", count: 100)
+    let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
+
+    XCTAssertTrue(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertTrue(collapsed.hasSuffix("…"), "collapsed body must expose an ellipsis before Show more")
+    XCTAssertEqual(collapsed.count, ChatBubbleTruncation.threshold + 1)
+    XCTAssertEqual(
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true),
+      source,
+      "expanding must restore the complete reply"
+    )
+  }
+
+  func testShortReplyDoesNotEnterCollapsedLayout() {
+    let source = "A short assistant reply"
+
+    XCTAssertFalse(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertEqual(
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false),
+      source
+    )
+  }
+
+  // omi-test-quality: source-inspection -- static contract: SwiftUI's view-builder branch and metadata frame have no runtime seam in the unit target; pure truncation behavior is covered above.
+  func testChatBubbleKeepsShowMoreInlineAndMetadataTrailing() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let source = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(
+      source.contains("HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs)"),
+      "collapsed replies must place the expansion control on the text baseline"
+    )
+    XCTAssertTrue(
+      source.contains("if message.sender == .ai, shouldTruncate"),
+      "the inline treatment must be limited to assistant replies"
+    )
+    XCTAssertTrue(
+      source.contains("else if message.sender == .user, shouldTruncate"),
+      "user replies must retain their trailing intrinsic bubble layout"
+    )
+    XCTAssertTrue(
+      source.contains(".frame(maxWidth: .infinity, alignment: .trailing)"),
+      "metadata must use the message column's trailing edge"
+    )
+  }
+}
+
 final class ChatTranscriptWindowTests: XCTestCase {
   func testKeepsOnlyTheNewestFiveHundredMessagesInChronologicalOrder() {
     let messages = (0...500).map { index in
