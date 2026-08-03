@@ -2525,7 +2525,7 @@ function DeveloperSection({
 
           <p className="text-sm text-text-secondary mb-4">
             Connect over MCP so Claude reads your memories live, or copy a memory pack.
-            Each field below maps to Claude's{' '}
+            Each field below maps to Claude&rsquo;s{' '}
             <span className="text-text-tertiary">
               Settings → Connectors → Add custom connector
             </span>{' '}
@@ -2537,7 +2537,9 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 1. Name{' '}
-                <span className="text-purple-400/60 font-normal">→ Claude "Name"</span>
+                <span className="text-purple-400/60 font-normal">
+                  → Claude &quot;Name&quot;
+                </span>
               </p>
               <button
                 onClick={() => {
@@ -2563,7 +2565,7 @@ function DeveloperSection({
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 2. Remote MCP server URL{' '}
                 <span className="text-purple-400/60 font-normal">
-                  → Claude "Remote MCP server URL"
+                  → Claude &quot;Remote MCP server URL&quot;
                 </span>
               </p>
               <button
@@ -2590,7 +2592,7 @@ function DeveloperSection({
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 3. OAuth Client ID{' '}
                 <span className="text-purple-400/60 font-normal">
-                  → Claude Advanced "OAuth Client ID"
+                  → Claude Advanced &quot;OAuth Client ID&quot;
                 </span>
               </p>
               <button
@@ -2617,7 +2619,7 @@ function DeveloperSection({
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 4. OAuth Client Secret{' '}
                 <span className="text-purple-400/60 font-normal">
-                  → Claude Advanced "OAuth Client Secret"
+                  → Claude Advanced &quot;OAuth Client Secret&quot;
                 </span>
               </p>
               {claudeConnectorSecret ? (
