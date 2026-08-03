@@ -23,7 +23,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
   }
 
-  func testBackFromPermissionsRetractsTheCurrentExchangeAndClearsRole() {
+  func testBackFromPermissionsRetractsTheCurrentExchangeAndPreservesRole() {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
     let rolePrompt = model.message(for: .role)
@@ -40,9 +40,9 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     model.goBack()
 
     XCTAssertEqual(model.step, .role)
-    XCTAssertNil(model.role)
-    XCTAssertEqual(model.roleDraft, "")
-    XCTAssertNil(UserDefaults.standard.object(forKey: DefaultsKey.onboardingRole))
+    XCTAssertEqual(model.role, "Student")
+    XCTAssertEqual(model.roleDraft, "Student")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: DefaultsKey.onboardingRole), "Student")
     XCTAssertEqual(model.thread.map(\.text), [rolePrompt])
     XCTAssertTrue(model.showWidget)
     XCTAssertEqual(
@@ -102,7 +102,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     model.goBack()
 
     XCTAssertEqual(model.step, .role)
-    XCTAssertNil(model.role)
+    XCTAssertEqual(model.role, "Student")
+    XCTAssertEqual(model.roleDraft, "Student")
     XCTAssertEqual(model.thread.map(\.text), [rolePrompt])
   }
 

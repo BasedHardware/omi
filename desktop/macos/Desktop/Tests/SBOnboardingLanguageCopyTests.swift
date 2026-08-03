@@ -36,4 +36,17 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
   func testLanguageSuggestionsKeepTheCurrentRegion() {
     XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh-TW").first, "zh-TW")
   }
+
+  func testResumedLanguageHydratesFromANormalizedPersistedCode() {
+    let previousLanguages = AssistantSettings.shared.voiceLanguages
+    let hadExplicitLanguages = AssistantSettings.shared.hasExplicitVoiceLanguages
+    defer { AssistantSettings.shared.voiceLanguages = hadExplicitLanguages ? previousLanguages : [] }
+
+    AssistantSettings.shared.voiceLanguages = ["zh"]
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.begin()
+
+    XCTAssertEqual(model.languageDraft, "Chinese (Simplified)")
+    model.streamTask?.cancel()
+  }
 }

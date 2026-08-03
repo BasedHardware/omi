@@ -445,7 +445,6 @@ final class SBOnboardingModel: ObservableObject {
     typing = false
     streamingText = nil
     retractCurrentExchange()
-    resetAnswer(for: previous)
     if displayedSteps.last == step {
       displayedSteps.removeLast()
     }
@@ -484,17 +483,6 @@ final class SBOnboardingModel: ObservableObject {
       rawValue -= 1
     }
     return nil
-  }
-
-  private func resetAnswer(for step: Step) {
-    switch step {
-    case .role:
-      role = nil
-      roleDraft = ""
-      UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
-    default:
-      break
-    }
   }
 
   var canGoBack: Bool {
@@ -549,7 +537,9 @@ final class SBOnboardingModel: ObservableObject {
     }
     if languageDraft.isEmpty, AssistantSettings.shared.hasExplicitVoiceLanguages,
       let code = AssistantSettings.shared.voiceLanguages.first,
-      let language = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
+      let language = AssistantSettings.supportedLanguages.first(where: {
+        $0.code == AssistantSettings.normalizeTranscriptionLanguageCode(code)
+      })
     {
       languageDraft = language.name
     }
