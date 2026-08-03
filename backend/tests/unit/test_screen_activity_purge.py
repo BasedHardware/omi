@@ -28,20 +28,23 @@ class _Collection:
 
 
 class _Batch:
-    def __init__(self):
+    def __init__(self, events):
         self.deleted = []
         self.commits = 0
+        self.events = events
 
     def delete(self, document):
         self.deleted.append(document.id)
 
     def commit(self):
         self.commits += 1
+        self.events.append('firestore')
 
 
 class _Database:
     def __init__(self, ids):
         self.batches = []
+        self.events = []
         activity_collection = _Collection([_Document(doc_id) for doc_id in ids])
         user = _Document('user-1', activity_collection)
         self.users = _Collection([user], activity=activity_collection)
@@ -50,7 +53,7 @@ class _Database:
         return self.users
 
     def batch(self):
-        batch = _Batch()
+        batch = _Batch(self.events)
         self.batches.append(batch)
         return batch
 
@@ -61,11 +64,13 @@ def test_purge_all_screen_activity_deletes_firestore_and_bounded_vector_batches(
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(screen_activity, 'db', database)
     monkeypatch.setattr(screen_activity.vector_db, 'index', vector_index)
+    vector_index.delete.side_effect = lambda **_kwargs: database.events.append('pinecone')
 
     assert screen_activity.purge_all_screen_activity() == 1001
     assert [batch.commits for batch in database.batches] == [1, 1, 1]
     assert [len(batch.deleted) for batch in database.batches] == [500, 500, 1]
     assert [len(call.kwargs['ids']) for call in vector_index.delete.call_args_list] == [1000, 1]
+    assert database.events == ['pinecone', 'pinecone', 'firestore', 'firestore', 'firestore']
 
 
 def test_purge_all_screen_activity_skips_shared_firestore_outside_production(monkeypatch):
