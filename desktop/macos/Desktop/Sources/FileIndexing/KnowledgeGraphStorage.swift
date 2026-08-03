@@ -106,6 +106,9 @@ actor KnowledgeGraphStorage {
       }
     }
 
+    if let ownerID = RuntimeOwnerIdentity.currentOwnerId(), !ownerID.isEmpty {
+      UserDefaults.standard.set(true, forKey: .agentSyncGraphReconcileNeeded(ownerID: ownerID))
+    }
     log("KnowledgeGraphStorage: Cleared all graph data")
   }
 
