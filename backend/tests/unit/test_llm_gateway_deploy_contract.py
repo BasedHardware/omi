@@ -344,6 +344,20 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     assert any(call.startswith('run jobs execute llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
     assert any(call.startswith('run jobs delete llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
 
+    # gcloud rejects `--args` lists that repeat an element ("<value>" cannot be
+    # specified multiple times), which is how a second probe lane broke every
+    # backend deploy at the VPC probe step.
+    for call in recorded_calls:
+        if not call.startswith('run jobs deploy '):
+            continue
+        smoke_args = next(
+            (token[len('--args=') :] for token in call.split(' ') if token.startswith('--args=')),
+            None,
+        )
+        assert smoke_args is not None, call
+        elements = smoke_args.split(',')
+        assert len(elements) == len(set(elements)), f'duplicate --args element: {smoke_args}'
+
 
 def test_gateway_vpc_probe_rejects_equals_style_arguments():
     result = subprocess.run(
