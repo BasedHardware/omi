@@ -17,9 +17,137 @@ For first-user dogfood, start with the **bucketed** inventory. The `stage-all-fo
 - **Bucketed dogfood** — bucketed runs preserve legacy timestamps, stage only manual or positively reviewed rows for required processing, and hold unreviewed profile/noisy/sensitive rows out of durable memory.
 - **Reversible** — remove `uid` from `CANONICAL_MEMORY_USERS` and redeploy to return them to legacy reads; legacy rows remain intact.
 
-## Preconditions
+## Bulk automation
 
-1. **Target uid chosen** — first production dogfood user only; no bulk/cron.
+Use `scripts/bulk_backfill_legacy_memories.py` for governed inventory and
+write-only enrollment/staging across an explicit UID list. The command defaults
+to dry-run and emits only counts, bucket totals, and character/token proxies. It
+never returns memory text or bucket samples.
+
+The bulk worker stores its server-owned checkpoint at
+`users/{uid}/memory_control/legacy_canonical_backfill`. States progress through
+`not_started`, `inventory_done`, `enrolled`, `processing`, `staged`, and
+`read_ready`; a governor or operator pause uses `paused`, while isolated failures
+use `failed`. Re-entry is idempotent. A capped run resumes from the existing
+single-user apply checkpoint, and a failed run restarts deterministic staging so
+successful rows are skipped and failed rows can be retried.
+
+`read_ready` means enrollment and staging reconciled for that UID. It does not
+change `MEMORY_MODE`, add the UID to `CANONICAL_MEMORY_USERS`, grant default
+memory reads, or open the global read gate. Those remain explicit later rollout
+actions.
+
+### 1. Prepare an explicit UID file
+
+Use either repeatable `--uid` flags or a UTF-8 newline-delimited/JSON UID file:
+
+```text
+# cohort-uids.txt
+uid-canary-a
+uid-canary-b
+```
+
+Do not put email addresses, names, or memory content in this file. The bulk
+command does not query all users or silently expand the cohort.
+
+### 2. Inventory dry-run
+
+Point `--firestore-project` at the data-plane project. For local testing, start
+the Firestore emulator, export `FIRESTORE_EMULATOR_HOST`, and use a disposable
+project name with seeded fake users.
+
+```bash
+cd backend
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid-file cohort-uids.txt \
+  --firestore-project based-hardware \
+  --max-users-per-run 10 \
+  --max-admitted-rows-per-user 100 \
+  --max-estimated-tokens-per-run 100000 \
+  --concurrency-limit 1
+```
+
+Review `source_count`, `bucket_counts`, `admitted_candidate_count`, and
+`admitted_candidate_estimated_tokens`. `actions` contains would-be enrollment
+and staging operations. Dry-run writes no enrollment or migration checkpoint
+documents.
+
+### 3. Canary apply
+
+Start with one UID and conservative caps. Apply mode requires both a fixed
+confirmation phrase and the exact deduplicated input count. A UID outside the
+code-owned cohort additionally requires both admin-override flags; the command
+prints a cohort patch suggestion but never edits the cohort.
+
+```bash
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid uid-canary-a \
+  --firestore-project based-hardware \
+  --apply \
+  --confirm-apply bulk-canonical-memory-backfill \
+  --confirm-user-count 1 \
+  --allow-admin-override \
+  --i-understand-uids-not-whitelisted \
+  --max-users-per-run 1 \
+  --max-admitted-rows-per-user 25 \
+  --max-estimated-tokens-per-run 25000 \
+  --wall-clock-seconds 600 \
+  --concurrency-limit 1
+```
+
+If existing enrollment documents differ, inspect them first and rerun only with
+`--allow-existing-update` after confirming the requested write-stage payload.
+The worker always enrolls at `stage=write`; it has no read-stage flag.
+Bulk enrollment writes only the per-user `memory_control/state` document. It
+does not rewrite rollout-wide global read or write-convergence gates and does
+not fabricate `memory_state/head` or compatibility projection data.
+
+The default `stage-all-for-admission` path is Firestore-only. Optional reviewed
+bucket upgrades remain capped by the same per-user row budget:
+
+```bash
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid uid-canary-a \
+  --firestore-project based-hardware \
+  --apply \
+  --confirm-apply bulk-canonical-memory-backfill \
+  --confirm-user-count 1 \
+  --allow-admin-override \
+  --i-understand-uids-not-whitelisted \
+  --process-bucket manual_required_promotion \
+  --max-users-per-run 1 \
+  --max-admitted-rows-per-user 25 \
+  --max-estimated-tokens-per-run 25000
+```
+
+This CLI does not invoke an LLM. Required `memory_l2` processing and promotion
+remain exclusively owned by `memory-maintenance-job`, which processes admitted
+rows under its own bounds. Never run L2 over `pending_admission`,
+`hold_noise`, or `hold_sensitive` rows.
+
+### Pause and resume
+
+Set `MEMORY_BULK_BACKFILL_PAUSED=true` on the maintenance shell for an immediate
+local pause, or set the server-owned Firestore document
+`memory_control/legacy_canonical_backfill_pause` to `{"paused": true}`. The
+worker checks pause before inventory and again before each enrollment/staging
+boundary. A pause-control read error fails closed.
+
+Clear the pause flag and rerun the exact command to resume. Do not delete or
+manually advance checkpoint documents. Row, token, user, and wall-clock limits
+stop cleanly; increase a cap only after reviewing the prior structured summary.
+
+### Rollback
+
+Before a read flip, rollback is simply: pause bulk work and do not add the UID to
+the code-owned cohort. If a later rollout already selected the UID, remove it
+from `backend/config/canonical_memory_cohort.py` and redeploy through the normal
+reviewed path. Canonical staged rows and checkpoints remain for idempotent
+resume; legacy memories remain untouched and must not be deleted or rewritten.
+
+## Single-user preconditions
+
+1. **Target uid chosen** — use this section for one-off dogfood; use the governed bulk command above for cohorts.
 2. **Backend env** — `GOOGLE_APPLICATION_CREDENTIALS` (or emulator) points at the intended project.
 3. **Cohort whitelist** — add uid to `CANONICAL_MEMORY_USERS` in `backend/utils/memory/memory_system.py` **before** backfill, then deploy:
    ```python
