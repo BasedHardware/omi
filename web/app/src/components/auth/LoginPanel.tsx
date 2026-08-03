@@ -25,7 +25,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
     try {
       await signInWithGoogle();
       onClose();
-      router.push('/conversations');
+      router.push('/home');
     } catch (err) {
       console.error('Google sign-in failed:', err);
       setError('Failed to sign in with Google. Please try again.');
@@ -40,7 +40,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
     try {
       await signInWithApple();
       onClose();
-      router.push('/conversations');
+      router.push('/home');
     } catch (err) {
       console.error('Apple sign-in failed:', err);
       setError('Failed to sign in with Apple. Please try again.');
@@ -73,7 +73,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
               'fixed right-0 top-0 h-full z-50',
               'w-full sm:w-[420px]',
               'bg-[#0B0F17] border-l border-white/10',
-              'flex flex-col shadow-2xl'
+              'flex flex-col shadow-2xl',
             )}
           >
             {/* Subtle purple glow at top */}
@@ -104,9 +104,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       className="h-12 w-auto"
                     />
                   </div>
-                  <h2 className="text-2xl font-semibold text-white mb-2">
-                    Welcome back
-                  </h2>
+                  <h2 className="text-2xl font-semibold text-white mb-2">Welcome back</h2>
                   <p className="text-gray-400 text-sm">
                     Sign in to access your conversations, memories, and apps
                   </p>
@@ -129,7 +127,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       'bg-white text-gray-900 font-medium',
                       'hover:bg-gray-100 transition-all',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'shadow-lg shadow-white/5'
+                      'shadow-lg shadow-white/5',
                     )}
                   >
                     {isLoading === 'google' ? (
@@ -164,7 +162,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       'w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl',
                       'bg-white/5 text-white font-medium border border-white/10',
                       'hover:bg-white/10 hover:border-white/20 transition-all',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {isLoading === 'apple' ? (

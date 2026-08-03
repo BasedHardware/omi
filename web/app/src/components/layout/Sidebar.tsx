@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GanttChartSquare,
+  House,
   MessageCircle,
   LayoutGrid,
   ListChecks,
@@ -72,6 +73,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'Home',
+    href: '/home',
+    icon: <House className="w-5 h-5" />,
+  },
+  {
     label: 'Conversations',
     href: '/conversations',
     icon: <GanttChartSquare className="w-5 h-5" />,
@@ -121,10 +127,7 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-export function Sidebar({
-  isOpen,
-  onClose,
-}: SidebarProps) {
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const { toggleNotificationCenter, unreadCount } = useNotificationContext();
@@ -234,7 +237,7 @@ export function Sidebar({
           'fixed top-0 left-0 bottom-0 z-50',
           'transition-transform duration-150 ease-out lg:transition-none',
           // Desktop: relative in flow
-          'lg:relative lg:z-auto'
+          'lg:relative lg:z-auto',
         )}
       >
         {/* Header */}
@@ -243,13 +246,10 @@ export function Sidebar({
           <div
             className={cn(
               'flex items-center pt-7 px-4 pb-4',
-              showText ? 'justify-between' : 'justify-center'
+              showText ? 'justify-between' : 'justify-center',
             )}
           >
-            <Link
-              href="/conversations"
-              className="flex items-center gap-2"
-            >
+            <Link href="/conversations" className="flex items-center gap-2">
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
@@ -280,7 +280,7 @@ export function Sidebar({
             <div
               className={cn(
                 'px-4 pb-3',
-                showText ? 'flex justify-end' : 'flex justify-center'
+                showText ? 'flex justify-end' : 'flex justify-center',
               )}
             >
               <button
@@ -288,7 +288,7 @@ export function Sidebar({
                 className={cn(
                   'p-2 rounded-lg transition-all duration-200',
                   'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                  isHeaderHovered ? 'opacity-100' : 'opacity-0'
+                  isHeaderHovered ? 'opacity-100' : 'opacity-0',
                 )}
                 title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
               >
@@ -305,7 +305,7 @@ export function Sidebar({
           <div
             className={cn(
               'px-4 pb-3',
-              showText ? 'flex justify-start' : 'flex justify-center'
+              showText ? 'flex justify-start' : 'flex justify-center',
             )}
           >
             <button
@@ -313,7 +313,7 @@ export function Sidebar({
               className={cn(
                 'flex items-center rounded-lg transition-colors',
                 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                showText ? 'px-2 py-2' : 'p-2'
+                showText ? 'px-2 py-2' : 'p-2',
               )}
               title="Notifications"
             >
@@ -326,7 +326,7 @@ export function Sidebar({
                       'min-w-[18px] h-[18px] px-1',
                       'flex items-center justify-center',
                       'bg-red-500 text-white text-[10px] font-bold',
-                      'rounded-full'
+                      'rounded-full',
                     )}
                   >
                     {unreadCount > 99 ? '99+' : unreadCount}
@@ -334,9 +334,7 @@ export function Sidebar({
                 )}
               </div>
               {showText && (
-                <span className="ml-3 text-sm text-text-secondary">
-                  Notifications
-                </span>
+                <span className="ml-3 text-sm text-text-secondary">Notifications</span>
               )}
             </button>
           </div>
@@ -344,10 +342,7 @@ export function Sidebar({
 
         {/* Scrollable middle section */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <nav className={cn(
-            'py-2 space-y-1',
-            showText ? 'px-3' : 'px-2'
-          )}>
+          <nav className={cn('py-2 space-y-1', showText ? 'px-3' : 'px-2')}>
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -363,7 +358,13 @@ export function Sidebar({
                   onClick={() => {
                     if (!isDesktop) onClose();
                   }}
-                  title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
+                  title={
+                    !showText
+                      ? showComingSoon
+                        ? `${item.label} (Coming Soon)`
+                        : item.label
+                      : undefined
+                  }
                   className={cn(
                     'flex items-center rounded-xl border-l-[3px]',
                     'transition-colors duration-150',
@@ -371,7 +372,7 @@ export function Sidebar({
                     isActive
                       ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
                       : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary border-transparent',
-                    showComingSoon && 'opacity-60'
+                    showComingSoon && 'opacity-60',
                   )}
                 >
                   <span className="flex-shrink-0 relative">
@@ -401,50 +402,61 @@ export function Sidebar({
         </div>
 
         {/* Platform-aware app download banner */}
-        {!mobileAppDismissed && (() => {
-
-          const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
-          const bannerHref = isMac ? 'https://macos.omi.me/' : 'https://onelink.to/rbsrxc';
-          const bannerTitle = isMac ? 'Omi is 10X better on macOS' : 'Take Omi with you';
-          const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
-          return (
-            <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
-              <a
-                href={bannerHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
-                  showText ? 'p-3 pr-9' : 'justify-center p-3'
-                )}
-              >
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
-                  {isMac ? <AppleLogo className="w-4 h-4 text-text-tertiary" /> : <Smartphone className="w-4 h-4 text-text-tertiary" />}
-                </div>
-                {showText && (
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-text-primary">{bannerTitle}</p>
-                    <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+        {!mobileAppDismissed &&
+          (() => {
+            const isMac =
+              typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+            const bannerHref = isMac
+              ? 'https://macos.omi.me/'
+              : 'https://onelink.to/rbsrxc';
+            const bannerTitle = isMac
+              ? 'Omi is 10X better on macOS'
+              : 'Take Omi with you';
+            const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
+            return (
+              <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
+                <a
+                  href={bannerHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
+                    showText ? 'p-3 pr-9' : 'justify-center p-3',
+                  )}
+                >
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+                    {isMac ? (
+                      <AppleLogo className="w-4 h-4 text-text-tertiary" />
+                    ) : (
+                      <Smartphone className="w-4 h-4 text-text-tertiary" />
+                    )}
                   </div>
-                )}
-                {showText && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setMobileAppDismissed(true);
-                      localStorage.setItem('mobile-app-banner-dismissed', 'true');
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </a>
-            </div>
-          );
-        })()}
+                  {showText && (
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text-primary">
+                        {bannerTitle}
+                      </p>
+                      <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                    </div>
+                  )}
+                  {showText && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMobileAppDismissed(true);
+                        localStorage.setItem('mobile-app-banner-dismissed', 'true');
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
+                      aria-label="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </a>
+              </div>
+            );
+          })()}
 
         {/* Feedback & Discord links */}
         <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
@@ -456,7 +468,7 @@ export function Sidebar({
             className={cn(
               'flex items-center rounded-lg transition-colors',
               'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
             )}
           >
             <MessageSquare className="w-4 h-4 flex-shrink-0" />
@@ -470,7 +482,7 @@ export function Sidebar({
             className={cn(
               'flex items-center rounded-lg transition-colors',
               'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
             )}
           >
             <DiscordIcon className="w-4 h-4 flex-shrink-0" />
@@ -496,7 +508,7 @@ export function Sidebar({
                 className={cn(
                   'w-full flex items-center',
                   'hover:bg-bg-tertiary/50 transition-colors',
-                  showText ? 'gap-3 p-4' : 'justify-center p-3'
+                  showText ? 'gap-3 p-4' : 'justify-center p-3',
                 )}
                 title={!showText ? 'Settings' : undefined}
               >
@@ -533,7 +545,7 @@ export function Sidebar({
                     <svg
                       className={cn(
                         'w-4 h-4 text-text-quaternary transition-transform',
-                        showUserMenu && 'rotate-180'
+                        showUserMenu && 'rotate-180',
                       )}
                       fill="none"
                       viewBox="0 0 24 24"
@@ -562,7 +574,7 @@ export function Sidebar({
                       'absolute bottom-full left-2 right-2 mb-3',
                       'bg-[#1a1a1f]/95 backdrop-blur-xl',
                       'rounded-2xl overflow-hidden',
-                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(139,92,246,0.15),0_10px_30px_-5px_rgba(0,0,0,0.5)]'
+                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(139,92,246,0.15),0_10px_30px_-5px_rgba(0,0,0,0.5)]',
                     )}
                   >
                     {/* User info header */}
@@ -587,9 +599,7 @@ export function Sidebar({
                           <p className="text-sm font-medium text-white/90 truncate">
                             {user?.displayName || 'User'}
                           </p>
-                          <p className="text-xs text-white/40 truncate">
-                            {user?.email}
-                          </p>
+                          <p className="text-xs text-white/40 truncate">{user?.email}</p>
                         </div>
                       </div>
                     </div>
@@ -611,7 +621,7 @@ export function Sidebar({
                           className={cn(
                             'group flex items-center gap-3 px-4 py-2.5',
                             'transition-all duration-150',
-                            'hover:bg-white/[0.04]'
+                            'hover:bg-white/[0.04]',
                           )}
                         >
                           <item.icon className="w-4 h-4 text-white/40 group-hover:text-purple-400 transition-colors flex-shrink-0" />
@@ -629,7 +639,7 @@ export function Sidebar({
                         className={cn(
                           'w-full flex items-center gap-2.5 p-2.5 rounded-xl',
                           'text-red-400/70 hover:text-red-400',
-                          'hover:bg-red-500/[0.08] transition-all'
+                          'hover:bg-red-500/[0.08] transition-all',
                         )}
                       >
                         <LogOut className="w-4 h-4" />
@@ -655,7 +665,7 @@ export function MobileMenuButton({ onClick }: { onClick: () => void }) {
       className={cn(
         'lg:hidden p-2 rounded-lg',
         'hover:bg-bg-tertiary transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50'
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
       )}
     >
       <Menu className="w-6 h-6 text-text-secondary" />
