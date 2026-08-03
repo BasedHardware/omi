@@ -220,6 +220,26 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  /// A scrollbar track click moves the viewport during the press and may never
+  /// produce a drag event at all. It is still the reader moving the viewport, so
+  /// it must take ownership — otherwise the next streamed token yanks them back.
+  func testAScrollbarTrackClickThatMovesTheViewportTakesOwnership() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    harness.trackClickJump(by: -1500)
+    let readerPosition = harness.scrollTop
+    XCTAssertFalse(harness.isAtBottom, "precondition: the track click left the live edge")
+
+    harness.appendStreamingText(" streamed after the track click.")
+    harness.pump(0.7)
+
+    XCTAssertEqual(
+      harness.scrollTop, readerPosition, accuracy: 4,
+      "a track click that moved the viewport must keep the reader's position")
+  }
+
   // MARK: - Harness
 
   private func makeHarness(messageCount: Int = 60) throws -> Harness {
@@ -368,6 +388,28 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         else { continue }
         NSApplication.shared.sendEvent(event)
       }
+      sendLeftMouseUp()
+      pump(0.05)
+    }
+
+    func sendLeftMouseUp() {
+      guard
+        let event = NSEvent.mouseEvent(
+          with: .leftMouseUp, location: NSPoint(x: 450, y: 300), modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+          context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+      else { return }
+      NSApplication.shared.sendEvent(event)
+      pump(0.02)
+    }
+
+    /// A scrollbar track click: the viewport jumps during the press itself, with
+    /// no drag event at any point.
+    func trackClickJump(by delta: CGFloat) {
+      sendLeftMouseDown()
+      moveClipView(by: delta)
+      pump(0.05)
+      sendLeftMouseUp()
       pump(0.05)
     }
 

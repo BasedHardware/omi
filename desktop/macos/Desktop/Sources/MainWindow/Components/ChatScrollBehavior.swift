@@ -438,9 +438,11 @@ struct UserScrollDetector: NSViewRepresentable {
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
     private var settleWorkItem: DispatchWorkItem?
-    /// Where the viewport sat when the current press began, so a drag can be
+    /// Where the viewport sat when the current press began, so movement can be
     /// told apart from a click that never moved anything.
     private var pressOriginScrollTop: CGFloat?
+    private var pressCandidateOwnsViewport = false
+    private var pressBoundsObservation: NSObjectProtocol?
     private static let dragMovementEpsilon: CGFloat = 1
     private var willStartLiveScrollObservation: NSObjectProtocol?
     private var didEndLiveScrollObservation: NSObjectProtocol?
@@ -513,10 +515,10 @@ struct UserScrollDetector: NSViewRepresentable {
             self.onUserScroll()
             self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
           } else {
-            let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
-            guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
             switch event.type {
             case .scrollWheel:
+              let wheelLocation = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(wheelLocation) else { break }
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
                 self.onUserScroll()
               }
@@ -525,23 +527,26 @@ struct UserScrollDetector: NSViewRepresentable {
               // to focus the window, select text, or hit a control used to claim
               // scroll ownership outright, which cancelled the one-shot launch
               // placement and left a freshly opened chat stranded at the top of
-              // its history. Remember where the viewport was instead, so a drag
-              // can be judged by whether it actually moved anything.
-              self.pressOriginScrollTop = Self.scrollTop(of: targetScrollView)
+              // its history. Open a candidate instead; only real displacement of
+              // this clip view promotes it to ownership.
+              let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(locationInScrollView) else { break }
+              self.beginPressCandidate(on: targetScrollView)
+            case .leftMouseUp:
+              self.endPressCandidate(on: targetScrollView)
             default:
-              // A drag owns the viewport only once it has genuinely moved it —
-              // a scrollbar drag, or a selection drag that auto-scrolls.
-              guard let pressOrigin = self.pressOriginScrollTop,
-                abs(Self.scrollTop(of: targetScrollView) - pressOrigin) >= Self.dragMovementEpsilon
-              else { break }
-              self.onUserScroll()
-              self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
+              // Deliberately not bounds-checked: a scrollbar drag and a
+              // selection autoscroll both leave the transcript's bounds while
+              // still moving it, and dropping those events lost the reader's
+              // ownership exactly when they were moving fastest.
+              self.promotePressCandidateIfMoved(on: targetScrollView)
             }
           }
           return event
         }
         monitor = NSEvent.addLocalMonitorForEvents(
-          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown], handler: handler)
+          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown],
+          handler: handler)
       }
     }
 
@@ -549,6 +554,12 @@ struct UserScrollDetector: NSViewRepresentable {
       MainActor.assumeIsolated {
         settleWorkItem?.cancel()
         settleWorkItem = nil
+        if let pressBoundsObservation {
+          NotificationCenter.default.removeObserver(pressBoundsObservation)
+        }
+        pressBoundsObservation = nil
+        pressOriginScrollTop = nil
+        pressCandidateOwnsViewport = false
         if let willStartLiveScrollObservation {
           NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
         }
@@ -582,6 +593,45 @@ struct UserScrollDetector: NSViewRepresentable {
         guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
         return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
       }
+    }
+
+    @MainActor
+    private func beginPressCandidate(on scrollView: NSScrollView) {
+      pressOriginScrollTop = Self.scrollTop(of: scrollView)
+      pressCandidateOwnsViewport = false
+      // A scrollbar track click repositions the viewport during mouse-down and
+      // may never produce a drag event, so watch the clip view rather than
+      // waiting for one.
+      scrollView.contentView.postsBoundsChangedNotifications = true
+      pressBoundsObservation = NotificationCenter.default.addObserver(
+        forName: NSView.boundsDidChangeNotification,
+        object: scrollView.contentView,
+        queue: .main
+      ) { [weak self, weak scrollView] _ in
+        guard let self, let scrollView else { return }
+        MainActor.assumeIsolated { self.promotePressCandidateIfMoved(on: scrollView) }
+      }
+    }
+
+    @MainActor
+    private func promotePressCandidateIfMoved(on scrollView: NSScrollView) {
+      guard let origin = pressOriginScrollTop, !pressCandidateOwnsViewport else { return }
+      guard abs(Self.scrollTop(of: scrollView) - origin) >= Self.dragMovementEpsilon else { return }
+      pressCandidateOwnsViewport = true
+      onUserScroll()
+    }
+
+    @MainActor
+    private func endPressCandidate(on scrollView: NSScrollView) {
+      let ownedViewport = pressCandidateOwnsViewport
+      if let observation = pressBoundsObservation {
+        NotificationCenter.default.removeObserver(observation)
+      }
+      pressBoundsObservation = nil
+      pressOriginScrollTop = nil
+      pressCandidateOwnsViewport = false
+      guard ownedViewport else { return }
+      scheduleDiscreteInputSettledBottomCheck(for: scrollView)
     }
 
     private func beginUserScroll() {
