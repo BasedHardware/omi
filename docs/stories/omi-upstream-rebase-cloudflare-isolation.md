@@ -29,7 +29,7 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 
 ## 目標成果
 
-`upstream/main@d2d921803` を起点に、Cloudflare Workerの既存文字起こしをアプリでread-onlyに一覧・詳細表示できる最小sliceを成立させる。WALとの接続は将来のためのno-op adapter境界だけに留める。Cloudflare Workerは別リポジトリのまま維持し、Flutterの製品差分はOSSの直接変更を一桁〜十数ファイルへ抑えることを設計目標として検証する。
+`upstream/main@57ca482ed` を起点に、Cloudflare Workerの既存文字起こしをアプリでread-onlyに一覧・詳細表示できる最小sliceを成立させる。WALとの接続は将来のためのno-op adapter境界だけに留める。Cloudflare Workerは別リポジトリのまま維持し、Flutterの製品差分はOSSの直接変更を一桁〜十数ファイルへ抑えることを設計目標として検証する。
 
 ## 受け入れ条件
 
@@ -108,17 +108,17 @@ Brainbase Omiセルフホスト版を保守する開発者と、その実機を�
 
 ### release_note
 
-- Cloudflare連携は設定済みの場合だけ表示するread-only list/detailである。Worker deployやiPhone実機E2Eを完了として告知せず、WAL upload-ack-deleteを含む書込み機能は提供しない。
+- `release_note`: Cloudflare連携は設定済みの場合だけ表示するread-only list/detailである。Worker deployやiPhone実機E2Eを完了として告知せず、WAL upload-ack-deleteを含む書込み機能は提供しない。
 
 ### rollout_plan
 
-- operatorはdart-definesでWorker URLとtokenを設定するだけである。URL/token未設定時はdisabledとなり、既存Omi機能に影響しない。Workerのdeployやproduction rolloutはこのStoryの実行手順ではない。
+- `rollout_plan`: operatorはdart-definesでWorker URLとtokenを設定するだけである。URL/token未設定時はdisabledとなり、既存Omi機能に影響しない。Workerのdeployやproduction rolloutはこのStoryの実行手順ではない。
 
 ### rollback_instruction
 
-- dart-definesからWorker URLまたはtokenを外してdisabledへ戻す。read-only UIを外す場合も既存Omiのデータ経路を変更せず、Cloudflareへのupload、ack、deleteを実行しない。
+- `rollback_instruction`: dart-definesからWorker URLまたはtokenを外してdisabledへ戻す。read-only UIを外す場合も既存Omiのデータ経路を変更せず、Cloudflareへのupload、ack、deleteを実行しない。
 
 ### observability_evidence
 
-- 観測証拠はscoped UI errorと、検証時のcurrent-headにbindしたVibePro artifacts/test logsに限定する。docs変更後は新HEADで再検証してbindし直すまで、既存artifactをruntime証明へ昇格させない。
+- `observability_evidence`: 観測証拠はscoped UI errorと、検証時のcurrent-headにbindしたVibePro artifacts/test logsに限定する。docs変更後は新HEADで再検証してbindし直すまで、既存artifactをruntime証明へ昇格させない。
 - production telemetry、Worker runtime、iPhone実機E2E、WAL upload-ack-deleteの観測は主張しない。
