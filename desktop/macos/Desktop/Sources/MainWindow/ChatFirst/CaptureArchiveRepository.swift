@@ -107,7 +107,7 @@ final class CaptureArchiveRepository: ObservableObject {
   private let remote: any CaptureArchiveRemoteDataSource
   private let local: any CaptureArchiveLocalDataSource
   private var hasLoaded = false
-  private var activeDetailRequestID: String?
+  private var activeDetailLoadToken = 0
   private var activeListLoadToken = 0
 
   init(
@@ -181,16 +181,17 @@ final class CaptureArchiveRepository: ObservableObject {
   /// Detail always revalidates from the source-scoped list's selected capture.
   /// It never falls back to a generic list request if the detail read fails.
   func loadDetail(id: String) async -> ServerConversation? {
-    activeDetailRequestID = id
+    let token = beginDetailLoad()
     if let cached = try? await local.detail(id: id), cached.isOmiCaptureArchiveRecord {
-      guard activeDetailRequestID == id else { return nil }
+      guard token == activeDetailLoadToken else { return nil }
       selectedCapture = cached
     }
 
     do {
       let detail = try await remote.detail(id: id)
-      guard activeDetailRequestID == id else { return nil }
+      guard token == activeDetailLoadToken else { return nil }
       guard detail.isOmiCaptureArchiveRecord else {
+        guard token == activeDetailLoadToken else { return nil }
         errorMessage = "This capture is no longer available."
         return nil
       }
@@ -203,6 +204,7 @@ final class CaptureArchiveRepository: ObservableObject {
       try? await local.store(detail)
       return detail
     } catch {
+      guard token == activeDetailLoadToken else { return nil }
       errorMessage = "This Omi-device capture is unavailable. Refresh to try again."
       return nil
     }
@@ -232,6 +234,11 @@ final class CaptureArchiveRepository: ObservableObject {
       // archive data is unavailable rather than silently replaced with a mixed list.
       errorMessage = "Omi-device captures are unavailable. Refresh to try again."
     }
+  }
+
+  private func beginDetailLoad() -> Int {
+    activeDetailLoadToken += 1
+    return activeDetailLoadToken
   }
 
   private func beginListLoad() -> Int {
