@@ -506,6 +506,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
@@ -518,6 +519,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
@@ -532,7 +536,9 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
-    deviceScope: String? = nil
+    includeArchive: Bool = false,
+    deviceScope: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -544,6 +550,9 @@ extension APIClient {
     if includeDismissed {
       endpoint += "&include_dismissed=true"
     }
+    if includeArchive {
+      endpoint += "&include_archive=true"
+    }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
     }
@@ -551,10 +560,20 @@ extension APIClient {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
     }
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: nil,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = OmiHTTPTransport.extractErrorDetail(from: data)
@@ -562,6 +581,7 @@ extension APIClient {
     }
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
+    try validateExpectedOwner(authPolicy)
     let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
     let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)

@@ -39,7 +39,7 @@ import {
 } from "../src/runtime/control-tools.js";
 
 describe("protocol v2", () => {
-  it("makes canonical session identity the only query execution selector", () => {
+  it("makes canonical session identity plus its bound projection surface the query selectors", () => {
     const message: QueryMessage = {
       type: "query",
       protocolVersion: PROTOCOL_VERSION,
@@ -47,6 +47,7 @@ describe("protocol v2", () => {
       clientId: "bridge-client",
       ownerId: "owner",
       sessionId: "ses_placeholder",
+      surfaceKind: "main_chat",
       prompt: "hello",
       expectedContextSnapshotVersion: "sha256:snapshot",
       expectedContextSnapshotGeneration: 3,
@@ -57,6 +58,7 @@ describe("protocol v2", () => {
       type: "query",
       protocolVersion: 2,
       sessionId: "ses_placeholder",
+      surfaceKind: "main_chat",
     });
     expect(message).not.toHaveProperty("adapterId");
     expect(message).not.toHaveProperty("model");

@@ -93,6 +93,33 @@ final class ChatBubbleMetadataRevealTests: XCTestCase {
   }
 }
 
+final class ChatBubbleLayoutRegressionTests: XCTestCase {
+  func testCollapsedReplyKeepsEllipsisAsTheInlineShowMoreAnchor() {
+    let source = String(repeating: "reply ", count: 100)
+    let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
+
+    XCTAssertTrue(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertTrue(collapsed.hasSuffix("…"), "collapsed body must expose an ellipsis before Show more")
+    XCTAssertEqual(collapsed.count, ChatBubbleTruncation.threshold + 1)
+    XCTAssertEqual(
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true),
+      source,
+      "expanding must restore the complete reply"
+    )
+  }
+
+  func testShortReplyDoesNotEnterCollapsedLayout() {
+    let source = "A short assistant reply"
+
+    XCTAssertFalse(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertEqual(
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false),
+      source
+    )
+  }
+
+}
+
 final class ChatTranscriptWindowTests: XCTestCase {
   func testKeepsOnlyTheNewestFiveHundredMessagesInChronologicalOrder() {
     let messages = (0...500).map { index in

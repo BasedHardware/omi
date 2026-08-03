@@ -297,7 +297,7 @@ struct DashboardPage: View {
   private static let homeAskBarMinWidth: CGFloat = 560
   private static let homeAskBarMaxWidth: CGFloat = 980
   private static let homeStagePanelMaxWidth: CGFloat = 1280
-  private static let homeChatColumnMaxWidth: CGFloat = 900
+  private static let homeChatColumnMaxWidth = ChatComposerLayout.contentLaneMaxWidth
   private static let homeStageTopPadding: CGFloat = 74
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
@@ -609,6 +609,7 @@ struct DashboardPage: View {
 
       ChatMessagesView(
         messages: chatProvider.messages,
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -1105,6 +1106,7 @@ struct DashboardPage: View {
     VStack(spacing: 0) {
       ChatMessagesView(
         messages: chatProvider.messages,
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
