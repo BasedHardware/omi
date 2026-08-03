@@ -63,7 +63,13 @@ struct ChatFirstShell: View {
             navigation.selectMore(.rewind)
           }
         )
+        // Route-specific identity guarantees every semantic navigation change
+        // mounts a fresh destination root and runs its visibility acknowledgement.
+        // Without it, SwiftUI can structurally reuse compatible branches (notably
+        // Home and More pages), leaving the automation contract stale even though
+        // the requested route is selected.
         destination
+          .id(navigation.route.stableName)
       }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
     }
@@ -276,7 +282,7 @@ struct ChatFirstShell: View {
     case .rewind:
       ChatFirstRewindHost(appState: appState)
     case .apps:
-      AppsPage(
+      ChatFirstAppsHost(
         appProvider: viewModelContainer.appProvider,
         appState: appState,
         connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
@@ -327,6 +333,44 @@ struct ChatFirstShell: View {
       case .help: return .help
       case .settings: return .settings
       }
+    }
+  }
+}
+
+/// Keeps the navigation response responsive while the marketplace's relatively
+/// expensive catalog grid is composed. The route mounts a small loading surface
+/// first, then yields one frame before constructing the existing AppsPage.
+private struct ChatFirstAppsHost: View {
+  @ObservedObject var appProvider: AppProvider
+  let appState: AppState
+  @ObservedObject var connectorStatusStore: ImportConnectorStatusStore
+  let handlesAutomationPresentations: Bool
+  @State private var hasPresentedCatalog = false
+
+  var body: some View {
+    Group {
+      if hasPresentedCatalog {
+        AppsPage(
+          appProvider: appProvider,
+          appState: appState,
+          connectorStatusStore: connectorStatusStore,
+          handlesAutomationPresentations: handlesAutomationPresentations
+        )
+      } else {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView().controlSize(.small)
+          Text("Loading apps…")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(OmiColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OmiColors.backgroundPrimary)
+      }
+    }
+    .task {
+      // Give the loading surface one render pass before the catalog materializes.
+      try? await Task.sleep(nanoseconds: 100_000_000)
+      hasPresentedCatalog = true
     }
   }
 }

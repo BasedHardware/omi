@@ -1,3 +1,4 @@
+import AppKit
 import FirebaseAuth
 import FirebaseCore
 import OmiSupport
@@ -823,13 +824,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           icon.isTemplate = true
           button.image = icon
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
+      } else {
+        button.image = omiMenuBarIcon()
       }
     }
     // Safety net: verify again after a short delay
@@ -891,22 +887,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           button.image = icon
           log("AppDelegate: [MENUBAR] Rewind icon set successfully")
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
-        button.imagePosition = .imageOnly
-        log("AppDelegate: [MENUBAR] Omi circle logo set successfully (size: \(icon.size))")
       } else {
-        // Fallback to SF Symbol
-        if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
-          icon.isTemplate = true
-          button.image = icon
-        }
-        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_menu_bar_icon, using fallback")
+        button.image = omiMenuBarIcon()
+        button.imagePosition = .imageOnly
+        log("AppDelegate: [MENUBAR] Omi brand mark set successfully")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
     } else {
@@ -1010,6 +994,46 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     } else {
       log("AppDelegate: [MENUBAR] VERIFY - WARNING: button is nil after setup!")
     }
+  }
+
+  /// Use the packaged menu asset when available, then the shared eight-dot
+  /// mark, then the application's own branded icon. These are identity
+  /// fallbacks; waveform remains reserved for active listening UI only.
+  @MainActor private func omiMenuBarIcon() -> NSImage {
+    let icon =
+      OmiBrandMarkAsset.templateImage(named: "omi_menu_bar_icon")
+      ?? OmiBrandMarkAsset.templateImage()
+      ?? NSApp.applicationIconImage
+      ?? generatedOmiMenuBarFallback()
+    icon.isTemplate = true
+    icon.size = NSSize(width: 18, height: 18)
+    return icon
+  }
+
+  @MainActor private func generatedOmiMenuBarFallback() -> NSImage {
+    let iconSize = NSSize(width: 18, height: 18)
+    let image = NSImage(size: iconSize)
+    image.lockFocus()
+    NSColor.black.setFill()
+    let dotDiameter: CGFloat = 4.2
+    let orbitRadius: CGFloat = 5.6
+    for index in 0..<8 {
+      let angle = CGFloat(index) * .pi / 4 - .pi / 2
+      let center = NSPoint(
+        x: iconSize.width / 2 + cos(angle) * orbitRadius,
+        y: iconSize.height / 2 + sin(angle) * orbitRadius
+      )
+      NSBezierPath(
+        ovalIn: NSRect(
+          x: center.x - dotDiameter / 2,
+          y: center.y - dotDiameter / 2,
+          width: dotDiameter,
+          height: dotDiameter
+        )
+      ).fill()
+    }
+    image.unlockFocus()
+    return image
   }
 
   @MainActor @objc private func openOmiFromMenu() {
