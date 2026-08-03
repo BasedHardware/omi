@@ -698,6 +698,9 @@ final class TaskChatCoordinator: ObservableObject {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           return ["error": "empty query"]
         }
+        guard !state.isSending else {
+          return ["accepted": "false", "error": "task thread is busy"]
+        }
         let messagesBefore = state.messages.count
         let sendGenerationBefore = state.localSendToken.generation
         Task { await state.sendMessage(query) }
