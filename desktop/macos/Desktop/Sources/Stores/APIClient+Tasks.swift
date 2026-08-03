@@ -23,6 +23,13 @@ struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
 }
 
 extension APIClient {
+  /// The backend's action-item list orders every non-null `due_at` before the
+  /// null bucket. Firestore inequality filters also exclude documents where
+  /// `due_at` is missing/null, so this lower bound is the smallest supported
+  /// query that returns only dated action items without materializing the
+  /// No Deadline universe.
+  static let earliestActionItemDueDate = Date(timeIntervalSince1970: -62_135_596_800)
+
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
   func getActionItems(
@@ -50,6 +57,53 @@ extension APIClient {
     if let deleted { queryItems.append("deleted=\(deleted)") }
     return try await get(
       "v1/action-items?\(queryItems.joined(separator: "&"))",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  /// Fetch one page from the complete dated active/completed bucket. The
+  /// lower-bound query intentionally has no upper bound: dated tasks in Today,
+  /// Tomorrow, and Later must all be represented regardless of their year.
+  func getDatedActionItems(
+    limit: Int = 500,
+    offset: Int = 0,
+    completed: Bool,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ActionItemsListResponse {
+    try await getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      dueStartDate: Self.earliestActionItemDueDate,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  /// Fetch one No Deadline page from the general action-item ordering.
+  ///
+  /// The current backend has no `due_at IS NULL` query parameter. Its stable
+  /// product ordering places all dated rows before null rows, so callers first
+  /// count the dated bucket, then page from that boundary. The caller must
+  /// still reject any non-null rows defensively because concurrent server
+  /// mutations can change a page between requests.
+  func getNoDeadlineActionItems(
+    limit: Int = 100,
+    offset: Int = 0,
+    datedCount: Int,
+    completed: Bool,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ActionItemsListResponse {
+    guard datedCount >= 0, offset >= 0 else { throw APIError.invalidResponse }
+    let (generalOffset, overflow) = datedCount.addingReportingOverflow(offset)
+    guard !overflow else { throw APIError.invalidResponse }
+    return try await getActionItems(
+      limit: limit,
+      offset: generalOffset,
+      completed: completed,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )

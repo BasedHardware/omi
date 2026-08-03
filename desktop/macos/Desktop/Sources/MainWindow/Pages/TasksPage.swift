@@ -503,8 +503,20 @@ class TasksViewModel: ObservableObject {
   var undoToastDismissTask: Task<Void, Never>?
 
   // Multi-select state
-  @Published var isMultiSelectMode = false
-  @Published var selectedTaskIds: Set<String> = []
+  @Published private(set) var multiSelection = TaskMultiSelectionState()
+
+  var isMultiSelectMode: Bool { multiSelection.isActive }
+  var selectedTaskIds: Set<String> { multiSelection.selectedIDs }
+  var visibleTaskIDsForSelection: [String] {
+    if !showCompleted && !isMultiSelectMode {
+      return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0).map(\.id) }
+    }
+    return displayTasks.map(\.id)
+  }
+
+  private var allAvailableTaskIDs: Set<String> {
+    Set(store.incompleteTasks.map(\.id) + store.completedTasks.map(\.id))
+  }
 
   // MARK: - Drag-and-Drop Reordering (like Flutter)
   /// Drag state for visual feedback
@@ -1497,6 +1509,55 @@ class TasksViewModel: ObservableObject {
 
     if keyCode == 53 { return handleEscape() }
 
+    if isMultiSelectMode {
+      if modifiers == .command && keyCode == 0 {
+        mutateMultiSelection { state in
+          _ = state.handleKeyboard(.selectAll, visibleIDs: visibleTaskIDsForSelection)
+        }
+        return true
+      }
+
+      let userModifiers = modifiers.subtracting([.numericPad, .function])
+      if keyCode == 126 && userModifiers == .shift {
+        moveSelection(-1)
+        mutateMultiSelection { state in
+          _ = state.handleKeyboard(
+            .extendFocused, focusedID: keyboardSelectedTaskId, visibleIDs: visibleTaskIDsForSelection)
+        }
+        return true
+      }
+      if keyCode == 125 && userModifiers == .shift {
+        moveSelection(1)
+        mutateMultiSelection { state in
+          _ = state.handleKeyboard(
+            .extendFocused, focusedID: keyboardSelectedTaskId, visibleIDs: visibleTaskIDsForSelection)
+        }
+        return true
+      }
+      if keyCode == 126 && userModifiers.isEmpty {
+        moveSelection(-1)
+        return true
+      }
+      if keyCode == 125 && userModifiers.isEmpty {
+        moveSelection(1)
+        return true
+      }
+      if (keyCode == 49 || keyCode == 36) && userModifiers.isEmpty {
+        mutateMultiSelection { state in
+          _ = state.handleKeyboard(
+            .toggleFocused,
+            focusedID: keyboardSelectedTaskId ?? hoveredTaskId,
+            visibleIDs: visibleTaskIDsForSelection)
+        }
+        return true
+      }
+      if modifiers == .command && keyCode == 2 {
+        Task { [weak self] in await self?.deleteSelectedTasks() }
+        return true
+      }
+      return false
+    }
+
     // Cmd+N: new task (inline at top)
     if modifiers == .command && keyCode == 45 {
       isInlineCreating = true
@@ -2319,6 +2380,8 @@ class TasksViewModel: ObservableObject {
     log(
       "TasksViewModel: Categorized \(displayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)"
     )
+
+    reconcileMultiSelection()
   }
 
   /// Load more filtered/search results (pagination within already-queried results)
@@ -2608,37 +2671,80 @@ class TasksViewModel: ObservableObject {
 
   // MARK: - Multi-Select
 
+  func mutateMultiSelection(_ mutation: (inout TaskMultiSelectionState) -> Void) {
+    var next = multiSelection
+    mutation(&next)
+    multiSelection = next
+  }
+
+  private func reconcileMultiSelection() {
+    guard multiSelection.isActive else { return }
+    let visibleIDs = visibleTaskIDsForSelection
+    mutateMultiSelection { state in
+      state.reconcile(visibleIDs: visibleIDs, availableTaskIDs: allAvailableTaskIDs)
+    }
+  }
+
   func toggleMultiSelectMode() {
-    isMultiSelectMode.toggle()
-    if !isMultiSelectMode {
-      selectedTaskIds.removeAll()
+    mutateMultiSelection { state in
+      if state.isActive {
+        state.exit()
+      } else {
+        state.enter()
+        state.reconcile(visibleIDs: visibleTaskIDsForSelection)
+      }
     }
   }
 
-  func toggleTaskSelection(_ task: TaskActionItem) {
-    if selectedTaskIds.contains(task.id) {
-      selectedTaskIds.remove(task.id)
-    } else {
-      selectedTaskIds.insert(task.id)
+  func toggleTaskSelection(
+    _ task: TaskActionItem,
+    modifiers: TaskMultiSelectionModifiers = .command
+  ) {
+    mutateMultiSelection { state in
+      _ = state.click(task.id, modifiers: modifiers, visibleIDs: visibleTaskIDsForSelection)
     }
   }
 
-  func selectAll() {
-    selectedTaskIds = Set(displayTasks.map { $0.id })
+  func toggleSelectAllVisibleTasks() {
+    mutateMultiSelection { state in
+      state.toggleSelectAll(visibleIDs: visibleTaskIDsForSelection)
+    }
   }
 
-  func deselectAll() {
-    selectedTaskIds.removeAll()
+  var allVisibleTasksSelected: Bool {
+    let visibleIDs = visibleTaskIDsForSelection
+    return !visibleIDs.isEmpty && visibleIDs.allSatisfy { multiSelection.selectedIDs.contains($0) }
   }
 
   func deleteSelectedTasks() async {
-    let idsToDelete = Array(selectedTaskIds)
-    for id in idsToDelete {
+    let orderedIDs = multiSelection.selectedIDs(in: visibleTaskIDsForSelection)
+    guard !orderedIDs.isEmpty else { return }
+    guard Self.confirmBulkDelete(count: orderedIDs.count) else { return }
+
+    for id in orderedIDs {
+      removeFromDisplay(id)
       chatCoordinator?.purgeState(for: id)
     }
-    await store.deleteMultipleTasks(ids: idsToDelete)
-    selectedTaskIds.removeAll()
-    isMultiSelectMode = false
+    // One batch delete compacts relevance scores highest-first after all rows
+    // are removed; per-task delete would compact against stale score ordering.
+    await store.deleteMultipleTasks(ids: orderedIDs)
+
+    mutateMultiSelection { state in
+      state.removeSelectedIDs(Set(orderedIDs))
+      if state.selectionCount == 0 {
+        state.exit()
+      }
+    }
+  }
+
+  private static func confirmBulkDelete(count: Int) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Delete \(count) tasks?"
+    alert.informativeText = "This cannot be undone."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Delete")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
   }
 
   func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async {
@@ -3210,6 +3316,7 @@ struct TasksPage: View {
   /// highlight the correct item without observing the full coordinator.
   @State private var activeChatTaskId: String? = nil
   @State private var showChatPanel = false
+  @State private var taskDetailTask: TaskActionItem?
   @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
   /// The window width before the chat panel was opened, so we can restore it exactly.
   /// Persisted so we can restore on app relaunch if the user quit with chat open.
@@ -3288,6 +3395,47 @@ struct TasksPage: View {
         )
         .frame(width: chatPanelWidth)
         .transition(.move(edge: .trailing))
+      } else if let taskDetailTask {
+        Rectangle()
+          .fill(OmiColors.border)
+          .frame(width: 1)
+          .frame(width: 9)
+
+        TaskDetailPanel(
+          task: taskDetailTask,
+          onDismiss: { closeTaskDetailPanel() },
+          onToggle: {
+            Task { await viewModel.toggleTask(taskDetailTask) }
+          },
+          onEdit: {
+            viewModel.editingTaskId = taskDetailTask.id
+            closeTaskDetailPanel()
+          },
+          onInvestigate: taskDetailTask.completed
+            ? nil
+            : {
+              investigateTask(taskDetailTask)
+            },
+          onOpenChat: chatProvider != nil && TaskAgentSettings.shared.isChatEnabled
+            ? {
+              closeTaskDetailPanel()
+              openChatForTask(taskDetailTask)
+            } : nil,
+          onIncrementIndent: viewModel.getIndentLevel(for: taskDetailTask.id) < 3
+            ? {
+              viewModel.incrementIndent(for: taskDetailTask.id)
+            } : nil,
+          onDecrementIndent: viewModel.getIndentLevel(for: taskDetailTask.id) > 0
+            ? {
+              viewModel.decrementIndent(for: taskDetailTask.id)
+            } : nil,
+          onDelete: {
+            closeTaskDetailPanel()
+            Task { await viewModel.deleteTaskWithUndo(taskDetailTask) }
+          }
+        )
+        .frame(width: 360)
+        .transition(.move(edge: .trailing).combined(with: .opacity))
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3336,10 +3484,13 @@ struct TasksPage: View {
     }
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
+      guard let taskDetailTask else { return }
+      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id })
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
       if isOpen {
+        taskDetailTask = nil
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
@@ -3368,6 +3519,7 @@ struct TasksPage: View {
     log(
       "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
     )
+    taskDetailTask = nil
     if !showChatPanel {
       // First open: expand window and reveal the panel together
       adjustWindowWidth(expand: true)
@@ -3378,7 +3530,11 @@ struct TasksPage: View {
     // Generic navigation only resumes an existing thread. Durable work is
     // created solely by the labeled “Work on this with Omi” action.
     Task {
-      _ = await chatCoordinator.openExistingThread(for: task)
+      if task.workstreamId != nil {
+        _ = await chatCoordinator.openExistingThread(for: task)
+      } else {
+        await chatCoordinator.openChat(for: task)
+      }
     }
   }
 
@@ -3387,7 +3543,24 @@ struct TasksPage: View {
     chatCoordinator.closeChat()
   }
 
+  private func closeTaskDetailPanel() {
+    taskDetailTask = nil
+  }
+
+  private func openTaskDetailPanel(for task: TaskActionItem) {
+    guard !viewModel.isMultiSelectMode else { return }
+    if showChatPanel {
+      closeChatPanel()
+      showChatPanel = false
+    }
+    taskDetailTask = task
+  }
+
   private func handleEscapeKey() -> Bool {
+    if taskDetailTask != nil {
+      closeTaskDetailPanel()
+      return true
+    }
     if viewModel.isAnyTaskEditing || viewModel.editingTaskId != nil {
       NSApp.keyWindow?.makeFirstResponder(nil)
       return true
@@ -3582,6 +3755,10 @@ struct TasksPage: View {
 
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
+      Text("Tasks")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         if viewModel.isSearching || viewModel.isLoadingFiltered {
@@ -3619,8 +3796,10 @@ struct TasksPage: View {
         multiSelectControls
       }
 
+      selectModeButton
+
       if viewModel.isMultiSelectMode {
-        if !viewModel.selectedTaskIds.isEmpty {
+        if viewModel.multiSelection.selectionCount > 0 {
           deleteSelectedButton
         }
         cancelMultiSelectButton
@@ -3761,29 +3940,50 @@ struct TasksPage: View {
     .help(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
   }
 
+  private var selectModeButton: some View {
+    Button {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        viewModel.toggleMultiSelectMode()
+      }
+    } label: {
+      HStack(spacing: OmiSpacing.xs) {
+        Image(
+          systemName: viewModel.isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark"
+        )
+        .scaledFont(size: OmiType.caption)
+        Text(viewModel.isMultiSelectMode ? "Done" : "Select")
+          .scaledFont(size: OmiType.body, weight: .medium)
+      }
+      .foregroundColor(viewModel.isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .omiControlSurface(
+        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+    }
+    .buttonStyle(.plain)
+    .help(viewModel.isMultiSelectMode ? "Exit selection" : "Select tasks for bulk actions")
+    .accessibilityIdentifier("tasks-select-toggle")
+  }
+
   private var multiSelectControls: some View {
     HStack(spacing: OmiSpacing.md) {
       Button {
-        if viewModel.selectedTaskIds.count == viewModel.displayTasks.count {
-          viewModel.deselectAll()
-        } else {
-          viewModel.selectAll()
-        }
+        viewModel.toggleSelectAllVisibleTasks()
       } label: {
         HStack(spacing: OmiSpacing.xs) {
           Image(
-            systemName: viewModel.selectedTaskIds.count == viewModel.displayTasks.count
+            systemName: viewModel.allVisibleTasksSelected
               ? "checkmark.circle.fill" : "circle"
           )
           .scaledFont(size: OmiType.body)
-          Text(viewModel.selectedTaskIds.count == viewModel.displayTasks.count ? "Deselect All" : "Select All")
+          Text(viewModel.allVisibleTasksSelected ? "Deselect All" : "Select All")
             .scaledFont(size: OmiType.body, weight: .medium)
         }
         .foregroundColor(OmiColors.textSecondary)
       }
       .buttonStyle(.plain)
 
-      Text("\(viewModel.selectedTaskIds.count) selected")
+      Text("\(viewModel.multiSelection.selectionCount) selected")
         .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
     }
@@ -3798,7 +3998,7 @@ struct TasksPage: View {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "trash")
           .scaledFont(size: OmiType.caption)
-        Text("Delete \(viewModel.selectedTaskIds.count)")
+        Text("Delete \(viewModel.multiSelection.selectionCount)")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
       .foregroundColor(.white)
@@ -4020,7 +4220,7 @@ struct TasksPage: View {
                   orderedTasks: orderedTasks,
                   isMultiSelectMode: viewModel.isMultiSelectMode,
                   indentLevelFor: { viewModel.getIndentLevel(for: $0) },
-                  isSelectedFor: { viewModel.selectedTaskIds.contains($0) },
+                  isSelectedFor: { viewModel.multiSelection.selectedIDs.contains($0) },
                   isKeyboardSelectedFor: { viewModel.keyboardSelectedTaskId == $0 },
                   onToggle: { await viewModel.toggleTask($0) },
                   onDelete: { await viewModel.deleteTaskWithUndo($0) },
@@ -4045,7 +4245,9 @@ struct TasksPage: View {
                     ? { task in openChatForTask(task) } : nil,
                   onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
+                  onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
+                  isTaskDetailPanelActive: taskDetailTask != nil,
                   isChatActive: showChatPanel,
                   activeChatTaskId: activeChatTaskId,
                   chatCoordinator: chatCoordinator,
@@ -4112,7 +4314,7 @@ struct TasksPage: View {
                   task: task,
                   indentLevel: viewModel.getIndentLevel(for: task.id),
                   isMultiSelectMode: viewModel.isMultiSelectMode,
-                  isSelected: viewModel.selectedTaskIds.contains(task.id),
+                  isSelected: viewModel.multiSelection.selectedIDs.contains(task.id),
                   isKeyboardSelected: viewModel.keyboardSelectedTaskId == task.id,
                   onToggle: { await viewModel.toggleTask($0) },
                   onDelete: { await viewModel.deleteTaskWithUndo($0) },
@@ -4130,7 +4332,9 @@ struct TasksPage: View {
                     ? { task in openChatForTask(task) } : nil,
                   onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
+                  onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
+                  isTaskDetailPanelActive: taskDetailTask != nil,
                   isChatActive: showChatPanel,
                   activeChatTaskId: activeChatTaskId,
                   chatCoordinator: chatCoordinator,
@@ -4155,11 +4359,6 @@ struct TasksPage: View {
                   .padding(.top, OmiSpacing.xxs)
                 }
               }
-              .onAppear {
-                Task {
-                  await viewModel.throttledLoadMoreIfNeeded(currentTask: task)
-                }
-              }
             }
           }
 
@@ -4174,45 +4373,19 @@ struct TasksPage: View {
             .padding(.vertical, OmiSpacing.md)
           }
 
-          // "Load more" button
-          if !viewModel.displayTasks.isEmpty && !viewModel.isLoadingMore {
-            if viewModel.isInFilteredMode && viewModel.hasMoreFilteredResults {
-              Button {
-                viewModel.loadMoreFiltered()
-              } label: {
-                HStack(spacing: OmiSpacing.xs) {
-                  Image(systemName: "arrow.down.circle")
-                  Text("Load more tasks")
-                }
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.lg)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(OmiChrome.elementRadius)
-              }
-              .buttonStyle(.plain)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, OmiSpacing.sm)
-            } else if !viewModel.isInFilteredMode && viewModel.hasMoreTasks {
-              Button {
+          // A true bottom sentinel replaces the obscured manual button and
+          // row-prefetch trigger. In the normal active view the store accepts
+          // only No Deadline pages; dated buckets are already complete.
+          if !viewModel.displayTasks.isEmpty && !viewModel.isLoadingMore && !viewModel.isActiveViewLoading
+            && (viewModel.isInFilteredMode ? viewModel.hasMoreFilteredResults : viewModel.hasMoreTasks)
+          {
+            Color.clear
+              .frame(height: 1)
+              .id("tasks-bottom-sentinel-\(viewModel.displayTasks.count)")
+              .accessibilityIdentifier("tasks-bottom-pagination-sentinel")
+              .onAppear {
                 Task { await viewModel.loadMoreTapped() }
-              } label: {
-                HStack(spacing: OmiSpacing.xs) {
-                  Image(systemName: "arrow.down.circle")
-                  Text("Load more tasks")
-                }
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.lg)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(OmiChrome.elementRadius)
               }
-              .buttonStyle(.plain)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, OmiSpacing.sm)
-            }
           }
         }
         .padding(.horizontal, OmiSpacing.lg)
@@ -4336,7 +4509,9 @@ struct TaskCategorySection: View {
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
+  var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
+  var isTaskDetailPanelActive: Bool = false
   var isChatActive: Bool = false
   var activeChatTaskId: String?
   var chatCoordinator: TaskChatCoordinator?
@@ -4478,7 +4653,9 @@ struct TaskCategorySection: View {
                 onOpenChat: onOpenChat,
                 onInvestigate: onInvestigate,
                 onSelect: onSelect,
+                onOpenDetails: onOpenDetails,
                 onHover: onHover,
+                isTaskDetailPanelActive: isTaskDetailPanelActive,
                 onDragStarted: onDragStarted,
                 onDragEnded: onDragEnded,
                 isBeingDragged: draggedTaskId == task.id,
@@ -4870,7 +5047,9 @@ struct TaskRow: View {
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
+  var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
+  var isTaskDetailPanelActive: Bool = false
   /// Called when the user begins dragging this row's handle — lets the
   /// parent ViewModel set `draggedTaskId` for visual feedback on other rows.
   /// Non-optional with no-op default: load-bearing for the dim effect, and a
@@ -4900,7 +5079,6 @@ struct TaskRow: View {
   @State private var checkmarkScale: CGFloat = 1.0
   @State private var rowOpacity: Double = 1.0
   @State private var rowOffset: CGFloat = 0
-  @State private var showTaskDetail = false
   @State private var isCopyingLink = false
   @State private var showShareCopiedToast = false
   @State private var shareToastDismissTask: Task<Void, Never>?
@@ -4973,6 +5151,8 @@ struct TaskRow: View {
           onSelect?(task)
           if isChatActive, !isActiveChatTask {
             onOpenChat?(task)
+          } else if !isMultiSelectMode {
+            onOpenDetails?(task)
           }
         }
     }
@@ -4991,12 +5171,6 @@ struct TaskRow: View {
           .padding(.trailing, OmiSpacing.md)
           .transition(.move(edge: .top).combined(with: .opacity))
       }
-    }
-    .sheet(isPresented: $showTaskDetail) {
-      TaskDetailView(
-        task: task,
-        onDismiss: { showTaskDetail = false }
-      )
     }
     .opacity(isBeingDragged ? 0.4 : 1.0)
     .omiAnimation(.easeInOut(duration: 0.12), value: isBeingDragged)
@@ -5349,8 +5523,6 @@ struct TaskRow: View {
               NewBadge()
             }
 
-            AutoAcceptedTaskWhyButton(task: task)
-
             // Explicit durable-work action. Merely viewing/selecting a
             // task never creates a thread.
             if let coordinator = chatCoordinator,
@@ -5394,8 +5566,6 @@ struct TaskRow: View {
               ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
             }
 
-            // Task detail button (hover for preview, click for full detail)
-            TaskDetailButton(task: task, showDetail: $showTaskDetail)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -5412,7 +5582,14 @@ struct TaskRow: View {
     }
     .overlay(alignment: .trailing) {
       // Hover actions overlaid on trailing edge (no layout shift)
-      if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
+      if TaskDetailPanelPresentationPolicy.showsHoverActions(
+        isRowHovering: isHovering,
+        isPriorityPickerPresented: showPriorityPicker,
+        isMultiSelectMode: isMultiSelectMode,
+        isDeletedTask: isDeletedTask,
+        isTextFieldFocused: isTextFieldFocused,
+        isDetailPanelPresented: isTaskDetailPanelActive
+      ) {
         HStack(spacing: OmiSpacing.xxs) {
           // Execute is an explicit work intent and stays in the same
           // durable task-backed thread as chat/investigate.

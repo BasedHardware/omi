@@ -108,7 +108,7 @@ final class MemoryLayerFilterTests: XCTestCase {
     let source = try memoriesPageSource()
 
     XCTAssertTrue(source.contains("recordReadScope(for: token)"))
-    XCTAssertTrue(source.contains("values.filter { $0.tierIsExplicit == lifecycleExposed }"))
+    XCTAssertTrue(source.contains("MemoryPageProjection.visibleMemories("))
     XCTAssertFalse(source.contains("lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }"))
   }
 
@@ -143,16 +143,40 @@ final class MemoryLayerFilterTests: XCTestCase {
     )
   }
 
-  func testMemoriesPageProjectsCacheReadsBeforeDisplay() throws {
+  func testMemoriesPageUsesTheServerPageAfterASuccessfulFetch() throws {
     let source = try memoriesPageSource()
 
     XCTAssertTrue(source.contains("private func displayCacheMemories("))
     XCTAssertFalse(source.contains("memories.append(contentsOf: moreFromCache)"))
     XCTAssertFalse(source.contains("memories = displayMemories(cachedMemories, for: token)"))
     XCTAssertFalse(source.contains("memories = displayMemories(mergedMemories, for: token)"))
-    XCTAssertTrue(source.contains("memories.append(contentsOf: visibleMemories)"))
     XCTAssertTrue(source.contains("memories = displayCacheMemories(cachedMemories, for: token)"))
-    XCTAssertTrue(source.contains("memories = displayCacheMemories(mergedMemories, for: token)"))
+    XCTAssertTrue(source.contains("source: .authoritativeServer"))
+    XCTAssertTrue(source.contains("hasAuthoritativeServerProjection"))
+  }
+
+  func testEmptyAuthoritativeServerPageDoesNotDisplayNewerCachedMemory() {
+    let cached = makeMemory(id: "local_42", tierIsExplicit: true)
+
+    let visible = MemoryPageProjection.visibleMemories(
+      cachedMemories: [cached],
+      serverMemories: [],
+      source: .authoritativeServer,
+      lifecycleExposed: true
+    )
+
+    XCTAssertTrue(
+      visible.isEmpty,
+      "An empty successful v3 page is an empty account projection, not a reason to resurrect cache rows"
+    )
+
+    let offlineFallback = MemoryPageProjection.visibleMemories(
+      cachedMemories: [cached],
+      serverMemories: [],
+      source: .cache,
+      lifecycleExposed: true
+    )
+    XCTAssertEqual(offlineFallback.map(\.id), ["local_42"])
   }
 
   func testMemoriesPageDoesNotRenderUnclassifiedCacheBeforeLifecycleCapability() throws {
@@ -160,7 +184,8 @@ final class MemoryLayerFilterTests: XCTestCase {
 
     XCTAssertTrue(source.contains("memoriesCanonicalLifecycleExposure_v1_"))
     XCTAssertTrue(source.contains("let hasRememberedLifecycleExposure = restoreCanonicalLifecycleExposure()"))
-    XCTAssertTrue(source.contains("if hasRememberedLifecycleExposure {"))
+    XCTAssertTrue(source.contains("let canRenderCacheBeforeAuthoritativeFetch ="))
+    XCTAssertTrue(source.contains("if canRenderCacheBeforeAuthoritativeFetch {"))
     XCTAssertTrue(source.contains("Deferring unclassified cache until lifecycle capability is confirmed"))
   }
 
@@ -186,6 +211,36 @@ final class MemoryLayerFilterTests: XCTestCase {
       .appendingPathComponent("Pages")
       .appendingPathComponent("MemoriesPage.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func makeMemory(id: String, tierIsExplicit: Bool) -> ServerMemory {
+    ServerMemory(
+      id: id,
+      content: "A cached memory",
+      category: .system,
+      tier: .longTerm,
+      tierIsExplicit: tierIsExplicit,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil,
+      reviewed: false,
+      userReview: nil,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: "desktop",
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil,
+      windowTitle: nil,
+      headline: nil
+    )
   }
 }
 
