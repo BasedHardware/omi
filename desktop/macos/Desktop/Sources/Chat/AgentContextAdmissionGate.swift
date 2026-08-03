@@ -13,33 +13,56 @@ import Foundation
 ///   paths that already hold the gate); the gate is not reentrant.
 /// - Runtime lifecycle (`start`, `stop`, `interrupt`, auth-handler wiring) —
 ///   process control, not context projection admission.
+/// - Long-running `bridge.query` streaming — only refresh and admission are
+///   serialized; the query stream itself runs outside the gate.
 actor AgentContextAdmissionGate {
+  private struct Waiter {
+    let id: UUID
+    let continuation: CheckedContinuation<Void, Error>
+  }
+
   private var held = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var waiters: [Waiter] = []
 
   func withExclusiveAccess<Result: Sendable>(
     _ operation: @escaping @Sendable () async throws -> Result
-  ) async rethrows -> Result {
-    await acquire()
+  ) async throws -> Result {
+    try await acquire()
     defer { release() }
+    try Task.checkCancellation()
     return try await operation()
   }
 
-  private func acquire() async {
-    guard held else {
-      held = true
+  private func acquire() async throws {
+    try Task.checkCancellation()
+    guard !held else {
+      let waiterID = UUID()
+      try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+          waiters.append(Waiter(id: waiterID, continuation: continuation))
+        }
+      } onCancel: { [weak self] in
+        guard let self else { return }
+        Task { await self.cancelWaiter(id: waiterID) }
+      }
+      try Task.checkCancellation()
       return
     }
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      waiters.append(continuation)
-    }
+    held = true
+  }
+
+  private func cancelWaiter(id: UUID) {
+    guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+    let waiter = waiters.remove(at: index)
+    waiter.continuation.resume(throwing: CancellationError())
   }
 
   private func release() {
-    guard !waiters.isEmpty else {
-      held = false
+    while !waiters.isEmpty {
+      let waiter = waiters.removeFirst()
+      waiter.continuation.resume()
       return
     }
-    waiters.removeFirst().resume()
+    held = false
   }
 }

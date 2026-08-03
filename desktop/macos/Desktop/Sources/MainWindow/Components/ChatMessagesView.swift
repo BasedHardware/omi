@@ -368,6 +368,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
+        for item in initialScrollWorkItems {
+          item.cancel()
+        }
+        initialScrollWorkItems.removeAll()
         initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil

@@ -165,6 +165,43 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  /// Opening Home's chat panel with the mouse puts a click inside the transcript
+  /// while launch placement is still settling. A click is not a scroll: it must
+  /// not cancel the placement and strand the reader at the top of the history.
+  func testAClickInTheTranscriptDoesNotCancelLaunchPlacement() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+
+    harness.pump(0.05)
+    harness.sendLeftMouseDown()
+    harness.settleInitialPlacement()
+
+    XCTAssertTrue(
+      harness.isAtBottom,
+      "a click during launch placement must not strand the transcript at the top "
+        + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
+  }
+
+  /// Dragging the scrollbar genuinely moves the viewport, so it must still take
+  /// ownership away from live-follow.
+  func testAMouseDragThatMovesTheViewportStillTakesOwnership() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    harness.sendLeftMouseDown()
+    harness.dragViewport(by: -1200)
+    let readerPosition = harness.scrollTop
+    XCTAssertFalse(harness.isAtBottom, "precondition: the drag left the live edge")
+
+    harness.appendStreamingText(" streamed while the reader dragged away.")
+    harness.pump(0.7)
+
+    XCTAssertEqual(
+      harness.scrollTop, readerPosition, accuracy: 4,
+      "a drag that moved the viewport must keep the reader's position")
+  }
+
   // MARK: - Harness
 
   private func makeHarness(messageCount: Int = 60) throws -> Harness {
@@ -261,6 +298,45 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.05)
       endLiveScroll()
       pump(0.3)
+    }
+
+    func sendLeftMouseDown() {
+      guard
+        let event = NSEvent.mouseEvent(
+          with: .leftMouseDown,
+          location: NSPoint(x: 450, y: 300),
+          modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window.windowNumber,
+          context: nil,
+          eventNumber: 0,
+          clickCount: 1,
+          pressure: 1)
+      else { return }
+      NSApplication.shared.sendEvent(event)
+      pump(0.02)
+    }
+
+    /// A scrollbar drag: mouse-dragged events that genuinely move the viewport.
+    func dragViewport(by delta: CGFloat) {
+      let steps = 12
+      for _ in 0..<steps {
+        moveClipView(by: delta / CGFloat(steps))
+        guard
+          let event = NSEvent.mouseEvent(
+            with: .leftMouseDragged,
+            location: NSPoint(x: 450, y: 300),
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1)
+        else { continue }
+        NSApplication.shared.sendEvent(event)
+      }
+      pump(0.05)
     }
 
     func beginLiveScroll() {

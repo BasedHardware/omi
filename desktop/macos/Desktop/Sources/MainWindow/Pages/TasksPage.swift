@@ -3485,7 +3485,7 @@ struct TasksPage: View {
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
       guard let taskDetailTask else { return }
-      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id }) ?? taskDetailTask
+      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id })
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
@@ -3530,7 +3530,11 @@ struct TasksPage: View {
     // Generic navigation only resumes an existing thread. Durable work is
     // created solely by the labeled “Work on this with Omi” action.
     Task {
-      _ = await chatCoordinator.openExistingThread(for: task)
+      if task.workstreamId != nil {
+        _ = await chatCoordinator.openExistingThread(for: task)
+      } else {
+        await chatCoordinator.openChat(for: task)
+      }
     }
   }
 
@@ -3553,6 +3557,10 @@ struct TasksPage: View {
   }
 
   private func handleEscapeKey() -> Bool {
+    if taskDetailTask != nil {
+      closeTaskDetailPanel()
+      return true
+    }
     if viewModel.isAnyTaskEditing || viewModel.editingTaskId != nil {
       NSApp.keyWindow?.makeFirstResponder(nil)
       return true

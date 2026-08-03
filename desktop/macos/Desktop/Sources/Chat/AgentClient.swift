@@ -3,17 +3,31 @@ import Foundation
 enum AgentContextAdmissionRetry {
   static func run<Result>(
     expectedContext: AgentContextFreshness?,
-    refresh: () async throws -> AgentContextFreshness,
-    attempt: (AgentContextFreshness?) async throws -> Result
+    gate: AgentContextAdmissionGate,
+    refresh: @escaping @Sendable () async throws -> AgentContextFreshness,
+    attempt: @escaping @Sendable (AgentContextFreshness?) async throws -> Result
   ) async throws -> Result {
+    func admit(_ context: AgentContextFreshness?) async throws -> AgentContextFreshness? {
+      try await gate.withExclusiveAccess {
+        context
+      }
+    }
+
+    func admitRefreshed() async throws -> AgentContextFreshness {
+      try await gate.withExclusiveAccess {
+        try await refresh()
+      }
+    }
+
+    let admittedContext = try await admit(expectedContext)
     do {
-      return try await attempt(expectedContext)
+      return try await attempt(admittedContext)
     } catch let error as BridgeError
       where expectedContext != nil && error.isContextSnapshotProjectionMismatch
     {
       log("AgentClient: canonical context advanced before admission; refreshing and retrying once")
       do {
-        let refreshedContext = try await refresh()
+        let refreshedContext = try await admitRefreshed()
         let result = try await attempt(refreshedContext)
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "chat_bridge",
@@ -112,7 +126,7 @@ enum AgentClient {
 
     private func withContextAdmissionAccess<Result: Sendable>(
       _ operation: @escaping @Sendable () async throws -> Result
-    ) async rethrows -> Result {
+    ) async throws -> Result {
       try await contextAdmissionGate.withExclusiveAccess(operation)
     }
 
@@ -209,7 +223,7 @@ enum AgentClient {
 
     func warmupSession(_ session: AgentSurfaceSession) async {
       let bridge = bridge
-      await withContextAdmissionAccess {
+      try? await withContextAdmissionAccess {
         await bridge.warmupSession(session)
       }
     }
@@ -509,25 +523,22 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
-      let result = try await withContextAdmissionAccess {
-        try Task.checkCancellation()
-        return try await bridge.query(
-          prompt: prompt,
-          surface: surface,
-          mode: mode,
-          imageData: imageData,
-          attachments: attachments,
-          producingTurnId: producingTurnId,
-          expectedContext: expectedContext,
-          reasoningEffort: reasoningEffort,
-          onTextDelta: onTextDelta,
-          onToolActivity: onToolActivity,
-          onThinkingDelta: onThinkingDelta,
-          onToolResultDisplay: onToolResultDisplay,
-          onAuthRequired: onAuthRequired,
-          onAuthSuccess: onAuthSuccess
-        )
-      }
+      let result = try await bridge.query(
+        prompt: prompt,
+        surface: surface,
+        mode: mode,
+        imageData: imageData,
+        attachments: attachments,
+        producingTurnId: producingTurnId,
+        expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort,
+        onTextDelta: onTextDelta,
+        onToolActivity: onToolActivity,
+        onThinkingDelta: onThinkingDelta,
+        onToolResultDisplay: onToolResultDisplay,
+        onAuthRequired: onAuthRequired,
+        onAuthSuccess: onAuthSuccess
+      )
       return QueryResult(result)
     }
 
@@ -549,38 +560,36 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
-      return try await withContextAdmissionAccess {
-        try Task.checkCancellation()
-        return QueryResult(
-          try await AgentContextAdmissionRetry.run(
-            expectedContext: expectedContext,
-            refresh: {
-              try await bridge.getContextSnapshot(
-                sessionId: session.sessionId,
-                surfaceKind: surface.surfaceKind
-              ).freshness
-            },
-            attempt: { admittedContext in
-              try await bridge.query(
-                prompt: prompt,
-                session: session,
-                surface: surface,
-                mode: mode,
-                imageData: imageData,
-                attachments: attachments,
-                producingTurnId: producingTurnId,
-                expectedContext: admittedContext,
-                reasoningEffort: reasoningEffort,
-                onTextDelta: onTextDelta,
-                onToolActivity: onToolActivity,
-                onThinkingDelta: onThinkingDelta,
-                onToolResultDisplay: onToolResultDisplay,
-                onAuthRequired: onAuthRequired,
-                onAuthSuccess: onAuthSuccess
-              )
-            }
-          ))
-      }
+      return QueryResult(
+        try await AgentContextAdmissionRetry.run(
+          expectedContext: expectedContext,
+          gate: contextAdmissionGate,
+          refresh: {
+            try await bridge.getContextSnapshot(
+              sessionId: session.sessionId,
+              surfaceKind: surface.surfaceKind
+            ).freshness
+          },
+          attempt: { admittedContext in
+            try await bridge.query(
+              prompt: prompt,
+              session: session,
+              surface: surface,
+              mode: mode,
+              imageData: imageData,
+              attachments: attachments,
+              producingTurnId: producingTurnId,
+              expectedContext: admittedContext,
+              reasoningEffort: reasoningEffort,
+              onTextDelta: onTextDelta,
+              onToolActivity: onToolActivity,
+              onThinkingDelta: onThinkingDelta,
+              onToolResultDisplay: onToolResultDisplay,
+              onAuthRequired: onAuthRequired,
+              onAuthSuccess: onAuthSuccess
+            )
+          }
+        ))
     }
   }
 

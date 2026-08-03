@@ -25,7 +25,7 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |
 | INV-AUTH-1 | Desktop Firebase session truth | locked | [auth-session.md](./auth-session.md) |
-| INV-DATA-1 | Production-family customer data-plane continuity | locked | [data-plane-continuity.md](./data-plane-continuity.md) |
+| INV-DATA-1 | Production-family customer data-plane continuity | proposed | [data-plane-continuity.md](./data-plane-continuity.md) |
 | INV-NAV-1 | Feature parity across desktop shells | proposed | [desktop-shell-feature-parity.md](./desktop-shell-feature-parity.md) |
 | INV-TASK-1 | Complete dated task buckets with bounded No Deadline paging | proposed | [task-dated-bucket-completeness.md](./task-dated-bucket-completeness.md) |
 | INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |

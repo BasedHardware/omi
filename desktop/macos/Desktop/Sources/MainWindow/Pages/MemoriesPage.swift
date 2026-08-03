@@ -428,7 +428,11 @@ class MemoriesViewModel: ObservableObject {
 
   private func reloadForCurrentLayerFilter() async {
     let token = currentScopeToken
-    if hasAuthoritativeServerProjection && token.searchText.isEmpty && token.selectedTags.isEmpty {
+    if hasAuthoritativeServerProjection
+      && token.searchText.isEmpty
+      && token.selectedTags.isEmpty
+      && token.layerFilter == .defaultAccess
+    {
       await loadMemories()
       guard isCurrentScope(token) else { return }
       await loadTagCountsFromDatabase()

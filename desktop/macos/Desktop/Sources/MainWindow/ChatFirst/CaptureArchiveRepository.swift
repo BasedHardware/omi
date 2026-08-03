@@ -195,6 +195,7 @@ final class CaptureArchiveRepository: ObservableObject {
       try? await local.store(detail)
       return detail
     } catch {
+      guard activeDetailRequestID == id else { return nil }
       errorMessage = "This Omi-device capture is unavailable. Refresh to try again."
       return nil
     }

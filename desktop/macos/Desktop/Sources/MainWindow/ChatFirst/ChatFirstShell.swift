@@ -462,11 +462,24 @@ private struct ChatFirstRestoredTasksHost: View {
     await Task.yield()
     guard viewModel.displayTasks.contains(where: { $0.id == task.id }) else { return }
     viewModel.keyboardSelectedTaskId = task.id
+    guard await waitForScrollProxy(timeoutMs: 1_500) else { return }
     guard let scrollProxy = viewModel.scrollProxy else { return }
     scrollProxy.scrollTo(task.id, anchor: .center)
     try? await Task.sleep(nanoseconds: 100_000_000)
     guard !Task.isCancelled, viewModel.keyboardSelectedTaskId == task.id else { return }
     _ = navigation.acknowledgeFocus(focus)
+  }
+
+  /// Poll until TasksPage mounts and assigns its ScrollViewReader proxy.
+  private func waitForScrollProxy(timeoutMs: Int) async -> Bool {
+    if viewModel.scrollProxy != nil { return true }
+    let steps = max(1, timeoutMs / 50)
+    for _ in 0..<steps {
+      guard !Task.isCancelled else { return false }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if viewModel.scrollProxy != nil { return true }
+    }
+    return viewModel.scrollProxy != nil
   }
 
   private func registerAutomationActions() {

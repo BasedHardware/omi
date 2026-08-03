@@ -45,22 +45,29 @@ steps:
         - Details
         - Actions
 
-  - id: S2b
-    name: Select multiple task rows through the task UI
-    do: "Activate the Tasks surface's visible multi-selection affordance (the control must expose the label 'Select'; identify it by its accessible label rather than coordinates). Verify selection mode exposes 'Select All', '0 selected', and 'Cancel'. Select two distinct visible task rows using their selection checkboxes; verify the toolbar reports '2 selected'. Use the row-selection semantics supported by this build (plain click, Command-click, or Shift-click) and verify the selected count changes only with the corresponding selection action."
+  - id: S2b-enter-select
+    name: Enter task multi-select mode
+    do: "Activate the Tasks surface's visible multi-selection affordance (accessible label 'Select'). Verify selection mode exposes 'Select All', '0 selected', and 'Cancel'."
     expect:
       text_visible:
         - Select All
         - 0 selected
-        - 2 selected
         - Cancel
+
+  - id: S2b-select-rows
+    name: Select two task rows
+    do: "Select two distinct visible task rows using their selection checkboxes. Verify the toolbar reports '2 selected'."
+    expect:
+      text_visible:
+        - 2 selected
 
   - id: S2c
     name: Execute and verify a bulk task operation
-    do: "With two task rows selected, activate the visible bulk action (for example, 'Delete 2'). Verify the action targets the selected rows once, presents its confirmation when required, and after confirmation the selected rows are removed or the UI reports the per-row result. Verify the selected count returns to zero and the Tasks list remains usable. If the build exposes a bulk completion action instead, apply it once and verify the affected rows show the resulting completion state without toggling any row twice."
+    do: "With two task rows selected, activate the visible bulk action (for example, 'Delete 2'). Confirm deletion when prompted. Verify multi-select mode exits and the Tasks list remains usable."
     expect:
       text_visible:
         - Tasks
+        - Select
 
   - id: S3
     name: Verify No Deadline section

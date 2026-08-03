@@ -287,19 +287,16 @@ def _load_assertions_for_canonical_graph_items(
     ]
 
 
-def get_canonical_knowledge_graph(
+CANONICAL_GRAPH_REVISION_READ_RETRIES = 2
+
+
+def _read_canonical_graph_page_once(
     uid: str,
     *,
     db_client: Any = None,
     limit: int = DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
     cursor: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Return one bounded, revision-fenced page of the canonical memory graph."""
-    if isinstance(limit, bool) or limit < 1 or limit > MAX_CANONICAL_GRAPH_PAGE_LIMIT:
-        raise ValueError(f'canonical graph limit must be between 1 and {MAX_CANONICAL_GRAPH_PAGE_LIMIT}')
-    if cursor is not None and not cursor.strip():
-        raise CanonicalGraphCursorError('malformed_cursor')
-
     client = _firestore_client(db_client)
     secret = _canonical_graph_cursor_secret()
     revision = _read_canonical_graph_revision(uid, db_client=client)
@@ -402,3 +399,32 @@ def get_canonical_knowledge_graph(
         'has_more': has_more,
         'next_cursor': next_cursor,
     }
+
+
+def get_canonical_knowledge_graph(
+    uid: str,
+    *,
+    db_client: Any = None,
+    limit: int = DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
+    cursor: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return one bounded, revision-fenced page of the canonical memory graph."""
+    if isinstance(limit, bool) or limit < 1 or limit > MAX_CANONICAL_GRAPH_PAGE_LIMIT:
+        raise ValueError(f'canonical graph limit must be between 1 and {MAX_CANONICAL_GRAPH_PAGE_LIMIT}')
+    if cursor is not None and not cursor.strip():
+        raise CanonicalGraphCursorError('malformed_cursor')
+
+    for attempt in range(CANONICAL_GRAPH_REVISION_READ_RETRIES):
+        try:
+            return _read_canonical_graph_page_once(
+                uid,
+                db_client=db_client,
+                limit=limit,
+                cursor=cursor,
+            )
+        except CanonicalGraphReadUnavailable as exc:
+            if str(exc) == 'canonical_revision_changed_during_read' and attempt == 0:
+                continue
+            raise
+
+    raise CanonicalGraphReadUnavailable('canonical_revision_changed_during_read')
