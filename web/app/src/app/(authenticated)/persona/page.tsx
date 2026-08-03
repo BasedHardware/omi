@@ -31,13 +31,13 @@ export default function PersonaPage() {
       </header>
 
       {loading ? (
-        <div className="mt-8 h-40 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
+        <div className="mt-8 h-40 animate-pulse rounded-card border border-stroke bg-bg-raised" />
       ) : error ? (
-        <p className="mt-8 rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+        <p className="mt-8 rounded-control border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
           {error}
         </p>
       ) : persona ? (
-        <section className="mt-8 rounded-xl border border-bg-tertiary bg-bg-secondary p-6">
+        <section className="mt-8 rounded-card border border-stroke bg-bg-raised p-6">
           <div className="flex items-start gap-4">
             {persona.image ? (
               <Image
@@ -75,14 +75,14 @@ export default function PersonaPage() {
               href={personaPublicUrl(persona.username)}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary"
+              className="mt-5 inline-flex items-center gap-2 rounded-control bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               View public page
             </a>
           )}
 
-          <p className="mt-6 border-t border-bg-tertiary pt-4 text-xs text-text-quaternary">
+          <p className="mt-6 border-t border-stroke pt-4 text-xs text-text-quaternary">
             Editing your persona is available in the Omi desktop and mobile apps.
           </p>
         </section>

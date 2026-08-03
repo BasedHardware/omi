@@ -22,12 +22,12 @@ export function ScoreSummary({ scores, loading }: ScoreSummaryProps) {
   const period = scores?.[activeTab] ?? null;
 
   return (
-    <section className="rounded-xl border border-bg-tertiary bg-bg-secondary p-6">
+    <section className="rounded-card border border-stroke bg-bg-raised p-6">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-text-quaternary">
           Score
         </h2>
-        <div className="flex gap-1 rounded-lg bg-bg-tertiary p-1">
+        <div className="flex gap-1 rounded-control bg-bg-tertiary p-1">
           {TABS.map(({ id, label }) => (
             <button
               key={id}
@@ -35,7 +35,7 @@ export function ScoreSummary({ scores, loading }: ScoreSummaryProps) {
               onClick={() => setTab(id)}
               aria-pressed={activeTab === id}
               className={cn(
-                'rounded-md px-3 py-1 text-xs transition-colors',
+                'rounded-chip px-3 py-1.5 text-xs transition-colors',
                 activeTab === id
                   ? 'bg-bg-quaternary text-text-primary'
                   : 'text-text-quaternary hover:text-text-secondary',
@@ -48,7 +48,7 @@ export function ScoreSummary({ scores, loading }: ScoreSummaryProps) {
       </div>
 
       {loading && !scores ? (
-        <div className="mt-6 h-12 w-32 animate-pulse rounded-lg bg-bg-tertiary" />
+        <div className="mt-6 h-12 w-32 animate-pulse rounded-control bg-bg-tertiary" />
       ) : period ? (
         <div className="mt-6 flex items-end gap-3">
           <span className="text-5xl font-semibold leading-none text-text-primary">

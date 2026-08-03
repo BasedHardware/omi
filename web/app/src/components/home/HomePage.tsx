@@ -27,7 +27,7 @@ export function HomePage() {
         <button
           type="button"
           onClick={() => setComposerOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90"
+          className="flex items-center gap-2 rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Set a goal
@@ -44,7 +44,7 @@ export function HomePage() {
         </h2>
 
         {error && (
-          <p className="mt-4 rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+          <p className="mt-4 rounded-control border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
             {error}
           </p>
         )}
@@ -54,12 +54,12 @@ export function HomePage() {
             {[0, 1].map((key) => (
               <div
                 key={key}
-                className="h-32 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary"
+                className="h-32 animate-pulse rounded-card border border-stroke bg-bg-raised"
               />
             ))}
           </div>
         ) : goals.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-bg-tertiary bg-bg-secondary/50 px-6 py-12 text-center">
+          <div className="mt-4 rounded-card border border-dashed border-stroke bg-bg-raised/50 px-6 py-12 text-center">
             <Target className="mx-auto h-8 w-8 text-text-quaternary" />
             <p className="mt-3 font-medium text-text-primary">No goals yet</p>
             <p className="mt-1 text-sm text-text-quaternary">
@@ -68,7 +68,7 @@ export function HomePage() {
             <button
               type="button"
               onClick={() => setComposerOpen(true)}
-              className="mt-5 rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90"
+              className="mt-5 rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90"
             >
               Set a goal
             </button>

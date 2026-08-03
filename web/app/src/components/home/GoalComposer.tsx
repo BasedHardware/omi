@@ -75,7 +75,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
     <Dialog.Root open={open} onOpenChange={close}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-bg-tertiary bg-bg-secondary p-6">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-card border border-stroke bg-bg-raised p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-lg font-semibold text-text-primary">
@@ -87,7 +87,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
             </div>
             <Dialog.Close
               aria-label="Close"
-              className="rounded-lg p-1.5 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              className="rounded-element p-1.5 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -107,7 +107,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                 }}
                 placeholder="Read 12 books this year"
                 maxLength={500}
-                className="mt-1.5 w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
+                className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
               />
             </label>
 
@@ -124,7 +124,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                     aria-pressed={goalType === id}
                     title={hint}
                     className={cn(
-                      'rounded-lg px-3 py-2 text-xs transition-colors',
+                      'rounded-chip px-3 py-2 text-xs transition-colors',
                       goalType === id
                         ? 'bg-bg-quaternary text-text-primary'
                         : 'bg-bg-tertiary text-text-quaternary hover:text-text-secondary',
@@ -147,7 +147,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                     value={target}
                     onChange={(event) => setTarget(event.target.value)}
                     min={1}
-                    className="mt-1.5 w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
+                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-text-quaternary"
                   />
                 </label>
                 <label className="block">
@@ -159,7 +159,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
                     onChange={(event) => setUnit(event.target.value)}
                     placeholder="books"
                     maxLength={64}
-                    className="mt-1.5 w-full rounded-lg bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
+                    className="mt-1.5 w-full rounded-control bg-bg-tertiary px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-quaternary focus:ring-1 focus:ring-text-quaternary"
                   />
                 </label>
               </div>
@@ -172,7 +172,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
             <button
               type="button"
               onClick={() => close(false)}
-              className="rounded-lg px-4 py-2 text-sm text-text-quaternary transition-colors hover:text-text-secondary"
+              className="rounded-control px-4 py-2 text-sm text-text-quaternary transition-colors hover:text-text-secondary"
             >
               Cancel
             </button>
@@ -180,7 +180,7 @@ export function GoalComposer({ open, onOpenChange, onCreate }: GoalComposerProps
               type="button"
               onClick={() => void submit()}
               disabled={!canSubmit}
-              className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="rounded-control bg-text-primary px-4 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {submitting ? 'Saving…' : 'Set goal'}
             </button>

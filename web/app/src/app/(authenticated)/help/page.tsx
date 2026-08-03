@@ -14,7 +14,7 @@ export default function HelpPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-bg-tertiary px-6 py-4">
+      <header className="border-b border-stroke px-6 py-4">
         <h1 className="text-2xl font-bold text-text-primary">Help</h1>
         <p className="mt-1 text-sm text-text-quaternary">
           Chat with the team. Replies come back here and by email.
