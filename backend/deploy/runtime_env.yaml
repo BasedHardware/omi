@@ -61,6 +61,10 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: TWILIO_TWIML_APP_SID
+          TWILIO_NUMBER:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_NUMBER
           RAPID_API_HOST:
             config_map:
               name: dev-omi-backend-config
@@ -330,6 +334,9 @@ environments:
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            TWILIO_NUMBER:
+              env_var: TWILIO_NUMBER
+              category: telephony
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -885,6 +892,10 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: TWILIO_TWIML_APP_SID
+          TWILIO_NUMBER:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_NUMBER
           RAPID_API_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -1077,6 +1088,9 @@ environments:
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            TWILIO_NUMBER:
+              env_var: TWILIO_NUMBER
+              category: telephony
             STRIPE_PLUS_MONTHLY_PRICE_ID:
               value: price_1TuH6z1F8wnoWYvw7Siv61SX
             STRIPE_PLUS_ANNUAL_PRICE_ID:
