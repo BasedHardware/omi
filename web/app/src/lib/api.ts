@@ -34,6 +34,7 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
+import type { Goal, GoalType, Scores } from '@/types/goals';
 import type {
   App,
   AppCategory,
@@ -518,6 +519,74 @@ export async function rebuildKnowledgeGraph(): Promise<void> {
   await fetchWithAuth('/v1/knowledge-graph/rebuild', {
     method: 'POST',
   });
+}
+
+// ============================================================================
+// Goals & Scores API
+// ============================================================================
+
+/**
+ * Get all goals.
+ *
+ * Uses `/v1/goals/all` rather than `/v1/goals/canonical/list` so the page works
+ * for every signed-in user; the canonical route is gated on task-system
+ * enrollment and 403s for everyone else.
+ */
+export async function getGoals(includeEnded = false): Promise<Goal[]> {
+  const goals = await fetchWithAuth<Goal[]>(
+    `/v1/goals/all?include_ended=${includeEnded}`,
+  );
+  return Array.isArray(goals) ? goals : [];
+}
+
+export interface CreateGoalParams {
+  title: string;
+  goal_type: GoalType;
+  target_value: number;
+  current_value?: number;
+  min_value?: number;
+  max_value?: number;
+  unit?: string | null;
+  desired_outcome?: string;
+  why_it_matters?: string;
+}
+
+export async function createGoal(params: CreateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>('/v1/goals', {
+    method: 'POST',
+    body: JSON.stringify({ ...params, source: 'user' }),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+/**
+ * Update only a goal's progress value.
+ *
+ * The backend takes `current_value` as a query parameter on this route, not in
+ * the body.
+ */
+export async function updateGoalProgress(
+  id: string,
+  currentValue: number,
+): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(
+    `/v1/goals/${id}/progress?current_value=${encodeURIComponent(currentValue)}`,
+    { method: 'PATCH' },
+  );
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  await fetchWithAuth(`/v1/goals/${id}`, { method: 'DELETE' });
+  invalidateCache(invalidationPatterns.goals);
+}
+
+/** Daily, weekly, and overall task-completion scores. */
+export async function getScores(date?: string): Promise<Scores> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return fetchWithAuth<Scores>(`/v1/scores${query}`);
 }
 
 // ============================================================================
