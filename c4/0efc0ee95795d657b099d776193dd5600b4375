@@ -1,0 +1,23 @@
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_0c099cae24c74c::t_60c17ce906694c 6,14
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_0c099cae24c74c::t_591d4491341a2e 4,15
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_0c099cae24c74c::t_5e8cd3a9ac80ee 5,8,12,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "c40efc0ee95795d657b099d776193dd5600b4375",
+  "prompts": {},
+  "sessions": {
+    "s_0c099cae24c74c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b34655d-8dbf-4c8f-8142-5928a5d6fa17",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
