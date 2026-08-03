@@ -69,6 +69,7 @@ from routers import (
     staged_tasks,
     focus_sessions,
     advice,
+    paper,
     chat_sessions,
     desktop_agent_vm,
     desktop_chat,
@@ -204,6 +205,7 @@ app.include_router(fair_use_admin.router)
 app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
 app.include_router(advice.router)
+app.include_router(paper.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
 app.include_router(tts.router)

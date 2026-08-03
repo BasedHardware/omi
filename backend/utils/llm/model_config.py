@@ -59,6 +59,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'conv_structure': ('gpt-5.6-luna', 'openai'),
     'conv_app_result': ('gpt-5.6-luna', 'openai'),
     'daily_summary': ('gpt-5.6-luna', 'openai'),
+    'paper': ('gpt-5.6-luna', 'openai'),
     'external_structure': ('gpt-5.6-luna', 'openai'),
     'memories': ('gpt-5.6-luna', 'openai'),
     'learnings': ('gpt-5.6-luna', 'openai'),
