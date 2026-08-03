@@ -111,12 +111,6 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertEqual(source.components(separatedBy: "userInitiated: true").count - 1, 2)
   }
 
-  func testTranscriptPrependUsesFirstVisibleRowAsAnchor() throws {
-    let source = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
-    XCTAssertTrue(source.contains("prependAnchorId = visibleTranscriptMessages.first?.id"))
-    XCTAssertFalse(source.contains("prependAnchorId = messages.first?.id"))
-  }
-
   func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")

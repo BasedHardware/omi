@@ -305,8 +305,12 @@ async def test_gateway_agent_loop_uses_openai_compatible_lane(agentic_mod, monke
     calls = []
 
     class Model:
-        def astream(self, messages, **kwargs):
-            calls.append((messages, kwargs))
+        def bind(self, **kwargs):
+            calls.append(('bind', kwargs))
+            return self
+
+        def astream(self, messages):
+            calls.append(('stream', messages))
 
             async def chunks():
                 yield types.SimpleNamespace(content='Luna answer', tool_call_chunks=[])
@@ -332,8 +336,8 @@ async def test_gateway_agent_loop_uses_openai_compatible_lane(agentic_mod, monke
 
     assert result is None
     assert ''.join(full_response) == 'Luna answer'
-    assert calls[0][0][0] == {'role': 'system', 'content': 'SYSTEM'}
-    assert calls[0][1]['tools'] == []
+    assert calls[0] == ('bind', {'tools': [], 'tool_choice': 'auto', 'max_completion_tokens': 8192})
+    assert calls[1][1][0] == {'role': 'system', 'content': 'SYSTEM'}
 
 
 async def test_tool_loop_still_reaches_a_second_iteration(agentic_mod):
