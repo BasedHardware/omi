@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { AppForm } from '@/components/apps/AppForm';
 import { getApp } from '@/lib/api';
 import type { App } from '@/types/apps';
@@ -43,9 +44,9 @@ export default function EditAppPage() {
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error || 'App not found'}</p>
-          <a href="/my-apps" className="text-accent-primary hover:underline">
+          <Link href="/my-apps" className="text-accent-primary hover:underline">
             Back to Apps
-          </a>
+          </Link>
         </div>
       </div>
     );

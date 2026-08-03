@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
@@ -313,9 +314,9 @@ export function LoginClient() {
           Help
         </a>
         <span>·</span>
-        <a href="/apps" className="hover:text-text-primary transition-colors">
+        <Link href="/apps" className="hover:text-text-primary transition-colors">
           Apps
-        </a>
+        </Link>
       </motion.div>
     </div>
   );

@@ -254,7 +254,7 @@ export function SpeakerTagSheet({
                   Tag Speaker {(segment.speaker_id ?? 0) + 1}
                 </h2>
                 <p className="text-sm text-text-tertiary truncate mt-0.5">
-                  "{segment.text.slice(0, 50)}..."
+                  &quot;{segment.text.slice(0, 50)}...&quot;
                 </p>
               </div>
               <button
