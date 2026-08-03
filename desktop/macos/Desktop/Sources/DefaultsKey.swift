@@ -134,6 +134,18 @@ struct ScopedDefaultsKey {
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
+
+  static func agentSyncCursors(ownerID: String) -> Self {
+    Self(rawValue: "agentSync_cursors.\(ownerID)")
+  }
+
+  static func agentSyncGraphProtocolVersion(ownerID: String) -> Self {
+    Self(rawValue: "agentSync_graph_protocol_version.\(ownerID)")
+  }
+
+  static func agentSyncGraphReconcileNeeded(ownerID: String) -> Self {
+    Self(rawValue: "agentSync_graph_reconcile_needed.\(ownerID)")
+  }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
@@ -147,6 +159,7 @@ extension UserDefaults {
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
