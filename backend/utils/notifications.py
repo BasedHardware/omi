@@ -278,6 +278,20 @@ def send_notification(
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
+def send_user_notification(user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> int:
+    """Send a visible notification and return how many devices were reached.
+
+    Same delivery as ``send_notification`` (routed through the active push backend), but returns the
+    successful-send count for callers that gate on delivery confirmation — e.g. the BYOK
+    error-notification dedupe lock, which is released when nothing was delivered so the next error
+    can retry.
+    """
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data)
+
+
 async def send_notification_async(
     user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
 ) -> None:
