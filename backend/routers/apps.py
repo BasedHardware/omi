@@ -937,8 +937,22 @@ async def update_persona(
         img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
-    await run_blocking(db_executor, save_username, data['username'], uid)
-    data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
+    # Partial update: released clients PATCH the whole persona, but a client that
+    # sends only the fields it changed must not have the rest silently rewritten.
+    # `username` claims the handle, and `name` drives an LLM description rewrite —
+    # both are destructive to do on a field the caller never mentioned.
+    if 'username' in data and data['username'] and data['username'] != persona.get('username'):
+        await run_blocking(db_executor, save_username, data['username'], uid)
+
+    if 'name' in data and data['name'] and data['name'] != persona.get('name'):
+        # The name changed, so the generated description no longer matches it,
+        # unless the caller supplied its own.
+        if not data.get('description'):
+            data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
+
+    # AppUpdate needs the identity fields even when the caller omitted them.
+    data['id'] = persona_id
+    data.setdefault('username', persona.get('username'))
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
