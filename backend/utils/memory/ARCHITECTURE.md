@@ -228,6 +228,8 @@ normal promotion admission.
 - `MEMORY_CANONICAL_MAINTENANCE_ENABLED` gates scheduled maintenance; Cloud
   Scheduler owns cadence.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED`, `MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD`, `MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP`, and `MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM` tune consolidation. The batch cap bounds each LLM call, and one maintenance pass drains every batch in its deterministic datastore-bounded selection.
+- The minimal operator matrix, activation order, retired names, and rollback
+  order live in `docs/runbooks/canonical-memory-rollout-flags.md`.
 - Required processing queries only active pending required rows; a negative user review moves the row to terminal `processing_rejected`. TTL queries only active, processed, expired Short-term rows ordered by `expires_at, memory_id`, while consolidation queries active, processed, source-active Short-term rows ordered by `captured_at, memory_id`. Every query applies its server-owned limit after these eligibility filters, so unrelated rows cannot starve work beyond the cap.
 - Vector repair persistence is a persisted rollout capability (`vector_repair_outbox_enabled` in `default_read_rollout.py`), not an environment switch.
 
