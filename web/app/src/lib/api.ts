@@ -35,6 +35,7 @@ export type {
   ActionItemsResponse,
 };
 import type { Goal, GoalHistoryEntry } from '@/types/goals';
+import type { ChatSession } from '@/types/chatSessions';
 import type { Scores } from '@/types/scores';
 import type {
   App,
@@ -526,6 +527,67 @@ export async function rebuildKnowledgeGraph(): Promise<void> {
 }
 
 // ============================================================================
+// Chat sessions API
+// ============================================================================
+
+interface ChatSessionWire {
+  id: string;
+  title?: string | null;
+  preview?: string | null;
+  created_at: string;
+  updated_at: string;
+  app_id?: string | null;
+  message_count?: number | null;
+  starred?: boolean | null;
+}
+
+function toChatSession(wire: ChatSessionWire): ChatSession {
+  return {
+    id: wire.id,
+    title: wire.title ?? undefined,
+    preview: wire.preview ?? undefined,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+    appId: wire.app_id ?? undefined,
+    messageCount: wire.message_count ?? 0,
+    starred: Boolean(wire.starred),
+  };
+}
+
+export async function getChatSessions(appId?: string): Promise<ChatSession[]> {
+  const query = appId ? `?app_id=${encodeURIComponent(appId)}` : '';
+  const sessions = await fetchWithAuth<ChatSessionWire[]>(`/v2/chat-sessions${query}`);
+  return Array.isArray(sessions) ? sessions.map(toChatSession) : [];
+}
+
+export async function createChatSession(
+  params: { title?: string; app_id?: string } = {},
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>('/v2/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  );
+}
+
+export async function updateChatSession(
+  id: string,
+  updates: { title?: string; starred?: boolean },
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>(`/v2/chat-sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+  );
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  await fetchWithAuth(`/v2/chat-sessions/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================================
 // Goals & Scores API
 // ============================================================================
 
@@ -756,10 +818,18 @@ export function parseStreamLine(line: string): MessageChunk | null {
 /**
  * Get message history
  */
-export async function getMessages(appId?: string): Promise<ServerMessage[]> {
+export async function getMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<ServerMessage[]> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Omitted entirely for the default shared thread; naming a session targets
+  // that one specific thread.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;

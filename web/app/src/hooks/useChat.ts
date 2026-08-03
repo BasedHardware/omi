@@ -11,6 +11,11 @@ import type { ChatContextInfo } from '@/components/chat/ChatContext';
 
 interface UseChatOptions {
   appId?: string;
+  /**
+   * Which chat session to read. `null` is the default shared thread every
+   * client sees through `/v2/messages`; an id targets that one thread.
+   */
+  chatSessionId?: string | null;
 }
 
 interface UseChatReturn {
@@ -30,7 +35,7 @@ interface UseChatReturn {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { appId } = options;
+  const { appId, chatSessionId = null } = options;
 
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,20 +44,27 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [currentThinking, setCurrentThinking] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Track current app ID to detect changes
+  // Track current app + session to detect changes
   const currentAppIdRef = useRef(appId);
-  // Track if we've loaded history for current app
+  const currentSessionIdRef = useRef(chatSessionId);
+  // Track if we've loaded history for the current app + session
   const historyLoadedRef = useRef(false);
 
-  // Reset state when app changes
+  // Reset state when the app or the selected session changes. Switching threads
+  // must clear the transcript: leaving the previous session's messages on
+  // screen reads as though they belong to the newly-selected chat.
   useEffect(() => {
-    if (currentAppIdRef.current !== appId) {
+    if (
+      currentAppIdRef.current !== appId ||
+      currentSessionIdRef.current !== chatSessionId
+    ) {
       currentAppIdRef.current = appId;
+      currentSessionIdRef.current = chatSessionId;
       historyLoadedRef.current = false;
       setMessages([]);
       setError(null);
     }
-  }, [appId]);
+  }, [appId, chatSessionId]);
 
   /**
    * Load message history from server
@@ -64,7 +76,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     setError(null);
 
     try {
-      const history = await getMessages(appId);
+      const history = await getMessages(appId, chatSessionId);
       setMessages([...history].reverse());
       historyLoadedRef.current = true;
     } catch (err) {
@@ -73,7 +85,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [appId]);
+  }, [appId, chatSessionId]);
 
   /**
    * Send a message and handle streaming response
