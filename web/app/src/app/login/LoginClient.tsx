@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { completeWebOAuth } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
@@ -55,6 +56,33 @@ export function LoginClient() {
     MixpanelManager.pageView('Login');
   }, []);
 
+  useEffect(() => {
+    const authCode = searchParams.get('code');
+    const authState = searchParams.get('state');
+    if (!authCode || !authState || channel) return;
+
+    let active = true;
+    setIsSigningIn('google');
+    setError(null);
+    completeWebOAuth(authCode, authState)
+      .then((destination) => {
+        if (active) router.replace(destination);
+      })
+      .catch((err) => {
+        if (active)
+          setError(
+            err instanceof Error ? err.message : 'Web sign-in could not be completed.',
+          );
+      })
+      .finally(() => {
+        if (active) setIsSigningIn(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [channel, router, searchParams]);
+
   // Redirect to conversations if already logged in
   useEffect(() => {
     if (!loading && user) {
@@ -66,8 +94,7 @@ export function LoginClient() {
     setIsSigningIn('google');
     setError(null);
     try {
-      await signInWithGoogle();
-      router.push(signedInDestination);
+      await signInWithGoogle(signedInDestination);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Google'));
       console.error(err);
@@ -80,8 +107,7 @@ export function LoginClient() {
     setIsSigningIn('apple');
     setError(null);
     try {
-      await signInWithApple();
-      router.push(signedInDestination);
+      await signInWithApple(signedInDestination);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Apple'));
       console.error(err);

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GET as searchApps } from '../src/app/api/apps/search/route';
+import { POST as exchangeWebAuthToken } from '../src/app/api/auth/token/route';
 import { GET as proxy } from '../src/app/api/proxy/[...path]/route';
 import { GET as robots } from '../src/app/robots.txt/route';
 
@@ -15,6 +16,45 @@ describe('Moonshine web routes', () => {
     const response = await proxy(new Request('http://localhost/api/proxy/v1/health'));
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'Authorization header required' });
+  });
+
+  test('forwards only the web auth token exchange fields', async () => {
+    const previousFetch = globalThis.fetch;
+    let receivedBody = '';
+    const mockFetch = async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      receivedBody = String(init?.body || '');
+      return new Response(JSON.stringify({ custom_token: 'test-token' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    globalThis.fetch = Object.assign(mockFetch, { preconnect: previousFetch.preconnect });
+
+    try {
+      const response = await exchangeWebAuthToken(
+        new Request('http://localhost/api/auth/token', {
+          method: 'POST',
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: 'test-code',
+            redirect_uri: 'https://web.example/login',
+            use_custom_token: 'true',
+            code_verifier: 'test-verifier',
+            ignored: 'not-forwarded',
+          }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ custom_token: 'test-token' });
+      expect(receivedBody).toBe(
+        'grant_type=authorization_code&code=test-code&redirect_uri=https%3A%2F%2Fweb.example%2Flogin&use_custom_token=true&code_verifier=test-verifier',
+      );
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 
   test('serves robots policy through a Moonshine route handler', async () => {

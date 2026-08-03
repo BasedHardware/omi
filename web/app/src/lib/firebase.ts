@@ -1,9 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import {
   getAuth,
-  GoogleAuthProvider,
-  OAuthProvider,
-  signInWithPopup,
+  signInWithCustomToken,
   signOut,
   onAuthStateChanged,
   User,
@@ -39,43 +37,135 @@ const app =
 // Initialize Firebase Auth
 export const auth = app ? getAuth(app) : (null as unknown as ReturnType<typeof getAuth>);
 
-// Google Auth Provider
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account',
-});
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
+const WEB_AUTH_SESSION_KEY = 'omi.web.auth.pending';
 
-// Apple Auth Provider
-const appleProvider = new OAuthProvider('apple.com');
-appleProvider.addScope('email');
-appleProvider.addScope('name');
+type WebAuthSession = {
+  state: string;
+  codeVerifier: string;
+  redirectUri: string;
+  destination: string;
+};
+
+function randomUrlSafeValue(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+async function codeChallengeForVerifier(codeVerifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(codeVerifier),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function webAuthRedirectUri(): string {
+  return `${window.location.origin}/login`;
+}
+
+function safeDestination(destination: string | undefined): string {
+  if (destination && destination.startsWith('/') && !destination.startsWith('//')) {
+    return destination;
+  }
+  return '/conversations';
+}
+
+async function startWebOAuth(
+  provider: 'google' | 'apple',
+  destination?: string,
+): Promise<void> {
+  if (typeof window === 'undefined')
+    throw new Error('Web authentication is only available in a browser');
+
+  const codeVerifier = randomUrlSafeValue(64);
+  const state = randomUrlSafeValue(32);
+  const redirectUri = webAuthRedirectUri();
+  const session: WebAuthSession = {
+    state,
+    codeVerifier,
+    redirectUri,
+    destination: safeDestination(destination),
+  };
+  sessionStorage.setItem(WEB_AUTH_SESSION_KEY, JSON.stringify(session));
+
+  const codeChallenge = await codeChallengeForVerifier(codeVerifier);
+  const params = new URLSearchParams({
+    provider,
+    redirect_uri: redirectUri,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+  });
+  window.location.assign(`${API_BASE_URL}/v1/auth/authorize?${params.toString()}`);
+}
+
+export async function completeWebOAuth(code: string, state: string): Promise<string> {
+  if (typeof window === 'undefined')
+    throw new Error('Web authentication is only available in a browser');
+
+  const rawSession = sessionStorage.getItem(WEB_AUTH_SESSION_KEY);
+  if (!rawSession) throw new Error('Sign-in session expired. Start again.');
+
+  let session: WebAuthSession;
+  try {
+    session = JSON.parse(rawSession) as WebAuthSession;
+  } catch {
+    sessionStorage.removeItem(WEB_AUTH_SESSION_KEY);
+    throw new Error('Sign-in session is invalid. Start again.');
+  }
+
+  if (session.state !== state || session.redirectUri !== webAuthRedirectUri()) {
+    sessionStorage.removeItem(WEB_AUTH_SESSION_KEY);
+    throw new Error('Sign-in state did not match. Start again.');
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: session.redirectUri,
+    use_custom_token: 'true',
+    code_verifier: session.codeVerifier,
+  });
+  const response = await fetch('/api/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const payload = (await response.json().catch(() => ({}))) as {
+    custom_token?: string;
+    detail?: string;
+  };
+  if (!response.ok || !payload.custom_token) {
+    throw new Error(payload.detail || 'Web sign-in could not be completed.');
+  }
+
+  await signInWithCustomToken(auth, payload.custom_token);
+  sessionStorage.removeItem(WEB_AUTH_SESSION_KEY);
+  return session.destination;
+}
 
 /**
  * Sign in with Google
  */
-export const signInWithGoogle = async (): Promise<User | null> => {
-  try {
-    if (!app) throw new Error('Firebase auth is only available in a browser');
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error) {
-    console.error('Google sign-in error:', error);
-    throw error;
-  }
+// Google Auth Provider
+export const signInWithGoogle = async (destination?: string): Promise<void> => {
+  await startWebOAuth('google', destination);
 };
 
 /**
  * Sign in with Apple
  */
-export const signInWithApple = async (): Promise<User | null> => {
-  try {
-    if (!app) throw new Error('Firebase auth is only available in a browser');
-    const result = await signInWithPopup(auth, appleProvider);
-    return result.user;
-  } catch (error) {
-    console.error('Apple sign-in error:', error);
-    throw error;
-  }
+// Apple Auth Provider
+export const signInWithApple = async (destination?: string): Promise<void> => {
+  await startWebOAuth('apple', destination);
 };
 
 /**

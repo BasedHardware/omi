@@ -104,6 +104,12 @@ def _validate_redirect_uri(redirect_uri: str) -> None:
             )
         return
 
+    if scheme == "https":
+        configured_redirect_uri = os.getenv("CHANNEL_SIGN_IN_URL", "").strip()
+        if configured_redirect_uri and redirect_uri.rstrip("/") == configured_redirect_uri.rstrip("/"):
+            return
+        raise HTTPException(status_code=400, detail="HTTPS redirect_uri is not an allowed web sign-in URL")
+
     if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
         raise HTTPException(
             status_code=400,
