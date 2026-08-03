@@ -142,7 +142,7 @@ if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseExceptio
     _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
-    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10 ** 12))
+    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)

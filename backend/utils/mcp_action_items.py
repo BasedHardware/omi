@@ -125,7 +125,10 @@ def _reload(uid: str, action_item_id: str) -> Dict[str, Any]:
 
 
 def create_action_item(
-    uid: str, description: Optional[str], due_at: Union[str, datetime, None] = None, completed: bool = False,
+    uid: str,
+    description: Optional[str],
+    due_at: Union[str, datetime, None] = None,
+    completed: bool = False,
 ) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
     (uid, normalized description)."""
@@ -163,7 +166,10 @@ def set_completed(uid: str, action_item_id: str, completed: bool = True) -> Dict
 
 
 def update_action_item(
-    uid: str, action_item_id: str, description: Optional[str] = None, due_at: Union[str, datetime, None] = None,
+    uid: str,
+    action_item_id: str,
+    description: Optional[str] = None,
+    due_at: Union[str, datetime, None] = None,
 ) -> Dict[str, Any]:
     """Update a task's description and/or due date.
 
