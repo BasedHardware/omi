@@ -95,6 +95,28 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(messagesSource.contains("initialRestoreState = .completed"))
   }
 
+  func testPermissionRefreshPreservesStateWhenSystemEventsIsStopped() throws {
+    let source = try sourceFile("AppState/AppState+Permissions.swift")
+    let start = try XCTUnwrap(source.range(of: "if status == -600"))
+    let snippet = String(source[start.lowerBound...]).prefix(320)
+
+    XCTAssertFalse(snippet.contains("hasAutomationPermission = false"))
+    XCTAssertFalse(snippet.contains("automationPermissionError = 0"))
+  }
+
+  func testGoogleConnectorProbesUseExplicitUserInitiatedReads() throws {
+    let source = try sourceFile("DesktopAutomationBridge.swift")
+    XCTAssertTrue(source.contains("name: \"calendar_read_probe\""))
+    XCTAssertTrue(source.contains("name: \"gmail_read_probe\""))
+    XCTAssertEqual(source.components(separatedBy: "userInitiated: true").count - 1, 2)
+  }
+
+  func testTranscriptPrependUsesFirstVisibleRowAsAnchor() throws {
+    let source = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+    XCTAssertTrue(source.contains("prependAnchorId = visibleTranscriptMessages.first?.id"))
+    XCTAssertFalse(source.contains("prependAnchorId = messages.first?.id"))
+  }
+
   func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")

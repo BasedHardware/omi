@@ -481,6 +481,11 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/tests/test-launch-env-forwarding.sh"]
     lanes: ["local", "ci"]
     reason: "`open` launches from launchd, so a documented run.sh env override that is not passed with `open --env` silently does nothing; caught OMI_FORCE_CANONICAL_MEMORY_ATLAS being documented but never forwarded"
+  - id: desktop-app-icon-bundle
+    command: ["bash", "desktop/macos/tests/test-app-icon-bundle.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/omi_icon.icns", "desktop/macos/tests/test-app-icon-bundle.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "named desktop bundles must copy the canonical Omi icon and fail closed when the asset is missing"
   - id: desktop-main-actor-xctest-hooks
     command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
     triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]

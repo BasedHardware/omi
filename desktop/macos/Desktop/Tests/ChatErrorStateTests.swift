@@ -270,6 +270,15 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(snippet.contains("guard isUserClaudeMode else { return }"))
   }
 
+  func testClaudeOAuthSuccessKeepsKeychainBackedConnectionState() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let start = try XCTUnwrap(source.range(of: "private func handleClaudeAuthSuccess()"))
+    let snippet = String(source[start.lowerBound...]).prefix(450)
+
+    XCTAssertTrue(snippet.contains("isClaudeConnected = true"))
+    XCTAssertFalse(snippet.contains("checkClaudeConnectionStatus()"))
+  }
+
   func testEnsureBridgeStartedMapsAuthMissingToAuthRequired() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("ChatErrorState.from(bridgeError)"))
