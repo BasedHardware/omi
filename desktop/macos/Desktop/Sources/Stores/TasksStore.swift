@@ -2523,11 +2523,8 @@ class TasksStore: ObservableObject {
       guard isCurrent(lease) else { return }
 
       let refreshedDatedIDs = Set(datedTasks.map(\.id))
-      let existingDatedByID = Dictionary(
-        lastWriteWins: Self.activeDatedOnly(incompleteTasks).map { ($0.id, $0) }
-      )
       let visibleDatedTasks =
-        datedTasks.map { existingDatedByID[$0.id] ?? $0 }
+        datedTasks
         + incompleteTasks.filter {
           $0.dueAt != nil && !$0.completed && !$0.isRetired && !refreshedDatedIDs.contains($0.id)
         }
