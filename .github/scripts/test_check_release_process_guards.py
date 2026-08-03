@@ -320,7 +320,14 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
 def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
-    _mutate(codemagic, old, new)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    target = dispatcher if old in dispatcher.read_text(encoding="utf-8") else codemagic
+    _mutate(target, old, new)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return GUARDS.check_mobile_codemagic_release_triggers()
 
@@ -328,6 +335,12 @@ def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str
 def test_mobile_codemagic_triggers_are_native_and_production_safe(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     assert GUARDS.check_mobile_codemagic_release_triggers() == []
@@ -393,16 +406,19 @@ def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lan
 @pytest.mark.parametrize(
     ("old", "new"),
     (
-        ("        - push\n", "        - pull_request\n"),
-        ("        - pattern: main\n", "        - pattern: release/*\n"),
-        ("      cancel_previous_builds: true\n", "      cancel_previous_builds: false\n"),
-        ("          - 'app/**'\n", "          - 'desktop/**'\n"),
+        ("    branches: [main]\n", "    branches: [release/*]\n"),
+        ("    paths: ['app/**']\n", "    paths: ['desktop/**']\n"),
+        ("  cancel-in-progress: false\n", "  cancel-in-progress: true\n"),
+        ("      changeset:\n        includes:\n          - 'app/**'\n", "      changeset:\n        includes:\n          - 'desktop/**'\n"),
     ),
 )
 def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
     errors = _mobile_trigger_errors_after(tmp_path, monkeypatch, old, new)
 
-    assert any("must natively trigger" in error for error in errors), errors
+    assert any(
+        "mobile internal build dispatcher" in error or "must retain its app/** changeset guard" in error
+        for error in errors
+    ), errors
 
 
 @pytest.mark.parametrize(
