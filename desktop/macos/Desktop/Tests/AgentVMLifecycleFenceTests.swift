@@ -3,6 +3,19 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentVMLifecycleFenceTests: XCTestCase {
+  func testGzipControllerCancellationBeforeLaunchPreventsProcessStart() {
+    let controller = GzipProcessController()
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+    controller.cancel()
+
+    XCTAssertThrowsError(try controller.run(process)) { error in
+      XCTAssertTrue(error is CancellationError)
+    }
+    XCTAssertFalse(process.isRunning)
+  }
+
   func testLateLifecycleWorkIsRejectedAfterOwnerTransition() {
     XCTAssertTrue(
       AgentVMService.lifecycleWorkIsCurrent(

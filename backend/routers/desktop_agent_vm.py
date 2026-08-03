@@ -16,8 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import users as users_db
 from database._client import get_firestore_client
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.executors import db_executor, run_blocking
-from utils.account_deletion_access import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
@@ -143,6 +143,7 @@ def _vm_lifecycle_allowed(uid: str, expected_vm_name: str, expected_auth_token: 
 @transactional
 def _set_vm_if_current_txn(
     transaction,
+    deletion_ref,
     user_ref,
     expected_vm_name: str,
     expected_auth_token: str,
@@ -150,6 +151,11 @@ def _set_vm_if_current_txn(
     ip: str | None,
     zone: str,
 ) -> bool:
+    deletion = deletion_ref.get(transaction=transaction)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(deletion_status):
+        return False
     snapshot = user_ref.get(transaction=transaction)
     current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(current, dict):
@@ -183,6 +189,7 @@ def _set_vm_if_current(
     client = get_firestore_client()
     return _set_vm_if_current_txn(
         client.transaction(),
+        client.collection("account_deletions").document(uid),
         client.collection("users").document(uid),
         expected_vm_name,
         expected_auth_token,
@@ -344,6 +351,14 @@ async def _delete_vm(project: str, vm_name: str, zone: str) -> None:
         await _operation(project, zone, operation)
 
 
+async def _delete_late_vm_or_record(uid: str, project: str, vm_name: str, zone: str) -> None:
+    try:
+        await _delete_vm(project, vm_name, zone)
+    except Exception:
+        await run_blocking(db_executor, users_db.record_late_agent_vm_cleanup, uid, vm_name, zone)
+        raise
+
+
 async def _provision_background(
     uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str
 ) -> None:
@@ -354,18 +369,11 @@ async def _provision_background(
         ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
         if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
             logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
-            try:
-                await _delete_vm(project, vm_name, _ZONE)
-            except Exception:
-                # The deletion worker may have observed a pre-create 404. Keep
-                # this concrete instance in the durable marker and reopen its
-                # wipe so reconciliation retries provider cleanup.
-                await run_blocking(db_executor, users_db.record_late_agent_vm_cleanup, uid, vm_name, _ZONE)
-                raise
+            await _delete_late_vm_or_record(uid, project, vm_name, _ZONE)
             return
         updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
         if not updated:
-            await _delete_vm(project, vm_name, _ZONE)
+            await _delete_late_vm_or_record(uid, project, vm_name, _ZONE)
     except Exception as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
         if await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):

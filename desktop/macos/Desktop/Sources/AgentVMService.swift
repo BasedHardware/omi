@@ -2,17 +2,28 @@ import Foundation
 @preconcurrency import GRDB
 import OmiSupport
 
-private final class GzipProcessController: @unchecked Sendable {
+final class GzipProcessController: @unchecked Sendable {
   private let lock = NSLock()
   private var process: Process?
   private var cancelled = false
 
-  func install(_ process: Process) -> Bool {
+  func run(_ process: Process) throws {
     lock.lock()
-    defer { lock.unlock() }
-    guard !cancelled else { return false }
+    guard !cancelled else {
+      lock.unlock()
+      throw CancellationError()
+    }
     self.process = process
-    return true
+    do {
+      // Launch while holding the same lock used by cancel(). Cancellation
+      // therefore either wins before launch or observes the running process.
+      try process.run()
+      lock.unlock()
+    } catch {
+      self.process = nil
+      lock.unlock()
+      throw error
+    }
   }
 
   func cancel() {
@@ -320,8 +331,7 @@ actor AgentVMService {
             }
             defer { try? output.close() }
             process.standardOutput = output
-            guard controller.install(process) else { throw CancellationError() }
-            try process.run()
+            try controller.run(process)
             process.waitUntilExit()
             if process.terminationReason == .uncaughtSignal {
               throw CancellationError()

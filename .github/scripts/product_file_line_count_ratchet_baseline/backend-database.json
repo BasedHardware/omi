@@ -2,7 +2,7 @@
   "files": {
     "backend/database/conversations.py": 1729,
     "backend/database/memory_apply_store.py": 1912,
-    "backend/database/users.py": 2098
+    "backend/database/users.py": 2093
   },
   "raise_justifications": {
     "backend/database/conversations.py": "Chat-first capture archive filtering and the #9809 orphaned in_progress selection belong beside the shared conversation query and cursor invariants; extraction would duplicate their ordered query contracts. Null-aware user-field preservation and folder_user_set marker so AI folder assignment does not clobber stub nulls or explicit user unfile.",

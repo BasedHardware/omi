@@ -404,6 +404,37 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     ]
 
 
+def test_background_wipe_defers_completion_for_late_vm_cleanup(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [],
+                'vectors_deleted': 0,
+                'recordings_deleted': 0,
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock(return_value=False))
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+
+def test_gce_project_uses_deployed_google_cloud_project(monkeypatch):
+    for name in ('GCE_PROJECT_ID', 'FIREBASE_PROJECT_ID', 'GCP_PROJECT_ID'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'deployed-project')
+
+    assert account_deletion._gce_project_id() == 'deployed-project'
+
+
 def test_background_wipe_user_data_swallows_failures(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock(side_effect=Exception('twilio down')))

@@ -14,6 +14,28 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from routers import desktop_agent_vm
 
 
+def test_vm_publish_transaction_refuses_deletion_admitted_before_commit():
+    deletion = type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'wipe_status': 'running'}})()
+
+    class Ref:
+        def __init__(self, snapshot):
+            self.snapshot = snapshot
+            self.reads = 0
+
+        def get(self, transaction=None):
+            self.reads += 1
+            return self.snapshot
+
+    deletion_ref = Ref(deletion)
+    user_ref = Ref(type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'agentVm': {}}})())
+    transaction = type('Transaction', (), {'set': lambda *args, **kwargs: None})()
+    raw = getattr(desktop_agent_vm._set_vm_if_current_txn, 'to_wrap', desktop_agent_vm._set_vm_if_current_txn)
+
+    assert raw(transaction, deletion_ref, user_ref, 'vm', 'token', 'ready', '34.1.2.3', 'zone') is False
+    assert deletion_ref.reads == 1
+    assert user_ref.reads == 0
+
+
 @pytest.mark.asyncio
 async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     vm = {"vmName": "omi-agent-user", "ip": "1.2.3.4", "authToken": "omi-token", "status": "ready"}

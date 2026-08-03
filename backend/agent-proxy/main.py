@@ -37,7 +37,7 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.account_deletion_access import account_deletion_blocks_access, normalize_account_deletion_status
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 logger = logging.getLogger(__name__)
 
@@ -817,7 +817,21 @@ async def agent_ws(websocket: WebSocket):
         return
 
     try:
-        deletion_status = await run_blocking(db_executor, _get_account_deletion_status, uid)
+        await _require_account_deletion_access_async(uid)
+    except AccountDeletionAccessBlocked:
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "account_deletion_in_progress",
+                "retryable": False,
+                "message": "Account deletion is in progress.",
+            },
+        )
+        await _close_client(websocket, uid, 4005, "Account deletion in progress")
+        return
     except Exception:
         logger.error("[agent-proxy] deletion fence unavailable for uid=%s", uid, exc_info=True)
         await websocket.accept()
@@ -833,21 +847,6 @@ async def agent_ws(websocket: WebSocket):
         )
         await _close_client(websocket, uid, 1013, "Account state unavailable")
         return
-    if account_deletion_blocks_access(deletion_status):
-        await websocket.accept()
-        await _send_startup_event(
-            websocket,
-            uid,
-            {
-                "type": "error",
-                "code": "account_deletion_in_progress",
-                "retryable": False,
-                "message": "Account deletion is in progress.",
-            },
-        )
-        await _close_client(websocket, uid, 4005, "Account deletion in progress")
-        return
-
     # Look up the user's agent VM and data protection level
     vm, data_protection_level = await run_blocking(db_executor, _get_user_context, uid)
     if not vm:

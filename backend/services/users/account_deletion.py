@@ -54,6 +54,15 @@ ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
+def _gce_project_id() -> str | None:
+    return (
+        os.getenv('GCE_PROJECT_ID')
+        or os.getenv('GOOGLE_CLOUD_PROJECT')
+        or os.getenv('FIREBASE_PROJECT_ID')
+        or os.getenv('GCP_PROJECT_ID')
+    )
+
+
 def delete_agent_vm_for_account(uid: str) -> None:
     """Delete the owner VM before the Firestore pointer becomes unreachable.
 
@@ -64,7 +73,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
     vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
     if not isinstance(vm, dict) or not vm.get('vmName'):
         return
-    project = os.getenv('GCE_PROJECT_ID') or os.getenv('FIREBASE_PROJECT_ID') or os.getenv('GCP_PROJECT_ID')
+    project = _gce_project_id()
     if not project:
         raise RuntimeError('GCE project is not configured for account-deletion VM cleanup')
     vm_name = str(vm['vmName'])
@@ -336,9 +345,12 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         return False
     else:
         try:
-            users_db.mark_user_deletion_wipe_completed(uid)
+            if users_db.mark_user_deletion_wipe_completed(uid) is False:
+                logger.warning('delete_account completion deferred for outstanding provider cleanup')
+                return False
         except Exception as e:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
+            return False
         required_failures, best_effort_failures = _purge_failures(purge_result)
         purge_result_dict = purge_result
         _emit_deletion_telemetry(
