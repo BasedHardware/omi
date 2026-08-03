@@ -1622,8 +1622,16 @@ async def mcp_authorize_consent(
     code_challenge_method: Optional[str] = Form(None),
 ):
     try:
-        _, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        _, scopes = await run_blocking(
+            db_executor,
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
         decoded_token: Dict[str, Any] = await run_blocking(
             critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
