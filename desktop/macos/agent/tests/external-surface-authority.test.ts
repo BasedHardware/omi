@@ -370,6 +370,11 @@ describe("external realtime surface authority", () => {
       toolInput: { type: "microphone" },
       originatingPrompt: "Check Slack's microphone permission",
     })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
+    expect(routeExternalSurfaceTool({
+      toolName: "check_permission_status",
+      toolInput: { type: "contacts" },
+      originatingPrompt: "Check Slack's contacts access",
+    })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
   });
 
   it("canonicalizes screen-share vocabulary to Omi's Screen Recording permission", () => {

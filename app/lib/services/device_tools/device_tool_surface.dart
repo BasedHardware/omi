@@ -218,6 +218,8 @@ class DeviceToolSurface {
 
   Future<DeviceToolResult> contactsPermissionStatus() => _invoke('contactsPermissionStatus', null);
 
+  Future<DeviceToolResult> cancelPendingInteraction() => _invoke('cancelPendingCompose', null);
+
   Future<DeviceToolResult> requestContactsPermission() => _invoke('requestContactsPermission', null);
 
   static List<String> _recipients(dynamic raw) {

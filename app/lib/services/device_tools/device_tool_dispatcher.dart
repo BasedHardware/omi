@@ -111,7 +111,7 @@ class DeviceToolDispatcher {
 
     DeviceToolResult result;
     try {
-      result = await _surface.execute(request.tool, request.arguments);
+      result = await _executeWithOwnerBoundary(request.tool, request.arguments, owner);
     } catch (e) {
       result = DeviceToolResult.failure('execution_failed', e.toString());
     }
@@ -124,6 +124,28 @@ class DeviceToolDispatcher {
     await _postResult(request.callId, result);
   }
 
+  Future<DeviceToolResult> _executeWithOwnerBoundary(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? owner,
+  ) async {
+    final execution = _surface.execute(tool, arguments);
+    while (true) {
+      final completed = await Future.any<Object?>([
+        execution,
+        Future<Object?>.delayed(const Duration(milliseconds: 100)),
+      ]);
+      if (completed is DeviceToolResult) return completed;
+      if (_currentOwnerUid() == owner) continue;
+      try {
+        await _surface.cancelPendingInteraction();
+      } catch (error) {
+        Logger.error('Could not cancel device tool after an account change: $error');
+      }
+      return await execution;
+    }
+  }
+
   Future<void> _postResult(String callId, DeviceToolResult result) async {
     try {
       final response = await makeApiCall(
@@ -131,6 +153,8 @@ class DeviceToolDispatcher {
         headers: {'Content-Type': 'application/json'},
         method: 'POST',
         body: jsonEncode({'result': result.payload}),
+        timeout: const Duration(seconds: 10),
+        retries: 0,
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Device tool result rejected: status=${response?.statusCode}');

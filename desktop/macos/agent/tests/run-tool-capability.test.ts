@@ -345,6 +345,40 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("requires a persisted desktop approval before authorizing sensitive tools", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "list_message_chats",
+      toolInput: {},
+    };
+
+    expectCode(() => broker.authorize({ ...base, invocationId: "without-approval" }), "approval_required");
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      capability: "desktop.messaging.read",
+      operation: "list_message_chats",
+      resourcePattern: "*",
+      effect: "allow",
+      source: "user",
+    });
+    const authorized = broker.authorize({ ...base, invocationId: "with-approval" });
+    expect(authorized.canonicalToolName).toBe("list_message_chats");
+    store.close();
+  });
+
   it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
     // Regression: realtime-voice runs relay Swift-executed voice tools that no
     // chat adapter advertises. An adapter-only allowlist rejected every such

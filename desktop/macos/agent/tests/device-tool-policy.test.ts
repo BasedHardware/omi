@@ -107,6 +107,23 @@ describe("on-device tool surface policy", () => {
     ).toBe("dispatch_required");
   });
 
+  it("does not let an unscoped send grant cover any recipient", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "send_message",
+      selectedBundles: ["desktop.messaging.send"],
+      resourceRef: "+15550100",
+      grants: [
+        {
+          bundle: "desktop.messaging.send",
+          expiresAtMs: Date.now() + HOUR_MS,
+          effect: "allow",
+        },
+      ],
+    });
+
+    expect(result.decision).toBe("dispatch_required");
+  });
+
   it("stops honoring a send grant once it expires", () => {
     const nowMs = 1_000_000;
     const result = evaluateDesktopToolPolicy({

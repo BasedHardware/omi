@@ -9,6 +9,12 @@ import {
   toolsForSurface,
 } from "./omi-tool-manifest.js";
 import { executionRoleAllowsTool, type AgentExecutionRole } from "./execution-policy.js";
+import {
+  desktopToolPolicyInternals,
+  evaluateDesktopToolPolicy,
+  type DesktopCoordinatorBundle,
+  type DesktopToolGrant,
+} from "./desktop-tool-policy.js";
 import type { AgentEvent, AgentStore, AttemptStatus, RunStatus } from "./types.js";
 import type { RunMode } from "./types.js";
 import {
@@ -100,6 +106,7 @@ export type RunToolCapabilityRejectCode =
   | "profile_changed"
   | "tool_not_manifested"
   | "tool_not_allowed"
+  | "approval_required"
   | "invocation_replayed";
 
 export class RunToolCapabilityRejectedError extends Error {
@@ -201,6 +208,35 @@ function text(value: unknown): string {
 function number(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const DESKTOP_APPROVAL_TOOLS = new Set([
+  "list_message_chats",
+  "read_message_history",
+  "list_mail_messages",
+  "send_message",
+  "run_applescript",
+]);
+
+function toolResourceRef(toolName: string, input: Record<string, unknown>): string | undefined {
+  const explicit = typeof input.resource_ref === "string" ? input.resource_ref.trim() : "";
+  if (explicit) return explicit;
+  if (toolName === "send_message") {
+    const recipient = typeof input.to === "string" ? input.to.trim() : "";
+    return recipient || undefined;
+  }
+  if (toolName === "run_applescript") {
+    const script = typeof input.script === "string" ? input.script : "";
+    return script || undefined;
+  }
+  if (toolName === "read_message_history") {
+    const chatId = typeof input.chat_id === "string" || typeof input.chat_id === "number"
+      ? String(input.chat_id)
+      : "";
+    const handle = typeof input.handle === "string" ? input.handle.trim() : "";
+    return chatId || handle || undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -393,6 +429,22 @@ export class RunToolCapabilityBroker {
       this.reject("tool_not_allowed", "Execution role cannot invoke this tool");
     }
 
+    if (DESKTOP_APPROVAL_TOOLS.has(tool.name)) {
+      const descriptor = desktopToolPolicyInternals.descriptorFromToolName(tool.name);
+      if (!descriptor) this.reject("tool_not_manifested", "Desktop approval metadata is missing");
+      const grants = this.desktopToolGrants(capability.sessionId, capability.runId);
+      const policy = evaluateDesktopToolPolicy({
+        toolName: tool.name,
+        selectedBundles: descriptor.bundles,
+        operation: tool.name,
+        resourceRef: toolResourceRef(tool.name, input.toolInput),
+        grants,
+      });
+      if (policy.decision !== "allow") {
+        this.reject("approval_required", `Desktop tool approval was not granted: ${policy.reason}`);
+      }
+    }
+
     const inputHash = canonicalInputHash(input.toolInput);
     const effectClass: ToolInvocationEffectClass = tool.annotations.readOnlyHint === true
       ? "read_only"
@@ -451,6 +503,35 @@ export class RunToolCapabilityBroker {
       canonicalToolName: tool.name,
       tool,
     };
+  }
+
+  private desktopToolGrants(sessionId: string, runId: string): DesktopToolGrant[] {
+    return this.store.allRows(
+      `SELECT capability, operation, resource_pattern, effect, expires_at_ms
+         FROM grants
+        WHERE session_id = ?
+          AND (run_id IS NULL OR run_id = ?)
+          AND revoked_at_ms IS NULL`,
+      [sessionId, runId],
+    ).flatMap((row) => {
+      const capability = typeof row.capability === "string" ? row.capability : "";
+      const bundle = capability as DesktopCoordinatorBundle;
+      if (![
+        "desktop.messaging.read",
+        "desktop.mail.read",
+        "desktop.messaging.send",
+        "desktop.automation.act",
+      ].includes(bundle)) return [];
+      return [{
+        bundle,
+        operation: typeof row.operation === "string" ? row.operation : undefined,
+        resourceRef: typeof row.resource_pattern === "string" && row.resource_pattern !== "*"
+          ? row.resource_pattern
+          : undefined,
+        expiresAtMs: typeof row.expires_at_ms === "number" ? row.expires_at_ms : Number.POSITIVE_INFINITY,
+        effect: row.effect === "allow" ? "allow" : "deny",
+      }];
+    });
   }
 
   authorizeRelayInvocation(input: {

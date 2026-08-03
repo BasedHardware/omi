@@ -78,7 +78,28 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
   "automation access",
   "full disk access",
   "full disk access permission",
+  "contacts",
+  "contacts permission",
+  "contacts access",
+  "address book",
+  "calendars",
+  "calendar permission",
+  "calendars permission",
+  "calendar access",
+  "reminders",
+  "reminders permission",
+  "reminders access",
+  "photos",
+  "photo library",
+  "photos permission",
+  "photos access",
 ]);
+
+const PERMISSION_PHRASE_PATTERN = PERMISSION_TYPES
+  .flatMap(({ phrases }) => phrases)
+  .sort((left, right) => right.length - left.length)
+  .map((phrase) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
 
 const DIRECTED_PROVIDER_TARGETS = [
   { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
@@ -363,10 +384,10 @@ function hasExplicitExternalPermissionTarget(
   for (const narrative of [originatingPrompt, objective]) {
     const normalized = narrative.toLowerCase();
     const candidates = [
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+needs\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)(?:\s+permissions?|\s+access)?\s+for\s+([a-z0-9._ -]+?)(?:[?.!,]|$)/g),
-      ...captures(normalized, /\b(?:grant|allow|enable|give|check)\s+([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)['’]s\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+needs\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:${PERMISSION_PHRASE_PATTERN})(?:\\s+permissions?|\\s+access)?\\s+for\\s+([a-z0-9._ -]+?)(?:[?.!,]|$)`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:grant|allow|enable|give|check)\\s+([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
     ];
     for (const candidate of candidates) {
       const cleaned = normalizeTarget(candidate);

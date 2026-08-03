@@ -493,6 +493,26 @@ class ChatToolExecutor {
     }
   }
 
+  nonisolated static func awaitCancellableAsyncRequest<Value: Sendable>(
+    _ operation: @escaping @Sendable () async -> Value
+  ) async -> Value? {
+    let state = CancellablePermissionContinuation<Value>()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        state.install(continuation)
+        guard !Task.isCancelled else {
+          state.finish(nil)
+          return
+        }
+        Task {
+          state.finish(await operation())
+        }
+      }
+    } onCancel: {
+      state.finish(nil)
+    }
+  }
+
   nonisolated static func authorizedOwnerChangedResult() -> String {
     #"{"ok":false,"error":{"code":"authorized_execution_owner_changed","message":"The signed-in account changed while the authorized tool was executing."}}"#
   }
@@ -519,10 +539,12 @@ class ChatToolExecutor {
       ownerIsCurrent ?? {
         isExpectedOwnerCurrent($0, authorizationSnapshot: authorizationSnapshot)
       }
-    guard validateOwner(expectedOwnerID) else { return nil }
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
     await prepare()
-    guard validateOwner(expectedOwnerID) else { return nil }
-    return await effect()
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
+    let value = await effect()
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
+    return value
   }
 
   // MARK: - Physical Execution Preconditions
@@ -1922,7 +1944,10 @@ class ChatToolExecutor {
 
     default:
       if deviceToolPermissionTypes.contains(type) {
-        return await requestDeviceToolPermission(type)
+        return await requestDeviceToolPermission(
+          type,
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       }
       return permissionJSON([
         "ok": false,
@@ -1957,7 +1982,8 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
-    let allStatuses = statuses.merging(deviceToolPermissionStatuses()) { existing, _ in existing }
+    var allStatuses = statuses.merging(deviceToolPermissionStatuses()) { existing, _ in existing }
+    allStatuses["full_disk_access"] = fullDiskAccessStatus()
     if let type = permissionType(from: args), allPermissionTypes.contains(type) {
       return permissionJSON([
         "ok": true,

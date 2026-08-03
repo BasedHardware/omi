@@ -79,12 +79,12 @@ enum ContactsReaderService {
   }
 
   static func requestAccess() async -> Bool {
-    let store = CNContactStore()
-    return await withCheckedContinuation { continuation in
+    return await ChatToolExecutor.awaitCancellablePermissionRequest { completion in
+      let store = CNContactStore()
       store.requestAccess(for: .contacts) { granted, _ in
-        continuation.resume(returning: granted)
+        completion(granted)
       }
-    }
+    } ?? false
   }
 
   static func search(query: String, limit: Int) throws -> [ContactRecord] {

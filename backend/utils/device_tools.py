@@ -138,6 +138,15 @@ def device_tool_inflight_key(uid: str, call_id: str) -> str:
 # contacts. Anything larger is not a result this surface produces.
 MAX_DEVICE_TOOL_RESULT_BYTES = 64 * 1024
 
+_STORE_DEVICE_TOOL_RESULT_SCRIPT = """
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+redis.call('SETEX', KEYS[2], ARGV[1], ARGV[2])
+redis.call('DEL', KEYS[1])
+return 1
+"""
+
 
 class UnknownDeviceToolCall(Exception):
     """Raised when a result arrives for a call that is not in flight."""
@@ -181,9 +190,16 @@ def store_device_tool_result(uid: str, call_id: str, payload: dict) -> None:
     serialized = json.dumps(payload)
     if len(serialized.encode('utf-8')) > MAX_DEVICE_TOOL_RESULT_BYTES:
         raise ValueError('Device tool result too large')
-    if not claim_device_tool_inflight(uid, call_id):
+    stored = redis_client.eval(
+        _STORE_DEVICE_TOOL_RESULT_SCRIPT,
+        2,
+        device_tool_inflight_key(uid, call_id),
+        device_tool_result_key(uid, call_id),
+        DEVICE_TOOL_RESULT_TTL_SECONDS,
+        serialized,
+    )
+    if not stored:
         raise UnknownDeviceToolCall(call_id)
-    redis_client.setex(device_tool_result_key(uid, call_id), DEVICE_TOOL_RESULT_TTL_SECONDS, serialized)
 
 
 def _read_device_tool_result(uid: str, call_id: str) -> Optional[dict]:

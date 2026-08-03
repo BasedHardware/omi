@@ -52,6 +52,13 @@ class FakeRedis:
         # on that count to be atomic.
         return 1 if self.store.pop(key, None) is not None else 0
 
+    def eval(self, _script, _numkeys, marker_key, result_key, _ttl, value):
+        if marker_key not in self.store:
+            return 0
+        self.store[result_key] = value
+        self.store.pop(marker_key)
+        return 1
+
 
 @pytest.fixture
 def fake_redis():
