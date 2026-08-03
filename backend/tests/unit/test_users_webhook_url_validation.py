@@ -124,7 +124,7 @@ def test_missing_url_returns_422():
 def test_valid_url_sets():
     with (
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
-        patch.object(users_mod, 'disable_user_webhook_db'),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
     ):
@@ -135,6 +135,7 @@ def test_valid_url_sets():
     setdb.assert_called_once()
     enable.assert_called_once_with('u1', 'audio_bytes')
     reset_health.assert_called_once_with('u1', 'audio_bytes')
+    disable.assert_not_called()
 
 
 def test_empty_url_disables_without_resetting_health():

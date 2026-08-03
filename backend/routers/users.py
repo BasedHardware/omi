@@ -480,14 +480,12 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    set_user_webhook_db(uid, wtype, url)
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     else:
-        set_user_webhook_db(uid, wtype, url)
         enable_user_webhook_db(uid, wtype)
         record_dev_webhook_success(uid, wtype)
-        return {'status': 'ok'}
-    set_user_webhook_db(uid, wtype, url)
     return {'status': 'ok'}
 
 
