@@ -9,11 +9,12 @@ by Bun. Sibling web surfaces live in `web/admin`, `web/frontend`,
 ```bash
 cd web/app
 bun install     # the Dockerfile uses the same bun.lock
-bun run dev     # generates the Firebase service worker, then moonshine dev
+bun run dev     # full build, serve, rebuild on change (scripts/dev.ts)
+# dev runs the full build pipeline, not `moonshine dev`: build:assets injects
+# NEXT_PUBLIC_* and writes the real server, and the app boots blank without it.
 ```
 
-Use Bun, not npm or pnpm: `Dockerfile` installs from `bun.lock`, and a competing
-lockfile changes what the production image installs.
+Use Bun, not npm or pnpm: `Dockerfile` installs from `bun.lock`.
 
 ## Quality Gates
 
