@@ -55,6 +55,11 @@ class ChannelStatusResponse(BaseModel):
     phone_registered: bool
 
 
+class ChannelRevokeResponse(BaseModel):
+    status: str
+    revoked: int
+
+
 def _channel_or_400(channel: str) -> str:
     normalized = channel.strip().lower()
     if normalized not in channels_db.CHANNELS:
@@ -110,13 +115,13 @@ async def get_channel_status(
     )
 
 
-@router.delete('/v1/channels/{channel}', tags=['channels'])
+@router.delete('/v1/channels/{channel}', response_model=ChannelRevokeResponse, tags=['channels'])
 async def revoke_channel(
     channel: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'channels:unlink'))
-) -> Dict[str, Any]:
+) -> ChannelRevokeResponse:
     channel = _channel_or_400(channel)
     count = await run_blocking(db_executor, channels_db.revoke_channel, uid, channel)
-    return {'status': 'ok', 'revoked': count}
+    return ChannelRevokeResponse(status='ok', revoked=count)
 
 
 async def _send_and_record(
