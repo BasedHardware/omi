@@ -34,23 +34,25 @@ async def _wait_for_account_deletion_recheck() -> None:
     await asyncio.sleep(_ACCOUNT_DELETION_RECHECK_SECONDS)
 
 
-async def _watch_account_deletion(websocket: WebSocket, uid: str) -> None:
+async def _watch_account_deletion(request: ListenRequest) -> None:
     """Close an accepted listen socket when its durable owner fence changes."""
     while True:
         await _wait_for_account_deletion_recheck()
         try:
-            await run_blocking(db_executor, auth.enforce_account_deletion_ws_access, uid)
+            await run_blocking(db_executor, auth.enforce_account_deletion_ws_access, request.uid)
         except WebSocketException as error:
+            request.owner_persistence_blocked.set()
             try:
-                await websocket.close(code=error.code, reason=error.reason)
-            except RuntimeError:
+                await request.websocket.close(code=error.code, reason=error.reason)
+            except Exception:
                 pass
             return
         except Exception:
-            logger.error('listen deletion fence unavailable uid=%s', uid, exc_info=True)
+            request.owner_persistence_blocked.set()
+            logger.error('listen deletion fence unavailable uid=%s', request.uid, exc_info=True)
             try:
-                await websocket.close(code=1013, reason='Account deletion state unavailable; retry later')
-            except RuntimeError:
+                await request.websocket.close(code=1013, reason='Account deletion state unavailable; retry later')
+            except Exception:
                 pass
             return
 
@@ -58,13 +60,15 @@ async def _watch_account_deletion(websocket: WebSocket, uid: str) -> None:
 async def _run_listen_session_with_deletion_fence(request: ListenRequest) -> None:
     session = asyncio.create_task(run_listen_session(request), name=f'listen:{request.uid}:session')
     deletion_watcher = asyncio.create_task(
-        _watch_account_deletion(request.websocket, request.uid),
+        _watch_account_deletion(request),
         name=f'listen:{request.uid}:deletion-fence',
     )
     done, pending = await asyncio.wait((session, deletion_watcher), return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
+    if deletion_watcher in done:
+        await asyncio.gather(deletion_watcher, return_exceptions=True)
     if session in done:
         await session
 

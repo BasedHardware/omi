@@ -103,8 +103,8 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
     assert calls == [
-        ('feedback', 'uid1', 'unused', 'details'),
         ('wipe_intent', 'uid1'),
+        ('feedback', 'uid1', 'unused', 'details'),
         ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
 
@@ -243,12 +243,14 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
         account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(side_effect=Exception('firestore down'))
     )
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    feedback = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'set_user_deletion_feedback', feedback)
     monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
 
     try:
-        account_deletion.start_account_deletion('uid1')
+        account_deletion.start_account_deletion('uid1', reason='unused')
     except Exception as exc:
         assert 'intent' in str(exc).lower() or 'deletion-wipe' in str(exc).lower()
     else:
@@ -256,6 +258,7 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
 
     # Firebase user must NOT be deleted if the intent failed.
     account_deletion.auth.delete_account.assert_not_called()
+    feedback.assert_not_called()
     submit.assert_not_called()
 
 

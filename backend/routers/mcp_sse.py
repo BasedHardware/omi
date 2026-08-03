@@ -1650,20 +1650,20 @@ async def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
-
-    grant = await run_blocking(db_executor, mcp_oauth_db.create_or_update_grant, uid, client_id, resource, scopes)
-    code = await run_blocking(
-        db_executor,
-        mcp_oauth_db.issue_authorization_code,
-        uid,
-        grant["id"],
-        client_id,
-        redirect_uri,
-        resource,
-        scopes,
-        cast(str, code_challenge),
-    )
+    try:
+        _, code = await run_blocking(
+            db_executor,
+            mcp_oauth_db.create_grant_and_authorization_code_if_allowed,
+            uid,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            cast(str, code_challenge),
+        )
+    except mcp_oauth_db.AccountDeletionAccessBlocked as exc:
+        detail = {"code": "account_deletion_in_progress", "status": str(exc), "retryable": False}
+        raise HTTPException(status_code=403, detail=detail) from exc
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 

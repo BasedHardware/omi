@@ -1,9 +1,8 @@
 import asyncio
-from types import SimpleNamespace
-
 from fastapi import WebSocketException
 
 from routers import transcribe
+from routers.listen.contracts import ListenRequest
 
 
 def test_active_listen_session_closes_and_cancels_when_deletion_is_admitted(monkeypatch):
@@ -40,9 +39,10 @@ def test_active_listen_session_closes_and_cancels_when_deletion_is_admitted(monk
     monkeypatch.setattr(transcribe, '_wait_for_account_deletion_recheck', immediate_recheck)
     monkeypatch.setattr(transcribe, 'run_blocking', direct_run_blocking)
     monkeypatch.setattr(transcribe.auth, 'enforce_account_deletion_ws_access', deletion_blocked)
-    request = SimpleNamespace(uid='uid', websocket=websocket)
+    request = ListenRequest(uid='uid', websocket=websocket)
 
     asyncio.run(transcribe._run_listen_session_with_deletion_fence(request))
 
     assert websocket.closes == [(4005, 'Account deletion in progress')]
     assert session_cancelled.is_set()
+    assert request.owner_persistence_blocked.is_set()

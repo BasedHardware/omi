@@ -441,12 +441,6 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
-    if reason or reason_details:
-        try:
-            users_db.set_user_deletion_feedback(uid, reason, reason_details)
-        except Exception as e:
-            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
-
     # Persist the authoritative, actionable intent before dispatch. This state
     # is enough for reconciliation to recover a failed queue handoff, while the
     # Cloud Tasks handler claim fences all destructive work. If either write or
@@ -460,6 +454,11 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     wipe_job_id = wipe_intent.get('wipe_job_id') if isinstance(wipe_intent, dict) else None
     if not isinstance(wipe_job_id, str) or not wipe_job_id:
         raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
+    if reason or reason_details:
+        try:
+            users_db.set_user_deletion_feedback(uid, reason, reason_details)
+        except Exception as e:
+            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
     dispatch_claimed = wipe_intent.get('dispatch_claimed') is True if isinstance(wipe_intent, dict) else False
     if not dispatch_claimed:
         logger.info('delete_account joined existing durable deletion intent')

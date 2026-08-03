@@ -30,6 +30,10 @@ class AccountDeletionAccessBlocked(RuntimeError):
     pass
 
 
+class AgentVmCreateOutcomeUnknown(RuntimeError):
+    """The provider may have accepted a create request before the failure."""
+
+
 class AgentVmResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -306,18 +310,24 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
         },
     }
     token = await run_blocking(db_executor, _get_access_token)
-    response = await _gce_request("POST", url, token, body)
+    try:
+        response = await _gce_request("POST", url, token, body)
+    except Exception as exc:
+        raise AgentVmCreateOutcomeUnknown("GCE create request outcome is unknown") from exc
     response.raise_for_status()
     operation = response.json().get("name")
     if not operation:
-        raise RuntimeError("GCE create response omitted operation name")
-    await _operation(project, _ZONE, operation)
-    _, instance = await _instance(project, _ZONE, vm_name)
+        raise AgentVmCreateOutcomeUnknown("GCE create response omitted operation name")
+    try:
+        await _operation(project, _ZONE, operation)
+        _, instance = await _instance(project, _ZONE, vm_name)
+    except Exception as exc:
+        raise AgentVmCreateOutcomeUnknown("GCE create completion is unknown") from exc
     if instance is None:
-        raise RuntimeError("GCE created VM is unavailable")
+        raise AgentVmCreateOutcomeUnknown("GCE created VM is unavailable")
     ip = _ip(instance)
     if ip is None:
-        raise RuntimeError("GCE created VM has no usable IP address")
+        raise AgentVmCreateOutcomeUnknown("GCE created VM has no usable IP address")
     return ip
 
 
@@ -359,25 +369,42 @@ async def _delete_late_vm_or_record(uid: str, project: str, vm_name: str, zone: 
         raise
 
 
+async def _cleanup_possible_late_vm(uid: str, project: str, vm_name: str, zone: str) -> None:
+    """Delete one possibly-created VM, durably recording a provider failure."""
+    try:
+        await _delete_late_vm_or_record(uid, project, vm_name, zone)
+    except Exception as exc:
+        logger.error("Late Agent VM cleanup deferred for uid=%s: %s", uid, exc)
+
+
 async def _provision_background(
     uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str
 ) -> None:
+    if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+        logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
+        return
     try:
-        if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
-            logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
-            return
         ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
-        if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
-            logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
-            await _delete_late_vm_or_record(uid, project, vm_name, _ZONE)
-            return
-        updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
-        if not updated:
-            await _delete_late_vm_or_record(uid, project, vm_name, _ZONE)
-    except Exception as exc:
+    except AgentVmCreateOutcomeUnknown as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
+        if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+            await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
+            return
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
+        return
+    except Exception as exc:
+        logger.error("Agent VM provisioning failed before provider acceptance for uid=%s: %s", uid, exc)
         if await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
             await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
+        return
+
+    if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+        logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
+        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
+        return
+    updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
+    if not updated:
+        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
 
 
 async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> None:
@@ -429,8 +456,9 @@ async def provision_agent_vm(
         bucket = _gcs_bucket()
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    vm_name = f"omi-agent-{hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]}"
-    auth_token = f"omi-{uuid.uuid4()}"
+    generation = uuid.uuid4().hex
+    vm_name = f"omi-agent-{hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]}-{generation[:8]}"
+    auth_token = f"omi-{generation}"
     created_at = _now()
     candidate = {
         "vmName": vm_name,
