@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PAPER — {{ dateline }}</title>
+    <style>
+      /* One sheet. Warm paper, soft-black ink, hairline rules, one warm accent.
+         Type sizes follow the premium-editorial convention: body 19/1.65, measure
+         ~62ch, headline capped well under 48px — restraint at the top of the scale is
+         what reads as confidence. No boxes, no shadows, no radius in the reading flow. */
+      @page {
+        size: A4;
+        margin: 20mm;
+      }
+
+      :root {
+        --ink: #333333; /* body ink is never pure black */
+        --ink-strong: #131313; /* masthead and quoted words only */
+        --meta: #757575;
+        --paper: #fffaf1; /* warm, not white */
+        --rule: #e2ded4; /* hairline, near-paper */
+        --rule-strong: #131313; /* the masthead rule, and only that */
+        --accent: #f09000; /* the single warm accent, used in exactly one place */
+        --serif: 'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino,
+          'Book Antiqua', Georgia, serif;
+        --mono: ui-monospace, 'SF Mono', 'Iosevka', 'Roboto Mono', Menlo, Consolas, monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 19px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+        font-kerning: normal;
+        text-rendering: optimizeLegibility;
+      }
+
+      .sheet {
+        max-width: 38rem; /* ~62ch at 19px */
+        margin: 0 auto;
+        padding: 4.5rem 1.5rem 3rem;
+      }
+
+      /* ---- masthead ---- */
+      .masthead {
+        text-align: center;
+        color: var(--ink-strong);
+        font-size: clamp(2.75rem, 13vw, 4rem);
+        line-height: 1;
+        font-weight: 400;
+        letter-spacing: 0.16em;
+        text-indent: 0.16em; /* optical centring against the trailing letterspace */
+      }
+
+      /* The dateline is furniture, not prose — second voice, mono. */
+      .dateline {
+        margin-top: 1.25rem;
+        padding: 0.7rem 0;
+        border-top: 1px solid var(--rule-strong);
+        border-bottom: 1px solid var(--rule-strong);
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        letter-spacing: 0.14em;
+        color: var(--meta);
+        text-transform: uppercase;
+      }
+
+      /* ---- the lede ---- */
+      .lede {
+        margin-top: 3.5rem;
+      }
+
+      .lede h1 {
+        color: var(--ink-strong);
+        font-size: clamp(1.875rem, 6.5vw, 2.5rem); /* ceiling 40px, well under 48 */
+        line-height: 1.12;
+        font-weight: 400;
+        letter-spacing: -0.019em;
+        text-wrap: balance;
+      }
+
+      .lede p {
+        margin-top: 1.5rem;
+      }
+
+      /* ---- blocks ---- */
+      /* Divider space is 1.5x paragraph space — the ratio does the work. */
+      section {
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--rule);
+      }
+
+      h2 {
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        font-weight: 400;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--meta);
+        margin-bottom: 1.5rem;
+      }
+
+      p + p {
+        margin-top: 1rem;
+      }
+
+      .loop + .loop {
+        margin-top: 1.75rem;
+      }
+
+      .loop p,
+      .lede p {
+        text-wrap: pretty;
+      }
+
+      .stamp {
+        display: block;
+        margin-top: 0.35rem;
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--meta);
+      }
+
+      /* The one place the paper raises its voice: your own words, quoted back at you.
+         Also the only appearance of the accent. */
+      blockquote {
+        margin: 1.1rem 0 1.4rem;
+        padding-left: 1.2rem;
+        border-left: 3px solid var(--accent);
+        color: var(--ink-strong);
+        font-style: italic;
+      }
+
+      .desk-name {
+        color: var(--ink-strong);
+      }
+
+      .stamp + p {
+        margin-top: 0.75rem;
+      }
+
+      .margin-note {
+        font-style: italic;
+      }
+
+      /* ---- the hard stop ---- */
+      .end {
+        margin-top: 4rem;
+        padding-top: 1.4rem;
+        border-top: 1px solid var(--rule-strong);
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        color: var(--meta);
+      }
+
+      .quiet {
+        margin-top: 3rem;
+        text-align: center;
+        color: var(--meta);
+      }
+
+      @media print {
+        :root {
+          --paper: #ffffff;
+        }
+        .sheet {
+          padding: 0;
+          max-width: none;
+        }
+        body {
+          font-size: 11pt;
+          line-height: 1.5;
+        }
+        section {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <div class="masthead">PAPER</div>
+        <div class="dateline">
+          {% if reader %}{{ reader }} &middot; {% endif %}{{ dateline }} &middot; No. {{ edition.issue_number }}
+        </div>
+      </header>
+
+      {% if edition.lede %}
+        <div class="lede">
+          <h1>{{ edition.lede.headline }}</h1>
+          {% if edition.lede.body %}<p>{{ edition.lede.body }}</p>{% endif %}
+        </div>
+      {% endif %}
+
+      {% if edition.open_loops %}
+        <section>
+          <h2>Open Loops</h2>
+          {% for entry in edition.open_loops %}
+            <div class="loop">
+              <p>{{ entry.question }}</p>
+              <span class="stamp">{{ age(entry.days_open) }}</span>
+            </div>
+          {% endfor %}
+        </section>
+      {% endif %}
+
+      {% if edition.counterpoint %}
+        <section>
+          <h2>Counterpoint</h2>
+          <span class="stamp">Your position, {{ edition.counterpoint.days_asserted }} separate days</span>
+          <blockquote>{{ edition.counterpoint.position }}</blockquote>
+          <p>{{ edition.counterpoint.argument }}</p>
+        </section>
+      {% endif %}
+
+      {% if edition.desk %}
+        <section>
+          <h2>The Desk</h2>
+          {% for item in edition.desk %}
+            <p class="desk-name">{{ item.name }}</p>
+            <span class="stamp">Quiet {{ silence(item.days_since) }}</span>
+            {% if item.context %}<p>{{ item.context }}</p>{% endif %}
+          {% endfor %}
+        </section>
+      {% endif %}
+
+      {% if edition.margin %}
+        <section>
+          <h2>The Margin</h2>
+          <p class="margin-note">{{ edition.margin.insight }}</p>
+        </section>
+      {% endif %}
+
+      {% if edition.is_empty %}
+        <p class="quiet">Nothing to print today.</p>
+      {% endif %}
+
+      <div class="end">End of edition</div>
+    </div>
+  </body>
+</html>
