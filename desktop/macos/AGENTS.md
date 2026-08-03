@@ -5,7 +5,7 @@ OMI Desktop App for macOS (Swift)
 
 ## Logs & Debugging
 
-For SwiftUI/AppKit scroll jumps, sticking, nested-event routing, or fast-gesture failures, follow [`docs/swiftui-appkit-scroll-debugging.md`](docs/swiftui-appkit-scroll-debugging.md).
+For difficult SwiftUI/AppKit runtime bugs—stale views, lost input, layout loops, jumps, beachballs, or fast-interaction failures—follow [`docs/swiftui-appkit-runtime-debugging.md`](docs/swiftui-appkit-runtime-debugging.md).
 
 ### Local App Logs
 - **App log file**: `/private/tmp/omi.log` (production). Each non-production
