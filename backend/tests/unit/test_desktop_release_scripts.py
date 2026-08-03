@@ -627,6 +627,7 @@ def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
         for relative_path in (
             ".github/workflows/desktop_qualify_beta.yml",
             ".github/workflows/desktop_promote_beta.yml",
+            ".github/workflows/desktop_recover_beta.yml",
             ".github/scripts/check-desktop-auto-beta-candidate.py",
         ):
             target = root / relative_path
