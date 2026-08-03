@@ -37,6 +37,12 @@ def normalize_user_url(url: str) -> str:
     return normalized
 
 
+def _url_has_explicit_delimiters(text: str, start: int, end: int) -> bool:
+    if start == 0 or end >= len(text):
+        return False
+    return (text[start - 1], text[end]) in {('<', '>'), ('`', '`'), ('(', ')')}
+
+
 def _canonical_user_url(
     url: str, *, strip_trailing_punctuation: bool = True
 ) -> Optional[Tuple[str, str, str, str, str, str]]:
@@ -62,8 +68,14 @@ def extract_urls_from_text(
     """Return http(s) URLs found in *text*, preserving order and dropping duplicates."""
     urls: List[str] = []
     seen: Set[str] = set()
-    for match in USER_URL_PATTERN.findall(text or ''):
-        url = match.strip() if preserve_terminal_punctuation else normalize_user_url(match)
+    source = text or ''
+    for match in USER_URL_PATTERN.finditer(source):
+        raw_url = match.group(0).strip()
+        url = (
+            raw_url
+            if preserve_terminal_punctuation and _url_has_explicit_delimiters(source, match.start(), match.end())
+            else normalize_user_url(raw_url)
+        )
         if url and url not in seen:
             seen.add(url)
             urls.append(url)
