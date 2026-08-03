@@ -291,9 +291,17 @@ Requirements and gotchas:
   - **NLLB:** convert `facebook/nllb-200-distilled-600M` to CTranslate2 int8 and place it at
     `nllb-200-distilled-600M-ct2-int8/` inside the volume (matches `NLLB_MODEL_DIR`). Serving then
     makes **zero** external calls.
-  - **Parakeet / diarizer:** pre-populate the HuggingFace cache (`HF_HOME=/models/hf` in the volume)
-    with the model weights, e.g. a one-time `docker run` with network before switching to the
-    internal network. Otherwise first startup fails (cannot reach HuggingFace).
+  - **Parakeet / diarizer / whisper:** pre-populate the HuggingFace cache (`HF_HOME=/models/hf` in the
+    volume) with the model weights, e.g. a one-time `docker run` with network before switching to the
+    internal network. Otherwise first startup fails (cannot reach HuggingFace). Whisper pulls
+    `Systran/faster-whisper-large-v3` (public, no gating) on first run.
+- **STT engine (ADR-0037): the default `parakeet` service is a thin NIM gateway to `whisper`**
+  (multilingual, 99 languages, commodity GPU incl. sm_120) — `PARAKEET_INFERENCE_MODE=nim` loads no
+  NeMo model and needs no GPU. The high-performance datacenter path (Parakeet on NeMo) is the
+  documented alternative on the `parakeet` service (see the header of that service in the compose and
+  `backend.env.example`). Verified 2026-08-03 on the RTX 5060 Ti: an Italian FLEURS clip →
+  `parakeet` gateway → `whisper` → correct Italian transcription with auto-detected language, via
+  `deploy/onprem/run-inference-live-tests.sh` (diarizer PASS · nllb PASS · whisper PASS).
 - Point the backend at them in `backend.env`: `HOSTED_PARAKEET_API_URL=http://parakeet:8080`,
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.

@@ -129,6 +129,18 @@ services:
   #       HOSTED_PARAKEET_API_URL=http://parakeet:8080
   #       HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080
   #       HOSTED_TRANSLATION_API_URL=http://nllb:8080   + TRANSLATION_SERVICE_MODELS=nllb
+  # STT gateway. DEFAULT = thin gateway to the whisper service (ADR-0037 default engine): in NIM mode
+  # main.py starts NO GPU worker / loads NO NeMo model, so this needs neither GPU nor the models volume;
+  # it just forwards to whisper (multilingual, 99 languages, commodity GPU).
+  #
+  # HIGH-PERFORMANCE DATACENTER ALTERNATIVE — Parakeet on NeMo (needs a GPU with Riva support + the
+  # models pre-provisioned into the volume). Swap the environment/volumes/devices for:
+  #   environment: { HF_HOME: /models/hf, PARAKEET_MODEL: nvidia/parakeet-tdt-0.6b-v3,
+  #                  PARAKEET_STREAM_MODEL: nvidia/parakeet-rnnt-1.1b,
+  #                  PARAKEET_STREAM_CAPACITY: "4", PARAKEET_STREAM_ALLOCATION_PERCENT: "100" }
+  #   volumes: [inference-models:/models] ; devices: ["nvidia.com/gpu=all"]
+  # (The image still ships the ~76GB NeMo base even as a gateway — a thin-gateway image is a tracked
+  # follow-up, like the diarizer slimming in D17.)
   parakeet:
     build:
       context: ../../
@@ -136,26 +148,18 @@ services:
       dockerfile: backend/parakeet/Dockerfile
     profiles: ["inference"]
     environment:
-      HF_HOME: /models/hf
-      # Batch model (prerecorded /transcribe) + streaming model (live /v3/stream). Both are
-      # pre-provisioned into the volume's HF cache. PARAKEET_STREAM_CAPACITY/ALLOCATION_PERCENT are
-      # REQUIRED by StreamAdmissionController.from_env (server refuses to start without them). CUDA
-      # graphs default off, which is the required state when a stream model is set.
-      PARAKEET_MODEL: nvidia/parakeet-tdt-0.6b-v3
-      PARAKEET_STREAM_MODEL: nvidia/parakeet-rnnt-1.1b
-      PARAKEET_STREAM_CAPACITY: "4"
-      PARAKEET_STREAM_ALLOCATION_PERCENT: "100"
-    volumes:
-      - inference-models:/models
-    # GPU via CDI — see the note on the diarizer service.
-    devices:
-      - "nvidia.com/gpu=all"
+      PARAKEET_INFERENCE_MODE: nim
+      NIM_INFERENCE_URL: http://whisper:8000   # gateway appends /v1/audio/transcriptions (no /v1 here)
+      NIM_LANGUAGE: auto                        # "auto" => omit language => whisper multilingual auto-detect
+      # Still REQUIRED by StreamAdmissionController.from_env even in NIM mode (parsed before the mode branch).
+      PARAKEET_STREAM_CAPACITY: "1"
+      PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 180s
+      start_period: 30s
     networks: [omi]
     restart: unless-stopped
 
@@ -198,6 +202,30 @@ services:
       - inference-models:/models
     # GPU via CDI — see the note on the diarizer service (legacy nvidia-runtime hosts use the
     # deploy.resources form instead). CPU-only smoke: set CT2_DEVICE=cpu and drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  # Multilingual STT (faster-whisper / CTranslate2) — the ADR-0037 DEFAULT on-prem engine (99
+  # languages, commodity GPU incl. Blackwell/sm_120). It is an OpenAI-compatible ASR server; the
+  # backend reaches it through the parakeet gateway in NIM mode: set on the `parakeet` service
+  #   PARAKEET_INFERENCE_MODE=nim, NIM_INFERENCE_URL=http://whisper:8000, NIM_LANGUAGE=auto
+  # (the gateway appends /v1/audio/transcriptions, so NIM_INFERENCE_URL must NOT include /v1; and no
+  # NeMo is loaded in NIM mode — main.py only starts the GPU worker when mode != nim). The
+  # Parakeet-NeMo path stays available for datacenter GPUs; pick one per ADR-0037's matrix.
+  whisper:
+    build:
+      context: ../../backend/whisper
+      dockerfile: Dockerfile
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf                 # model pre-provisioned into the volume (internal network = no egress)
+      WHISPER_MODEL: large-v3
+      WHISPER_COMPUTE_TYPE: int8_float16   # ~1.5GB on GPU; CTranslate2 mode validated on sm_120
+    volumes:
+      - inference-models:/models
+    # GPU via CDI — see the diarizer service note. CPU-only smoke: WHISPER_DEVICE=cpu + drop this stanza.
     devices:
       - "nvidia.com/gpu=all"
     networks: [omi]

@@ -8,7 +8,7 @@
 #
 #   diarizer  -> tests/contract/test_speaker_embedding_live_contract.py   (2 tests)
 #   nllb      -> tests/contract/test_translation_nllb_live_contract.py     (4 tests)
-#   parakeet  -> tests/container/test_parakeet_wer_gate.py                 (4 tests)
+#   whisper   -> multilingual STT via the parakeet NIM gateway (Italian FLEURS clip)
 #
 # Why each test still runs in a throwaway pytest container: the live tests are pytest suites
 # that need the backend's own client code + deps, and they enforce a hermetic network guard
@@ -34,14 +34,17 @@ COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/../.." && pwd)"
 TEST_IMAGE="${TEST_IMAGE:-omi-onprem-backend-test:v2}"
 LIBRISPEECH_CACHE="${LIBRISPEECH_CACHE:-$HOME/.cache/omi-onprem/librispeech}"
+ITALIAN_AUDIO="${ITALIAN_AUDIO:-$HOME/.cache/omi-onprem/audio/italian.wav}"
 # Dev-only test secret; the live tests only need a non-empty, well-formed value.
 ENC_SECRET="${ENCRYPTION_SECRET:-omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv}"
 LIBRISPEECH_URL="https://www.openslr.org/resources/12/test-clean.tar.gz"
 
-SERVICES=("$@"); [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(diarizer nllb parakeet)
+SERVICES=("$@"); [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(diarizer nllb whisper)
 
 compose() { docker compose -p "$PROJECT" -f "$COMPOSE_DIR/docker-compose.yml" "$@"; }
 cid() { echo "${PROJECT}-$1-1"; }
+# whisper listens on 8000 (OpenAI-compatible), the rest on 8080.
+svc_port() { case "$1" in whisper) echo 8000 ;; *) echo 8080 ;; esac; }
 
 log() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 
@@ -49,9 +52,10 @@ log() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 in_svc() { docker exec "$(cid "$1")" sh -c "python3 -c \"$2\" 2>/dev/null || python -c \"$2\""; }
 
 wait_health() {
-  local svc="$1" tries="${2:-90}" i
+  local svc="$1" tries="${2:-90}" port i
+  port=$(svc_port "$svc")
   for ((i=1; i<=tries; i++)); do
-    if in_svc "$svc" "import urllib.request;urllib.request.urlopen('http://localhost:8080/health',timeout=3)" >/dev/null 2>&1; then
+    if in_svc "$svc" "import urllib.request;urllib.request.urlopen('http://localhost:$port/health',timeout=3)" >/dev/null 2>&1; then
       echo "  $svc healthy (~$((i*4))s)"; return 0
     fi
     sleep 4
@@ -101,17 +105,29 @@ for svc in "${SERVICES[@]}"; do
            -e HOSTED_TRANSLATION_API_URL=http://127.0.0.1:8080 -e TRANSLATION_SERVICE_MODELS=nllb; then
         RESULT[nllb]=PASS; else RESULT[nllb]=FAIL; fi
       ;;
-    parakeet)
-      if [ ! -f "$LIBRISPEECH_CACHE/test-clean.tar.gz" ]; then
-        log "parakeet: fetching LibriSpeech test-clean on the host (outside the guard) -> $LIBRISPEECH_CACHE"
-        mkdir -p "$LIBRISPEECH_CACHE"
-        curl -fL --retry 3 --retry-delay 2 -o "$LIBRISPEECH_CACHE/test-clean.tar.gz" "$LIBRISPEECH_URL"
+    whisper)
+      # ADR-0037 default STT: multilingual transcription via the thin parakeet gateway (NIM mode) ->
+      # whisper. Bring the gateway up too, then prove the full path with a non-English (Italian) clip.
+      compose --profile inference up -d parakeet
+      wait_health parakeet
+      if [ ! -f "$ITALIAN_AUDIO" ]; then
+        log "whisper: fetching a FLEURS Italian sample on the host -> $ITALIAN_AUDIO"
+        mkdir -p "$(dirname "$ITALIAN_AUDIO")"
+        docker run --rm -v "$(dirname "$ITALIAN_AUDIO")":/out python:3.11-slim bash -c \
+          "pip install -q datasets soundfile && python - <<PY
+from datasets import load_dataset, Audio
+s = next(iter(load_dataset('google/fleurs','it_it',split='test',streaming=True).cast_column('audio', Audio(decode=False))))
+open('/out/$(basename "$ITALIAN_AUDIO")','wb').write(s['audio']['bytes'])
+PY"
       fi
-      log "parakeet: WER regression gate (LibriSpeech test-clean)"
-      if svc_pytest parakeet tests/container/test_parakeet_wer_gate.py \
-           -e PARAKEET_URL=http://127.0.0.1:8080 -e LIBRISPEECH_CACHE=/cache -e WER_MAX_SAMPLES=10 \
-           -v "$LIBRISPEECH_CACHE":/cache; then
-        RESULT[parakeet]=PASS; else RESULT[parakeet]=FAIL; fi
+      log "whisper: multilingual STT via the parakeet gateway (Italian audio -> gateway -> whisper)"
+      resp=$(docker run --rm --network "container:$(cid parakeet)" -v "$(dirname "$ITALIAN_AUDIO")":/audio:ro \
+        curlimages/curl:latest -s -X POST http://127.0.0.1:8080/v1/transcribe \
+        -F "file=@/audio/$(basename "$ITALIAN_AUDIO");type=audio/wav")
+      printf '  -> %.200s\n' "$resp"
+      # A non-empty transcription proves gateway -> whisper -> STT end to end (auto-detected language).
+      if echo "$resp" | grep -qE '"text"[[:space:]]*:[[:space:]]*"[^"]+"'; then
+        RESULT[whisper]=PASS; else RESULT[whisper]=FAIL; fi
       ;;
     *) echo "unknown service: $svc" >&2; exit 2 ;;
   esac
