@@ -9,7 +9,6 @@ covers:
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+AccountDeletion.swift
   - desktop/macos/Desktop/Sources/SignInView.swift
 preconditions:
   - auth_ready

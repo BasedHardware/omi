@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import ipaddress
 import logging
 import os
@@ -15,12 +16,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
+from utils.account_deletion_access import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ZONE = "us-central1-a"
+
+
+class AccountDeletionAccessBlocked(RuntimeError):
+    pass
 
 
 class AgentVmResponse(BaseModel):
@@ -106,6 +112,49 @@ def _set_vm(
     if ip:
         vm["ip"] = ip
     get_firestore_client().collection("users").document(uid).set({"agentVm": vm}, merge=True)
+
+
+@transactional
+def _claim_vm_if_allowed_txn(
+    transaction, deletion_ref, user_ref, candidate: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
+    deletion = deletion_ref.get(transaction=transaction)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(deletion_status):
+        raise AccountDeletionAccessBlocked(deletion_status or "unknown")
+    snapshot = user_ref.get(transaction=transaction)
+    current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if isinstance(current, dict) and current.get("vmName"):
+        return current, False
+    transaction.set(user_ref, {"agentVm": candidate}, merge=True)
+    return candidate, True
+
+
+def _claim_vm_if_allowed(uid: str, candidate: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    client = get_firestore_client()
+    return _claim_vm_if_allowed_txn(
+        client.transaction(),
+        client.collection("account_deletions").document(uid),
+        client.collection("users").document(uid),
+        candidate,
+    )
+
+
+def _vm_lifecycle_allowed(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
+    client = get_firestore_client()
+    deletion = client.collection("account_deletions").document(uid).get()
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(deletion_status):
+        return False
+    user = client.collection("users").document(uid).get()
+    current = (user.to_dict() or {}).get("agentVm") if user.exists else None
+    return (
+        isinstance(current, dict)
+        and current.get("vmName") == expected_vm_name
+        and current.get("authToken") == expected_auth_token
+    )
 
 
 @transactional
@@ -301,15 +350,37 @@ async def _start_vm(project: str, vm_name: str, zone: str) -> str:
     return ip
 
 
+async def _delete_vm(project: str, vm_name: str, zone: str) -> None:
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}"
+    response = await _gce_request("DELETE", url, token)
+    if response.status_code == 404:
+        return
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if operation:
+        await _operation(project, zone, operation)
+
+
 async def _provision_background(
     uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str
 ) -> None:
     try:
+        if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+            logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
+            return
         ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
+        if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+            logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
+            await _delete_vm(project, vm_name, _ZONE)
+            return
+        updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
+        if not updated:
+            await _delete_vm(project, vm_name, _ZONE)
     except Exception as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
+        if await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+            await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
 
 
 async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> None:
@@ -355,8 +426,27 @@ async def provision_agent_vm(
 ) -> ProvisionAgentResponse:
     if _agent_disabled():
         raise HTTPException(status_code=503, detail="Agent VM provisioning is disabled")
-    vm = await run_blocking(db_executor, _get_vm, uid)
-    if vm:
+    try:
+        project = _project()
+        source_image = _source_image(project)
+        bucket = _gcs_bucket()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    vm_name = f"omi-agent-{hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]}"
+    auth_token = f"omi-{uuid.uuid4()}"
+    created_at = _now()
+    candidate = {
+        "vmName": vm_name,
+        "zone": _ZONE,
+        "status": "provisioning",
+        "authToken": auth_token,
+        "createdAt": created_at,
+    }
+    try:
+        vm, claimed = await run_blocking(db_executor, _claim_vm_if_allowed, uid, candidate)
+    except AccountDeletionAccessBlocked as exc:
+        raise HTTPException(status_code=403, detail="account_deletion_in_progress") from exc
+    if not claimed:
         return ProvisionAgentResponse(
             status="exists",
             vmName=str(vm["vmName"]),
@@ -364,16 +454,6 @@ async def provision_agent_vm(
             authToken=str(vm.get("authToken") or ""),
             agentStatus=str(vm.get("status") or "provisioning"),
         )
-    try:
-        project = _project()
-        source_image = _source_image(project)
-        bucket = _gcs_bucket()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    vm_name = f"omi-agent-{uid[:12].lower()}"
-    auth_token = f"omi-{uuid.uuid4()}"
-    created_at = _now()
-    await run_blocking(db_executor, _set_vm, uid, vm_name, "provisioning", auth_token, created_at)
     background_tasks.add_task(_provision_background, uid, project, source_image, bucket, vm_name, auth_token)
     return ProvisionAgentResponse(
         status="provisioning", vmName=vm_name, authToken=auth_token, agentStatus="provisioning"
@@ -399,27 +479,28 @@ async def get_agent_status(
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
         return _response(vm)
     if gce_status == "NOT_FOUND":
-        await run_blocking(
+        deleted = await run_blocking(
             db_executor,
             _delete_vm_if_current,
             uid,
             str(vm["vmName"]),
             str(vm.get("authToken") or ""),
         )
-        return None
+        return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
     if gce_status in {"TERMINATED", "STOPPED"}:
         pending = {**vm, "status": "provisioning", "ip": None}
-        await run_blocking(
+        updated = await run_blocking(
             db_executor,
-            _set_vm,
+            _set_vm_if_current,
             uid,
             str(vm["vmName"]),
-            "provisioning",
             str(vm.get("authToken") or ""),
-            _now(),
+            "provisioning",
             None,
             str(vm.get("zone") or _ZONE),
         )
+        if not updated:
+            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
         background_tasks.add_task(_restart_background, uid, project, vm)
         return _response(pending)
     if (
@@ -430,7 +511,22 @@ async def get_agent_status(
         pending = {**vm, "status": "provisioning", "ip": None}
         instance_ip = _ip(instance)
         if instance_ip is None:
-            return _response(pending)
+            vm_name = str(vm["vmName"])
+            auth_token = str(vm.get("authToken") or "")
+            zone = str(vm.get("zone") or _ZONE)
+            logger.warning(
+                "Deleting unusable running Agent VM without an external IP for uid=%s",
+                uid,
+            )
+            await _delete_vm(project, vm_name, zone)
+            deleted = await run_blocking(
+                db_executor,
+                _delete_vm_if_current,
+                uid,
+                vm_name,
+                auth_token,
+            )
+            return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
         background_tasks.add_task(_recover_background, uid, vm, instance_ip)
         return _response(pending)
     return _response(vm)

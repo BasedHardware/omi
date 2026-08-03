@@ -5,17 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, cast
 
+from utils.account_deletion_access import ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES
+
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
-ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES = frozenset(
-    {
-        "deleting_auth",
-        "pending",
-        "retrying",
-        "running",
-        "failed",
-        "completed",
-    }
-)
+ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES = ACCOUNT_DELETION_ACCESS_BLOCKING_STATUSES
 
 
 @dataclass(frozen=True)

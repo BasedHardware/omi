@@ -756,3 +756,15 @@ def revoke_user_grant(uid: str, grant_id: str) -> bool:
         return False
     revoke_grant(grant_id)
     return True
+
+
+def delete_user_oauth_credentials(uid: str) -> None:
+    """Revoke and remove every OAuth credential rooted at a user grant."""
+    grants = list(db.collection("mcp_oauth_grants").where("uid", "==", uid).stream())
+    for grant in grants:
+        grant_id = grant.id
+        revoke_grant(grant_id)
+        for collection_name in ("mcp_oauth_access_tokens", "mcp_oauth_refresh_tokens"):
+            for token in db.collection(collection_name).where("grant_id", "==", grant_id).stream():
+                token.reference.delete()
+        grant.reference.delete()

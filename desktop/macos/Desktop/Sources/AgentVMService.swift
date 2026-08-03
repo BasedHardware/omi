@@ -1,5 +1,30 @@
 import Foundation
+@preconcurrency import GRDB
 import OmiSupport
+
+private final class GzipProcessController: @unchecked Sendable {
+  private let lock = NSLock()
+  private var process: Process?
+  private var cancelled = false
+
+  func install(_ process: Process) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !cancelled else { return false }
+    self.process = process
+    return true
+  }
+
+  func cancel() {
+    lock.lock()
+    cancelled = true
+    let process = process
+    lock.unlock()
+    if process?.isRunning == true {
+      process?.terminate()
+    }
+  }
+}
 
 /// Manages the cloud agent VM lifecycle: provisioning, status polling, and database upload.
 /// All operations are fire-and-forget from the caller's perspective.
@@ -13,11 +38,13 @@ actor AgentVMService {
   /// Revoke every suspended VM operation before an effective-owner transition
   /// publishes the next account. Late status, upload, and token-send results
   /// remain harmless because each continuation revalidates this generation.
-  func cancelForOwnerTransition() {
+  func cancelForOwnerTransition() async {
     lifecycleGeneration &+= 1
-    pipelineTask?.cancel()
+    let task = pipelineTask
+    task?.cancel()
     pipelineTask = nil
     isRunning = false
+    await task?.value
     log("AgentVMService: Cancelled owner-bound lifecycle work")
   }
 
@@ -263,6 +290,49 @@ actor AgentVMService {
     return compressed * 100 / original
   }
 
+  private static func createConsistentSnapshot(sourcePool: DatabasePool, destination: URL) async throws {
+    try await Task.detached(priority: .utility) {
+      try? FileManager.default.removeItem(at: destination)
+      let destinationQueue = try DatabaseQueue(path: destination.path)
+      try sourcePool.backup(to: destinationQueue, pagesPerStep: 128) { _ in
+        try Task.checkCancellation()
+      }
+    }.value
+  }
+
+  private static func gzip(source: URL, destination: URL) async throws -> Int32 {
+    let controller = GzipProcessController()
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        DispatchQueue.global(qos: .utility).async {
+          let process = Process()
+          process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+          process.arguments = ["-c", source.path]
+          do {
+            try? FileManager.default.removeItem(at: destination)
+            FileManager.default.createFile(atPath: destination.path, contents: nil)
+            guard let output = FileHandle(forWritingAtPath: destination.path) else {
+              throw CocoaError(.fileWriteUnknown)
+            }
+            defer { try? output.close() }
+            process.standardOutput = output
+            guard controller.install(process) else { throw CancellationError() }
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationReason == .uncaughtSignal {
+              throw CancellationError()
+            }
+            continuation.resume(returning: process.terminationStatus)
+          } catch {
+            continuation.resume(throwing: error)
+          }
+        }
+      }
+    } onCancel: {
+      controller.cancel()
+    }
+  }
+
   /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
   /// Pauses AgentSync during upload to prevent competing for memory and network.
   private func uploadDatabase(
@@ -292,10 +362,30 @@ actor AgentVMService {
       return false
     }
 
+    // Snapshot through SQLite's online-backup API. Compressing the live main
+    // file alone can omit committed WAL pages and upload a torn database.
+    guard let sourcePool = await RewindDatabase.shared.getDatabaseQueue() else {
+      log("AgentVMService: Rewind database is not initialized")
+      return false
+    }
+    let snapshotPath = dbPath.appendingPathExtension("upload.snapshot")
+    let tempGzPath = snapshotPath.appendingPathExtension("gz")
+    defer {
+      try? FileManager.default.removeItem(at: snapshotPath)
+      try? FileManager.default.removeItem(at: tempGzPath)
+    }
+    do {
+      try await Self.createConsistentSnapshot(sourcePool: sourcePool, destination: snapshotPath)
+    } catch {
+      log("AgentVMService: Database snapshot failed — \(error.localizedDescription)")
+      return false
+    }
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
+
     // Get original file size
     let originalSize: UInt64
     do {
-      let attrs = try FileManager.default.attributesOfItem(atPath: dbPath.path)
+      let attrs = try FileManager.default.attributesOfItem(atPath: snapshotPath.path)
       originalSize = attrs[.size] as? UInt64 ?? 0
     } catch {
       log("AgentVMService: Failed to get DB size — \(error.localizedDescription)")
@@ -305,28 +395,10 @@ actor AgentVMService {
     log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB) via streaming gzip...")
 
     // Stream-compress to a temp file using shell gzip (uses ~0 MB memory vs loading entire DB)
-    let tempGzPath = dbPath.appendingPathExtension("upload.gz")
     do {
-      // Remove any stale temp file
-      try? FileManager.default.removeItem(at: tempGzPath)
-
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
-      process.arguments = ["-c", dbPath.path]
-
-      FileManager.default.createFile(atPath: tempGzPath.path, contents: nil)
-      guard let outHandle = FileHandle(forWritingAtPath: tempGzPath.path) else {
-        log("AgentVMService: Failed to create temp gzip file")
-        return false
-      }
-      process.standardOutput = outHandle
-      try process.run()
-      process.waitUntilExit()
-      try outHandle.close()
-
-      guard process.terminationStatus == 0 else {
-        log("AgentVMService: gzip failed with exit code \(process.terminationStatus)")
-        try? FileManager.default.removeItem(at: tempGzPath)
+      let terminationStatus = try await Self.gzip(source: snapshotPath, destination: tempGzPath)
+      guard terminationStatus == 0 else {
+        log("AgentVMService: gzip failed with exit code \(terminationStatus)")
         return false
       }
 
@@ -337,13 +409,11 @@ actor AgentVMService {
       )
     } catch {
       log("AgentVMService: Compression failed — \(error.localizedDescription)")
-      try? FileManager.default.removeItem(at: tempGzPath)
       return false
     }
 
     log("AgentVMService: Uploading compressed database to \(vmIP)...")
     guard isCurrent(ownerID: ownerID, generation: generation) else {
-      try? FileManager.default.removeItem(at: tempGzPath)
       return false
     }
 
@@ -360,36 +430,48 @@ actor AgentVMService {
     request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 600
 
-    do {
-      // Upload from file — streams from disk, doesn't load into memory
-      let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempGzPath)
-      try? FileManager.default.removeItem(at: tempGzPath)
+    for attempt in 1...3 {
       guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
-
-      guard let httpResponse = response as? HTTPURLResponse else {
-        log("AgentVMService: Upload failed — invalid response")
-        return false
-      }
-
-      if httpResponse.statusCode == 200 {
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let bytes = json["bytesReceived"] as? Int
-        {
-          log("AgentVMService: Upload complete — \(bytes / 1024 / 1024) MB received by server")
-        } else {
-          log("AgentVMService: Upload complete")
+      do {
+        // Upload from file — streams from disk, doesn't load into memory.
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempGzPath)
+        guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
+        guard let httpResponse = response as? HTTPURLResponse else {
+          log("AgentVMService: Upload failed — invalid response")
+          return false
         }
-        return true
-      } else {
+        if httpResponse.statusCode == 200 {
+          if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let bytes = json["bytesReceived"] as? Int
+          {
+            log("AgentVMService: Upload complete — \(bytes / 1024 / 1024) MB received by server")
+          } else {
+            log("AgentVMService: Upload complete")
+          }
+          return true
+        }
         let body = String(data: data, encoding: .utf8) ?? ""
-        log("AgentVMService: Upload failed — HTTP \(httpResponse.statusCode): \(body)")
+        let retryable =
+          httpResponse.statusCode == 408 || httpResponse.statusCode == 429
+          || (500...599).contains(httpResponse.statusCode)
+        log(
+          "AgentVMService: Upload attempt \(attempt) failed — HTTP \(httpResponse.statusCode): \(body)"
+        )
+        guard retryable, attempt < 3 else { return false }
+      } catch {
+        guard attempt < 3, !Task.isCancelled else {
+          log("AgentVMService: Upload failed — \(error.localizedDescription)")
+          return false
+        }
+        log("AgentVMService: Upload attempt \(attempt) failed — \(error.localizedDescription)")
+      }
+      do {
+        try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+      } catch {
         return false
       }
-    } catch {
-      try? FileManager.default.removeItem(at: tempGzPath)
-      log("AgentVMService: Upload failed — \(error.localizedDescription)")
-      return false
     }
+    return false
   }
 
   /// Start incremental sync after VM is confirmed ready.

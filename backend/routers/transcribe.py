@@ -11,7 +11,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocketException
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from firebase_admin.auth import InvalidIdTokenError
 
@@ -187,13 +187,17 @@ async def web_listen_handler(
     except WebSocketDisconnect:
         return
     try:
-        uid = auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))
+        uid = await auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))
     except ValueError as error:
         await websocket.close(code=1008, reason=str(error))
         return
     except InvalidIdTokenError:
         await websocket.send_json({'type': 'auth_response', 'success': False})
         await websocket.close(code=1008, reason='Invalid token')
+        return
+    except WebSocketException as error:
+        await websocket.send_json({'type': 'auth_response', 'success': False})
+        await websocket.close(code=error.code, reason=error.reason)
         return
     except Exception as error:
         logger.error('web listen auth failed error_type=%s', type(error).__name__)

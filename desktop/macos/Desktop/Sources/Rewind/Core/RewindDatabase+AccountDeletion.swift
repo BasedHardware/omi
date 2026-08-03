@@ -16,7 +16,10 @@ extension RewindDatabase {
     legacyRoot: URL? = nil,
     includeLegacyStorage: Bool? = nil
   ) throws {
-    guard accepted, let ownerID, !ownerID.isEmpty else { return }
+    guard accepted else { return }
+    guard let ownerID, !ownerID.isEmpty else {
+      throw RewindError.storageError("Accepted account deletion has no cleanup owner")
+    }
     guard ownerID != ".", ownerID != "..", !ownerID.contains("/") else {
       throw RewindError.storageError("Invalid account owner for local-data deletion")
     }
@@ -60,6 +63,13 @@ extension RewindDatabase {
       if fileManager.fileExists(atPath: target.path) {
         try fileManager.removeItem(at: target)
       }
+    }
+    let legacyAnonymousDirectory =
+      resolvedLegacyRoot
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent("anonymous", isDirectory: true)
+    if fileManager.fileExists(atPath: legacyAnonymousDirectory.path) {
+      try fileManager.removeItem(at: legacyAnonymousDirectory)
     }
     log("RewindDatabase: Removed accepted account-deletion local data")
   }

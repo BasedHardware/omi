@@ -1159,9 +1159,10 @@ class TestWSAuthDependencyBYOK:
         ws.headers = headers
         return ws
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate):
+    def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
         from utils.other.endpoints import get_current_user_uid_ws_listen
 
@@ -1170,9 +1171,10 @@ class TestWSAuthDependencyBYOK:
         assert uid == 'ws-uid'
         mock_validate.assert_called_once_with('ws-uid')
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate):
+    def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
         from utils.other.endpoints import get_current_user_uid_ws_listen
 
@@ -1181,9 +1183,10 @@ class TestWSAuthDependencyBYOK:
         assert uid == 'ws-uid'
         mock_validate.assert_called_once()
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value='fingerprint mismatch')
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate):
+    def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate, _mock_deletion):
         import asyncio
         from fastapi import WebSocketException
         from utils.other.endpoints import get_current_user_uid_ws_listen

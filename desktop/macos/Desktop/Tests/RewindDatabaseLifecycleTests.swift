@@ -28,6 +28,12 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
       try Data("deleted-owner".utf8).write(to: url.appendingPathComponent("sentinel"))
     }
+    let legacyAnonymousRoot =
+      legacyRoot
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent("anonymous", isDirectory: true)
+    try FileManager.default.createDirectory(at: legacyAnonymousRoot, withIntermediateDirectories: true)
+    try Data("anonymous-db".utf8).write(to: legacyAnonymousRoot.appendingPathComponent("omi.db"))
 
     try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
       ownerID: ownerID,
@@ -45,6 +51,30 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
         FileManager.default.fileExists(atPath: legacyRoot.appendingPathComponent(artifact).path),
         "a fresh UID must not be able to migrate \(artifact) from the deleted owner")
     }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: legacyAnonymousRoot.path))
+  }
+
+  func testAcceptedAccountDeletionWithoutOwnerFailsClosed() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("rewind-account-delete-missing-owner-\(UUID().uuidString)", isDirectory: true)
+    let legacyDatabase = root.appendingPathComponent("omi.db")
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("must-survive".utf8).write(to: legacyDatabase)
+
+    do {
+      try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
+        ownerID: nil,
+        accepted: true,
+        profileRoot: root,
+        legacyRoot: root,
+        includeLegacyStorage: true)
+      XCTFail("Accepted deletion without an owner must fail closed")
+    } catch {
+      XCTAssertTrue(String(describing: error).contains("no cleanup owner"))
+    }
+    XCTAssertTrue(FileManager.default.fileExists(atPath: legacyDatabase.path))
   }
 
   func testFailedDeletionRequestPreservesOwnerAndLegacyData() async throws {

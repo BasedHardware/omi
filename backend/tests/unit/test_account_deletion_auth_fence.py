@@ -16,7 +16,7 @@ def _quiet_auth_side_effects(monkeypatch):
     monkeypatch.setattr(endpoints, "validate_byok_request", MagicMock())
 
 
-@pytest.mark.parametrize("status", ["deleting_auth", "pending", "retrying", "running", "failed"])
+@pytest.mark.parametrize("status", ["deleting_auth", "pending", "retrying", "running", "failed", "completed"])
 def test_http_auth_fences_every_actionable_deletion_state(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
 
@@ -33,7 +33,7 @@ def test_http_auth_fences_every_actionable_deletion_state(monkeypatch, status):
     endpoints.validate_byok_request.assert_not_called()
 
 
-@pytest.mark.parametrize("status", [None, "completed", "cancelled", "billing_failed"])
+@pytest.mark.parametrize("status", [None, "cancelled", "billing_failed"])
 def test_terminal_or_pre_acceptance_state_allows_auth(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
 
@@ -65,7 +65,7 @@ def test_websocket_auth_uses_typed_account_deletion_close(monkeypatch):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: "running")
 
     with pytest.raises(WebSocketException) as error:
-        endpoints._verify_ws_auth("Bearer token")
+        endpoints.enforce_account_deletion_ws_access("old-uid")
 
     assert error.value.code == endpoints.WS_AUTH_CODE_ACCOUNT_DELETION
     assert error.value.reason == "Account deletion in progress"

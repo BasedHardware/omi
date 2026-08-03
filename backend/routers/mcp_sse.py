@@ -78,6 +78,7 @@ from utils.mcp_memories import (
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.observability.api_keys import record_api_key_repairs
+from utils.other.endpoints import enforce_account_deletion_http_access
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -163,6 +164,7 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
+    enforce_account_deletion_http_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -181,6 +183,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
+        enforce_account_deletion_http_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -193,6 +196,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
         return None
+    enforce_account_deletion_http_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",
@@ -1606,7 +1610,7 @@ def mcp_authorize(
 
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
-def mcp_authorize_consent(
+async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -1621,7 +1625,9 @@ def mcp_authorize_consent(
         _, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
-        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        decoded_token: Dict[str, Any] = await run_blocking(
+            critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
+        )  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
@@ -1630,9 +1636,19 @@ def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
-    code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, cast(str, code_challenge)
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
+
+    grant = await run_blocking(db_executor, mcp_oauth_db.create_or_update_grant, uid, client_id, resource, scopes)
+    code = await run_blocking(
+        db_executor,
+        mcp_oauth_db.issue_authorization_code,
+        uid,
+        grant["id"],
+        client_id,
+        redirect_uri,
+        resource,
+        scopes,
+        cast(str, code_challenge),
     )
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 

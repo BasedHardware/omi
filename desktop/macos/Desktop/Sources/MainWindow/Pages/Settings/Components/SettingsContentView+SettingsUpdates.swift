@@ -116,7 +116,14 @@ extension SettingsContentView {
 
     Task {
       do {
+        guard let deletionOwner = RuntimeOwnerIdentity.currentOwnerId() else {
+          throw AuthError.notSignedIn
+        }
         try await APIClient.shared.deleteAccount()
+        // The backend has durably admitted deletion. Persist the cleanup owner
+        // before any local transition so a crash/relaunch cannot restore this
+        // accepted account and migrate its local Rewind data into a new UID.
+        UserDefaults.standard.set(deletionOwner, forKey: .acceptedAccountDeletionOwnerId)
         await MainActor.run {
           appState.stopTranscription()
           ProactiveAssistantsPlugin.shared.stopMonitoring()

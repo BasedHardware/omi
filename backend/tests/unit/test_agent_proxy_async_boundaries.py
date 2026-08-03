@@ -439,9 +439,9 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
     assert bool(agent_proxy.UNRESOLVED_VM_IP)
 
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", None, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", None, "ready")
 
 
 @pytest.mark.asyncio

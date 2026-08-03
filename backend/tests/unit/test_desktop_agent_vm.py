@@ -22,7 +22,10 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
+    monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_claim_vm_if_allowed", lambda _uid, _candidate: (vm, False))
     tasks = BackgroundTasks()
 
     response = await desktop_agent_vm.provision_agent_vm(tasks, "user")
@@ -45,11 +48,14 @@ async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeyp
         return function(*args)
 
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: None)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
     monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
-    monkeypatch.setattr(desktop_agent_vm, "_set_vm", lambda *args: writes.append(args))
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_claim_vm_if_allowed",
+        lambda uid, candidate: writes.append((uid, candidate)) or (candidate, True),
+    )
     tasks = BackgroundTasks()
 
     response = await desktop_agent_vm.provision_agent_vm(tasks, "fresh-firebase-uid")
@@ -58,7 +64,8 @@ async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeyp
     assert response.agent_status == "provisioning"
     assert response.ip is None
     assert writes[0][0] == "fresh-firebase-uid"
-    assert writes[0][2] == "provisioning"
+    assert writes[0][1]["status"] == "provisioning"
+    assert writes[0][1]["vmName"].startswith("omi-agent-")
     assert len(tasks.tasks) == 1
 
 
@@ -94,14 +101,14 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *args: _stopped_instance())
-    monkeypatch.setattr(desktop_agent_vm, "_set_vm", lambda *args: writes.append(args))
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: writes.append(args) or True)
     tasks = BackgroundTasks()
 
     response = await desktop_agent_vm.get_agent_status(tasks, "user")
 
     assert response.status == "provisioning"
     assert response.ip is None
-    assert writes[0][2] == "provisioning"
+    assert writes[0][3] == "provisioning"
     assert len(tasks.tasks) == 1
 
 
@@ -133,6 +140,46 @@ async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch
 
     assert response is None
     assert clears == [("uid", "omi-agent-stale", "old-token")]
+
+
+@pytest.mark.asyncio
+async def test_status_deletes_running_vm_without_usable_ip_and_cas_clears_pointer(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-unreachable",
+        "zone": "us-central1-a",
+        "ip": None,
+        "authToken": "current-token",
+        "status": "error",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+    gce_deletes = []
+    pointer_clears = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def running_without_ip(*_args):
+        return "RUNNING", {"networkInterfaces": []}
+
+    async def delete_vm(*args):
+        gce_deletes.append(args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", running_without_ip)
+    monkeypatch.setattr(desktop_agent_vm, "_delete_vm", delete_vm)
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_delete_vm_if_current",
+        lambda *args: pointer_clears.append(args) or True,
+    )
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response is None
+    assert gce_deletes == [("project", "omi-agent-unreachable", "us-central1-a")]
+    assert pointer_clears == [("uid", "omi-agent-unreachable", "current-token")]
 
 
 @pytest.mark.asyncio

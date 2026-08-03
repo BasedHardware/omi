@@ -211,8 +211,10 @@ actor AgentSyncService {
     let stopGeneration = syncGeneration
     let wasRunning = isRunning
     isRunning = false
-    syncTask?.cancel()
+    let task = syncTask
+    task?.cancel()
     syncTask = nil
+    await task?.value
     guard wasRunning else { return }
     if flushPendingChanges {
       log("AgentSync: stopping — flushing final changes")

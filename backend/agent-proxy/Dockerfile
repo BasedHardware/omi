@@ -19,6 +19,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/utils/__init__.py ./utils/__init__.py
+COPY backend/utils/account_deletion_access.py ./utils/account_deletion_access.py
 COPY backend/utils/executors.py ./utils/executors.py
 COPY backend/agent-proxy/resilience.py .
 COPY backend/agent-proxy/main.py .

@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": 2819,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 2844,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4469,
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": 1515,
@@ -8,7 +8,7 @@
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1559
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls. +7 keeps accepted account-deletion storage preparation inside the fenced sign-out commit before credentials and owner visibility can change (SCA-280).",
+    "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls. +32 keeps the durable accepted-deletion cleanup journal and owner-bound VM/sync drain inside the fenced sign-out commit so cleanup resumes after restart and credentials or owner visibility cannot change first (SCA-280).",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Chat-first runtime automation remains in the owning desktop bridge so named-bundle UI verification keeps its lifecycle boundary. present_onboarding_opener QA action renders the real post-onboarding opener in-process for verification; merged with main's capture_main_window_png sheet-surface capture support, plus the Canonical Memory Atlas open/scrub/viewport QA actions this bridge exposes for the atlas e2e flow. Adds memory_graph_rebuild so the Brain Map's rebuild control can be exercised without a cursor; the rest of that surface is only reachable by clicking. Also exposes the QA actions backing clickable Brain Map connections and cited-memory navigation (commit 97a24cd2cf). Adds memory_atlas_enter_region and a label form of memory_atlas_select so going into a Brain Map island, and picking an entity inside it, are reachable without a cursor; both are otherwise only doable by clicking a painted canvas, which no headless check can do.",
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": "Adds the bounded shared-capture silent-microphone terminal incident so a persistent zero-sample CoreAudio route is queryable without recording sensitive content.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior. Adds cloudOAuthGrantClientIDs so ChatGPT directory grants (always omi-chatgpt-prod) verify on dev/Beta builds, fixing the connector chip never flipping to connected.",
