@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, cast
 
@@ -42,6 +43,9 @@ def purge_screen_activity_for_user(uid: str) -> int:
 
 
 def purge_all_screen_activity() -> int:
+    if os.getenv('OMI_ENV_STAGE', '').strip().lower() != 'prod':
+        logger.info('Skipping historical screen activity purge outside production')
+        return 0
     total = 0
     for user in db.collection(USERS_COLLECTION).select([]).stream():
         total += purge_screen_activity_for_user(str(user.id))

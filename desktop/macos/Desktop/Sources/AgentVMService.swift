@@ -26,12 +26,7 @@ actor AgentVMService {
         if let status = status, status.status == "ready", let ip = status.ip {
           log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
           // Only upload if the VM doesn't have a database yet
-          if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-            _ = await uploadDatabase(vmIP: ip, authToken: status.authToken)
-          } else {
-            log("AgentVMService: VM already has database, skipping upload")
-          }
-          await startIncrementalSync(vmIP: ip, authToken: status.authToken)
+          await startAgentSession(vmIP: ip, authToken: status.authToken)
           return
         }
         if let status = status,
@@ -42,10 +37,7 @@ actor AgentVMService {
             let ip = result.ip
           {
             log("AgentVMService: VM became ready — ip=\(ip)")
-            if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
-              _ = await uploadDatabase(vmIP: ip, authToken: result.authToken)
-            }
-            await startIncrementalSync(vmIP: ip, authToken: result.authToken)
+            await startAgentSession(vmIP: ip, authToken: result.authToken)
           }
           return
         }
@@ -110,10 +102,8 @@ actor AgentVMService {
     }
 
     // Step 3: Check if DB exists and upload it
-    _ = await uploadDatabase(vmIP: ip, authToken: authToken)
-
     // Step 4: Start incremental sync
-    await startIncrementalSync(vmIP: ip, authToken: authToken)
+    await startAgentSession(vmIP: ip, authToken: authToken)
   }
 
   /// Poll GET /v2/agent/status until status is "ready" and IP is available.
@@ -160,8 +150,8 @@ actor AgentVMService {
   /// Re-upload the database to a VM that lost its data (e.g. after a restart).
   /// Called by AgentSyncService when it detects databaseReady: false on the VM.
   func reuploadDatabase(vmIP: String, authToken: String) async -> Bool {
-    log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
-    return await uploadDatabase(vmIP: vmIP, authToken: authToken)
+    log("AgentVMService: Database re-upload is disabled")
+    return false
   }
 
   /// Compression ratio as a whole-number percent. Guards against a zero
@@ -176,6 +166,10 @@ actor AgentVMService {
   /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
   /// Pauses AgentSync during upload to prevent competing for memory and network.
   private func uploadDatabase(vmIP: String, authToken: String) async -> Bool {
+    guard !(await RewindDatabase.shared.containsScreenData()) else {
+      log("AgentVMService: Database upload skipped because local screen data is present")
+      return false
+    }
     await AgentSyncService.shared.pause()
     defer { Task { await AgentSyncService.shared.resume() } }
     // Find the local database path
@@ -288,10 +282,30 @@ actor AgentVMService {
   }
 
   /// Start incremental sync after VM is confirmed ready.
-  private func startIncrementalSync(vmIP: String, authToken: String) async {
-    await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+  private func startAgentSession(vmIP: String, authToken: String) async {
+    guard await purgeRemoteScreenActivity(vmIP: vmIP, authToken: authToken) else {
+      log("AgentVMService: Refusing to start agent session until VM screen activity is purged")
+      return
+    }
     // Send Firebase token so the VM can call backend tools
     await sendFirebaseToken(vmIP: vmIP, authToken: authToken)
+  }
+
+  private func purgeRemoteScreenActivity(vmIP: String, authToken: String) async -> Bool {
+    guard let url = URL(string: "http://\(vmIP):8080/purge-screen-activity") else { return false }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 30
+
+    do {
+      let (_, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse else { return false }
+      return httpResponse.statusCode == 200
+    } catch {
+      log("AgentVMService: Failed to purge VM screen activity — \(error.localizedDescription)")
+      return false
+    }
   }
 
   /// Send the user's Firebase ID token to the VM so it can call Python backend tools.

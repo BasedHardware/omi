@@ -287,7 +287,8 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
     XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
-    XCTAssertFalse(source.contains("AgentVMService.shared"))
+    XCTAssertTrue(source.contains("AgentVMService.shared.ensureProvisioned()"))
+    XCTAssertFalse(source.contains("AgentSyncService.shared.start"))
   }
 
   @MainActor

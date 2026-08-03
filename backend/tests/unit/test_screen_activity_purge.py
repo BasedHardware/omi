@@ -58,6 +58,7 @@ class _Database:
 def test_purge_all_screen_activity_deletes_firestore_and_bounded_vector_batches(monkeypatch):
     database = _Database([f'screenshot-{i}' for i in range(1001)])
     vector_index = Mock()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(screen_activity, 'db', database)
     monkeypatch.setattr(screen_activity.vector_db, 'index', vector_index)
 
@@ -65,3 +66,15 @@ def test_purge_all_screen_activity_deletes_firestore_and_bounded_vector_batches(
     assert [batch.commits for batch in database.batches] == [1, 1, 1]
     assert [len(batch.deleted) for batch in database.batches] == [500, 500, 1]
     assert [len(call.kwargs['ids']) for call in vector_index.delete.call_args_list] == [1000, 1]
+
+
+def test_purge_all_screen_activity_skips_shared_firestore_outside_production(monkeypatch):
+    database = _Database(['screenshot-1'])
+    vector_index = Mock()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(screen_activity, 'db', database)
+    monkeypatch.setattr(screen_activity.vector_db, 'index', vector_index)
+
+    assert screen_activity.purge_all_screen_activity() == 0
+    assert database.batches == []
+    vector_index.delete.assert_not_called()

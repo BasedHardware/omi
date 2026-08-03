@@ -67,6 +67,26 @@ actor RewindDatabase {
     return dbQueue
   }
 
+  static func containsScreenData(in db: Database) throws -> Bool {
+    for table in ["screenshots", "focus_sessions", "observations"] {
+      if try db.tableExists(table) {
+        return true
+      }
+    }
+    return false
+  }
+
+  func containsScreenData() async -> Bool {
+    guard let dbQueue else { return true }
+    do {
+      return try await dbQueue.read { db in
+        try Self.containsScreenData(in: db)
+      }
+    } catch {
+      return true
+    }
+  }
+
   /// Monotonic epoch of the current `dbQueue`. Bumped on every close and every
   /// pool (re)open, so a storage actor that cached a pool can detect a swap
   /// (corruption/maintenance recovery replaces the pool) and drop its stale

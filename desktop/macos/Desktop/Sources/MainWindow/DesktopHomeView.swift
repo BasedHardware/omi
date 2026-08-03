@@ -208,6 +208,7 @@ struct DesktopHomeView: View {
         }
         .onAppear {
           log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+          Task { await AgentVMService.shared.ensureProvisioned() }
           updatePolicyManager.refresh(force: true)
           // Check all permissions on launch
           appState.checkAllPermissions()

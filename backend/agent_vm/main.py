@@ -23,14 +23,11 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 SYNC_TABLES = frozenset(
     {
-        "screenshots",
         "action_items",
         "transcription_sessions",
         "transcription_segments",
         "memories",
         "staged_tasks",
-        "focus_sessions",
-        "observations",
         "live_notes",
         "ai_user_profiles",
         "task_dedup_log",
@@ -356,76 +353,6 @@ def execute_sql(query: str) -> str:
         return json.dumps({"error": str(exc)})
 
 
-async def semantic_search(query: str, days: int = 7, app_filter: str | None = None) -> str:
-    if runtime.db is None:
-        return json.dumps({"error": "Database not loaded. Upload omi.db first."})
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return json.dumps({"error": "GEMINI_API_KEY not set"})
-    body = {
-        "model": "models/gemini-embedding-001",
-        "content": {"parts": [{"text": query}]},
-        "taskType": "RETRIEVAL_QUERY",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={api_key}",
-                json=body,
-            )
-            response.raise_for_status()
-            vector = [float(value) for value in response.json()["embedding"]["values"]]
-    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
-        return json.dumps({"error": str(exc)})
-    norm = sum(value * value for value in vector) ** 0.5
-    vector = [value / norm for value in vector] if norm else vector
-    parameters: list[Any] = [f"-{max(1, min(days, 3650))} days"]
-    sql = "SELECT id, timestamp, appName, windowTitle, substr(ocrText, 1, 300), embedding FROM screenshots WHERE embedding IS NOT NULL AND timestamp >= datetime('now', ?)"
-    if app_filter:
-        sql += " AND appName = ?"
-        parameters.append(app_filter)
-    sql += " ORDER BY timestamp DESC LIMIT 10000"
-    try:
-        with runtime.lock:
-            rows = runtime.db.execute(sql, parameters).fetchall()
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-    matches = []
-    for row in rows:
-        blob = row[5]
-        if not isinstance(blob, bytes) or len(blob) != len(vector) * 4:
-            continue
-        values = memoryview(blob).cast("f")
-        score = sum(left * right for left, right in zip(vector, values))
-        matches.append(
-            {
-                "id": row[0],
-                "timestamp": row[1],
-                "appName": row[2],
-                "windowTitle": row[3],
-                "ocrPreview": row[4],
-                "similarity": round(score, 3),
-            }
-        )
-    matches.sort(key=lambda item: item["similarity"], reverse=True)
-    return json.dumps({"results": matches[:20], "count": len(matches[:20])}, default=str)
-
-
-def daily_recap(days_ago: int = 0) -> str:
-    if runtime.db is None:
-        return json.dumps({"error": "Database not loaded. Upload omi.db first."})
-    days_ago = max(0, min(days_ago, 3650))
-    try:
-        with runtime.lock:
-            apps = runtime.db.execute(
-                "SELECT appName, COUNT(*) FROM screenshots WHERE timestamp >= datetime('now', 'start of day', ?, 'localtime') AND timestamp < datetime('now', 'start of day', ?, 'localtime') GROUP BY appName ORDER BY COUNT(*) DESC LIMIT 10",
-                (f"-{days_ago} days", f"-{days_ago - 1} days" if days_ago else "+1 day"),
-            ).fetchall()
-        return json.dumps({"apps": [{"appName": row[0], "screenshots": row[1]} for row in apps]})
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-
-
 def database_schema() -> str:
     if runtime.db is None:
         return "No database is loaded."
@@ -433,7 +360,7 @@ def database_schema() -> str:
         with runtime.lock:
             tables = runtime.db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
-                "AND name NOT LIKE 'grdb_%' ORDER BY name"
+                "AND name NOT LIKE 'grdb_%' AND name NOT IN ('screenshots', 'focus_sessions', 'observations') ORDER BY name"
             ).fetchall()
             entries = []
             for table in tables:
@@ -450,21 +377,17 @@ def database_schema() -> str:
 
 def system_prompt() -> str:
     return """You are an AI assistant with access to the user's OMI desktop database and connected services.
-This database contains their screen history, tasks, transcriptions, memories, and focus sessions.
+This database contains their tasks, transcriptions, memories, and connected services.
 
 DATABASE SCHEMA:
 %s
 
 TOOLS:
 - execute_sql: Run read-only SQL queries. SELECT auto-limits to 200 rows. Use it for structured queries.
-- semantic_search: Search screenshot OCR text by semantic similarity for fuzzy or conceptual queries.
-- get_daily_recap: Use this for what the user did today, yesterday, or this week.
 - Backend tools: Use these for calendar, email, health, conversations, memories, action items, and web search.
 
 GUIDELINES:
-- For activity summaries, use get_daily_recap before issuing multiple SQL queries.
-- For time-filtered screenshots, use timestamp range comparisons instead of date() or strftime() in WHERE clauses.
-- Key tables include screenshots, action_items, memories, transcription_sessions, transcription_segments, focus_sessions, observations, and staged_tasks.
+- Key tables include action_items, memories, transcription_sessions, transcription_segments, and staged_tasks.
 - Be concise and helpful. Format results clearly.""" % database_schema()
 
 
@@ -488,8 +411,6 @@ class AgentSession:
         self.pending_tools: list[str] = []
 
     async def start(self) -> bool:
-        if runtime.db is None:
-            return False
         if self.task:
             return True
         try:
@@ -502,28 +423,7 @@ class AgentSession:
         async def sql_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             return {"content": [{"type": "text", "text": execute_sql(str(arguments["query"]))}]}
 
-        @tool(
-            "semantic_search",
-            "Search screenshot OCR text by semantic similarity.",
-            {"query": str, "days": int, "app_filter": str},
-        )
-        async def search_tool(arguments: dict[str, Any]) -> dict[str, Any]:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": await semantic_search(
-                            str(arguments["query"]), int(arguments.get("days", 7)), arguments.get("app_filter") or None
-                        ),
-                    }
-                ]
-            }
-
-        @tool("get_daily_recap", "Get a compact activity recap for a day offset from today.", {"days_ago": int})
-        async def recap_tool(arguments: dict[str, Any]) -> dict[str, Any]:
-            return {"content": [{"type": "text", "text": daily_recap(int(arguments.get("days_ago", 0)))}]}
-
-        tools = [sql_tool, search_tool, recap_tool]
+        tools = [sql_tool] if runtime.db is not None else []
         for definition in runtime.backend_tools:
             name = definition.get("name")
             if not isinstance(name, str) or not IDENTIFIER.fullmatch(name):
@@ -727,6 +627,26 @@ async def sync(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     runtime.last_activity_at = time.monotonic()
     return {"applied": applied, "table": table}
+
+
+@app.post("/purge-screen-activity")
+async def purge_screen_activity(request: Request) -> dict[str, Any]:
+    runtime.require_auth(request)
+    if runtime.db is None:
+        return {"status": "ok", "deleted": 0}
+    deleted = 0
+    with runtime.lock:
+        for table in ("screenshots", "focus_sessions", "observations"):
+            try:
+                cursor = runtime.db.execute(f'DELETE FROM "{table}"')
+            except sqlite3.OperationalError as exc:
+                if "no such table" in str(exc).lower():
+                    continue
+                raise HTTPException(status_code=400, detail="Unable to purge screen activity") from exc
+            deleted += max(cursor.rowcount, 0)
+        runtime.db.commit()
+    runtime.last_activity_at = time.monotonic()
+    return {"status": "ok", "deleted": deleted}
 
 
 @app.websocket("/ws")

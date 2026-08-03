@@ -72,6 +72,7 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/auth", json={"firebaseToken": "firebase"}).status_code == 401
         assert client.post("/ping").status_code == 401
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
+        assert client.post("/purge-screen-activity").status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
 
@@ -157,7 +158,7 @@ def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
 def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
@@ -165,30 +166,103 @@ def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
         response = client.post(
             "/sync?token=test-token",
             json={
-                "table": "screenshots",
+                "table": "memories",
                 "rows": [
-                    {"id": "one", "appName": "Safari"},
-                    {"id": "two", "appName": "Terminal", "ocrText": "build passed"},
+                    {"id": "one", "content": "Safari"},
+                    {"id": "two", "content": "build passed"},
                     {},
                 ],
             },
         )
-        rows = [
-            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM screenshots ORDER BY id")
-        ]
+        rows = [tuple(row) for row in module.runtime.db.execute("SELECT id, content FROM memories ORDER BY id")]
 
     assert response.status_code == 200
-    assert response.json() == {"applied": 2, "table": "screenshots"}
+    assert response.json() == {"applied": 2, "table": "memories"}
     assert rows == [
-        ("one", "Safari", None),
-        ("two", "Terminal", "build passed"),
+        ("one", "Safari"),
+        ("two", "build passed"),
     ]
+
+
+def test_purge_screen_activity_removes_legacy_screen_tables(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE focus_sessions (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE observations (id TEXT PRIMARY KEY)")
+    connection.executemany("INSERT INTO screenshots VALUES (?)", [("s1",), ("s2",)])
+    connection.execute("INSERT INTO focus_sessions VALUES ('f1')")
+    connection.execute("INSERT INTO observations VALUES ('o1')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/sync?token=test-token",
+            json={"table": "screenshots", "rows": [{"id": "s3"}]},
+        )
+        purge = client.post("/purge-screen-activity?token=test-token")
+        remaining = [
+            module.runtime.db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+            for table in ("screenshots", "focus_sessions", "observations")
+        ]
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Table 'screenshots' not in sync whitelist"
+    assert purge.status_code == 200
+    assert purge.json() == {"status": "ok", "deleted": 4}
+    assert remaining == [0, 0, 0]
+
+
+def test_agent_session_starts_without_local_database(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    options = {}
+
+    class Client:
+        def __init__(self, **_):
+            return None
+
+        async def connect(self):
+            return None
+
+        async def query(self, _):
+            return None
+
+        async def disconnect(self):
+            return None
+
+        async def receive_response(self):
+            yield {"type": "result", "subtype": "success", "result": "", "total_cost_usd": 0}
+
+    def tool(*_):
+        return lambda function: function
+
+    fake_sdk = types.SimpleNamespace(
+        ClaudeAgentOptions=lambda **kwargs: options.update(kwargs) or kwargs,
+        ClaudeSDKClient=Client,
+        create_sdk_mcp_server=lambda *_args, **_kwargs: object(),
+        tool=tool,
+    )
+    monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake_sdk)
+
+    class Socket:
+        async def send_json(self, _event):
+            return None
+
+    async def run() -> None:
+        session = module.AgentSession(Socket())
+        assert await session.prewarm()
+        await session.close()
+
+    asyncio.run(run())
+    assert options["allowed_tools"] == ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
 
 
 def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_path: Path, monkeypatch) -> None:
     _, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.execute("CREATE TABLE memories (id TEXT)")
     connection.close()
     assert module.runtime.open_database()
     schema = {
@@ -247,7 +321,8 @@ def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_p
     events = asyncio.run(run())
     assert captured["get_calendar_events"] == schema
     assert {"type": "init", "sessionId": "sdk-session"} in events
-    assert "screenshots:" in options["system_prompt"]
+    assert "memories:" in options["system_prompt"]
+    assert "screenshots:" not in options["system_prompt"]
     assert "WebSearch" in options["allowed_tools"]
 
 
