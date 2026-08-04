@@ -9,6 +9,7 @@ real app is imported, while this module keeps bucket/blob bytes under a temp dir
 import os
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -79,6 +80,16 @@ class FakeBlob:
     @property
     def public_url(self) -> str:
         return f"https://fake-gcs.local/{self.bucket.name}/{self.name}"
+
+    @property
+    def size(self):
+        return self.path.stat().st_size if self.path.exists() else None
+
+    @property
+    def updated(self):
+        if not self.path.exists():
+            return None
+        return datetime.fromtimestamp(self.path.stat().st_mtime, tz=timezone.utc)
 
     def exists(self, *args, **kwargs) -> bool:
         return self.path.exists()
@@ -158,6 +169,12 @@ class FakeStorageClient:
 
     def get_bucket(self, name: str) -> FakeBucket:
         return self.bucket(name)
+
+    def list_blobs(self, bucket_or_name, prefix: str = "", *args, **kwargs) -> Iterable[FakeBlob]:
+        # Mirror google.cloud.storage.Client.list_blobs, which accepts either a bucket object or a
+        # bucket name and returns the matching blobs. The object-store GCS adapter calls it this way.
+        name = bucket_or_name.name if isinstance(bucket_or_name, FakeBucket) else bucket_or_name
+        return FakeBucket(name).list_blobs(prefix=prefix or "")
 
 
 def patch_google_storage():
