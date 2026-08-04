@@ -157,6 +157,8 @@ def run_enrichment(
         # Every committed apply advances the canonical control head. Re-read the
         # control record and re-plan the next item so no operation is submitted
         # against a stale observed_head_commit_id.
+        retryable_head_mismatches = 0
+        max_retryable_head_mismatches = apply_limit * 2
         while applied < apply_limit:
             control = _control(uid, db_client=db_client)
             planned = None
@@ -183,8 +185,15 @@ def run_enrichment(
             if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
                 report[result.status.value] += 1
                 applied += 1
+                retryable_head_mismatches = 0
                 if progress_reporter is not None:
                     progress_reporter({result.status.value: applied})
+            elif result.status == ApplyStatus.retryable_head_mismatch:
+                report[result.status.value] += 1
+                retryable_head_mismatches += 1
+                if retryable_head_mismatches < max_retryable_head_mismatches:
+                    continue
+                break
             else:
                 report[f"apply_{result.status.value}"] += 1
                 break
