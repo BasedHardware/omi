@@ -17,6 +17,7 @@ on:
       - "desktop/macos/scripts/desktop_flow_contract.py"
       - "desktop/macos/e2e/**"
       - "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+      - "desktop/macos/Desktop/Sources/AIClone/AICloneAutomationActions.swift"
       - "desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift"
       - "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
       - "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift"

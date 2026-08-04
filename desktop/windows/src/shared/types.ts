@@ -662,6 +662,57 @@ export type PickedChatFile = {
   bytes: Uint8Array | null
 }
 
+export type AiCloneChatMode = 'off' | 'draft' | 'auto'
+
+export type AiCloneChat = {
+  id: string
+  title: string
+  network: string
+  type: 'single' | 'group'
+  mode: AiCloneChatMode
+  lastActivityAt?: number
+}
+
+export type AiCloneDraft = {
+  id: string
+  chatId: string
+  chatTitle: string
+  network: string
+  senderName: string
+  incomingText: string
+  incomingMessageId?: string
+  replyText: string
+  createdAt: number
+}
+
+export type AiCloneActivityItem = {
+  id: string
+  at: number
+  kind: 'auto_sent' | 'draft_sent' | 'draft_dismissed' | 'error'
+  chatTitle: string
+  text: string
+}
+
+export type AiCloneState = {
+  beeperConnected: boolean
+  beeperReachable: boolean
+  enabled: boolean
+  authTokenPresent: boolean
+  pendingDrafts: AiCloneDraft[]
+  activity: AiCloneActivityItem[]
+  autoSentThisHour: number
+  error?: string
+}
+
+export type AiCloneEvent = { kind: 'state'; state: AiCloneState } | { kind: 'token-expired' }
+
+export type AiCloneAuth = {
+  token: string
+  apiBase?: string
+  desktopApiBase?: string
+  displayName?: string
+}
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -1239,6 +1290,16 @@ export type OmiBridgeApi = {
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
   screenSynthAdvanceWatermark: (ts: number) => Promise<void>
   screenSynthRecordRun: (run: ScreenSynthRun) => Promise<void>
+  aiCloneGetState: () => Promise<AiCloneState>
+  aiCloneConnect: (beeperToken: string) => Promise<AiCloneState>
+  aiCloneDisconnect: () => Promise<AiCloneState>
+  aiCloneSetEnabled: (enabled: boolean, auth?: AiCloneAuth) => Promise<AiCloneState>
+  aiCloneListChats: () => Promise<AiCloneChat[]>
+  aiCloneSetChatMode: (chatId: string, mode: AiCloneChatMode) => Promise<void>
+  aiCloneApproveDraft: (draftId: string, editedText?: string) => Promise<AiCloneState>
+  aiCloneDiscardDraft: (draftId: string) => Promise<AiCloneState>
+  aiCloneProvideAuthToken: (auth: AiCloneAuth) => void
+  onAiCloneEvent: (cb: (e: AiCloneEvent) => void) => () => void
   // --- Coding agents (Claude Code / OpenClaw / Hermes / Codex) ---
   /** Connection status for every known agent (commandOverrides come from prefs). */
   codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) => Promise<CodingAgentInfo[]>

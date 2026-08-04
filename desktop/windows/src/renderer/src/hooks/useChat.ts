@@ -41,6 +41,7 @@ import {
 import { trackEvent } from '../lib/analytics'
 import { mergeAgentCards } from '../lib/chat/agentThreadCards'
 import type { ChatContentBlock } from '../../../shared/chatContent'
+import { parseOmiSseLine } from '../../../shared/omiSse'
 
 export type ChatMsg = {
   id?: string
@@ -1237,10 +1238,7 @@ export function useChat(): UseChat {
       // bubble; and (c) encodes reply newlines as the literal token `__CRLF__` so
       // they survive single-line SSE framing; restore those.
       const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:') || line.startsWith('message:')) return null
-        const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
-        if (content.startsWith('think:')) return null
-        return content.replace(/__CRLF__/g, '\n')
+        return line.startsWith('message:') ? null : parseOmiSseLine(line)
       }
 
       // The terminal `done:` frame carries the AUTHORITATIVE final message: a
