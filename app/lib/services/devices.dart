@@ -10,6 +10,7 @@ import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
+import 'package:omi/utils/ble_connect_retry.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -35,10 +36,7 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  );
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 class DeviceService {
@@ -59,6 +57,13 @@ class DeviceService {
   DeviceServiceStatus get status => _status;
 
   DateTime? _firstConnectedAt;
+
+  // #6610: after device-ready timeout / connect failure, soft-retry with backoff
+  // without disposing the transport (native auto-reconnect must stay alive).
+  Timer? _bleConnectRetryTimer;
+  int _bleConnectRetryAttempt = 0;
+  String? _bleConnectRetryDeviceId;
+  bool _userDisconnectedBle = false;
 
   Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
     Logger.debug("Device discovering...");
@@ -103,51 +108,87 @@ class DeviceService {
     }
   }
 
-  Future<void> _connectToDevice(String id) async {
-    // Clean up existing connection — disconnect if active, then dispose transport
-    if (_connection != null) {
-      if (_connection!.status == DeviceConnectionState.connected) {
-        await _connection!.disconnect();
-      }
-      await _connection!.transport.dispose();
-    }
-    _connection = null;
+  Future<void> _connectToDevice(String id, {required bool softRetry}) async {
+    final reuseExisting =
+        softRetry &&
+        shouldSoftRetryExistingConnection(existingDeviceId: _connection?.device.id, targetDeviceId: id, force: true);
 
-    var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug(
-      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
-    );
-
-    // If device not in discovered list, try to get it from SharedPreferences
-    // This allows background reconnection without scanning
-    if (device == null) {
-      Logger.debug(
-        '[DeviceService] Device not in discovered list, checking stored device',
-      );
-      device = _getStoredDevice(id);
-      if (device != null) {
-        Logger.debug('[DeviceService] Using stored device: ${device.name}');
-        if (!_devices.any((d) => d.id == device!.id)) {
-          _devices.add(device);
+    if (!reuseExisting) {
+      // Clean up existing connection — disconnect if active, then dispose transport
+      if (_connection != null) {
+        if (_connection!.status == DeviceConnectionState.connected) {
+          await _connection!.disconnect();
         }
-      } else {
-        Logger.debug(
-          '[DeviceService] No stored device available for $id, returning',
-        );
-        return;
+        await _connection!.transport.dispose();
       }
+      _connection = null;
+
+      var device = _devices.firstWhereOrNull((f) => f.id == id);
+      Logger.debug(
+        '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
+      );
+
+      // If device not in discovered list, try to get it from SharedPreferences
+      // This allows background reconnection without scanning
+      if (device == null) {
+        Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
+        device = _getStoredDevice(id);
+        if (device != null) {
+          Logger.debug('[DeviceService] Using stored device: ${device.name}');
+          if (!_devices.any((d) => d.id == device!.id)) {
+            _devices.add(device);
+          }
+        } else {
+          Logger.debug('[DeviceService] No stored device available for $id, returning');
+          return;
+        }
+      }
+
+      _connection = DeviceConnectionFactory.create(device);
+    } else {
+      Logger.debug('[DeviceService] soft-retrying existing transport for $id');
     }
 
-    _connection = DeviceConnectionFactory.create(device);
     if (_connection != null) {
-      await _connection!.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-      );
+      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      Logger.debug(
-        '[DeviceService] Failed to create device connection for ${device.id}',
-      );
+      Logger.debug('[DeviceService] Failed to create device connection for $id');
     }
+  }
+
+  void _cancelBleConnectRetry() {
+    _bleConnectRetryTimer?.cancel();
+    _bleConnectRetryTimer = null;
+    _bleConnectRetryDeviceId = null;
+  }
+
+  void _resetBleConnectRetryState() {
+    _cancelBleConnectRetry();
+    _bleConnectRetryAttempt = 0;
+  }
+
+  void _scheduleBleConnectRetry(String deviceId) {
+    final pairedId = SharedPreferencesUtil().btDevice.id;
+    final should = shouldScheduleBleConnectRetry(
+      serviceReady: _status == DeviceServiceStatus.ready || _status == DeviceServiceStatus.scanning,
+      hasPairedDevice: pairedId.isNotEmpty && pairedId == deviceId,
+      userDisconnected: _userDisconnectedBle,
+      alreadyConnected: _connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected,
+      retryAlreadyScheduled: _bleConnectRetryTimer?.isActive == true,
+    );
+    if (!should) return;
+
+    final delay = nextBleConnectRetryDelay(_bleConnectRetryAttempt);
+    _bleConnectRetryAttempt += 1;
+    _bleConnectRetryDeviceId = deviceId;
+    Logger.debug(
+      '[DeviceService] scheduling BLE soft-retry #$_bleConnectRetryAttempt for $deviceId in ${delay.inSeconds}s',
+    );
+    _bleConnectRetryTimer?.cancel();
+    _bleConnectRetryTimer = Timer(delay, () {
+      _bleConnectRetryTimer = null;
+      unawaited(ensureConnection(deviceId, force: true, softRetry: true));
+    });
   }
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context) {
@@ -165,11 +206,13 @@ class DeviceService {
 
   void start() {
     _status = DeviceServiceStatus.ready;
-
-    // TODO: Start watchdog to discover automatically, re-connect automatically
+    // Auto-reconnect after connect/device-ready failures is handled by
+    // _scheduleBleConnectRetry (#6610). Native owns in-session BLE reconnect.
   }
 
   void stop() {
+    _userDisconnectedBle = true;
+    _cancelBleConnectRetry();
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
@@ -188,15 +231,13 @@ class DeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  ) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
+    if (state == DeviceConnectionState.connected) {
+      _userDisconnectedBle = false;
+      _resetBleConnectRetryState();
+    }
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -210,18 +251,16 @@ class DeviceService {
 
   final Mutex _mutex = Mutex();
 
-  Future<DeviceConnection?> ensureConnection(
-    String deviceId, {
-    bool force = false,
-  }) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, bool softRetry = false}) async {
     await _mutex.acquire();
     try {
       Logger.debug(
-        "ensureConnection ${_connection?.device.id} ${_connection?.status} $force",
+        "ensureConnection ${_connection?.device.id} ${_connection?.status} force=$force softRetry=$softRetry",
       );
 
       // Connected to this device — return it
       if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
+        _resetBleConnectRetryState();
         return _connection;
       }
 
@@ -235,15 +274,27 @@ class DeviceService {
       // No connection or different device — only connect on force (user-initiated)
       if (!force) return null;
 
+      // App/user asked to reconnect — clear manual-disconnect suppression.
+      _userDisconnectedBle = false;
+
       try {
-        await _connectToDevice(deviceId);
+        await _connectToDevice(deviceId, softRetry: softRetry);
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
+        _scheduleBleConnectRetry(deviceId);
         return null;
       }
 
-      _firstConnectedAt ??= DateTime.now();
-      return _connection;
+      if (_connection?.status == DeviceConnectionState.connected) {
+        _firstConnectedAt ??= DateTime.now();
+        _resetBleConnectRetryState();
+        return _connection;
+      }
+
+      // Connect returned without throwing but never reached connected (e.g. no
+      // stored device). Schedule a soft retry while the device stays paired.
+      _scheduleBleConnectRetry(deviceId);
+      return null;
     } finally {
       _mutex.release();
     }
@@ -267,6 +318,8 @@ class DeviceService {
   }
 
   Future<void> disconnectDevice() async {
+    _userDisconnectedBle = true;
+    _cancelBleConnectRetry();
     if (_connection != null) {
       Logger.debug("DeviceService: Disconnecting device...");
       await _connection?.disconnect();
@@ -276,6 +329,8 @@ class DeviceService {
 
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
+    _userDisconnectedBle = true;
+    _cancelBleConnectRetry();
     if (_connection != null) {
       if (_connection!.status == DeviceConnectionState.connected) {
         try {
@@ -288,9 +343,7 @@ class DeviceService {
       try {
         await _connection!.transport.dispose();
       } catch (e) {
-        Logger.debug(
-          "DeviceService: transport dispose during forget failed: $e",
-        );
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
       }
       _connection = null;
     }

@@ -40,6 +40,13 @@ final class OmiBleManager: NSObject {
     /// Connection start time per peripheral UUID.
     private var connectionStartTimes: [String: Int64] = [:]
 
+    /// When `connectPeripheral` was last issued per UUID. Used by the connecting
+    /// watchdog (#6610) to cancel + re-issue connects stuck in `.connecting`.
+    private var connectAttemptStartTimes: [String: Date] = [:]
+
+    /// Periodic check for CoreBluetooth peripherals stuck in `.connecting`.
+    private var connectingWatchdogTimer: Timer?
+
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
 
@@ -129,6 +136,8 @@ final class OmiBleManager: NSObject {
                 NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
                 return
             }
+            connectAttemptStartTimes[uuid] = Date()
+            startConnectingWatchdogIfNeeded()
             centralManager.connect(peripheral, options: nil)
             return
         }
@@ -139,7 +148,51 @@ final class OmiBleManager: NSObject {
         if let peripheral = retrieved.first {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
+            connectAttemptStartTimes[uuid] = Date()
+            startConnectingWatchdogIfNeeded()
             centralManager.connect(peripheral, options: nil)
+        }
+    }
+
+    /// CoreBluetooth can leave a peripheral in `.connecting` after backgrounding
+    /// without firing disconnect/fail callbacks (#6610). Cancel and re-issue connect
+    /// so Dart's soft-retry path and native auto-reconnect can recover.
+    private func startConnectingWatchdogIfNeeded() {
+        guard connectingWatchdogTimer == nil else { return }
+        connectingWatchdogTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+            self?.kickStuckConnectingPeripherals()
+        }
+    }
+
+    private func kickStuckConnectingPeripherals() {
+        let threshold: TimeInterval = 65
+        for (uuid, peripheral) in peripherals {
+            guard peripheral.state == .connecting else { continue }
+            guard !manuallyDisconnected.contains(uuid) else { continue }
+            guard let started = connectAttemptStartTimes[uuid] else { continue }
+            let elapsed = Date().timeIntervalSince(started)
+            guard elapsed >= threshold else { continue }
+
+            NSLog("[OmiBle] connecting watchdog: canceling stuck connect for \(uuid) after \(Int(elapsed))s")
+            connectAttemptStartTimes.removeValue(forKey: uuid)
+            centralManager.cancelPeripheralConnection(peripheral)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
+                guard let self = self else { return }
+                guard !self.manuallyDisconnected.contains(uuid) else { return }
+                guard let peripheral = self.peripherals[uuid] else { return }
+                if peripheral.state == .connected { return }
+                NSLog("[OmiBle] connecting watchdog: re-issuing connect for \(uuid)")
+                self.connectAttemptStartTimes[uuid] = Date()
+                peripheral.delegate = self
+                self.centralManager.connect(peripheral, options: nil)
+            }
+        }
+
+        if connectAttemptStartTimes.isEmpty,
+           peripherals.values.allSatisfy({ $0.state != .connecting }) {
+            connectingWatchdogTimer?.invalidate()
+            connectingWatchdogTimer = nil
         }
     }
 
@@ -602,6 +655,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         everConnected.insert(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
+        connectAttemptStartTimes.removeValue(forKey: uuid)
 
         peripheral.delegate = self
         peripheral.discoverServices(nil)
@@ -612,6 +666,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
+        connectAttemptStartTimes.removeValue(forKey: uuid)
         cleanupPeripheral(uuid)
 
         if !isManual {
@@ -644,6 +699,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
+        connectAttemptStartTimes.removeValue(forKey: uuid)
         cleanupPeripheral(uuid)
 
         // Finalize the in-progress batch recording so it's saved + ingestable right away
