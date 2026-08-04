@@ -64,6 +64,31 @@ final class CapturePacingTests: XCTestCase {
         XCTAssertNotNil(FrameImage.encoded(small, quality: .best), "…and is still encodable")
     }
 
+    // MARK: - Capture request lifecycle
+
+    /// The capture request cache is tied to the exact shareable-content window object and frame.
+    /// Reusing by numeric window ID alone could carry a stale filter across a refreshed snapshot.
+    func testCaptureRequestCacheRequiresTheSameWindowSnapshot() {
+        let snapshotWindow = NSObject()
+        let sameSnapshot = CaptureRequestKey(
+            windowID: 42, windowIdentity: ObjectIdentifier(snapshotWindow),
+            windowFrame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let refreshedSnapshot = CaptureRequestKey(
+            windowID: 42, windowIdentity: ObjectIdentifier(NSObject()),
+            windowFrame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let differentWindow = CaptureRequestKey(
+            windowID: 43, windowIdentity: ObjectIdentifier(snapshotWindow),
+            windowFrame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let resizedWindow = CaptureRequestKey(
+            windowID: 42, windowIdentity: ObjectIdentifier(snapshotWindow),
+            windowFrame: CGRect(x: 0, y: 0, width: 120, height: 100))
+
+        XCTAssertEqual(sameSnapshot, sameSnapshot)
+        XCTAssertNotEqual(sameSnapshot, refreshedSnapshot)
+        XCTAssertNotEqual(sameSnapshot, differentWindow)
+        XCTAssertNotEqual(sameSnapshot, resizedWindow)
+    }
+
     // MARK: - Pause on Inactivity
 
     /// The threshold, and why it is where it is: reading is inactivity, and this pipeline already

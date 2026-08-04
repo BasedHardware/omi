@@ -18,6 +18,14 @@ import SoundAnalysis
 /// cached under Application Support; after that this runs with the machine offline.
 actor Transcriber {
 
+    /// The one pool shared by onboarding's warm-up and every first capture.
+    ///
+    /// The generic pool is deliberately injectable so its lifecycle contract can be tested with a
+    /// small value instead of downloading or loading CoreML models.
+    private static let modelPool = ModelPool<AsrModels> { version, progress in
+        try await obtainModels(version: version, progress: progress)
+    }
+
     // MARK: - Tuning
 
     /// The wire format every capture source produces. Not configurable — the model wants 16 kHz.
@@ -128,7 +136,7 @@ actor Transcriber {
         }
 
         let started = Date()
-        _ = try await ModelPool.shared.models(version: version, progress: progress)
+        _ = try await modelPool.models(version: version, progress: progress)
         progress?(1)
         ContextLog.info(
             "Parakeet \(version) downloaded in \(String(format: "%.0f", Date().timeIntervalSince(started)))s", "stt")
@@ -249,7 +257,7 @@ actor Transcriber {
             // Shared across both transcribers. Two independent `downloadAndLoad` calls compile the
             // same ~600 MB of CoreML twice, concurrently, competing for the same ANE — which is why
             // a cold start used to take minutes per channel instead of once for both.
-            let models = try await ModelPool.shared.models(version: version)
+            let models = try await Self.modelPool.models(version: version)
             let loaded = AsrManager()
             try await loaded.loadModels(models)
             manager = loaded
@@ -757,32 +765,42 @@ enum SpeechModelError: LocalizedError {
 
 // MARK: - Model pool
 
-/// One download-and-compile of the Parakeet weights, shared by every transcriber.
+/// One download-and-compile of a model value, shared by every caller for a version.
 ///
 /// `AsrManager` instances stay separate — each channel needs its own decoder state — but the
-/// weights behind them do not, and compiling them twice is pure cost paid at the worst moment.
-private actor ModelPool {
-    static let shared = ModelPool()
+/// weights behind them do not, and compiling them twice is pure cost paid at the worst moment. The
+/// loader is injected so this task/result-sharing contract can be tested without CoreML hardware.
+actor ModelPool<Value: Sendable> {
+    typealias Loader = @Sendable (
+        AsrModelVersion,
+        (@Sendable (Double) -> Void)?
+    ) async throws -> Value
 
-    private var loaded: [AsrModelVersion: AsrModels] = [:]
-    private var inFlight: [AsrModelVersion: Task<AsrModels, Error>] = [:]
+    private let loader: Loader
+    private var loaded: [AsrModelVersion: Value] = [:]
+    private var inFlight: [AsrModelVersion: Task<Value, Error>] = [:]
+
+    init(loader: @escaping Loader) {
+        self.loader = loader
+    }
 
     func models(
         version: AsrModelVersion,
         progress: (@Sendable (Double) -> Void)? = nil
-    ) async throws -> AsrModels {
+    ) async throws -> Value {
         if let models = loaded[version] { return models }
         if let task = inFlight[version] { return try await task.value }
 
-        // Through `Transcriber.obtainModels`, not `AsrModels.downloadAndLoad` — this was the second
-        // of the two unguarded entry points, and the one a real user hits: onboarding's warm-up is
-        // skippable, but every first `Transcriber.start()` arrives here.
+        // The production loader is `Transcriber.obtainModels`, not `AsrModels.downloadAndLoad` —
+        // this was the second of the two unguarded entry points, and the one a real user hits:
+        // onboarding's warm-up is skippable, but every first `Transcriber.start()` arrives here.
         //
         // Only a *success* is cached, so a refusal is re-decided on the next start rather than
         // remembered. That is what lets transcription come up on its own the moment Airgap Mode goes
         // off, and it costs nothing to re-ask: a refused decision is one `FileManager` existence
         // check and never touches the network.
-        let task = Task { try await Transcriber.obtainModels(version: version, progress: progress) }
+        let loader = self.loader
+        let task = Task { try await loader(version, progress) }
         inFlight[version] = task
         defer { inFlight[version] = nil }
         let models = try await task.value

@@ -7,6 +7,33 @@ import ImageIO
 import ScreenCaptureKit
 import Vision
 
+/// Identity for the immutable ScreenCaptureKit objects associated with one shareable-content
+/// snapshot. A new snapshot may contain the same window ID with new geometry or ownership, so object
+/// identity and the current frame are part of the key rather than relying on the numeric ID alone.
+struct CaptureRequestKey: Equatable {
+    let windowID: CGWindowID
+    let windowIdentity: ObjectIdentifier
+    let windowFrame: CGRect
+
+    init(window: SCWindow) {
+        windowID = window.windowID
+        windowIdentity = ObjectIdentifier(window)
+        windowFrame = window.frame
+    }
+
+    init(windowID: CGWindowID, windowIdentity: ObjectIdentifier, windowFrame: CGRect = .zero) {
+        self.windowID = windowID
+        self.windowIdentity = windowIdentity
+        self.windowFrame = windowFrame
+    }
+}
+
+private struct CachedCapture {
+    let key: CaptureRequestKey
+    let filter: SCContentFilter
+    let configuration: SCStreamConfiguration
+}
+
 /// Samples the active window on a timer, reads it with Vision when the pixels actually changed, and
 /// hands every worthwhile observation to `onFrame`.
 ///
@@ -132,6 +159,7 @@ final class ScreenWatcher {
         lastSkipReason = nil
         cachedContent = nil
         cachedContentAt = nil
+        cachedCapture = nil
         lastServedAt = nil
         if wasRunning { ContextLog.info("Screen watcher stopped", "screen") }
     }
@@ -174,6 +202,12 @@ final class ScreenWatcher {
 
     private var cachedContent: SCShareableContent?
     private var cachedContentAt: Date?
+
+    /// The one-shot screenshot API creates its capture machinery around the filter and
+    /// configuration it receives. Keep those request objects alive while the exact same window
+    /// snapshot remains active; a changed `SCWindow` identity gets a fresh filter so a refreshed
+    /// `SCShareableContent` snapshot can never inherit stale geometry or ownership.
+    private var cachedCapture: CachedCapture?
 
     private var lastSkipReason: String?
     private var lastErrorLoggedAt: Date?
@@ -228,6 +262,7 @@ final class ScreenWatcher {
     // MARK: - One tick
 
     private func tick() async {
+        guard !Task.isCancelled else { return }
         // First, because it is the only guard whose answer can change without anything on this Mac
         // moving: a grant is dropped by the OS, not by the user's hands. It used to be a bare
         // `hasPermission()` that logged once and idled — the exact shape of the twenty-nine-hour
@@ -293,7 +328,9 @@ final class ScreenWatcher {
             return
         }
 
-        guard let front = await activeWindow(pid: frontApp.processIdentifier) else {
+        let front = await activeWindow(pid: frontApp.processIdentifier)
+        guard !Task.isCancelled else { return }
+        guard let front else {
             // **Not** served. A frontmost application whose windows are invisible to
             // `SCShareableContent` is the signature of a window-server connection that no longer
             // carries capture rights, which is what a grant dropped mid-life leaves behind.
@@ -330,6 +367,7 @@ final class ScreenWatcher {
                 bundleID: bundleID,
                 appName: appName,
                 window: capturedWindow))
+        guard !Task.isCancelled else { return }
         let admission = exclusions.admit(subject)
         guard let ticket = admission.ticket else {
             noteSkip(admission.reason?.logDescription ?? "excluded")
@@ -337,7 +375,9 @@ final class ScreenWatcher {
             return
         }
 
-        guard let image = await capture(window) else {
+        let image = await capture(window)
+        guard !Task.isCancelled else { return }
+        guard let image else {
             // `capture` already logged; this is the second of the three refusal signatures.
             reportStall()
             return
@@ -404,6 +444,7 @@ final class ScreenWatcher {
             )
         }.value
 
+        guard !Task.isCancelled else { return }
         guard let processed else {
             // Pixels moved but no readable text arrived, in a window that is already the last row
             // stored — a spinner advancing, a progress bar filling, a repaint. The row would say
@@ -608,36 +649,52 @@ final class ScreenWatcher {
     }
 
     private func capture(_ window: SCWindow) async -> CGImage? {
-        // The filter, not `window.frame`, is the authority on what will actually be captured and at
-        // what backing scale — the frame knows neither. Both properties are macOS 14.0+ and the
-        // deployment floor here is 14.4.
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        guard
-            let size = ScreenPipeline.captureSize(
-                for: filter.contentRect,
-                pointPixelScale: CGFloat(filter.pointPixelScale)
-            )
-        else {
-            noteSkip("window has no area")
-            return nil
-        }
+        let request: CachedCapture
+        let key = CaptureRequestKey(window: window)
+        if let cachedCapture, cachedCapture.key == key {
+            request = cachedCapture
+        } else {
+            // The filter, not `window.frame`, is the authority on what will actually be captured and
+            // at what backing scale — the frame knows neither. Both properties are macOS 14.0+ and the
+            // deployment floor here is 14.4.
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            guard
+                let size = ScreenPipeline.captureSize(
+                    for: filter.contentRect,
+                    pointPixelScale: CGFloat(filter.pointPixelScale)
+                )
+            else {
+                cachedCapture = nil
+                noteSkip("window has no area")
+                return nil
+            }
 
-        let config = SCStreamConfiguration()
-        config.width = size.width
-        config.height = size.height
-        config.scalesToFit = true
-        config.showsCursor = false
-        // Asking for more pixels than the nominal size is pointless if the source is downsampled
-        // first, so take the native backing store.
-        config.captureResolution = .best
+            let config = SCStreamConfiguration()
+            config.width = size.width
+            config.height = size.height
+            config.scalesToFit = true
+            config.showsCursor = false
+            // Asking for more pixels than the nominal size is pointless if the source is downsampled
+            // first, so take the native backing store.
+            config.captureResolution = .best
+            request = CachedCapture(key: key, filter: filter, configuration: config)
+            cachedCapture = request
+        }
 
         do {
             return try await SCScreenshotManager.captureImage(
-                contentFilter: filter,
-                configuration: config
+                contentFilter: request.filter,
+                configuration: request.configuration
             )
         } catch {
-            noteError("Capture failed: \(error.localizedDescription)")
+            // Do not carry a filter/configuration across a failed WindowServer request. The next
+            // tick gets a fresh one-shot request and can recover from a stale connection or window.
+            if cachedCapture?.key == request.key, cachedCapture?.filter === request.filter {
+                cachedCapture = nil
+            }
+            if !Task.isCancelled {
+                noteError("Capture failed: \(error.localizedDescription)")
+            }
             return nil
         }
     }

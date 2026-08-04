@@ -19,4 +19,25 @@ final class TranscriptOwnershipTests: XCTestCase {
     func testLiveCloudOwnsNewTranscriptChunks() {
         XCTAssertFalse(TranscriptOwnership.shouldFeedLocalFallback(when: .live))
     }
+
+    func testLocalModelStartsOnlyWhenCloudBufferCannotCoverTheGap() {
+        XCTAssertFalse(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .connecting, isSignedIn: true))
+        XCTAssertFalse(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .idle, isSignedIn: true))
+        XCTAssertTrue(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .idle, isSignedIn: false))
+        XCTAssertTrue(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .failed("network unavailable"), isSignedIn: true))
+        XCTAssertTrue(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .paywalled, isSignedIn: true))
+        XCTAssertTrue(
+            TranscriptOwnership.shouldStartLocalFallback(
+                when: .airgapped, isSignedIn: true))
+    }
 }

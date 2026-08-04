@@ -237,12 +237,16 @@ final class Engine: ObservableObject {
     private var screenRecycledAt: Double?
 
     private var audioSources: [CaptureComponent: AudioSource] = [:]
+    /// Identifies one permission/device run. A canceled start may finish after a stop and restart;
+    /// it must not publish state or install a local transcriber into the new run.
+    private var audioRunIDs: [CaptureComponent: UUID] = [:]
     private var transcribers: [CaptureComponent: Transcriber] = [:]
     private var chunkFeeds: [CaptureComponent: AsyncStream<Data>.Continuation] = [:]
     private var pumps: [CaptureComponent: Task<Void, Never>] = [:]
     private var starts: [CaptureComponent: Task<Void, Never>] = [:]
-    /// Silicon-only: Parakeet `start()` side tasks. Cancelled in `teardownAudio` so a stop mid-load
-    /// cannot resurrect a pump on a transcriber the engine no longer owns.
+    /// Silicon-only: Parakeet start side tasks. Created only when a cloud fallback is actually
+    /// needed, and cancelled in teardownAudio so a stop mid-load cannot resurrect a pump on a
+    /// transcriber the engine no longer owns.
     private var localStarts: [CaptureComponent: Task<Void, Never>] = [:]
     private var screenWatcher: ScreenWatcher?
 
@@ -571,9 +575,11 @@ final class Engine: ObservableObject {
         stopScreen(reason: reason)
     }
 
-    /// Wires one audio device into the cloud mixer, and optionally a local Parakeet instance on
-    /// Apple Silicon. Capture lifecycle must not wait on (or die with) local model load — cloud
-    /// transcription needs the chunks either way.
+    /// Wires one audio device into the cloud mixer. On Apple Silicon, local Parakeet is started only
+    /// after cloud ownership is no longer viable; while the socket is connecting it buffers audio,
+    /// so warming two ~600 MB ASR managers during every healthy launch is unnecessary. Capture
+    /// lifecycle must not wait on (or die with) local model load — cloud transcription needs the
+    /// chunks either way.
     private func startAudio(_ component: CaptureComponent) {
         guard starts[component] == nil, !isLive(component) else { return }
         guard let capability = component.capability else { return }
@@ -586,6 +592,7 @@ final class Engine: ObservableObject {
         let decision = AudioCaptureDecision.make(usesLocalSTT: HostArchitecture.usesLocalSTT)
         let segmentSource = component.segmentSource
         let lines = lineFeed
+        let runID = UUID()
         // A stream rather than a task per chunk: tasks reach an actor in whatever order the pool
         // schedules them, and reordered audio is a corrupted transcript. Bounded, because a stalled
         // transcriber must cost a few dropped seconds rather than the whole machine's memory.
@@ -593,78 +600,18 @@ final class Engine: ObservableObject {
             of: Data.self, bufferingPolicy: .bufferingNewest(512))
 
         audioSources[component] = device
+        audioRunIDs[component] = runID
         chunkFeeds[component] = feed
-
-        let transcriber: Transcriber?
-        if decision.startLocalSTT {
-            let local = Transcriber(source: segmentSource)
-            transcribers[component] = local
-            transcriber = local
-        } else {
-            transcriber = nil
-        }
 
         starts[component] = Task { [weak self] in
             do {
-                if let transcriber {
-                    await transcriber.setOnLine { text, startedAt, endedAt in
-                        lines?.yield(
-                            TranscriptLine(
-                                text: text, startedAt: startedAt, endedAt: endedAt, source: segmentSource))
-                    }
-                    if !Transcriber.isModelReady {
-                        // ~600 MB on first run. Say so rather than looking silently broken for minutes.
-                        self?.setState(
-                            component,
-                            .starting(
-                                "\(component.label) warming up — first run downloads the transcription model"))
-                        self?.publishState()
-                    }
-                    // Side task: never await before device start. A throw must not tear down capture
-                    // (`AudioCaptureDecision.teardownCaptureOnLocalSTTFailure` is always false).
-                    let localStart = Task { [weak self] in
-                        do {
-                            try await transcriber.start()
-                            await MainActor.run {
-                                guard let self, self.transcribers[component] != nil else { return }
-                                self.localStarts[component] = nil
-                                if case .starting = self.componentStates[component] {
-                                    self.setState(component, .live)
-                                }
-                                self.publishState()
-                            }
-                        } catch {
-                            await MainActor.run {
-                                guard let self, self.transcribers[component] != nil else { return }
-                                self.localStarts[component] = nil
-                                if Task.isCancelled { return }
-                                ContextLog.error(
-                                    "\(component.label) local transcription unavailable — "
-                                        + "\(error.localizedDescription). Cloud transcription continues.",
-                                    "engine")
-                                if !decision.teardownCaptureOnLocalSTTFailure {
-                                    self.publishState()
-                                    return
-                                }
-                                self.teardownAudio(component)
-                                self.setState(
-                                    component,
-                                    .blocked(
-                                        "\(component.label) stopped — \(error.localizedDescription)"))
-                                self.publishState()
-                            }
-                        }
-                    }
-                    self?.localStarts[component] = localStart
-                }
-
                 self?.pumps[component] = Task.detached(priority: .userInitiated) {
                     for await chunk in chunks {
                         // Every chunk reaches the cloud. The local model owns only the fallback:
                         // feeding both while cloud is live persists two independent transcripts of
                         // the same audio. Decide at ingestion time, before model latency can blur a
                         // cloud-state transition with the line it later emits.
-                        let useLocalFallback = await MainActor.run { () -> Bool in
+                        let localFallback = await MainActor.run { () -> Transcriber? in
                             switch component {
                             case .microphone: Engine.shared.mixerInput(mic: chunk)
                             case .systemAudio: Engine.shared.mixerInput(system: chunk)
@@ -674,22 +621,31 @@ final class Engine: ObservableObject {
                             // rather than merely started. `AudioSource.isRunning` is a flag the
                             // source sets; this is bytes.
                             Engine.shared.noteOutput(component)
-                            return TranscriptOwnership.shouldFeedLocalFallback(
-                                when: ListenSocket.shared.state)
+                            let cloudState = ListenSocket.shared.state
+                            guard TranscriptOwnership.shouldFeedLocalFallback(when: cloudState) else {
+                                return nil
+                            }
+                            return Engine.shared.startLocalFallbackIfNeeded(
+                                component: component,
+                                runID: runID,
+                                decision: decision,
+                                segmentSource: segmentSource,
+                                lines: lines,
+                                cloudState: cloudState)
                         }
-                        if useLocalFallback, let transcriber {
-                            await transcriber.append(chunk)
+                        if let localFallback {
+                            await localFallback.append(chunk)
                         }
                     }
                 }
                 try await device.start(onChunk: { feed.yield($0) }, onLevel: { _ in })
 
-                guard let self, !Task.isCancelled else {
+                guard let self, self.audioRunIDs[component] == runID, !Task.isCancelled else {
                     // Stopped while the device was still coming up; do not leave an IOProc behind.
                     device.stop()
                     return
                 }
-                if transcriber == nil || Transcriber.isModelReady {
+                if self.transcribers[component] == nil || Transcriber.isModelReady {
                     self.setState(component, .live)
                 }
                 // The device came up, so this install has demonstrably been allowed to use it. That
@@ -699,13 +655,95 @@ final class Engine: ObservableObject {
                 self.noteOutput(component)
                 self.publishState()
             } catch {
-                guard let self, !Task.isCancelled else { return }
+                guard let self, self.audioRunIDs[component] == runID, !Task.isCancelled else { return }
                 self.teardownAudio(component)
                 self.setState(
                     component, .blocked("\(component.label) stopped — \(error.localizedDescription)"))
                 self.publishState()
             }
         }
+    }
+
+    /// Installs the local fallback for one audio run, but only after the socket has lost the
+    /// ability to carry the audio. Connecting and signed-in idle are deliberately excluded:
+    /// ListenSocket buffers both states, so eagerly starting two Parakeet managers there would
+    /// spend the steady-state memory budget on a path cloud is already covering.
+    ///
+    /// The invariant is: every chunk still goes to the cloud; local receives only chunks for which
+    /// TranscriptOwnership has selected fallback ownership. Once a local instance exists, it
+    /// remains available during reconnects, and its bounded Transcriber buffer absorbs model load
+    /// latency. The run id makes stop/restart a hard ownership boundary.
+    private func startLocalFallbackIfNeeded(
+        component: CaptureComponent,
+        runID: UUID,
+        decision: AudioCaptureDecision,
+        segmentSource: SegmentSource,
+        lines: AsyncStream<TranscriptLine>.Continuation?,
+        cloudState: ListenSocket.State
+    ) -> Transcriber? {
+        guard audioRunIDs[component] == runID, decision.startLocalSTT else { return nil }
+        if let transcriber = transcribers[component] { return transcriber }
+        guard TranscriptOwnership.shouldStartLocalFallback(
+            when: cloudState, isSignedIn: OmiAuth.shared.isSignedIn) else { return nil }
+
+        let transcriber = Transcriber(source: segmentSource)
+        transcribers[component] = transcriber
+
+        // Side task: never await before device start. A throw must not tear down capture
+        // (AudioCaptureDecision.teardownCaptureOnLocalSTTFailure is always false).
+        let localStart = Task { [weak self] in
+            await transcriber.setOnLine { text, startedAt, endedAt in
+                lines?.yield(
+                    TranscriptLine(
+                        text: text, startedAt: startedAt, endedAt: endedAt, source: segmentSource))
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  self.audioRunIDs[component] == runID,
+                  self.transcribers[component] != nil else { return }
+            if !Transcriber.isModelReady {
+                // ~600 MB on first run. Say so rather than looking silently broken for minutes.
+                self.setState(
+                    component,
+                    .starting(
+                        "\(component.label) warming up — first run downloads the transcription model"))
+                self.publishState()
+            }
+            do {
+                try await transcriber.start()
+                await MainActor.run {
+                    guard self.audioRunIDs[component] == runID,
+                          self.transcribers[component] != nil else { return }
+                    self.localStarts[component] = nil
+                    if case .starting = self.componentStates[component] {
+                        self.setState(component, .live)
+                    }
+                    self.publishState()
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.audioRunIDs[component] == runID,
+                          self.transcribers[component] != nil else { return }
+                    self.localStarts[component] = nil
+                    if Task.isCancelled { return }
+                    ContextLog.error(
+                        "\(component.label) local transcription unavailable — "
+                            + "\(error.localizedDescription). Cloud transcription continues.",
+                        "engine")
+                    if !decision.teardownCaptureOnLocalSTTFailure {
+                        self.publishState()
+                        return
+                    }
+                    self.teardownAudio(component)
+                    self.setState(
+                        component,
+                        .blocked("\(component.label) stopped — \(error.localizedDescription)"))
+                    self.publishState()
+                }
+            }
+        }
+        localStarts[component] = localStart
+        return transcriber
     }
 
     private func makeAudioSource(_ component: CaptureComponent) -> AudioSource? {
@@ -757,6 +795,7 @@ final class Engine: ObservableObject {
     /// so a half-built pipeline never leaks an IOProc, a tap, or a pump task.
     private func teardownAudio(_ component: CaptureComponent) {
         starts[component] = nil
+        audioRunIDs[component] = nil
         localStarts.removeValue(forKey: component)?.cancel()
         chunkFeeds[component]?.finish()  // ends the pump's `for await`
         chunkFeeds[component] = nil
@@ -1191,6 +1230,22 @@ final class Engine: ObservableObject {
 enum TranscriptOwnership {
     static func shouldFeedLocalFallback(when cloudState: ListenSocket.State) -> Bool {
         cloudState != .live
+    }
+
+    /// Starting local ASR is stricter than feeding an already-running instance. The socket holds
+    /// PCM while connecting (including signed-in idle), so those states do not justify loading the
+    /// model. Signed-out idle and every explicit refusal/offline state still need local startup.
+    static func shouldStartLocalFallback(
+        when cloudState: ListenSocket.State, isSignedIn: Bool
+    ) -> Bool {
+        switch cloudState {
+        case .live, .connecting:
+            return false
+        case .idle:
+            return !isSignedIn
+        case .failed, .paywalled, .airgapped:
+            return true
+        }
     }
 }
 
