@@ -1,0 +1,21 @@
+docs/superpowers/specs/2026-08-04-lock-in-design.md
+  s_acebfdccb4f1d0::t_6045d5ad19b04f 116-118
+desktop/lock-in/Sources/LockInCapture/URLProbe.swift
+  s_acebfdccb4f1d0::t_2bc35f0583c492 96,100,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "5fec43437b6b40ef7a6b56ecd0b3886df120d19f",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
