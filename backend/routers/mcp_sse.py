@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
@@ -84,6 +85,12 @@ from utils.mcp_memories import (
     search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_analytics import (
+    authorization_outcome_for_code,
+    error_category_for_code,
+    result_count_for_tool_result,
+    schedule_mcp_tool_call,
+)
 from utils.observability.api_keys import record_api_key_repairs
 from utils.other.endpoints import enforce_account_deletion_http_access
 
@@ -1442,15 +1449,38 @@ def handle_mcp_message(
         raw_arguments: object = params.get("arguments", {})
         arguments: Dict[str, Any] = cast(Dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
 
-        if not tool_name:
+        if not isinstance(tool_name, str) or not tool_name:
+            schedule_mcp_tool_call(
+                uid=auth_context.uid,
+                tool_name=tool_name,
+                auth_type=auth_context.auth_type,
+                client_id=auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="validation",
+                duration_ms=0,
+                result_count=0,
+            )
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
+        started_at = time.monotonic()
         try:
             mcp_auth_context = auth_context
             _require_tool_scope(mcp_auth_context, tool_name)
             auth_context = mcp_auth_context.memory_context
             result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome=authorization_outcome_for_code(e.code),
+                error_category=error_category_for_code(e.code),
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
                 required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
@@ -1463,6 +1493,18 @@ def handle_mcp_message(
                     }
                 }
             return error, None
+
+        schedule_mcp_tool_call(
+            uid=mcp_auth_context.uid,
+            tool_name=tool_name,
+            auth_type=mcp_auth_context.auth_type,
+            client_id=mcp_auth_context.client_id,
+            outcome="success",
+            authorization_outcome="allowed",
+            error_category="none",
+            duration_ms=(time.monotonic() - started_at) * 1_000,
+            result_count=result_count_for_tool_result(tool_name, result),
+        )
 
         return (
             create_mcp_response(

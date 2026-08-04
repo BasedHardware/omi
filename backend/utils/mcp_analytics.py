@@ -1,0 +1,212 @@
+"""Privacy-safe product telemetry for hosted MCP tool calls.
+
+``MCP Tool Call`` is the stable PostHog event contract for the hosted
+Streamable HTTP MCP tool boundary. Its properties deliberately contain only
+closed enums and bounded numeric values. In particular, they never contain
+tool arguments, result content, OAuth/API-key credentials, user identifiers,
+client IDs, IP addresses, or exception text.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any, Mapping, Optional
+
+from utils.executors import db_executor, submit_with_context
+from utils.integration_telemetry import emit_posthog_event
+
+logger = logging.getLogger(__name__)
+
+MCP_TOOL_CALL = "MCP Tool Call"
+
+_CHATGPT_CLIENT_IDS = frozenset(
+    client_id
+    for client_id in {
+        "omi-chatgpt-prod",
+        "omi-chatgpt-dev",
+        os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", ""),
+    }
+    if client_id
+)
+_CLAUDE_CLIENT_IDS = frozenset(
+    client_id
+    for client_id in {
+        "omi-claude-prod",
+        os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", ""),
+    }
+    if client_id
+)
+
+_TOOL_OPERATIONS = {
+    "get_user_profile": "memory_get",
+    "get_memories": "memory_list",
+    "search_memories": "memory_search",
+    "get_conversations": "conversation_list",
+    "get_conversation_by_id": "conversation_get",
+    "search_conversations": "conversation_search",
+    # Kept here for the connector branch: once search/fetch reaches this
+    # boundary it automatically uses the same event contract.
+    "search": "memory_conversation_search",
+    "fetch": "memory_conversation_fetch",
+}
+_KNOWN_TOOLS = frozenset(
+    {
+        "get_user_profile",
+        "get_memories",
+        "search_memories",
+        "create_memory",
+        "edit_memory",
+        "delete_memory",
+        "get_conversations",
+        "search_conversations",
+        "get_conversation_by_id",
+        "get_daily_summaries",
+        "search_x_posts",
+        "get_x_posts",
+        "get_action_items",
+        "search_action_items",
+        "create_action_item",
+        "complete_action_item",
+        "update_action_item",
+        "delete_action_item",
+        "get_goals",
+        "get_chat_messages",
+        "get_people",
+        "get_screen_activity",
+        "search",
+        "fetch",
+    }
+)
+
+
+def schedule_mcp_tool_call(
+    *,
+    uid: str,
+    tool_name: object,
+    auth_type: object,
+    client_id: Optional[str],
+    outcome: str,
+    authorization_outcome: str,
+    error_category: str,
+    duration_ms: float,
+    result_count: int,
+) -> None:
+    """Queue optional analytics without delaying or changing the MCP response."""
+    try:
+        submit_with_context(
+            db_executor,
+            emit_mcp_tool_call,
+            uid=uid,
+            tool_name=tool_name,
+            auth_type=auth_type,
+            client_id=client_id,
+            outcome=outcome,
+            authorization_outcome=authorization_outcome,
+            error_category=error_category,
+            duration_ms=duration_ms,
+            result_count=result_count,
+        )
+    except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
+        logger.warning("mcp analytics scheduling failed error=%s", type(exc).__name__)
+
+
+def emit_mcp_tool_call(
+    *,
+    uid: str,
+    tool_name: object,
+    auth_type: object,
+    client_id: Optional[str],
+    outcome: str,
+    authorization_outcome: str,
+    error_category: str,
+    duration_ms: float,
+    result_count: int,
+) -> None:
+    """Emit the shared PostHog event using only bounded, allowlisted values."""
+    properties = {
+        "tool": _normalize_tool(tool_name),
+        "operation": _normalize_operation(tool_name),
+        "client": _normalize_client(auth_type, client_id),
+        "transport": _normalize_transport(auth_type),
+        "outcome": outcome if outcome in {"success", "error"} else "error",
+        "authorization_outcome": (
+            authorization_outcome
+            if authorization_outcome in {"allowed", "denied", "not_applicable"}
+            else "not_applicable"
+        ),
+        "error_category": (
+            error_category
+            if error_category in {"none", "authorization_denied", "validation", "unknown_tool", "internal"}
+            else "internal"
+        ),
+        "duration_ms": _bounded_int(duration_ms, maximum=60_000),
+        "result_count": _bounded_int(result_count, maximum=1_000),
+    }
+    # The shared helper owns the PostHog client and catches capture failures.
+    emit_posthog_event(uid, MCP_TOOL_CALL, properties)
+
+
+def result_count_for_tool_result(tool_name: object, result: Mapping[str, Any]) -> int:
+    """Return only a capped top-level result cardinality, never result contents."""
+    for value in result.values():
+        if isinstance(value, list):
+            return _bounded_int(len(value), maximum=1_000)
+    operation = _normalize_operation(tool_name)
+    if operation.endswith("_get") or operation.endswith("_fetch"):
+        return 1 if result else 0
+    return 0
+
+
+def error_category_for_code(code: int) -> str:
+    if code in {-32003, -32009}:
+        return "authorization_denied"
+    if code == -32602:
+        return "validation"
+    if code == -32601:
+        return "unknown_tool"
+    return "internal"
+
+
+def authorization_outcome_for_code(code: int) -> str:
+    return "denied" if code in {-32003, -32009} else "not_applicable"
+
+
+def _normalize_tool(tool_name: object) -> str:
+    return tool_name if isinstance(tool_name, str) and tool_name in _KNOWN_TOOLS else "unknown"
+
+
+def _normalize_operation(tool_name: object) -> str:
+    normalized_tool = _normalize_tool(tool_name)
+    return _TOOL_OPERATIONS.get(normalized_tool, "other")
+
+
+def _normalize_client(auth_type: object, client_id: Optional[str]) -> str:
+    if auth_type == "legacy_mcp_key":
+        return "api_key"
+    if auth_type != "oauth":
+        return "unknown"
+    if client_id in _CHATGPT_CLIENT_IDS:
+        return "chatgpt"
+    if client_id in _CLAUDE_CLIENT_IDS:
+        return "claude"
+    # OAuth token validation means this is a registered client. Do not publish
+    # its raw client ID as an analytics dimension.
+    return "other_registered"
+
+
+def _normalize_transport(auth_type: object) -> str:
+    if auth_type == "oauth":
+        return "hosted_oauth"
+    if auth_type == "legacy_mcp_key":
+        return "api_key"
+    return "unknown"
+
+
+def _bounded_int(value: object, *, maximum: int) -> int:
+    if not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        return max(0, min(int(value), maximum))
+    except (TypeError, ValueError, OverflowError):
+        return 0
