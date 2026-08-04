@@ -751,14 +751,15 @@ extension SettingsContentView {
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(OmiSpacing.lg)
+      .padding(OmiSpacing.xl)
       .omiPanel(
-        fill: OmiColors.backgroundTertiary.opacity(0.5),
-        radius: OmiChrome.smallControlRadius,
-        stroke: OmiColors.backgroundQuaternary.opacity(0.4),
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        shadowY: 2
+        fill: OmiColors.backgroundRaised,
+        radius: OmiChrome.controlRadius,
+        stroke: OmiColors.border.opacity(0.40),
+        shadowOpacity: 0.28,
+        shadowRadius: 16,
+        shadowY: 8,
+        highlight: true
       )
     return Group {
       if let settingId = settingId {
@@ -777,7 +778,7 @@ extension SettingsContentView {
     let row = HStack {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
-          .scaledFont(size: OmiType.body)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textSecondary)
         Text(subtitle)
           .scaledFont(size: OmiType.caption)
@@ -800,23 +801,22 @@ extension SettingsContentView {
   }
 
   func settingsCardHeader(icon: String, title: String) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
+    HStack(spacing: OmiSpacing.md) {
       Image(systemName: icon)
-        .scaledFont(size: 14, weight: .semibold)
-        .foregroundColor(.white)
-        .frame(width: 28, height: 28)
+        .scaledFont(size: 13, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+        .frame(width: 30, height: 30)
         .background(
-          LinearGradient(
-            colors: [OmiColors.accent.opacity(0.85), OmiColors.accent],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          )
+          RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
+            .fill(OmiColors.backgroundQuaternary)
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .shadow(color: OmiColors.accent.opacity(0.25), radius: 3, y: 1)
 
       Text(title)
-        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .scaledFont(size: OmiType.subheading, weight: .semibold, tracking: -0.2)
         .foregroundColor(OmiColors.textPrimary)
     }
   }

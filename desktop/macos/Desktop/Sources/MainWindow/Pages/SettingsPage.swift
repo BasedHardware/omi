@@ -18,17 +18,17 @@ struct SettingsPage: View {
           // Section header
           HStack {
             Text(selectedSection.displayTitle)
-              .scaledFont(size: OmiType.title, weight: .bold)
+              .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.8)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
               .transition(.opacity)
-              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
+              .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.22), value: selectedSection)
 
             Spacer()
           }
           .padding(.horizontal, OmiSpacing.section)
           .padding(.top, OmiSpacing.section)
-          .padding(.bottom, OmiSpacing.xxl)
+          .padding(.bottom, OmiSpacing.xl)
 
           // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
@@ -51,7 +51,16 @@ struct SettingsPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundSecondary.opacity(0.3))
+    .background(
+      LinearGradient(
+        colors: [
+          OmiColors.backgroundSecondary,
+          OmiColors.backgroundPrimary,
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
     .onAppear {
       AnalyticsManager.shared.settingsPageOpened()
     }

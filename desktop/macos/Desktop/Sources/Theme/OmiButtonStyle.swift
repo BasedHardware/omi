@@ -87,6 +87,7 @@ private struct OmiButtonContent: View {
   let radius: CGFloat
 
   @Environment(\.isEnabled) private var isEnabled
+  @State private var isHovered = false
 
   var body: some View {
     configuration.label
@@ -97,15 +98,39 @@ private struct OmiButtonContent: View {
       .background(
         RoundedRectangle(cornerRadius: radius, style: .continuous)
           .fill(backgroundColor)
+          .overlay {
+            if kind == .secondary {
+              RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(
+                  Color.white.opacity(isHovered ? 0.16 : 0.10),
+                  lineWidth: 1
+                )
+            }
+            if kind == .primary && isHovered {
+              RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(Color.black.opacity(0.06))
+            }
+          }
+          .shadow(
+            color: kind == .primary
+              ? Color.white.opacity(isHovered ? 0.18 : 0.08)
+              : Color.black.opacity(0.25),
+            radius: kind == .primary ? 10 : 6,
+            y: kind == .primary ? 4 : 2
+          )
       )
-      .overlay {
-        if kind == .secondary {
-          RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        }
+      .opacity(isEnabled ? (configuration.isPressed ? 0.90 : 1) : 0.45)
+      .scaleEffect(configuration.isPressed ? 0.97 : (isHovered && isEnabled ? 1.015 : 1))
+      .omiAnimation(
+        .timingCurve(0.32, 0.72, 0, 1, duration: 0.18),
+        value: configuration.isPressed
+      )
+      .omiAnimation(
+        .timingCurve(0.32, 0.72, 0, 1, duration: 0.2),
+        value: isHovered
+      )
+      .onHover { hovering in
+        isHovered = hovering
       }
-      .opacity(isEnabled ? (configuration.isPressed ? 0.92 : 1) : 0.45)
-      .scaleEffect(configuration.isPressed ? 0.985 : 1)
-      .omiAnimation(.easeOut(duration: 0.12), value: configuration.isPressed)
   }
 }

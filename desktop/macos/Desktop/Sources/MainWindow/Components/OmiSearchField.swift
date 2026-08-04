@@ -68,6 +68,8 @@ struct OmiSearchField: View {
   @Binding var text: String
   var isLoading = false
 
+  @FocusState private var isFocused: Bool
+
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
       Group {
@@ -80,12 +82,13 @@ struct OmiSearchField: View {
         }
       }
       .frame(width: 16, height: 16)
-      .foregroundStyle(OmiColors.textTertiary)
+      .foregroundStyle(isFocused ? OmiColors.textPrimary : OmiColors.textTertiary)
 
       TextField(placeholder, text: $text)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundStyle(OmiColors.textPrimary)
+        .focused($isFocused)
 
       if !text.isEmpty {
         Button {
@@ -101,11 +104,13 @@ struct OmiSearchField: View {
       }
     }
     .padding(.horizontal, OmiSpacing.md)
-    .frame(minHeight: 44)
+    .frame(minHeight: 40)
     .omiControlSurface(
-      fill: OmiColors.backgroundSecondary,
-      radius: 16,
-      stroke: OmiColors.border.opacity(0.18)
+      fill: OmiColors.backgroundRaised,
+      radius: OmiChrome.controlRadius,
+      stroke: isFocused
+        ? OmiColors.accent.opacity(0.32)
+        : OmiColors.border.opacity(0.40)
     )
     .accessibilityElement(children: .contain)
   }

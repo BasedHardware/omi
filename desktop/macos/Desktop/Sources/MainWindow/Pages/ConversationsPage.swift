@@ -209,7 +209,7 @@ struct ConversationsPage: View {
       HStack {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Conversations")
-            .scaledFont(size: OmiType.heading, weight: .semibold)
+            .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.6)
             .foregroundColor(OmiColors.textPrimary)
           Text("Recordings, notes, and transcripts from your day")
             .scaledFont(size: OmiType.caption)
@@ -221,9 +221,15 @@ struct ConversationsPage: View {
         headerActions
       }
       .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.top, OmiSpacing.lg)
+      .padding(.top, OmiSpacing.xl)
       .padding(.bottom, OmiSpacing.md)
-      .background(OmiColors.backgroundPrimary)
+      .background(
+        LinearGradient(
+          colors: [OmiColors.backgroundSecondary, OmiColors.backgroundPrimary],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+      )
 
       // The whole page below the header scrolls together. Floating action bars
       // (load-more, merge) stay pinned to the bottom via the ZStack overlay.

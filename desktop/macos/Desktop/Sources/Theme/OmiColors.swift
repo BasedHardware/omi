@@ -1,34 +1,41 @@
 import SwiftUI
 
 /// Shared dark palette for the native macOS app.
-/// Neutral dark surfaces, restrained borders, and a single white accent (INV-UI-1:
-/// never purple — accents and primary actions use white/neutral treatments).
+/// Cool charcoal surfaces with clear layer separation, restrained borders, and a
+/// single white accent (INV-UI-1: never purple — accents and primary actions use
+/// white/neutral treatments).
 package enum OmiColors {
-  // MARK: - Background Colors
-  package static let backgroundPrimary = Color(hex: 0x0F0F0F)
-  package static let backgroundSecondary = Color(hex: 0x1A1A1A)
-  package static let backgroundTertiary = Color(hex: 0x252525)
-  package static let backgroundQuaternary = Color(hex: 0x35343B)
-  package static let backgroundRaised = Color(hex: 0x1F1F25)
+  // MARK: - Background Colors (cool-tinted charcoal stack)
+  /// Deepest canvas — slight blue-gray so pure black never flattens the window.
+  package static let backgroundPrimary = Color(hex: 0x0B0C0F)
+  /// Content canvas behind cards.
+  package static let backgroundSecondary = Color(hex: 0x12141A)
+  /// Raised cards / selected rows.
+  package static let backgroundTertiary = Color(hex: 0x1C1F28)
+  /// Controls, chips, inset wells.
+  package static let backgroundQuaternary = Color(hex: 0x2A2E3A)
+  /// Hover / elevated secondary surfaces.
+  package static let backgroundRaised = Color(hex: 0x181B24)
 
   // MARK: - Border Colors
-  package static let border = Color(hex: 0x3A3940)
+  /// Cool hairline — reads as machined metal, not muddy gray.
+  package static let border = Color(hex: 0x3A4050)
 
   // MARK: - Accent System (single neutral accent, INV-UI-1)
   package static let accent = Color(hex: 0xFFFFFF)
 
   // MARK: - Text Colors
-  package static let textPrimary = Color(hex: 0xFFFFFF)
-  package static let textSecondary = Color(hex: 0xE5E5E5)
-  package static let textTertiary = Color(hex: 0xB0B0B0)
-  package static let textQuaternary = Color(hex: 0x888888)
+  package static let textPrimary = Color(hex: 0xF4F5F7)
+  package static let textSecondary = Color(hex: 0xC8CAD2)
+  package static let textTertiary = Color(hex: 0x8B90A0)
+  package static let textQuaternary = Color(hex: 0x63687A)
 
   // MARK: - Status Colors
-  package static let success = Color(hex: 0x10B981)  // Green
-  package static let warning = Color(hex: 0xF59E0B)  // Amber
-  package static let error = Color(hex: 0xEF4444)  // Red
-  package static let info = Color(hex: 0x3B82F6)  // Blue
-  package static let amber = Color(hex: 0xF59E0B)  // Same as warning, for starred items
+  package static let success = Color(hex: 0x34D399)  // Soft emerald
+  package static let warning = Color(hex: 0xFBBF24)  // Amber
+  package static let error = Color(hex: 0xF87171)  // Soft red
+  package static let info = Color(hex: 0x60A5FA)  // Soft blue
+  package static let amber = Color(hex: 0xFBBF24)  // Same as warning, for starred items
 
   // MARK: - Mac Window Button Colors
   package static let windowButtonClose = Color(hex: 0xFF5F57)
@@ -46,7 +53,7 @@ package enum OmiColors {
   ]
 
   /// User bubble color: richer than the page chrome, softer than a flat primary fill.
-  package static let userBubble = Color(hex: 0x2C2C33)
+  package static let userBubble = Color(hex: 0x242833)
 }
 
 // MARK: - Color Extension for Hex

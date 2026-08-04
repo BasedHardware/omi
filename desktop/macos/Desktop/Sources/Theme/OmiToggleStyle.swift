@@ -25,9 +25,9 @@ package struct OmiToggleStyle: ToggleStyle {
           .fill(configuration.isOn ? OmiColors.backgroundPrimary : Color.white)
           .frame(width: thumbSize, height: thumbSize)
           .padding(thumbPadding)
-          .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+          .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
       }
-      .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
+      .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.18), value: configuration.isOn)
       .onTapGesture {
         configuration.isOn.toggle()
       }

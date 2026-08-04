@@ -401,7 +401,7 @@ struct SettingsSidebar: View {
 
       // Settings title
       Text("Settings")
-        .scaledFont(size: OmiType.heading, weight: .bold)
+        .scaledFont(size: OmiType.heading, weight: .bold, tracking: -0.4)
         .foregroundColor(OmiColors.textPrimary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.bottom, OmiSpacing.md)
@@ -409,16 +409,16 @@ struct SettingsSidebar: View {
       // Search field
       searchField
         .padding(.horizontal, OmiSpacing.md)
-        .padding(.bottom, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.lg)
 
       if searchQuery.isEmpty {
         ScrollView(showsIndicators: false) {
-          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xl) {
             ForEach(sidebarGroups) { group in
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(group.title.uppercased())
-                  .scaledFont(size: OmiType.caption, weight: .semibold)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.micro, weight: .semibold, tracking: 1.2)
+                  .foregroundColor(OmiColors.textQuaternary)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.bottom, OmiSpacing.xxs)
 
@@ -428,7 +428,7 @@ struct SettingsSidebar: View {
                     isSelected: selectedSection.sidebarItem == section,
                     iconWidth: iconWidth,
                     onTap: {
-                      OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+                      OmiMotion.withGated(.timingCurve(0.32, 0.72, 0, 1, duration: 0.22)) {
                         selectedSection = section
                       }
                     }
@@ -454,9 +454,9 @@ struct SettingsSidebar: View {
   private var searchField: some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
-        .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(isSearchFocused ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.18), value: isSearchFocused)
 
       TextField("Search settings...", text: $searchQuery)
         .textFieldStyle(.plain)
@@ -475,16 +475,14 @@ struct SettingsSidebar: View {
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundTertiary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(
-              isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
-        )
+    .omiControlSurface(
+      fill: OmiColors.backgroundRaised,
+      radius: OmiChrome.elementRadius,
+      stroke: isSearchFocused
+        ? OmiColors.accent.opacity(0.35)
+        : OmiColors.border.opacity(0.35)
     )
   }
 
@@ -577,12 +575,12 @@ struct SettingsSidebarItem: View {
         Button(action: onTap) {
           HStack(spacing: OmiSpacing.md) {
             Image(systemName: icon)
-              .scaledFont(size: OmiType.subheading)
+              .scaledFont(size: OmiType.subheading, weight: isSelected ? .semibold : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
               .frame(width: iconWidth)
 
             Text(section.displayTitle)
-              .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
+              .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
               .lineLimit(1)
               .truncationMode(.tail)
@@ -591,17 +589,34 @@ struct SettingsSidebarItem: View {
             Spacer()
           }
           .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.sm + 2)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .fill(
-                isSelected
-                  ? OmiColors.backgroundTertiary.opacity(0.8)
-                  : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+            ZStack(alignment: .leading) {
+              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                .fill(
+                  isSelected
+                    ? OmiColors.backgroundTertiary
+                    : (isHovered ? OmiColors.backgroundRaised.opacity(0.9) : Color.clear)
+                )
+              if isSelected {
+                Capsule()
+                  .fill(OmiColors.accent)
+                  .frame(width: 3, height: 18)
+                  .padding(.leading, 4)
+              }
+            }
           )
+          .overlay {
+            if isSelected {
+              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+          }
         }
         .buttonStyle(.plain)
+        .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.2), value: isSelected)
+        .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.16), value: isHovered)
         .onHover { hovering in
           isHovered = hovering
         }

@@ -3760,7 +3760,7 @@ struct TasksPage: View {
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
       Text("Tasks")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.6)
         .foregroundColor(OmiColors.textPrimary)
 
       Spacer()
@@ -3794,7 +3794,7 @@ struct TasksPage: View {
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, OmiSpacing.xl)
     .padding(.bottom, OmiSpacing.md)
   }
 

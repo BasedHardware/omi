@@ -8,7 +8,7 @@ extension SettingsContentView {
   /// Listening controls only — capture toggles live here so Rewind/Transcription
   /// stay focused on history and speech quality rather than on/off power switches.
   var generalSection: some View {
-    VStack(spacing: OmiSpacing.xl) {
+    VStack(spacing: OmiSpacing.lg) {
       Text(
         "Control what Omi captures while you work. Fine-tune screen history in Rewind and speech quality in Transcription."
       )
