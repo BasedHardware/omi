@@ -109,8 +109,7 @@ class DeviceService {
   }
 
   Future<void> _connectToDevice(String id, {required bool softRetry}) async {
-    final reuseExisting =
-        softRetry &&
+    final reuseExisting = softRetry &&
         shouldSoftRetryExistingConnection(existingDeviceId: _connection?.device.id, targetDeviceId: id, force: true);
 
     if (!reuseExisting) {
