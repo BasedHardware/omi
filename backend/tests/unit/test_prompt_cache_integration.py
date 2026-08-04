@@ -996,6 +996,21 @@ def test_system_prompt_is_time_invariant():
     assert "654321" not in prompt_late, "Live timestamp leaked into the cached system prompt"
 
 
+def test_channel_media_prompt_instructions_allow_trusted_vision_context():
+    chat_mod = _get_chat_module()
+    message = MagicMock(
+        from_external_integration=True,
+        message_source="channel:telegram",
+        text="What is this?\n\n[Vision analysis for image attachment: photo.jpg (image/jpeg)]\nA pendant.",
+    )
+
+    section = chat_mod._get_channel_media_section([message])
+
+    assert "trusted visual context" in section
+    assert "Do not say that you lack image processing" in section
+    assert chat_mod._get_channel_media_section([]) == ""
+
+
 def test_current_datetime_block_carries_live_time():
     """get_current_datetime_block must produce the live time for injection into the user turn."""
     from datetime import datetime as _dt
