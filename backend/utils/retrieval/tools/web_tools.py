@@ -52,6 +52,13 @@ def _parenthesized_url(raw_url: str, text: str, start: int) -> Optional[str]:
     return url_without_closing_delimiter
 
 
+def _markdown_delimited_url(raw_url: str, text: str, start: int) -> Optional[str]:
+    for opening, closing in (('**', '**'), ('__', '__'), ('[', ']')):
+        if start >= len(opening) and text[start - len(opening) : start] == opening and raw_url.endswith(closing):
+            return raw_url[: -len(closing)]
+    return _parenthesized_url(raw_url, text, start)
+
+
 def _canonical_user_url(
     url: str, *, strip_trailing_punctuation: bool = True
 ) -> Optional[Tuple[str, str, str, str, str, str]]:
@@ -85,9 +92,9 @@ def extract_urls_from_text(
             if _url_has_explicit_delimiters(source, match.start(), match.end()):
                 url = raw_url
             else:
-                parenthesized_url = _parenthesized_url(raw_url, source, match.start())
-                if parenthesized_url is not None:
-                    url = parenthesized_url
+                delimited_url = _markdown_delimited_url(raw_url, source, match.start())
+                if delimited_url is not None:
+                    url = delimited_url
         if url and url not in seen:
             seen.add(url)
             urls.append(url)

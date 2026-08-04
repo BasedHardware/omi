@@ -77,6 +77,17 @@ class TestUrlExtraction:
         messages = [_message('Fetch `https://example.com/releases/v1.0.!?`')]
         assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.!?']
 
+    def test_extract_user_turn_urls_strips_closing_markdown_delimiters(self):
+        messages = [_message('Fetch **https://example.com/article** and [https://example.com/docs]')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/article', 'https://example.com/docs']
+
+    def test_extract_user_turn_urls_preserves_terminal_url_punctuation_in_markdown_delimiters(self):
+        messages = [_message('Fetch **https://example.com/releases/v1.0.** and [https://example.com/releases/v2.0.?]')]
+        assert extract_user_turn_urls(messages) == [
+            'https://example.com/releases/v1.0.',
+            'https://example.com/releases/v2.0.?',
+        ]
+
     def test_extracted_terminal_url_punctuation_matches_literal_allowlist(self):
         url = extract_user_turn_urls([_message('Fetch <https://example.com/releases/v1.0.>')])[0]
         assert is_url_allowlisted(url, [url])
