@@ -41,21 +41,30 @@ final class AutomationSettingsSectionTests: XCTestCase {
   }
 
   func testMergedSidebarAliasesKeepDeepLinksRoutable() {
-    // Merged nav (Account & Plan, Notifications & Privacy): the absorbed section
-    // ids must stay resolvable for automation/deep links and map to their merged
-    // sidebar item.
+    // Merged nav (Account & Plan, Notifications & Privacy, Ask Omi): the
+    // absorbed section ids must stay resolvable for automation/deep links and
+    // map to their merged sidebar item.
     XCTAssertEqual(Section.automationMatch("privacy"), .privacy)
     XCTAssertEqual(Section.automationMatch("plan-usage"), .planUsage)
+    XCTAssertEqual(Section.automationMatch("shortcuts"), .shortcuts)
     XCTAssertEqual(Section.privacy.sidebarItem, .notifications)
     XCTAssertEqual(Section.planUsage.sidebarItem, .account)
+    XCTAssertEqual(Section.shortcuts.sidebarItem, .floatingBar)
     XCTAssertEqual(Section.account.sidebarItem, .account)
     XCTAssertEqual(Section.notifications.sidebarItem, .notifications)
+    XCTAssertEqual(Section.floatingBar.sidebarItem, .floatingBar)
     // Raw values are the automation snapshot contract (omi-hardening-smoke SET-01,
     // e2e flow waits) — merged display labels must not leak into them.
     XCTAssertEqual(Section.planUsage.rawValue, "Plan and Usage")
     XCTAssertEqual(Section.privacy.rawValue, "Privacy")
+    XCTAssertEqual(Section.general.rawValue, "General")
+    XCTAssertEqual(Section.floatingBar.rawValue, "Floating Bar")
+    XCTAssertEqual(Section.shortcuts.rawValue, "Shortcuts")
     XCTAssertEqual(Section.account.displayTitle, "Account & Plan")
     XCTAssertEqual(Section.notifications.displayTitle, "Notifications & Privacy")
+    XCTAssertEqual(Section.general.displayTitle, "Listening")
+    XCTAssertEqual(Section.floatingBar.displayTitle, "Ask Omi")
+    XCTAssertEqual(Section.shortcuts.displayTitle, "Ask Omi")
   }
 
   func testUnknownAndEmptyReturnNil() {

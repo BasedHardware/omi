@@ -5,8 +5,18 @@ import UniformTypeIdentifiers
 import WebKit
 
 extension SettingsContentView {
+  /// Listening controls only — capture toggles live here so Rewind/Transcription
+  /// stay focused on history and speech quality rather than on/off power switches.
   var generalSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      Text(
+        "Control what Omi captures while you work. Fine-tune screen history in Rewind and speech quality in Transcription."
+      )
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(OmiColors.textTertiary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .fixedSize(horizontal: false, vertical: true)
+
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         VStack(spacing: OmiSpacing.md) {
@@ -73,73 +83,6 @@ extension SettingsContentView {
         }
       }
 
-      // Notifications toggle
-      settingsCard(settingId: "general.notifications") {
-        VStack(spacing: OmiSpacing.md) {
-          settingsCardHeader(icon: "bell.fill", title: "Notifications")
-          settingRow(
-            title: "Status",
-            subtitle: notificationStatusText
-          ) {
-            // Toggle mirrors the effective notification state. macOS ownership
-            // caveat: the app can request/repair permission but cannot revoke
-            // it, so flipping OFF (or fixing disabled banners) deep-links to
-            // System Settings; the toggle re-syncs from the real permission.
-            Toggle(
-              "",
-              isOn: Binding(
-                get: {
-                  appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
-                },
-                set: { newValue in
-                  if newValue {
-                    if appState.isNotificationBannerDisabled {
-                      // Banners off — user needs to change style in System Settings
-                      appState.openNotificationPreferences()
-                    } else {
-                      // Auth not granted — try lsregister repair first
-                      AnalyticsManager.shared.notificationRepairTriggered(
-                        reason: "settings_fix_button",
-                        previousStatus: "not_authorized",
-                        currentStatus: "not_authorized"
-                      )
-                      appState.repairNotificationAndFallback()
-                    }
-                  } else {
-                    appState.openNotificationPreferences()
-                  }
-                }
-              )
-            )
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-            .frame(width: 36, height: 20)
-          }
-
-          // Warning when banners are disabled
-          if appState.isNotificationBannerDisabled {
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "exclamationmark.triangle.fill")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.warning)
-
-              Text(
-                "Banners disabled - you won't see visual alerts. Set style to \"Banners\" in System Settings."
-              )
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
-
-              Spacer()
-            }
-            .padding(OmiSpacing.sm)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(OmiColors.warning.opacity(0.1))
-            )
-          }
-        }
-      }
-
       // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
       if #available(macOS 14.4, *) {
         settingsCard(settingId: "general.systemaudio") {
@@ -176,64 +119,6 @@ extension SettingsContentView {
           }
         }
       }
-
-      // Font Size
-      settingsCard(settingId: "general.fontsize") {
-        VStack(spacing: OmiSpacing.md) {
-          settingsCardHeader(icon: "textformat.size", title: "Font Size")
-          settingRow(
-            title: "Scale",
-            subtitle: "Current scale: \(Int(fontScaleSettings.scale * 100))%"
-          ) {
-            if fontScaleSettings.scale != 1.0 {
-              Button("Reset") {
-                fontScaleSettings.resetToDefault()
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-            } else {
-              EmptyView()
-            }
-          }
-
-          HStack(spacing: OmiSpacing.md) {
-            // The small/large "A" pair illustrates the scale range — keep the
-            // original 12/18 ratio rather than the type registers.
-            Text("A")
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
-
-            Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(OmiColors.info)
-              .onChange(of: fontScaleSettings.scale) { _, _ in
-                performStepHaptic()
-              }
-
-            Text("A")
-              .scaledFont(size: 18, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
-          }
-
-          Text("The quick brown fox jumps over the lazy dog")
-            .scaledFont(size: 14)
-            .foregroundColor(OmiColors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, OmiSpacing.xxs)
-
-          HStack {
-            Spacer()
-            Button(action: {
-              resetWindowToDefaultSize()
-            }) {
-              HStack(spacing: OmiSpacing.xs) {
-                Image(systemName: "arrow.uturn.backward")
-                Text("Reset Window Size")
-              }
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-          }
-        }
-      }
-
     }
   }
 

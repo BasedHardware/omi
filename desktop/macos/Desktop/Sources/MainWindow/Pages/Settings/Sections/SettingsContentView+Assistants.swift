@@ -992,6 +992,61 @@ extension SettingsContentView {
 
   var preferencesSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Font size lives with other app preferences (not under Listening).
+      settingsCard(settingId: "advanced.preferences.fontsize") {
+        VStack(spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "textformat.size", title: "Font Size")
+          settingRow(
+            title: "Scale",
+            subtitle: "Current scale: \(Int(fontScaleSettings.scale * 100))%"
+          ) {
+            if fontScaleSettings.scale != 1.0 {
+              Button("Reset") {
+                fontScaleSettings.resetToDefault()
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            } else {
+              EmptyView()
+            }
+          }
+
+          HStack(spacing: OmiSpacing.md) {
+            Text("A")
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textTertiary)
+
+            Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
+              .tint(OmiColors.info)
+              .onChange(of: fontScaleSettings.scale) { _, _ in
+                performStepHaptic()
+              }
+
+            Text("A")
+              .scaledFont(size: 18, weight: .medium)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Text("The quick brown fox jumps over the lazy dog")
+            .scaledFont(size: 14)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, OmiSpacing.xxs)
+
+          HStack {
+            Spacer()
+            Button(action: {
+              resetWindowToDefaultSize()
+            }) {
+              HStack(spacing: OmiSpacing.xs) {
+                Image(systemName: "arrow.uturn.backward")
+                Text("Reset Window Size")
+              }
+            }
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          }
+        }
+      }
+
       // Multiple Chat Sessions toggle
       settingsCard(settingId: "advanced.preferences.multichat") {
         HStack(spacing: OmiSpacing.lg) {

@@ -13,37 +13,25 @@ struct SettingsSearchItem: Identifiable {
   let settingId: String
 
   var breadcrumb: String {
-    return section.rawValue
+    return section.displayTitle
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
-    // General
+    // Listening (General)
     SettingsSearchItem(
-      name: "Rewind", subtitle: "Screen capture and audio recording",
-      keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
-      section: .general, icon: "gearshape", settingId: "general.rewind"),
+      name: "Screen Capture", subtitle: "Toggle screen capture on or off",
+      keywords: ["monitor", "screenshot", "capture", "rewind", "recording"],
+      section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
+    SettingsSearchItem(
+      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
+      keywords: ["audio", "microphone", "recording", "transcription", "mic"],
+      section: .general, icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "System Audio", subtitle: "When to record audio from other apps",
       keywords: [
         "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
         "speaker",
       ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
-      settingId: "general.notifications"),
-    SettingsSearchItem(
-      name: "Ask omi", subtitle: "Show or hide the floating chat bar",
-      keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
-      settingId: "general.askomi"),
-    SettingsSearchItem(
-      name: "Font Size", subtitle: "Adjust text size across the app",
-      keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape",
-      settingId: "general.fontsize"),
-    SettingsSearchItem(
-      name: "Reset Window Size", subtitle: "Restore the default window dimensions",
-      keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.resetwindow"),
 
     // Rewind
     SettingsSearchItem(
@@ -305,6 +293,14 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard",
       settingId: "floatingbar.pttsounds"),
     SettingsSearchItem(
+      name: "Font Size", subtitle: "Adjust text size across the app",
+      keywords: ["text size", "zoom", "scale", "reset", "font"], section: .advanced,
+      icon: "textformat.size", settingId: "advanced.preferences.fontsize"),
+    SettingsSearchItem(
+      name: "Reset Window Size", subtitle: "Restore the default window dimensions",
+      keywords: ["resize", "window", "default size"], section: .advanced, icon: "slider.horizontal.3",
+      settingId: "advanced.preferences.fontsize"),
+    SettingsSearchItem(
       name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
       keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.multichat"),
@@ -341,20 +337,42 @@ struct SettingsSidebar: View {
   @FocusState private var isSearchFocused: Bool
 
   private let iconWidth: CGFloat = 20
-  // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
-  // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
-  // content too). The absorbed cases stay routable for deep links/automation
-  // and highlight their merged item via `sidebarItem`.
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
-    .general,
-    .account,
-    .transcription,
-    .floatingBar,
-    .notifications,
-    .rewind,
-    .shortcuts,
-    .advanced,
-    .about,
+
+  /// Thematic sidebar groups. Section raw values / automation contracts are
+  /// unchanged; only presentation order and labels are reorganized.
+  private struct SidebarGroup: Identifiable {
+    let id: String
+    let title: String
+    let sections: [SettingsContentView.SettingsSection]
+  }
+
+  private let sidebarGroups: [SidebarGroup] = [
+    SidebarGroup(
+      id: "capture",
+      title: "Capture",
+      sections: [.general, .transcription, .rewind]
+    ),
+    SidebarGroup(
+      id: "ask-omi",
+      title: "Ask Omi",
+      // Shortcuts merge onto Floating Bar (same pattern as Account & Plan).
+      sections: [.floatingBar]
+    ),
+    SidebarGroup(
+      id: "alerts",
+      title: "Alerts & Privacy",
+      sections: [.notifications]
+    ),
+    SidebarGroup(
+      id: "account",
+      title: "Account",
+      sections: [.account]
+    ),
+    SidebarGroup(
+      id: "system",
+      title: "System",
+      sections: [.advanced, .about]
+    ),
   ]
 
   private var filteredSearchItems: [SettingsSearchItem] {
@@ -394,21 +412,29 @@ struct SettingsSidebar: View {
         .padding(.bottom, OmiSpacing.md)
 
       if searchQuery.isEmpty {
-        // Normal settings sections
         ScrollView(showsIndicators: false) {
-          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            ForEach(visibleSections, id: \.self) { section in
-              SettingsSidebarItem(
-                section: section,
-                isSelected: selectedSection.sidebarItem == section,
-                iconWidth: iconWidth,
-                onTap: {
-                  OmiMotion.withGated(.easeInOut(duration: 0.15)) {
-                    selectedSection = section
-                  }
-                }
-              )
+          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+            ForEach(sidebarGroups) { group in
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(group.title.uppercased())
+                  .scaledFont(size: OmiType.caption, weight: .semibold)
+                  .foregroundColor(OmiColors.textTertiary)
+                  .padding(.horizontal, OmiSpacing.md)
+                  .padding(.bottom, OmiSpacing.xxs)
 
+                ForEach(group.sections, id: \.self) { section in
+                  SettingsSidebarItem(
+                    section: section,
+                    isSelected: selectedSection.sidebarItem == section,
+                    iconWidth: iconWidth,
+                    onTap: {
+                      OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+                        selectedSection = section
+                      }
+                    }
+                  )
+                }
+              }
             }
           }
         }
@@ -528,7 +554,7 @@ struct SettingsSidebarItem: View {
 
   private var icon: String {
     switch section {
-    case .general: return "gearshape"
+    case .general: return "ear"
     case .rewind: return "clock.arrow.circlepath"
     case .transcription: return "waveform"
     case .notifications: return "bell"
@@ -538,7 +564,7 @@ struct SettingsSidebarItem: View {
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
-    case .advanced: return "chart.bar"
+    case .advanced: return "slider.horizontal.3"
     case .about: return "info.circle"
     }
   }

@@ -7,11 +7,17 @@ import WebKit
 extension SettingsContentView {
   var rewindSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      Text("Manage screen history storage, excluded apps, and retention. Turn capture on or off from Listening.")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textTertiary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+
       // Storage Stats
       settingsCard(settingId: "rewind.storage") {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
           settingsCardHeader(icon: "internaldrive.fill", title: "Storage")
-          
+
           if let stats = rewindStats {
             settingRow(
               title: "Usage",
@@ -46,7 +52,7 @@ extension SettingsContentView {
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
-          
+
           Text("Screen capture is paused when these apps are active")
             .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
@@ -105,7 +111,8 @@ extension SettingsContentView {
           settingsCardHeader(icon: "battery.75percent", title: "Battery Optimization")
           settingRow(
             title: "Behavior",
-            subtitle: "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
+            subtitle:
+              "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
           ) {
             Text("Automatic")
               .scaledFont(size: OmiType.body, weight: .medium)

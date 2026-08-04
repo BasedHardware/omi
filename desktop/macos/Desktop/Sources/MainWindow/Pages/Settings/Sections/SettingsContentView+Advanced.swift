@@ -9,33 +9,58 @@ extension SettingsContentView {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: icon)
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(OmiColors.accent)
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
       Spacer()
     }
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, OmiSpacing.md)
+    .padding(.bottom, OmiSpacing.xs)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(OmiColors.border.opacity(0.28))
+        .frame(height: 1)
+    }
   }
 
   var advancedSection: some View {
     VStack(spacing: OmiSpacing.xxl) {
-      advancedCategoryHeader(title: "AI Setup", icon: "cpu")
-      aiSetupSubsection
-      advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
-      profileAndStatsSubsection
-      advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
-      resetOnboardingSubsection
+      // Product assistants first — these are the features people look for.
+      advancedCategoryHeader(title: "Assistants", icon: "sparkles")
+      focusAssistantSubsection
+      taskAssistantSubsection
+      insightAssistantSubsection
+      memoryAssistantSubsection
+      analysisThrottleSubsection
+
       advancedCategoryHeader(title: "Goals", icon: "target")
       goalsSubsection
+
+      advancedCategoryHeader(title: "Integrations", icon: "link")
+      gmailReaderSubsection
+      calendarSyncSubsection
+
+      advancedCategoryHeader(title: "AI Setup", icon: "cpu")
+      aiSetupSubsection
+
+      advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
+      profileAndStatsSubsection
+
       advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
       preferencesSubsection
+
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
+
+      advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+      resetOnboardingSubsection
+
       if AppBuild.isBetaProductionBundle {
         advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
         betaDiagnosticsSubsection
       }
+
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 

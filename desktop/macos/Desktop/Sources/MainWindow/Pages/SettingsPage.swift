@@ -341,25 +341,29 @@ struct SettingsContentView: View {
     case about = "About"
 
     /// Label shown in the settings sidebar and page header. Merged sections
-    /// (Account + Plan and Usage, Notifications + Privacy) share one nav item,
-    /// so both cases surface the combined title. Raw values stay untouched —
-    /// they are the automation contract (`selectedSettingsSection` snapshots,
+    /// share one nav item so both cases surface the combined title. A few
+    /// cases also use a clearer product label than their raw value
+    /// (`Listening`, `Ask Omi`). Raw values stay untouched — they are the
+    /// automation contract (`selectedSettingsSection` snapshots,
     /// `omi-ctl navigate settings <section>`, e2e flow waits).
     var displayTitle: String {
       switch self {
+      case .general: return "Listening"
       case .account, .planUsage: return "Account & Plan"
       case .notifications, .privacy: return "Notifications & Privacy"
+      case .floatingBar, .shortcuts: return "Ask Omi"
       default: return rawValue
       }
     }
 
     /// The sidebar nav entry that represents this section. Legacy deep-link
-    /// targets (`privacy`, `planUsage`) remain routable but highlight their
-    /// merged sidebar item.
+    /// targets (`privacy`, `planUsage`, `shortcuts`) remain routable but
+    /// highlight their merged sidebar item.
     var sidebarItem: SettingsSection {
       switch self {
       case .planUsage: return .account
       case .privacy: return .notifications
+      case .shortcuts: return .floatingBar
       default: return self
       }
     }
@@ -562,9 +566,9 @@ struct SettingsContentView: View {
           planUsageSection
         case .aiChat:
           aiChatSection
-        case .floatingBar:
+        case .floatingBar, .shortcuts:
           floatingBarSection
-        case .shortcuts:
+          mergedSectionHeader(title: "Shortcuts", icon: "keyboard")
           shortcutsSection
         case .advanced:
           advancedSection
