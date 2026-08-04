@@ -45,6 +45,26 @@ def maximum_future_skew_seconds() -> int:
     return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
 
 
+def normalize_capture_window(
+    start_ts: float,
+    end_ts: float,
+    *,
+    now: Optional[float] = None,
+) -> tuple[float, float]:
+    """Shift a capture window so it never ends after server now.
+
+    Offline sync filenames embed the client wall clock. Mild positive skew
+    (phone a few minutes ahead) previously produced conversations that appear
+    in the future in the app (#4770). Preserve duration by shifting the whole
+    window backward when the end is past ``now``.
+    """
+    effective_now = time.time() if now is None else now
+    if end_ts <= effective_now:
+        return float(start_ts), float(end_ts)
+    shift = end_ts - effective_now
+    return float(start_ts) - shift, float(end_ts) - shift
+
+
 def capture_times_within_window(filenames: Iterable[str], lower: float, upper: float) -> bool:
     try:
         capture_times = [float(parse_sync_filename_timestamp(filename)) for filename in filenames]

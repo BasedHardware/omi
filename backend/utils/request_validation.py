@@ -12,8 +12,9 @@ does not cover (multipart/form-data JSON-string fields, multi-field calendar
 date validation, filename timestamp parsing, chunked-upload envelopes).
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+import os
 from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
@@ -124,7 +125,13 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
         raise ValueError('invalid timestamp') from e
 
     now = datetime.now(timezone.utc)
-    if timestamp_dt > now or timestamp_dt < datetime(2024, 1, 1, tzinfo=timezone.utc):
+    if timestamp_dt < datetime(2024, 1, 1, tzinfo=timezone.utc):
+        raise ValueError('invalid timestamp')
+    # Allow mild client clock skew (default 300s) so uploads still succeed; the
+    # sync pipeline clamps conversation started/finished to server now (#4770).
+    # Far-future values remain invalid.
+    max_future_skew_seconds = max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
+    if timestamp_dt > now + timedelta(seconds=max_future_skew_seconds):
         raise ValueError('invalid timestamp')
     return timestamp
 

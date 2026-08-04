@@ -18,7 +18,7 @@ import threading
 import time
 import wave
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
@@ -116,7 +116,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
-from utils.sync.lanes import SyncLane
+from utils.sync.lanes import SyncLane, normalize_capture_window
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -1142,6 +1142,9 @@ def process_segment(
             closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
         if not closest_memory:
+            # Clamp mild client clock skew so offline conversations never appear
+            # in the future relative to server time (#4770).
+            timestamp, segment_end_timestamp = normalize_capture_window(timestamp, segment_end_timestamp)
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
             finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
             create_memory = CreateConversation(
@@ -1227,6 +1230,11 @@ def process_segment(
             # Ensure finished_at doesn't go backwards
             if new_finished_at < closest_memory['finished_at']:
                 new_finished_at = closest_memory['finished_at']
+
+            # Never publish a finished_at in the future (#4770).
+            now_utc = datetime.now(timezone.utc)
+            if new_finished_at > now_utc:
+                new_finished_at = now_utc
 
             # remove timestamp field
             for segment in segments:
@@ -1442,7 +1450,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
+        now_utc = datetime.now(timezone.utc)
+        max_future_skew_seconds = max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
+        if time_val > now_utc + timedelta(seconds=max_future_skew_seconds) or time_val < datetime(
+            2024, 1, 1, tzinfo=timezone.utc
+        ):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
 
         path = f"{directory}{filename}"

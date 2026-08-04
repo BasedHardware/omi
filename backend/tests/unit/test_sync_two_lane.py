@@ -41,6 +41,27 @@ def _backend_deploy_steps(workflow_name: str) -> list[dict[str, Any]]:
     return steps
 
 
+def test_normalize_capture_window_shifts_future_skew_back_to_now():
+    """#4770: phone clock a few minutes ahead must not create future-dated conversations."""
+    now = 2_000_000_000.0
+    start = now + 180  # 3 minutes ahead (matches the reported screenshot skew)
+    end = start + 60
+
+    clamped_start, clamped_end = lanes.normalize_capture_window(start, end, now=now)
+
+    assert clamped_end == now
+    assert clamped_start == now - 60
+    assert clamped_end - clamped_start == end - start
+
+
+def test_normalize_capture_window_leaves_past_windows_unchanged():
+    now = 2_000_000_000.0
+    start = now - 600
+    end = now - 540
+
+    assert lanes.normalize_capture_window(start, end, now=now) == (start, end)
+
+
 def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')

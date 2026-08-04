@@ -89,6 +89,13 @@ def test_parse_sync_filename_timestamp_rejects_future_values():
         parse_sync_filename_timestamp(f'audio_{future}.bin')
 
 
+def test_parse_sync_filename_timestamp_allows_mild_future_skew():
+    """Mild client clock skew (within SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS) must upload (#4770)."""
+    mild_future = int(datetime.now(timezone.utc).timestamp()) + 120
+
+    assert parse_sync_filename_timestamp(f'audio_{mild_future}.bin') == mild_future
+
+
 @pytest.mark.parametrize(
     'payload',
     [
