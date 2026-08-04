@@ -6,3 +6,5 @@ dist/
 bun.lockb
 .package-lock.json
 package-lock.json
+
+!bun.lock
