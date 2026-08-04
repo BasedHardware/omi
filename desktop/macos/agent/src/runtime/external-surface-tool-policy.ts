@@ -19,6 +19,8 @@ export type ExternalSurfaceToolPolicyDecision =
       | "permission_route_rejected"
       | "permission_request_not_authorized"
       | "pill_management_intent_required"
+      | "memory_save_not_authorized"
+      | "memory_content_not_in_user_request"
       | "sql_write_rejected";
     message: string;
   };
@@ -144,6 +146,22 @@ export function routeExternalSurfaceTool(
       code: "pill_management_intent_required",
       message: "Dismissing or restoring a desktop agent pill requires explicit current-turn pill-management intent",
     };
+  }
+  if (input.toolName === "create_memory") {
+    if (!hasExplicitMemorySaveIntent(input.originatingPrompt)) {
+      return {
+        action: "reject",
+        code: "memory_save_not_authorized",
+        message: "Saving a memory requires an explicit affirmative current-turn request such as 'remember this' or 'save this'",
+      };
+    }
+    if (!hasMemoryContentInUserRequest(input.toolInput, input.originatingPrompt)) {
+      return {
+        action: "reject",
+        code: "memory_content_not_in_user_request",
+        message: "Memory content must be plainly supplied in the current user request; inferred or rewritten content is not authorized",
+      };
+    }
   }
   if (input.toolName !== "spawn_agent") {
     return { action: "execute", toolName: input.toolName, toolInput: input.toolInput, recoveredFromDelegation: false };
@@ -324,6 +342,77 @@ export function hasExplicitPillManagementIntent(prompt: string): boolean {
   return target && action;
 }
 
+/**
+ * Memory writes are model-proposed effects, so the current user turn must
+ * contain its own affirmative remember/save command. A fact merely stated in
+ * context, a question about whether to save, or a negative instruction is not
+ * authorization; an assistant suggestion cannot authorize the write either.
+ */
+export function hasExplicitMemorySaveIntent(prompt: string): boolean {
+  const text = prompt.toLowerCase().trim();
+  if (!text) return false;
+
+  // Keep this list in lockstep with the native executor: recall questions and
+  // explicit negations must never become durable-write authority.
+  const rejectedPhrases = [
+    "do you remember",
+    "did you remember",
+    "what do you remember",
+    "what should i remember",
+    "don't remember",
+    "do not remember",
+    "never remember",
+    "not remember",
+    "don't save",
+    "do not save",
+    "don't store",
+    "do not store",
+    "don't add",
+    "do not add",
+    "don't create",
+    "do not create",
+  ];
+  if (rejectedPhrases.some((phrase) => text.includes(phrase))) return false;
+
+  const imperativePhrases = [
+    "remember that",
+    "remember this",
+    "remember: ",
+    "please remember",
+    "save this",
+    "save to memory",
+    "save as a memory",
+    "store this",
+    "store in memory",
+    "add this to memory",
+    "create a memory",
+    "make this a memory",
+    "keep in mind that",
+  ];
+  const startsWithRememberCommand = text.startsWith("remember ")
+    || text.startsWith("remember:")
+    || text.startsWith("remember,");
+  if (!startsWithRememberCommand && !imperativePhrases.some((phrase) => text.includes(phrase))) return false;
+  // A question is only authorized when it contains an explicit polite
+  // request ("please ...?") or starts with the direct "remember" command.
+  if (text.includes("?") && !text.includes("please") && !text.startsWith("remember")) return false;
+  return true;
+}
+
+/**
+ * A memory write may only persist text that the user supplied in this turn.
+ * Compare normalized text literally rather than allowing a model-proposed
+ * paraphrase or an inferred fact to become durable state.
+ */
+export function hasMemoryContentInUserRequest(
+  toolInput: Record<string, unknown>,
+  originatingPrompt: string,
+): boolean {
+  const content = normalizeMemoryText(textField(toolInput, "content"));
+  const prompt = normalizeMemoryText(originatingPrompt);
+  return content.length > 0 && prompt.includes(content);
+}
+
 function permissionRequest(text: string): { toolName: "check_permission_status" | "request_permission"; type: string } | null {
   const normalized = text.toLowerCase();
   const permission = PERMISSION_TYPES.find(({ phrases }) => phrases.some((phrase) => normalized.includes(phrase)));
@@ -387,4 +476,14 @@ function normalizeTarget(value: string): string {
 function textField(input: Record<string, unknown>, key: string): string {
   const value = input[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeMemoryText(value: string): string {
+  // Keep symbols (including emoji and values such as `C++`) intact; only
+  // punctuation and whitespace are presentation differences for this check.
+  const words = value.normalize("NFKC").toLowerCase().replace(/[\p{P}\s]+/gu, " ").trim();
+  // Padding makes the literal containment check word-boundary aware while
+  // still tolerating ordinary punctuation differences (e.g. a comma before
+  // "remember this" or a sentence-final period omitted by the tool).
+  return words ? ` ${words} ` : "";
 }

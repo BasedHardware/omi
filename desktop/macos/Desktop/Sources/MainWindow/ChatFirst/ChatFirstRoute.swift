@@ -258,6 +258,14 @@ final class ChatFirstShellNavigation: ObservableObject {
     origin: ChatFirstAnalyticsEvent.RouteOrigin = .sidebar
   ) {
     guard destination.isPrimaryDestination else { return }
+    // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
+    // used to leave the automation state permanently "not visible" because
+    // SwiftUI correctly did not remount the unchanged destination.
+    if route == destination {
+      invalidateGoalLinkResolutions()
+      clearFocus()
+      return
+    }
     invalidateGoalLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -267,6 +275,11 @@ final class ChatFirstShellNavigation: ObservableObject {
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
+    if route == .more(page) {
+      invalidateGoalLinkResolutions()
+      clearFocus()
+      return
+    }
     invalidateGoalLinkResolutions()
     route = .more(page)
     visibleRoute = nil

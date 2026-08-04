@@ -1,125 +1,145 @@
+# generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py
 schema_version: 1
 environments:
   dev:
-    gcp_project: based-hardware-dev
-    runtime_gcp_project: based-hardware
-    region: us-central1
     llm_gateway:
       namespace: dev-omi-backend
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
       static_address_name: dev-llm-gateway-ilb-ip-address
+    gcp_project: based-hardware-dev
     gke:
       backend-listen:
-        values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
         env:
-          DESKTOP_UPDATE_POINTERS_MODE:
-            value: primary
-            category: rollout
-          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-            value: '0.01'
-            category: rollout
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware-dev
-          GCP_LOCATION:
-            value: us-central1
-          USE_VERTEX_AI:
-            value: 'true'
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
-          OMI_ENV_STAGE:
-            value: dev
-            category: runtime_identity
-          STT_PRERECORDED_MODEL:
-            value: parakeet,modulate-velma-2
-            category: stt_policy
-          GOOGLE_CLIENT_ID:
-            config_map:
-              name: dev-omi-backend-config
-              key: GOOGLE_CLIENT_ID
-          REDIS_DB_HOST:
-            config_map:
-              name: dev-omi-backend-config
-              key: REDIS_DB_HOST
-          STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
-            category: stt_policy
-          TYPESENSE_HOST:
-            config_map:
-              name: dev-omi-backend-config
-              key: TYPESENSE_HOST
-          TWILIO_ACCOUNT_SID:
-            config_map:
-              name: dev-omi-backend-config
-              key: TWILIO_ACCOUNT_SID
-          TWILIO_API_KEY_SID:
-            config_map:
-              name: dev-omi-backend-config
-              key: TWILIO_API_KEY_SID
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: dev-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           TWILIO_TWIML_APP_SID:
             config_map:
               name: dev-omi-backend-config
               key: TWILIO_TWIML_APP_SID
-          RAPID_API_HOST:
-            config_map:
-              name: dev-omi-backend-config
-              key: RAPID_API_HOST
-          CONVERSATION_SUMMARIZED_APP_IDS:
-            config_map:
-              name: dev-omi-backend-config
-              key: CONVERSATION_SUMMARIZED_APP_IDS
-          X_OAUTH_CLIENT_ID:
-            config_map:
-              name: dev-omi-backend-config
-              key: X_OAUTH_CLIENT_ID
+          USE_VERTEX_AI:
+            value: 'true'
+          STT_PRERECORDED_MODEL:
+            value: parakeet,modulate-velma-2
+            category: stt_policy
           X_OAUTH_REDIRECT_URI:
             config_map:
               name: dev-omi-backend-config
               key: X_OAUTH_REDIRECT_URI
-          MCP_AUTHORIZATION_SERVER_URL:
-            config_map:
-              name: dev-omi-backend-config
-              key: MCP_AUTHORIZATION_SERVER_URL
-          MCP_RESOURCE_URL:
-            config_map:
-              name: dev-omi-backend-config
-              key: MCP_RESOURCE_URL
-          MCP_OAUTH_CHATGPT_CLIENT_ID:
-            config_map:
-              name: dev-omi-backend-config
-              key: MCP_OAUTH_CHATGPT_CLIENT_ID
-          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
-            config_map:
-              name: dev-omi-backend-config
-              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
-          MCP_OAUTH_PUBLIC_CLIENT_ID:
-            config_map:
-              name: dev-omi-backend-config
-              key: MCP_OAUTH_PUBLIC_CLIENT_ID
           MCP_OAUTH_PUBLIC_REDIRECT_URIS:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+          MEMORY_ENABLED_USERS:
+            category: memory_rollout
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          OMI_ENV_STAGE:
+            value: dev
+            category: runtime_identity
+          STT_SERVICE_MODELS:
+            value: modulate-velma-2,parakeet
+            category: stt_policy
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+            value: http://parakeet.omiapi.com
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
           MODULATE_API_KEY:
             secret:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omiapi.com
-            category: service_discovery
-          HOSTED_TRANSLATION_API_URL:
-            value: http://nllb.omiapi.com
-            category: service_discovery
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
-            category: rollout
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
-            category: rollout
+            category: memory_rollout
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: REDIS_DB_HOST
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware-dev
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TYPESENSE_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: TYPESENSE_HOST
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          GCP_LOCATION:
+            value: us-central1
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          HOSTED_TRANSLATION_API_URL:
+            category: service_discovery
+            value: http://nllb.omiapi.com
+          RAPID_API_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: RAPID_API_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          MEMORY_MODE:
+            category: memory_rollout
+            value: read
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
+          MCP_RESOURCE_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MEMORY_V3_GET_ENABLED:
+            category: memory_rollout
+            value: 'true'
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -138,31 +158,8 @@ environments:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          OMI_LLM_GATEWAY_SERVICE_TOKEN:
-            secret:
-              name: dev-omi-backend-secrets
-              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-          MEMORY_MODE:
-            value: read
-            category: memory_rollout
-          MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
-            value: 'true'
-            category: memory_rollout
-          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
-            category: memory_rollout
-          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-            value: '900'
-            category: reliability
+        values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
-        values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
         env:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
@@ -170,9 +167,7 @@ environments:
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'
             category: rollout
-      # Direct pusher bindings are kept here as the dev source contract. The
-      # deploy preflight compares this inventory to the rendered chart and
-      # queries only live object/key metadata before a Helm upgrade.
+        values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
@@ -275,192 +270,283 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: METRICS_SECRET
+      config_map:
+        name: dev-omi-backend-config
+        entries:
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            source: environment
+          GOOGLE_CLIENT_ID:
+            source: environment
+          MCP_AUTHORIZATION_SERVER_URL:
+            source: environment
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            source: environment
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            source: environment
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            source: environment
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            source: environment
+          MCP_RESOURCE_URL:
+            source: environment
+          RAPID_API_HOST:
+            source: environment
+          REDIS_DB_HOST:
+            source: environment
+          STT_PRERECORDED_MODEL:
+            source: literal
+            value: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS:
+            source: literal
+            value: modulate-velma-2,parakeet
+          TYPESENSE_HOST:
+            source: environment
+          TWILIO_ACCOUNT_SID:
+            source: environment
+          TWILIO_API_KEY_SID:
+            source: environment
+          TWILIO_TWIML_APP_SID:
+            source: environment
+          X_OAUTH_CLIENT_ID:
+            source: environment
+          X_OAUTH_REDIRECT_URI:
+            source: environment
+    region: us-central1
     cloud_run:
-      workflow_files:
-        - .github/workflows/gcp_backend_auto_dev.yml
-        - .github/workflows/gcp_backend.yml
-        - .github/workflows/gcp_notifications_job.yml
-        - .github/workflows/gcp_memory_maintenance_job.yml
-        - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       network:
         flags:
+          --vpc-egress: private-ranges-only
           --network: omi-dev-vpc-1
           --subnet: omi-us-central1-dev-vpc-1-subnet-1
-          --vpc-egress: private-ranges-only
       services:
         backend:
+          secrets:
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
-            SYNC_LEDGER_FENCE_MODE:
-              env_var: SYNC_LEDGER_FENCE_MODE
-              default: legacy
-              category: rollout
-            DESKTOP_UPDATE_POINTERS_MODE:
-              value: primary
-              category: rollout
-            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-              value: '0.01'
-              category: rollout
-            GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
-            USE_VERTEX_AI:
-              value: 'true'
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
-            # Dev-only, exact-principal replay capture. Cloud Run's writable
-            # scratch is ephemeral; persist synchronously to the private dev
-            # bucket and never copy these values into the prod manifest.
-            OMI_PARITY_PACK_CAPTURE:
-              value: '1'
-              category: replay_capture
-            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: replay_capture
-            OMI_PARITY_PACK_ROOT:
-              value: /tmp/omi-parity-pack
-              category: replay_capture
-            OMI_PARITY_PACK_GCS_URI:
-              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
-              category: replay_capture
-            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
-              value: '3600'
-              category: replay_capture
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
-            # the production-only parakeet.omi.me endpoint.
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omiapi.com
-              category: service_discovery
-            # Direct dev Cloud Run /v4/listen traffic remains public while the
-            # retired Cloud Run Pusher route drains. It must use the GKE Pusher.
-            HOSTED_PUSHER_API_URL:
-              value: http://pusher.omiapi.com
-              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
-              # The workflow replaces this with the ingress-derived address
-              # after the gateway serving gate passes. Direct mode never uses
-              # the sentinel, and it is deliberately not a routable contract.
               default: http://127.0.0.1:9
               category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
-              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
-              provisional: true
-              category: service_auth
             PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
               provisional: true
               category: service_auth
+            USE_VERTEX_AI:
+              value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: read
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omiapi.com
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-          secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
-              version: latest
-            MODULATE_API_KEY:
-              secret: MODULATE_API_KEY
-              version: latest
-        backend-sync: &dev_backend_sync
-          env:
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            GCP_LOCATION:
+              value: us-central1
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            SYNC_FRESH_MAX_AGE_SECONDS:
-              value: '21600'
+            MEMORY_MODE:
+              category: memory_rollout
+              value: read
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'true'
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
+            HOSTED_PUSHER_API_URL:
+              value: http://pusher.omiapi.com
+              category: service_discovery
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: 'false'
               category: rollout
-              provisional: true
-            SYNC_BACKFILL_MAX_AGE_SECONDS:
-              value: '2592000'
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: '1.0'
               category: rollout
-              provisional: true
-            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
-              value: '300'
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+              value: 'false'
               category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: '1.0'
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
+              value: '1.0'
+              category: rollout
+        backend-sync:
+          secrets:
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            SYNC_BACKFILL_ENABLED:
               provisional: true
+              value: 'true'
+              category: rollout
+            USE_VERTEX_AI:
+              value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
+              provisional: true
               value: '4'
               category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omiapi.com
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
+              value: '2592000'
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              provisional: true
+              value: '21600'
+              category: rollout
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              provisional: true
+              value: '300'
+              category: rollout
+            GCP_LOCATION:
+              value: us-central1
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            MEMORY_MODE:
+              category: memory_rollout
+              value: read
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              provisional: true
               value: '555'
               category: rollout
-              provisional: true
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'true'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
-            USE_VERTEX_AI:
-              value: 'true'
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
             OMI_PARITY_PACK_CAPTURE:
               value: '1'
               category: replay_capture
@@ -476,28 +562,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omiapi.com
-              category: service_discovery
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -516,67 +580,109 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
               category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: read
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            SYNC_BACKFILL_ENABLED:
-              value: 'true'
-              category: rollout
-              provisional: true
-            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-              value: '900'
-              category: reliability
           forbidden_env:
-            - HOSTED_PUSHER_API_URL
-          secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
-              version: latest
-            MODULATE_API_KEY:
-              secret: MODULATE_API_KEY
-              version: latest
+          - HOSTED_PUSHER_API_URL
         backend-sync-backfill:
-          <<: *dev_backend_sync
-          provisional: true
-        backend-integration:
+          secrets:
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
-            GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            SYNC_BACKFILL_ENABLED:
+              provisional: true
+              value: 'true'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              provisional: true
+              value: '4'
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omiapi.com
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              provisional: true
+              value: '2592000'
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              provisional: true
+              value: '21600'
+              category: rollout
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              provisional: true
+              value: '300'
+              category: rollout
+            GCP_LOCATION:
+              value: us-central1
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            MEMORY_MODE:
+              category: memory_rollout
+              value: read
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              provisional: true
+              value: '555'
+              category: rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'true'
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
               value: '1'
               category: replay_capture
@@ -592,28 +698,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omiapi.com
-              category: service_discovery
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -632,143 +716,159 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
               category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: read
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-              value: '900'
-              category: reliability
+          provisional: true
           forbidden_env:
-            - HOSTED_PUSHER_API_URL
+          - HOSTED_PUSHER_API_URL
+        backend-integration:
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
               version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+          env:
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            USE_VERTEX_AI:
+              value: 'true'
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omiapi.com
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            MEMORY_MODE:
+              category: memory_rollout
+              value: read
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'true'
+            GCP_LOCATION:
+              value: us-central1
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: '1.0'
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: '1.0'
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
+              value: '1.0'
+              category: rollout
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
       jobs:
         notifications-job:
-          env:
-            GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
-            # X connector sync still indexes via Pinecone (not memory maintenance).
-            PINECONE_INDEX_NAME:
-              value: memories-backend-dev
-              category: integrations
-          forbidden_env:
-            - HOSTED_PUSHER_API_URL
           secrets:
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
-              version: latest
-            OPENAI_API_KEY:
-              secret: OPENAI_API_KEY
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
-        memory-maintenance-job:
-          # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
-          # These must not rely on a prior Cloud Run revision retaining live-only patches.
-          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
-          # Retired names remain only in --remove-env-vars to clean stale revisions.
-          flags:
-            --task-timeout: 3600s
-            --cpu: '2'
-            --memory: 2Gi
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
-            GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend-dev
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            # Derived by the deploy workflow only after the gateway serving
-            # gate and Cloud Run VPC probe succeed; never pin an ILB address.
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            MEMORY_MODE:
-              value: read
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            TYPESENSE_HOST_PORT:
-              value: '443'
-              category: memory_rollout
-            PINECONE_INDEX_NAME:
-              value: memories-backend-dev
-              category: memory_rollout
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
+        memory-maintenance-job:
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            # Retained for canonical Pinecone embedding upserts and similarity
-            # queries. Canonical L2 maintenance itself routes through the gateway above.
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
@@ -776,22 +876,199 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
-            TYPESENSE_API_KEY:
-              secret: TYPESENSE_API_KEY
-              version: latest
-  prod:
-    gcp_project: based-hardware
+          flags:
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --task-timeout: 3600s
+            --cpu: '2'
+            --memory: 2Gi
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              category: memory_rollout
+              value: 'true'
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: memory_rollout
+              value: memories-backend-dev
+            MEMORY_MODE:
+              category: memory_rollout
+              value: read
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'true'
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+      workflow_files:
+      - .github/workflows/gcp_backend_auto_dev.yml
+      - .github/workflows/gcp_backend.yml
+      - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_memory_maintenance_job.yml
+      - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
+    compute_project: based-hardware-dev
+    data_plane_project: based-hardware
     runtime_gcp_project: based-hardware
-    region: us-central1
+  prod:
     llm_gateway:
       namespace: prod-omi-backend
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       static_address_name: prod-omi-self-hosted-llm-ip-address
+    gcp_project: based-hardware
     gke:
       backend-listen:
-        values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
+          OMI_LLM_GATEWAY_URL:
+            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
+            category: service_discovery
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: prod-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          TWILIO_TWIML_APP_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_TWIML_APP_SID
+          USE_VERTEX_AI:
+            value: 'true'
+          STT_PRERECORDED_MODEL:
+            value: parakeet,modulate-velma-2
+            category: stt_policy
+          X_OAUTH_REDIRECT_URI:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_REDIRECT_URI
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+          MEMORY_ENABLED_USERS:
+            category: memory_rollout
+            value: ''
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          OMI_ENV_STAGE:
+            value: prod
+            category: runtime_identity
+          STT_SERVICE_MODELS:
+            value: modulate-velma-2,parakeet
+            category: stt_policy
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+            value: http://parakeet.omi.me
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
+          MODULATE_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MODULATE_API_KEY
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TYPESENSE_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: TYPESENSE_HOST
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          GCP_LOCATION:
+            value: us-central1
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          HOSTED_TRANSLATION_API_URL:
+            category: service_discovery
+            value: http://nllb.omi.me
+          RAPID_API_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: RAPID_API_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          MEMORY_MODE:
+            category: memory_rollout
+            value: 'off'
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
+          MCP_RESOURCE_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MEMORY_V3_GET_ENABLED:
+            category: memory_rollout
+            value: 'false'
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -816,91 +1093,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: SYNC_TASKS_HANDLER_URL
-          DESKTOP_UPDATE_POINTERS_MODE:
-            value: primary
-            category: rollout
-          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-            value: '0.01'
-            category: rollout
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware
-          GCP_LOCATION:
-            value: us-central1
-          USE_VERTEX_AI:
-            value: 'true'
-          OMI_ENV_STAGE:
-            value: prod
-            category: runtime_identity
-          STT_PRERECORDED_MODEL:
-            value: parakeet,modulate-velma-2
-            category: stt_policy
-          GOOGLE_CLIENT_ID:
-            config_map:
-              name: prod-omi-backend-config
-              key: GOOGLE_CLIENT_ID
-          REDIS_DB_HOST:
-            config_map:
-              name: prod-omi-backend-config
-              key: REDIS_DB_HOST
-          STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
-            category: stt_policy
-          TYPESENSE_HOST:
-            config_map:
-              name: prod-omi-backend-config
-              key: TYPESENSE_HOST
-          TWILIO_ACCOUNT_SID:
-            config_map:
-              name: prod-omi-backend-config
-              key: TWILIO_ACCOUNT_SID
-          TWILIO_API_KEY_SID:
-            config_map:
-              name: prod-omi-backend-config
-              key: TWILIO_API_KEY_SID
-          TWILIO_TWIML_APP_SID:
-            config_map:
-              name: prod-omi-backend-config
-              key: TWILIO_TWIML_APP_SID
-          RAPID_API_HOST:
-            config_map:
-              name: prod-omi-backend-config
-              key: RAPID_API_HOST
-          CONVERSATION_SUMMARIZED_APP_IDS:
-            config_map:
-              name: prod-omi-backend-config
-              key: CONVERSATION_SUMMARIZED_APP_IDS
-          X_OAUTH_CLIENT_ID:
-            config_map:
-              name: prod-omi-backend-config
-              key: X_OAUTH_CLIENT_ID
-          X_OAUTH_REDIRECT_URI:
-            config_map:
-              name: prod-omi-backend-config
-              key: X_OAUTH_REDIRECT_URI
-          MCP_AUTHORIZATION_SERVER_URL:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_AUTHORIZATION_SERVER_URL
-          MCP_RESOURCE_URL:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_RESOURCE_URL
-          MCP_OAUTH_CHATGPT_CLIENT_ID:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_OAUTH_CHATGPT_CLIENT_ID
-          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
-          MCP_OAUTH_PUBLIC_CLIENT_ID:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_OAUTH_PUBLIC_CLIENT_ID
-          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
-            config_map:
-              name: prod-omi-backend-config
-              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
           MCP_OAUTH_CLAUDE_CLIENT_ID:
             config_map:
               name: prod-omi-backend-config
@@ -913,63 +1105,19 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-          MODULATE_API_KEY:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MODULATE_API_KEY
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omi.me
-            category: service_discovery
-          HOSTED_TRANSLATION_API_URL:
-            value: http://nllb.omi.me
-            category: service_discovery
-          OMI_LLM_GATEWAY_URL:
-            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
-            category: service_discovery
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
-            category: rollout
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_SERVICE_TOKEN:
-            secret:
-              name: prod-omi-backend-secrets
-              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-          MEMORY_MODE:
-            value: "off"
-            category: memory_rollout
-          MEMORY_ENABLED_USERS:
-            value: ''
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
-            category: memory_rollout
           MCP_OAUTH_CLIENTS_JSON:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
-          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-            value: '900'
-            category: reliability
+        values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
-        values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
         env:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
@@ -977,153 +1125,84 @@ environments:
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'
             category: rollout
+        values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
+      config_map:
+        name: prod-omi-backend-config
+        entries:
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            source: environment
+          GOOGLE_CLIENT_ID:
+            source: environment
+          MCP_AUTHORIZATION_SERVER_URL:
+            source: environment
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            source: environment
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            source: environment
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            source: environment
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            source: environment
+          MCP_RESOURCE_URL:
+            source: environment
+          RAPID_API_HOST:
+            source: environment
+          REDIS_DB_HOST:
+            source: environment
+          STT_PRERECORDED_MODEL:
+            source: literal
+            value: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS:
+            source: literal
+            value: modulate-velma-2,parakeet
+          TYPESENSE_HOST:
+            source: environment
+          TWILIO_ACCOUNT_SID:
+            source: environment
+          TWILIO_API_KEY_SID:
+            source: environment
+          TWILIO_TWIML_APP_SID:
+            source: environment
+          X_OAUTH_CLIENT_ID:
+            source: environment
+          X_OAUTH_REDIRECT_URI:
+            source: environment
+          ACCOUNT_DELETION_HANDLER_URL:
+            source: environment
+          MCP_OAUTH_CLAUDE_CLIENT_ID:
+            source: environment
+          MCP_OAUTH_CLAUDE_CLIENT_NAME:
+            source: environment
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+            source: environment
+          SYNC_TASKS_HANDLER_URL:
+            source: environment
+          SYNC_TASKS_INVOKER_SA:
+            source: environment
+    region: us-central1
     cloud_run:
-      workflow_files:
-        - .github/workflows/gcp_backend.yml
-        - .github/workflows/gcp_notifications_job.yml
-        - .github/workflows/gcp_memory_maintenance_job.yml
       network:
         flags:
+          --vpc-egress: private-ranges-only
           --network:
             env_var: CLOUD_RUN_VPC_NETWORK
           --subnet:
             env_var: CLOUD_RUN_VPC_SUBNET
-          --vpc-egress: private-ranges-only
       services:
         backend:
-          env:
-            LISTEN_FINALIZATION_DISPATCH_MODE:
-              value: cloud_tasks
-              category: reliability
-            LISTEN_FINALIZATION_TASKS_QUEUE:
-              value: conversation-finalization
-              category: reliability
-            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
-              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
-              category: reliability
-            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
-              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
-              category: reliability
-            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
-              value: '5'
-              category: reliability
-            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
-              value: '1500'
-              category: reliability
-            ACCOUNT_DELETION_DISPATCH_MODE:
-              value: cloud_tasks
-              category: reliability
-            ACCOUNT_DELETION_TASKS_QUEUE:
-              value: account-deletion
-              category: reliability
-            ACCOUNT_DELETION_HANDLER_URL:
-              env_var: ACCOUNT_DELETION_HANDLER_URL
-              category: reliability
-            SYNC_TASKS_PROJECT:
-              value: based-hardware
-              category: reliability
-            SYNC_TASKS_LOCATION:
-              value: us-central1
-              category: reliability
-            SYNC_TASKS_INVOKER_SA:
-              env_var: SYNC_TASKS_INVOKER_SA
-              category: reliability
-            SYNC_TASKS_HANDLER_URL:
-              env_var: SYNC_TASKS_HANDLER_URL
-              category: reliability
-            SYNC_LEDGER_FENCE_MODE:
-              env_var: SYNC_LEDGER_FENCE_MODE
-              default: legacy
-              category: rollout
-            DESKTOP_UPDATE_POINTERS_MODE:
-              value: primary
-              category: rollout
-            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-              value: '0.01'
-              category: rollout
-            GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
-            USE_VERTEX_AI:
-              value: 'true'
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STRIPE_PLUS_MONTHLY_PRICE_ID:
-              value: price_1TuH6z1F8wnoWYvw7Siv61SX
-            STRIPE_PLUS_ANNUAL_PRICE_ID:
-              value: price_1TuHCw1F8wnoWYvwZvKu86sI
-            STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID:
-              value: price_1TuIa81F8wnoWYvw0iX0j5M8
-            STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
-              value: price_1TuIap1F8wnoWYvwHWq0EvNU
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omi.me
-              category: service_discovery
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              # Never make a reserved ILB IP independently valid runtime
-              # configuration. The deployment gate derives the live address.
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
-              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
-              provisional: true
-              category: service_auth
-            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
-              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
-              provisional: true
-              category: service_auth
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: "off"
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: ''
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            MCP_OAUTH_CLAUDE_CLIENT_ID:
-              env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
-              category: oauth_metadata
-            MCP_OAUTH_CLAUDE_CLIENT_NAME:
-              env_var: MCP_OAUTH_CLAUDE_CLIENT_NAME
-              category: oauth_metadata
-            MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-              env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-              category: oauth_metadata
-            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-              value: '900'
-              category: reliability
           secrets:
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
               version: latest
@@ -1133,20 +1212,75 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            MODULATE_API_KEY:
-              secret: MODULATE_API_KEY
-              version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-        backend-sync: &prod_backend_sync
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
+            USE_VERTEX_AI:
+              value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: ''
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
+              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omi.me
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            GCP_LOCATION:
+              value: us-central1
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            MEMORY_MODE:
+              category: memory_rollout
+              value: 'off'
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'false'
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1186,107 +1320,139 @@ environments:
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
               category: reliability
-            SYNC_LEDGER_FENCE_MODE:
-              env_var: SYNC_LEDGER_FENCE_MODE
-              default: legacy
-              category: rollout
-            SYNC_FRESH_MAX_AGE_SECONDS:
-              value: '21600'
-              category: rollout
-              provisional: true
-            SYNC_BACKFILL_MAX_AGE_SECONDS:
-              value: '2592000'
-              category: rollout
-              provisional: true
-            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
-              value: '300'
-              category: rollout
-              provisional: true
-            SYNC_BACKFILL_USER_DAILY_HOURS:
-              value: '4'
-              category: rollout
-              provisional: true
-            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
-              value: '555'
-              category: rollout
-              provisional: true
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
-            USE_VERTEX_AI:
-              value: 'true'
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omi.me
-              category: service_discovery
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
+            STRIPE_PLUS_MONTHLY_PRICE_ID:
+              value: price_1TuH6z1F8wnoWYvw7Siv61SX
+            STRIPE_PLUS_ANNUAL_PRICE_ID:
+              value: price_1TuHCw1F8wnoWYvwZvKu86sI
+            STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID:
+              value: price_1TuIa81F8wnoWYvw0iX0j5M8
+            STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
+              value: price_1TuIap1F8wnoWYvwHWq0EvNU
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: "off"
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: ''
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            SYNC_BACKFILL_ENABLED:
-              value: 'true'
-              category: rollout
-              provisional: true
-            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-              value: '900'
-              category: reliability
+            MCP_OAUTH_CLAUDE_CLIENT_ID:
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
+              category: oauth_metadata
+            MCP_OAUTH_CLAUDE_CLIENT_NAME:
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_NAME
+              category: oauth_metadata
+            MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+              env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+              category: oauth_metadata
+        backend-sync:
           secrets:
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-        backend-sync-backfill:
-          <<: *prod_backend_sync
-          provisional: true
-        backend-integration:
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            SYNC_BACKFILL_ENABLED:
+              provisional: true
+              value: 'true'
+              category: rollout
+            USE_VERTEX_AI:
+              value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: ''
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              provisional: true
+              value: '4'
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omi.me
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              provisional: true
+              value: '2592000'
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              provisional: true
+              value: '21600'
+              category: rollout
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              provisional: true
+              value: '300'
+              category: rollout
+            GCP_LOCATION:
+              value: us-central1
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            MEMORY_MODE:
+              category: memory_rollout
+              value: 'off'
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              provisional: true
+              value: '555'
+              category: rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1310,146 +1476,154 @@ environments:
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            GCP_LOCATION:
-              value: us-central1
-            USE_VERTEX_AI:
-              value: 'true'
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            GOOGLE_CLIENT_ID:
-              env_var: GOOGLE_CLIENT_ID
-              category: oauth_metadata
-            STT_PRERECORDED_MODEL:
-              value: parakeet,modulate-velma-2
-              category: stt_policy
-            HOSTED_PARAKEET_API_URL:
-              value: http://parakeet.omi.me
-              category: service_discovery
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              default: http://127.0.0.1:9
-              category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
-              category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
-            MEMORY_MODE:
-              value: "off"
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: ''
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
-            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-              value: '900'
-              category: reliability
+        backend-sync-backfill:
           secrets:
-            ENCRYPTION_SECRET:
-              secret: ENCRYPTION_SECRET
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-      jobs:
-        notifications-job:
-          env:
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            # X connector sync still indexes via Pinecone (not memory maintenance).
-            PINECONE_INDEX_NAME:
-              value: memories-backend
-              category: integrations
-          secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            OPENAI_API_KEY:
-              secret: OPENAI_API_KEY
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            PINECONE_API_KEY:
-              secret: PINECONE_API_KEY
-              version: latest
-        memory-maintenance-job:
-          # Dark prod template only; this declaration does not prove a live job exists.
-          # Rollout contract: docs/runbooks/canonical-memory-rollout-flags.md.
-          flags:
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            # Derived by the deploy workflow only after the gateway serving
-            # gate and Cloud Run VPC probe succeed; never pin an ILB address.
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
               category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+            SYNC_BACKFILL_ENABLED:
+              provisional: true
               value: 'true'
               category: rollout
+            USE_VERTEX_AI:
+              value: 'true'
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            MEMORY_MODE:
-              value: "off"
-              category: memory_rollout
-            MEMORY_ENABLED_USERS:
-              value: ''
-              category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              value: 'false'
-              category: memory_rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              provisional: true
+              value: '4'
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omi.me
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              provisional: true
+              value: '2592000'
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              provisional: true
+              value: '21600'
+              category: rollout
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-              value: 'true'
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              provisional: true
+              value: '300'
+              category: rollout
+            GCP_LOCATION:
+              value: us-central1
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            MEMORY_MODE:
               category: memory_rollout
+              value: 'off'
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              provisional: true
+              value: '555'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            TYPESENSE_HOST_PORT:
-              value: '443'
+            MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-            PINECONE_INDEX_NAME:
-              value: memories-backend
-              category: memory_rollout
+              value: 'false'
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              category: reliability
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+          provisional: true
+        backend-integration:
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -1457,10 +1631,121 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            # Retained for canonical Pinecone embedding upserts and similarity
-            # queries. Canonical L2 maintenance itself routes through the gateway above.
+          env:
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: ''
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            USE_VERTEX_AI:
+              value: 'true'
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omi.me
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            MEMORY_MODE:
+              category: memory_rollout
+              value: 'off'
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            GCP_LOCATION:
+              value: us-central1
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              category: reliability
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+      jobs:
+        notifications-job:
+          secrets:
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+          env:
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+        memory-maintenance-job:
+          secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
@@ -1468,6 +1753,53 @@ environments:
             TYPESENSE_HOST:
               secret: TYPESENSE_HOST
               version: latest
-            TYPESENSE_API_KEY:
-              secret: TYPESENSE_API_KEY
-              version: latest
+          flags:
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'false'
+              category: rollout
+            MEMORY_ENABLED_USERS:
+              category: memory_rollout
+              value: ''
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: memory_rollout
+              value: memories-backend
+            MEMORY_MODE:
+              category: memory_rollout
+              value: 'off'
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+      workflow_files:
+      - .github/workflows/gcp_backend.yml
+      - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_memory_maintenance_job.yml
+    compute_project: based-hardware
+    data_plane_project: based-hardware
+    runtime_gcp_project: based-hardware

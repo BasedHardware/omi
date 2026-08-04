@@ -279,8 +279,8 @@ struct DesktopTopBar: View {
 }
 
 enum TopNavigationLayoutMetrics {
-  /// The navigation lane follows the same readable width as the Home chat
-  /// composer, while retaining the composer's horizontal inset at narrow sizes.
+  /// The top bar follows the same readable lane as the Home chat composer,
+  /// retaining the composer's horizontal inset at narrow sizes.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
     max(
       0,
@@ -336,8 +336,9 @@ struct TopNavigationBarLayout<
   }
 }
 
-/// Measures a top-bar row at its no-overflow width, then pins its persistent
-/// controls to the trailing edge once `ViewThatFits` has selected it.
+/// Fills the proposed lane when the row fits, then pins its persistent controls
+/// to the trailing edge. When it does not fit, reporting intrinsic width lets
+/// `ViewThatFits` select the compact alternative.
 private struct TopNavigationBarRowLayout: Layout {
   private static let navigationToControlsSpacing = OmiSpacing.md * 3
   private static let controlsToSettingsSpacing = OmiSpacing.md
@@ -348,9 +349,17 @@ private struct TopNavigationBarRowLayout: Layout {
     cache: inout ()
   ) -> CGSize {
     let sizes = sizes(for: subviews)
+    let intrinsicWidth =
+      sizes.navigation.width + Self.navigationToControlsSpacing + sizes.controls.width
+      + Self.controlsToSettingsSpacing + sizes.settings.width
+    let width: CGFloat
+    if let proposedWidth = proposal.width, proposedWidth.isFinite {
+      width = max(proposedWidth, intrinsicWidth)
+    } else {
+      width = intrinsicWidth
+    }
     return CGSize(
-      width: sizes.navigation.width + Self.navigationToControlsSpacing + sizes.controls.width
-        + Self.controlsToSettingsSpacing + sizes.settings.width,
+      width: width,
       height: max(sizes.navigation.height, sizes.controls.height, sizes.settings.height)
     )
   }

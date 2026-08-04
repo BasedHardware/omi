@@ -19,7 +19,7 @@ enum ChatScrollLiveEdge {
   /// single early scrollTo may resolve against the pre-history document and
   /// leave a long transcript at its top, so settle the live edge again after
   /// the first layout has materialized the lazy rows.
-  static let initialRestoreSettlingDelays: [TimeInterval] = [0.05, 0.2, 0.5]
+  static let initialRestoreSettlingDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0]
 
   static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
     visibleMaxY >= documentHeight - intentEpsilon

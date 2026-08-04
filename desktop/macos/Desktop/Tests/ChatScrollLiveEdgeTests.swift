@@ -106,7 +106,16 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
   }
 
   func testInitialRestoreSettlesAcrossMultipleLayoutTurns() {
-    XCTAssertEqual(ChatScrollLiveEdge.initialRestoreSettlingDelays, [0.05, 0.2, 0.5])
+    XCTAssertEqual(ChatScrollLiveEdge.initialRestoreSettlingDelays, [0.05, 0.2, 0.5, 1.0])
+  }
+
+  func testEveryPresentationStartsAFreshBottomPlacement() {
+    XCTAssertEqual(
+      ChatInitialRestoreState.atPresentationStart(previous: .completed),
+      .waiting,
+      "a replacement SwiftUI scroll view must not inherit an old completed placement"
+    )
+    XCTAssertEqual(ChatInitialRestoreState.atPresentationStart(previous: .userInterrupted), .waiting)
   }
 
   func testPendingInitialRestoreRetriesAfterTransientViewDisappearance() {

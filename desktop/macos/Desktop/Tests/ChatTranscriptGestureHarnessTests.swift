@@ -43,6 +43,19 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  func testCompactHomeTranscriptOpensAtTheLiveEdge() throws {
+    let harness = try makeHarness(messageCount: 120, transcriptWindowPolicy: .compactHome)
+    defer { harness.tearDown() }
+
+    harness.settleInitialPlacement()
+
+    XCTAssertTrue(
+      harness.isAtBottom,
+      "the compact Home transcript must open at the newest mounted message "
+        + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))"
+    )
+  }
+
   func testStreamingDoesNotPullAFastScrollingReaderBackToTheLiveEdge() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
@@ -311,8 +324,11 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
   // MARK: - Harness
 
-  private func makeHarness(messageCount: Int = 60) throws -> Harness {
-    try Harness(messageCount: messageCount)
+  private func makeHarness(
+    messageCount: Int = 60,
+    transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+  ) throws -> Harness {
+    try Harness(messageCount: messageCount, transcriptWindowPolicy: transcriptWindowPolicy)
   }
 
   @MainActor
@@ -330,9 +346,15 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       try self.init(messageCount: 0, startsLoading: true, pendingMessageCount: messageCount)
     }
 
-    init(messageCount: Int, startsLoading: Bool = false, pendingMessageCount: Int = 0) throws {
+    init(
+      messageCount: Int,
+      startsLoading: Bool = false,
+      pendingMessageCount: Int = 0,
+      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+    ) throws {
       model = TranscriptModel(messages: Self.makeMessages(count: messageCount))
       model.isLoadingInitial = startsLoading
+      model.transcriptWindowPolicy = transcriptWindowPolicy
       self.pendingMessages = Self.makeMessages(count: pendingMessageCount)
       hostingView = NSHostingView(rootView: HarnessChatHost(model: model))
       hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
@@ -384,7 +406,7 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
-    func settleInitialPlacement() { pump(1.0) }
+    func settleInitialPlacement() { pump(1.2) }
 
     func performUpwardGesture(
       events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,
@@ -627,6 +649,7 @@ final class TranscriptModel: ObservableObject {
   @Published var isLoadingInitial: Bool = false
   @Published var localSendToken: LocalSendToken?
   @Published var isPresented: Bool = true
+  var transcriptWindowPolicy: ChatTranscriptWindow.Policy?
 
   init(messages: [ChatMessage]) {
     self.messages = messages
@@ -651,6 +674,7 @@ struct HarnessChatHost: View {
           onRate: { _, _ in },
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
+          transcriptWindowPolicy: model.transcriptWindowPolicy,
           contentColumnWidth: 760,
           timelineTrailingInset: 0,
           welcomeContent: { EmptyView() }

@@ -120,6 +120,11 @@ class VoiceRecorderProvider extends ChangeNotifier {
     // Create a persisted PCM file for streaming audio to disk.
     final recordingsDir = await _recordingsDirectory();
     _pcmFile = File('${recordingsDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.pcm');
+    // Create the file before opening the sink. IOSink.openWrite() may defer
+    // file creation until the first event-loop turn, which can leave the
+    // recording session with no visible PCM file immediately after a
+    // successful start under load.
+    await _pcmFile!.create();
     _pcmSink = _pcmFile!.openWrite();
 
     // Reset audio levels

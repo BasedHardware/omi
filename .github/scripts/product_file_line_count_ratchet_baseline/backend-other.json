@@ -1,10 +1,8 @@
 {
   "files": {
-    "backend/scripts/validate-backend-runtime-env.py": 1895,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, SCA-29/SCA-33 runtime-versus-workflow source boundaries, and SCA-284's fail-closed memory-L2 gateway contract remain one authoritative deployment contract.",
     "backend/testing/listen_pusher_stack/run.py": "#10577 keeps the operation-scoped persistence-fault controls beside the real listener/Pusher/Firestore assertions they qualify. +79 for #9809: the cloud-orphan-recovery scenario stays in the existing end-to-end listener/Pusher gauntlet rather than forking a second harness."
   },
   "threshold": 1500
