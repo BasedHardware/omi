@@ -398,12 +398,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     if (_isDisposed) return;
+    // Refresh WALs *before* updating the "synced" conversation UI so we don't
+    // label recordings as synced while the reconciler is still leaving some
+    // WALs in an uploaded/pending state (issue #7240).
+    await refreshWals();
     if (conversations.isNotEmpty && !_syncState.isProcessing) {
       // Append to whatever is already shown — jobs reconcile incrementally.
       final merged = [..._syncState.syncedConversations, ...conversations];
-      _updateSyncState(_syncState.toCompleted(conversations: merged));
+      final filtered = filterFullySyncedConversations(conversations: merged, wals: _allWals);
+      _updateSyncState(_syncState.toCompleted(conversations: filtered));
     }
-    await refreshWals();
   }
 
   Future<void> _discoverPendingWals() async {
@@ -676,9 +680,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       newConversationIds: result.newConversationIds,
       updatedConversationIds: result.updatedConversationIds,
     );
-    _updateSyncState(_syncState.toCompleted(conversations: conversations));
-    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    // Refresh WAL list so we can filter "synced" conversations to only those
+    // whose WALs have been reconciled to WalStatus.synced.
     await refreshWals();
+    final filtered = filterFullySyncedConversations(conversations: conversations, wals: _allWals);
+    _updateSyncState(_syncState.toCompleted(conversations: filtered));
+  }
+
+  /// Filters "synced" conversation pointers down to only those conversations
+  /// whose associated WALs have been fully reconciled (`WalStatus.synced`).
+  ///
+  /// This prevents UI states like "synced OK" from showing up while some
+  /// recordings are still left in an uploaded/pending state (issue #7240).
+  @visibleForTesting
+  static List<SyncedConversationPointer> filterFullySyncedConversations({
+    required List<SyncedConversationPointer> conversations,
+    required List<Wal> wals,
+  }) {
+    final byConversationId = <String, List<Wal>>{};
+    for (final wal in wals) {
+      final id = wal.conversationId;
+      if (id == null) continue;
+      (byConversationId[id] ??= <Wal>[]).add(wal);
+    }
+
+    bool isFullySynced(SyncedConversationPointer pointer) {
+      final walsForConversation = byConversationId[pointer.conversation.id] ?? const <Wal>[];
+      if (walsForConversation.isEmpty) return true; // No local WALs → nothing pending.
+      return walsForConversation.every((w) => w.status == WalStatus.synced);
+    }
+
+    return conversations.where(isFullySynced).toList();
   }
 
   // Audio playback delegate methods
