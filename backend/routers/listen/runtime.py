@@ -26,7 +26,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
 from utils.client_device import resolve_client_device_from_headers
-from utils.executors import db_executor, run_blocking, start_background_task
+from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_ENABLED,
@@ -650,7 +650,7 @@ class ListenSessionRuntime:
             await self._teardown_components()
         finally:
             try:
-                self.parity_capture.persist()
+                await run_blocking(storage_executor, self.parity_capture.persist)
             except Exception as error:
                 logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 

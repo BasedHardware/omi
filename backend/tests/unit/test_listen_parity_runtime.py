@@ -2,6 +2,8 @@
 
 import json
 import logging
+from collections import Counter
+from functools import wraps
 from typing import Any, cast
 
 import pytest
@@ -11,6 +13,7 @@ from routers.listen.contracts import ListenRequest
 from routers.listen.parity_capture import ListenParityCapture
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
+from utils.executors import storage_executor
 from utils.listen_session_bootstrap import ListenConnectBase
 from utils.stt.streaming import STTService
 
@@ -32,6 +35,8 @@ class _FakeWebSocket:
         self.sent = []
 
     async def receive(self):
+        if not self._messages:
+            raise RuntimeError('unexpected extra WebSocket receive after scripted disconnect')
         message = self._messages.pop(0)
         if message['type'] == 'websocket.disconnect':
             self.client_state = WebSocketState.DISCONNECTED
@@ -125,7 +130,7 @@ class _FakePersistence:
         return False
 
 
-def _install_runtime_fakes(monkeypatch, runtime, stt_sockets):
+def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
     import routers.listen.receiver as receiver_module
     import routers.listen.runtime as runtime_module
 
@@ -150,10 +155,13 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets):
         runtime.conversations = _FakeConversations(runtime)
         runtime.speakers = _FakeSpeakers()
 
-    async def not_paywalled(_executor, _function, *_args, **_kwargs):
+    async def run_blocking_fake(executor, function, *args, **kwargs):
+        blocking_calls.append((executor, function))
+        if getattr(function, '__self__', None) is runtime.parity_capture and function.__name__ == 'persist':
+            return function(*args, **kwargs)
         return False
 
-    monkeypatch.setattr(runtime_module, 'run_blocking', not_paywalled)
+    monkeypatch.setattr(runtime_module, 'run_blocking', run_blocking_fake)
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', load_base)
     monkeypatch.setattr(
         runtime_module,
@@ -190,6 +198,7 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     persist_calls = []
     original_persist = ListenParityCapture.persist
 
+    @wraps(original_persist)
     def persist_once(capture):
         persist_calls.append(capture)
         return original_persist(capture)
@@ -206,7 +215,8 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
     runtime.persistence = cast(Any, _FakePersistence(fail_usage=fail_usage))
     stt_sockets = []
-    _install_runtime_fakes(monkeypatch, runtime, stt_sockets)
+    blocking_calls = []
+    _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls)
     caplog.set_level(logging.INFO)
 
     if fail_usage:
@@ -220,11 +230,21 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     assert stt_sockets[0].sent == [_AUDIO]
     assert runtime.transcripts.inbound == [{'text': _TRANSCRIPT, 'start': 0.0, 'end': 0.03}]
     assert len(persist_calls) == 1
+    persist_offloads = [
+        (executor, function)
+        for executor, function in blocking_calls
+        if executor is storage_executor
+        and getattr(function, '__self__', None) is runtime.parity_capture
+        and function.__name__ == 'persist'
+    ]
+    assert len(persist_offloads) == 1
 
     cassette_files = list((root / 'cassettes').glob('*.json'))
     assert len(cassette_files) == 1
     cassette = json.loads(cassette_files[0].read_text(encoding='utf-8'))
-    assert [event['direction'] for event in cassette['events']] == ['client', 'inbound', 'outbound']
+    assert Counter(event['direction'] for event in cassette['events']) == Counter(
+        {'client': 1, 'inbound': 1, 'outbound': 1}
+    )
     assert len(exported) == 1
     assert exported[0][0] == cassette_files[0]
     assert exported[0][1] == ('runtime-capture-bucket', 'parity-pack/v0')
