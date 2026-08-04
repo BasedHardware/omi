@@ -62,10 +62,15 @@ def test_additional_scrape_jobs_exist_in_prod_values():
     values = _load_prod_values()
     configured = _additional_scrape_job_names(values)
 
-    for job in inventory['scrape_jobs']:
-        if job['mechanism'] != 'additionalScrapeConfigs':
-            continue
-        assert job['name'] in configured, f"inventory job {job['name']!r} missing from prod additionalScrapeConfigs"
+    declared = {job['name'] for job in inventory['scrape_jobs'] if job['mechanism'] == 'additionalScrapeConfigs'}
+    for name in declared:
+        assert name in configured, f"inventory job {name!r} missing from prod additionalScrapeConfigs"
+
+    # Reverse direction: a job added straight to prod values without a matching
+    # inventory entry is undeclared monitoring drift and must fail fast, not
+    # silently scrape in production with nothing tracking it (cubic review on #9587).
+    for name in configured:
+        assert name in declared, f"prod additionalScrapeConfigs job {name!r} is not declared in the inventory"
 
 
 def test_token_scraped_jobs_use_metrics_scrape_token():
@@ -108,15 +113,18 @@ def test_enforced_coverage_alert_includes_declared_jobs():
     inventory = _load_inventory()
     rules = _alert_rules()
     scrape_rule = next(rule for rule in rules if rule['uid'] == 'omi-journey-scrape-missing')
+    # Grafana alert expressions live in data[].model.expr. Require it directly —
+    # a JSON-dump-the-whole-rule fallback would let the job name match an
+    # unrelated field (uid, title, a label) and pass even when the actual
+    # alerting expression is wrong or missing (cubic review on #9587).
     expr = scrape_rule['data'][0]['model']['expr'] if scrape_rule.get('data') else ''
-    # Grafana alert expressions live in data[].model; fall back to string search of whole rule.
-    blob = expr or json.dumps(scrape_rule)
+    assert expr, f"omi-journey-scrape-missing has no data[].model.expr to enforce coverage against: {scrape_rule!r}"
 
     for job in inventory['scrape_jobs']:
         if job.get('coverage_status') != 'enforced':
             continue
         assert job.get('coverage_alert') == 'omi-journey-scrape-missing'
-        assert job['name'] in blob, f"enforced job {job['name']!r} must appear in omi-journey-scrape-missing expr"
+        assert job['name'] in expr, f"enforced job {job['name']!r} must appear in omi-journey-scrape-missing expr"
 
 
 def test_declared_gaps_are_explicit_not_silently_enforced():

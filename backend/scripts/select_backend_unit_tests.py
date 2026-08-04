@@ -94,6 +94,19 @@ MEMORY_POLICY_CORE_TESTS = (
     'testing/e2e/test_canonical_memory_pipeline.py',
 )
 
+# Monitoring telemetry contract sources (#9587). Referenced from both the
+# AREA_TESTS path->test mapping and is_selectable_backend_path's
+# intentional-exception check below — single source so the two lists cannot
+# drift apart and silently stop selecting the monitoring unit contracts.
+MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/expected-targets.prod.yaml',
+    'backend/charts/monitoring/kube-prometheus-stack/',
+    'backend/charts/monitoring/alerts/',
+    'backend/charts/monitoring/alert-rules.json',
+    'backend/charts/monitoring/prometheus-stackdriver-exporter/',
+    'backend/charts/parakeet/templates/servicemonitor.yaml',
+)
+
 AREA_TESTS = (
     (
         (
@@ -148,14 +161,7 @@ AREA_TESTS = (
         ('tests/unit/test_parakeet_*.py',),
     ),
     (
-        (
-            'backend/charts/monitoring/expected-targets.prod.yaml',
-            'backend/charts/monitoring/kube-prometheus-stack/',
-            'backend/charts/monitoring/alerts/',
-            'backend/charts/monitoring/alert-rules.json',
-            'backend/charts/monitoring/prometheus-stackdriver-exporter/',
-            'backend/charts/parakeet/templates/servicemonitor.yaml',
-        ),
+        MONITORING_CONTRACT_SOURCES,
         (),
         (
             'tests/unit/test_monitoring_*.py',
@@ -315,14 +321,7 @@ def is_selectable_backend_path(path: str) -> bool:
     if path.startswith('backend/docs/'):
         return False
     if path.startswith('backend/charts/'):
-        monitoring_contract_prefixes = (
-            'backend/charts/monitoring/expected-targets.prod.yaml',
-            'backend/charts/monitoring/kube-prometheus-stack/',
-            'backend/charts/monitoring/alerts/',
-            'backend/charts/monitoring/alert-rules.json',
-            'backend/charts/monitoring/prometheus-stackdriver-exporter/',
-            'backend/charts/parakeet/templates/servicemonitor.yaml',
-        )
+        monitoring_contract_prefixes = MONITORING_CONTRACT_SOURCES
         return any(
             path == prefix or path.startswith(prefix) if prefix.endswith('/') else path == prefix
             for prefix in monitoring_contract_prefixes
