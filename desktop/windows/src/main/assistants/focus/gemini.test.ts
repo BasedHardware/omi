@@ -1,8 +1,5 @@
-// The Gemini call's retry classification: a per-request TIMEOUT is transient and
-// must be retried to the max attempt count, while a genuine session sign-out (the
-// external abort signal firing) is terminal and must NOT be retried. Both used to
-// surface as a bare AbortError; the fix makes the timeout distinguishable so it is
-// no longer misclassified as terminal.
+// Ambiguous local timeouts and session cancellation are both terminal. Only the
+// backend may explicitly authorize a replay via its typed response contract.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -41,7 +38,7 @@ afterEach(() => {
 })
 
 describe('analyzeScreenshot — retry classification', () => {
-  it('retries a per-request timeout up to the max (3 attempts, 2s/8s backoff)', async () => {
+  it('does not replay a per-request timeout after dispatch', async () => {
     vi.useFakeTimers()
     h.abortSignal = undefined // no session abort in flight
     fetchThatAbortsWithSignal()
@@ -50,14 +47,10 @@ describe('analyzeScreenshot — retry classification', () => {
     // Attach the rejection expectation synchronously so the rejection is handled.
     const assertion = expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
 
-    await vi.advanceTimersByTimeAsync(30_000) // attempt 1 times out
-    await vi.advanceTimersByTimeAsync(2_000) // backoff #1
-    await vi.advanceTimersByTimeAsync(30_000) // attempt 2 times out
-    await vi.advanceTimersByTimeAsync(8_000) // backoff #2
-    await vi.advanceTimersByTimeAsync(30_000) // attempt 3 times out → throw
+    await vi.advanceTimersByTimeAsync(30_000)
 
     await assertion
-    expect(h.fetch).toHaveBeenCalledTimes(3)
+    expect(h.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('does NOT retry a genuine session sign-out (single attempt, AbortError)', async () => {

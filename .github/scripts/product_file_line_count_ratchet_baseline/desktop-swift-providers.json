@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6805,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 3222
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 3213
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Chat-first uses the existing provider-owned generation, journal, and owner-fence lifecycle; extracting its canonical context cleanup would split that boundary. ACP authentication terminalizes the active turn with an explicit disposition instead of awaiting OAuth, failed bridge starts consume typed runtime diagnostics at the sole user-facing error surface to avoid a duplicate Sentry event, and owner transitions clear the previous account's chat error presentation; a component split is tracked follow-up.",

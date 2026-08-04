@@ -41,7 +41,7 @@ checks:
     reason: "make setup provisions no app toolchain while .github/checks-manifest.yaml is a ROUTING_INPUTS entry that wakes the Flutter codegen lane, so a docs-only PR hit 'run flutter pub get' with no mention of PRE_PUSH_SKIP_FLUTTER_GENERATED; actionlint's branch had the same omission, and a hatch nobody can find is not a hatch"
   - id: setup-pre-push-prerequisites
     command: ["bash", "scripts/test-make-setup.sh"]
-    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/repair-git-primary-worktree.sh", "scripts/setup-refresh-main.sh", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/repair-git-primary-worktree.sh", "scripts/setup-refresh-main.sh", "scripts/test-make-setup.sh", ".cursor/worktrees.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: pre-push-worktree-fallback
@@ -78,12 +78,12 @@ checks:
     reason: "manifest validity and workflow drift guard"
   - id: backend-production-release-vector-guards
     command: ["python3", ".github/scripts/check_release_rings.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/scripts/check_release_rings.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the canonical production backend deploy remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
-    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
@@ -385,6 +385,11 @@ checks:
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]
     lanes: ["local", "ci"]
     reason: "backend tests or their isolation allowlist changed"
+  - id: backend-runtime-env-compose
+    command: ["bash", "backend/scripts/check_runtime_env_compose.sh"]
+    triggers: ["backend/deploy/runtime_env/_base.yaml", "backend/deploy/runtime_env/dev.overlay.yaml", "backend/deploy/runtime_env/prod.overlay.yaml", "backend/deploy/compose_runtime_env.py", "backend/deploy/_generate_runtime_env_sources.py", "backend/deploy/runtime_env.yaml", "backend/scripts/check_runtime_env_compose.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
   - id: backend-workflow-contracts
     command: ["python3", "backend/scripts/check_workflow_contracts.py", "--changed-files", "{changed_files}"]
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
@@ -570,22 +575,22 @@ checks:
     reason: "#9989 exercises non-main, ambiguous SHA, mismatched checkout, and workflow-contract rejection cases"
   - id: backend-deploy-source-admission
     command: ["python3", ".github/scripts/check_backend_deploy_source_admission.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9991 keeps backend deploy source selection bound to one successful main Release Eligibility proof"
   - id: backend-deploy-source-admission-fixtures
     command: ["python3", ".github/scripts/test_check_backend_deploy_source_admission.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
   - id: gcp-backend-production-boundary
     command: ["python3", ".github/scripts/check-gcp-backend-production-boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the canonical production deploy is rollback-first and Cloud Run-only"
   - id: gcp-backend-production-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_gcp_backend_production_boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mutation-tests prod/all admission, serving smoke order, token handling, and rollback coverage"
   - id: direct-backend-production-admission
