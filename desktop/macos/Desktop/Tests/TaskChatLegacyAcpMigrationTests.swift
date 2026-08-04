@@ -124,6 +124,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
     XCTAssertTrue(source.contains("if !failedByUserStop {\n            Self.applyFailureTextIfNeeded"))
     XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertTrue(source.contains("disposition: .discard"))
+    XCTAssertTrue(source.contains("disposition: failedByUserStop ? .discard : .accept"))
     XCTAssertFalse(source.contains("failedByUserStop ? .completed : .failed"))
   }
 

@@ -5,6 +5,7 @@ description: Hermetic task-backed thread continuity through the app kernel, incl
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
 preconditions:
   - automation_bridge_ready
@@ -40,8 +41,10 @@ steps:
         timeoutMs: "10000"
         pollMs: "25"
         expectedPrefix: "Paced"
+        expectedText: "Paced streaming reveals this response in visible increments before the terminal event arrives."
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.strict_prefix_observed: "true"
       result.detail.visible_assistant_prefix: "Paced"
       result.detail.is_streaming: "true"
 
@@ -86,8 +89,10 @@ steps:
         timeoutMs: "10000"
         pollMs: "25"
         expectedPrefix: "Fast"
+        expectedText: "Fast terminal response delivers a large delta and settles immediately, without the pacing gap."
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.strict_prefix_observed: "true"
       result.detail.visible_assistant_prefix: "Fast"
       result.detail.is_streaming: "true"
 

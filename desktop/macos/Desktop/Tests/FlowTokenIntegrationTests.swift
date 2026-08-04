@@ -39,4 +39,28 @@ import XCTest
     XCTAssertEqual(StreamingAssistantText.displayedText("\n  A streamed answer.  \n"), "A streamed answer.")
   }
 
+  func testStreamingRevealContractRequiresStrictPrefix() {
+    XCTAssertTrue(
+      ChatStreamingRevealContract.isStrictPrefix(
+        "Paced streaming",
+        expectedPrefix: "Paced",
+        expectedText: "Paced streaming response"
+      )
+    )
+    XCTAssertFalse(
+      ChatStreamingRevealContract.isStrictPrefix(
+        "Paced streaming response",
+        expectedPrefix: "Paced",
+        expectedText: "Paced streaming response"
+      )
+    )
+    XCTAssertFalse(
+      ChatStreamingRevealContract.isStrictPrefix(
+        "Fast streaming",
+        expectedPrefix: "Paced",
+        expectedText: "Paced streaming response"
+      )
+    )
+  }
+
 }

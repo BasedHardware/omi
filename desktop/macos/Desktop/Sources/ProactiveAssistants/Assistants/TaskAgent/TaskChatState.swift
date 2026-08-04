@@ -473,7 +473,8 @@ class TaskChatState: ObservableObject {
     messageId: String,
     lease: TaskChatOwnerLease,
     producingRunId: String,
-    producingAttemptId: String
+    producingAttemptId: String,
+    disposition: KernelJournalTerminalDisposition = .accept
   ) async throws -> KernelJournalTurn {
     guard await journalWriteCoordinator.beginTerminalization(messageID: messageId) else {
       throw BridgeError.agentError("Task-chat turn terminalization is already in progress")
@@ -492,7 +493,8 @@ class TaskChatState: ObservableObject {
           authorizationSnapshot: lease.authorizationSnapshot,
           message: message,
           producingRunId: producingRunId,
-          producingAttemptId: producingAttemptId
+          producingAttemptId: producingAttemptId,
+          disposition: disposition
         )
       else { return false }
       terminalTurn = turn
@@ -502,10 +504,14 @@ class TaskChatState: ObservableObject {
       throw BridgeError.agentError("Task-chat terminalization failed after retry")
     }
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    let validTerminalStatus =
+      disposition == .discard
+      ? turn.status == .failed
+      : turn.status == .completed || turn.status == .failed
     guard turn.turnId == messageId,
       turn.producingRunId == producingRunId,
       turn.producingAttemptId == producingAttemptId,
-      turn.status == .completed || turn.status == .failed
+      validTerminalStatus
     else {
       throw BridgeError.agentError("Kernel returned an invalid task-chat terminal receipt")
     }
@@ -543,7 +549,8 @@ class TaskChatState: ObservableObject {
     messageId: String,
     lease: TaskChatOwnerLease,
     producingRunId: String,
-    producingAttemptId: String
+    producingAttemptId: String,
+    disposition: KernelJournalTerminalDisposition = .accept
   ) async -> Bool {
     guard isCurrent(lease),
       let message = messages.first(where: { $0.id == messageId })
@@ -555,13 +562,21 @@ class TaskChatState: ObservableObject {
         authorizationSnapshot: lease.authorizationSnapshot,
         message: message,
         producingRunId: producingRunId,
-        producingAttemptId: producingAttemptId
-      ),
-      isCurrent(lease),
+        producingAttemptId: producingAttemptId,
+        disposition: disposition
+      )
+    else {
+      return false
+    }
+    let validTerminalStatus =
+      disposition == .discard
+      ? turn.status == .failed
+      : turn.status == .completed || turn.status == .failed
+    guard isCurrent(lease),
       turn.turnId == messageId,
       turn.producingRunId == producingRunId,
       turn.producingAttemptId == producingAttemptId,
-      turn.status == .completed || turn.status == .failed
+      validTerminalStatus
     else {
       return false
     }
@@ -736,7 +751,8 @@ class TaskChatState: ObservableObject {
                 messageId: aiMessageId,
                 lease: lease,
                 producingRunId: producingRunIdentity.runID,
-                producingAttemptId: producingRunIdentity.attemptID
+                producingAttemptId: producingRunIdentity.attemptID,
+                disposition: .discard
               )) != nil
           }
           throw BridgeError.stopped
@@ -847,7 +863,8 @@ class TaskChatState: ObservableObject {
             messageId: aiMessageId,
             lease: lease,
             producingRunId: producingRunIdentity.runID,
-            producingAttemptId: producingRunIdentity.attemptID
+            producingAttemptId: producingRunIdentity.attemptID,
+            disposition: failedByUserStop ? .discard : .accept
           )
         }
       } else {

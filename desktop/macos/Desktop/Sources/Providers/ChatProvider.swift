@@ -1298,6 +1298,11 @@ class ChatProvider: ObservableObject {
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
   private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
+  private struct PendingSpawnMaterialization: Hashable {
+    let messageID: String
+    let toolUseID: String?
+  }
+  private var pendingSpawnMaterializations: Set<PendingSpawnMaterialization> = []
 
   // MARK: - Filtered Sessions
   var filteredSessions: [ChatSession] {
@@ -1684,6 +1689,7 @@ class ChatProvider: ObservableObject {
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
     streamingBuffer.discardAllPendingSegments()
+    pendingSpawnMaterializations.removeAll()
     journalOwnerByMessageID.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
@@ -4487,6 +4493,7 @@ class ChatProvider: ObservableObject {
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        pendingSpawnMaterializations.removeAll { $0.messageID == aiMessageId }
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -4785,6 +4792,7 @@ class ChatProvider: ObservableObject {
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        pendingSpawnMaterializations.removeAll { $0.messageID == aiMessageId }
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout
@@ -5375,35 +5383,31 @@ class ChatProvider: ObservableObject {
         }
       )
     }
-    materializeCompletedSpawnProjections()
+    materializePendingSpawnProjections()
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
     }
   }
 
-  private func materializeCompletedSpawnProjections() {
-    for index in messages.indices {
-      let toolUseIDs = messages[index].contentBlocks.compactMap { block -> String? in
-        guard case .toolCall(_, let name, let status, let toolUseId, _, let output) = block,
-          !status.isInFlight,
-          output != nil
-        else { return nil }
-        let normalizedName =
-          name.hasPrefix("mcp__")
-          ? String(name.split(separator: "__").last ?? Substring(name))
-          : name
-        return normalizedName == "spawn_agent" ? toolUseId : nil
+  private func materializePendingSpawnProjections() {
+    for target in Array(pendingSpawnMaterializations) {
+      guard let index = messages.firstIndex(where: { $0.id == target.messageID }) else {
+        pendingSpawnMaterializations.remove(target)
+        continue
       }
-      for toolUseId in toolUseIDs {
-        guard
-          let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
-            in: &messages[index].contentBlocks,
-            toolUseId: toolUseId,
-            toolName: "spawn_agent"
-          ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty
-        else { continue }
-        upsertSpawnedAgentPill(spawnedAgent)
-      }
+      guard
+        let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
+          in: &messages[index].contentBlocks,
+          toolUseId: target.toolUseID,
+          toolName: "spawn_agent"
+        ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty
+      else { continue }
+      pendingSpawnMaterializations.remove(target)
+      // The transcript and notch must project the same accepted kernel
+      // run. Without this handoff, main-chat spawn receipts render a
+      // structured card while the compact notch still sees an empty
+      // AgentPillsManager (white mark and no hover row).
+      upsertSpawnedAgentPill(spawnedAgent)
     }
   }
 
@@ -5467,7 +5471,10 @@ class ChatProvider: ObservableObject {
         name: name,
         output: output,
         messages: &messages,
-        normalizeText: Self.normalizeStreaming
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
+        }
       )
     else { return }
     attachGeneratedFileResources(
@@ -5476,24 +5483,13 @@ class ChatProvider: ObservableObject {
       toolUseId: toolUseId,
       extraTexts: [output]
     )
-    if let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
-      in: &messages[index].contentBlocks,
-      toolUseId: toolUseId,
-      toolName: name
-    ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty {
-      // The transcript and notch must project the same accepted kernel
-      // run. Without this handoff, main-chat spawn receipts render a
-      // structured card while the compact notch still sees an empty
-      // AgentPillsManager (white mark and no hover row).
-      AgentPillsManager.shared.upsertSpawnedPill(
-        id: spawnedAgent.pillID,
-        query: spawnedAgent.objective,
-        title: spawnedAgent.title,
-        sessionId: spawnedAgent.sessionID,
-        runId: spawnedAgent.runID,
-        attemptId: nil,
-        provider: spawnedAgent.provider,
-        producingJournalSurface: mainChatSurfaceReference()
+    let normalizedName =
+      name.hasPrefix("mcp__")
+      ? String(name.split(separator: "__").last ?? Substring(name))
+      : name
+    if normalizedName == "spawn_agent" {
+      pendingSpawnMaterializations.insert(
+        PendingSpawnMaterialization(messageID: messageId, toolUseID: toolUseId)
       )
     }
     scheduleJournalUpdate(messageId: messageId, status: .streaming)
