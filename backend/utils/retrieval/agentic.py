@@ -64,6 +64,7 @@ from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from database.redis_db import get_cached_user_geolocation
@@ -95,6 +96,47 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+class _PerplexityWebSearchToolProxy:
+    """Lazy adapter for the gateway-only web-search function tool.
+
+    Agentic unit tests intentionally load this module with a minimal LangChain
+    stub. Avoid importing the optional Perplexity tool module at import time,
+    while retaining the real LangChain tool and gateway implementation when a
+    managed request actually executes it.
+    """
+
+    name = 'perplexity_web_search_tool'
+    description = 'Search the web for current information using Perplexity AI.'
+
+    @property
+    def args_schema(self):
+        try:
+            from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+            return perplexity_web_search_tool.args_schema
+        except ModuleNotFoundError as error:
+            if error.name != 'langchain_core.tools':
+                raise
+
+            class _FallbackArgsSchema:
+                @classmethod
+                def schema(cls):
+                    return {
+                        'properties': {'query': {'type': 'string'}},
+                        'required': ['query'],
+                    }
+
+            return _FallbackArgsSchema
+
+    async def ainvoke(self, tool_input, config=None):
+        from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+        return await perplexity_web_search_tool.ainvoke(tool_input, config=config)
+
+
+perplexity_web_search_tool = _PerplexityWebSearchToolProxy()
 
 
 def _positive_timeout_from_env(name: str, default: float) -> float:
@@ -1098,7 +1140,10 @@ async def execute_agentic_chat_stream(
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
         # so they share the first-event deadline instead of leaving the SSE body silent.
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
-            gateway_feature_mode = should_route_features_through_gateway()
+            # Anthropic BYOK is an explicit direct-provider choice. It must not
+            # enter the managed OpenAI-compatible lane, whose route override
+            # would otherwise attach an Anthropic key to a Luna/OpenAI route.
+            gateway_feature_mode = should_route_features_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
@@ -1182,6 +1227,16 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # managed mode converts function tools to the OpenAI-compatible shape below.
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
     if gateway_feature_mode:
+        # Anthropic's native web_search server tool is not understood by the
+        # OpenAI-compatible gateway. Expose the existing Perplexity-backed
+        # function tool in the managed lane and register the same object for
+        # execution; direct Anthropic mode keeps the native server tool above.
+        tool_registry = dict(tool_registry)
+        tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
+        tool_schemas = [
+            *tool_schemas,
+            _langchain_tool_to_anthropic(perplexity_web_search_tool, defer_loading=False),
+        ]
         tool_schemas = _convert_anthropic_tools_to_openai(tool_schemas)
 
     # Build the provider-neutral role/content message shape. The current datetime is injected

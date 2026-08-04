@@ -106,9 +106,14 @@ final class DesktopChatDriftGuardTests: XCTestCase {
 
   func testGoogleConnectorProbesUseExplicitUserInitiatedReads() throws {
     let source = try sourceFile("DesktopAutomationBridge.swift")
-    XCTAssertTrue(source.contains("name: \"calendar_read_probe\""))
-    XCTAssertTrue(source.contains("name: \"gmail_read_probe\""))
-    XCTAssertEqual(source.components(separatedBy: "userInitiated: true").count - 1, 2)
+    for action in ["calendar_read_probe", "gmail_read_probe"] {
+      guard let start = source.range(of: "name: \"\(action)\"") else {
+        return XCTFail("missing \(action)")
+      }
+      let tail = source[start.lowerBound...]
+      let body = tail.range(of: "\n    register(").map { String(tail[..<$0.lowerBound]) } ?? String(tail)
+      XCTAssertTrue(body.contains("userInitiated: true"), "\(action) must declare explicit user intent")
+    }
   }
 
   func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {

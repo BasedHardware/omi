@@ -232,10 +232,23 @@ run_case_once() {
     status=$?
     set -e
     if [[ "$mode" == success ]]; then
-      [[ "$status" -eq 0 ]] || { cat "$output" >&2; fail "success case exited $status"; }
+      if [[ "$status" -ne 0 ]]; then
+        cat "$output" >&2
+        return 1
+      fi
     else
-      [[ "$status" -ne 0 ]] || { cat "$output" >&2; fail "flow failure case unexpectedly succeeded"; }
+      if [[ "$status" -eq 0 ]]; then
+        cat "$output" >&2
+        fail "flow failure case unexpectedly succeeded"
+      fi
     fi
+  fi
+
+  # The first attempt deliberately reserves the automation port. The launcher
+  # exits before it can write ownership evidence in that case, so hand the
+  # collision back to run_case() before checking the normal post-run records.
+  if grep -Fq "Address already in use" "$error_file" 2>/dev/null; then
+    return 1
   fi
 
   wait_for_file "$owned_file" || fail "$mode case did not record owned app"

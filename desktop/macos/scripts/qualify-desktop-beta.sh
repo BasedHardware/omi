@@ -891,14 +891,14 @@ fi
 phase_end passed
 
 phase_begin "named-bundle-resources" "user-visible-behavioral-fault"
-if ! "$WORKTREE/desktop/macos/tests/test-named-bundle-resources.sh" "/Applications/${BUNDLE}.app"; then
+if ! bash "$WORKTREE/desktop/macos/tests/test-named-bundle-resources.sh" "/Applications/${BUNDLE}.app"; then
   phase_end failed
   exit 1
 fi
 phase_end passed
 
 phase_begin "mounted-navigation-latency" "user-visible-behavioral-fault"
-if ! "$WORKTREE/desktop/macos/tests/test-mounted-navigation-latency.sh" "$AUTOMATION_PORT"; then
+if ! bash "$WORKTREE/desktop/macos/tests/test-mounted-navigation-latency.sh" "$AUTOMATION_PORT"; then
   phase_end failed
   exit 1
 fi

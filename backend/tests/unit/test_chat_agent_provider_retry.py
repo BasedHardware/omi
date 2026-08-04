@@ -508,7 +508,57 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
     assert seen['system'].startswith('SYSTEM')
     assert '<url_fetching_instructions>' in seen['system']
     assert seen['messages'] == [{'role': 'user', 'content': 'hello'}]
-    assert seen['schemas'] == []
+    assert [schema['function']['name'] for schema in seen['schemas']] == ['perplexity_web_search_tool']
+
+
+async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
+    callback_data = {}
+    seen = {'direct': False}
+
+    async def fake_run_blocking(_executor, function, *_args, **_kwargs):
+        if function is agentic_mod.get_user_timezone:
+            return 'UTC'
+        if function is agentic_mod._get_agentic_qa_prompt:
+            return 'SYSTEM'
+        if function is agentic_mod.load_app_tools:
+            return []
+        raise AssertionError(f'unexpected blocking setup call: {function}')
+
+    async def direct_runner(_system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable):
+        seen['direct'] = True
+        full_response.append('direct answer')
+        await callback.put_data('direct answer')
+        await callback.end()
+        return None
+
+    async def gateway_runner(*_args):
+        raise AssertionError('Anthropic BYOK must not select the gateway runner')
+
+    with patch.object(agentic_mod, 'should_route_features_through_gateway', return_value=True), patch.object(
+        agentic_mod, 'get_byok_key', return_value='sk-ant-test'
+    ), patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking), patch.object(
+        agentic_mod, '_convert_tools', return_value=([], {})
+    ), patch.object(
+        agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
+    ), patch.object(
+        agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages
+    ), patch.object(
+        agentic_mod, '_run_openai_agent_stream', new=gateway_runner
+    ), patch.object(
+        agentic_mod, '_run_anthropic_agent_stream', new=direct_runner
+    ):
+        chunks = [
+            chunk
+            async for chunk in agentic_mod.execute_agentic_chat_stream(
+                'uid_test',
+                [_chat_message('hello')],
+                callback_data=callback_data,
+                current_datetime_block='<current_datetime/>',
+            )
+        ]
+
+    assert chunks == ['data: direct answer', None]
+    assert seen['direct'] is True
 
 
 async def test_safety_guard_message_becomes_the_answer(agentic_mod):
