@@ -325,17 +325,17 @@ class MemoryGraphViewModel: ObservableObject {
       }
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
       let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
       }.value
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return
       }
       canonicalAtlasProjection = projection
       graphResponse = response
-      isEmpty = response.nodes.isEmpty
+      isEmpty = response.atlasNodes.isEmpty
       hasLoadedCanonicalAtlas = true
       lastLoadedAt = Date()
-      log("Memory atlas: \(response.nodes.count) nodes, \(response.edges.count) edges")
+      log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
     } catch {
       log("Failed to load memory atlas: \(error.localizedDescription)")
     }
@@ -378,20 +378,20 @@ class MemoryGraphViewModel: ObservableObject {
           return false
         }
 
-        if !response.nodes.isEmpty {
+        if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
           let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false
           }
           canonicalAtlasProjection = projection
           graphResponse = response
-          isEmpty = false
+          isEmpty = response.atlasNodes.isEmpty
           hasLoadedCanonicalAtlas = true
           lastLoadedAt = Date()
-          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.nodes.count) nodes")
+          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")
           return true
         }
       }

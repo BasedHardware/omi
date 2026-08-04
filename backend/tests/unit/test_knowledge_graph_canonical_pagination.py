@@ -315,24 +315,28 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
 
 
-def test_canonical_graph_includes_unlinked_canonical_memory_as_an_atlas_node(monkeypatch):
+def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_graph(monkeypatch):
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
-    item, _assertion = _assertion_and_item("unlinked", 1, graph_ready=False)
-    item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
-    db = _FakeDB([item], {})
+    linked_item, linked_assertion = _assertion_and_item("linked", 1, updated_at=NOW.replace(minute=1))
+    unlinked_updated_at = NOW.replace(minute=2)
+    unlinked_item, _unlinked_assertion = _assertion_and_item("unlinked", 2, updated_at=unlinked_updated_at)
+    unlinked_item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
+    db = _FakeDB([linked_item, unlinked_item], {"linked": linked_assertion})
 
     page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
 
-    assert page.edges == []
-    assert page.nodes == [
+    assert page.nodes
+    assert _page_memory_ids(page) == {"linked"}
+    assert all(not node["id"].startswith("memory:") for node in page.nodes)
+    assert page.catalog_nodes == [
         {
             "id": "memory:unlinked",
             "label": "A durable canonical memory that has no inferred relationship yet.",
             "node_type": "concept",
             "aliases": [],
             "memory_ids": ["unlinked"],
-            "created_at": NOW,
-            "updated_at": NOW,
+            "created_at": unlinked_updated_at,
+            "updated_at": unlinked_updated_at,
         }
     ]
 
@@ -419,6 +423,7 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
     canonical_payload = {
         "nodes": [{"id": "canonical-node"}],
         "edges": [],
+        "catalog_nodes": [{"id": "memory:catalog-only"}],
         "has_more": True,
         "next_cursor": "v3.opaque.signed",
     }
