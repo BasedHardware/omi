@@ -127,8 +127,22 @@ void main() {
           isRecording: true,
           supportsBatch: true,
           batchAlreadyActive: false,
+          isOnDeviceOfflineBatchActive: false,
         ),
         isTrue,
+      );
+    });
+
+    test('does not fall back when an on-device offline batch recording is already active', () {
+      expect(
+        shouldFallbackToPhoneOnDeviceDisconnect(
+          isRecordingDevice: true,
+          isRecording: true,
+          supportsBatch: true,
+          batchAlreadyActive: false,
+          isOnDeviceOfflineBatchActive: true,
+        ),
+        isFalse,
       );
     });
 
@@ -139,6 +153,7 @@ void main() {
           isRecording: true,
           supportsBatch: true,
           batchAlreadyActive: false,
+          isOnDeviceOfflineBatchActive: false,
         ),
         isFalse,
       );
@@ -148,6 +163,7 @@ void main() {
           isRecording: false,
           supportsBatch: true,
           batchAlreadyActive: false,
+          isOnDeviceOfflineBatchActive: false,
         ),
         isFalse,
       );
@@ -157,6 +173,7 @@ void main() {
           isRecording: true,
           supportsBatch: false,
           batchAlreadyActive: false,
+          isOnDeviceOfflineBatchActive: false,
         ),
         isFalse,
       );
@@ -166,6 +183,7 @@ void main() {
           isRecording: true,
           supportsBatch: true,
           batchAlreadyActive: true,
+          isOnDeviceOfflineBatchActive: false,
         ),
         isFalse,
       );

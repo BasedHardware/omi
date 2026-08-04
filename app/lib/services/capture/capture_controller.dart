@@ -1575,11 +1575,20 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> onRecordingDeviceDisconnected() async {
+    // #7194: if the wearable is already doing its own on-device offline/batch
+    // recording, do not stop it and do not start the phone mic fallback.
+    // Phone fallback is a complementary safety net for live streaming gaps (#11078),
+    // not a replacement for on-device offline capture.
+    final bool isOnDeviceOfflineBatchActive = SharedPreferencesUtil().batchModeEnabled &&
+        _recordingDevice != null &&
+        (_recordingDevice!.type == DeviceType.limitless || _offlineSessionStartSeconds != 0);
+
     if (!shouldFallbackToPhoneOnDeviceDisconnect(
       isRecordingDevice: _recordingDevice != null,
       isRecording: isRecordingDuringDeviceDisconnect(recordingState),
       supportsBatch: phoneMicSupportsTranscribeLater && deviceSupportsTranscribeLater,
       batchAlreadyActive: _phoneMicBatchActive,
+      isOnDeviceOfflineBatchActive: isOnDeviceOfflineBatchActive,
     )) {
       return;
     }

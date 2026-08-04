@@ -89,8 +89,13 @@ bool shouldFallbackToPhoneOnDeviceDisconnect({
   required bool isRecording,
   required bool supportsBatch,
   required bool batchAlreadyActive,
+  required bool isOnDeviceOfflineBatchActive,
 }) =>
-    isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive;
+    isRecordingDevice &&
+    isRecording &&
+    supportsBatch &&
+    !batchAlreadyActive &&
+    !isOnDeviceOfflineBatchActive;
 
 /// Maps the capture state machine into the boolean that the fallback predicate
 /// (`shouldFallbackToPhoneOnDeviceDisconnect`) expects for `isRecording`.
