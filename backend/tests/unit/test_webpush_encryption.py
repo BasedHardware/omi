@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 
 import http_ece
 import pytest
@@ -69,3 +70,18 @@ def test_invalid_public_key_raises():
     _private_key, _p256dh, auth, _auth_bytes = _recipient()
     with pytest.raises(Exception):
         wpe.encrypt(b"x", p256dh=_b64url(b"not-a-valid-point"), auth=auth)
+
+
+def test_wrong_length_p256dh_is_rejected_with_a_clear_error():
+    # An uncompressed P-256 point is 65 bytes (RFC 8291). A wrong length must fail fast with a
+    # specific error, not a cryptic one deep inside http-ece's key import.
+    _private_key, _p256dh, auth, _auth_bytes = _recipient()
+    with pytest.raises(ValueError, match="p256dh"):
+        wpe.encrypt(b"x", p256dh=_b64url(os.urandom(64)), auth=auth)
+
+
+def test_wrong_length_auth_secret_is_rejected_with_a_clear_error():
+    # RFC 8291 fixes the auth secret at 16 bytes; a shorter one must be rejected up front.
+    _private_key, p256dh, _auth, _auth_bytes = _recipient()
+    with pytest.raises(ValueError, match="auth"):
+        wpe.encrypt(b"x", p256dh=p256dh, auth=_b64url(os.urandom(8)))

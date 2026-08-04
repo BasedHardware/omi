@@ -418,9 +418,16 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
     if backend == UNIFIEDPUSH:
         # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
         from utils.push import unifiedpush as _up
+        from database.notifications import UnifiedPushEndpoint
 
+        # Normalize to UnifiedPushEndpoint so a caller passing bare URL strings (the pre-key-set
+        # recipient shape) still delivers instead of failing inside send_bulk.
+        endpoints = [
+            recipient if isinstance(recipient, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=recipient)
+            for recipient in user_tokens
+        ]
         tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
-        await _up.send_bulk(user_tokens, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
+        await _up.send_bulk(endpoints, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
         return
     try:
         batch_size = 500

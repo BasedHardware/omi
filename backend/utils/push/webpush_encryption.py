@@ -39,6 +39,12 @@ def encrypt(plaintext: bytes, *, p256dh: str, auth: str) -> bytes:
     """
     recipient_key = _b64url_decode(p256dh)
     auth_secret = _b64url_decode(auth)
+    # Fail fast on a malformed key set (RFC 8291): p256dh is a 65-byte uncompressed P-256 point and
+    # auth is a 16-byte secret. A clear error here beats an opaque failure deep in the crypto/fanout.
+    if len(recipient_key) != 65:
+        raise ValueError(f"invalid p256dh: expected 65 bytes, got {len(recipient_key)}")
+    if len(auth_secret) != 16:
+        raise ValueError(f"invalid auth: expected 16 bytes, got {len(auth_secret)}")
     ephemeral = ec.generate_private_key(ec.SECP256R1())
     return http_ece.encrypt(
         plaintext,

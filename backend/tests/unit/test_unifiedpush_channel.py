@@ -262,8 +262,26 @@ def test_send_bulk_notification_routes_to_unifiedpush(monkeypatch):
     monkeypatch.setattr(up, 'send_bulk', _spy)
 
     with _loaded_notifications() as notifications:
-        # In unifiedpush mode the bulk recipients are endpoint URLs, not FCM tokens.
+        # Bare URL strings (the pre-key-set recipient shape) are normalized to UnifiedPushEndpoint
+        # records before reaching send_bulk, so bulk delivery is resilient to caller shape.
         asyncio.run(notifications.send_bulk_notification(['http://ntfy/a?up=1', 'http://ntfy/b?up=1'], 'omi', 'hi'))
 
-    assert captured['endpoints'] == ['http://ntfy/a?up=1', 'http://ntfy/b?up=1']
+    assert captured['endpoints'] == [_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')]
     assert captured['title'] == 'omi'
+
+
+def test_resolve_push_backend_normalizes_whitespace_and_case(monkeypatch):
+    # The flag is read at call time; whitespace/case around a valid value must normalize, not coerce.
+    from utils.push.selector import resolve_push_backend
+
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', '  UnifiedPush\n')
+    assert resolve_push_backend() == 'unifiedpush'
+
+
+def test_resolve_push_backend_coerces_unknown_to_fcm(monkeypatch):
+    # A non-blank typo is coerced to the FCM default (logged), never raised — a typo must not take
+    # push delivery down.
+    from utils.push.selector import resolve_push_backend
+
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'bogus')
+    assert resolve_push_backend() == 'fcm'

@@ -18,7 +18,9 @@ def resolve_push_backend() -> str:
     An unset/blank value selects FCM (upstream default). An unrecognized value is logged
     and coerced to FCM rather than raising, so a typo never takes push delivery down.
     """
-    value = (os.getenv('PUSH_NOTIFICATION_BACKEND') or FCM).strip().lower()
+    # Strip first, then fall back: an unset OR whitespace-only value defaults cleanly to FCM without
+    # logging a spurious "invalid" error. Only a non-blank unrecognized value is an actual typo.
+    value = (os.getenv('PUSH_NOTIFICATION_BACKEND') or '').strip().lower() or FCM
     if value not in VALID_BACKENDS:
         logger.error("Invalid PUSH_NOTIFICATION_BACKEND=%r; falling back to '%s'", value, FCM)
         return FCM
