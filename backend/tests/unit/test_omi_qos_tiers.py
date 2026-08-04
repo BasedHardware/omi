@@ -276,6 +276,7 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
+            'security_screen',
         }
         expected_openai = {
             **{feature: ('gpt-5.6-luna', 'openai') for feature in luna_features},
