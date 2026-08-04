@@ -1,0 +1,75 @@
+desktop/context-for-claude/Sources/ContextApp/Update/UpdateRelaunch.swift
+  s_6753c03801cb1c::t_695f94dcff0e99 1-5,7-10,15-17,20,25-26,34,42,58,86-87,98
+  s_6753c03801cb1c::t_3fa8a118fda084 6,11-14,18-19,21-24,27-33,35-41,43-57,59-85,88-97
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_6753c03801cb1c::t_015e4a6d2fc673 132
+  s_6753c03801cb1c::t_787f7f0cb72be9 215-218
+desktop/context-for-claude/Sources/ContextApp/Update/UpdatePolicy.swift
+  s_6753c03801cb1c::t_d521585c2135a6 1-5,11-12,17-23,29-30,34,38,43,64,68,73,78-79,103-104,121,135,158,174,203-204
+  s_6753c03801cb1c::t_db03680b588a5a 6-10,13-16,24-28,31-33,35-37,39-42,44-63,65-67,69-72,74-77,80-102,105-120,122-134,136-157,160-173,175-202
+  s_6753c03801cb1c::t_2b6e76c250765e 159
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_6753c03801cb1c::t_c9234f0f3b9e76 118-119
+  s_6753c03801cb1c::t_70d3911c77af6c 8-13
+  s_6753c03801cb1c::t_26c2f9393dba15 173-174
+  s_6753c03801cb1c::t_78ba1a9510142f 280
+desktop/context-for-claude/docs/releasing.md
+  s_6753c03801cb1c::t_175dd36167e413 1-252
+desktop/context-for-claude/Sources/ContextApp/Update/UpdatesSettingsRow.swift
+  s_6753c03801cb1c::t_bc31b84a28d4ed 1-5,7,12-13,15-16,18,32-33,42-43
+  s_6753c03801cb1c::t_b1e58e7dc8d18b 6,8-11,14,17,19-31,34-41
+desktop/context-for-claude/scripts/package-dmg.sh
+  s_6753c03801cb1c::t_e56839e2073b49 138-151
+  s_6753c03801cb1c::t_9282a89444209f 444-460,466-475
+  s_6753c03801cb1c::t_7595dd4e93aa52 476
+desktop/context-for-claude/README.md
+  s_6753c03801cb1c::t_e0d2d5ac2246ab 44-64
+desktop/context-for-claude/scripts/build.sh
+  s_6753c03801cb1c::t_19b0a2c8c73218 178-212,219-222
+  s_6753c03801cb1c::t_8951db8a2b9b0b 213-218
+  s_6753c03801cb1c::t_48780aba9ff8a3 295-308,313-346,352-358,360-374
+desktop/context-for-claude/appcast.xml
+  s_6753c03801cb1c::t_9acd6c33f53c83 6,15,19,22,26,28-29,31-47
+  s_6753c03801cb1c::t_d29353d1cf4950 1-5,7-14,16-18,20-21,23-25,27,30,48-55
+desktop/context-for-claude/Package.swift
+  s_6753c03801cb1c::t_b868100991428b 64
+  s_6753c03801cb1c::t_217e4e33a19d68 19-26
+desktop/context-for-claude/scripts/uninstall.sh
+  s_6753c03801cb1c::t_89825013459a19 96-111
+desktop/context-for-claude/Package.resolved
+  s_6753c03801cb1c::t_086da644234714 20-28
+desktop/context-for-claude/Tests/ContextAppTests/UpdatePolicyTests.swift
+  s_6753c03801cb1c::t_0314e772a34284 1-10,13-14,271
+  s_6753c03801cb1c::t_1cbe04002be384 11-12,15-270
+desktop/context-for-claude/Sources/ContextApp/Update/ContextUpdater.swift
+  s_6753c03801cb1c::t_4f116012ded256 17-20,22-24,27-28,32-108,111,117-122,129-166,168-186
+  s_6753c03801cb1c::t_3ad2b3ad3cd3a6 112-116
+  s_6753c03801cb1c::t_ff3939fb89a979 1-16,21,25-26,29-31,109-110,123-128,167,187-188
+desktop/context-for-claude/ARCHITECTURE.md
+  s_6753c03801cb1c::t_05ad722bd383fb 126
+  s_6753c03801cb1c::t_820a09ce19410b 22-29
+  s_6753c03801cb1c::t_4b3eeee8282b20 38
+desktop/context-for-claude/Sources/ContextApp/Backend/NetworkEgress.swift
+  s_6753c03801cb1c::t_7dcb67088709cb 42-46
+  s_6753c03801cb1c::t_a9891b99b82ace 116-122
+  s_6753c03801cb1c::t_8a398df77d4cc5 56-60
+desktop/context-for-claude/Resources/Info.plist
+  s_6753c03801cb1c::t_5905aa2bb42b74 25-41,43
+  s_6753c03801cb1c::t_eb2ea5c4753684 53-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "cefc4e99f6d22037d5085a5e654afe6005d8aa15",
+  "prompts": {},
+  "sessions": {
+    "s_6753c03801cb1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72b90662-7c98-40c1-97b6-59916a7ca4ee",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
