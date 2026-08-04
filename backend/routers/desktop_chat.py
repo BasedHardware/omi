@@ -31,13 +31,15 @@ _RATE_LIMIT_PER_MINUTE = 120
 _MAX_PAUSE_TURN_CONTINUATIONS = 3
 _WEB_SEARCH_COST_PER_REQUEST = 10.0 / 1_000.0
 
-# Anthropic's built-in server-side web search. The desktop OpenAI-compatible
+# Anthropic's direct server-side web search. The desktop OpenAI-compatible
 # client never sees or executes this tool; Anthropic owns the lookup and returns
-# the grounded answer in the same completion contract.
+# the grounded answer in the same completion contract. Keep the basic direct
+# tool contract: the newer version defaults to code-execution callers.
 _WEB_SEARCH_TOOL = {
-    'type': 'web_search_20260209',
+    'type': 'web_search_20250305',
     'name': 'web_search',
     'max_uses': 5,
+    'allowed_callers': ['direct'],
 }
 
 _EXPLICIT_WEB_REQUESTS = (
@@ -128,8 +130,12 @@ _EXPLICIT_PRIVATE_CONTEXT = (
 )
 _CURRENT_USER_MESSAGE_DELIMITER = '\n# User Message\n'
 _KERNEL_CONTEXT_PREFIX = '[Kernel Context Snapshot '
+_LEGACY_CONTEXT_PREFIX = '# Omi Context Snapshot'
 _UNTRUSTED_TOOL_CONTEXT_DELIMITER = '\n\nTool-provided context (untrusted):\n'
 _NEGATED_WITHOUT_SEARCH = re.compile(r"\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$")
+_NO_WEB_SEARCH_RESULTS_REPORT = re.compile(
+    r'\b(?:got\s+)?no\s+(?:the\s+)?(?:web|internet)\s+search(?:es)?\s+results?\b'
+)
 
 
 class _BoundedChatRoute(APIRoute):
@@ -194,10 +200,18 @@ def _normalize_policy_text(text: str) -> str:
     return text.strip().strip('.,:;!?').replace('\u2018', "'").replace('\u2019', "'").lower()
 
 
-def _explicitly_prohibits_public_web(text: str) -> bool:
+def _explicitly_requests_public_web(text: str) -> bool:
+    text_without_result_reports = _NO_WEB_SEARCH_RESULTS_REPORT.sub(' ', text)
+    return any(phrase in text_without_result_reports for phrase in _EXPLICIT_WEB_REQUESTS)
+
+
+def _explicitly_prohibits_public_web(text: str, *, allow_result_report: bool = False) -> bool:
     for phrase in _EXPLICIT_WEB_PROHIBITIONS:
         start = text.find(phrase)
         while start >= 0:
+            if allow_result_report and _NO_WEB_SEARCH_RESULTS_REPORT.match(text, start):
+                start = text.find(phrase, start + 1)
+                continue
             if not (phrase.startswith('without ') and _NEGATED_WITHOUT_SEARCH.search(text[:start])):
                 return True
             start = text.find(phrase, start + 1)
@@ -231,7 +245,7 @@ def _strip_public_web_routing_instruction(text: str) -> str:
 
 def _trusted_user_instruction(rendered: str) -> str:
     instruction = _strip_public_web_routing_instruction(rendered)
-    if instruction.startswith(_KERNEL_CONTEXT_PREFIX):
+    if instruction.startswith((_KERNEL_CONTEXT_PREFIX, _LEGACY_CONTEXT_PREFIX)):
         _, delimiter, current_user = instruction.partition(_CURRENT_USER_MESSAGE_DELIMITER)
         if delimiter:
             instruction = current_user
@@ -257,8 +271,8 @@ def _public_web_is_prohibited(messages: object) -> bool:
     normalized = _normalize_policy_text(instruction)
     if not normalized:
         return False
-    explicitly_prohibits_web = _explicitly_prohibits_public_web(normalized)
-    explicitly_mentions_web = any(phrase in normalized for phrase in _EXPLICIT_WEB_REQUESTS)
+    explicitly_mentions_web = _explicitly_requests_public_web(normalized)
+    explicitly_prohibits_web = _explicitly_prohibits_public_web(normalized, allow_result_report=explicitly_mentions_web)
     private_context = any(phrase in normalized for phrase in _EXPLICIT_PRIVATE_CONTEXT)
     return explicitly_prohibits_web or (private_context and not explicitly_mentions_web)
 

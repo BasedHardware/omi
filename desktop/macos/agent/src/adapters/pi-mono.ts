@@ -250,13 +250,25 @@ const EXPLICIT_WEB_PROHIBITIONS = [
 ];
 
 const KERNEL_CONTEXT_PREFIX = "[Kernel Context Snapshot ";
+const LEGACY_CONTEXT_PREFIX = "# Omi Context Snapshot";
 const UNTRUSTED_TOOL_CONTEXT_DELIMITER = "\n\nTool-provided context (untrusted):\n";
 const NEGATED_WITHOUT_SEARCH = /\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$/;
+const NO_WEB_SEARCH_RESULTS_REPORT = /\b(?:got\s+)?no\s+(?:the\s+)?(?:web|internet)\s+search(?:es)?\s+results?\b/;
 
-function explicitlyProhibitsPublicWeb(normalized: string): boolean {
+function explicitlyRequestsPublicWeb(normalized: string): boolean {
+  return EXPLICIT_WEB_REQUESTS.some((phrase) =>
+    normalized.replace(NO_WEB_SEARCH_RESULTS_REPORT, " ").includes(phrase)
+  );
+}
+
+function explicitlyProhibitsPublicWeb(normalized: string, allowResultReport = false): boolean {
   for (const phrase of EXPLICIT_WEB_PROHIBITIONS) {
     let start = normalized.indexOf(phrase);
     while (start >= 0) {
+      if (allowResultReport && NO_WEB_SEARCH_RESULTS_REPORT.exec(normalized.slice(start))?.index === 0) {
+        start = normalized.indexOf(phrase, start + 1);
+        continue;
+      }
       if (!(phrase.startsWith("without ") && NEGATED_WITHOUT_SEARCH.test(normalized.slice(0, start)))) {
         return true;
       }
@@ -326,7 +338,7 @@ const CURRENT_USER_MESSAGE_DELIMITER = "\n# User Message\n";
 
 function currentUserInstruction(renderedPrompt: string): string {
   let instruction = stripPublicWebRoutingInstruction(renderedPrompt);
-  if (instruction.startsWith(KERNEL_CONTEXT_PREFIX)) {
+  if (instruction.startsWith(KERNEL_CONTEXT_PREFIX) || instruction.startsWith(LEGACY_CONTEXT_PREFIX)) {
     const delimiterIndex = instruction.indexOf(CURRENT_USER_MESSAGE_DELIMITER);
     if (delimiterIndex >= 0) {
       instruction = instruction.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
@@ -405,10 +417,8 @@ export function routePromptForPublicWeb(message: string): string {
   // whether this particular turn requires a public-web lookup.
   const normalized = normalizedLookupText(currentUserInstruction(message));
   if (!normalized) return message;
-  const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
-    (phrase) => normalized.includes(phrase)
-  );
-  if (explicitlyProhibitsPublicWeb(normalized)) {
+  const hasExplicitWebReference = explicitlyRequestsPublicWeb(normalized);
+  if (explicitlyProhibitsPublicWeb(normalized, hasExplicitWebReference)) {
     return message;
   }
   const hasExplicitPrivateContext = EXPLICIT_PRIVATE_CONTEXT.some(

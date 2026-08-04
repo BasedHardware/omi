@@ -244,6 +244,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       "Search the web because I got no results from the prior search.",
       "Search the web, but do not use these results as the only source.",
       "Search the web and explain why no search results appeared.",
+      "I got no web search results; search the web again.",
       "Search the web for the term no-search.",
     ]) {
       expect(routePromptForPublicWeb(message)).toContain("<omi_retrieval_policy>");
@@ -311,9 +312,9 @@ describe("PiMonoAdapter prompt correlation", () => {
     seedSessions(adapter, "child");
     const renderedChildPrompt = [
       "# Omi Context Snapshot",
-      "Earlier user request: ask OpenClaw what's trending on X right now.",
+      "Earlier user request: Search the web for current news.",
       "# User Message",
-      "Sleep for 5 seconds.",
+      "From my conversations, what did I say?",
     ].join("\n");
 
     const prompt = adapter.sendPrompt(

@@ -46,6 +46,12 @@ def test_request_injects_web_search_for_desktop_opt_in():
         }
     )
     assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+    assert payload['tools'][0] == {
+        'type': 'web_search_20250305',
+        'name': 'web_search',
+        'max_uses': 5,
+        'allowed_callers': ['direct'],
+    }
 
 
 def test_request_keeps_private_turns_off_public_web_search():
@@ -53,6 +59,24 @@ def test_request_keeps_private_turns_off_public_web_search():
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'From my conversations, what did I say about the trip?'}],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': (
+                        '# Omi Context Snapshot\n'
+                        'Earlier user request: Search the web for current news.\n'
+                        '# User Message\nFrom my conversations, what did I say?'
+                    ),
+                }
+            ],
             'omi_web_search': True,
         }
     )
@@ -137,6 +161,17 @@ def test_request_does_not_invert_double_negated_web_requirement(content):
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': content}],
+            'omi_web_search': True,
+        }
+    )
+    assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+
+
+def test_request_allows_retry_after_reported_missing_search_results():
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'I got no web search results; search the web again.'}],
             'omi_web_search': True,
         }
     )
