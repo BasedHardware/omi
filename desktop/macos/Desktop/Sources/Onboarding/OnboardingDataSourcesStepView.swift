@@ -118,6 +118,7 @@ scanDeferred: coordinator.gmailInsightsDeferred,
         action: {
           Task {
             await coordinator.loadGmailAccounts()
+            guard !coordinator.gmailAccounts.isEmpty else { return }
             coordinator.showingGmailAccountPicker = true
           }
         }

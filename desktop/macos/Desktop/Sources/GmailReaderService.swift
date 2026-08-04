@@ -205,12 +205,17 @@ userInitiated: userInitiated,
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     do {
+      let selectedCookiePath = GmailSelectionStore.selectedCookiePath
       _ = try fetchGmailViaAtomFeedSingle(
         maxResults: 1,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
         allowBootstrap: false,
+<<<<<<< HEAD
         userInitiated: userInitiated
+=======
+        selectedCookiePath: selectedCookiePath
+>>>>>>> e794d11904 (fix(desktop): fail closed on ambiguous Gmail accounts)
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
