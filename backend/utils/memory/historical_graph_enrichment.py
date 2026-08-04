@@ -14,7 +14,7 @@ from typing import Any
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, ConfigDict, Field
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, memory_content_hash
 from models.memory_promotion import PromotionGraphPlan
 from models.product_memory import MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentResult, prepare_graph_enrichment
@@ -92,6 +92,16 @@ def plan_historical_graph_enrichment(
     llm: Any,
 ) -> GraphEnrichmentResult:
     """Plan one fenced enrichment from current canonical evidence only."""
+    expected_content_hash = memory_content_hash(
+        content=item.content,
+        evidence_ids=sorted(evidence.evidence_id for evidence in item.evidence),
+    )
+    if item.content_hash != expected_content_hash:
+        return GraphEnrichmentResult(
+            status="blocked",
+            block_code="content_hash_invalid",
+            reason="canonical item content hash does not match its current content and evidence",
+        )
     graph_plan = invoke_historical_graph_planner(item, llm)
     if graph_plan is None:
         return GraphEnrichmentResult(status="blocked", block_code="not_source_grounded", reason="no safe graph fact")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, memory_content_hash
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
@@ -51,10 +51,15 @@ def _item(**overrides: object) -> MemoryItem:
         "ledger_commit_id": "head0",
         "ledger_sequence": 1,
         "item_revision": 1,
-        "content_hash": "hash1",
+        "content_hash": "",
         "account_generation": 1,
     }
     payload.update(overrides)
+    if "content_hash" not in overrides:
+        payload["content_hash"] = memory_content_hash(
+            content=str(payload["content"]),
+            evidence_ids=sorted(item["evidence_id"] for item in payload["evidence"]),
+        )
     return MemoryItem(**payload)
 
 
@@ -74,7 +79,7 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
 
     assert planned.status == GraphEnrichmentStatus.ready
     assert planned.operation is not None
-    assert planned.patch_payload["expected_content_hash"] == "hash1"
+    assert planned.patch_payload["expected_content_hash"] == _item().content_hash
     assert planned.patch_payload["evidence_ids"] == ["ev1"]
 
 
@@ -87,3 +92,14 @@ def test_historical_graph_planner_blocks_when_no_source_grounded_fact_exists():
 
     assert planned.status == GraphEnrichmentStatus.blocked
     assert planned.block_code == "not_source_grounded"
+
+
+def test_historical_graph_planner_blocks_a_stale_content_hash_before_calling_the_model():
+    planned = plan_historical_graph_enrichment(
+        item=_item(content_hash="stale"),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner({"eligible": True}),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "content_hash_invalid"
