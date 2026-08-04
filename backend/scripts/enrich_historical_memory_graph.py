@@ -11,7 +11,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -121,6 +121,7 @@ def run_enrichment(
     scan_limit: int | None = None,
     db_client: Any | None = None,
     llm: Any | None = None,
+    progress_reporter: Callable[[dict[str, int]], None] | None = None,
 ) -> dict[str, Any]:
     """Return aggregate outcomes for one bounded historical enrichment page."""
     if limit < 1 or limit > MAX_PAGE_SIZE or apply_limit < 1 or apply_limit > MAX_PAGE_SIZE:
@@ -134,41 +135,59 @@ def run_enrichment(
         raise ValueError("apply requires confirm_uid to exactly match uid")
 
     db_client = db_client or firestore.Client(project=firestore_project)
-    control = _control(uid, db_client=db_client)
     if llm is None and not structured_only:
         llm = get_llm("memory_l2")
     report: Counter[str] = Counter()
     applied = 0
-    for item in _candidates(uid, control=control, limit=candidate_limit, db_client=db_client):
-        planned = (
-            _structured_plan(item, control)
-            if structured_only
-            else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
-        )
-        if planned is None:
-            report["not_structured"] += 1
-            continue
-        if planned.status != "ready" or planned.operation is None:
-            report[planned.block_code or "blocked"] += 1
-            continue
-        if not apply:
-            report["planned"] += 1
-            continue
-        if applied >= apply_limit:
-            report["apply_limit_reached"] += 1
-            continue
-        result = apply_long_term_patch_firestore(
-            uid=uid,
-            operation_id=planned.operation.operation_id,
-            patch_payload=planned.patch_payload,
-            proposed_operation=planned.operation,
-            db_client=db_client,
-        )
-        if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-            report[result.status.value] += 1
-            applied += 1
-        else:
-            report[f"apply_{result.status.value}"] += 1
+    if not apply:
+        control = _control(uid, db_client=db_client)
+        for item in _candidates(uid, control=control, limit=candidate_limit, db_client=db_client):
+            planned = (
+                _structured_plan(item, control)
+                if structured_only
+                else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+            )
+            if planned is None:
+                report["not_structured"] += 1
+            elif planned.status == "ready" and planned.operation is not None:
+                report["planned"] += 1
+            else:
+                report[planned.block_code or "blocked"] += 1
+    else:
+        # Every committed apply advances the canonical control head. Re-read the
+        # control record and re-plan the next item so no operation is submitted
+        # against a stale observed_head_commit_id.
+        while applied < apply_limit:
+            control = _control(uid, db_client=db_client)
+            planned = None
+            for item in _candidates(uid, control=control, limit=candidate_limit, db_client=db_client):
+                candidate = (
+                    _structured_plan(item, control)
+                    if structured_only
+                    else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+                )
+                if candidate is None:
+                    continue
+                if candidate.status == "ready" and candidate.operation is not None:
+                    planned = candidate
+                    break
+            if planned is None:
+                break
+            result = apply_long_term_patch_firestore(
+                uid=uid,
+                operation_id=planned.operation.operation_id,
+                patch_payload=planned.patch_payload,
+                proposed_operation=planned.operation,
+                db_client=db_client,
+            )
+            if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+                report[result.status.value] += 1
+                applied += 1
+                if progress_reporter is not None:
+                    progress_reporter({result.status.value: applied})
+            else:
+                report[f"apply_{result.status.value}"] += 1
+                break
     return {
         "dry_run": not apply,
         "limit": limit,
@@ -191,6 +210,9 @@ def main() -> int:
             structured_only=args.structured_only,
             apply_limit=args.apply_limit,
             scan_limit=args.scan_limit,
+            progress_reporter=(
+                (lambda progress: print(json.dumps({"progress": progress}), flush=True)) if args.apply else None
+            ),
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
