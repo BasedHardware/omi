@@ -6,14 +6,14 @@ describe("origin parity mounts", () => {
   it("GET /v3/memories proxies when memory module on", async () => {
     const calls: string[] = [];
     const prev = globalThis.fetch;
-    globalThis.fetch = async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       calls.push(url);
       return new Response(JSON.stringify([{ id: "1", content: "x" }]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    };
+    }) as unknown as typeof fetch;
     try {
       const app = createApp({
         features: resolveFeatures({

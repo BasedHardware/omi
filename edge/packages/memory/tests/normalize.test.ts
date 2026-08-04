@@ -4,11 +4,11 @@ import { originMemoryStore } from "../src/types.js";
 describe("originMemoryStore normalize", () => {
   it("lists from array body", async () => {
     const prev = globalThis.fetch;
-    globalThis.fetch = async () =>
+    globalThis.fetch = (async () =>
       new Response(
         JSON.stringify([{ id: "m1", content: "likes coffee", category: "interesting" }]),
         { status: 200 },
-      );
+      )) as unknown as typeof fetch;
     try {
       const store = originMemoryStore("https://api.example", "Bearer t");
       const rows = await store.list({ uid: "u1" });

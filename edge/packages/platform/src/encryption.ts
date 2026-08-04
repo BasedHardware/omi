@@ -7,6 +7,12 @@
 
 const INFO = new TextEncoder().encode("user-data-encryption");
 
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function requireSecret(secret: string): Uint8Array {
   const bytes = new TextEncoder().encode(secret);
   if (bytes.length < 32) {
@@ -17,13 +23,13 @@ function requireSecret(secret: string): Uint8Array {
 
 export async function deriveKey(secret: string, uid: string): Promise<CryptoKey> {
   const master = requireSecret(secret);
-  const baseKey = await crypto.subtle.importKey("raw", master, "HKDF", false, ["deriveKey"]);
+  const baseKey = await crypto.subtle.importKey("raw", asArrayBuffer(master), "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: new TextEncoder().encode(uid),
-      info: INFO,
+      salt: asArrayBuffer(new TextEncoder().encode(uid)),
+      info: asArrayBuffer(INFO),
     },
     baseKey,
     { name: "AES-GCM", length: 256 },
@@ -56,7 +62,7 @@ export async function encrypt(data: string, uid: string, secret: string): Promis
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(data);
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, plaintext),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: asArrayBuffer(nonce) }, key, asArrayBuffer(plaintext)),
   );
   const payload = new Uint8Array(nonce.length + ciphertext.length);
   payload.set(nonce, 0);
@@ -71,7 +77,11 @@ export async function decrypt(encryptedData: string, uid: string, secret: string
     const payload = b64Decode(encryptedData);
     const nonce = payload.slice(0, 12);
     const ciphertext = payload.slice(12);
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, ciphertext);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: asArrayBuffer(nonce) },
+      key,
+      asArrayBuffer(ciphertext),
+    );
     return new TextDecoder().decode(plain);
   } catch {
     // Match Python: fail-open return ciphertext on decrypt error
@@ -83,7 +93,7 @@ export async function encryptAudioChunk(data: Uint8Array, uid: string, secret: s
   const key = await deriveKey(secret, uid);
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, data),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: asArrayBuffer(nonce) }, key, asArrayBuffer(data)),
   );
   const encryptedPayload = new Uint8Array(nonce.length + ciphertext.length);
   encryptedPayload.set(nonce, 0);
@@ -109,7 +119,11 @@ export async function decryptAudioChunk(
   const ciphertext = encryptedPayload.slice(12);
   const key = await deriveKey(secret, uid);
   const plain = new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, ciphertext),
+    await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: asArrayBuffer(nonce) },
+      key,
+      asArrayBuffer(ciphertext),
+    ),
   );
   return { data: plain, bytesConsumed: 4 + length };
 }
