@@ -12,6 +12,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "ble_perm.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "transport.h"
@@ -80,18 +81,18 @@ static struct bt_gatt_attr storage_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&storage_service_uuid),
     BT_GATT_CHARACTERISTIC(&storage_write_uuid.uuid,
                            BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_WRITE,
+                           OMI_GATT_PERM_WRITE,
                            NULL,
                            storage_write_handler,
                            NULL),
-    BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(storage_config_changed_handler, OMI_GATT_PERM_CCC),
     BT_GATT_CHARACTERISTIC(&storage_read_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ,
+                           OMI_GATT_PERM_READ,
                            storage_read_characteristic,
                            NULL,
                            NULL),
-    BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(storage_config_changed_handler, OMI_GATT_PERM_CCC),
 };
 
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
