@@ -1,14 +1,15 @@
 'use client';
 
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
-import { Send, Paperclip } from 'lucide-react';
+import { ArrowUp, Paperclip, Mic, Square } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
 import { uploadChatFiles } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
- * The ask bar: text, attachments, dictation and send.
+ * The ask bar: one pill that carries the text and every control that acts on
+ * it.
  *
  * Desktop keeps one composer for the whole Home stage and moves it between the
  * hub and the transcript rather than giving each mode its own, so this owns the
@@ -32,8 +33,17 @@ interface ChatComposerProps {
   isStreaming: boolean;
   appId?: string;
   placeholder?: string;
-  /** Rendered under the input; the hub omits it to keep the resting state calm. */
-  hint?: string;
+  /**
+   * Capture controls live in the pill so that starting a recording and asking
+   * about it are the same gesture in the same place. Omitted where there is no
+   * capture to start.
+   */
+  recording?: {
+    isActive: boolean;
+    onStart: () => void;
+    onStop: () => void;
+    disabled?: boolean;
+  };
   ref?: React.Ref<ChatComposerHandle>;
 }
 
@@ -42,7 +52,7 @@ export function ChatComposer({
   isStreaming,
   appId,
   placeholder = 'Ask anything...',
-  hint,
+  recording,
   ref,
 }: ChatComposerProps) {
   const [input, setInput] = useState('');
@@ -161,33 +171,61 @@ export function ChatComposer({
     !isStreaming &&
     !isUploading;
 
+  const iconButton = cn(
+    'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+    'text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary',
+    'disabled:cursor-not-allowed disabled:opacity-40',
+  );
+
   return (
-    <div>
+    <div
+      className={cn(
+        'rounded-[28px] border border-stroke bg-bg-tertiary',
+        'transition-colors focus-within:border-white/25',
+      )}
+    >
       {/* File preview bar */}
       {selectedFiles.length > 0 && (
-        <FilePreview
-          files={selectedFiles}
-          onRemove={handleRemoveFile}
-          disabled={isStreaming}
-        />
+        <div className="px-3 pt-3">
+          <FilePreview
+            files={selectedFiles}
+            onRemove={handleRemoveFile}
+            disabled={isStreaming}
+          />
+        </div>
       )}
 
-      <div className="flex items-center gap-2">
+      {/* The text sits on its own line above the controls so a long draft grows
+          the pill downward instead of squeezing the buttons. */}
+      <textarea
+        ref={inputRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        disabled={isStreaming}
+        rows={1}
+        className={cn(
+          'no-scrollbar w-full resize-none bg-transparent px-5 pt-4',
+          'text-text-primary placeholder:text-text-quaternary',
+          'focus:outline-none',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          'max-h-[200px]',
+        )}
+      />
+
+      <div className="flex items-center gap-1 px-2.5 pb-2.5 pt-1">
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isStreaming || selectedFiles.length >= MAX_FILES}
-          className={cn(
-            'p-2 rounded-element flex-shrink-0',
-            'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'transition-colors',
-          )}
+          className={iconButton}
           title={
             selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'
           }
+          aria-label="Attach file"
         >
-          <Paperclip className="w-5 h-5" />
+          <Paperclip className="h-[18px] w-[18px]" />
         </button>
         <input
           ref={fileInputRef}
@@ -198,25 +236,24 @@ export function ChatComposer({
           className="hidden"
         />
 
-        {/* Text input */}
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={isStreaming}
-          rows={1}
-          className={cn(
-            'flex-1 px-4 py-3 rounded-control resize-none',
-            'bg-bg-tertiary border border-stroke',
-            'text-text-primary placeholder:text-text-quaternary',
-            'focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20',
-            'transition-all',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'h-[48px] max-h-[200px]',
-          )}
-        />
+        {recording && (
+          <button
+            onClick={recording.isActive ? recording.onStop : recording.onStart}
+            disabled={recording.disabled}
+            className={cn(
+              iconButton,
+              recording.isActive && 'bg-red-500/15 text-red-400 hover:bg-red-500/25',
+            )}
+            title={recording.isActive ? 'Stop recording' : 'Record'}
+            aria-label={recording.isActive ? 'Stop recording' : 'Record'}
+          >
+            {recording.isActive ? (
+              <Square className="h-4 w-4 fill-current" />
+            ) : (
+              <Mic className="h-[18px] w-[18px]" />
+            )}
+          </button>
+        )}
 
         {/* Inline voice recorder - always visible */}
         <InlineVoiceRecorder
@@ -224,23 +261,22 @@ export function ChatComposer({
           disabled={isStreaming}
         />
 
+        <div className="flex-1" />
+
         {/* Send button */}
         <button
           onClick={() => void handleSend()}
           disabled={!canSend}
           className={cn(
-            'w-[48px] h-[48px] rounded-control flex-shrink-0',
-            'flex items-center justify-center',
-            'bg-text-primary text-bg-primary hover:opacity-90',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            'transition-opacity',
+            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+            'bg-text-primary text-bg-primary transition-opacity hover:opacity-90',
+            'disabled:cursor-not-allowed disabled:opacity-25',
           )}
           aria-label="Send message"
         >
-          <Send className="w-5 h-5" />
+          <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
         </button>
       </div>
-      {hint && <p className="text-xs text-text-quaternary mt-2 text-center">{hint}</p>}
     </div>
   );
 }
