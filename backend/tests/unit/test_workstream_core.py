@@ -505,6 +505,9 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3
 def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(monkeypatch):
     store = FakeDocumentStore()
     monkeypatch.setattr(recurrence_inbox_db, '_store', lambda: store)
+    # u1 is a canonical task-intelligence user in this scenario; the cohort gate reads a frozen
+    # env-derived set at import, so patch the entitlement check the module imported.
+    monkeypatch.setattr(recurrence_inbox_db, 'is_canonical_memory_user', lambda uid: True)
 
     def seed_control(generation):
         store.set(
