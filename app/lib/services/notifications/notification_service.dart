@@ -37,11 +37,21 @@ NotificationBackend selectNotificationBackend({
 
 /// Factory function to create the notification service
 NotificationInterface _createPlatformNotificationService() {
+  final requested = Env.notificationsBackend;
   final selected = selectNotificationBackend(
-    backend: Env.notificationsBackend,
+    backend: requested,
     fcmSupported: PlatformManager().isFCMSupported,
     unifiedPushSupported: Platform.isAndroid,
   );
+  // Make a silent capability downgrade observable: the operator chose the backend at build time, but
+  // a platform without the transport (FCM SDK / a UnifiedPush distributor) falls back to local-only.
+  // Log it so a missing remote push is diagnosable instead of silently degrading.
+  if (selected == NotificationBackend.local && requested != 'local') {
+    debugPrint(
+      'NotificationService: NOTIFICATIONS_BACKEND=$requested has no transport on this platform; '
+      'falling back to local-only notifications (no remote push).',
+    );
+  }
   switch (selected) {
     case NotificationBackend.fcm:
       return fcm.createNotificationService();
