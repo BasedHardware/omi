@@ -1,0 +1,22 @@
+{
+  "name": "@omi/gateway",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./create-app": "./src/create-app.ts"
+  },
+  "dependencies": {
+    "@omi/platform": "workspace:*",
+    "@omi/tenant": "workspace:*",
+    "@omi/memory": "workspace:*",
+    "@omi/conversation": "workspace:*",
+    "@omi/tasks": "workspace:*",
+    "hono": "^4.7.7"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

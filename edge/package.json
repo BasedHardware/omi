@@ -4,18 +4,20 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "workers/*"
+    "apps/*"
   ],
   "scripts": {
-    "test": "npm run test -w @omi/platform && npm run test -w @omi/tenant",
-    "typecheck": "tsc -p packages/platform && tsc -p packages/tenant && tsc -p workers/bff && tsc -p workers/search",
-    "dev:bff": "npm run dev -w @omi/bff",
-    "dev:search": "npm run dev -w @omi/search"
+    "test": "bun run --filter '*' test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "dev": "bun run --filter @omi/api dev",
+    "dev:node": "bun run packages/gateway/src/node-dev.ts"
   },
   "devDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1",
-    "@cloudflare/workers-types": "^4.20250417.0",
-    "wrangler": "4.12.0"
+    "hono": "^4.7.7",
+    "wrangler": "4.12.0",
+    "@cloudflare/workers-types": "^4.20250417.0"
   }
 }

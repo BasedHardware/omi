@@ -1,16 +1,17 @@
 {
-  "name": "@omi/search",
+  "name": "@omi/api",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@omi/platform": "*",
-    "@omi/tenant": "*",
+    "@omi/gateway": "workspace:*",
+    "@omi/platform": "workspace:*",
     "hono": "^4.7.7"
   }
 }

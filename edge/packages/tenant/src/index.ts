@@ -1,17 +1,15 @@
 /**
- * Per-user tenant routing: control-plane map uid → D1 database id + Vectorize index.
- *
- * Phase 1: in-memory / KV map. Phase 2: Cloudflare API create D1 per user (or shard).
- * D1 account limits mean real prod may shard many uids per D1; interface stays per-uid lookup.
+ * Per-user tenant routing: control-plane map uid → logical DB + vector index.
+ * Provider-agnostic: store is injected (KV, D1 control table, memory Map).
  */
+
+import type { KvStore } from "@omi/platform";
 
 export type TenantRecord = {
   uid: string;
-  /** Cloudflare D1 database id (UUID) or logical shard id */
+  /** Logical DB id (D1 uuid, shard id, or other provider handle) */
   d1DatabaseId: string;
-  /** Vectorize index name for this tenant (or shared index + uid filter) */
   vectorizeIndex: string;
-  /** AI Search index / namespace when enabled */
   aiSearchIndex?: string;
   createdAt: number;
   status: "active" | "migrating" | "disabled";
@@ -22,7 +20,6 @@ export type TenantStore = {
   put(record: TenantRecord): Promise<void>;
 };
 
-/** Deterministic shard key for multi-tenant D1 until 1:1 D1 is viable. */
 export function shardIdForUid(uid: string, shardCount: number): string {
   if (shardCount < 1) throw new Error("shardCount must be >= 1");
   let h = 2166136261;
@@ -50,8 +47,7 @@ export function defaultTenantRecord(
   };
 }
 
-/** KV-backed store (Workers). key = `tenant:${uid}` */
-export function kvTenantStore(kv: KVNamespace): TenantStore {
+export function kvTenantStore(kv: KvStore): TenantStore {
   return {
     async get(uid: string) {
       const raw = await kv.get(`tenant:${uid}`, "json");
@@ -63,7 +59,6 @@ export function kvTenantStore(kv: KVNamespace): TenantStore {
   };
 }
 
-/** Ensure tenant row exists (lazy provision metadata only — no D1 create API here). */
 export async function ensureTenant(
   store: TenantStore,
   uid: string,
@@ -76,7 +71,6 @@ export async function ensureTenant(
   return created;
 }
 
-/** Minimal per-user D1 schema (apply via migration runner later). */
 export const USER_D1_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS memories (
   id TEXT PRIMARY KEY,
