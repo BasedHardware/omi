@@ -60,8 +60,8 @@ class PureSocket implements IPureSocket {
   final SocketHeadersProvider _headersProvider;
 
   PureSocket(this.url, {SocketHeadersProvider? headersProvider, Map<String, String> extraHeaders = const {}})
-    : _headersProvider =
-          headersProvider ?? (() async => {...await buildHeaders(requireAuthCheck: true), ...extraHeaders});
+      : _headersProvider =
+            headersProvider ?? (() async => {...await buildHeaders(requireAuthCheck: true), ...extraHeaders});
 
   @override
   void setListener(IPureSocketListener listener) {

@@ -78,9 +78,9 @@ void main() {
 }
 
 ConversationProvider _provider() => ConversationProvider(
-  conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-  isSignedIn: () => true,
-);
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
 
 ServerConversation _conversation(
   String id, {
