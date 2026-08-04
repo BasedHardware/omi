@@ -78,6 +78,16 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_backend_oauth_authority_env(payload: str) -> str:
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "BASE_API_URL", "value": "https://api.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -136,9 +146,11 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_oauth_authority_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+                )
             )
         )
     )
@@ -1313,6 +1325,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                             'backend': {
                                 'env': {
                                     'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'BASE_API_URL': {'value': 'https://api.omiapi.com'},
                                     'OMI_ENV_STAGE': {'value': 'dev'},
                                     'CHANNEL_SIGN_IN_URL': {'value': 'https://app.example/login'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},

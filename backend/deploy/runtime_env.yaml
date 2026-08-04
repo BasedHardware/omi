@@ -309,6 +309,9 @@ environments:
               category: rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            BASE_API_URL:
+              value: https://api.omiapi.com
+              category: oauth_metadata
             GCP_LOCATION:
               value: us-central1
             USE_VERTEX_AI:
