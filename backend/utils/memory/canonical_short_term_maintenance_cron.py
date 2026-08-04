@@ -32,10 +32,14 @@ from utils.memory.short_term_promotion import (
     CanonicalShortTermMaintenanceReport,
     run_canonical_short_term_maintenance,
 )
+from scripts.enrich_historical_memory_graph import MAX_PAGE_SIZE, run_enrichment
 
 logger = logging.getLogger(__name__)
 
 MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
+MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED"
+MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE"
+DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 
 
 def _required_memory_processor(item: MemoryItem) -> ProcessedRequiredMemory:
@@ -51,6 +55,21 @@ def canonical_maintenance_enabled() -> bool:
     return raw.lower() == "true"
 
 
+def canonical_graph_backfill_enabled() -> bool:
+    """Keep graph migration work opt-in until the deployment contract enables it."""
+    return os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "false").lower() == "true"
+
+
+def canonical_graph_backfill_page_size() -> int:
+    """Return the bounded per-user assertion-enrichment budget for one cron run."""
+    raw = os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV, str(DEFAULT_GRAPH_BACKFILL_PAGE_SIZE))
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
+    return min(MAX_PAGE_SIZE, max(1, value))
+
+
 @dataclass
 class CanonicalShortTermMaintenanceCronSummary:
     run_id: str
@@ -63,6 +82,8 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_retryable_failures_total: int = 0
     outbox_dead_letters_total: int = 0
     outbox_ack_failures_total: int = 0
+    graph_enriched_total: int = 0
+    graph_enrichment_blocked_total: int = 0
     errors: list[str] = field(default_factory=_empty_errors)
 
 
@@ -224,13 +245,40 @@ def run_canonical_short_term_maintenance_for_cohort(
             skipped,
         )
 
+        if not canonical_graph_backfill_enabled():
+            continue
+        try:
+            graph_report = run_enrichment(
+                uid=uid,
+                # The database client is injected above; this is retained only
+                # for the CLI contract and is never used by this cron path.
+                firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
+                limit=canonical_graph_backfill_page_size(),
+                apply=True,
+                confirm_uid=uid,
+                structured_only=False,
+                apply_limit=canonical_graph_backfill_page_size(),
+                db_client=client,
+            )
+            graph_outcomes = graph_report.get("outcomes", {})
+            summary.graph_enriched_total += int(graph_outcomes.get("committed", 0))
+            summary.graph_enrichment_blocked_total += sum(
+                int(value) for key, value in graph_outcomes.items() if key not in {"committed", "idempotent_skip"}
+            )
+        except Exception as exc:
+            message = f"uid={uid}: graph_enrichment:{type(exc).__name__}"
+            summary.errors.append(message)
+            logger.warning("canonical_short_term_maintenance_cron: %s", message)
+
     logger.info(
         "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d routed_total=%d "
-        "promoted_total=%d skipped_users=%d errors=%d",
+        "promoted_total=%d graph_enriched_total=%d graph_enrichment_blocked_total=%d skipped_users=%d errors=%d",
         effective_run_id,
         summary.user_count,
         summary.routed_total,
         summary.promoted_total,
+        summary.graph_enriched_total,
+        summary.graph_enrichment_blocked_total,
         summary.skipped_users,
         len(summary.errors),
     )
