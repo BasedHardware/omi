@@ -552,11 +552,17 @@ async def _stream_with_terminal_metrics(
         if terminal_observed:
             return
         terminal_observed = True
+        # Per the PR behavioral contract, actual fallback requires a subsequent
+        # successful provider/route.  Only stamp the actual-fallback labels when
+        # the terminal outcome is success; an error or cancellation means the
+        # failover did not complete, so dashboards and ad-hoc queries must not
+        # count it as a completed failover.
+        completed_fallback = prepared.fallback_used and outcome == 'success'
         trace.record(
             provider=prepared.provider,
             configured_model=prepared.model,
             route_artifact_id=route.route_artifact_id,
-            fallback_reason=prepared.fallback_reason,
+            fallback_reason=prepared.fallback_reason if completed_fallback else None,
             retry_ordinal=1,
             outcome=outcome,
             error_class=error_class,
@@ -579,14 +585,14 @@ async def _stream_with_terminal_metrics(
                 credential_source=credentials.source.value,
                 route_serving_class=(
                     RouteServingClass.ACTUAL_FALLBACK
-                    if prepared.fallback_used
+                    if completed_fallback
                     else selected_route_serving_class(resolved_route)
                 ),
                 used_lkg=selected_route_is_lkg(resolved_route),
-                fallback_used=prepared.fallback_used,
-                fallback_reason=prepared.fallback_reason,
-                fallback_from_route_artifact_id=route.route_artifact_id if prepared.fallback_used else None,
-                fallback_to_route_artifact_id=route.route_artifact_id if prepared.fallback_used else None,
+                fallback_used=completed_fallback,
+                fallback_reason=prepared.fallback_reason if completed_fallback else None,
+                fallback_from_route_artifact_id=route.route_artifact_id if completed_fallback else None,
+                fallback_to_route_artifact_id=route.route_artifact_id if completed_fallback else None,
                 outcome=outcome,
                 error_class=error_class,
                 request_id=request_id,

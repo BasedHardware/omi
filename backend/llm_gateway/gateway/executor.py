@@ -251,6 +251,7 @@ async def _execute_route(
     refs = [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
     current_fallback_reason = fallback_reason
+    failed_provider_refs: list[ProviderRef] = []
 
     for index, provider_ref in enumerate(refs):
         provider = provider_registry.provider_for(provider_ref.provider)
@@ -281,22 +282,37 @@ async def _execute_route(
                         'provider request failed',
                         failure_class=FailureClass.INVALID_CONFIG,
                     )
+                # A within-route provider fallback qualifies as actual failover
+                # only when the succeeding ref differs (provider or model) from
+                # every failed ref.  An identical provider+model retry is a retry,
+                # not a failover — it violates the PR contract that actual
+                # fallback requires a *subsequent provider/route* success.
+                # Cross-route fallback (fallback_reason passed from the caller,
+                # e.g. active→LKG) is always actual regardless of ref identity.
+                distinct_within_route = any(
+                    failed.provider != provider_ref.provider or failed.model != provider_ref.model
+                    for failed in failed_provider_refs
+                )
+                actual_fallback = current_fallback_reason is not None and (
+                    fallback_reason is not None or distinct_within_route
+                )
                 return _executor_result(
                     response,
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
-                    fallback_used=current_fallback_reason is not None,
-                    fallback_reason=current_fallback_reason,
+                    fallback_used=actual_fallback,
+                    fallback_reason=current_fallback_reason if actual_fallback else None,
                     fallback_from_route_artifact_id=(
                         fallback_from_route_artifact_id
                         if fallback_from_route_artifact_id is not None
-                        else route.route_artifact_id if current_fallback_reason is not None else None
+                        else route.route_artifact_id if actual_fallback else None
                     ),
                     used_lkg=is_lkg,
                 )
 
         last_error = error
+        failed_provider_refs.append(provider_ref)
         if index == len(refs) - 1 or not _can_try_next_provider(route, error.failure_class):
             raise error
         current_fallback_reason = error.failure_class

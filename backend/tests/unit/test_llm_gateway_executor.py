@@ -318,6 +318,37 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
 
 
 @pytest.mark.asyncio
+async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
+    """A within-route fallback to the same provider+model is a retry, not a
+    distinct provider/route failover, and must not be classified as
+    ACTUAL_FALLBACK — per the PR behavioral contract that actual fallback
+    requires a *subsequent provider/route* success."""
+    identical_ref = ProviderRef(provider='openai', model='gpt-5.6-luna')
+    config = config_with_active_route(active_route_with_fallbacks([identical_ref]))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(identical_ref, content='{"answer":"retry"}'),
+        ]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_model == 'gpt-5.6-luna'
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
+    assert result.route_serving_class == RouteServingClass.ACTIVE
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'failure_class,error_type',
     [
