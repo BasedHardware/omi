@@ -590,6 +590,7 @@ def _chat_message(text, sender='human'):
         text=text,
         created_at=datetime(2026, 7, 28, 8, 53, tzinfo=timezone.utc),
         files_id=[],
+        from_external_integration=False,
     )
 
 
