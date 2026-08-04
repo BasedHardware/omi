@@ -111,6 +111,7 @@
       "checks": [],
       "invariants": [
         "stable never resolves or downloads a beta release",
+        "appcast never exposes an untagged item when only beta resolves (#9528)",
         "validated pointer LKG precedes exact-channel legacy fallback",
         "immutable manifests are registered before atomic pointer promotion",
         "beta visibility requires exact-tag T2 qualification evidence"
