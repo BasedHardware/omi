@@ -204,16 +204,17 @@ type BoundaryInput = { predicate: string; arguments: readonly { slot_id: string;
  * sha256 topic refs and `source-local:` argument values. None of it is
  * readable, and a sufficiency judgment made over ids is made over nothing. */
 const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
-  task: "Judge whether this remembered fact still carries the referents, roles, and time it needs to be understood months from now.",
+  task: "Judge whether this fact is standing knowledge worth keeping months from now — not merely whether the excerpt is locally intelligible.",
   fact: { relation: input.predicate, roles: input.arguments.map((argument) => ({ role: argument.role, filler: argument.surface ?? (argument.value.kind === "literal" ? String(argument.value.value) : "unresolved reference") })), ambiguity_markers: input.ambiguity_markers },
   excerpts: input.source_excerpts.map((item) => item.excerpt),
   output_contract: { decision: "accept_ltm|abstain", risk_markers: ["string (optional)"] },
   rules: [
     "Return JSON only, with exactly the output_contract shape and no Markdown or prose.",
-    "This is a semantic sufficiency judgment under D44, not a length threshold. Judge only whether the excerpts above preserve the necessary referents, roles, and time.",
-    "Return decision=accept_ltm when the excerpts do name who/what the fact is about and when it holds, even if they are brief. Return decision=abstain when a referent, role, or time needed to understand it later is missing from them.",
-    "Abstain means the context is missing, not that you are cautious. Abstaining on a self-contained excerpt discards a real memory permanently, which is a failure of the same size as admitting an unintelligible one.",
-    "risk_markers is optional and may describe insufficiency risks. It is advisory only: downstream derives new_entity and resolved_pronoun from graph state, not this response.",
+    "This is a durability judgment for long-term memory, not a length threshold. Prefer accept_ltm for durable owner/self facts, stable preferences, relationships, and standing world facts whose referents and time survive outside this session.",
+    "Return decision=abstain for session residue: finished micro-tasks, transient logistics, ambient bystander chatter that is not standing knowledge about the owner, or facts whose referents/roles/time are missing from the excerpts.",
+    "ambiguity_markers such as one_off or hedged are strong abstain signals unless the excerpts clearly state a durable fact.",
+    "Abstaining on a self-contained durable fact discards a real memory permanently — same severity as admitting sludge. When unsure between standing knowledge and session residue, abstain.",
+    "risk_markers is optional and may describe insufficiency or residue risks. It is advisory only: downstream derives new_entity and resolved_pronoun from graph state, not this response.",
   ],
 }, null, 2);
 
@@ -601,7 +602,7 @@ export const EDGES = {
   [entityStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntity(input as EntityResolutionRequest), parse: (content, input) => parseEntityProposal(content, input as EntityResolutionRequest) },
   [mentionStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForMention(input as MentionDetectionRequest), parse: (content, input) => parseMentionResponse(content, input as MentionDetectionRequest) },
   [scopeStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForScope(input as ScopeRoleRequest), parse: (content, input) => parseScopeResponse(content, input as ScopeRoleRequest) },
-  [boundaryStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
+  [boundaryStrategy]: { versions: new Set(["v2"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
   [groundedStrategy]: { versions: null, prompt: (input) => typeof (input as { prompt?: unknown }).prompt === "string" ? (input as { prompt: string }).prompt : JSON.stringify(input), parse: (content) => parseGroundedResponse(content) },
   [identityStrategy]: { versions: new Set(["dream-identity-v1"]), prompt: (input) => promptForIdentityAdjudication(input as { profiles?: readonly ReferentProfile[] }), parse: (content, input) => parseIdentityAdjudication(content, input as { profiles?: readonly ReferentProfile[] }) },
   [identityVerifyStrategy]: { versions: new Set(["dream-identity-verify-v2"]), prompt: (input) => promptForIdentityVerification(input as { who?: string | null; profiles?: readonly ReferentProfile[] }), parse: (content) => parseIdentityVerification(content) },

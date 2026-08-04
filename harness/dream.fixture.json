@@ -1,6 +1,6 @@
 {
   "owner_account_id": "dream-owner",
-  "source_trust": "synthetic",
+  "source_trust": "imported_unverified",
   "event_kind": "synthetic.chat/utterance",
   "adapter": { "producer_ref": "synthetic", "contract_ref": "synthetic-v1", "namespace_instance_ref": "device", "asserted_identity_domain": "person", "scope_ref": "dream-owner", "issuer_ref": "issuer", "authority_policy_version": "v1" },
   "sessions": [

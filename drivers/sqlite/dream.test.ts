@@ -39,9 +39,30 @@ const seed = async (ledger: SqliteLedger, claims: readonly ReturnType<typeof see
   await ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: Object.fromEntries(claims.map((item) => [item.provisional.claim_revision_id, item.canonical.claim_revision_id])), results: claims.map((item) => ({ input_provisional_revision_id: item.provisional.claim_revision_id, disposition: "admit" as const, operation: null })) }, derivation, revisions, adjacency: [], artifacts: claims.map((item) => ({ artifact_id: `auto-placement:${item.provisional.claim_revision_id}`, kind: "auto_placement_log" as const, provisional_revision_id: item.provisional.claim_revision_id, canonical_claim_revision_id: item.canonical.claim_revision_id, margin: null, risk_markers: [], unit_boundary_decision: "accept_ltm" as const, scope_locality: "source_local" as const })) });
 };
 
+const dreamModel = (cycleId: string, groups: readonly (readonly string[])[], overrides: {
+  boundary?: "accept_ltm" | "abstain";
+  scopeLocality?: "durable" | "source_local" | null;
+  onBoundary?: () => void;
+} = {}) => new DeterministicFakeModel((request) => {
+  if (request.strategy === "identity-adjudication") return { partition_hash: cycleId, same_groups: groups, uncertain_pairs: [] };
+  if (request.strategy === "identity-verification") return { verdict: "same", who: "the recurring referent" };
+  if (request.strategy === "identity-naming-check") return { names_specific_referent: true };
+  if (request.strategy === "speaker-self-reference") return { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) };
+  if (request.strategy === "stm-ltm-unit-boundary") {
+    overrides.onBoundary?.();
+    return overrides.boundary === "abstain" ? { decision: "abstain", reason: "fixture abstain" } : { decision: "accept_ltm" };
+  }
+  if (request.strategy === "scope-role-binding") {
+    return overrides.scopeLocality === null
+      ? { bindings: {}, scope: null }
+      : { bindings: {}, scope: { locality: overrides.scopeLocality ?? "durable", scope_ref: "fixture:scope" } };
+  }
+  return { assertions: [] };
+});
+
 const cycle = (db: Database, ledger: SqliteLedger, cycleId: string, groups: readonly (readonly string[])[]) => runSqliteDreamCycle({
   db, ledger, owner_account_id: owner, stm_items: [], stm_mentions: [], cycle_id: cycleId, trigger_kind: "idle",
-  model: new DeterministicFakeModel((request) => request.strategy === "identity-adjudication" ? { partition_hash: cycleId, same_groups: groups, uncertain_pairs: [] } : request.strategy === "identity-verification" ? { verdict: "same", who: "the recurring referent" } : request.strategy === "identity-naming-check" ? { names_specific_referent: true } : request.strategy === "speaker-self-reference" ? { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) } : { assertions: [] }),
+  model: dreamModel(cycleId, groups),
 });
 
 test("dream commits a reprojectable merge atomically and reaches its claim from the durable entity", async () => {
@@ -268,4 +289,89 @@ test("a terminally processed partition is recorded, preserving the variance guar
   const report = await cycle(db, ledger, "terminal-1", [[left.mention.mention_id, right.mention.mention_id]]);
   expect(report).toMatchObject({ committed_merges: 1, skipped_merges: [] });
   expect(db.query("SELECT COUNT(*) AS count FROM dream_partition_history").get()).toEqual({ count: 1 });
+});
+
+const stmItem = (id: string, overrides: {
+  labels?: readonly string[];
+  source_trust?: string;
+  observed_speaker_slot_id?: string | null;
+  local_key?: string;
+} = {}) => {
+  const base = seedClaim(id, false);
+  const evidence = { ...base.evidence, source_trust: overrides.source_trust ?? "test", source_identity_ref: { ...base.evidence.source_identity_ref!, local_key: overrides.local_key ?? base.evidence.source_identity_ref!.local_key } };
+  const claim = {
+    ...base.provisional,
+    policy_labels: [...(overrides.labels ?? [])],
+    observed_speaker_slot_id: overrides.observed_speaker_slot_id === undefined ? "subject" : overrides.observed_speaker_slot_id,
+    evidence_refs: [evidence.evidence_id],
+  };
+  return {
+    id: claim.claim_revision_id,
+    session_id: `session:${id}`,
+    event_time_watermark: "2026-01-01T00:00:00Z",
+    capture_sequence: 0,
+    revision_lineage: "r1",
+    ingest_sequence: 0,
+    entity_refs: [],
+    lexical_terms: [id],
+    vector_key: id,
+    predicate_id: claim.predicate,
+    bytes: 32,
+    claim,
+    evidence: [evidence],
+    argument_origins: { subject: "independent" as const },
+    settled_window_id: "w1",
+  };
+};
+
+const promoteCycle = (db: Database, ledger: SqliteLedger, cycleId: string, items: readonly ReturnType<typeof stmItem>[], overrides: Parameters<typeof dreamModel>[2] = {}) =>
+  runSqliteDreamCycle({
+    db, ledger, owner_account_id: owner, stm_items: items, stm_mentions: [], cycle_id: cycleId, trigger_kind: "end_of_stream",
+    model: dreamModel(cycleId, [], overrides),
+  });
+
+test("promotion defers on boundary abstain and consumes the STM item once", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("boundary-abstain", { labels: ["subject:owner"] });
+  let boundaryCalls = 0;
+  const first = await promoteCycle(db, ledger, "promo-abstain-1", [item], { boundary: "abstain", onBoundary: () => { boundaryCalls += 1; } });
+  expect(first).toMatchObject({ promoted: 0, deferred: [item.id] });
+  expect(ledger.isProvisionalConsumed(item.claim.claim_revision_id)).toBe(true);
+  expect(boundaryCalls).toBe(1);
+
+  const second = await promoteCycle(db, ledger, "promo-abstain-2", [item], { boundary: "accept_ltm", onBoundary: () => { boundaryCalls += 1; } });
+  expect(second.promoted).toBe(0);
+  expect(boundaryCalls).toBe(1);
+  expect(db.query("SELECT COUNT(*) AS count FROM derivation_commits WHERE idempotency_key = ?").get(`dream-promotion:${owner}:${item.id}`)).toEqual({ count: 1 });
+});
+
+test("promotion admits owner + accept_ltm + durable scope", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("promo-admit", { labels: ["subject:owner"] });
+  const report = await promoteCycle(db, ledger, "promo-admit-1", [item], { boundary: "accept_ltm", scopeLocality: "durable" });
+  expect(report).toMatchObject({ promoted: 1, deferred: [] });
+  expect(ledger.snapshot(owner).claims.some((row) => row.claim.lifecycle === "canonical" && row.claim.source_provisional_revision_ids.includes(item.claim.claim_revision_id))).toBe(true);
+});
+
+test("promotion defers bystander without calling boundary", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("promo-bystander", { labels: ["subject:bystander"] });
+  let boundaryCalls = 0;
+  const report = await promoteCycle(db, ledger, "promo-bystander-1", [item], { onBoundary: () => { boundaryCalls += 1; } });
+  expect(report).toMatchObject({ promoted: 0, deferred: [item.id] });
+  expect(boundaryCalls).toBe(0);
+});
+
+test("promotion admits trusted import without subject:owner", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("promo-trust", { labels: ["subject:generic"], source_trust: "user_asserted" });
+  const report = await promoteCycle(db, ledger, "promo-trust-1", [item], { boundary: "accept_ltm", scopeLocality: "durable" });
+  expect(report).toMatchObject({ promoted: 1, deferred: [] });
+});
+
+test("promotion defers when scope locality is source_local", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("promo-local", { labels: ["subject:owner"] });
+  const report = await promoteCycle(db, ledger, "promo-local-1", [item], { boundary: "accept_ltm", scopeLocality: "source_local" });
+  expect(report).toMatchObject({ promoted: 0, deferred: [item.id] });
 });

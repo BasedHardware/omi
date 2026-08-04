@@ -9,10 +9,17 @@ import { SqliteLedger } from "../drivers/sqlite";
 import { SqliteStmStore } from "../drivers/sqlite/stm";
 import { validateGraphBrowserExport } from "./graph-export";
 import { selectModel } from "./model-select";
-import { runPipeline } from "./run-pipeline";
+import { runPipeline, subjectPolicyLabels } from "./run-pipeline";
 
 const fixture = new URL("./corpus.fixture.json", import.meta.url).pathname;
 const dbPath = (prefix = "omi-stage-") => join(mkdtempSync(join(tmpdir(), prefix)), "run.db");
+
+test("subjectPolicyLabels marks owner self-reference, bystander, and generic", () => {
+  const claim = { observed_speaker_slot_id: "speaker", arguments: [{ slot_id: "speaker" }, { slot_id: "person" }], evidence_refs: ["e1"] };
+  expect(subjectPolicyLabels(claim, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:owner"]);
+  expect(subjectPolicyLabels(claim, [{ evidence_id: "e1", source_identity_ref: { local_key: "speaker:s1:0" } }])).toEqual(["subject:bystander"]);
+  expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:generic"]);
+});
 
 test("pipeline runs each selected session once with deterministic fake extraction", async () => {
   const result = await runPipeline([fixture, "--db", dbPath(), "--batch", "4", "--max-sessions", "4"]);
@@ -128,4 +135,41 @@ test("dream calls the selected identity and predicate model edges", async () => 
     selectDreamModel: (hermetic) => ({ live: false, model: { invoke: (request) => { strategies.push(request.strategy); return hermetic.invoke(request); }, render: (request) => hermetic.render(request), compose: (request) => hermetic.compose(request) } }),
   });
   expect(strategies).toEqual(expect.arrayContaining(["identity-adjudication", "predicate-alignment"]));
+});
+
+test("is_actor_user beats person_id so owner self-refs clear the promote bar", async () => {
+  const path = dbPath("omi-owner-key-");
+  const result = await runPipeline([fixture, "--db", path, "--max-sessions", "1"]);
+  expect(result.dream_failures).toEqual([]);
+  const stm = new SqliteStmStore(new Database(path));
+  const ownerKeys = stm.all().flatMap((item) => item.evidence.map((evidence) => evidence.source_identity_ref?.local_key));
+  expect(ownerKeys).toContain("person:owner");
+  expect(ownerKeys).not.toContain("person:owner-42");
+  expect(stm.all().some((item) => item.claim.policy_labels.includes("subject:owner"))).toBe(true);
+  const canonical = new SqliteLedger(new Database(path)).snapshot("synthetic-owner").claims.filter((item) => item.claim.lifecycle === "canonical");
+  expect(canonical.length).toBeGreaterThan(0);
+});
+
+test("manual note and imported document enter STM then dream with trust-based admit", async () => {
+  const multiOrigin = new URL("./multi-origin.fixture.json", import.meta.url).pathname, path = dbPath("omi-multi-origin-");
+  const result = await runPipeline([multiOrigin, "--db", path]);
+  expect(result.dream_failures).toEqual([]);
+  expect(result.dream_cycles).toBeGreaterThan(0);
+  const db = new Database(path);
+  const stm = new SqliteStmStore(db);
+  expect(stm.all().length).toBeGreaterThan(0);
+  expect(stm.unconsumed()).toEqual([]);
+  const trusts = new Set(stm.all().flatMap((item) => item.evidence.map((evidence) => evidence.source_trust)));
+  expect(trusts.has("user_asserted")).toBe(true);
+  expect(trusts.has("imported_unverified")).toBe(true);
+  const kinds = (db.query("SELECT content_json FROM event_revisions").all() as { content_json: string }[])
+    .map((row) => JSON.parse(row.content_json).event_kind);
+  expect(kinds).toEqual(expect.arrayContaining(["capture.manual/note", "capture.import/document"]));
+  const snapshot = new SqliteLedger(db).snapshot("multi-origin-owner");
+  const canonical = snapshot.claims.filter((item) => item.claim.lifecycle === "canonical");
+  expect(canonical.length).toBeGreaterThan(0);
+  expect(canonical.some((item) => item.claim.evidence_refs.some((ref) => {
+    const evidence = snapshot.evidence?.find((row) => row.evidence.evidence_id === ref);
+    return evidence?.evidence.source_trust === "user_asserted";
+  }))).toBe(true);
 });

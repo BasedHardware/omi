@@ -18,7 +18,7 @@ import { selectDreamModel, selectModel, type ModelSelection } from "./model-sele
 
 type Adapter = { producer_ref: string; contract_ref: string; namespace_instance_ref: string; asserted_identity_domain: string | null; scope_ref: string | null; issuer_ref: string; authority_policy_version: string };
 type Segment = { event_id: string; text: string; start_at: string; speaker_label: string | null; speaker_id: string; is_actor_user?: boolean | null; person_id?: string | null; revision_lineage: string; ingest_sequence: number; settled_window_id: string };
-type Session = { session_id: string; capture_sequence: number; revision_lineage: string; ingest_sequence: number; settled_window_id: string; adapter?: Adapter; segments: readonly Segment[] };
+type Session = { session_id: string; capture_sequence: number; revision_lineage: string; ingest_sequence: number; settled_window_id: string; adapter?: Adapter; source_trust?: string; event_kind?: string; segments: readonly Segment[] };
 type Corpus = { owner_account_id: string; adapter: Adapter; source_trust?: string; event_kind?: string; sessions: readonly Session[] };
 
 const digest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -33,16 +33,16 @@ const readCorpus = (path: string): Corpus => {
   return corpus as Corpus;
 };
 
-// Identity coordinates, most durable first: a producer-resolved person_id is
-// global; the owner flag is producer-asserted at capture (device login) and
-// therefore global; a bare diarization channel is meaningful only within its
-// own session, so it is session-scoped -- "speaker:2" recurring tomorrow is a
-// different throat, and an unscoped key would silently assert otherwise.
-const sourceIdentity = (adapter: Adapter, session_id: string, segment: Segment) => ({ namespace_instance_ref: adapter.namespace_instance_ref, local_key: segment.person_id ? `person:${segment.person_id}` : segment.is_actor_user ? "person:owner" : `speaker:${session_id}:${segment.speaker_id}`, producer: { producer_ref: adapter.producer_ref, contract_ref: adapter.contract_ref }, asserted_identity: { domain: adapter.asserted_identity_domain, scope_ref: adapter.scope_ref } });
+// Identity coordinates: owner attestation wins over person_id (matches
+// coldrun_adapter / D-b subject:owner). A bare diarization channel is
+// session-scoped — "speaker:2" tomorrow is a different throat.
+const sourceIdentity = (adapter: Adapter, session_id: string, segment: Segment) => ({ namespace_instance_ref: adapter.namespace_instance_ref, local_key: segment.is_actor_user ? "person:owner" : segment.person_id ? `person:${segment.person_id}` : `speaker:${session_id}:${segment.speaker_id}`, producer: { producer_ref: adapter.producer_ref, contract_ref: adapter.contract_ref }, asserted_identity: { domain: adapter.asserted_identity_domain, scope_ref: adapter.scope_ref } });
 
 const ingest = async (ledger: SqliteLedger, corpus: Corpus, session: Session, parent_commit: string | null) => {
   const adapter = session.adapter ?? corpus.adapter;
-  const ingested = ingestConversation({ owner_account_id: corpus.owner_account_id, capture_session_id: session.session_id, stream_id: "stage-a", source_trust: corpus.source_trust, event_kind: corpus.event_kind, payload_schema_ref: corpus.event_kind, utterances: session.segments.map((segment) => ({ source_unit_ref: segment.event_id, speaker_rendering: segment.speaker_label ?? (segment.is_actor_user ? "owner" : `speaker ${segment.speaker_id}`), source_identity_ref: sourceIdentity(adapter, session.session_id, segment), mention_ref: segment.speaker_id, text: segment.text, event_time: segment.start_at })) });
+  const source_trust = session.source_trust ?? corpus.source_trust;
+  const event_kind = session.event_kind ?? corpus.event_kind;
+  const ingested = ingestConversation({ owner_account_id: corpus.owner_account_id, capture_session_id: session.session_id, stream_id: "stage-a", source_trust, event_kind, payload_schema_ref: event_kind, utterances: session.segments.map((segment) => ({ source_unit_ref: segment.event_id, speaker_rendering: segment.speaker_label ?? (segment.is_actor_user ? "owner" : `speaker ${segment.speaker_id}`), source_identity_ref: sourceIdentity(adapter, session.session_id, segment), mention_ref: segment.speaker_id, text: segment.text, event_time: segment.start_at })) });
   const events = ingested.events.map((event, index) => ({ ...event, event_id: session.segments[index]!.event_id, source_sequence: session.segments[index]!.ingest_sequence, payload: { ...event.payload, is_actor_user: session.segments[index]!.is_actor_user ?? null, person_id: session.segments[index]!.person_id ?? null, adapter } }));
   const revisions: AtomicGraphTransition["revisions"] = [
     ...events.map((event) => ({ kind: "event" as const, revision_id: event.event_revision_id, event })),
@@ -62,13 +62,32 @@ const syntheticClaims = (evidence: readonly ReturnType<typeof ingestConversation
   return { relation: `utterance.${speaker.toLocaleLowerCase()}`, arguments: arguments_, polarity: /\bnot\b/i.test(item.excerpt!) ? "negative" as const : "positive" as const, temporal_expression: { kind: "absolute" as const, granularity: "instant" as const, value: item.event_revision_id }, evidence: label, observed_speaker_slot_id: "speaker" };
 });
 
-const itemFor = (session: Session, claim: ReturnType<typeof materializeGroundedProvisional>, evidence: readonly ReturnType<typeof ingestConversation>["evidence"][number][], argument_origins: Readonly<Record<string, "suggested" | "independent">>): DurableStmItem => ({
-  id: claim.claim_revision_id, session_id: session.session_id, event_time_watermark: claim.temporal_scope.observed_at,
-  capture_sequence: session.capture_sequence, revision_lineage: session.revision_lineage, ingest_sequence: session.ingest_sequence,
-  entity_refs: [...new Set(claim.arguments.flatMap((argument) => argument.value.kind === "source_local_ref" ? [argument.value.ref] : []))],
-  lexical_terms: terms(`${claim.predicate} ${claim.arguments.map((argument) => argument.surface ?? "").join(" ")}`), vector_key: digest(claim.predicate),
-  predicate_id: claim.predicate, bytes: JSON.stringify(claim).length, claim, evidence, argument_origins, settled_window_id: session.settled_window_id,
-});
+/** Deterministic subject class: owner fills a claim role via self-reference on person:owner evidence. */
+export const subjectPolicyLabels = (
+  claim: { observed_speaker_slot_id?: string | null; arguments: readonly { slot_id: string }[]; evidence_refs: readonly string[] },
+  evidence: readonly { evidence_id: string; source_identity_ref?: { local_key: string } | null }[],
+): readonly string[] => {
+  const speakerSlot = claim.observed_speaker_slot_id;
+  if (!speakerSlot || !claim.arguments.some((argument) => argument.slot_id === speakerSlot)) return ["subject:generic"];
+  const byId = new Map(evidence.map((item) => [item.evidence_id, item]));
+  for (const ref of claim.evidence_refs) {
+    const key = byId.get(ref)?.source_identity_ref?.local_key;
+    if (key === "person:owner") return ["subject:owner"];
+    if (key) return ["subject:bystander"];
+  }
+  return ["subject:generic"];
+};
+
+const itemFor = (session: Session, claim: ReturnType<typeof materializeGroundedProvisional>, evidence: readonly ReturnType<typeof ingestConversation>["evidence"][number][], argument_origins: Readonly<Record<string, "suggested" | "independent">>): DurableStmItem => {
+  const labeled = { ...claim, policy_labels: [...subjectPolicyLabels(claim, evidence)] };
+  return {
+    id: labeled.claim_revision_id, session_id: session.session_id, event_time_watermark: labeled.temporal_scope.observed_at,
+    capture_sequence: session.capture_sequence, revision_lineage: session.revision_lineage, ingest_sequence: session.ingest_sequence,
+    entity_refs: [...new Set(labeled.arguments.flatMap((argument) => argument.value.kind === "source_local_ref" ? [argument.value.ref] : []))],
+    lexical_terms: terms(`${labeled.predicate} ${labeled.arguments.map((argument) => argument.surface ?? "").join(" ")}`), vector_key: digest(labeled.predicate),
+    predicate_id: labeled.predicate, bytes: JSON.stringify(labeled).length, claim: labeled, evidence, argument_origins, settled_window_id: session.settled_window_id,
+  };
+};
 
 /**
  * Production does not discard a person's memories because one call failed, so
@@ -145,7 +164,20 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
 
   const dreamOnce = async (triggerKind: "volume" | "idle" | "end_of_stream", windowLabel: string): Promise<void> => {
     cycleCounter += 1;
-    const hermetic = { async invoke(request: { strategy: string; input: unknown }) { if (request.strategy === "predicate-alignment") return { assertions: [] }; if (request.strategy === "identity-verification") return { verdict: "same", who: (request.input as { surfaces?: readonly string[] }).surfaces?.[0] ?? null }; if (request.strategy === "identity-naming-check") return { names_specific_referent: true }; if (request.strategy === "speaker-self-reference") return { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) }; const profiles = (request.input as { profiles?: Parameters<typeof proposeProfileOverlaps>[0] }).profiles ?? []; return { same_groups: proposeProfileOverlaps(profiles).slice(0, 1), uncertain_pairs: [] }; }, async render() { return { summary_text: "", citations: [] }; }, async compose() { return { answer_text: "", citations: [], assertions: [] }; } };
+    const hermetic = {
+      async invoke(request: { strategy: string; input: unknown }) {
+        if (request.strategy === "predicate-alignment") return { assertions: [] };
+        if (request.strategy === "stm-ltm-unit-boundary") return { decision: "accept_ltm" };
+        if (request.strategy === "scope-role-binding") return { bindings: {}, scope: { locality: "durable", scope_ref: "hermetic:durable" } };
+        if (request.strategy === "identity-verification") return { verdict: "same", who: (request.input as { surfaces?: readonly string[] }).surfaces?.[0] ?? null };
+        if (request.strategy === "identity-naming-check") return { names_specific_referent: true };
+        if (request.strategy === "speaker-self-reference") return { self_referring: ((request.input as { phrases?: readonly string[] }).phrases ?? []).map(() => true) };
+        const profiles = (request.input as { profiles?: Parameters<typeof proposeProfileOverlaps>[0] }).profiles ?? [];
+        return { same_groups: proposeProfileOverlaps(profiles).slice(0, 1), uncertain_pairs: [] };
+      },
+      async render() { return { summary_text: "", citations: [] }; },
+      async compose() { return { answer_text: "", citations: [], assertions: [] }; },
+    };
     const selection = dependencies.selectDreamModel?.(hermetic) ?? selectDreamModel(options, hermetic);
     // Provenance must name the model that actually adjudicated this cycle:
     // live GLM runs stamp the live model id, hermetic runs stamp the fake.
@@ -153,19 +185,20 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
     // A consolidation failure costs you consolidation, not the extraction run.
     // Dream is the experimental half; committed memories must not be discarded
     // because one merge could not satisfy the ledger.
+    let deferredIds: readonly string[] = [];
     try {
-      await runSqliteDreamCycle({ db, ledger, owner_account_id: corpus.owner_account_id, stm_items: stm.unconsumed(), stm_mentions: stm.mentions(), model: selection.model, cycle_id: `cycle:${cycleCounter}:${windowLabel}`, trigger_kind: triggerKind, model_version: modelVersion });
+      const report = await runSqliteDreamCycle({ db, ledger, owner_account_id: corpus.owner_account_id, stm_items: stm.unconsumed(), stm_mentions: stm.mentions(), model: selection.model, cycle_id: `cycle:${cycleCounter}:${windowLabel}`, trigger_kind: triggerKind, model_version: modelVersion });
+      deferredIds = report.deferred;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       dreamFailures.push({ cycle: cycleCounter, reason });
       console.error(`dream cycle ${cycleCounter} failed: ${reason}`);
     }
     dreamCycles += 1;
-    // DRAIN: the ledger's consumed markers are the authority on which
-    // provisional claims a cycle promoted; tombstone exactly those items and
-    // recompute the watermark from what remains, so a later volume trigger can
-    // genuinely fire again instead of being pinned above the low watermark.
-    stm.consume(stm.unconsumed().filter((item) => ledger.isProvisionalConsumed(item.claim.claim_revision_id)).map((item) => item.id));
+    // DRAIN: ledger consumed markers cover admits + deferred commits; report.deferred
+    // also covers crash-recovery skips that already had an idempotency commit.
+    const deferred = new Set(deferredIds);
+    stm.consume(stm.unconsumed().filter((item) => ledger.isProvisionalConsumed(item.claim.claim_revision_id) || deferred.has(item.id)).map((item) => item.id));
     lastTriggerTokens = stm.unconsumed().reduce((sum, item) => sum + item.bytes, 0);
     parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
   };

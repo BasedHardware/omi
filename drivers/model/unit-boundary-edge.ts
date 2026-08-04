@@ -16,7 +16,7 @@ export const buildUnitBoundaryRequest = (claim: ProvisionalClaim, evidence: read
 
 export const invokeUnitBoundaryStrategy = async (port: ModelPort, claim: ProvisionalClaim, evidence: readonly Evidence[]): Promise<UnitBoundaryJudgment> => {
   const input = buildUnitBoundaryRequest(claim, evidence);
-  const judged = await port.invoke({ strategy: "stm-ltm-unit-boundary", version: "v1", input: {
+  const judged = await port.invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: {
     ...input,
   } });
   if (typeof judged !== "object" || judged === null || !["accept_ltm", "abstain"].includes((judged as { decision?: unknown }).decision as string)) throw new Error("invalid STM/LTM unit-boundary model judgment");

@@ -9,21 +9,28 @@ import { validateAndAllocatePlacement } from "../../core/consolidate/plan";
 import { reprojectBoundClaims, reprojectionWitnesses, type ReprojectionBinding } from "../../core/consolidate/reprojection";
 import { invokePredicateAlignment } from "../../core/consolidate/relations";
 import { diffGraphSnapshots, liveCommittedClaims, type GraphSnapshot } from "../../core/retrieve";
-import type { IdentityAuthorization, IdentityConstraint, Mention } from "../../core/schema";
+import type { Entity, IdentityAuthorization, IdentityConstraint, Mention } from "../../core/schema";
+import { invokeScopeStrategy } from "../model/scope-edge";
+import { invokeUnitBoundaryStrategy } from "../model/unit-boundary-edge";
 import type { ModelPort } from "../model/port";
 import type { DurableStmItem } from "./stm";
 import { SqliteLedger } from "./index";
 
 export const DEFAULT_DREAM_MODEL_VERSION = "deterministic-fake-v1";
+export const TRUSTED_SOURCE_TRUST = new Set(["user_asserted", "imported_unverified"]);
 // model_version is provenance, not decoration: a live-adjudicated commit must
 // not claim the deterministic fake produced it.
 const versionsFor = (model_version: string) => ({ strategy_version: "dream-consolidation-v1", model_version, prompt_version: "dream-v1", policy_version: "d50-v1", code_version: "dream-v1", schema_version: "stage-b2-v1", tokenizer_version: "none", tool_version: "dream-v1" });
 const instant = (at: string) => ({ typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: at }, resolved_interval: { kind: "instant" as const, start: at, end: at, timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "dream-promotion-v1", timezone: "UTC" } });
 const payload = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "mention" ? revision.mention : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "predicate" ? revision.predicate : revision.kind === "predicate_assertion" ? revision.assertion : revision.support;
+const promotionIdempotencyKey = (owner: string, itemId: string) => `dream-promotion:${owner}:${itemId}`;
+const passesSubjectOrTrust = (item: DurableStmItem): boolean =>
+  item.claim.policy_labels.includes("subject:owner")
+  || item.evidence.some((evidence) => TRUSTED_SOURCE_TRUST.has(evidence.source_trust));
 
 /** retryable is set on freshly produced skips; rows re-read from the audit table omit it. */
 export interface DreamMergeSkip { group_mention_ids: readonly string[]; reason: string; retryable?: boolean; }
-export interface DreamCycleReport { cycle_id: string; promoted: number; reprojected: number; committed_merges: number; skipped_merges: readonly DreamMergeSkip[]; trajectory: ReturnType<typeof diffGraphSnapshots>; }
+export interface DreamCycleReport { cycle_id: string; promoted: number; deferred: readonly string[]; reprojected: number; committed_merges: number; skipped_merges: readonly DreamMergeSkip[]; trajectory: ReturnType<typeof diffGraphSnapshots>; }
 
 /** The few dream records worth keeping across a run. */
 export class SqliteDreamStore {
@@ -45,30 +52,113 @@ export class SqliteDreamStore {
   trajectories(owner: string): readonly { cycle_id: string; trajectory: ReturnType<typeof diffGraphSnapshots> }[] { return (this.db.query("SELECT cycle_id, trajectory_json FROM dream_cycles WHERE owner_account_id=? ORDER BY cycle_id").all(owner) as { cycle_id: string; trajectory_json: string }[]).map((row) => ({ cycle_id: row.cycle_id, trajectory: JSON.parse(row.trajectory_json) })); }
 }
 
-const promotionTransition = async (ledger: SqliteLedger, owner: string, items: readonly DurableStmItem[], cycleId: string, versions: ReturnType<typeof versionsFor>): Promise<number> => {
+const promotionTransition = async (input: {
+  ledger: SqliteLedger;
+  owner: string;
+  items: readonly DurableStmItem[];
+  cycleId: string;
+  versions: ReturnType<typeof versionsFor>;
+  model: ModelPort;
+  entities: readonly Entity[];
+}): Promise<{ promoted: number; deferred: readonly string[] }> => {
   let promoted = 0;
-  for (const item of items) {
-    if (ledger.isProvisionalConsumed(item.claim.claim_revision_id)) continue;
+  const deferred: string[] = [];
+  for (const item of input.items) {
+    if (input.ledger.isProvisionalConsumed(item.claim.claim_revision_id)) {
+      deferred.push(item.id);
+      continue;
+    }
+    // Crash recovery: a prior cycle decided this item but died before STM drain.
+    // Do not re-invoke models — the idempotency key has no cycle component.
+    if (input.ledger.findCommitByIdempotencyKey(promotionIdempotencyKey(input.owner, item.id))) {
+      deferred.push(item.id);
+      continue;
+    }
+
     const sufficient = checkStmSufficiency(item.claim, item.evidence, item.claim.arguments.map((argument) => argument.slot_id));
-    const disposition = sufficient.ok ? "admit" as const : "defer_review" as const;
-    // This is deliberately a consolidation disposition plus sufficiency, not
-    // the old boundary/scope proxy. Source-local and literal arguments admit.
-    validateAndAllocatePlacement({ batch_id: `${cycleId}:${item.id}`, leased_inputs: [{ provisional_revision_id: item.claim.claim_revision_id, entity_id: null, proposition_key: item.claim.proposition_key_raw ?? item.claim.predicate, proposition_key_resolved: item.claim.proposition_key_resolved, alias_frontier_generation: item.claim.predicate_alias_frontier, review_attempt: 0, max_review_attempts: 1 }], snapshot: [], results: [{ input_provisional_revision_id: item.claim.claim_revision_id, disposition, operation: null, ...(disposition === "defer_review" ? { re_resolution_trigger: "new_evidence" } : {}) }] });
-    const canonicalId = `canonical:promotion:${sha256CanonicalRedacted({ cycleId, provisional: item.claim.claim_revision_id }).slice(0, 24)}`;
+    let disposition: "admit" | "defer_review" = "defer_review";
+    let trigger: "new_evidence" | "new_identity_evidence" | "boundary_reconsideration" | null = "new_evidence";
+    let unitBoundaryDecision: "accept_ltm" | "abstain" = "abstain";
+    let scopeLocality: "durable" | "source_local" | null = null;
+    let riskMarkers: ("new_entity" | "resolved_pronoun" | "low_margin")[] = [];
+
+    if (!sufficient.ok) {
+      // gate 1
+    } else if (!passesSubjectOrTrust(item)) {
+      trigger = "new_identity_evidence";
+    } else {
+      try {
+        const boundary = await invokeUnitBoundaryStrategy(input.model, item.claim, item.evidence);
+        unitBoundaryDecision = boundary.decision;
+        if (boundary.margin === "low") riskMarkers = ["low_margin"];
+        if (boundary.decision !== "accept_ltm") {
+          trigger = "boundary_reconsideration";
+        } else {
+          const scope = await invokeScopeStrategy(input.model, item.claim, input.entities, item.evidence);
+          scopeLocality = scope.scope?.locality ?? null;
+          if (scope.scope?.locality === "durable") {
+            disposition = "admit";
+            trigger = null;
+          } else {
+            trigger = "boundary_reconsideration";
+          }
+        }
+      } catch {
+        // Isolate flaky model calls: leave undecided for the next cycle.
+        continue;
+      }
+    }
+
+    validateAndAllocatePlacement({
+      batch_id: `${input.cycleId}:${item.id}`,
+      leased_inputs: [{ provisional_revision_id: item.claim.claim_revision_id, entity_id: null, proposition_key: item.claim.proposition_key_raw ?? item.claim.predicate, proposition_key_resolved: item.claim.proposition_key_resolved, alias_frontier_generation: item.claim.predicate_alias_frontier, review_attempt: 0, max_review_attempts: 1 }],
+      snapshot: [],
+      results: [{ input_provisional_revision_id: item.claim.claim_revision_id, disposition, operation: null, ...(trigger ? { re_resolution_trigger: trigger } : {}) }],
+    });
+    const canonicalId = `canonical:promotion:${sha256CanonicalRedacted({ cycleId: input.cycleId, provisional: item.claim.claim_revision_id }).slice(0, 24)}`;
     const provisional: ClaimRevision = { kind: "claim", revision_id: item.claim.claim_revision_id, claim: item.claim, placement_status: disposition === "admit" ? "consumed" : "provisional_abstained" };
     const canonical = disposition === "admit" ? (() => {
       const { ambiguity_markers: _ambiguity, context_packet: _context, ...base } = item.claim;
-      return { ...base, claim_revision_id: canonicalId, temporal_scope: { ...item.claim.temporal_scope, valid_time: instant(item.claim.temporal_scope.observed_at) }, lifecycle: "canonical" as const, canonical_claim_id: canonicalId, source_provisional_revision_ids: [item.claim.claim_revision_id] };
+      return { ...base, claim_revision_id: canonicalId, temporal_scope: { ...item.claim.temporal_scope, valid_time: instant(item.claim.temporal_scope.observed_at) }, lifecycle: "canonical" as const, canonical_claim_id: canonicalId, source_provisional_revision_ids: [item.claim.claim_revision_id], ...(scopeLocality ? { scope: { locality: scopeLocality, scope_ref: item.claim.scope.scope_ref } } : {}) };
     })() : null;
-    const predicate = item.claim.predicate_id ? [{ kind: "predicate" as const, revision_id: `${item.claim.predicate_id}:initial`, predicate: { predicate_id: item.claim.predicate_id, owner_account_id: owner, predicate_revision_id: `${item.claim.predicate_id}:initial`, identity_name: item.claim.predicate, display_name: item.claim.predicate, lifecycle: "canonical" as const, slot_ids: item.claim.arguments.map((argument) => argument.slot_id).sort() } }] : [];
+    const predicate = item.claim.predicate_id ? [{ kind: "predicate" as const, revision_id: `${item.claim.predicate_id}:initial`, predicate: { predicate_id: item.claim.predicate_id, owner_account_id: input.owner, predicate_revision_id: `${item.claim.predicate_id}:initial`, identity_name: item.claim.predicate, display_name: item.claim.predicate, lifecycle: "canonical" as const, slot_ids: item.claim.arguments.map((argument) => argument.slot_id).sort() } }] : [];
     const revisions: AtomicGraphTransition["revisions"] = [...predicate, provisional, ...(canonical ? [{ kind: "claim" as const, revision_id: canonicalId, claim: canonical, placement_status: "canonical" as const }] : [])];
-    // Stage A stores mentions separately; copy them from the durable STM store in the caller's cycle.
-    const head = ledger.graphHead(owner);
-    const derivation = prepareDerivation({ attempt_id: `dream-promotion-attempt:${cycleId}:${item.id}`, commit_id: `dream-promotion:${cycleId}:${item.id}`, owner_account_id: owner, parent_commit: head?.commit_id ?? null, idempotency_key: `dream-promotion:${owner}:${item.id}`, input_revisions: [{ revision_id: item.claim.claim_revision_id, content: item.claim }], output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: payload(revision) })), versions, success_kind: canonical ? "success" : "successful_empty" });
-    await ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: canonical ? { [item.claim.claim_revision_id]: canonicalId } : {}, results: [{ input_provisional_revision_id: item.claim.claim_revision_id, disposition, operation: null, ...(disposition === "defer_review" ? { re_resolution_trigger: "new_evidence" } : {}) }] }, derivation, revisions, adjacency: [], artifacts: [{ artifact_id: canonical ? `auto-placement:${item.claim.claim_revision_id}` : `abstention-set:${item.claim.claim_revision_id}`, kind: canonical ? "auto_placement_log" : "abstention_set", provisional_revision_id: item.claim.claim_revision_id, canonical_claim_revision_id: canonical ? canonicalId : null, margin: null, risk_markers: [], unit_boundary_decision: canonical ? "accept_ltm" : "abstain", scope_locality: canonical?.scope.locality ?? null }] });
+    const head = input.ledger.graphHead(input.owner);
+    const derivation = prepareDerivation({
+      attempt_id: `dream-promotion-attempt:${input.cycleId}:${item.id}`,
+      commit_id: `dream-promotion:${input.cycleId}:${item.id}`,
+      owner_account_id: input.owner,
+      parent_commit: head?.commit_id ?? null,
+      idempotency_key: promotionIdempotencyKey(input.owner, item.id),
+      input_revisions: [{ revision_id: item.claim.claim_revision_id, content: item.claim }],
+      output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: payload(revision) })),
+      versions: input.versions,
+      success_kind: canonical ? "success" : "successful_empty",
+    });
+    await input.ledger.appendTransitionPlan({
+      placement: {
+        offline_experiment: true,
+        allocations: canonical ? { [item.claim.claim_revision_id]: canonicalId } : {},
+        results: [{ input_provisional_revision_id: item.claim.claim_revision_id, disposition, operation: null, ...(trigger ? { re_resolution_trigger: trigger } : {}) }],
+      },
+      derivation,
+      revisions,
+      adjacency: [],
+      artifacts: [{
+        artifact_id: canonical ? `auto-placement:${item.claim.claim_revision_id}` : `abstention-set:${item.claim.claim_revision_id}`,
+        kind: canonical ? "auto_placement_log" : "abstention_set",
+        provisional_revision_id: item.claim.claim_revision_id,
+        canonical_claim_revision_id: canonical ? canonicalId : null,
+        margin: null,
+        risk_markers: riskMarkers,
+        unit_boundary_decision: unitBoundaryDecision,
+        scope_locality: scopeLocality,
+      }],
+    });
     if (canonical) promoted++;
+    else deferred.push(item.id);
   }
-  return promoted;
+  return { promoted, deferred };
 };
 
 const supportFor = (snapshot: GraphSnapshot, mention: Mention): import("../../core/resolve/identity-authority").ImmutableIdentitySupport | null => {
@@ -97,9 +187,20 @@ export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteL
     const proposal = await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [] });
     const predicateAssertions = await invokePredicateAlignment(input.model, (before.predicates ?? []).map((item) => item.predicate), String(before.graph_generation ?? 0));
     const gate = runDreamCycle({ cycle_id: input.cycle_id, facts, previous_split_keys: contradictions.map((item) => `${item.entity_id}:${item.claim_revision_ids.join(":")}`), proposals: [{ proposal_id: proposal.partition_hash, partition_hash: proposal.partition_hash, prior_partition_hash: state.priorPartitions(input.owner_account_id).includes(proposal.partition_hash) ? proposal.partition_hash : undefined, new_evidence: true }] });
-    // Promotion is intentionally not identity-gated: unresolved source-local
-    // and literal arguments become canonical, auditable inputs for next time.
-    const promoted = await promotionTransition(input.ledger, input.owner_account_id, input.stm_items, input.cycle_id, versions);
+    // Promotion is content-gated (sufficiency → subject/trust → boundary →
+    // durable scope) and intentionally not identity-gated: unresolved
+    // source-local arguments become canonical inputs for the next merge cycle.
+    const promotion = await promotionTransition({
+      ledger: input.ledger,
+      owner: input.owner_account_id,
+      items: input.stm_items,
+      cycleId: input.cycle_id,
+      versions,
+      model: input.model,
+      entities: (before.entities ?? []).map((item) => item.entity),
+    });
+    const promoted = promotion.promoted;
+    const deferred = promotion.deferred;
     let afterPromotion = input.ledger.snapshot(input.owner_account_id);
     const missingMentions = input.stm_mentions.filter((mention) => !(afterPromotion.mentions ?? []).some((stored) => stored.mention.mention_id === mention.mention_id));
     if (missingMentions.length) {
@@ -284,7 +385,7 @@ export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteL
     // partition with pending work stays re-proposable next cycle.
     if (!skippedMerges.some((item) => item.retryable)) state.recordPartition(input.owner_account_id, proposal.partition_hash);
     const after = input.ledger.snapshot(input.owner_account_id);
-    const report: DreamCycleReport = { cycle_id: input.cycle_id, promoted, reprojected, committed_merges: committedMerges, skipped_merges: skippedMerges, trajectory: diffGraphSnapshots(before, after) };
+    const report: DreamCycleReport = { cycle_id: input.cycle_id, promoted, deferred, reprojected, committed_merges: committedMerges, skipped_merges: skippedMerges, trajectory: diffGraphSnapshots(before, after) };
     state.recordCycle(report, input.owner_account_id, input.trigger_kind, Number(before.graph_generation ?? 0), Number(after.graph_generation ?? 0));
     return report;
 };
