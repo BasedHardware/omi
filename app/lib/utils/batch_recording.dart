@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/enums.dart';
 
 /// Marker stored in [Wal.device] for recordings produced by offline/batch mode.
 /// Lets the conversations list show *only* batch recordings — never the device
@@ -90,6 +91,17 @@ bool shouldFallbackToPhoneOnDeviceDisconnect({
   required bool batchAlreadyActive,
 }) =>
     isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive;
+
+/// Maps the capture state machine into the boolean that the fallback predicate
+/// (`shouldFallbackToPhoneOnDeviceDisconnect`) expects for `isRecording`.
+///
+/// In particular, active BLE device streaming uses `RecordingState.deviceRecord`,
+/// not `RecordingState.record`, so device disconnect fallback must treat
+/// `deviceRecord` as "recording".
+bool isRecordingDuringDeviceDisconnect(RecordingState recordingState) =>
+    recordingState == RecordingState.deviceRecord ||
+    recordingState == RecordingState.record ||
+    recordingState == RecordingState.interrupted;
 
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///

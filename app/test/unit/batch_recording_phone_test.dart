@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 /// Phone-mic × Transcribe Later: filename parsing, the auto/explicit marker
@@ -111,6 +112,14 @@ void main() {
   });
 
   group('shouldFallbackToPhoneOnDeviceDisconnect', () {
+    test('maps RecordingState.deviceRecord to the predicate isRecording flag', () {
+      expect(isRecordingDuringDeviceDisconnect(RecordingState.deviceRecord), isTrue);
+      expect(isRecordingDuringDeviceDisconnect(RecordingState.record), isTrue);
+      // Interrupted is treated as "recording" for disconnect fallback purposes
+      // (e.g. socket drop preceded the BLE disconnect).
+      expect(isRecordingDuringDeviceDisconnect(RecordingState.interrupted), isTrue);
+    });
+
     test('falls back only for an active supported wearable session', () {
       expect(
         shouldFallbackToPhoneOnDeviceDisconnect(

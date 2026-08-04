@@ -126,6 +126,11 @@ class CaptureController extends ChangeNotifier
   // active. Distinct from the Live phone-mic path (_phoneMicWalActive).
   bool _phoneMicBatchActive = false;
 
+  // Completes when the native phone-mic batch teardown is fully drained.
+  // Used to serialize reconnect/device transitions so we never resume before
+  // finalization is complete.
+  Completer<void>? _phoneMicBatchStopCompleter;
+
   bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
 
   bool _isLoadingInProgressConversation = false;
@@ -1475,6 +1480,15 @@ class CaptureController extends ChangeNotifier
               if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
                 updateRecordingState(RecordingState.stop);
               }
+
+              // Used to serialize reconnect/device transitions so we never
+              // resume the device stream before the native phone-batch
+              // teardown is fully drained/finalized.
+              final completer = _phoneMicBatchStopCompleter;
+              if (completer != null && !completer.isCompleted) {
+                completer.complete();
+              }
+              _phoneMicBatchStopCompleter = null;
             },
             onInterruption: _onMicInterruption,
             onBatchStalled: _onBatchStalled,
@@ -1528,7 +1542,19 @@ class CaptureController extends ChangeNotifier
     // paths never own the microphone concurrently.
     if (_phoneMicBatchActive) {
       _micInterrupted = true;
+      final completer = Completer<void>();
+      _phoneMicBatchStopCompleter = completer;
+
       ServiceManager.instance().phoneMic.stop();
+
+      try {
+        await completer.future.timeout(const Duration(seconds: 5));
+      } catch (e, st) {
+        Logger.debug('[CaptureProvider] phone-mic batch stop timed out: $e\n$st');
+      } finally {
+        _phoneMicBatchStopCompleter = null;
+      }
+
       _phoneMicBatchActive = false;
       _endOfflineSession();
       _micInterrupted = false;
@@ -1551,8 +1577,8 @@ class CaptureController extends ChangeNotifier
   Future<void> onRecordingDeviceDisconnected() async {
     if (!shouldFallbackToPhoneOnDeviceDisconnect(
       isRecordingDevice: _recordingDevice != null,
-      isRecording: recordingState == RecordingState.record,
-      supportsBatch: phoneMicSupportsTranscribeLater,
+      isRecording: isRecordingDuringDeviceDisconnect(recordingState),
+      supportsBatch: phoneMicSupportsTranscribeLater && deviceSupportsTranscribeLater,
       batchAlreadyActive: _phoneMicBatchActive,
     )) {
       return;
