@@ -56,6 +56,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
+        {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
     return payload.replace(
@@ -120,6 +121,7 @@ def with_parity_pack_env(payload: str) -> str:
 
 
 GOOGLE_OAUTH_SECRETS = '''\
+        {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
@@ -154,6 +156,7 @@ def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Pat
 
 
 STANDARD_CLOUD_RUN_SECRETS = {
+    'MEMORY_V3_CURSOR_SECRET': {'secret': 'MEMORY_V3_CURSOR_SECRET', 'version': 'latest'},
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},

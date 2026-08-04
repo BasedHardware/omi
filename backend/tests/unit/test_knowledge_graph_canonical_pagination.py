@@ -144,7 +144,9 @@ def _fake_db_for(rows):
     assertions_collection = f"users/{UID}/memory_graph_assertions"
     for item_snapshot, assertion_payload in rows:
         backing[f"{items_collection}/{item_snapshot.id}"] = item_snapshot.to_dict()
-        backing[f"{assertions_collection}/{assertion_payload['memory_id']}"] = assertion_payload
+        # assertion_payload is None for an unlinked canonical memory (item only, no graph assertion).
+        if assertion_payload is not None:
+            backing[f"{assertions_collection}/{assertion_payload['memory_id']}"] = assertion_payload
     store = _RecordingStore(backing)
     _STORE_HOLDER["store"] = store
     return store
@@ -221,6 +223,48 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert _page_memory_ids(page) == {"valid"}
     assert page.has_more is False
     assert page.next_cursor is None
+
+
+def test_canonical_graph_includes_unlinked_canonical_memory_as_an_atlas_node(monkeypatch):
+    # Atlas product change (#11081): a durable canonical memory with no graph assertion (graph_ready
+    # False, unlinked) is still surfaced as an isolated catalog node. Exercised on the neutral store
+    # seam — the item is seeded without an assertion (row second element None).
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    item, _assertion = _assertion_and_item("unlinked", 1, graph_ready=False)
+    item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
+    _fake_db_for([(item, None)])
+
+    page = kg.get_canonical_knowledge_graph(UID, limit=10)
+
+    assert page.edges == []
+    assert page.nodes == [
+        {
+            "id": "memory:unlinked",
+            "label": "A durable canonical memory that has no inferred relationship yet.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["unlinked"],
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+    ]
+
+
+def test_assertion_loader_rechecks_account_generation_before_fetch():
+    # Kept from upstream, re-expressed on the neutral seam (the loader reads through kg_db._store(),
+    # which the autouse _route_canonical_store fixture routes; the port dropped the db_client arg).
+    # Same recheck as test_load_fenced_assertions_excludes_wrong_account_generation, exercised via the
+    # canonical-graph fixtures.
+    stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
+    _fake_db_for([(stale_item, stale_assertion)])
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        ["stale-generation"],
+        account_generation=4,
+    )
+
+    assert loaded == []
 
 
 def test_underfilled_empty_item_window_advances_without_overlap(monkeypatch):
