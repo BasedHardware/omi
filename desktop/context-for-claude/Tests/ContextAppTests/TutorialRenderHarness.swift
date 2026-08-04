@@ -17,8 +17,15 @@ import XCTest
 /// the current pass fixed: the tutorial now opens the *real* `SearchBarWindow`, so what a person has
 /// to look at is no longer a card imitating a search panel — it is a short coach mark that has to
 /// stay short, stay legible, and say something true in each of the states the real panel can leave it
-/// in. Those states are the cases below. The panel itself is `SearchRenderHarness`'s subject and is
-/// deliberately not re-rendered here.
+/// in. Those states are most of the cases below. The panel itself is `SearchRenderHarness`'s subject
+/// and is deliberately not re-rendered here.
+///
+/// **It also renders the two beats that draw a physical action**, which are the only cards carrying
+/// a moving illustration: the launch gesture pressing itself on a keyboard's bottom row, and two
+/// fingers sweeping a trackpad with the timeline travelling under them. A still frame of a loop is
+/// not a judgement of the loop and is not offered as one — what these frames answer is the question
+/// a headless test cannot, which is whether the drawing reads as the object it is claiming to be at
+/// the size a 470 pt card affords it.
 ///
 /// The same two rules `SearchRenderHarness` obeys, for the same reasons:
 ///
@@ -37,7 +44,7 @@ final class TutorialRenderHarness: XCTestCase {
     }
 
     @MainActor
-    func testRenderTheSearchBeatCards() throws {
+    func testRenderTheTutorialCards() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["CONTEXT_TUTORIAL_RENDER"] == "1",
             "on-screen render harness; set CONTEXT_TUTORIAL_RENDER=1 to run it")
@@ -70,19 +77,39 @@ final class TutorialRenderHarness: XCTestCase {
     /// the "Search All" pill, one standing under the real panel — and an arrow changes the card's
     /// width and its padding. A render that only ever showed the armless form would not be showing
     /// what ships.
+    ///
+    /// In flow order, so the sequence reads the way a first run does: the launch gesture, the swipe,
+    /// then the search beats.
     @MainActor
     private static func cases()
         -> [(String, NSAppearance.Name, Fixtures.Desktop, (TutorialWorld) -> TutorialModel)]
     {
         [
+            // The two beats that ask for a *physical action* and draw it. Both are loops, so a still
+            // capture catches whichever beat the 1.6 s spin above happened to land on — the row may
+            // be up, the fingers may be mid-lift. These frames are here to check the composition:
+            // that the row reads as a keyboard's bottom row, that the pad reads as a trackpad and not
+            // a window, that two fingers are legible as two, and that none of it overflows a 470 pt
+            // card. The motion itself is judged in the running app, which is the only place it exists.
+            ("00-open-timeline", .aqua, .midGrey, { $0.modelAtTheChordBeat() }),
+            (
+                "01-open-timeline-rebound", .aqua, .midGrey,
+                { world in
+                    world.chord = "⌘⇧K"
+                    return world.modelAtTheChordBeat()
+                }
+            ),
+            ("02-timeline-swipe", .aqua, .midGrey, { $0.modelAtTheTimelineBeat() }),
+            ("03-timeline-swipe-darksystem-black", .darkAqua, .black, { $0.modelAtTheTimelineBeat() }),
+
             // "Click Search All, just up there." The beat that no longer swallows the press.
-            ("00-find-moments", .aqua, .midGrey, { $0.modelAtTheFindMomentsBeat() }),
+            ("04-find-moments", .aqua, .midGrey, { $0.modelAtTheFindMomentsBeat() }),
             // The panel is up and nothing has been typed into it yet. The card's whole job here is to
             // stay out of the way of a surface that is doing the work.
-            ("01-asking", .aqua, .midGrey, { $0.modelAtTheQueryBeat() }),
+            ("05-asking", .aqua, .midGrey, { $0.modelAtTheQueryBeat() }),
             // A real question that really found nothing, said as itself.
             (
-                "02-found-nothing", .aqua, .midGrey,
+                "06-found-nothing", .aqua, .midGrey,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "zzzz nothing matches", results: 0))
@@ -91,7 +118,7 @@ final class TutorialRenderHarness: XCTestCase {
             ),
             // The real panel came back with real hits. Continue lights; nothing is drawn twice.
             (
-                "03-found", .aqua, .midGrey,
+                "07-found", .aqua, .midGrey,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "throughput", results: 12))
@@ -101,7 +128,7 @@ final class TutorialRenderHarness: XCTestCase {
             // One of them pressed: the panel has closed itself and the timeline is back at that
             // moment. The card must not still be asking for a click.
             (
-                "04-travelled", .aqua, .midGrey,
+                "08-travelled", .aqua, .midGrey,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "throughput", results: 12))
@@ -112,7 +139,7 @@ final class TutorialRenderHarness: XCTestCase {
             // The same, for a moment with no picture left — a spoken line, or a frame retention has
             // already unlinked. The aside is the only difference and it has to be the honest one.
             (
-                "05-travelled-no-picture", .aqua, .midGrey,
+                "09-travelled-no-picture", .aqua, .midGrey,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "invoice", results: 4))
@@ -123,7 +150,7 @@ final class TutorialRenderHarness: XCTestCase {
             // Escape, with nothing found. The one state this card grows a button for, because the
             // gate it serves cannot be waived.
             (
-                "06-panel-closed", .aqua, .midGrey,
+                "10-panel-closed", .aqua, .midGrey,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.closed)
@@ -131,7 +158,7 @@ final class TutorialRenderHarness: XCTestCase {
                 }
             ),
             (
-                "07-found-darksystem-black", .darkAqua, .black,
+                "11-found-darksystem-black", .darkAqua, .black,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "throughput", results: 12))
@@ -139,7 +166,7 @@ final class TutorialRenderHarness: XCTestCase {
                 }
             ),
             (
-                "08-found-lightsystem-white", .aqua, .white,
+                "12-found-lightsystem-white", .aqua, .white,
                 { world in
                     let model = world.modelAtTheQueryBeat()
                     world.report(.answered(query: "throughput", results: 12))
@@ -289,6 +316,12 @@ final class TutorialRenderHarness: XCTestCase {
 @MainActor
 final class TutorialWorld {
 
+    /// The shortcut as the shortcut layer prints it, which is the only thing the tutorial learns
+    /// about it and therefore the only thing that decides which of the two launch drawings the card
+    /// puts up. The pair's spelling by default, because that is what ships; set it to `"⌘⇧K"` to
+    /// look at the chip that types a rebind instead.
+    var chord = "⌘ + ⌘"
+
     private var timelineIsVisible = false
     private var searchPanelIsVisible = false
     private var hotkeyFired: (() -> Void)?
@@ -307,15 +340,35 @@ final class TutorialWorld {
         searchPanelHappened?(event)
     }
 
-    /// A model driven — through the real gates, never by poking state — to the pill beat.
-    func modelAtTheFindMomentsBeat() -> TutorialModel {
+    /// A model driven — through the real gates, never by poking state — to the beat that asks for
+    /// the launch gesture.
+    func modelAtTheChordBeat() -> TutorialModel {
         let model = TutorialModel(environment: environment())
         model.begin()
         model.advance()  // invitation → collectFrames
         model.poll()
         model.advance()  // collectFrames → openTimeline
+        precondition(model.step == .openTimeline, "the harness did not reach the chord beat")
+        return model
+    }
+
+    /// One beat on: the user really pressed it, and the window really came up. This is the state the
+    /// drag demonstration is drawn in.
+    ///
+    /// The window is marked visible *before* the keypress is delivered, because the model reads
+    /// whether the timeline is on screen as it enters the step — the same order the real shell
+    /// produces, where the shortcut's own handler opens the window and the observer reports it after.
+    func modelAtTheTimelineBeat() -> TutorialModel {
+        let model = modelAtTheChordBeat()
         timelineIsVisible = true
         hotkeyFired?()  // openTimeline → timeline
+        precondition(model.step == .timeline, "the harness did not reach the drag beat")
+        return model
+    }
+
+    /// And one further: they dragged, so the demonstration has stopped and the pill beat is up.
+    func modelAtTheFindMomentsBeat() -> TutorialModel {
+        let model = modelAtTheTimelineBeat()
         dragTravelled?()
         model.advance()  // timeline → findMoments
         precondition(model.step == .findMoments, "the harness did not reach the pill beat")
@@ -336,7 +389,7 @@ final class TutorialWorld {
         environment.screenIsGranted = { true }
         environment.frameCount = { _ in TutorialModel.frameTarget }
         environment.openPage = { _ in true }
-        environment.timelineChord = { "⌘⌘" }
+        environment.timelineChord = { self.chord }
         environment.timelineChordIsArmed = { true }
         environment.watchForTimelineHotkey = { self.hotkeyFired = $0 }
         environment.stopWatchingTimelineHotkey = { self.hotkeyFired = nil }

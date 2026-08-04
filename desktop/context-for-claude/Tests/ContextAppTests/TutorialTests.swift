@@ -62,6 +62,11 @@ final class TutorialTests: XCTestCase {
 
         /// Whether the machine is genuinely listening for the timeline chord.
         var chordIsArmed = true
+        /// The shortcut as the shortcut layer *prints* it, which is the only thing the tutorial ever
+        /// learns about it. A repeated tap by default, so every test written before the beat grew a
+        /// second drawing still exercises the branch it was written for; the tests about the launch
+        /// gesture set it to the pair's spelling themselves.
+        var chord = "⌘⌘"
         /// Whether a timeline window actually comes up when something opens one. False models the
         /// shell declining because the capture store is not open yet.
         var timelineCanOpen = true
@@ -109,7 +114,7 @@ final class TutorialTests: XCTestCase {
                 if let outcome = self.claudeAnswer { answer(outcome) }
             }
             environment.claudeRestartIsNeeded = { self.claudeNeedsRestart }
-            environment.timelineChord = { "⌘⌘" }
+            environment.timelineChord = { self.chord }
             environment.timelineChordIsArmed = { self.chordIsArmed }
             environment.watchForTimelineHotkey = { self.hotkeyWatch = $0 }
             environment.stopWatchingTimelineHotkey = { self.hotkeyWatch = nil }
@@ -1053,7 +1058,8 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(model.gateIsSatisfied)
         XCTAssertFalse(model.advance(), "time passing is not a gesture")
         XCTAssertEqual(model.step, .timeline)
-        XCTAssertEqual(model.speech.aside, "Drag across it with two fingers to travel through your day.")
+        XCTAssertEqual(
+            model.speech.aside, "Swipe two fingers across your trackpad to travel through your day.")
 
         world.dragAcrossTheTimeline()
         XCTAssertTrue(model.didDrag)
@@ -1652,6 +1658,178 @@ final class TutorialTests: XCTestCase {
         }
     }
 
+    // MARK: - Both Command keys, being pressed together
+
+    /// **The gesture is recognised from the shortcut's spelling, and `⌘⌘` is not it.**
+    ///
+    /// The tutorial learns what to draw from one string — the printed shortcut it already shows the
+    /// user — and the whole risk in that is the collision at the middle of this test. `⌘⌘`, two
+    /// glyphs with nothing between them, has always meant the **repeated tap** in this product and
+    /// still ships as half of the search default (`⌘⌘⇧`). The pair gesture is a different thing
+    /// entirely — two physical keys, one modifier mask, no repeat — and if a picture of it ever
+    /// captured `⌘⌘` the search beat would start teaching a gesture that cannot fire it.
+    ///
+    /// So the rule is a *separator*, not a spelling, and both halves of that are asserted: every
+    /// plausible way the shortcut layer might punctuate the pair is accepted, and the adjacent form
+    /// is refused along with everything that has a third key in it.
+    func testTheLaunchGestureIsRecognisedFromItsSpellingAndNothingElse() {
+        for spelling in ["⌘ + ⌘", "⌘+⌘", "⌘ ⌘", "⌘·⌘", "⌘-⌘", "⌘ & ⌘", " ⌘  +  ⌘ "] {
+            XCTAssertTrue(
+                TutorialCommandPair.matches(spelling),
+                "“\(spelling)” is two Command keys and a joiner, and the card would draw a chord")
+        }
+
+        for other in ["⌘⌘", "⌘⌘⇧", "⌘ + ⌘ + ⌘", "⌘ + ⌥", "⌘ + K", "⌘⇧K", "⌘", "F5", ""] {
+            XCTAssertFalse(
+                TutorialCommandPair.matches(other),
+                "“\(other)” was taken for both Command keys pressed together")
+        }
+
+        // The reason the adjacent form has to stay out, stated where the exclusion is: it is already
+        // spoken for, by the drawing that got it right.
+        XCTAssertTrue(
+            TutorialChordCycle(chord: "⌘⌘").isRepeatedTap,
+            "⌘⌘ stopped meaning a repeated tap, so the separator rule is now guarding nothing")
+    }
+
+    /// **Neither Command key is ever drawn going down without the other.**
+    ///
+    /// The whole of the defect this gesture's picture exists to avoid, as an assertion over every
+    /// beat of the loop rather than over the one frame somebody happened to look at. The report was
+    /// *"expressing both the command keys one by one. It's supposed to be both the command keys
+    /// together"* — a drawing that lights one cap and then the other is not a slower version of this
+    /// gesture, it is a different gesture, and a pose type that could express it would let it back
+    /// in the next time the timing is retuned.
+    func testNeitherCommandKeyIsEverShownGoingDownWithoutTheOther() {
+        for reduceMotion in [false, true] {
+            // Negative ticks included: the counter wraps with `&+`, and a modulo that went negative
+            // would index the loop off its own front.
+            for tick in -TutorialCommandPair.beats..<(TutorialCommandPair.beats * 3) {
+                let pose = TutorialCommandPair.pose(at: tick, reduceMotion: reduceMotion)
+                XCTAssertEqual(
+                    pose.leftIsDown, pose.rightIsDown,
+                    "one Command key is down alone at tick \(tick) (reduce motion: \(reduceMotion))")
+                XCTAssertEqual(
+                    pose.tie, pose.bothAreDown ? 1 : 0,
+                    "the tie disagrees with the keys it is tying at tick \(tick)")
+            }
+        }
+
+        // …and the loop is a loop: it presses, it lets go, and it repeats. Without the rest beats
+        // the caps read as merely highlighted and nothing is ever seen to be *pressed*.
+        let ticks = 0..<TutorialCommandPair.beats
+        XCTAssertTrue(ticks.contains { TutorialCommandPair.pose(at: $0, reduceMotion: false).bothAreDown })
+        XCTAssertTrue(ticks.contains { !TutorialCommandPair.pose(at: $0, reduceMotion: false).bothAreDown })
+        for tick in ticks {
+            XCTAssertEqual(
+                TutorialCommandPair.pose(at: tick, reduceMotion: false),
+                TutorialCommandPair.pose(at: tick + TutorialCommandPair.beats, reduceMotion: false),
+                "the loop does not repeat at tick \(tick)")
+        }
+    }
+
+    /// **Reduce Motion holds the pair down instead of letting it go**, which is the opposite of what
+    /// the chord demonstration does under the same setting — and the difference is the point.
+    ///
+    /// A chord at rest is still legible: the caps say which keys. A *pair* at rest is two identical
+    /// ⌘ caps sitting there, which is precisely the ambiguous picture the moving version was built
+    /// to replace. So the still frame is the gesture at the instant it fires, and it does not depend
+    /// on where in the loop the setting happened to be turned on.
+    func testReduceMotionHoldsTheCommandPairAtTheMomentItFires() {
+        for tick in 0..<(TutorialCommandPair.beats * 2) {
+            let pose = TutorialCommandPair.pose(at: tick, reduceMotion: true)
+            XCTAssertTrue(pose.bothAreDown, "the still frame lets go at tick \(tick)")
+            XCTAssertEqual(pose.tie, 1, "the still frame's tie is half drawn at tick \(tick)")
+        }
+
+        // Which is only a *choice* if the moving version does something else, so: it lets go.
+        XCTAssertTrue(
+            (0..<TutorialCommandPair.beats).contains {
+                !TutorialCommandPair.pose(at: $0, reduceMotion: false).bothAreDown
+            },
+            "the loop never releases, so holding it down under Reduce Motion decides nothing")
+    }
+
+    /// The row is a keyboard's bottom row, and the two keys the beat is about are on opposite sides
+    /// of the one landmark everybody can find without looking down.
+    ///
+    /// "The two either side of the space bar" is what the card says out loud, so the drawing has to
+    /// be arranged that way — and the tie is positioned from these same numbers, which is why they
+    /// are asserted rather than eyeballed.
+    func testTheKeyboardRowPutsOneCommandKeyEitherSideOfTheSpaceBar() {
+        let caps = TutorialCommandRow.caps
+        let commands = TutorialCommandRow.commandIndices
+        XCTAssertEqual(commands.count, 2, "a pair is two keys")
+        XCTAssertEqual(commands.first, TutorialCommandRow.leftCommand)
+        XCTAssertEqual(commands.last, TutorialCommandRow.rightCommand)
+
+        XCTAssertEqual(caps[TutorialCommandRow.leftCommand].label, "⌘")
+        XCTAssertEqual(caps[TutorialCommandRow.rightCommand].label, "⌘")
+        XCTAssertEqual(
+            caps[TutorialCommandRow.leftCommand].width, caps[TutorialCommandRow.rightCommand].width,
+            "one Command key drawn wider than the other reads as the more important of the two")
+
+        // Exactly one cap stands between them, it carries no legend, and it is the widest thing on
+        // the row: that is a space bar and nothing else on a keyboard is.
+        let between = (TutorialCommandRow.leftCommand + 1)..<TutorialCommandRow.rightCommand
+        XCTAssertEqual(between.count, 1, "the two Command caps are not either side of one key")
+        let spaceBar = caps[between.lowerBound]
+        XCTAssertEqual(spaceBar.label, "")
+        XCTAssertEqual(spaceBar.width, caps.map(\.width).max())
+
+        // The tie's endpoints, which are cap centres in the row's own coordinates.
+        let leftCentre = TutorialCommandRow.centre(of: TutorialCommandRow.leftCommand)
+        let rightCentre = TutorialCommandRow.centre(of: TutorialCommandRow.rightCommand)
+        XCTAssertLessThan(leftCentre, rightCentre)
+        XCTAssertGreaterThan(leftCentre, 0)
+        XCTAssertLessThan(rightCentre, TutorialCommandRow.width)
+        XCTAssertEqual(
+            TutorialCommandRow.width,
+            caps.reduce(0) { $0 + $1.width } + TutorialCommandRow.gap * CGFloat(caps.count - 1),
+            accuracy: 0.001)
+        // An index the row does not have must not fall off the front of it — the tie would be drawn
+        // from x = 0, which is a stroke leaving the board.
+        XCTAssertEqual(TutorialCommandRow.centre(of: caps.count + 4), 0)
+
+        // And it has to stand *beside* a sentence on a fixed-width card, not instead of one. A row
+        // that grew past this would push "opens it from anywhere." onto a second line, or off.
+        let cardContent = TutorialOverlay.width - TutorialCardView.horizontalPadding * 2
+        XCTAssertLessThan(
+            TutorialCommandRow.width, cardContent * 0.6,
+            "the keyboard row has taken the width the card's own sentence needs")
+    }
+
+    /// **The card's sentence and the card's drawing describe the same gesture**, and the beat picks
+    /// both from the one thing it knows about the shortcut: how it is printed.
+    func testTheOpenTimelineBeatSaysTheGestureItDraws() {
+        let pair = World()
+        pair.screenGranted = true
+        pair.chord = "⌘ + ⌘"
+        let pairModel = makeModel(pair)
+        drive(pairModel, pair, to: .openTimeline)
+
+        XCTAssertTrue(pairModel.timelineChordIsCommandPair)
+        XCTAssertEqual(
+            pairModel.speech.aside,
+            "Press both Command keys together — the two either side of the space bar.")
+        // The same words the animation is labelled with, which is what stops a screen reader and a
+        // pair of eyes being told two different things.
+        XCTAssertEqual(
+            pairModel.speech.aside?.hasPrefix(TutorialCommandPair.spoken), true,
+            "the card's sentence and the drawing's label have drifted apart")
+
+        // A rebind, or any machine still on the typed default, gets the chip that types itself and
+        // the sentence that goes with it.
+        let typed = World()
+        typed.screenGranted = true
+        typed.chord = "⌘⇧K"
+        let typedModel = makeModel(typed)
+        drive(typedModel, typed, to: .openTimeline)
+
+        XCTAssertFalse(typedModel.timelineChordIsCommandPair)
+        XCTAssertEqual(typedModel.speech.aside, "Press these keys, and it will come up.")
+    }
+
     // MARK: - The gesture, being made
 
     /// **The content moves with the fingers, by exactly as much.**
@@ -1689,6 +1867,104 @@ final class TutorialTests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(backdrop), abs(hand))
         }
         XCTAssertNotEqual(TutorialScrollCycle.backdrop(1), TutorialScrollCycle.hand(1))
+    }
+
+    /// **The fingers are on the glass for the whole travelling part of the sweep, and lift only
+    /// where it has stopped.**
+    ///
+    /// The lift is what makes the drawing a *swipe* rather than two dots sliding — a gesture has a
+    /// beginning and an end, and the picture that got reported had neither. But a lift is also the
+    /// one thing that can put this demonstration back in disagreement with itself: the panels follow
+    /// the fingertips exactly (`testTheDemonstratedPanelsFollowTheHandExactly`), so any travel that
+    /// happens while the fingers are off the glass is content moving with nothing pushing it.
+    ///
+    /// The sweep is eased, so it has all but stopped at its ends, and that is the property this
+    /// pins: whatever the thresholds are retuned to, the distance covered during the lift has to
+    /// stay too small to read as movement. Eight points is about a third of one panel.
+    func testTheFingersStayOnTheGlassForTheWholeTravellingPartOfTheSweep() {
+        XCTAssertEqual(TutorialScrollCycle.contact(0), 1, "the middle of a swipe is not a hover")
+        XCTAssertEqual(TutorialScrollCycle.contact(1), 0, "the fingers never come off")
+        XCTAssertEqual(TutorialScrollCycle.contact(-1), 0, "the fingers only come off at one end")
+
+        var previous = 1.0
+        for step in stride(from: 0.0, through: 1.0, by: 0.02) {
+            let phase = CGFloat(step)
+            let contact = TutorialScrollCycle.contact(phase)
+            XCTAssertLessThanOrEqual(
+                contact, previous, "the fingers press back down mid-lift at phase \(phase)")
+            XCTAssertEqual(
+                contact, TutorialScrollCycle.contact(-phase), accuracy: 0.001,
+                "the fingers behave differently at the two ends of a sweep that runs both ways")
+            previous = contact
+        }
+
+        let travelledWhileLifting =
+            abs(TutorialScrollCycle.hand(1))
+            - abs(TutorialScrollCycle.hand(TutorialScrollCycle.plantedBelow))
+        XCTAssertLessThanOrEqual(
+            travelledWhileLifting, 8,
+            "the panels travel \(travelledWhileLifting) pt with the fingers off the glass, which is "
+                + "content moving on its own")
+    }
+
+    /// **The fingertips land on the pad, and the fingers leave it by the near edge.**
+    ///
+    /// The one part of this drawing that is arithmetic rather than judgement, and the one part that
+    /// failed silently while it was being written: a finger is laid out as a tall box with its tip at
+    /// the top, SwiftUI centres that box in the trackpad, and centring puts the tip half a finger
+    /// *above* the far edge — outside the clip, drawing nothing. Nothing about that is visible in the
+    /// source and nothing about it is visible in a still frame of an empty pad either. It is visible
+    /// here.
+    func testTheFingertipsLandInsideTheTrackpadAndTheFingersRunOffTheNearEdge() {
+        let halfHeight = TutorialScrollCycle.trackpadHeight / 2
+        // Where the tip ends up in the trackpad's own coordinates, centre at 0, far edge negative.
+        let tip = TutorialScrollCycle.fingerOffset - TutorialScrollCycle.fingerLength / 2
+        XCTAssertEqual(tip, TutorialScrollCycle.padDrop - halfHeight, accuracy: 0.001)
+
+        XCTAssertGreaterThan(tip, -halfHeight, "the fingertips are drawn off the far edge, and clipped")
+        XCTAssertLessThan(
+            tip + TutorialScrollCycle.padHeight, halfHeight,
+            "the contact patches hang off the near edge, so the thing that reads as the fingers "
+                + "touching the glass is the thing that gets cut")
+        XCTAssertGreaterThan(
+            tip + TutorialScrollCycle.fingerLength, halfHeight,
+            "the fingers end inside the pad, which draws two stubs rather than a hand")
+
+        // Two, and legibly two: patches closer together than they are wide read as one smudge.
+        XCTAssertGreaterThan(TutorialScrollCycle.padSpread, TutorialScrollCycle.padWidth)
+
+        // And the pair stays on the glass at the ends of its travel — a finger that sweeps off the
+        // side of the trackpad is a gesture the trackpad could not have received.
+        let outermost =
+            TutorialScrollCycle.travel + TutorialScrollCycle.padSpread / 2
+            + TutorialScrollCycle.padWidth / 2
+        XCTAssertLessThan(
+            outermost, TutorialScrollCycle.trackpadWidth / 2,
+            "the sweep carries the fingers over the edge of the pad they are supposed to be on")
+    }
+
+    /// **Reduce Motion parks the sweep, so the sweep's meaning has to be drawn instead.**
+    ///
+    /// A parked version of this picture is two fingers resting on a trackpad, which is a drawing of
+    /// *not* doing the thing the card is asking for. So the still frame grows the one thing the
+    /// moving one does not need — a double-headed arrow across the pad — and the pose is where that
+    /// substitution is decided, because a view is not a place a claim can be tested.
+    func testReduceMotionParksTheSweepAndDrawsItsDirectionInstead() {
+        for step in stride(from: -1.0, through: 1.0, by: 0.25) {
+            let still = TutorialSweepPose(phase: CGFloat(step), reduceMotion: true)
+            XCTAssertEqual(still.fingers, 0, "the still frame moved at phase \(step)")
+            XCTAssertEqual(still.content, 0)
+            XCTAssertEqual(still.backdrop, 0)
+            XCTAssertEqual(still.contact, 1, "a half-lifted finger in a still frame is a smudge")
+            XCTAssertTrue(still.showsTravelArrow, "nothing is moving and nothing says which way")
+        }
+
+        // The moving version says it by moving, and must not wear the glyph as well.
+        let moving = TutorialSweepPose(phase: 0.8, reduceMotion: false)
+        XCTAssertFalse(moving.showsTravelArrow)
+        XCTAssertEqual(moving.fingers, TutorialScrollCycle.hand(0.8), accuracy: 0.001)
+        XCTAssertEqual(moving.content, moving.fingers, accuracy: 0.001)
+        XCTAssertNotEqual(moving.fingers, 0)
     }
 
     // MARK: - Standing clear of Claude

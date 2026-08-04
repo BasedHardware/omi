@@ -91,6 +91,18 @@ final class TutorialModel: ObservableObject {
     /// offered immediately rather than after a wait nothing can end.
     var timelineChordIsArmed: Bool { environment.timelineChordIsArmed() }
 
+    /// Whether the timeline's shortcut is the app's own launch gesture — **both Command keys pressed
+    /// together** — rather than a set of keys that is typed.
+    ///
+    /// Decided from the printed shortcut and from nothing else, which is the same rule
+    /// `timelineChord` already follows and it matters more here. This beat has two drawings and two
+    /// sentences, and picking between them by asking the shortcut layer what *kind* of binding it
+    /// holds would put a second copy of "what the app listens for" in the tutorial — one that goes
+    /// stale silently the moment somebody rebinds. The string the user is being shown is the only
+    /// thing that can be trusted to describe the gesture they have to make; see
+    /// `TutorialCommandPair` for what counts as this gesture and why.
+    var timelineChordIsCommandPair: Bool { TutorialCommandPair.matches(timelineChord) }
+
     // MARK: - Published state
 
     @Published private(set) var step: TutorialStep = .invitation
@@ -635,6 +647,18 @@ final class TutorialModel: ObservableObject {
                     "I cannot listen for that shortcut.",
                     aside: "Accessibility is off, so I will have to open your timeline myself.")
             }
+            // The one gesture in this app that a chip of keycaps cannot spell, so it gets its own
+            // sentence as well as its own drawing. "These keys" is a fine thing to say about a chord
+            // whose caps are printed beside it and a useless thing to say about two keys that are
+            // *identical* and a space bar apart — the reader has to be told which two, and that
+            // both go down at once, because the picture and the words are the only two places that
+            // can be said. They say it in the same words on purpose: `TutorialCommandPair.spoken` is
+            // the label a screen reader gets for the animation.
+            guard !timelineChordIsCommandPair else {
+                return TutorialSpeech(
+                    "Open your timeline.",
+                    aside: "Press both Command keys together — the two either side of the space bar.")
+            }
             return TutorialSpeech(
                 "Open your timeline.", aside: "Press these keys, and it will come up.")
 
@@ -650,9 +674,21 @@ final class TutorialModel: ObservableObject {
             }
             // Which way is "back" depends on the user's own scrolling setting, so the card asks for
             // the gesture and not for a direction it cannot promise.
+            //
+            // **It names the trackpad, and `TutorialDrag` deliberately does not require one.** That
+            // looks like the card asking for something narrower than the gate accepts, and it is —
+            // on purpose. The sentence's job is to get a first-time user to make a gesture they have
+            // never made on a window they have never seen, and the way to fail at that is to
+            // enumerate: "drag, scroll, or swipe" teaches nothing and reads as a manual. So it
+            // teaches the one gesture almost every Mac can make, the drawing beside it shows two
+            // fingers making it (`TutorialScrollDemo`), and the gate stays wider than the sentence —
+            // a mouse wheel satisfies it in silence and nobody is ever told they did it wrong.
+            //
+            // Reported as: "it isn't clear that they have to swipe on the trackpad with two
+            // fingers." The words counted the fingers before; nothing else in the beat did.
             let opening = didWaiveHotkey ? "I opened it for you." : "Everything I have seen."
             return TutorialSpeech(
-                opening, aside: "Drag across it with two fingers to travel through your day.")
+                opening, aside: "Swipe two fingers across your trackpad to travel through your day.")
 
         case .findMoments:
             return TutorialSpeech("Now find one moment.", aside: "Click Search All, just up there.")

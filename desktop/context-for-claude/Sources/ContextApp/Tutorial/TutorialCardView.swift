@@ -18,9 +18,10 @@ import SwiftUI
 ///   card says "Scroll through it for a bit" and then "Got it", which is the same fact in a human's
 ///   words. Nothing here is on a timer; see `TutorialModel.outcome`.
 ///
-/// The two beats that ask for a *physical action* draw it rather than describe it: the chord types
-/// itself and the gesture is made by a hand. Both live in `TutorialDemonstrations.swift`, both are
-/// rendered only while their step is still waiting, and neither can move the flow along.
+/// The two beats that ask for a *physical action* draw it rather than describe it: the way in
+/// presses itself on a keyboard, and the way across is swiped by two fingers on a trackpad. Both
+/// live in `TutorialDemonstrations.swift`, both are rendered only while their step is still waiting,
+/// and neither can move the flow along.
 ///
 /// Every colour is an `Ink` token — a named system colour or an alpha on one — so it reads correctly
 /// in both appearances and carries no borrowed brand. Nothing here is purple, and nothing here reads
@@ -150,17 +151,25 @@ struct TutorialCardView: View {
         case .collectFrames where model.outcome == .waiting:
             listening
 
-        // The chord, typing itself. Shown only when it is genuinely registered: a tutorial that
-        // taught keys this machine does not listen for would be teaching a surface that is not
-        // there, and this beat cannot be earned on such a machine at all.
+        // The way in, moving. Shown only when it is genuinely registered: a tutorial that taught
+        // keys this machine does not listen for would be teaching a surface that is not there, and
+        // this beat cannot be earned on such a machine at all.
         //
-        // It moves because the app's own default chord is a *double tap* of ⌘, and a still picture
-        // of two ⌘ symbols side by side says the opposite of that. Drawing the tap as two caps did
-        // too: a Mac has two Command keys, so two ⌘ caps lighting in turn was read — and reported —
-        // as "both the command keys, one by one". One cap, struck twice. See `TutorialChordCycle`.
+        // **Two drawings, because this app ships two shapes of gesture and neither picture can tell
+        // the other's story.** The app's own way in is both Command keys pressed *together*, which
+        // has no keycap spelling at all — two ⌘ chips side by side are exactly as good a picture of
+        // "press the left one, then the right one", and that ambiguity has been reported before. So
+        // it gets a keyboard's bottom row with the space bar between the two caps, and they go down
+        // on the same beat. A rebound chord is typed, and gets the chip that types itself. The model
+        // decides which from the printed shortcut and nothing else (`timelineChordIsCommandPair`),
+        // so the drawing and the card's own sentence cannot disagree about the gesture.
         case .openTimeline where model.timelineChordIsArmed:
             HStack(spacing: 10) {
-                TutorialChordDemo(chord: model.timelineChord)
+                if model.timelineChordIsCommandPair {
+                    TutorialCommandPairDemo()
+                } else {
+                    TutorialChordDemo(chord: model.timelineChord)
+                }
                 Text("opens it from anywhere.")
                     .inkStyle(InkType.statusLabel, color: Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -169,6 +178,10 @@ struct TutorialCardView: View {
         // The gesture, being made, and only until they have made it. Leaving a loop running under
         // "there you go" would be the card still asking for something it has already been given —
         // which is also what stops it: this branch is the only thing rendering it.
+        //
+        // Two fingers on a trackpad now, not a hand glyph on a strip: the beat's words asked for two
+        // fingers and its picture showed one shape on no particular surface, which is what was
+        // reported. See `TutorialScrollDemo`.
         case .timeline where model.timelineIsOpen && !model.didDrag:
             TutorialScrollDemo()
 

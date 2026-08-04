@@ -51,13 +51,15 @@ final class InkAccentTests: XCTestCase {
 
     /// **The fix reaches the pixels**, on one of the controls that was drawing the machine's accent.
     ///
-    /// `TutorialScrollDemo` is the tutorial's drag hint — the accented panel under the hand, at
+    /// `TutorialScrollDemo` is the tutorial's drag hint — the accented panel under the fingers, at
     /// `Ink.accent.opacity(0.85)`, and one of the two sites this sweep started from. (It was three
-    /// travelling capsules at that same alpha when this test was written; the hint became a hand
-    /// sweeping over a strip so the beat shows the *gesture* rather than its outcome. The alpha did
-    /// not move, deliberately — the composited hue below was measured at it.) Asserting the token
-    /// alone would leave the interesting half unproven: that this view spends the token rather than
-    /// a colour of its own. So the view is rendered and its most saturated pixel is read.
+    /// travelling capsules at that same alpha when this test was written; then a hand sweeping over a
+    /// strip, so the beat showed the *gesture* rather than its outcome; and now two fingers on a
+    /// drawn trackpad beside that strip, because the words said "two fingers" and no picture ever
+    /// did. The alpha did not move through any of it, deliberately — the composited hue below was
+    /// measured at it.) Asserting the token alone would leave the interesting half unproven: that
+    /// this view spends the token rather than a colour of its own. So the view is rendered and its
+    /// most saturated pixel is read.
     ///
     /// The pixel is composited — `Ink.accent` at 0.85 over `Ink.wash` over white — so it is compared
     /// to the token by **hue, within 8°**, and not by equality. `BrandColour`'s clearance is
@@ -75,12 +77,12 @@ final class InkAccentTests: XCTestCase {
     /// test guards, rather than a colour of its own.
     @MainActor
     func testTheTutorialDragHintDrawsTheGuardedAccent() throws {
-        // Big enough for the hint's own layout — it is a 46 pt strip now, and a frame that clipped
-        // it could leave the accented panel outside the bitmap, which would fail this test for a
-        // reason that has nothing to do with the accent.
+        // Big enough for the hint's own layout — a 112 pt trackpad, a gap, and a strip beside it, all
+        // 68 pt tall — because a frame that clipped it could leave the accented panel outside the
+        // bitmap, which would fail this test for a reason that has nothing to do with the accent.
         let renderer = ImageRenderer(
             content: TutorialScrollDemo()
-                .frame(width: 220, height: 60)
+                .frame(width: 440, height: 96)
                 .background(Color.white))
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.nsImage, "TutorialScrollDemo did not render")
@@ -94,6 +96,40 @@ final class InkAccentTests: XCTestCase {
             drawn.hue, token.hue, accuracy: 8,
             "the capsule is not Ink.accent — it renders at hue \(drawn.hue) where the token is at "
                 + "\(token.hue), so the guard over the token says nothing about this view")
+    }
+
+    /// The other half of the same tutorial pass, and the newer of the two views: the launch gesture's
+    /// keyboard row, whose pressed ⌘ caps fill with `Ink.accent` and whose tie between them is
+    /// stroked in it.
+    ///
+    /// Rendered rather than asserted on the token for the same reason as above — the interesting
+    /// claim is that *this view* spends the token — and it is worth its own case because it is the
+    /// one place in the tutorial where the accent is used to say that two things belong to one
+    /// gesture, which is exactly the kind of "make it stand out" drawing that reaches for a hue of
+    /// its own (`INV-UI-1`).
+    ///
+    /// The pose at tick 0 is the pair **down**, under Reduce Motion and without it alike
+    /// (`TutorialCommandPair.pose`), so there is always accent in the bitmap and this does not
+    /// depend on what the running machine has that setting at.
+    @MainActor
+    func testTheTutorialLaunchGestureDrawsTheGuardedAccent() throws {
+        let renderer = ImageRenderer(
+            content: TutorialCommandPairDemo()
+                .frame(width: 260, height: 60)
+                .background(Color.white))
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.nsImage, "TutorialCommandPairDemo did not render")
+        let pixel = try XCTUnwrap(
+            Self.mostSaturatedPixel(of: image), "the keyboard row rendered no colour at all")
+
+        assertReadsOnBrand(pixel, "TutorialCommandPairDemo's pressed Command caps, as rendered")
+
+        let drawn = try XCTUnwrap(BrandColour.read(pixel))
+        let token = try XCTUnwrap(BrandColour.read(NSColor(Ink.accent)))
+        XCTAssertEqual(
+            drawn.hue, token.hue, accuracy: 8,
+            "the pressed cap is not Ink.accent — it renders at hue \(drawn.hue) where the token is "
+                + "at \(token.hue), so the guard over the token says nothing about this view")
     }
 
     /// The rendered pixel carrying the most hue, which for this view is a capsule's interior: the
