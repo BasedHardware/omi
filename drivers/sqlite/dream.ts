@@ -104,9 +104,11 @@ const promotionTransition = async (input: {
           }
         }
       } catch (error) {
-        // Isolate flaky model calls: leave undecided for the next cycle.
+        // GlmModel already retried; leaving the item unconsumed would re-burn
+        // the same failing call every subsequent cycle. One-shot defer instead.
         console.error(`dream promotion failed for ${item.id}: ${error instanceof Error ? error.message : error}`);
-        continue;
+        trigger = "boundary_reconsideration";
+        unitBoundaryDecision = "abstain";
       }
     }
 

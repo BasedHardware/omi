@@ -78,6 +78,9 @@ test("GLM retries a malformed boundary judgment and accepts a later valid respon
   const provider = fixtureProvider('{"decision":"abstain","risk_markers":[""]}', '{"decision":"abstain","risk_markers":["missing_time"]}');
   await expect(modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
   expect(provider.calls).toHaveLength(2);
+  const retryPrompt = (provider.calls[1] as { messages: { content: string }[] }).messages[0]!.content;
+  expect(retryPrompt).toContain("previous answer was rejected");
+  expect(retryPrompt).toContain("risk_markers");
 });
 
 test("GLM placement abstentions parse without becoming placement approvals, and unknown strategies still reject", async () => {

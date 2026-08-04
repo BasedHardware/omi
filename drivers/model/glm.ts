@@ -30,6 +30,18 @@ const retryableGlmError = (error: unknown): boolean => {
     || /was not JSON|missing required field|unexpected field|must be|risk_markers|invalid STM|GLM .+ response/.test(message);
 };
 
+/** On retry, tell the model what failed — do not silently coerce its prior answer. */
+const repairHint = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/risk_markers/.test(message)) {
+    return "\n\nYour previous answer was rejected: risk_markers must be an array of non-empty strings, or omit the field. Empty strings are invalid. Return valid JSON only.";
+  }
+  if (/was not JSON|missing required field|unexpected field|must be|invalid STM|GLM .+ response/.test(message)) {
+    return `\n\nYour previous answer was rejected (${message.slice(0, 160)}). Re-answer with JSON that matches the output_contract exactly.`;
+  }
+  return "";
+};
+
 /**
  * Every id a model must return is a label into a list it can read on the same
  * page, never a sha256 or a revision id out of our bookkeeping. A model asked
@@ -643,12 +655,14 @@ export class GlmModel implements ModelPort {
     if (version !== undefined && edge.versions !== null && !edge.versions.has(version)) throw new Error(`GLM ${strategy} version mismatch: caller requested "${version}" but this driver implements "${[...edge.versions].join('", "')}"`);
     if (!this.apiKey) throw new Error("GLM API key missing: set GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY");
     const attempts = 3;
+    let lastError: unknown;
     for (let attempt = 1; ; attempt += 1) {
       try {
+        const content = edge.prompt(input) + (attempt > 1 ? repairHint(lastError) : "");
         const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content: edge.prompt(input) }] }),
+          body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
           // A hung request must become an ERROR the caller's fail-closed/retry
           // paths can see, never a dream cycle stalled forever on one socket.
           signal: AbortSignal.timeout(300_000),
@@ -657,6 +671,7 @@ export class GlmModel implements ModelPort {
         const payload = await response.json();
         return edge.parse(readContent(payload), input);
       } catch (error) {
+        lastError = error;
         if (attempt >= attempts || !retryableGlmError(error)) throw error;
         const backoffMs = 500 * 2 ** (attempt - 1);
         console.error(`retry ${attempt}/${attempts - 1} for ${strategy} in ${backoffMs}ms: ${error instanceof Error ? error.message : error}`);
