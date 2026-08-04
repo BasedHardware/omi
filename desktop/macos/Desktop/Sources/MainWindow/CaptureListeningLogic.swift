@@ -26,6 +26,25 @@ enum CaptureListeningLogic {
   }
 
   static func listeningModeTitle(appState: AppState, raw: String) -> String {
+    // Surface the explicitly-chosen mic as the visible capture source. Meta
+    // glasses advertise a Bluetooth codename (e.g. "EL AI 000F"), so product-
+    // name matching alone can't identify them — an explicit user selection is
+    // the reliable signal, and showing its real name stays honest either way.
+    // While "Only during meetings" is armed but no meeting is live, no mic is
+    // actually open — keep the mode title instead of implying live capture.
+    if appState.isTranscribing, !appState.isAwaitingMeeting,
+      let name = appState.recordingInputDeviceName
+    {
+      if AudioCaptureService.isMetaGlassesName(name) {
+        return name.localizedCaseInsensitiveContains("oakley") ? name : "Ray-Ban Meta"
+      }
+      let preferredUID =
+        UserDefaults.standard.string(
+          forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+      if !preferredUID.isEmpty {
+        return name
+      }
+    }
     switch listeningCaptureMode(raw: raw) {
     case .always:
       return "Always"

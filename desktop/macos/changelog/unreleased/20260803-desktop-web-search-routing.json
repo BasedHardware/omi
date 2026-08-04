@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop web-search routing so public lookups work while private and explicitly no-web requests stay local"
+}

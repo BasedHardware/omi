@@ -126,6 +126,11 @@ class CaptureController extends ChangeNotifier
   // active. Distinct from the Live phone-mic path (_phoneMicWalActive).
   bool _phoneMicBatchActive = false;
 
+  // Completes when the native phone-mic batch teardown is fully drained.
+  // Used to serialize reconnect/device transitions so we never resume before
+  // finalization is complete.
+  Completer<void>? _phoneMicBatchStopCompleter;
+
   bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
 
   bool _isLoadingInProgressConversation = false;
@@ -273,6 +278,11 @@ class CaptureController extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
+  /// Stable identity for the active live-capture session. Unlike a transcript
+  /// segment ID, this does not change when the backend revises or deletes
+  /// segments during the capture.
+  String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
+
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
 
@@ -411,7 +421,13 @@ class CaptureController extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
+  // The transcript service readiness is driven solely by the socket lifecycle
+  // (set true on subscribe, false on close). The `&& _isConnected` gate was
+  // removed (#6311): ConnectivityService can flicker false during a WiFi↔cellular
+  // handoff or a brief DNS hiccup even while the WebSocket is alive and segments
+  // are flowing, which made the UI show "Recording, reconnecting" over healthy
+  // transcription. The socket is the authoritative connectivity signal.
+  bool get transcriptServiceReady => _transcriptServiceReady;
 
   // having a connected device or using the phone's mic for recording.
   // Includes `interrupted` so the keep-alive/reconnect path keeps running
@@ -441,7 +457,7 @@ class CaptureController extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
-    if (device == null) _endOfflineSession();
+    if (device == null && !_phoneMicBatchActive) _endOfflineSession();
     notifyListeners();
   }
 
@@ -1211,6 +1227,7 @@ class CaptureController extends ChangeNotifier
         // Add placeholder to UI for immediate feedback
         photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
         photos = List.from(photos);
+        _segmentsPhotosVersion++;
         notifyListeners();
 
         // Chunking Logic
@@ -1463,6 +1480,15 @@ class CaptureController extends ChangeNotifier
               if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
                 updateRecordingState(RecordingState.stop);
               }
+
+              // Used to serialize reconnect/device transitions so we never
+              // resume the device stream before the native phone-batch
+              // teardown is fully drained/finalized.
+              final completer = _phoneMicBatchStopCompleter;
+              if (completer != null && !completer.isCompleted) {
+                completer.complete();
+              }
+              _phoneMicBatchStopCompleter = null;
             },
             onInterruption: _onMicInterruption,
             onBatchStalled: _onBatchStalled,
@@ -1511,6 +1537,29 @@ class CaptureController extends ChangeNotifier
     }
     if (device != null) _updateRecordingDevice(device);
 
+    // A phone batch fallback covers the interval while the wearable was out of
+    // range. Finalize it before opening the device stream again so both capture
+    // paths never own the microphone concurrently.
+    if (_phoneMicBatchActive) {
+      _micInterrupted = true;
+      final completer = Completer<void>();
+      _phoneMicBatchStopCompleter = completer;
+
+      ServiceManager.instance().phoneMic.stop();
+
+      try {
+        await completer.future.timeout(const Duration(seconds: 5));
+      } catch (e, st) {
+        Logger.debug('[CaptureProvider] phone-mic batch stop timed out: $e\n$st');
+      } finally {
+        _phoneMicBatchStopCompleter = null;
+      }
+
+      _phoneMicBatchActive = false;
+      _endOfflineSession();
+      _micInterrupted = false;
+    }
+
     bool wasPaused = _isPaused;
 
     // Ensure even very short device recordings have a location in Redis before
@@ -1523,6 +1572,31 @@ class CaptureController extends ChangeNotifier
     if (wasPaused) {
       await pauseDeviceRecording();
     }
+  }
+
+  Future<void> onRecordingDeviceDisconnected() async {
+    // #7194: if the wearable is already doing its own on-device offline/batch
+    // recording, do not stop it and do not start the phone mic fallback.
+    // Phone fallback is a complementary safety net for live streaming gaps (#11078),
+    // not a replacement for on-device offline capture.
+    final bool isOnDeviceOfflineBatchActive = SharedPreferencesUtil().batchModeEnabled &&
+        _recordingDevice != null &&
+        (_recordingDevice!.type == DeviceType.limitless || _offlineSessionStartSeconds != 0);
+
+    if (!shouldFallbackToPhoneOnDeviceDisconnect(
+      isRecordingDevice: _recordingDevice != null,
+      isRecording: isRecordingDuringDeviceDisconnect(recordingState),
+      supportsBatch: phoneMicSupportsTranscribeLater && deviceSupportsTranscribeLater,
+      batchAlreadyActive: _phoneMicBatchActive,
+      isOnDeviceOfflineBatchActive: isOnDeviceOfflineBatchActive,
+    )) {
+      return;
+    }
+
+    Logger.debug('[CaptureProvider] BLE disconnected during recording; starting phone batch fallback');
+    await _cleanupCurrentState(disableNativeBackground: true);
+    await _socket?.stop(reason: 'BLE disconnected; starting phone batch fallback');
+    await _startPhoneMicBatch(auto: true);
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {

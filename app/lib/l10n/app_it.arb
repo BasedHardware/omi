@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "In attesa di sincronizzazione",
     "syncStatusRetrying": "Elaborazione non riuscita — nuovo tentativo",
     "syncStatusFailed": "Non riuscito — tocca Riprova",
+    "syncStatusTooOld": "Troppo vecchia per la sincronizzazione — Omi non può accettarla",
     "syncStatusFileUnavailable": "File non disponibile",
     "syncStatusUploaded": "Caricato · elaborazione su Omi",
     "noRecordingsYet": "Ancora nessuna registrazione",

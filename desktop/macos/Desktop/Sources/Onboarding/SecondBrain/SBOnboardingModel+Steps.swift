@@ -32,8 +32,14 @@ extension SBOnboardingModel {
       pollPermission(key)
     case "screen_recording":
       scrState = .waiting
-      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-      pollPermission(key)
+      appState.checkScreenRecordingPermission()
+      if appState.hasScreenRecordingPermission {
+        setPermOn(key)
+        autoAdvanceIfCurrent(key)
+      } else {
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+        pollPermission(key)
+      }
     case "full_disk_access":
       requestFullDiskAccess()
     case "accessibility":
@@ -229,15 +235,8 @@ extension SBOnboardingModel {
       // flips to "on" when FDA is granted from the context step — its poll only
       // drives fdaState, unlike every other connector that writes back its own state.
       contextStates["files"] = "on"
-      // Apple Notes reads through the same FDA grant, so re-probe it here too —
-      // otherwise granting FDA leaves Notes showing a pointless "Connect" button.
-      if contextStates["applenotes"] != "on" {
-        Task { [weak self] in
-          if await AppleNotesReaderService.shared.connectionStatus().isConnected {
-            self?.contextStates["applenotes"] = "on"
-          }
-        }
-      }
+    // Do not read Apple Notes merely because Full Disk Access changed. The
+    // explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
@@ -389,17 +388,17 @@ extension SBOnboardingModel {
       // .registerCommandO), so it reliably summons Omi globally — the natural,
       // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
       // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
-      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "press to set"),
+      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "press to set"),
     ]
   }
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "hold to talk"),
-      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "hold to talk"),
-      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "hold to talk"),
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
+      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
+      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }
 
@@ -412,15 +411,28 @@ extension SBOnboardingModel {
     // Preserve a choice when the user returns with Back. A fresh stage still
     // starts empty, while an already-confirmed shortcut stays visible/editable.
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
+    let isTalk: Bool
     switch step {
-    case .shortcutOpen: rememberedSelection = openShortcutSelection
-    case .shortcutTalk: rememberedSelection = talkShortcutSelection
-    default: rememberedSelection = nil
+    case .shortcutOpen:
+      rememberedSelection = openShortcutSelection
+      isTalk = false
+    case .shortcutTalk:
+      rememberedSelection = talkShortcutSelection
+      isTalk = true
+    default:
+      rememberedSelection = nil
+      isTalk = false
     }
-    shortcutPicked = rememberedSelection != nil
-    shortcutPressed = false
-    shortcutTokens = rememberedSelection?.displayTokens ?? []
-    chosenShortcut = rememberedSelection
+    if let rememberedSelection {
+      shortcutPicked = true
+      shortcutPressed = false
+      shortcutRecording = false
+      pendingModifierOnlyShortcut = nil
+      shortcutTokens = rememberedSelection.displayTokens
+      chosenShortcut = rememberedSelection
+    } else {
+      beginShortcutRecording(isTalk: isTalk)
+    }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
@@ -473,6 +485,9 @@ extension SBOnboardingModel {
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
+    if shortcutRecording {
+      return recordShortcut(from: event)
+    }
     guard !shortcutPressed else { return false }
     // If the user already tapped a row, honor that exact pick; otherwise let ANY
     // offered combo select itself on press, so "just press the key" works and the
@@ -506,6 +521,8 @@ extension SBOnboardingModel {
     shortcutTokens = shortcut.displayTokens
     shortcutPicked = true
     shortcutPressed = false
+    shortcutRecording = false
+    pendingModifierOnlyShortcut = nil
     if isTalk {
       talkShortcutSelection = shortcut
       ShortcutSettings.shared.pttShortcut = shortcut
@@ -515,6 +532,44 @@ extension SBOnboardingModel {
       ShortcutSettings.shared.askOmiShortcut = shortcut
       ShortcutSettings.shared.askOmiEnabled = true
     }
+  }
+
+  func beginShortcutRecording(isTalk: Bool) {
+    chosenShortcut = nil
+    chosenShortcutIsPTT = isTalk
+    shortcutTokens = []
+    shortcutPicked = false
+    shortcutPressed = false
+    shortcutRecording = true
+    pendingModifierOnlyShortcut = nil
+  }
+
+  func recordShortcut(from event: NSEvent) -> Bool {
+    let isTalk = step == .shortcutTalk
+    if isTalk, event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        pickShortcut(shortcut, isTalk: true)
+        return true
+      }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
+    guard
+      let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: isTalk
+      )
+    else {
+      return event.type == .flagsChanged
+    }
+    pendingModifierOnlyShortcut = nil
+    pickShortcut(shortcut, isTalk: isTalk)
+    return true
   }
 
   func answerShortcutOpen() {
@@ -747,17 +802,8 @@ extension SBOnboardingModel {
     if appState.hasFullDiskAccess { contextStates["files"] = "on" }
     Task { [weak self] in
       guard let self else { return }
-      // Apple Notes rides the same Full Disk Access grant that powers Files, so a
-      // readable NoteStore should show "✓ on" up front — not a "Connect" button
-      // that would only flip to on for nothing (this precheck was missing, which
-      // made the row look fake).
-      if self.contextStates["applenotes"] != "on",
-        await AppleNotesReaderService.shared.connectionStatus().isConnected
-      {
-        self.contextStates["applenotes"] = "on"
-      }
-
-      // Do not probe browser cookies just to decorate a fresh onboarding row.
+      // Do not probe browser cookies or Apple Notes just to decorate a fresh
+      // onboarding row.
       // A functional probe without a completed import used to paint "on" even
       // though post-onboarding Home/Apps had no persisted connector state and
       // no imported data. Only re-check a connector that this account already
@@ -882,7 +928,7 @@ extension SBOnboardingModel {
         guard let self else { return }
         // Full Disk Access covers Notes when it applies; if not, grant a
         // security-scoped folder bookmark (the real, re-sign-proof connect path).
-        var status = await AppleNotesReaderService.shared.connectionStatus()
+        var status = await AppleNotesReaderService.shared.connectionStatus(userInitiated: true)
         if status.isConnected {
           self.contextStates["applenotes"] = "on"
           return
@@ -904,7 +950,10 @@ extension SBOnboardingModel {
         }
         do {
           _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: path)
-          status = await AppleNotesReaderService.shared.connectionStatus(selectedFolderPath: path)
+          status = await AppleNotesReaderService.shared.connectionStatus(
+            selectedFolderPath: path,
+            userInitiated: true
+          )
           self.contextStates["applenotes"] = status.isConnected ? "on" : "needsSignIn"
         } catch {
           self.contextStates["applenotes"] = "needsSignIn"

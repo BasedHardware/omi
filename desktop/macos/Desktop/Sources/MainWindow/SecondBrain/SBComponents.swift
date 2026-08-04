@@ -17,14 +17,7 @@ struct SBLogo: View {
 
   @State private var angle: Double = 0
 
-  private static let image: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-      let data = try? Data(contentsOf: url)
-    else { return nil }
-    let img = NSImage(data: data)
-    img?.isTemplate = true
-    return img
-  }()
+  private static let image = OmiBrandMarkAsset.templateImage()
 
   var body: some View {
     Group {
@@ -34,8 +27,10 @@ struct SBLogo: View {
           .renderingMode(.template)
           .scaledToFit()
       } else {
-        // Fallback: a simple ring of dots so the mark is never missing.
-        Circle().strokeBorder(lineWidth: size * 0.12)
+        // A missing bitmap must never turn Omi into a generic progress ring.
+        // Keep the same eight-dot brand silhouette at every shared SBLogo call
+        // site while the signed bundle's resource lookup is unavailable.
+        OmiBrandMarkFallback(size: size, color: tint ?? sb.ink)
       }
     }
     .foregroundStyle(tint ?? sb.ink)
@@ -54,6 +49,80 @@ struct SBLogo: View {
     } else {
       withAnimation(.easeOut(duration: 0.2)) { angle = 0 }
     }
+  }
+}
+
+/// Resolves the packaged Omi mark without depending on a single bundle's
+/// registration order. Named, signed app bundles load the SwiftPM resource
+/// bundle beneath `Contents/Resources`, while tests and preview hosts can make
+/// it available through one of the already-loaded bundles instead.
+enum OmiBrandMarkAsset {
+  private static let resourceBundleName = "Omi Computer_Omi Computer.bundle"
+
+  static func templateImage(named resourceName: String = "herologo") -> NSImage? {
+    templateImage(
+      named: resourceName,
+      in: Bundle.allBundles + Bundle.allFrameworks + [Bundle.main],
+      resourceBundleRoots: knownResourceBundleRoots()
+    )
+  }
+
+  static func templateImage(
+    named resourceName: String = "herologo",
+    in bundles: [Bundle],
+    resourceBundleRoots: [URL]
+  ) -> NSImage? {
+    for bundle in bundles {
+      guard let url = bundle.url(forResource: resourceName, withExtension: "png"),
+        let image = NSImage(contentsOf: url)
+      else { continue }
+      image.isTemplate = true
+      return image
+    }
+
+    for root in resourceBundleRoots {
+      let url = root.appendingPathComponent("\(resourceName).png")
+      guard let image = NSImage(contentsOf: url) else { continue }
+      image.isTemplate = true
+      return image
+    }
+
+    return nil
+  }
+
+  private static func knownResourceBundleRoots() -> [URL] {
+    let mainBundleURL = Bundle.main.bundleURL
+    return [
+      // Signed app: Omi.app/Contents/Resources/<SwiftPM resources>.bundle
+      mainBundleURL
+        .appendingPathComponent("Contents/Resources")
+        .appendingPathComponent(resourceBundleName),
+      // Development app host: Omi.app/<SwiftPM resources>.bundle
+      mainBundleURL.appendingPathComponent(resourceBundleName),
+      // SwiftPM test host: .build/.../debug/<SwiftPM resources>.bundle
+      mainBundleURL.deletingLastPathComponent().appendingPathComponent(resourceBundleName),
+    ]
+  }
+}
+
+/// Vector-equivalent recovery mark for the rare case where an external host
+/// has not made the packaged PNG available yet. It intentionally mirrors the
+/// eight-dot Omi logo rather than drawing a generic circle.
+private struct OmiBrandMarkFallback: View {
+  let size: CGFloat
+  let color: Color
+
+  var body: some View {
+    ZStack {
+      ForEach(0..<8, id: \.self) { index in
+        Circle()
+          .fill(color)
+          .frame(width: size * 0.23, height: size * 0.23)
+          .offset(y: -size * 0.31)
+          .rotationEffect(.degrees(Double(index) * 45))
+      }
+    }
+    .frame(width: size, height: size)
   }
 }
 

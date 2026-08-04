@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -38,6 +39,7 @@ from models.product_memory import (
 from utils.memory.short_term_lifecycle import default_short_term_expiry
 
 logger = logging.getLogger(__name__)
+_GRAPH_PREDICATE_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 _PATCH_MUTATION_IDENTITY_EXCLUDED_KEYS = {
     "schema_version",
@@ -270,6 +272,75 @@ def memory_content_hash(*, content: Optional[str], evidence_ids: List[str]) -> s
     return deterministic_contract_id(
         "memory-content",
         {"content": content, "evidence_ids": evidence_ids},
+    )
+
+
+def _valid_graph_enrichment_receipt(
+    raw_receipt: Any,
+    *,
+    operation: MemoryOperation,
+    existing_item: MemoryItem,
+    control_state: MemoryControlState,
+    graph_plan: Optional[PromotionGraphPlan],
+) -> bool:
+    """Validate the persisted receipt before allowing a graph-only LTM mutation."""
+    if not isinstance(raw_receipt, dict) or graph_plan is None:
+        return False
+    if raw_receipt.get("schema_version") != "canonical_memory_graph_enrichment_receipt.v1":
+        return False
+    evidence_ids = raw_receipt.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return False
+    if any(not isinstance(value, str) or not value.strip() for value in evidence_ids):
+        return False
+    normalized_evidence_ids = sorted(value.strip() for value in evidence_ids)
+    if len(normalized_evidence_ids) != len(set(normalized_evidence_ids)):
+        return False
+
+    def nonnegative_int(value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    receipt_id = raw_receipt.get("receipt_id")
+    uid = raw_receipt.get("uid")
+    memory_id = raw_receipt.get("memory_id")
+    content_hash = raw_receipt.get("content_hash")
+    plan_hash = raw_receipt.get("plan_hash")
+    item_revision = raw_receipt.get("item_revision")
+    account_generation = raw_receipt.get("account_generation")
+    source_generation = raw_receipt.get("source_generation")
+    if not all(
+        isinstance(value, str) and value.strip() for value in (receipt_id, uid, memory_id, content_hash, plan_hash)
+    ):
+        return False
+    if not all(nonnegative_int(value) for value in (item_revision, account_generation, source_generation)):
+        return False
+    expected_id = (
+        "ger_"
+        + deterministic_contract_id(
+            "canonical-memory-graph-enrichment-receipt",
+            {
+                "schema_version": raw_receipt["schema_version"],
+                "uid": uid,
+                "memory_id": memory_id,
+                "item_revision": item_revision,
+                "content_hash": content_hash,
+                "evidence_ids": normalized_evidence_ids,
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+                "plan_hash": plan_hash,
+            },
+        )[:32]
+    )
+    return (
+        receipt_id == expected_id
+        and uid == operation.uid
+        and memory_id == existing_item.memory_id
+        and item_revision == existing_item.item_revision
+        and content_hash == existing_item.content_hash
+        and normalized_evidence_ids == sorted(record.evidence_id for record in existing_item.evidence)
+        and account_generation == control_state.account_generation
+        and source_generation == control_state.source_generation
+        and plan_hash == graph_plan.plan_hash
     )
 
 
@@ -619,6 +690,17 @@ def apply_long_term_patch_transaction(
             reason="observed head does not match current head",
         )
 
+    if (
+        operation.operation_type == MemoryOperationType.graph_enrichment
+        and patch.decision != DurablePatchDecision.update
+    ):
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason="graph enrichment requires an update decision",
+        )
+
     if any(item.source_state != SourceState.active for item in evidence):
         return ApplyResult(
             status=ApplyStatus.source_not_active,
@@ -646,6 +728,7 @@ def apply_long_term_patch_transaction(
             outbox_events=outbox_events,
         )
     transitioning_to_long_term = False
+    graph_enrichment = False
     if patch.decision == DurablePatchDecision.update:
         if existing_item_raw is None:
             return ApplyResult(
@@ -678,6 +761,65 @@ def apply_long_term_patch_transaction(
                 operation=operation,
                 reason="update patch expected_content_hash mismatch",
             )
+        graph_enrichment = operation.operation_type == MemoryOperationType.graph_enrichment
+        if graph_enrichment:
+            raw_graph_plan = promotion_audit.get("graph_plan") if isinstance(promotion_audit, dict) else None
+            raw_receipt = promotion_audit.get("graph_enrichment_receipt") if isinstance(promotion_audit, dict) else None
+            try:
+                graph_plan = PromotionGraphPlan(**raw_graph_plan) if isinstance(raw_graph_plan, dict) else None
+            except Exception:
+                graph_plan = None
+            required_receipt_valid = not (existing_item.promotion or {}).get(
+                "required"
+            ) or valid_required_processing_receipt(
+                content=existing_item.content or "",
+                item_revision=existing_item.item_revision,
+                promotion=existing_item.promotion or {},
+            )
+            if not (
+                existing_item.status == MemoryItemStatus.active
+                and existing_item.tier == MemoryTier.long_term
+                and existing_item.processing_state == ProcessingState.processed
+                and not existing_item.graph_ready
+                and graph_plan is not None
+                and _valid_graph_enrichment_receipt(
+                    raw_receipt,
+                    operation=operation,
+                    existing_item=existing_item,
+                    control_state=control_state,
+                    graph_plan=graph_plan,
+                )
+                and required_receipt_valid
+                and not set(existing_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+                and (existing_item.promotion or {}).get("user_review") is not False
+                and patch.target_tier is None
+                and patch.memory_text is None
+                and patch.target_visibility is None
+                and patch.target_user_asserted is None
+                and not patch.clear_graph_assertion
+                and not extra_item_updates
+                and promotion_metadata is None
+                and patch.result_status == LifecycleState.active
+                and not patch.supersedes
+                and patch.subject_entity_id == graph_plan.subject_entity_id
+                and (
+                    not existing_item.subject_entity_id
+                    or graph_plan.subject_entity_id == existing_item.subject_entity_id
+                )
+                and patch.predicate == graph_plan.predicate
+                and (not existing_item.predicate or graph_plan.predicate == existing_item.predicate)
+                and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))
+                and patch.arguments == graph_plan.arguments
+                and (not existing_item.arguments or graph_plan.arguments == existing_item.arguments)
+                and sorted(record.evidence_id for record in evidence)
+                == sorted(record.evidence_id for record in existing_item.evidence)
+            ):
+                return ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="graph enrichment must attach one validated plan without changing Long-term semantics",
+                )
         if existing_item.tier == MemoryTier.long_term and existing_item.status == MemoryItemStatus.active:
             proposed_evidence = evidence or existing_item.evidence
             semantic_change = any(
@@ -691,7 +833,7 @@ def apply_long_term_patch_transaction(
                 )
             )
             explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
-            if semantic_change and not explicit_short_term_demotion:
+            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
                 return ApplyResult(
                     status=ApplyStatus.invalid_patch,
                     control_state=control_state,
@@ -765,11 +907,15 @@ def apply_long_term_patch_transaction(
 
     memory_items = [memory_item]
     graph_assertions: List[MemoryGraphAssertion] = []
-    refresh_graph_assertion = transitioning_to_long_term or (
-        memory_item.tier == MemoryTier.long_term
-        and memory_item.status == MemoryItemStatus.active
-        and memory_item.graph_ready
-        and not patch.clear_graph_assertion
+    refresh_graph_assertion = (
+        transitioning_to_long_term
+        or graph_enrichment
+        or (
+            memory_item.tier == MemoryTier.long_term
+            and memory_item.status == MemoryItemStatus.active
+            and memory_item.graph_ready
+            and not patch.clear_graph_assertion
+        )
     )
     if refresh_graph_assertion:
         admission_metadata = memory_item.promotion or {}

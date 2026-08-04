@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat startup to always land at the bottom, preserved explicit reader scroll position, kept the transcript and prompt rail responsive through repeated fast scrolling and scroll-view replacement, and prevented duplicate scrollbars, bottom snapping, and beachballs"
+}

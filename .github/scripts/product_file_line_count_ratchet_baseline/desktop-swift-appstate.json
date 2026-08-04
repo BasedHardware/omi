@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1533
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1608
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds shared-capture silent-mic recovery telemetry so non-Bluetooth CoreAudio rebuild attempts are visible to release-health alongside the existing Bluetooth fallback."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows."
   },
   "threshold": 1500
 }

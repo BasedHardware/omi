@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Väntar på synkronisering",
     "syncStatusRetrying": "Kunde inte bearbetas — försöker igen",
     "syncStatusFailed": "Misslyckades — tryck på Försök igen",
+    "syncStatusTooOld": "För gammal för att synkas — Omi kan inte ta emot den",
     "syncStatusFileUnavailable": "Filen är inte tillgänglig",
     "syncStatusUploaded": "Uppladdad · bearbetas på Omi",
     "noRecordingsYet": "Inga inspelningar än",

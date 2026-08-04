@@ -8,15 +8,37 @@ BASH := bash
 endif
 
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-# Retain a lazy compatibility value for callers that inspect $(PYTHON).
-PYTHON ?= $(shell source scripts/dev-harness/_resolve_python.sh; dev_harness_python)
+# Fall back to the working directory (where make runs, i.e. the repo root) when
+# `git rev-parse --show-toplevel` cannot resolve a work tree. In a linked
+# worktree whose git context resolves to a git dir rather than a work tree,
+# show-toplevel exits 128 and previously expanded to an empty prefix, turning
+# the source into `/scripts/dev-harness/_resolve_python.sh: No such file` and
+# breaking every target. Use the make process's working directory rather than
+# a command substitution: it remains shell data even when the checkout name
+# contains quote or command-substitution characters.
+# GNU Make supplies a built-in PYTHON=python default. Treat that as unset so
+# harness targets still resolve this checkout's backend venv, while retaining
+# explicit command-line and environment overrides for callers.
+ifeq ($(origin PYTHON),default)
+PYTHON := $(shell bash -c 'cd -P "$$PWD"; source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+else
+PYTHON ?= $(shell bash -c 'cd -P "$$PWD"; source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+endif
+# Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
+# (Make text interpolation). Shell variable expansion treats the resolved path
+# as data and cannot be broken by quote or command-substitution characters in
+# the checkout root, unlike Make interpolation into recipe shell text.
+export PYTHON
 # Keep the checkout-local interpreter resolution inside Bash so native GNU
 # Make never exports a Unicode checkout path through its legacy code page.
 PYTHON_RUNNER := $(BASH) scripts/dev-harness/run-python.sh
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
+CHAT_FIRST_E2E_ACTION ?= prepare
+CHAT_FIRST_E2E_CASE ?= enabled
+CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks setup-backend preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-maintenance
+.PHONY: setup setup-main setup-hooks setup-backend preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-promotion run-canonical-maintenance
 
 # Baseline setup is deliberately limited to prerequisites that the default
 # pre-push gate may require; app and desktop runtime environments stay opt-in.
@@ -91,6 +113,12 @@ desktop-run-local:
 	else \
 		$(BASH) scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	fi
+
+chat-first-e2e-fixture:
+	PYTHON="$(PYTHON)" bash scripts/dev-harness/chat-first-e2e-fixture.sh "$(CHAT_FIRST_E2E_ACTION)" "$(CHAT_FIRST_E2E_CASE)" "$(CHAT_FIRST_E2E_SECONDS)"
+
+run-canonical-promotion:
+	PYTHON="$$PYTHON" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$$PYTHON" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
 
 run-canonical-maintenance:
 	$(PYTHON_RUNNER) scripts/dev-harness/run-canonical-maintenance.py "$(MAINTENANCE_USER)"

@@ -252,6 +252,32 @@ enum RealtimeHubSchemaRefreshPolicy {
 enum RealtimeHubCloseClassifier {
   static let idleTeardownThreshold: TimeInterval = 60
 
+  /// Errnos a socket reports once the peer (or an intermediary) has dropped it.
+  /// Read from the typed errno rather than the localized failure text.
+  private static let idleDisconnectPOSIXCodes: Set<Int> = [
+    Int(POSIXErrorCode.ECONNABORTED.rawValue),
+    Int(POSIXErrorCode.ECONNRESET.rawValue),
+    Int(POSIXErrorCode.ENOTCONN.rawValue),
+    Int(POSIXErrorCode.ETIMEDOUT.rawValue),
+  ]
+
+  /// A warm socket that outlived the idle window while owning no turn is dropped by
+  /// the peer as an ordinary idle teardown — the recovery path already reads
+  /// `aliveFor > 60` that way and re-warms the same provider. On the read/write side
+  /// that arrives as ECONNRESET/ENOTCONN rather than a provider close, so the
+  /// failure-kind switch used to label it a transport error and report it. A fast
+  /// disconnect, or one during an active turn, is a genuine transport failure and
+  /// still falls through as reportable.
+  private static func isAgedIdleDisconnect(
+    _ failure: RealtimeHubTransportFailure,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool
+  ) -> Bool {
+    guard !hasActiveTurn, aliveFor >= idleTeardownThreshold else { return false }
+    guard failure.systemDomain == "posix", let code = failure.systemCode else { return false }
+    return idleDisconnectPOSIXCodes.contains(code)
+  }
+
   static func category(
     failure: RealtimeHubTransportFailure,
     aliveFor: TimeInterval,
@@ -267,10 +293,11 @@ enum RealtimeHubCloseClassifier {
       return .transportConnect
     case .handshake:
       return .transportHandshake
-    case .receive:
-      return .transportReceive
-    case .send:
-      return .transportSend
+    case .receive, .send:
+      if isAgedIdleDisconnect(failure, aliveFor: aliveFor, hasActiveTurn: hasActiveTurn) {
+        return .expectedIdleTeardown
+      }
+      return failure.kind == .receive ? .transportReceive : .transportSend
     case .protocolViolation:
       return .transportProtocolViolation
     case .providerError:

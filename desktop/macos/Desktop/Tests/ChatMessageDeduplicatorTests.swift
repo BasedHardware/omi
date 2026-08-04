@@ -40,4 +40,30 @@ final class ChatMessageDeduplicatorTests: XCTestCase {
     let messages = [msg("1", "short repeated"), msg("2", "short repeated")]
     XCTAssertTrue(ChatMessageDeduplicator.duplicateIDs(in: messages).isEmpty)
   }
+
+  func testVisibleDuplicateWorkIsBoundedToRecentTranscriptWindow() {
+    let repeatedBody = sharedOpening + " repeated history body"
+    let oldMessages = (0..<(ChatTranscriptWindow.maximumVisibleMessageCount * 20)).map { index in
+      msg("old-\(index)", repeatedBody)
+    }
+    let visibleMessages = (0..<(ChatTranscriptWindow.maximumVisibleMessageCount - 1)).map { index in
+      msg("visible-\(index)", "visible \(index)")
+    }
+    let visibleDuplicate = msg(
+      "visible-duplicate",
+      sharedOpening + " visible duplicate body"
+    )
+    let visibleDuplicateCopy = msg(
+      "visible-duplicate-copy",
+      sharedOpening + " visible duplicate body"
+    )
+
+    let duplicates = ChatTranscriptWindow.visibleDuplicateIDs(
+      in: oldMessages + visibleMessages + [visibleDuplicate, visibleDuplicateCopy]
+    )
+
+    // The transcript renderer only displays the recent window, so streaming
+    // body updates must not spend work deduplicating rows that cannot appear.
+    XCTAssertEqual(duplicates, ["visible-duplicate-copy"])
+  }
 }

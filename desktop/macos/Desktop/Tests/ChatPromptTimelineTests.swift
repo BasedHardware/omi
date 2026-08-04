@@ -19,6 +19,7 @@ final class ChatPromptTimelineHoverLayoutTests: XCTestCase {
       id: "q\($0)",
       prompt: "a question long enough to fill the card's whole width and then some",
       reply: "an answer that is also long enough to wrap onto the card's second line",
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double($0)),
       fraction: CGFloat($0) / 3
     )
   }
@@ -142,6 +143,7 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
     XCTAssertEqual(sources.map(\.id), ["q1", "q2"])
     XCTAssertEqual(sources[0].prompt, "How do I set up SwiftPM?")
     XCTAssertEqual(sources[0].reply, "Open Xcode, then File > Add Packages.")
+    XCTAssertEqual(sources[0].createdAt, Date(timeIntervalSince1970: 1_700_000_000))
     XCTAssertEqual(sources[1].reply, "It lets you write concurrent code without callbacks.")
   }
 
@@ -181,7 +183,12 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
   }
 
   private func message(_ id: String, _ text: String, _ sender: ChatSender) -> ChatMessage {
-    ChatMessage(id: id, text: text, sender: sender)
+    ChatMessage(
+      id: id,
+      text: text,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      sender: sender
+    )
   }
 }
 
@@ -190,7 +197,10 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
 /// measured.
 final class ChatPromptTimelineMarkTests: XCTestCase {
   private let sources = (0..<5).map {
-    ChatPromptSource(id: "q\($0)", prompt: "prompt \($0)", reply: "reply \($0)")
+    ChatPromptSource(
+      id: "q\($0)", prompt: "prompt \($0)", reply: "reply \($0)",
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double($0))
+    )
   }
 
   func testAFullyMeasuredTranscriptPlacesEveryMarkAtItsRealPosition() {
@@ -266,9 +276,18 @@ final class ChatPromptTimelineMarkTests: XCTestCase {
 /// Which mark is lit, and where ⌘↑ / ⌘↓ go next.
 final class ChatPromptTimelineActiveMarkTests: XCTestCase {
   private let marks = [
-    ChatPromptMark(id: "q0", prompt: "a", reply: "", fraction: 0.0),
-    ChatPromptMark(id: "q1", prompt: "b", reply: "", fraction: 0.4),
-    ChatPromptMark(id: "q2", prompt: "c", reply: "", fraction: 0.8),
+    ChatPromptMark(
+      id: "q0", prompt: "a", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      fraction: 0.0
+    ),
+    ChatPromptMark(
+      id: "q1", prompt: "b", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_001),
+      fraction: 0.4
+    ),
+    ChatPromptMark(
+      id: "q2", prompt: "c", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_002),
+      fraction: 0.8
+    ),
   ]
 
   func testTheMarkBeingReadIsTheLastOneAboveTheReadingLine() {
@@ -622,39 +641,5 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
       ChatPromptTimelineMetrics.previewCenterY(
         anchorY: 300, cardHeight: 70, railHeight: railHeight),
       300, accuracy: 0.001)
-  }
-}
-
-@MainActor
-final class ChatPromptTimelineScrollerControllerTests: XCTestCase {
-  func testCustomTimelineHidesAndRestoresTheLegacyVerticalScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = true
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
-    XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? false)
-    XCTAssertEqual(scrollView.verticalScroller?.alphaValue, 0)
-
-    XCTAssertFalse(controller.setSuppressed(true), "duplicate geometry updates must be a no-op")
-
-    controller.setSuppressed(false)
-
-    XCTAssertTrue(scrollView.hasVerticalScroller)
-  }
-
-  func testRestoringPreservesAnInitiallyHiddenScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = false
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-    controller.restore()
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
   }
 }

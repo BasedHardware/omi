@@ -1,3 +1,23 @@
+# Review is required from the listed owner before merge. Ordering matters: the last matching
+# pattern wins, so keep the broad entries above the narrow ones.
+
 # Broad production authority remains protected after the retired release-ring deletion.
 /.github/workflows/** @Git-on-my-level
 /backend/charts/backend-secrets/** @Git-on-my-level
+
+# Device firmware. Behaviour here ships to hardware in the field and cannot be rolled back the
+# way a server deploy can.
+/omi/firmware/** @TuEmb
+
+# BLE and offline sync. These carry recording data between the device and the backend, and a
+# change that looks local has repeatedly broken capture or stranded recordings on devices.
+/app/lib/services/devices/** @mdmohsin7
+/app/lib/services/wals/** @mdmohsin7
+/app/lib/services/bridges/** @mdmohsin7
+/app/lib/services/wals.dart @mdmohsin7
+/app/lib/services/devices.dart @mdmohsin7
+/app/lib/providers/sync_provider.dart @mdmohsin7
+/app/lib/providers/device_provider.dart @mdmohsin7
+/app/lib/providers/capture_provider.dart @mdmohsin7
+/app/android/app/src/main/kotlin/com/friend/ios/ble/** @mdmohsin7
+/app/ios/Runner/Ble/** @mdmohsin7

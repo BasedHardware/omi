@@ -9772,4 +9772,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty iPhonen asetuksissa.';
+
+  @override
+  String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
 }

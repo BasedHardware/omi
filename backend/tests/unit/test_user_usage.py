@@ -231,3 +231,40 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     # 600 (7am local, filed under the previous UTC date) + 300 (6pm local, filed under today's
     # UTC date). Serving the UTC day alone finds only the 300.
     assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monkeypatch):
+    query = MagicMock()
+    query.stream.return_value = iter(
+        [
+            _Snap({'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8}),
+            _Snap({'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16}),
+        ]
+    )
+    mock_db.collection.return_value.document.return_value.collection.return_value = query
+    record_read = MagicMock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', record_read)
+
+    result = user_usage.get_current_user_usage('uid', 'all_time')
+
+    assert result['all_time']['transcription_seconds'] == 30
+    assert result['all_time']['words_transcribed'] == 4
+    assert result['all_time']['speech_seconds'] == 24
+    assert result['history'] == [
+        {
+            'date': '2025-01-01',
+            'transcription_seconds': 10,
+            'words_transcribed': 0,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+        {
+            'date': '2026-01-01',
+            'transcription_seconds': 20,
+            'words_transcribed': 4,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+    ]
+    query.stream.assert_called_once_with()
+    record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)

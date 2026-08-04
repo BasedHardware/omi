@@ -14,6 +14,7 @@ import { Rewind } from '../pages/Rewind'
 import { Insights } from '../pages/Insights'
 import { LiveConversation } from '../pages/LiveConversation'
 import { KnowledgeGraph } from '../pages/KnowledgeGraph'
+import { CONVERSATIONS_PATH } from '../lib/conversations/conversationsPanelActivity'
 
 // Single source of truth for the app's page routing. Both MainViews (what renders
 // in the content area) and Sidebar (the nav rail) are driven off this array, so a
@@ -79,6 +80,10 @@ const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
 
+// Shared path constants — keep panel activity predicates and the manifest in sync.
+export const HOME_PATH = '/home'
+export { CONVERSATIONS_PATH }
+
 export const routeManifest: RouteEntry[] = [
   // Redirects: legacy/blank routes fold into Home (Home merges the old Chat and
   // Record screens).
@@ -131,7 +136,7 @@ export const routeManifest: RouteEntry[] = [
   {
     id: 'conversations',
     kind: 'panel',
-    path: '/conversations',
+    path: CONVERSATIONS_PATH,
     Component: ConversationsPanel,
     nav: { label: 'Conversations', Icon: GanttChartSquare, order: 1 },
     shortcut: '2',
@@ -182,9 +187,6 @@ export const routeManifest: RouteEntry[] = [
     escapeToHome: true
   }
 ]
-
-// Home is the one page with no PageChromeBar and no Esc-to-home (it IS home).
-export const HOME_PATH = '/home'
 
 export type ResolveResult =
   | { entry: RouteEntry; params: Record<string, string> }

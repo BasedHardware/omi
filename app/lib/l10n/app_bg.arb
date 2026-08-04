@@ -2962,6 +2962,7 @@
     "syncStatusWaiting": "Чака синхронизация",
     "syncStatusRetrying": "Неуспешна обработка — нов опит",
     "syncStatusFailed": "Неуспешно — натиснете „Опитай отново“",
+    "syncStatusTooOld": "Твърде стар за синхронизиране — Omi не може да го приеме",
     "syncStatusFileUnavailable": "Файлът е недостъпен",
     "syncStatusUploaded": "Качено · обработва се в Omi",
     "noRecordingsYet": "Все още няма записи",

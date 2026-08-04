@@ -184,8 +184,10 @@ public class ProactiveAssistantsPlugin: NSObject {
   private override init() {
     super.init()
 
-    // Load environment variables
-    loadEnvironment()
+    // Environment ownership is centralized so explicit launch overrides (for
+    // example a local Python backend) cannot be replaced by a later singleton
+    // initialization.
+    BundleEnvironment.loadIfNeeded()
 
     // Set up the coordinator event callback
     AssistantCoordinator.shared.setEventCallback { [weak self] type, data in
@@ -199,35 +201,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     setupTestNotificationListeners()
 
     log("ProactiveAssistantsPlugin initialized")
-  }
-
-  // MARK: - Environment Loading
-
-  private func loadEnvironment() {
-    let envPaths = [
-      Bundle.main.path(forResource: ".env", ofType: nil),
-      FileManager.default.currentDirectoryPath + "/.env",
-      NSHomeDirectory() + "/.omi.env",
-      NSHomeDirectory() + "/.hartford.env",
-    ].compactMap { $0 }
-
-    for path in envPaths {
-      if let contents = try? String(contentsOfFile: path, encoding: .utf8) {
-        for line in contents.components(separatedBy: .newlines) {
-          let parts = line.split(separator: "=", maxSplits: 1)
-          if parts.count == 2 {
-            let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
-            let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
-              .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-            setenv(key, value, 1)
-          }
-        }
-        log("Loaded environment from: \(path)")
-        break
-      }
-    }
-
-    DesktopBackendEnvironment.applyReleaseChannelDefaults()
   }
 
   // MARK: - Assistant Management
@@ -306,35 +279,10 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Request notification permission in parallel, but only for first-time users.
-    // The bridge owns the private-XPC callback registration and explicit main handoff.
-    UserNotificationCallbackBridge.authorizationStatus(handler: Self.handleStartupNotificationAuthorizationStatus)
-
-    // Start monitoring immediately — don't wait for notification permission callback
+    // Notification authorization is an explicit Settings action. Monitoring may
+    // run without system banners, and must never turn launch/wake into a consent
+    // request.
     continueStartMonitoring(completion: completion)
-  }
-
-  @MainActor
-  private static func handleStartupNotificationAuthorizationStatus(_ authorizationStatus: UNAuthorizationStatus) {
-    guard authorizationStatus == .notDetermined else {
-      log("Skipping startup notification authorization request (auth=\(authorizationStatus.rawValue))")
-      return
-    }
-
-    guard NotificationRegistrationRepair.shouldAttemptStartupRepair() else {
-      log("Skipping startup notification repair — already attempted for this app version")
-      return
-    }
-    NotificationRegistrationRepair.markStartupRepairAttempted()
-
-    NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-      reason: "launch_disabled_error_startup",
-      previousStatus: "notDetermined"
-    ) { granted in
-      if !granted {
-        log("Notification permission not granted - screen analysis will work but notifications will be disabled")
-      }
-    }
   }
 
   /// Repair LaunchServices registration when notification authorization fails with "not allowed".

@@ -3,9 +3,13 @@
   "releases": [
     {
       "version": "0.12.148",
-      "date": "2026-07-30",
+      "date": "2026-07-31",
       "changes": [
-        "Fixed Escape so it closes active desktop editing and overlays before navigating home"
+        "Choose your microphone in Settings → Transcription — including Ray-Ban Meta glasses, which now show as the capture source on the Listening button",
+        "Fixed a conflict where push-to-talk could fight the active transcription microphone (e.g. Ray-Ban Meta glasses) over the same audio device — push-to-talk now uses the built-in mic while another capture is running",
+        "Push-to-talk now responds instantly on consecutive presses — the microphone stays warm between turns instead of reopening the audio device each time",
+        "Fixed corrupted import statement in OmiApp.swift",
+        "Fixed reliability of macOS update builds"
       ]
     },
     {

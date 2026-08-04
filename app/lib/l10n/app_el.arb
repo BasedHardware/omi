@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Σε αναμονή συγχρονισμού",
     "syncStatusRetrying": "Αποτυχία επεξεργασίας — νέα προσπάθεια",
     "syncStatusFailed": "Απέτυχε — πατήστε Επανάληψη",
+    "syncStatusTooOld": "Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί",
     "syncStatusFileUnavailable": "Το αρχείο δεν είναι διαθέσιμο",
     "syncStatusUploaded": "Μεταφορτώθηκε · επεξεργασία στο Omi",
     "noRecordingsYet": "Δεν υπάρχουν ακόμη ηχογραφήσεις",

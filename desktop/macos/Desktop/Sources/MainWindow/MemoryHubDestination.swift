@@ -39,6 +39,17 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     guard let requestedRawValue else { return .conversations }
     return MemoryHubDestination(rawValue: requestedRawValue) ?? .conversations
   }
+
+  static func applySidebarSelection(
+    _ item: SidebarNavItem,
+    selectedIndex: inout Int,
+    memoryDestinationRawValue: inout Int
+  ) {
+    if let destination = destination(for: item) {
+      memoryDestinationRawValue = destination.rawValue
+    }
+    selectedIndex = item.rawValue
+  }
 }
 
 /// Deterministic interaction state for the Memory dropdown.

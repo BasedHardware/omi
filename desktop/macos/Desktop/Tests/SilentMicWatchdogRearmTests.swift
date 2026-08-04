@@ -9,6 +9,17 @@ import XCTest
 /// audio callback) so the fire-more-than-once contract is verified without real CoreAudio buffers.
 final class SilentMicWatchdogRearmTests: XCTestCase {
 
+  func testResetClearsWatchdogEvaluationState() {
+    let svc = AudioCaptureService()
+    svc.detectSilentMicOnAnyTransport = true
+
+    XCTAssertNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 0))
+    svc.resetSilentMicWatchdog()
+
+    XCTAssertNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 1))
+    XCTAssertNotNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 2))
+  }
+
   /// PTT opts every transport into detection; without this only Bluetooth inputs fire.
   private func makeWatchdog(anyTransport: Bool = true) -> AudioCaptureService {
     let svc = AudioCaptureService()

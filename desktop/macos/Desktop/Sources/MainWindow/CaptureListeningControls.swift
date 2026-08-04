@@ -27,8 +27,31 @@ struct CaptureListeningControls: View {
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
-      captureButton
+      ForEach(CaptureListeningControlsLayout.displayOrder, id: \.self) { control in
+        switch control {
+        case .listening:
+          listeningControlSlot
+        case .capture:
+          captureButton
+        }
+      }
+    }
+    .onAppear(perform: syncCaptureState)
+    .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
+      syncCaptureState()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
+      syncCaptureState()
+    }
+  }
 
+  private var transcriptionUnavailable: Bool { appState.transcriptionServiceError != nil }
+
+  /// Listening reveals a mode toggle on hover. Keep that extra width inside a
+  /// reserved trailing slot so the right edge of the control group stays fixed
+  /// and Capture never moves while the secondary affordance fades in.
+  private var listeningControlSlot: some View {
+    ZStack(alignment: .trailing) {
       HomeListeningStatusButton(
         title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
         systemImage: transcriptionUnavailable
@@ -42,16 +65,8 @@ struct CaptureListeningControls: View {
         modeAction: toggleListeningMode
       )
     }
-    .onAppear(perform: syncCaptureState)
-    .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
-      syncCaptureState()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
-      syncCaptureState()
-    }
+    .frame(width: CaptureListeningControlsLayout.listeningSlotWidth, alignment: .trailing)
   }
-
-  private var transcriptionUnavailable: Bool { appState.transcriptionServiceError != nil }
 
   // MARK: Capture button + hover Rewind affordance
 
@@ -140,4 +155,19 @@ struct CaptureListeningControls: View {
     CaptureListeningLogic.syncCaptureState(
       screenAnalysisEnabled: $screenAnalysisEnabled, isCaptureMonitoring: $isCaptureMonitoring)
   }
+}
+
+enum CaptureListeningControlsLayout {
+  enum Control: Hashable {
+    case listening
+    case capture
+  }
+
+  /// Listening's reserved trailing slot must precede Capture, otherwise the
+  /// slot's hover capacity becomes visible whitespace between the two pills.
+  static let displayOrder: [Control] = [.listening, .capture]
+
+  /// Resting Listening is about 104pt wide; reserve room for its 31pt hover
+  /// affordance without changing the control group's measured width.
+  static let listeningSlotWidth: CGFloat = 136
 }

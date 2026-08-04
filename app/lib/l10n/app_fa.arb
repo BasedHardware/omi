@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "در انتظار همگام‌سازی",
     "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
     "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
+    "syncStatusTooOld": "برای همگام‌سازی خیلی قدیمی است — Omi نمی‌تواند آن را بپذیرد",
     "syncStatusFileUnavailable": "فایل در دسترس نیست",
     "syncStatusUploaded": "بارگذاری شد · در حال پردازش در Omi",
     "noRecordingsYet": "هنوز ضبطی وجود ندارد",

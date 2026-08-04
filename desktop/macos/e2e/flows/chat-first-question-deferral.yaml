@@ -1,0 +1,149 @@
+version: 2
+name: chat-first-question-deferral
+tier: manual
+description: "Manual local/offline flow for a server-materialized question card, its real deferral, and a normal foreground re-raise."
+app: non-prod
+# Setup is server-owned and must precede this flow:
+# PROVIDER_MODE=offline make dev-up
+# make seed-memory-scenario SCENARIO=happy_path
+# make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=question
+# make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
+# Run with --lane ui --bundle-id com.omi.omi-chat-first-e2e for AX steps.
+covers:
+  # S4 and S8 use the enabled main-Chat bridge facade for the owned question
+  # reply and materialization/receipt operations; no page-local journal path
+  # is involved.
+  - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
+  # This flow reaches the focused facade's bounded reply/deferral, receipt
+  # listing/acknowledgement, and foreground materialization operations. It does
+  # not claim appendChatFirstBlocks; that privileged rendered-block contract
+  # stays in unit/authorized-tool tests.
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+ChatFirstJournal.swift
+  # This is the user journey for model-validated question cards; the adapter's
+  # all-or-nothing wire contract is behaviorally tested in ChatFirstRichBlockTests.
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstPromptMaterializationCoordinator.swift
+  # S8 drives the coordinator's normal server fetch/ack/materialize runner.
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstPromptMaterializationDriver.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstDeferralOutboxDriver.swift
+preconditions:
+  - automation_bridge_ready
+  - named_non_production_bundle_ui_lane
+  - provider_mode_offline
+  - chat_first_e2e_fixture_case_question_prepared_by_make_helper
+  - desktop_user_omi_chat_first_e2e_enabled
+  - chat_first_prompt_materialized_in_mounted_main_chat
+
+steps:
+  - id: S1
+    name: Navigate to the mounted Chat page after server materialization
+    bridge.navigate:
+      target: chat
+      activateApp: true
+      settleMs: 1000
+
+  - id: S2
+    name: Confirm the current Chat tail has a real actionable and deferrable question
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.actionable_question_at_tail: "true"
+      result.detail.actionable_question_available: "true"
+      result.detail.deferrable_question_available: "true"
+
+  - id: S3
+    name: Verify the stable local-only question and deferral controls are exposed through Accessibility
+    ax.expect:
+      identifiers_visible:
+        - chat-first-question-chat-first-e2e-question-v1
+        - chat-first-question-chat-first-e2e-question-v1-option-later
+
+  - id: S4
+    name: Select the bounded deferral option through the normal main-Chat journal
+    bridge.action:
+      name: chat_first_select_question_option
+      params:
+        selection: defer
+    expect:
+      result.detail.question_selection_started: "true"
+
+  - id: S5
+    name: Wait for the ordinary main-Chat deferral turn to settle
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S6
+    name: Confirm the consumed question retired from the current Chat tail
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.actionable_question_at_tail: "false"
+      result.detail.deferrable_question_available: "false"
+
+  - id: S7
+    name: Advance only the server-owned fixture clock, then wait for the normal foreground debounce window
+    do: "Run `make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=snapshot CHAT_FIRST_E2E_CASE=question` and inspect only `pending_deferral_count`; run `make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=advance CHAT_FIRST_E2E_CASE=question CHAT_FIRST_E2E_SECONDS=86400`; then allow the documented 60-second foreground debounce to expire. Do not inspect fixture, transcript, question, answer, or entity content."
+
+  - id: S8
+    name: Trigger only the mounted normal foreground materialization coordinator and wait for its tail result
+    bridge.action:
+      name: chat_first_request_prompt_materialization
+      params:
+        timeoutMs: "60000"
+    expect:
+      result.detail.prompt_materialization_requested: "true"
+      result.detail.actionable_question_at_tail: "true"
+
+  - id: S9
+    name: Verify the same stable local-only question controls reappeared at the actionable tail
+    ax.expect:
+      identifiers_visible:
+        - chat-first-question-chat-first-e2e-question-v1
+        - chat-first-question-chat-first-e2e-question-v1-option-later
+
+  - id: S10
+    name: Confirm the re-raised tail again offers both bounded choices
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.actionable_question_at_tail: "true"
+      result.detail.actionable_question_available: "true"
+      result.detail.deferrable_question_available: "true"
+
+  - id: S11
+    name: Answer the re-raised question through its bounded non-deferral selection
+    bridge.action:
+      name: chat_first_select_question_option
+      params:
+        selection: first
+    expect:
+      result.detail.question_selection_started: "true"
+
+  - id: S12
+    name: Wait for the ordinary main-Chat answer turn to settle
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S13
+    name: Confirm the answered re-raise retired from the current Chat tail
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.actionable_question_at_tail: "false"
+      result.detail.actionable_question_available: "false"
+      result.detail.deferrable_question_available: "false"

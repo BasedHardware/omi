@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -17,6 +18,12 @@ import 'package:omi/utils/other/temp.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
+
+typedef TranscriptSegmentBuilder = Widget Function(
+  BuildContext context,
+  TranscriptSegment segment,
+  int index,
+);
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -36,6 +43,14 @@ class TranscriptWidget extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final Function(int segmentIndex)? onEditSegmentText;
+  final bool followLatest;
+  final TranscriptScrollState? scrollState;
+  final double jumpToLatestButtonBottom;
+  final int contentVersion;
+  final String layoutIdentity;
+  final List<Widget> leadingItems;
+  final List<String> leadingItemIds;
+  final TranscriptSegmentBuilder? segmentBuilder;
 
   const TranscriptWidget({
     super.key,
@@ -56,10 +71,45 @@ class TranscriptWidget extends StatefulWidget {
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
     this.onEditSegmentText,
-  });
+    this.followLatest = false,
+    this.scrollState,
+    this.jumpToLatestButtonBottom = 16,
+    this.contentVersion = 0,
+    this.layoutIdentity = 'transcript',
+    this.leadingItems = const [],
+    this.leadingItemIds = const [],
+    this.segmentBuilder,
+  }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
   State<TranscriptWidget> createState() => _TranscriptWidgetState();
+}
+
+class TranscriptScrollState {
+  bool hasPosition = false;
+  double offset = 0;
+  bool isAtBottom = true;
+  String? anchorSegmentId;
+  int anchorSegmentIndex = 0;
+  double anchorViewportOffset = 0;
+  String? layoutIdentity;
+
+  void update({
+    required double offset,
+    required bool isAtBottom,
+    String? anchorSegmentId,
+    int? anchorSegmentIndex,
+    double? anchorViewportOffset,
+    String? layoutIdentity,
+  }) {
+    hasPosition = true;
+    this.offset = offset;
+    this.isAtBottom = isAtBottom;
+    if (anchorSegmentId != null) this.anchorSegmentId = anchorSegmentId;
+    if (anchorSegmentIndex != null) this.anchorSegmentIndex = anchorSegmentIndex;
+    if (anchorViewportOffset != null) this.anchorViewportOffset = anchorViewportOffset;
+    if (layoutIdentity != null) this.layoutIdentity = layoutIdentity;
+  }
 }
 
 class _TranscriptWidgetState extends State<TranscriptWidget> {
@@ -69,16 +119,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   final Map<String, String> _decodedTextCache = {};
 
   // ScrollController to enable proper scrolling
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
 
   // Auto-scroll state management
   bool _userHasScrolled = false;
   bool _isAutoScrolling = false;
-  int _previousSegmentCount = 0;
+  bool _userInterruptedAutoScroll = false;
+  bool _isUserScrolling = false;
+  bool _isRestoringAnchor = false;
+  bool _pendingAnchorRestore = false;
+  bool _isAtBottom = true;
+  bool _followAgain = false;
+  Future<void>? _activeFollow;
 
   // Search result tracking
-  List<GlobalKey> _segmentKeys = [];
-  List<GlobalKey> _matchKeys = [];
+  final Map<String, GlobalKey> _segmentKeys = {};
+  final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
@@ -116,8 +172,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void initState() {
     super.initState();
-    _previousSegmentCount = widget.segments.length;
-    _initializeSegmentKeys();
+    final savedState = widget.scrollState;
+    final shouldRestorePosition = savedState?.hasPosition == true && !savedState!.isAtBottom;
+    final canUseRawOffset = savedState?.layoutIdentity == null || savedState?.layoutIdentity == widget.layoutIdentity;
+    _pendingAnchorRestore = shouldRestorePosition && !canUseRawOffset;
+    _scrollController = ScrollController(
+      initialScrollOffset: shouldRestorePosition && canUseRawOffset ? savedState.offset : 0,
+    );
+    _userHasScrolled = shouldRestorePosition;
+    _isAtBottom = !shouldRestorePosition;
+    _syncSegmentKeys();
     _rebuildMatchKeys();
 
     // Add scroll listener to detect manual scrolling
@@ -126,15 +190,29 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Notify parent about scroll controller
     widget.onScrollControllerReady?.call(_scrollController);
 
-    if (widget.segments.isNotEmpty && widget.isConversationDetail) {
+    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) &&
+        (widget.isConversationDetail || widget.followLatest)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
+        if (!mounted) return;
+        if (widget.followLatest && _userHasScrolled) {
+          if (canUseRawOffset) {
+            _setIsAtBottom(false);
+          } else {
+            _restoreAnchor();
+          }
+        } else {
+          _scrollToBottomGently(animated: widget.isConversationDetail);
+        }
       });
     }
   }
 
-  void _initializeSegmentKeys() {
-    _segmentKeys = List.generate(widget.segments.length, (index) => GlobalKey());
+  void _syncSegmentKeys() {
+    final currentIds = widget.segments.map((segment) => segment.id).toSet();
+    _segmentKeys.removeWhere((id, _) => !currentIds.contains(id));
+    for (final segment in widget.segments) {
+      _segmentKeys.putIfAbsent(segment.id, GlobalKey.new);
+    }
   }
 
   void _rebuildMatchKeys() {
@@ -156,10 +234,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Reinitialize keys if segment count changed
-    if (widget.segments.length != oldWidget.segments.length) {
-      _initializeSegmentKeys();
-    }
+    final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
+        widget.segments.length != oldWidget.segments.length ||
+        widget.leadingItems.length != oldWidget.leadingItems.length ||
+        widget.layoutIdentity != oldWidget.layoutIdentity;
+    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+
+    if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
+    _syncSegmentKeys();
 
     if (widget.searchQuery != oldWidget.searchQuery) {
       _rebuildMatchKeys();
@@ -172,14 +254,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       }
     }
 
-    // Check if new segments were added
-    if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
-      _previousSegmentCount = widget.segments.length;
+    if (contentChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
+        if (!mounted) return;
+        if (shouldFollow) {
+          _scrollToBottomGently();
+        } else {
+          _restoreAnchor();
+        }
       });
-    } else {
-      _previousSegmentCount = widget.segments.length;
     }
 
     // Handle search result navigation
@@ -201,42 +284,207 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _onScroll() {
-    if (_isAutoScrolling) {
+    if (!_scrollController.hasClients) return;
+
+    final currentScroll = _scrollController.offset;
+    final distanceFromBottom = _scrollController.position.maxScrollExtent - currentScroll;
+    final isAtBottom = distanceFromBottom <= 24;
+    _setIsAtBottom(isAtBottom);
+  }
+
+  void _captureCurrentPosition({String? layoutIdentity}) {
+    if (!_scrollController.hasClients) return;
+
+    final currentScroll = _scrollController.offset;
+    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
+    _userHasScrolled = !isAtBottom;
+    final scrollState = widget.scrollState;
+    if (scrollState != null) {
+      String? anchorId;
+      var anchorIndex = 0;
+      var anchorViewportOffset = 0.0;
+      if (!isAtBottom) {
+        var closestTop = double.infinity;
+        for (var index = 0; index < widget.segments.length; index++) {
+          final segment = widget.segments[index];
+          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
+          if (renderObject is! RenderBox) continue;
+          final viewport = RenderAbstractViewport.of(renderObject);
+          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+          final bottom = top + renderObject.size.height;
+          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
+            closestTop = top;
+            anchorId = segment.id;
+            anchorIndex = index;
+            anchorViewportOffset = top;
+          }
+        }
+      }
+      scrollState.update(
+        offset: currentScroll,
+        isAtBottom: isAtBottom,
+        anchorSegmentId: anchorId,
+        anchorSegmentIndex: anchorIndex,
+        anchorViewportOffset: anchorViewportOffset,
+        layoutIdentity: layoutIdentity ?? widget.layoutIdentity,
+      );
+    }
+    _setIsAtBottom(isAtBottom);
+  }
+
+  Future<void> _restoreAnchor() async {
+    if (!_scrollController.hasClients) return;
+    final scrollState = widget.scrollState;
+    if (scrollState == null || scrollState.isAtBottom || widget.segments.isEmpty) {
+      _pendingAnchorRestore = false;
+      _captureCurrentPosition();
       return;
     }
 
-    // Check if user manually scrolled up from the bottom
-    if (_scrollController.hasClients) {
-      final maxScroll = _scrollController.position.maxScrollExtent;
-      final currentScroll = _scrollController.offset;
-      const threshold = 100.0;
-      final distanceFromBottom = maxScroll - currentScroll;
+    var anchorIndex = widget.segments.indexWhere((segment) => segment.id == scrollState.anchorSegmentId);
+    if (anchorIndex < 0) {
+      anchorIndex = scrollState.anchorSegmentIndex.clamp(0, widget.segments.length - 1).toInt();
+    }
+    final anchorId = widget.segments[anchorIndex].id;
 
-      if (distanceFromBottom > threshold) {
-        _userHasScrolled = true;
-      } else if (distanceFromBottom < 50.0) {
-        _userHasScrolled = false;
+    _isAutoScrolling = true;
+    _isRestoringAnchor = true;
+    try {
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final anchorContext = _segmentKeys[anchorId]?.currentContext;
+        final anchor = anchorContext?.findRenderObject();
+        if (anchor is RenderBox) {
+          final viewport = RenderAbstractViewport.of(anchor);
+          final anchorViewportOffset = viewport.getOffsetToReveal(anchor, 0).offset - _scrollController.offset;
+          final correction = anchorViewportOffset - scrollState.anchorViewportOffset;
+          if (correction.abs() <= 0.5) break;
+          final target = (_scrollController.offset + correction).clamp(
+            _scrollController.position.minScrollExtent,
+            _scrollController.position.maxScrollExtent,
+          );
+          _scrollController.jumpTo(target);
+          await WidgetsBinding.instance.endOfFrame;
+          continue;
+        }
+
+        final itemIndex = widget.leadingItems.length + anchorIndex + 1;
+        final itemCount = widget.leadingItems.length + widget.segments.length + 2;
+        final fraction = itemIndex / max(1, itemCount - 1);
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent * fraction);
+        await WidgetsBinding.instance.endOfFrame;
       }
+    } finally {
+      _pendingAnchorRestore = false;
+      _isRestoringAnchor = false;
+      _isAutoScrolling = false;
+    }
+
+    if (!mounted || !_scrollController.hasClients) return;
+    _userHasScrolled = true;
+    scrollState.update(
+      offset: _scrollController.offset,
+      isAtBottom: false,
+      anchorSegmentId: anchorId,
+      anchorSegmentIndex: anchorIndex,
+      anchorViewportOffset: scrollState.anchorViewportOffset,
+      layoutIdentity: widget.layoutIdentity,
+    );
+    _setIsAtBottom(false);
+  }
+
+  void _setIsAtBottom(bool value) {
+    if (_isAtBottom == value || !mounted) return;
+    setState(() => _isAtBottom = value);
+  }
+
+  Future<void> _runFollowToBottom({required bool animated}) async {
+    _isAutoScrolling = true;
+    _userInterruptedAutoScroll = false;
+    var firstPass = true;
+    try {
+      do {
+        _followAgain = false;
+
+        // ListView.builder refines maxScrollExtent as previously lazy rows are
+        // laid out. Follow that moving edge until both layout and queued content
+        // updates settle.
+        for (var attempt = 0; attempt < 20; attempt++) {
+          final target = _scrollController.position.maxScrollExtent;
+          if (animated) {
+            await _scrollController.animateTo(
+              target,
+              duration: Duration(milliseconds: firstPass ? 500 : 100),
+              curve: Curves.easeInOut,
+            );
+          } else {
+            _scrollController.jumpTo(target);
+          }
+          firstPass = false;
+
+          if (_userInterruptedAutoScroll) return;
+
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted || !_scrollController.hasClients || _userInterruptedAutoScroll) return;
+
+          final remaining = _scrollController.position.maxScrollExtent - _scrollController.offset;
+          if (remaining.abs() <= 0.5) break;
+        }
+      } while (_followAgain && !_userInterruptedAutoScroll);
+
+      if (!mounted || !_scrollController.hasClients || _userInterruptedAutoScroll) return;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      if ((maxExtent - _scrollController.offset).abs() > 0.5) {
+        _scrollController.jumpTo(maxExtent);
+      }
+      _userHasScrolled = false;
+      widget.scrollState?.update(offset: maxExtent, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
+      _setIsAtBottom(true);
+    } finally {
+      _isAutoScrolling = false;
     }
   }
 
-  void _scrollToBottomGently() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
+  Future<void> _scrollToBottomGently({bool animated = true}) {
+    if (!_scrollController.hasClients) return Future.value();
+    _followAgain = true;
+    final activeFollow = _activeFollow;
+    if (activeFollow != null) return activeFollow;
 
-    final maxExtent = _scrollController.position.maxScrollExtent;
-
-    final startOffset = (maxExtent - 30).clamp(0.0, maxExtent);
-
-    _scrollController.jumpTo(startOffset);
-
-    _isAutoScrolling = true;
-    _scrollController.animateTo(maxExtent, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut).then((
-      _,
-    ) {
-      _isAutoScrolling = false;
+    late final Future<void> trackedFollow;
+    trackedFollow = _runFollowToBottom(animated: animated).whenComplete(() {
+      if (identical(_activeFollow, trackedFollow)) _activeFollow = null;
     });
+    _activeFollow = trackedFollow;
+    return trackedFollow;
+  }
+
+  bool _onUserScroll(UserScrollNotification notification) {
+    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
+    if (notification.direction != ScrollDirection.idle) {
+      _isUserScrolling = true;
+      if (_isAutoScrolling) {
+        _userInterruptedAutoScroll = true;
+        _followAgain = false;
+        _isAutoScrolling = false;
+      }
+      _captureCurrentPosition();
+    } else if (_isUserScrolling) {
+      _captureCurrentPosition();
+      _isUserScrolling = false;
+    }
+    return false;
+  }
+
+  bool _onScrollMetrics(ScrollMetricsNotification notification) {
+    if (!widget.followLatest || _isAutoScrolling) return false;
+    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+    if (shouldFollow && notification.metrics.extentAfter > 0.5) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToBottomGently(animated: false);
+      });
+    }
+    return false;
   }
 
   @override
@@ -303,9 +551,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final segmentKey = _segmentKeys[targetSegmentIndex];
+      final segmentKey = _segmentKeys[widget.segments[targetSegmentIndex].id];
 
-      final segmentContext = segmentKey.currentContext;
+      final segmentContext = segmentKey?.currentContext;
       if (segmentContext != null) {
         _scrollToContext(segmentContext);
         return;
@@ -407,33 +655,119 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   Widget build(BuildContext context) {
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
+    final transcriptList = NotificationListener<ScrollMetricsNotification>(
+      onNotification: _onScrollMetrics,
+      child: NotificationListener<UserScrollNotification>(
+        onNotification: _onUserScroll,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
+            }
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.only(top: searchBarHeight),
+            itemCount: widget.leadingItems.length + widget.segments.length + 2,
+            findChildIndexCallback: _findChildIndex,
+            itemBuilder: (context, idx) {
+              if (idx == 0) {
+                return SizedBox(key: const ValueKey('transcript_header'), height: widget.topMargin ? 32 : 0);
+              }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: () {
-        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-          widget.onTapWhenSearchEmpty!();
-        }
-      },
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: EdgeInsets.only(top: searchBarHeight),
-        itemCount: widget.segments.length + 2,
-        itemBuilder: (context, idx) {
-          if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-          if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin + 120);
+              final leadingIndex = idx - 1;
+              if (leadingIndex < widget.leadingItems.length) {
+                return KeyedSubtree(
+                  key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
+                  child: widget.leadingItems[leadingIndex],
+                );
+              }
 
-          if (widget.separator && idx > 1) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [const SizedBox(height: 4), _buildSegmentItem(idx - 1)],
-            );
-          }
+              final segmentIndex = idx - widget.leadingItems.length - 1;
+              if (segmentIndex == widget.segments.length) {
+                return SizedBox(
+                  key: const ValueKey('transcript_bottom_spacing'),
+                  height: widget.bottomMargin + 120,
+                );
+              }
 
-          return _buildSegmentItem(idx - 1);
-        },
+              final segment = widget.segments[segmentIndex];
+              final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
+              Widget child = customSegment == null
+                  ? _buildSegmentItem(segmentIndex)
+                  : Container(key: _segmentKeys[segment.id], child: customSegment);
+              if (widget.separator && segmentIndex > 0) {
+                child = Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [const SizedBox(height: 4), child],
+                );
+              }
+              return KeyedSubtree(
+                key: ValueKey('transcript-segment-${segment.id}'),
+                child: child,
+              );
+            },
+          ),
+        ),
       ),
     );
+
+    if (!widget.followLatest) return transcriptList;
+
+    return Stack(
+      children: [
+        Positioned.fill(child: transcriptList),
+        PositionedDirectional(
+          end: 16,
+          bottom: widget.jumpToLatestButtonBottom,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: animation, child: child),
+            ),
+            child: _isAtBottom
+                ? const SizedBox.shrink(key: ValueKey('transcript_jump_to_latest_hidden'))
+                : Semantics(
+                    button: true,
+                    label: context.l10n.jumpToLatestMessage,
+                    child: FloatingActionButton.small(
+                      key: const ValueKey('transcript_jump_to_latest'),
+                      heroTag: null,
+                      tooltip: context.l10n.jumpToLatestMessage,
+                      backgroundColor: const Color(0xFF35343B),
+                      foregroundColor: Colors.white,
+                      onPressed: () => _scrollToBottomGently(),
+                      child: const Icon(Icons.keyboard_arrow_down_rounded),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int? _findChildIndex(Key key) {
+    if (key == const ValueKey('transcript_header')) return 0;
+    if (key == const ValueKey('transcript_bottom_spacing')) {
+      return widget.leadingItems.length + widget.segments.length + 1;
+    }
+    if (key is! ValueKey<String>) return null;
+
+    const leadingPrefix = 'transcript-leading-';
+    const segmentPrefix = 'transcript-segment-';
+    if (key.value.startsWith(leadingPrefix)) {
+      final id = key.value.substring(leadingPrefix.length);
+      final index = widget.leadingItemIds.indexOf(id);
+      return index < 0 ? null : index + 1;
+    }
+    if (key.value.startsWith(segmentPrefix)) {
+      final id = key.value.substring(segmentPrefix.length);
+      final index = widget.segments.indexWhere((segment) => segment.id == id);
+      return index < 0 ? null : widget.leadingItems.length + index + 1;
+    }
+    return null;
   }
 
   Widget _buildSegmentItem(int segmentIdx) {
@@ -442,7 +776,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
-      key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+      key: _segmentKeys[data.id],
       child: Padding(
         padding: EdgeInsetsDirectional.fromSTEB(
           widget.horizontalMargin ? 16 : 0,

@@ -9609,4 +9609,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => 'そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。';
+
+  @override
+  String get syncStatusTooOld => '古すぎて同期できません — Omi は受け付けられません';
 }

@@ -7,6 +7,11 @@ import WebKit
 extension SettingsContentView {
   var transcriptionSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Microphone (input device — e.g. Ray-Ban Meta glasses)
+      settingsCard(settingId: "transcription.microphone") {
+        MicrophonePickerCard(onChanged: { restartTranscriptionIfNeeded() })
+      }
+
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -311,14 +316,10 @@ extension SettingsContentView {
 
   /// Restart transcription if currently running to apply new settings
   func restartTranscriptionIfNeeded() {
-    guard appState.isTranscribing else { return }
-
-    // Stop and restart to apply new language settings
-    appState.stopTranscription()
-
-    // Wait a moment for cleanup, then restart
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      self.appState.startTranscription()
+    Task { @MainActor in
+      if await appState.prepareTranscriptionRestartAfterSettingsChange() {
+        appState.startTranscription()
+      }
     }
   }
 

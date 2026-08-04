@@ -1017,7 +1017,7 @@ enum MemoryAtlasLayoutEngine {
   ) -> MemoryAtlasSnapshot {
     // Graph responses are external data. Coalesce duplicate identifiers at the
     // boundary so a malformed server response cannot trap while building a UI.
-    let nodes = uniqueNodes(from: graph.nodes)
+    let nodes = uniqueNodes(from: graph.atlasNodes)
     let edges = uniqueEdges(from: graph.edges)
 
     guard !nodes.isEmpty else {
@@ -2025,7 +2025,7 @@ struct CanonicalMemoryAtlasPage: View {
         entities: projection.snapshot.nodes.count, connections: projection.snapshot.edges.count)
     }
     return MemoryAtlasLayoutEngine.countLabel(
-      entities: viewModel.graphResponse.nodes.count, connections: viewModel.graphResponse.edges.count)
+      entities: viewModel.graphResponse.atlasNodes.count, connections: viewModel.graphResponse.edges.count)
   }
 
   var body: some View {
@@ -2089,7 +2089,7 @@ struct CanonicalMemoryAtlasPage: View {
     .task { await viewModel.prepareCanonicalAtlas() }
     .onAppear {
       memoryAtlasLogger.info(
-        "Atlas page opened nodes=\(viewModel.graphResponse.nodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
+        "Atlas page opened nodes=\(viewModel.graphResponse.atlasNodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
       )
     }
   }
@@ -2126,7 +2126,7 @@ struct CanonicalMemoryAtlasTabView: View {
     .task { await viewModel.prepareCanonicalAtlas() }
     .onAppear {
       memoryAtlasLogger.info(
-        "Atlas tab opened nodes=\(viewModel.graphResponse.nodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
+        "Atlas tab opened nodes=\(viewModel.graphResponse.atlasNodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
       )
     }
   }

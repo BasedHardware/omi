@@ -289,9 +289,8 @@ Use one valid baseline and mutate one prerequisite at a time.
 
 | Case | Required result |
 |---|---|
-| Feature variable absent, false, or non-exact | Canonical memory path not selected; zero canonical-memory adapter calls; existing legacy/off contract unchanged. |
-| `MEMORY_MODE` not exactly `read` | Canonical memory path not selected; zero canonical-memory adapter calls. |
-| Authenticated UID not allowlisted | Canonical memory path not selected; no canonical-memory Firestore calls. |
+| Readiness declarations absent, false, non-exact, or inconsistent | Evidence invalid and deploy validation fails; request behavior is still determined by code entitlement plus persisted control state. |
+| Authenticated UID absent from `CANONICAL_MEMORY_USERS` | Canonical memory path not selected; no canonical-memory Firestore calls. |
 | Valid allowlisted user | Exact synthetic memories, ordering, pagination, generation, and headers expected by API contract. |
 | Client UID/query/body/mode/header spoof | No effect on authenticated UID or route selection. |
 | User A attempts to reference user B | No B data returned through query, header, path, or cursor. |

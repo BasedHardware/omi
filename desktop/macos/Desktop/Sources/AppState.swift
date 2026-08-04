@@ -214,8 +214,8 @@ class AppState: ObservableObject {
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  /// Monotonically increasing counter — incremented each time a new recording starts.
-  /// Used to detect if a new recording began during the post-stop force-process delay.
+  /// Monotonically increasing counter — incremented for each recording start or stop request.
+  /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed
@@ -394,7 +394,11 @@ class AppState: ObservableObject {
   var totalWordCount = 0
 
   var recordingStartTime: Date?
-  var recordingInputDeviceName: String?
+  /// Published: the capture-source label renders this, and the preferred-mic
+  /// resolution assigns it after `isTranscribing` has already published — a
+  /// plain var would leave the UI showing the default device until unrelated
+  /// state churned.
+  @Published var recordingInputDeviceName: String?
   var maxRecordingTimer: Timer? {
     get { servicesCoordinator.maxRecordingTimer }
     set { servicesCoordinator.maxRecordingTimer = newValue }
@@ -406,6 +410,9 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Serializes segment persistence so a local duplicate replacement cannot race
+  /// the original mic segment's upsert in SQLite.
+  var transcriptPersistenceTail: Task<Void, Never>?
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
