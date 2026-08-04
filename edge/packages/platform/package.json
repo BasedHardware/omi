@@ -1,0 +1,16 @@
+{
+  "name": "@omi/platform",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./encryption": "./src/encryption.ts",
+    "./sanitize": "./src/sanitize.ts",
+    "./auth": "./src/auth.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

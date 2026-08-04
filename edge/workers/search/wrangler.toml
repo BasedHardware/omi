@@ -1,0 +1,13 @@
+name = "omi-search"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FIREBASE_PROJECT_ID = "based-hardware"
+ORIGIN_API_BASE = "https://api.omi.me"
+TENANT_SHARD_COUNT = "64"
+
+# [[vectorize]]
+# binding = "MEMORY_VECTORS"
+# index_name = "omi-memories-shard_0000"

@@ -1,0 +1,21 @@
+{
+  "name": "omi-edge",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "workers/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w @omi/platform && npm run test -w @omi/tenant",
+    "typecheck": "tsc -p packages/platform && tsc -p packages/tenant && tsc -p workers/bff && tsc -p workers/search",
+    "dev:bff": "npm run dev -w @omi/bff",
+    "dev:search": "npm run dev -w @omi/search"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1",
+    "@cloudflare/workers-types": "^4.20250417.0",
+    "wrangler": "4.12.0"
+  }
+}
