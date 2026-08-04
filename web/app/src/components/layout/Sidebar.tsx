@@ -22,7 +22,6 @@ import {
   Settings,
   Shield,
   LifeBuoy,
-  Sparkles,
   Bell,
   Download,
   Mic,
@@ -101,11 +100,6 @@ const navItems: NavItem[] = [
     label: 'Tasks',
     href: '/tasks',
     icon: <ListChecks className="w-5 h-5" />,
-  },
-  {
-    label: 'Persona',
-    href: '/persona',
-    icon: <Sparkles className="w-5 h-5" />,
   },
 ];
 
