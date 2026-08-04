@@ -14,7 +14,7 @@ interface BottomNavigationProps {
 // Core navigation items (excluding More)
 const navItems = [
   { label: 'Home', href: '/home', icon: House },
-  { label: 'Conversations', href: '/conversations', icon: GanttChartSquare },
+  { label: 'Timeline', href: '/timeline', icon: GanttChartSquare },
   { label: 'Record', href: '/record', icon: Mic },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ];
@@ -28,9 +28,9 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
   // Handle conversations click - always go to list view
   const handleConversationsClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Always navigate to /conversations with a timestamp to force navigation
-    // This ensures the URL change is detected even if we're already on /conversations
-    router.push('/conversations?v=' + Date.now(), { scroll: false });
+    // Always navigate to /timeline with a timestamp to force navigation
+    // This ensures the URL change is detected even if we're already on /timeline
+    router.push('/timeline?v=' + Date.now(), { scroll: false });
   };
 
   return (
@@ -51,10 +51,10 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href === '/conversations' && pathname?.startsWith('/conversations')) ||
+            (item.href === '/timeline' && pathname?.startsWith('/timeline')) ||
             (item.href === '/tasks' && pathname?.startsWith('/tasks'));
           const showRecordingBadge = item.href === '/record' && isRecording;
-          const isConversations = item.href === '/conversations';
+          const isConversations = item.href === '/timeline';
 
           return (
             <Link

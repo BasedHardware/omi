@@ -91,6 +91,11 @@ export function HeaderRecordingIndicator() {
     setAudioMode(mode);
   };
 
+  // Starting a recording belongs to the composer on Home, so the idle affordance
+  // is not repeated here. The active states stay global: once something is
+  // recording you must be able to stop it from wherever you have navigated to.
+  if (isIdle) return null;
+
   return (
     <motion.div
       className="fixed top-4 z-[9999]"
