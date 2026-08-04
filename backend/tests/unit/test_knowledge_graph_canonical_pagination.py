@@ -315,6 +315,28 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
 
 
+def test_canonical_graph_includes_unlinked_canonical_memory_as_an_atlas_node(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    item, _assertion = _assertion_and_item("unlinked", 1, graph_ready=False)
+    item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
+    db = _FakeDB([item], {})
+
+    page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert page.edges == []
+    assert page.nodes == [
+        {
+            "id": "memory:unlinked",
+            "label": "A durable canonical memory that has no inferred relationship yet.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["unlinked"],
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+    ]
+
+
 def test_assertion_loader_rechecks_account_generation_before_fetch():
     stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
     db = _fake_db_for([(stale_item, stale_assertion)])

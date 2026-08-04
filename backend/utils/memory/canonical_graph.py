@@ -12,9 +12,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database import knowledge_graph as kg_db
 from database._client import get_firestore_client
-from database.firestore_index_registry import CANONICAL_GRAPH_READ_QUERY
+from database.firestore_index_registry import CANONICAL_MEMORY_ATLAS_READ_QUERY
 from database.memory_collections import MemoryCollections
 from models.memory_promotion import MemoryGraphAssertion
+from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.cursor import (
     V3CursorContext,
@@ -29,7 +30,7 @@ DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT = 200
 MAX_CANONICAL_GRAPH_PAGE_LIMIT = 500
 CANONICAL_GRAPH_CURSOR_SOURCE = 'canonical_memory_graph'
 CANONICAL_GRAPH_CURSOR_READ_MODE = 'canonical_graph'
-CANONICAL_GRAPH_CURSOR_FILTER = 'canonical_graph_v1:updated_at_desc:memory_id_desc'
+CANONICAL_GRAPH_CURSOR_FILTER = 'canonical_graph_v2:updated_at_desc:memory_id_desc'
 CANONICAL_GRAPH_CURSOR_TTL_SECONDS = 600
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 CANONICAL_GRAPH_REVISION_READ_RETRIES = 2
@@ -216,6 +217,12 @@ def _canonical_graph_query_item_is_eligible(
     account_generation: int,
 ) -> bool:
     item_account_generation = item.get('account_generation')
+    promotion = item.get('promotion')
+    sensitivity_labels = item.get('sensitivity_labels')
+    if not isinstance(promotion, dict) or not isinstance(sensitivity_labels, list):
+        return False
+    if any(not isinstance(label, str) for label in sensitivity_labels):
+        return False
     return (
         item.get('uid') == uid
         and isinstance(item.get('memory_id'), str)
@@ -225,7 +232,9 @@ def _canonical_graph_query_item_is_eligible(
         and _enum_value(item.get('status')) == 'active'
         and _enum_value(item.get('tier')) == 'long_term'
         and _enum_value(item.get('processing_state')) == 'processed'
-        and item.get('graph_ready') is True
+        and _enum_value(item.get('source_state')) == 'active'
+        and not set(sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        and promotion.get('user_review') is not False
     )
 
 
@@ -274,14 +283,13 @@ def _build_canonical_graph_items_query(
     cursor_boundary: Optional[Tuple[datetime, str]],
 ):
     items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
-    query = CANONICAL_GRAPH_READ_QUERY.build(
+    query = CANONICAL_MEMORY_ATLAS_READ_QUERY.build(
         items_ref,
         {
             'account_generation': revision.account_generation,
             'tier': 'long_term',
             'status': 'active',
             'processing_state': 'processed',
-            'graph_ready': True,
         },
         field_filter_factory=FieldFilter,
     )
@@ -297,6 +305,36 @@ def _build_canonical_graph_items_query(
             }
         )
     return query
+
+
+def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Represent a durable canonical memory without inventing a relationship.
+
+    Historical rows may predate the graph-assertion contract.  They remain
+    authoritative memory facts, so the atlas includes them as isolated memory
+    nodes while assertion-backed relationships stay exclusively in the fenced
+    graph records below.
+    """
+    content = item.get('content')
+    memory_id = item.get('memory_id')
+    updated_at = item.get('updated_at')
+    if (
+        not isinstance(content, str)
+        or not content.strip()
+        or not isinstance(memory_id, str)
+        or not isinstance(updated_at, datetime)
+    ):
+        return None
+    label = ' '.join(content.split())
+    return {
+        'id': f'memory:{memory_id}',
+        'label': label[:240],
+        'node_type': 'concept',
+        'aliases': [],
+        'memory_ids': [memory_id],
+        'created_at': item.get('captured_at') or updated_at,
+        'updated_at': updated_at,
+    }
 
 
 def _read_canonical_graph_page_once(
@@ -318,14 +356,16 @@ def _read_canonical_graph_page_once(
             secret=secret,
         )
 
+    accepted_items: List[Dict[str, Any]] = []
     accepted_assertions: List[MemoryGraphAssertion] = []
+    visible_memory_ids: set[str] = set()
     pending_snapshots: List[Any] = []
     pending_window_has_more = False
     last_consumed_snapshot: Any = None
     query_boundary = cursor_boundary
 
     while True:
-        while len(accepted_assertions) < limit:
+        while len(visible_memory_ids) < limit:
             if not pending_snapshots:
                 query = _build_canonical_graph_items_query(
                     client,
@@ -352,12 +392,13 @@ def _read_canonical_graph_page_once(
                 )
                 if item is not None:
                     eligible_batch.append(item)
-                if len(accepted_assertions) + len(eligible_batch) >= limit or not pending_snapshots:
+                if len(visible_memory_ids) + len(eligible_batch) >= limit or not pending_snapshots:
                     break
                 snapshot = pending_snapshots.pop(0)
                 last_consumed_snapshot = snapshot
 
             if eligible_batch:
+                accepted_items.extend(eligible_batch)
                 memory_ids = [cast(str, item['memory_id']) for item in eligible_batch]
                 loaded_assertions = kg_db.load_fenced_assertions_for_memory_items(
                     uid,
@@ -367,10 +408,12 @@ def _read_canonical_graph_page_once(
                 )
                 for assertion in loaded_assertions:
                     accepted_assertions.append(assertion)
-                    if len(accepted_assertions) >= limit:
-                        break
+                    visible_memory_ids.add(assertion.memory_id)
+                for item in eligible_batch:
+                    if _canonical_memory_catalog_node(item) is not None:
+                        visible_memory_ids.add(cast(str, item['memory_id']))
 
-            if len(accepted_assertions) >= limit:
+            if len(visible_memory_ids) >= limit:
                 break
             if not pending_snapshots and not pending_window_has_more:
                 break
@@ -398,7 +441,7 @@ def _read_canonical_graph_page_once(
         else:
             has_more = False
 
-        if accepted_assertions or not has_more:
+        if visible_memory_ids or not has_more:
             break
         if last_consumed_snapshot is None:
             break
@@ -431,8 +474,9 @@ def _read_canonical_graph_page_once(
         {'nodes': [], 'edges': []},
         accepted_assertions,
     )
+    catalog_nodes = [node for item in accepted_items if (node := _canonical_memory_catalog_node(item)) is not None]
     return CanonicalKnowledgeGraphPage(
-        nodes=merged['nodes'],
+        nodes=[*merged['nodes'], *catalog_nodes],
         edges=merged['edges'],
         has_more=has_more,
         next_cursor=next_cursor,
