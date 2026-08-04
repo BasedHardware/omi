@@ -121,6 +121,8 @@ async def screen_tool_result(
     cancel: Optional[asyncio.Event] = None,
     classify_content: Optional[str] = None,
     deadline: Optional[float] = None,
+    trusted_control: Optional[str] = None,
+    untrusted_result: Optional[str] = None,
 ) -> str:
     """Screen one tool result and return it with any provenance notice prepended.
 
@@ -137,12 +139,13 @@ async def screen_tool_result(
         return result
     policy = resolve_security_policy(resolved_floor)
     if policy.tool_approvals is ToolApprovals.ALL:
-        # Strict posture distrusts every inbound source; frame without classifying.
-        return f'{strict_notice(source.noun)}\n{result}'
+        return _frame_tool_result(source.noun, result, trusted_control, untrusted_result)
     if policy.inbound_screening is InboundScreening.OFF:
         return result
 
-    to_classify = result if classify_content is None else classify_content
+    to_classify = (
+        untrusted_result if untrusted_result is not None else (result if classify_content is None else classify_content)
+    )
     if not to_classify or not to_classify.strip():
         return result
 
@@ -167,4 +170,11 @@ async def screen_tool_result(
     composed = compose_security_posture(resolved_floor, outcome.verdict.decision)
     if composed is not SecurityPosture.STRICT:
         return result
-    return f'{strict_notice(source.noun)}\n{result}'
+    return _frame_tool_result(source.noun, result, trusted_control, untrusted_result)
+
+
+def _frame_tool_result(noun: str, result: str, trusted_control: Optional[str], untrusted_result: Optional[str]) -> str:
+    if not trusted_control:
+        return f'{strict_notice(noun)}\n{result}'
+    content = result if untrusted_result is None else untrusted_result
+    return f'{trusted_control}\n{strict_notice(noun)}\n{content}'

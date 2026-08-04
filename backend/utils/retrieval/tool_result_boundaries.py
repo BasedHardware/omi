@@ -6,6 +6,21 @@ CHAT_MEMORY_TOOL_NAMES = frozenset({'get_memories_tool', 'search_memories_tool'}
 CHAT_MEMORY_SAFE_NO_RESULT = "No memories available for this request."
 
 
+class TrustedToolResult(str):
+    trusted_control: str
+    untrusted_content: str
+
+    def __new__(cls, content: str, *, trusted_control: str, untrusted_content: str):
+        result = super().__new__(cls, content)
+        result.trusted_control = trusted_control
+        result.untrusted_content = untrusted_content
+        return result
+
+
+def trusted_tool_result(content: str, *, trusted_control: str, untrusted_content: str) -> TrustedToolResult:
+    return TrustedToolResult(content, trusted_control=trusted_control, untrusted_content=untrusted_content)
+
+
 def chat_memory_content_for_classification(result: str) -> str:
     """The untrusted evidence of a memory result, for security screening.
 

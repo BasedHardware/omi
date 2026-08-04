@@ -199,6 +199,13 @@ if not hasattr(retrieval_mod, "__path__"):
 # _load_module_from_file is defined.
 
 boundaries_mod = _stub_module("utils.retrieval.tool_result_boundaries")
+
+
+class TrustedToolResult(str):
+    pass
+
+
+setattr(boundaries_mod, "TrustedToolResult", TrustedToolResult)
 setattr(
     boundaries_mod,
     "preserve_chat_memory_tool_result_boundary",

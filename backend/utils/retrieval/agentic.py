@@ -51,6 +51,7 @@ from utils.retrieval.tools import (
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import (
     CHAT_MEMORY_TOOL_NAMES,
+    TrustedToolResult,
     chat_memory_content_for_classification,
     preserve_chat_memory_tool_result_boundary,
 )
@@ -374,10 +375,21 @@ async def _execute_tool(
     """Execute a LangChain tool by name, injecting RunnableConfig."""
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
-    result = await tool_obj.ainvoke(tool_input, config=config)
-    result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    raw_result = await tool_obj.ainvoke(tool_input, config=config)
+    trusted_control = raw_result.trusted_control if isinstance(raw_result, TrustedToolResult) else None
+    untrusted_result = raw_result.untrusted_content if isinstance(raw_result, TrustedToolResult) else None
+    result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))
     classify = chat_memory_content_for_classification(result) if tool_name in CHAT_MEMORY_TOOL_NAMES else result
-    result = await screen_tool_result(tool_name, result, classify_content=classify, deadline=screen_deadline)
+    if untrusted_result is not None:
+        classify = untrusted_result
+    result = await screen_tool_result(
+        tool_name,
+        result,
+        classify_content=classify,
+        deadline=screen_deadline,
+        trusted_control=trusted_control,
+        untrusted_result=untrusted_result,
+    )
     return result
 
 

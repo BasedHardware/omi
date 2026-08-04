@@ -114,6 +114,15 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_SECURITY_POSTURE:
+            value: auto
+            category: rollout
+          OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+            value: '15'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -352,6 +361,15 @@ environments:
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            OMI_SECURITY_POSTURE:
+              value: auto
+              category: rollout
+            OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+              value: '8'
+              category: rollout
+            OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+              value: '15'
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -914,6 +932,15 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_SECURITY_POSTURE:
+            value: auto
+            category: rollout
+          OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+            value: '15'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -1056,6 +1083,15 @@ environments:
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            OMI_SECURITY_POSTURE:
+              value: auto
+              category: rollout
+            OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+              value: '8'
+              category: rollout
+            OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+              value: '15'
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'

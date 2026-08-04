@@ -83,6 +83,10 @@ Posture is not yet propagated to the surrounding turn. A `strict` verdict frames
 offending tool result but does not currently gate the agent's subsequent tool calls;
 `render_security_policy_prompt` exists for that follow-up and is unwired.
 
+Server-authored recovery controls such as asking for an action-item lookup or a calendar event ID are carried
+separately from the result body. Only the result body is classified, so a strict frame cannot suppress a valid
+next-step instruction while still protecting the model from untrusted result data.
+
 ## Configuration
 
 | Variable | Default | Effect |
@@ -90,6 +94,9 @@ offending tool result but does not currently gate the agent's subsequent tool ca
 | `OMI_SECURITY_POSTURE` | `auto` | `dangerous` disables screening; `auto` screens external content; `strict` skips the classifier because everything inbound is already distrusted. Unset or unparseable values fall back to `auto`. |
 | `OMI_SECURITY_SCREEN_TIMEOUT_SECONDS` | `8.0` | Per-classifier-call deadline. Non-positive or unparseable values fall back to the default. |
 | `OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS` | `15.0` | Total deadline for screening all content chunks, including retries and backoff. Non-positive or unparseable values fall back to the default. |
+
+The defaults are registered in `backend/deploy/runtime_env.yaml` for the Cloud Run backend and GKE
+`backend-listen` surfaces, and in both backend-listen Helm values files.
 
 ## Bounds
 
