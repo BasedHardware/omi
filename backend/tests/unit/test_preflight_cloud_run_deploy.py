@@ -22,6 +22,17 @@ def load_preflight():
     return module
 
 
+def test_preflight_script_imports_without_pythonpath() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), '--help'],
+        cwd=BACKEND_ROOT.parent,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     preflight = load_preflight()
     monkeypatch.setattr(preflight, '_secret_exists', lambda **kwargs: False)

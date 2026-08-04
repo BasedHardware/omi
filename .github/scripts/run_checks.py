@@ -20,6 +20,7 @@ from typing import Any
 from git_bash import bash_executable
 
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
+MANIFEST_RELATIVE_PATH = ".github/checks-manifest.yaml"
 
 
 def detect_platform() -> str:
@@ -121,6 +122,48 @@ def load_manifest(path: Path) -> Manifest:
     return Manifest(checks=checks, exempt=exempt)
 
 
+def load_manifest_from_text(text: str) -> Manifest:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml", delete=False) as handle:
+        handle.write(text)
+        path = Path(handle.name)
+    try:
+        return load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def manifest_changed_check_ids(root: Path, base: str, head: str, *, include_worktree: bool = False) -> set[str]:
+    """Return check ids whose manifest entries differ between base and head."""
+    manifest_path = root / MANIFEST_RELATIVE_PATH
+    head_manifest = load_manifest(manifest_path)
+    try:
+        base_text = run_git(root, "show", f"{base}:{MANIFEST_RELATIVE_PATH}")
+    except subprocess.CalledProcessError:
+        return {check.id for check in head_manifest.checks}
+
+    base_manifest = load_manifest_from_text(base_text)
+    head_by_id = {check.id: check for check in head_manifest.checks}
+    base_by_id = {check.id: check for check in base_manifest.checks}
+    changed = {
+        check_id
+        for check_id in set(head_by_id) | set(base_by_id)
+        if head_by_id.get(check_id) != base_by_id.get(check_id)
+    }
+    if include_worktree and head == "HEAD":
+        try:
+            committed_text = run_git(root, "show", f"HEAD:{MANIFEST_RELATIVE_PATH}")
+        except subprocess.CalledProcessError:
+            return changed
+        committed_manifest = load_manifest_from_text(committed_text)
+        committed_by_id = {check.id: check for check in committed_manifest.checks}
+        changed |= {
+            check_id
+            for check_id in set(head_by_id) | set(committed_by_id)
+            if head_by_id.get(check_id) != committed_by_id.get(check_id)
+        }
+    return changed
+
+
 def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
     errors: list[str] = []
     ids = [check.id for check in manifest.checks]
@@ -186,6 +229,7 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -211,11 +255,24 @@ def _platform_matches(check: Check, platform: str, *, exclusive: bool = False) -
     return not check.platforms or "all" in check.platforms or platform in check.platforms
 
 
-def matching_paths(check: Check, files: list[str]) -> tuple[str, ...]:
+def matching_paths(
+    check: Check,
+    files: list[str],
+    *,
+    manifest_changed_ids: set[str] | None = None,
+) -> tuple[str, ...]:
     """Return changed paths that caused *check* to be selected."""
     if "all" in check.triggers:
         return tuple(files) if files else ("all",)
-    return tuple(path for path in files if any(trigger_matches(pattern, path) for pattern in check.triggers))
+    matched = tuple(path for path in files if any(trigger_matches(pattern, path) for pattern in check.triggers))
+    if manifest_changed_ids is None or not matched:
+        return matched
+    non_manifest = [path for path in matched if path != MANIFEST_RELATIVE_PATH]
+    if non_manifest:
+        return matched
+    if MANIFEST_RELATIVE_PATH in matched and check.id in manifest_changed_ids:
+        return matched
+    return ()
 
 
 def resolve_check_selections(
@@ -226,6 +283,7 @@ def resolve_check_selections(
     include_pr_body_checks: bool = True,
     platform: str = "all",
     exclusive_platform: bool = False,
+    manifest_changed_ids: set[str] | None = None,
 ) -> list[CheckSelection]:
     """Resolve checks with their manifest-owned path and reason evidence."""
     selections: list[CheckSelection] = []
@@ -236,7 +294,7 @@ def resolve_check_selections(
             continue
         if not _platform_matches(check, platform, exclusive=exclusive_platform):
             continue
-        paths = matching_paths(check, files)
+        paths = matching_paths(check, files, manifest_changed_ids=manifest_changed_ids)
         if paths:
             selections.append(CheckSelection(check=check, matched_paths=paths))
     return selections
@@ -250,6 +308,7 @@ def resolve_checks(
     include_pr_body_checks: bool = True,
     platform: str = "all",
     exclusive_platform: bool = False,
+    manifest_changed_ids: set[str] | None = None,
 ) -> list[Check]:
     return [
         selection.check
@@ -260,6 +319,7 @@ def resolve_checks(
             include_pr_body_checks=include_pr_body_checks,
             platform=platform,
             exclusive_platform=exclusive_platform,
+            manifest_changed_ids=manifest_changed_ids,
         )
     ]
 
@@ -438,6 +498,16 @@ def main() -> int:
             if args.changed_files
             else changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
         )
+        manifest_changed_ids = (
+            manifest_changed_check_ids(
+                root,
+                resolved_base,
+                args.head,
+                include_worktree=args.lane == "local",
+            )
+            if MANIFEST_RELATIVE_PATH in files
+            else None
+        )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
@@ -459,6 +529,7 @@ def main() -> int:
                 include_pr_body_checks=not args.skip_pr_body_checks,
                 platform=detected_platform,
                 exclusive_platform=args.exclusive_platform,
+                manifest_changed_ids=manifest_changed_ids,
             )
         )
     except ValueError as exc:

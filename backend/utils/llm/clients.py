@@ -251,6 +251,18 @@ class _AnthropicClientProxy:
         return getattr(self._resolve(), name)
 
 
+def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic.AsyncAnthropic:
+    """Return Anthropic without consulting the feature gateway switch.
+
+    Desktop chat has a legacy Anthropic fallback for BYOK and specialist model
+    requests. Calling the module-level proxy there would re-enter the managed
+    gateway whenever the global feature flag is enabled.
+    """
+    if byok_api_key:
+        return _cached_anthropic(byok_api_key)
+    return anthropic_client._default_client()
+
+
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 

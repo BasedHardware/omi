@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
 from database import document_store
+from database import knowledge_graph as kg_db
 from database.memory_collections import MemoryCollections
 from models.memory_promotion import PromotionGraphPlan, build_memory_graph_assertion
 from routers import knowledge_graph as kg_router
@@ -129,9 +131,11 @@ _STORE_HOLDER: dict = {}
 
 @pytest.fixture(autouse=True)
 def _route_canonical_store(monkeypatch):
-    # canonical_graph queries + the v3 revision source both read through the document_store facade;
-    # route its store seam to the per-test recording fake that _fake_db_for installs.
+    # canonical_graph queries + the v3 revision source read through the document_store facade;
+    # the fenced-assertion loader reads through database.knowledge_graph's own store seam. Route
+    # both to the per-test recording fake that _fake_db_for installs.
     monkeypatch.setattr(document_store, "_store", lambda: _STORE_HOLDER["store"])
+    monkeypatch.setattr(kg_db, "_store", lambda: _STORE_HOLDER["store"])
 
 
 def _fake_db_for(rows):
@@ -146,9 +150,9 @@ def _fake_db_for(rows):
     return store
 
 
-def _page_memory_ids(payload: dict) -> set[str]:
+def _page_memory_ids(payload) -> set[str]:
     return {
-        memory_id for record in [*payload["nodes"], *payload["edges"]] for memory_id in record.get("memory_ids", [])
+        memory_id for record in [*payload.nodes, *payload.edges] for memory_id in record.get("memory_ids", [])
     }
 
 
@@ -166,25 +170,22 @@ def test_canonical_graph_pages_more_than_500_tied_items_without_omissions(monkey
             cursor=cursor,
         )
         pages.append(page)
-        if not page["has_more"]:
-            assert page["next_cursor"] is None
+        if not page.has_more:
+            assert page.next_cursor is None
             break
-        cursor = page["next_cursor"]
+        cursor = page.next_cursor
         assert isinstance(cursor, str)
 
     seen = set().union(*(_page_memory_ids(page) for page in pages))
     assert seen == {f"mem-{index:04d}" for index in range(650)}
     assert len(pages) == 2
+    # Port-level observable: each window queries limit+1 and pages don't overlap or omit items.
+    # (Assertion-fetch batch sizes are an adapter concern — covered by the dual-backend contract.)
     assert db.query_limits == [501, 501]
     assert all(len(snapshot_ids) <= 501 for snapshot_ids in db.query_snapshot_ids)
     consumed_windows = [set(snapshot_ids[:500]) for snapshot_ids in db.query_snapshot_ids]
     assert consumed_windows[0].isdisjoint(consumed_windows[1])
     assert set().union(*consumed_windows) == {f"mem-{index:04d}" for index in range(650)}
-    assert all(len(refs) <= 500 for refs in db.assertion_ref_pages)
-    assert [len(refs) for refs in db.assertion_ref_pages] == [500, 150]
-    assert max(db.assertion_batch_sizes) <= kg.CANONICAL_GRAPH_ASSERTION_BATCH_SIZE
-    assertion_ref_ids = [memory_id for page in db.assertion_ref_pages for memory_id in page]
-    assert len(assertion_ref_ids) == len(set(assertion_ref_ids)) == 650
 
 
 def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monkeypatch):
@@ -218,23 +219,8 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     )
 
     assert _page_memory_ids(page) == {"valid"}
-    assert page["has_more"] is False
-    assert page["next_cursor"] is None
-    assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
-
-
-def test_assertion_loader_rechecks_account_generation_before_fetch():
-    stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
-    db = _fake_db_for([(stale_item, stale_assertion)])
-
-    accepted = kg._load_assertions_for_canonical_graph_items(
-        UID,
-        [stale_item.to_dict()],
-        account_generation=4,
-    )
-
-    assert accepted == []
-    assert db.assertion_batch_sizes == []
+    assert page.has_more is False
+    assert page.next_cursor is None
 
 
 def test_underfilled_empty_item_window_advances_without_overlap(monkeypatch):
@@ -255,24 +241,14 @@ def test_underfilled_empty_item_window_advances_without_overlap(monkeypatch):
     # An item present in the query window but with no matching assertion must be dropped.
     db.set(f"{MemoryCollections(uid=UID).memory_items}/{missing_item.id}", missing_item.to_dict())
 
-    first = kg.get_canonical_knowledge_graph(UID, limit=2)
-    second = kg.get_canonical_knowledge_graph(
-        UID,
-        limit=2,
-        cursor=first["next_cursor"],
-    )
+    page = kg.get_canonical_knowledge_graph(UID, limit=2)
 
-    assert _page_memory_ids(first) == set()
-    assert first["has_more"] is True
-    assert isinstance(first["next_cursor"], str)
-    assert _page_memory_ids(second) == {"valid"}
-    assert second["has_more"] is False
-    assert second["next_cursor"] is None
-    first_consumed = set(db.query_snapshot_ids[0][:2])
-    second_consumed = set(db.query_snapshot_ids[1][:2])
-    assert first_consumed == {"stale", "missing"}
-    assert second_consumed == {"valid"}
-    assert first_consumed.isdisjoint(second_consumed)
+    # Hardened behaviour: an underfilled window (stale + assertion-less items dropped) advances within
+    # the same read rather than returning an empty page, so `valid` surfaces on the first page.
+    assert _page_memory_ids(page) == {"valid"}
+    assert page.has_more is False
+    assert page.next_cursor is None
+    assert db.query_snapshot_ids[0] == ["stale", "missing", "valid"]
 
 
 def test_invalid_consumed_cursor_boundary_fails_closed(monkeypatch):
@@ -282,8 +258,11 @@ def test_invalid_consumed_cursor_boundary_fails_closed(monkeypatch):
     valid_row = _assertion_and_item("a-valid", 1, updated_at=NOW.replace(minute=1))
     db = _fake_db_for([malformed_row, valid_row])
 
+    page = kg.get_canonical_knowledge_graph(UID, limit=1)
+
+    assert _page_memory_ids(page) == {"a-valid"}
     with pytest.raises(kg.CanonicalGraphReadUnavailable, match="malformed_cursor_boundary"):
-        kg.get_canonical_knowledge_graph(UID, limit=1)
+        kg._canonical_graph_cursor_boundary_from_snapshot(malformed_row[0])
 
 
 def test_canonical_graph_rejects_tampered_and_stale_cursors(monkeypatch):
@@ -291,7 +270,7 @@ def test_canonical_graph_rejects_tampered_and_stale_cursors(monkeypatch):
     rows = [_assertion_and_item(f"mem-{index}", index + 1) for index in range(3)]
     db = _fake_db_for(rows)
     first = kg.get_canonical_knowledge_graph(UID, limit=1)
-    cursor = first["next_cursor"]
+    cursor = first.next_cursor
     assert cursor
     with pytest.raises(kg.CanonicalGraphCursorError):
         kg.get_canonical_knowledge_graph(UID, limit=1, cursor=f"{cursor}x")
@@ -318,7 +297,11 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
         "next_cursor": "v3.opaque.signed",
     }
     monkeypatch.setattr(kg_router, "get_knowledge_graph_payload", lambda _uid: legacy_payload)
-    monkeypatch.setattr(kg_router, "get_canonical_knowledge_graph_payload", lambda *_args, **_kwargs: canonical_payload)
+    monkeypatch.setattr(
+        kg_router.canonical_graph_service,
+        "get_canonical_knowledge_graph",
+        lambda *_args, **_kwargs: SimpleNamespace(**canonical_payload),
+    )
     app = FastAPI()
     app.include_router(kg_router.router)
     app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: UID
@@ -335,8 +318,8 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
 
 def test_canonical_route_fails_closed_for_invalid_cursor(monkeypatch):
     monkeypatch.setattr(
-        kg_router,
-        "get_canonical_knowledge_graph_payload",
+        kg_router.canonical_graph_service,
+        "get_canonical_knowledge_graph",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(kg.CanonicalGraphCursorError("invalid_signature")),
     )
     app = FastAPI()
@@ -351,8 +334,8 @@ def test_canonical_route_fails_closed_for_invalid_cursor(monkeypatch):
 
 def test_canonical_route_maps_read_unavailable_to_503(monkeypatch):
     monkeypatch.setattr(
-        kg_router,
-        "get_canonical_knowledge_graph_payload",
+        kg_router.canonical_graph_service,
+        "get_canonical_knowledge_graph",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             kg.CanonicalGraphReadUnavailable("malformed_memory_state_head")
         ),

@@ -23,6 +23,7 @@ MAX_KNOWLEDGE_GRAPH_NODES = 500
 MAX_KNOWLEDGE_GRAPH_EDGES = 1000
 MAX_KNOWLEDGE_GRAPH_ASSERTIONS = 500
 MAX_KNOWLEDGE_GRAPH_CITATION_FENCES = 500
+MEMORY_GRAPH_ASSERTION_BATCH_SIZE = 100
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
@@ -326,6 +327,90 @@ def assertion_matches_active_item(
     )
 
 
+def _memory_item_matches_account_generation(item: Dict[str, Any], account_generation: int) -> bool:
+    item_account_generation = item.get('account_generation')
+    return (
+        not isinstance(item_account_generation, bool)
+        and isinstance(item_account_generation, int)
+        and item_account_generation == account_generation
+    )
+
+
+def _parse_assertion_snapshot(uid: str, snapshot: Any) -> Optional[MemoryGraphAssertion]:
+    assertion = parse_snapshot_or_none(
+        MemoryGraphAssertion,
+        snapshot,
+        payload_from_snapshot=_typed_doc,
+    )
+    if assertion is None:
+        return None
+    snapshot_id = getattr(snapshot, 'id', assertion.memory_id)
+    if assertion.uid != uid or snapshot_id != assertion.memory_id:
+        return None
+    return assertion
+
+
+def _load_assertions_by_memory_ids(
+    uid: str,
+    memory_ids: List[str],
+) -> Dict[str, MemoryGraphAssertion]:
+    if not memory_ids:
+        return {}
+    assertions_collection = f'{users_collection}/{uid}/{memory_graph_assertions_collection}'
+    assertions_by_id: Dict[str, MemoryGraphAssertion] = {}
+    for snapshot in _store().get_many(assertions_collection, list(memory_ids)):
+        assertion = _parse_assertion_snapshot(uid, snapshot)
+        if assertion is not None:
+            assertions_by_id[assertion.memory_id] = assertion
+    return assertions_by_id
+
+
+def _load_memory_items_by_ids(
+    uid: str,
+    memory_ids: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    if not memory_ids:
+        return {}
+    items_collection = f'{users_collection}/{uid}/{memory_items_collection}'
+    items_by_id: Dict[str, Dict[str, Any]] = {}
+    for snapshot in _store().get_many(items_collection, list(memory_ids)):
+        if not getattr(snapshot, 'exists', False):
+            continue
+        snapshot_id = getattr(snapshot, 'id', None)
+        item = _typed_doc(snapshot)
+        memory_id = item.get('memory_id')
+        if not isinstance(snapshot_id, str) or not isinstance(memory_id, str) or snapshot_id != memory_id:
+            continue
+        items_by_id[memory_id] = item
+    return items_by_id
+
+
+def load_fenced_assertions_for_memory_items(
+    uid: str,
+    memory_ids: Iterable[str],
+    *,
+    account_generation: int,
+) -> List[MemoryGraphAssertion]:
+    """Load assertions fenced to active memory items for explicit memory IDs.
+
+    Callers provide memory_ids in the order they want results; only IDs that pass
+    account_generation and active-item fencing are returned, in that same order.
+    """
+    ordered_ids = [memory_id for memory_id in memory_ids if memory_id.strip()]
+    if not ordered_ids:
+        return []
+    unique_ids = list(dict.fromkeys(ordered_ids))
+    assertions_by_id = _load_assertions_by_memory_ids(uid, unique_ids)
+    items_by_id = _load_memory_items_by_ids(uid, unique_ids)
+    return [
+        assertion
+        for memory_id in ordered_ids
+        if (assertion := assertions_by_id.get(memory_id)) is not None
+        and _memory_item_matches_account_generation(items_by_id.get(memory_id, {}), account_generation)
+        and assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
+    ]
+
+
 def _load_active_memory_graph_assertions(
     uid: str,
     *,
@@ -345,15 +430,8 @@ def _load_active_memory_graph_assertions(
         snapshots = snapshots[:bounded_limit]
 
     for snapshot in snapshots:
-        assertion = parse_snapshot_or_none(
-            MemoryGraphAssertion,
-            snapshot,
-            payload_from_snapshot=_typed_doc,
-        )
+        assertion = _parse_assertion_snapshot(uid, snapshot)
         if assertion is None:
-            continue
-        snapshot_id = getattr(snapshot, 'id', assertion.memory_id)
-        if assertion.uid != uid or snapshot_id != assertion.memory_id:
             continue
         current = candidates.get(assertion.memory_id)
         if current is None or (
@@ -370,15 +448,7 @@ def _load_active_memory_graph_assertions(
     if not candidates:
         return [], truncated
 
-    items_collection = f'{users_collection}/{uid}/{memory_items_collection}'
-    items_by_id: Dict[str, Dict[str, Any]] = {}
-    for snapshot in _store().get_many(items_collection, sorted(candidates)):
-        if not snapshot.exists:
-            continue
-        item = _typed_doc(snapshot)
-        memory_id = item.get('memory_id')
-        if isinstance(memory_id, str):
-            items_by_id[memory_id] = item
+    items_by_id = _load_memory_items_by_ids(uid, sorted(candidates))
 
     return (
         [

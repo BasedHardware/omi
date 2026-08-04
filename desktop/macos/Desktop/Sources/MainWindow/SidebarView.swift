@@ -344,21 +344,10 @@ struct SidebarView: View {
   // MARK: - Header Section (Logo + Collapse Button on same row)
   private var headerSection: some View {
     HStack(spacing: OmiSpacing.md) {
-      // Omi logo icon - using the herologo from Resources
-      if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-        let logoImage = NSImage(contentsOf: logoURL)
-      {
-        Image(nsImage: logoImage)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: iconWidth, height: iconWidth)
-      } else {
-        // Fallback SF Symbol
-        Image(systemName: "circle.fill")
-          .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.accent)
-          .frame(width: iconWidth)
-      }
+      // SBLogo resolves the packaged mark through signed-app, development, and
+      // preview layouts, and retains the eight-dot Omi silhouette if an asset
+      // host is incomplete. Never substitute a generic solid circle here.
+      SBLogo(size: iconWidth, tint: OmiColors.accent)
 
       if !isCollapsed {
         // Brand name

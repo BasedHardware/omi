@@ -79,6 +79,7 @@ def _active_item(assertion: MemoryGraphAssertion, **overrides: Any) -> dict[str,
     item = {
         "uid": UID,
         "memory_id": assertion.memory_id,
+        "account_generation": 4,
         "status": "active",
         "tier": "long_term",
         "processing_state": "processed",
@@ -360,3 +361,90 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
             (assertion.memory_id,),
         )
     ]
+
+
+def test_load_fenced_assertions_preserves_caller_order_and_skips_missing(graph_store):
+    first = _assertion("mem-first", commit_sequence=2)
+    second = _assertion("mem-second", commit_sequence=3)
+    third = _assertion("mem-third", commit_sequence=4)
+    graph_store.seed(
+        {
+            **_docs_for(first, _active_item(first)),
+            **_docs_for(third, _active_item(third)),
+        }
+    )
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        ["mem-second", "mem-first", "mem-missing", "mem-third"],
+        account_generation=4,
+    )
+
+    assert [assertion.memory_id for assertion in loaded] == ["mem-first", "mem-third"]
+
+
+def test_load_fenced_assertions_reads_every_memory_id_regardless_of_batch_size(graph_store):
+    assertions = [_assertion(f"mem-{index:03d}", commit_sequence=index + 1) for index in range(205)]
+    docs: dict[str, dict[str, Any]] = {}
+    for assertion in assertions:
+        docs.update(_docs_for(assertion, _active_item(assertion)))
+    graph_store.seed(docs)
+    memory_ids = [assertion.memory_id for assertion in assertions]
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        memory_ids,
+        account_generation=4,
+    )
+
+    # The port loads all 205 ids through ``_store().get_many`` regardless of how the
+    # adapter internally chunks the reads (chunking is an adapter concern, not a
+    # contract the read side exposes — hence no raw batch-size assertion here).
+    assert [assertion.memory_id for assertion in loaded] == memory_ids
+
+
+def test_load_fenced_assertions_excludes_wrong_account_generation(graph_store):
+    assertion = _assertion("mem-stale-generation")
+    graph_store.seed(_docs_for(assertion, _active_item(assertion, account_generation=3)))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_excludes_restricted_sensitivity_labels(graph_store):
+    assertion = _assertion("mem-restricted")
+    graph_store.seed(_docs_for(assertion, _active_item(assertion, sensitivity_labels=["HeAlTh"])))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents(graph_store):
+    assertion = _assertion("mem-authoritative")
+    docs = _docs_for(assertion, _active_item(assertion))
+    item_path = f"users/{UID}/memory_items/{assertion.memory_id}"
+    miskeyed_item = dict(docs[item_path])
+    miskeyed_item["memory_id"] = "mem-payload-alias"
+    docs[item_path] = miskeyed_item
+    graph_store.seed(docs)
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+        )
+        == []
+    )

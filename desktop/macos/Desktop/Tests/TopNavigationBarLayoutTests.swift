@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 import XCTest
 
@@ -6,6 +7,49 @@ import XCTest
 
 @MainActor
 final class TopNavigationBarLayoutTests: XCTestCase {
+  func testExpandedNavigationUsesLaneLeadingEdgeAndPinsPersistentControlsToTrailingEdge() {
+    let laneWidth = TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400)
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationBarLayout(
+        expandedNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .expanded) {
+            Color.clear.frame(width: 420, height: 32)
+          }
+        },
+        compactNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .compact) {
+            Color.clear.frame(width: 68, height: 32)
+          }
+        },
+        persistentControls: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .persistentControls) {
+            Color.clear.frame(width: 150, height: 32)
+          }
+        },
+        settings: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .settings) {
+            Color.clear.frame(width: 32, height: 32)
+          }
+        }
+      )
+      .frame(width: laneWidth, height: 44)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: laneWidth, height: 44)
+    host.layoutSubtreeIfNeeded()
+
+    guard
+      let navigation = recorder.frame(of: .expanded),
+      let persistentControls = recorder.frame(of: .persistentControls),
+      let settings = recorder.frame(of: .settings)
+    else {
+      return XCTFail("expected expanded navigation and persistent controls to be placed")
+    }
+    XCTAssertEqual(navigation.minX, 0, accuracy: 0.5)
+    XCTAssertEqual(settings.maxX, laneWidth, accuracy: 0.5)
+    XCTAssertEqual(persistentControls.maxX, settings.minX - OmiSpacing.md, accuracy: 0.5)
+  }
+
   func testCompactNavigationIsPlacedWhenTheFullTopBarWouldOverflow() {
     let recorder = TopNavigationLayoutRecorder()
     let host = NSHostingView(
@@ -40,6 +84,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     guard let compact = recorder.frame(of: .compact) else {
       return XCTFail("the compact navigation was never placed")
     }
+    XCTAssertEqual(compact.minX, 0, accuracy: 0.5)
     XCTAssertLessThanOrEqual(compact.maxX, 300.5)
 
     guard
@@ -49,6 +94,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       return XCTFail("the persistent controls were never placed")
     }
     XCTAssertGreaterThan(persistentControls.minX, compact.maxX)
+    XCTAssertEqual(persistentControls.maxX, settings.minX - OmiSpacing.md, accuracy: 0.5)
     XCTAssertGreaterThanOrEqual(settings.maxX, 299)
     XCTAssertLessThanOrEqual(settings.maxX, 300.5)
   }
@@ -113,8 +159,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap])
   }
 
-  func testNavigationLaneUsesTheComposerWidthAndInsetsAtNarrowSizes() {
-    XCTAssertEqual(ChatComposerLayout.contentLaneMaxWidth, 900)
+  func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 900)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 768)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 8)
@@ -125,6 +170,14 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     // conditional child—owns the measured width used by the right nav group.
     XCTAssertEqual(CaptureListeningControlsLayout.listeningSlotWidth, 136)
     XCTAssertGreaterThan(CaptureListeningControlsLayout.listeningSlotWidth, 104)
+  }
+
+  func testListeningPrecedesCaptureSoItsReservedSlotStaysOutsideTheVisiblePair() {
+    XCTAssertEqual(
+      CaptureListeningControlsLayout.displayOrder,
+      [.listening, .capture],
+      "Listening must lead Capture so the reserved trailing slot cannot create an inner gap"
+    )
   }
 }
 

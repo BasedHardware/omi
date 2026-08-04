@@ -7,6 +7,16 @@ import pytest
 from scripts import smoke_what_matters_now
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / ".github/actions/deploy-backend-stack/action.yml"
+
+
+def backend_deploy_contract_text(workflow_name: str) -> str:
+    workflow = (REPOSITORY_ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
+    if "./.github/actions/deploy-backend-stack" not in workflow:
+        return workflow
+    return workflow + "\n" + DEPLOY_BACKEND_STACK_ACTION.read_text(encoding="utf-8")
+
 
 class _Response:
     def __init__(self, status):
@@ -104,14 +114,14 @@ def test_main_uses_the_code_owned_fixture_without_a_uid_environment_variable(mon
 
 
 def test_auto_dev_smoke_uses_the_tagged_candidate_output_with_existing_auth():
-    root = Path(__file__).resolve().parents[3]
-    workflow = (root / '.github' / 'workflows' / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+    workflow = backend_deploy_contract_text("gcp_backend_auto_dev.yml")
 
     assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
     assert '--secret=ADMIN_KEY' in workflow
     assert 'Capture exact no-traffic candidate URLs' in workflow
     assert 'resolve_cloud_run_tagged_url.py' in workflow
-    assert '--tag=${{ env.CANDIDATE_TAG }}' in workflow
+    assert 'candidate_tag: ${{ env.CANDIDATE_TAG }}' in workflow
+    assert '--tag=${{ inputs.candidate_tag }}' in workflow
     assert 'run_dev_candidate_acceptance.py' in workflow
     assert '--candidate backend=${{ steps.candidate-urls.outputs.backend_url }}' in workflow
     assert workflow.index('run_dev_candidate_acceptance.py') < workflow.index(
@@ -122,8 +132,7 @@ def test_auto_dev_smoke_uses_the_tagged_candidate_output_with_existing_auth():
 
 
 def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
-    root = Path(__file__).resolve().parents[3]
-    workflow = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
+    workflow = backend_deploy_contract_text("gcp_backend.yml")
 
     assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
     assert '--secret=ADMIN_KEY' in workflow
@@ -131,3 +140,9 @@ def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
     # root: `"$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url ...`, so
     # the quote from that path prefix sits between the script name and the flag.
     assert 'smoke_what_matters_now.py" --base-url https://api.omi.dev' in workflow
+    assert 'id: smoke-what-matters-now-datastore-query' in workflow
+    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
+    restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
+    smoke = workflow.index('Smoke What Matters Now datastore query')
+    verify = workflow.index('Verify serving backend release vector')
+    assert verify < smoke < restore

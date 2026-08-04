@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlparse
 
+from .parity_telemetry import record_parity_capture_event
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_EXPORT_INTERVAL_SECONDS = 3600
@@ -93,29 +95,27 @@ def export_cassette_file(local_path: Path, *, environ: Mapping[str, str] | None 
     env = os.environ if environ is None else environ
     target = resolve_export_target(env)
     if target is None:
+        record_parity_capture_event('export', 'skipped', 'target_unconfigured', environ=env)
         return False
     root_value = (env.get("OMI_PARITY_PACK_ROOT") or "").strip()
     if not root_value:
+        record_parity_capture_event('export', 'skipped', 'root_unconfigured', environ=env)
         return False
     root = Path(root_value)
     path = Path(local_path)
     if not path.is_file():
+        record_parity_capture_event('export', 'failed', 'local_file_missing', environ=env)
         return False
     bucket_name, prefix = target
     object_name = _object_name(prefix, path, root)
+    record_parity_capture_event('export', 'attempted', 'configured', environ=env)
     try:
         _object_store().put_from_file(bucket_name, object_name, str(path), content_type="application/json")
-        logger.info(
-            "Parity pack cassette exported bucket=%s object=%s",
-            bucket_name,
-            object_name,
-        )
+        record_parity_capture_event('export', 'succeeded', 'none', environ=env)
         return True
-    except Exception as error:
-        logger.warning(
-            "Parity pack cassette export failed error_type=%s",
-            type(error).__name__,
-        )
+    except Exception:
+        logger.warning("Parity pack cassette export failed reason_class=upload_error")
+        record_parity_capture_event('export', 'failed', 'upload_error', environ=env)
         _record_export_failure(reason="other")
         return False
 
