@@ -3763,36 +3763,12 @@ struct TasksPage: View {
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      // Search field
-      HStack(spacing: OmiSpacing.sm) {
-        if viewModel.isSearching || viewModel.isLoadingFiltered {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 14, height: 14)
-        } else {
-          Image(systemName: "magnifyingglass")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-
-        TextField("Search tasks...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
-
-        if !viewModel.searchText.isEmpty {
-          Button {
-            viewModel.searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
-          }
-          .buttonStyle(.plain)
-        }
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
+      OmiSearchField(
+        placeholder: "Search tasks...",
+        text: $viewModel.searchText,
+        isLoading: viewModel.isSearching || viewModel.isLoadingFiltered
+      )
+      .frame(minWidth: 180, maxWidth: 260)
 
       if !viewModel.isMultiSelectMode {
         completedToggleButton
@@ -3911,14 +3887,9 @@ struct TasksPage: View {
       viewModel.isInlineCreating = true
     } label: {
       Image(systemName: "plus")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.elementRadius)
+        .accessibilityLabel("Add task")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
     .help("Add task (⌘N)")
   }
 
@@ -3929,18 +3900,9 @@ struct TasksPage: View {
       viewModel.toggleShowCompletedView()
     } label: {
       Image(systemName: viewModel.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(viewModel.showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(viewModel.showCompleted ? OmiColors.border : Color.clear, lineWidth: 1)
-        )
+        .accessibilityLabel(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
     .help(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
   }
 
@@ -3958,13 +3920,10 @@ struct TasksPage: View {
         Text(viewModel.isMultiSelectMode ? "Done" : "Select")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(viewModel.isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(
+      OmiButtonStyle(viewModel.isMultiSelectMode ? .primary : .secondary, size: .compact)
+    )
     .help(viewModel.isMultiSelectMode ? "Exit selection" : "Select tasks for bulk actions")
     .accessibilityIdentifier("tasks-select-toggle")
   }
@@ -4005,15 +3964,8 @@ struct TasksPage: View {
         Text("Delete \(viewModel.multiSelection.selectionCount)")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(.white)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(Color.red)
-      )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.destructive, size: .compact))
   }
 
   private var cancelMultiSelectButton: some View {
@@ -4021,16 +3973,8 @@ struct TasksPage: View {
       viewModel.toggleMultiSelectMode()
     } label: {
       Text("Cancel")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
-        )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
   }
 
   private var taskSettingsButton: some View {
@@ -4041,15 +3985,9 @@ struct TasksPage: View {
       )
     } label: {
       Image(systemName: "gearshape")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
-        )
+        .accessibilityLabel("Task settings")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
     .help("Task Settings")
   }
 

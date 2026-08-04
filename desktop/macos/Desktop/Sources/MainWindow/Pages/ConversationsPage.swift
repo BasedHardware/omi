@@ -356,13 +356,8 @@ struct ConversationsPage: View {
         Text(isMultiSelectMode ? "Done" : "Select")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(isMultiSelectMode ? .primary : .secondary, size: .compact))
     .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
     .accessibilityIdentifier("conversations-select-toggle")
   }
@@ -377,13 +372,8 @@ struct ConversationsPage: View {
         Text("Quick Note")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
   }
 
   // MARK: - Conversation List Section
@@ -602,7 +592,7 @@ struct ConversationsPage: View {
         .omiControlSurface(
           fill: appState.showStarredOnly
             ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
-          radius: 16,
+          radius: OmiChrome.smallControlRadius,
           stroke: appState.showStarredOnly
             ? OmiColors.amber.opacity(0.36) : OmiColors.border.opacity(0.14)
         )
@@ -643,13 +633,15 @@ struct ConversationsPage: View {
               .scaledFont(size: OmiType.caption, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
+        .foregroundColor(
+          appState.selectedDateFilter != nil ? OmiColors.backgroundPrimary : OmiColors.textSecondary
+        )
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .omiControlSurface(
           fill: appState.selectedDateFilter != nil
             ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
-          radius: 16,
+          radius: OmiChrome.smallControlRadius,
           stroke: appState.selectedDateFilter != nil
             ? OmiColors.border.opacity(0.28) : OmiColors.border.opacity(0.14)
         )

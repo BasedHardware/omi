@@ -532,7 +532,13 @@ struct SettingsContentView: View {
         .foregroundColor(OmiColors.textPrimary)
       Spacer()
     }
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, OmiSpacing.md)
+    .padding(.bottom, OmiSpacing.xs)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(OmiColors.border.opacity(0.28))
+        .frame(height: 1)
+    }
   }
 
   var body: some View {
