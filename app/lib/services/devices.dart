@@ -211,7 +211,7 @@ class DeviceService {
 
   void stop() {
     _userDisconnectedBle = true;
-    _cancelBleConnectRetry();
+    _resetBleConnectRetryState();
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
@@ -256,6 +256,20 @@ class DeviceService {
       Logger.debug(
         "ensureConnection ${_connection?.device.id} ${_connection?.status} force=$force softRetry=$softRetry",
       );
+
+      // A force-connect to a different device supersedes any pending soft-retry
+      // for the old one. Without this, a stale retry timer can fire later and
+      // tear down + replace the connection this call is about to establish.
+      if (shouldInvalidatePendingRetryForDifferentTarget(
+        pendingRetryDeviceId: _bleConnectRetryDeviceId,
+        targetDeviceId: deviceId,
+        force: force,
+      )) {
+        Logger.debug(
+          '[DeviceService] invalidating stale soft-retry for $_bleConnectRetryDeviceId (now targeting $deviceId)',
+        );
+        _resetBleConnectRetryState();
+      }
 
       // Connected to this device — return it
       if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
@@ -318,7 +332,7 @@ class DeviceService {
 
   Future<void> disconnectDevice() async {
     _userDisconnectedBle = true;
-    _cancelBleConnectRetry();
+    _resetBleConnectRetryState();
     if (_connection != null) {
       Logger.debug("DeviceService: Disconnecting device...");
       await _connection?.disconnect();
@@ -329,7 +343,7 @@ class DeviceService {
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     _userDisconnectedBle = true;
-    _cancelBleConnectRetry();
+    _resetBleConnectRetryState();
     if (_connection != null) {
       if (_connection!.status == DeviceConnectionState.connected) {
         try {
