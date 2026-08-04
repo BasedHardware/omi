@@ -135,7 +135,11 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
   const sessions = [...corpus.sessions].sort((left, right) => left.segments[0]!.start_at.localeCompare(right.segments[0]!.start_at) || left.capture_sequence - right.capture_sequence || left.revision_lineage.localeCompare(right.revision_lineage) || left.ingest_sequence - right.ingest_sequence || left.session_id.localeCompare(right.session_id)).slice(0, maxSessions);
   let parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? null;
   const dreamFailures: { cycle: number; reason: string }[] = [];
-  let calls = 0, dreamCycles = 0, cycleCounter = 0, lastTriggerTokens = 0;
+  let calls = 0, dreamCycles = 0, lastTriggerTokens = 0;
+  // Resume must not reuse prior cycle_ids: dream-mentions/predicate idempotency
+  // keys include the cycle id, and a collided key with new mention content throws
+  // after promotion already committed (stranding the rest of the cycle).
+  let cycleCounter = new SqliteDreamStore(db).trajectories(corpus.owner_account_id).length;
   let previousWindow: string | null = null, previousEventTime: string | null = null;
   const relations: string[] = [];
 
