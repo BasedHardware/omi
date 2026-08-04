@@ -37,6 +37,12 @@ function b64urlToBytes(s: string): Uint8Array {
   return out;
 }
 
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function decodeJson<T>(part: string): T {
   return JSON.parse(new TextDecoder().decode(b64urlToBytes(part))) as T;
 }
@@ -86,7 +92,12 @@ export async function verifyBearerToken(token: string, env: AuthEnv): Promise<st
   );
   const data = new TextEncoder().encode(`${h}.${p}`);
   const sig = b64urlToBytes(s);
-  const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sig, data);
+  const ok = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    asArrayBuffer(sig),
+    asArrayBuffer(data),
+  );
   if (!ok) throw new Error("bad_signature");
 
   const uid = payload.user_id || payload.sub;
