@@ -181,7 +181,8 @@ enum TaskChatRuntime {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     message: ChatMessage,
     producingRunId: String,
-    producingAttemptId: String
+    producingAttemptId: String,
+    disposition: KernelJournalTerminalDisposition = .accept
   ) async throws -> KernelJournalTurn {
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
     let bridge = try await sharedBridge()
@@ -193,10 +194,14 @@ enum TaskChatRuntime {
         turnId: message.id,
         producingRunId: producingRunId,
         producingAttemptId: producingAttemptId,
-        disposition: .accept,
-        content: message.text,
-        contentBlocksJSON: ChatContentBlockCodec.encode(message.contentBlocks) ?? "[]",
-        resourcesJSON: ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]"
+        disposition: disposition,
+        content: disposition == .accept ? message.text : nil,
+        contentBlocksJSON: disposition == .accept
+          ? ChatContentBlockCodec.encode(message.contentBlocks) ?? "[]"
+          : nil,
+        resourcesJSON: disposition == .accept
+          ? ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]"
+          : nil
       ),
       authorizationSnapshot: authorizationSnapshot
     )

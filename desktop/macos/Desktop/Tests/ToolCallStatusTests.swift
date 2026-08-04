@@ -229,6 +229,25 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
   }
 
+  func testStreamingBufferSchedulesToolResultFlush() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
+    let scheduled = expectation(description: "tool result flush should be scheduled")
+
+    buffer.applyToolResult(
+      messageId: messageId,
+      toolUseId: "tool-1",
+      name: "Bash",
+      output: "done",
+      messages: &messages,
+      scheduleFlush: { scheduled.fulfill() }
+    )
+
+    wait(for: [scheduled], timeout: 0.1)
+    buffer.cancelPendingFlush()
+  }
+
   func testStreamingBufferPreservesThinkingBeforeTextOrder() {
     let messageId = "assistant-1"
     var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]

@@ -93,8 +93,10 @@ steps:
         timeoutMs: "10000"
         pollMs: "25"
         expectedPrefix: "Paced"
+        expectedText: "Paced streaming reveals this response in visible increments before the terminal event arrives."
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.strict_prefix_observed: "true"
       result.detail.visible_assistant_prefix: "Paced"
       result.detail.is_streaming: "true"
 
@@ -139,8 +141,10 @@ steps:
         timeoutMs: "10000"
         pollMs: "25"
         expectedPrefix: "Fast"
+        expectedText: "Fast terminal response delivers a large delta and settles immediately, without the pacing gap."
     expect:
       result.detail.streaming_reveal_observed: "true"
+      result.detail.strict_prefix_observed: "true"
       result.detail.visible_assistant_prefix: "Fast"
       result.detail.is_streaming: "true"
 
