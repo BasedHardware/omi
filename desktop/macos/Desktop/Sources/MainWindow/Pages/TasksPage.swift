@@ -3763,12 +3763,14 @@ struct TasksPage: View {
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
+      Spacer()
+
       OmiSearchField(
         placeholder: "Search tasks...",
         text: $viewModel.searchText,
         isLoading: viewModel.isSearching || viewModel.isLoadingFiltered
       )
-      .frame(minWidth: 180, maxWidth: 260)
+      .frame(minWidth: 120, maxWidth: 260)
 
       if !viewModel.isMultiSelectMode {
         completedToggleButton

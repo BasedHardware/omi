@@ -218,20 +218,7 @@ struct ConversationsPage: View {
 
         Spacer()
 
-        if !appState.conversations.isEmpty {
-          selectModeButton
-        }
-
-        quickNoteButton
-
-        // Only offer the manual "Start Recording" affordance when listening is
-        // set to Always. In Meetings-only (the default) or Off, showing it while
-        // nothing is transcribing misleads the user into thinking capture is
-        // active — during an actual meeting isTranscribing is already true and
-        // the live transcript replaces this button.
-        if !appState.isTranscribing && listeningCaptureMode == .always {
-          startRecordingButton
-        }
+        headerActions
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.lg)
@@ -263,6 +250,73 @@ struct ConversationsPage: View {
         isLiveTranscriptExpanded = false
       }
     }
+  }
+
+  @ViewBuilder
+  private var headerActions: some View {
+    ViewThatFits(in: .horizontal) {
+      fullHeaderActions
+      compactHeaderActions
+    }
+  }
+
+  @ViewBuilder
+  private var fullHeaderActions: some View {
+    if !appState.conversations.isEmpty {
+      selectModeButton
+    }
+    quickNoteButton
+    if !appState.isTranscribing && listeningCaptureMode == .always {
+      startRecordingButton
+    }
+  }
+
+  @ViewBuilder
+  private var compactHeaderActions: some View {
+    if !appState.conversations.isEmpty {
+      compactSelectModeButton
+    }
+    compactQuickNoteButton
+    if !appState.isTranscribing && listeningCaptureMode == .always {
+      compactStartRecordingButton
+    }
+  }
+
+  private var compactSelectModeButton: some View {
+    Button {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        isMultiSelectMode.toggle()
+        if !isMultiSelectMode {
+          selectedConversationIds.removeAll()
+          showMergeConfirmation = false
+        }
+      }
+    } label: {
+      Image(systemName: isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark")
+        .accessibilityLabel(isMultiSelectMode ? "Done" : "Select conversations")
+    }
+    .buttonStyle(OmiButtonStyle(isMultiSelectMode ? .primary : .secondary, size: .compact))
+    .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
+  }
+
+  private var compactQuickNoteButton: some View {
+    Button {
+      NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
+    } label: {
+      Image(systemName: "note.text")
+        .accessibilityLabel("Quick Note")
+    }
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    .help("Quick Note")
+  }
+
+  private var compactStartRecordingButton: some View {
+    Button(action: { appState.startTranscription() }) {
+      Image(systemName: "mic.fill")
+        .accessibilityLabel("Start Recording")
+    }
+    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    .help("Start Recording")
   }
 
   /// Everything below the fixed header, rendered inside a single scroll so the
