@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -20,7 +20,9 @@ import type {
   SortOption,
 } from '@/types/apps';
 import { AppCard } from './AppCard';
+import { connectorTabFromParam, type ConnectorTab } from '@/lib/connectors';
 import { AppGridSection } from './AppGridSection';
+import { ConnectedServices } from './ConnectedServices';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 // Module-level cache for apps data
@@ -48,7 +50,7 @@ function isCacheStale(): boolean {
   return Date.now() - appsCache.timestamp > CACHE_TTL;
 }
 
-type Tab = 'explore' | 'installed' | 'my-apps';
+type Tab = ConnectorTab;
 
 // Quick filter dropdown component
 function FilterDropdown({
@@ -74,7 +76,7 @@ function FilterDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-white/10 text-text-primary border border-white/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
@@ -95,7 +97,7 @@ function FilterDropdown({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary',
+                !value ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
               {placeholder || `All ${label}s`}
@@ -109,7 +111,7 @@ function FilterDropdown({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                  value === option.id ? 'text-purple-primary' : 'text-text-primary',
+                  value === option.id ? 'text-text-primary' : 'text-text-primary',
                 )}
               >
                 {option.title}
@@ -140,7 +142,7 @@ function RatingFilter({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-white/10 text-text-primary border border-white/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
@@ -162,7 +164,7 @@ function RatingFilter({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary',
+                !value ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
               Any rating
@@ -176,7 +178,7 @@ function RatingFilter({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-1',
-                  value === rating ? 'text-purple-primary' : 'text-text-primary',
+                  value === rating ? 'text-text-primary' : 'text-text-primary',
                 )}
               >
                 {rating}+ <Star className="w-3 h-3 fill-current" />
@@ -213,7 +215,7 @@ function SortDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value && value !== 'installs_desc'
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-white/10 text-text-primary border border-white/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
@@ -237,7 +239,7 @@ function SortDropdown({
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
                   value === option.id || (!value && option.id === 'installs_desc')
-                    ? 'text-purple-primary'
+                    ? 'text-text-primary'
                     : 'text-text-primary',
                 )}
               >
@@ -253,7 +255,10 @@ function SortDropdown({
 
 export function AppsExplorer() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('explore');
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    connectorTabFromParam(searchParams.get('tab')),
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -530,7 +535,7 @@ export function AppsExplorer() {
   return (
     <div className="min-h-full">
       {/* Page Header */}
-      <PageHeader title="Apps" icon={LayoutGrid} />
+      <PageHeader title="Connectors" icon={LayoutGrid} />
 
       {/* Sticky Toolbar */}
       <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
@@ -543,7 +548,7 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'explore'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-white text-black'
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
@@ -554,7 +559,7 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'installed'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-white text-black'
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
@@ -565,21 +570,32 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'my-apps'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-white text-black'
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
               My Apps
             </button>
+            <button
+              onClick={() => setActiveTab('services')}
+              className={cn(
+                'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
+                activeTab === 'services'
+                  ? 'bg-white text-black'
+                  : 'text-text-secondary hover:bg-bg-tertiary',
+              )}
+            >
+              Services
+            </button>
 
             {/* Spacer + Create button */}
             <div className="flex-1" />
             <button
-              onClick={() => router.push('/my-apps/new')}
+              onClick={() => router.push('/connectors/new')}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-xl',
-                'bg-purple-primary text-white font-medium',
-                'hover:bg-purple-primary/90 transition-colors',
+                'bg-white text-black font-medium',
+                'hover:bg-white/90 transition-colors',
               )}
             >
               <Plus className="w-5 h-5" />
@@ -588,7 +604,7 @@ export function AppsExplorer() {
           </div>
 
           {/* Search */}
-          <div className="relative mb-3">
+          <div className={cn('relative mb-3', activeTab === 'services' && 'hidden')}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-quaternary" />
             <input
               type="text"
@@ -599,7 +615,7 @@ export function AppsExplorer() {
                 'w-full pl-10 pr-10 py-2.5 rounded-xl',
                 'bg-bg-tertiary border border-bg-quaternary',
                 'text-text-primary placeholder:text-text-quaternary',
-                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                'focus:outline-none focus:ring-2 focus:ring-white/50',
                 'transition-all',
               )}
             />
@@ -614,7 +630,12 @@ export function AppsExplorer() {
           </div>
 
           {/* Inline Filters */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              'flex flex-wrap items-center gap-2',
+              activeTab === 'services' && 'hidden',
+            )}
+          >
             <FilterDropdown
               label="Category"
               value={filters.category}
@@ -640,7 +661,7 @@ export function AppsExplorer() {
             {activeFilterCount > 0 && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-purple-primary hover:underline ml-2"
+                className="text-sm text-text-primary hover:underline ml-2"
               >
                 Clear all
               </button>
@@ -651,9 +672,11 @@ export function AppsExplorer() {
 
       {/* Content */}
       <div className="w-full px-6 py-6">
-        {isLoading ? (
+        {activeTab === 'services' ? (
+          <ConnectedServices />
+        ) : isLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+            <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
           </div>
         ) : isSearching ? (
           <div className="flex justify-center py-12">

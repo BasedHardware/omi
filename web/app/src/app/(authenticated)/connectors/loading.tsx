@@ -31,19 +31,19 @@ export default function AppsLoading() {
             <div className="p-2 rounded-lg bg-bg-tertiary">
               <LayoutGrid className="w-5 h-5 text-text-secondary" />
             </div>
-            <h1 className="text-xl font-semibold text-text-primary font-display">Apps</h1>
+            <h1 className="text-xl font-semibold text-text-primary font-display">
+              Connectors
+            </h1>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
           <div className="flex items-center gap-1">
-            {['Explore', 'Installed', 'My Apps'].map((tab, i) => (
+            {['Explore', 'Installed', 'My Apps', 'Services'].map((tab, i) => (
               <div
                 key={tab}
-                className={`px-4 py-2 rounded-lg ${
-                  i === 0 ? 'bg-bg-tertiary' : ''
-                }`}
+                className={`px-4 py-2 rounded-lg ${i === 0 ? 'bg-bg-tertiary' : ''}`}
               >
                 <div className="h-4 w-16 bg-bg-tertiary rounded animate-pulse" />
               </div>

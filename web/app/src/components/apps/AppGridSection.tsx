@@ -29,9 +29,9 @@ export function AppGridSection({
         <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
         {showViewAll && capabilityId && (
           <Link
-            href={`/my-apps?capability=${capabilityId}`}
+            href={`/connectors?capability=${capabilityId}`}
             className={cn(
-              'flex items-center gap-1 text-sm text-purple-primary',
+              'flex items-center gap-1 text-sm text-text-primary',
               'hover:underline',
             )}
           >

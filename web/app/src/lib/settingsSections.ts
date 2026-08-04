@@ -10,10 +10,10 @@
  */
 export const SETTINGS_SECTIONS = [
   {
-    id: 'profile',
-    label: 'Profile',
-    title: 'Profile',
-    description: 'Account details, language, and notifications',
+    id: 'account',
+    label: 'Account',
+    title: 'Account',
+    description: 'Profile, language, notifications, plan, and usage',
   },
   {
     id: 'privacy',
@@ -22,22 +22,10 @@ export const SETTINGS_SECTIONS = [
     description: 'Data permissions and training settings',
   },
   {
-    id: 'integrations',
-    label: 'Integrations',
-    title: 'Integrations',
-    description: 'Connected services and apps',
-  },
-  {
     id: 'developer',
     label: 'Developer',
     title: 'Developer',
     description: 'API keys, webhooks, and data export',
-  },
-  {
-    id: 'account',
-    label: 'Account',
-    title: 'Account',
-    description: 'Plan, usage, and account management',
   },
 ] as const;
 

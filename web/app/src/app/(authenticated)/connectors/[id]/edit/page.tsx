@@ -45,7 +45,7 @@ export default function EditAppPage() {
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error || 'App not found'}</p>
-          <Link href="/my-apps" className="text-accent-primary hover:underline">
+          <Link href="/connectors" className="text-accent-primary hover:underline">
             Back to Apps
           </Link>
         </div>
@@ -60,4 +60,4 @@ export default function EditAppPage() {
   );
 }
 
-registerMoonshineRoute('/my-apps/:id/edit', EditAppPage, 'authenticated');
+registerMoonshineRoute('/connectors/:id/edit', EditAppPage, 'authenticated');

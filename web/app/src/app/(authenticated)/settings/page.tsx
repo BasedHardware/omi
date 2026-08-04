@@ -24,7 +24,7 @@ export default function Settings() {
       .then(() => {
         if (!active) return;
         showToast('Channel connected', 'success');
-        router.replace('/settings?section=integrations');
+        router.replace('/connectors?tab=services');
       })
       .catch(() => {
         if (!active) return;

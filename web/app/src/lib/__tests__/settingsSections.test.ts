@@ -17,6 +17,17 @@ describe('SETTINGS_SECTIONS', () => {
     }
   });
 
+  it('has no integrations section — connected services live on /connectors', () => {
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain('integrations');
+  });
+
+  it('has one merged account section rather than separate profile and account', () => {
+    const ids = SETTINGS_SECTIONS.map((section) => section.id);
+
+    expect(ids).toContain('account');
+    expect(ids).not.toContain('profile');
+  });
+
   it('has no duplicate ids', () => {
     const ids = SETTINGS_SECTIONS.map((section) => section.id);
 
@@ -39,6 +50,8 @@ describe('isSettingsSectionId', () => {
 
   it('rejects anything else, so ?section= cannot select a missing page', () => {
     expect(isSettingsSectionId('nope')).toBe(false);
+    expect(isSettingsSectionId('integrations')).toBe(false);
+    expect(isSettingsSectionId('profile')).toBe(false);
     expect(isSettingsSectionId('')).toBe(false);
     expect(isSettingsSectionId('__proto__')).toBe(false);
   });

@@ -15,4 +15,4 @@ export default function AppDetailPage() {
   );
 }
 
-registerMoonshineRoute('/my-apps/:id', AppDetailPage, 'authenticated');
+registerMoonshineRoute('/connectors/:id', AppDetailPage, 'authenticated');

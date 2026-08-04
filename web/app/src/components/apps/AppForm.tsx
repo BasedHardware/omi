@@ -128,9 +128,9 @@ interface AppFormProps {
 const sectionCardClass =
   'rounded-2xl p-5 bg-gradient-to-b from-white/[0.03] to-white/[0.01] shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]';
 const inputClass =
-  'w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-purple-primary/50';
+  'w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-white/50';
 const textareaClass =
-  'w-full px-4 py-3 rounded-xl resize-none bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-purple-primary/50';
+  'w-full px-4 py-3 rounded-xl resize-none bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-white/50';
 
 export function AppForm({ mode, app }: AppFormProps) {
   const router = useRouter();
@@ -459,10 +459,10 @@ export function AppForm({ mode, app }: AppFormProps) {
 
       if (mode === 'create') {
         const result = await createApp(data, logoFile || undefined);
-        router.push(`/my-apps/${result.app_id}`);
+        router.push(`/connectors/${result.app_id}`);
       } else if (app) {
         await updateApp(app.id, data, logoFile || undefined);
-        router.push(`/my-apps/${app.id}`);
+        router.push(`/connectors/${app.id}`);
       }
     } catch (err) {
       console.error('Failed to save app:', err);
@@ -485,7 +485,7 @@ export function AppForm({ mode, app }: AppFormProps) {
     setIsDeleting(true);
     try {
       await deleteApp(app.id);
-      router.push('/my-apps');
+      router.push('/connectors');
     } catch (err) {
       console.error('Failed to delete app:', err);
       setError('Failed to delete app');
@@ -536,8 +536,8 @@ export function AppForm({ mode, app }: AppFormProps) {
             disabled={isSubmitting}
             className={cn(
               'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium',
-              'bg-purple-primary text-white',
-              'hover:bg-purple-secondary transition-colors',
+              'bg-white text-black',
+              'hover:bg-white/90 transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
@@ -572,7 +572,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(
                     'w-20 h-20 rounded-2xl border border-dashed flex items-center justify-center',
-                    'transition-colors hover:border-purple-primary/50',
+                    'transition-colors hover:border-white/50',
                     logoPreview ? 'border-transparent' : 'border-bg-quaternary',
                   )}
                 >
@@ -623,8 +623,8 @@ export function AppForm({ mode, app }: AppFormProps) {
                   disabled={isGeneratingDescription || !name}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
-                    'bg-purple-primary/10 text-purple-primary',
-                    'hover:bg-purple-primary/20 transition-colors',
+                    'bg-white/10 text-text-primary',
+                    'hover:bg-white/20 transition-colors',
                     'disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
@@ -652,9 +652,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                     'w-full px-4 py-3 pr-10 rounded-xl text-left',
                     'border transition-all',
                     category
-                      ? 'bg-purple-primary/10 border-purple-primary/50 text-white'
+                      ? 'bg-white/10 border-white/50 text-white'
                       : 'bg-bg-tertiary border-bg-quaternary text-text-primary',
-                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                    'focus:outline-none focus:ring-2 focus:ring-white/50',
                   )}
                 >
                   {category
@@ -665,7 +665,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 <ChevronDownIcon
                   className={cn(
                     'w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all',
-                    category ? 'text-purple-primary' : 'text-text-tertiary',
+                    category ? 'text-text-primary' : 'text-text-tertiary',
                     isCategoryOpen && 'rotate-180',
                   )}
                 />
@@ -686,14 +686,14 @@ export function AppForm({ mode, app }: AppFormProps) {
                           className={cn(
                             'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between',
                             isSelected
-                              ? 'bg-purple-primary/20 text-white'
+                              ? 'bg-white/20 text-white'
                               : 'text-text-primary hover:bg-bg-tertiary',
                           )}
                         >
                           <span>{cat.title}</span>
                           {isSelected && (
                             <svg
-                              className="w-4 h-4 text-purple-primary"
+                              className="w-4 h-4 text-text-primary"
                               fill="none"
                               viewBox="0 0 24 24"
                               stroke="currentColor"
@@ -745,12 +745,12 @@ export function AppForm({ mode, app }: AppFormProps) {
                   'flex-shrink-0 w-[120px] h-[180px] rounded-xl',
                   'border border-dashed border-bg-quaternary',
                   'flex items-center justify-center',
-                  'hover:border-purple-primary/50 transition-colors',
+                  'hover:border-white/50 transition-colors',
                   'disabled:opacity-50',
                 )}
               >
                 {uploadingThumbnail ? (
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-primary border-t-transparent" />
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-white/30 border-t-transparent" />
                 ) : (
                   <PlusIcon className="w-6 h-6 text-text-tertiary" />
                 )}
@@ -784,7 +784,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                       'relative px-4 py-4 rounded-xl text-left transition-all',
                       'border flex items-center justify-between',
                       isSelected
-                        ? 'bg-purple-primary/10 text-white border-purple-primary/50 ring-1 ring-purple-primary/30'
+                        ? 'bg-white/10 text-white border-white/50 ring-1 ring-white/30'
                         : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary',
                     )}
                   >
@@ -800,13 +800,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                       className={cn(
                         'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                         isSelected
-                          ? 'bg-purple-primary border-purple-primary'
+                          ? 'bg-white border-white/30'
                           : 'border-text-quaternary bg-transparent',
                       )}
                     >
                       {isSelected && (
                         <svg
-                          className="w-3 h-3 text-white"
+                          className="w-3 h-3 text-black"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -888,7 +888,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                       'w-full px-4 py-3 rounded-xl appearance-none',
                       'bg-bg-tertiary border border-bg-quaternary',
                       'text-text-primary',
-                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                      'focus:outline-none focus:ring-2 focus:ring-white/50',
                     )}
                   >
                     <option value="">Select a trigger</option>
@@ -970,7 +970,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                         'px-4 py-4 rounded-xl text-left transition-all',
                         'border flex items-center justify-between',
                         isSelected
-                          ? 'bg-purple-primary/10 text-white border-purple-primary/50 ring-1 ring-purple-primary/30'
+                          ? 'bg-white/10 text-white border-white/50 ring-1 ring-white/30'
                           : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary',
                       )}
                     >
@@ -986,13 +986,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                         className={cn(
                           'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                           isSelected
-                            ? 'bg-purple-primary border-purple-primary'
+                            ? 'bg-white border-white/30'
                             : 'border-text-quaternary bg-transparent',
                         )}
                       >
                         {isSelected && (
                           <svg
-                            className="w-3 h-3 text-white"
+                            className="w-3 h-3 text-black"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -1041,7 +1041,7 @@ export function AppForm({ mode, app }: AppFormProps) {
             <div
               className={cn(
                 'flex items-center justify-between p-4 rounded-xl transition-all',
-                !isPrivate ? 'bg-purple-primary/10' : 'bg-bg-tertiary',
+                !isPrivate ? 'bg-white/10' : 'bg-bg-tertiary',
               )}
             >
               <div>
@@ -1057,12 +1057,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                 onClick={() => setIsPrivate(!isPrivate)}
                 className={cn(
                   'relative w-14 h-8 rounded-full transition-all',
-                  !isPrivate ? 'bg-purple-primary' : 'bg-bg-quaternary',
+                  !isPrivate ? 'bg-white' : 'bg-bg-quaternary',
                 )}
               >
                 <div
                   className={cn(
-                    'absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-md',
+                    'absolute top-1 w-6 h-6 rounded-full transition-all shadow-md',
+                    !isPrivate ? 'bg-black' : 'bg-white',
                     !isPrivate ? 'left-7' : 'left-1',
                   )}
                 />
@@ -1075,7 +1076,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 <div
                   className={cn(
                     'flex items-center justify-between p-4 rounded-xl transition-all',
-                    isPaid ? 'bg-purple-primary/10' : 'bg-bg-tertiary',
+                    isPaid ? 'bg-white/10' : 'bg-bg-tertiary',
                   )}
                 >
                   <div>
@@ -1089,12 +1090,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                     onClick={() => setIsPaid(!isPaid)}
                     className={cn(
                       'relative w-14 h-8 rounded-full transition-all',
-                      isPaid ? 'bg-purple-primary' : 'bg-bg-quaternary',
+                      isPaid ? 'bg-white' : 'bg-bg-quaternary',
                     )}
                   >
                     <div
                       className={cn(
-                        'absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-md',
+                        'absolute top-1 w-6 h-6 rounded-full transition-all shadow-md',
+                        isPaid ? 'bg-black' : 'bg-white',
                         isPaid ? 'left-7' : 'left-1',
                       )}
                     />
@@ -1123,7 +1125,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                             'w-full pl-8 pr-4 py-3 rounded-xl',
                             'bg-bg-secondary border border-bg-quaternary',
                             'text-text-primary placeholder:text-text-tertiary',
-                            'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                            'focus:outline-none focus:ring-2 focus:ring-white/50',
                           )}
                         />
                       </div>
@@ -1146,7 +1148,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                                 'flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all',
                                 'border',
                                 isSelected
-                                  ? 'bg-purple-primary/10 text-white border-purple-primary/50'
+                                  ? 'bg-white/10 text-white border-white/50'
                                   : 'bg-bg-secondary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary',
                               )}
                             >

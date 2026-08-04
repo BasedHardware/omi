@@ -43,7 +43,7 @@ const CAPABILITY_INFO: Record<
   persona: {
     icon: <Brain className="w-4 h-4" />,
     label: 'Persona',
-    color: 'text-purple-400',
+    color: 'text-text-secondary',
   },
   memories: {
     icon: <Brain className="w-4 h-4" />,
@@ -114,7 +114,7 @@ export function AppDetail({ appId }: AppDetailProps) {
   const handleShare = async () => {
     if (!app) return;
 
-    const url = `${window.location.origin}/my-apps/${app.id}`;
+    const url = `${window.location.origin}/connectors/${app.id}`;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -140,7 +140,7 @@ export function AppDetail({ appId }: AppDetailProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+        <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
       </div>
     );
   }
@@ -150,8 +150,8 @@ export function AppDetail({ appId }: AppDetailProps) {
       <div className="text-center py-12">
         <p className="text-text-tertiary">{error || 'App not found'}</p>
         <Link
-          href="/my-apps"
-          className="text-purple-primary hover:underline mt-2 inline-block"
+          href="/connectors"
+          className="text-text-primary hover:underline mt-2 inline-block"
         >
           Back to Apps
         </Link>
@@ -218,7 +218,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                     'transition-colors flex items-center gap-2',
                     app.enabled
                       ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
-                      : 'bg-purple-primary text-white hover:bg-purple-secondary',
+                      : 'bg-white text-black hover:bg-white/90',
                     'disabled:opacity-50',
                   )}
                 >
@@ -248,7 +248,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
                 {isOwner && (
                   <button
-                    onClick={() => router.push(`/my-apps/${app.id}/edit`)}
+                    onClick={() => router.push(`/connectors/${app.id}/edit`)}
                     className={cn(
                       'px-4 py-2.5 rounded-xl font-medium',
                       'border border-bg-quaternary',
@@ -393,7 +393,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                                 'hover:bg-bg-quaternary transition-colors',
                               )}
                             >
-                              <span className="w-6 h-6 rounded-full bg-purple-primary/20 text-purple-primary text-sm flex items-center justify-center">
+                              <span className="w-6 h-6 rounded-full bg-white/20 text-text-primary text-sm flex items-center justify-center">
                                 {index + 1}
                               </span>
                               {step.name}
@@ -438,7 +438,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                         <p className="text-sm text-text-secondary">{review.review}</p>
                       )}
                       {review.response && (
-                        <div className="mt-2 pl-4 border-l-2 border-purple-primary/30">
+                        <div className="mt-2 pl-4 border-l-2 border-white/30">
                           <p className="text-xs text-text-tertiary mb-1">
                             Developer response:
                           </p>
