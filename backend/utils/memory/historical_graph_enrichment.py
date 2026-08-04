@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from models.memory_apply import MemoryControlState, memory_content_hash
 from models.memory_promotion import PromotionGraphPlan
 from models.product_memory import MemoryItem
-from utils.memory.graph_enrichment import GraphEnrichmentResult, prepare_graph_enrichment
+from utils.memory.graph_enrichment import GraphEnrichmentResult, GraphEnrichmentStatus, prepare_graph_enrichment
 
 HISTORICAL_GRAPH_PLANNER_VERSION = "canonical_historical_graph_enrichment.v1"
 
@@ -98,13 +98,17 @@ def plan_historical_graph_enrichment(
     )
     if item.content_hash != expected_content_hash:
         return GraphEnrichmentResult(
-            status="blocked",
+            status=GraphEnrichmentStatus.blocked,
             block_code="content_hash_invalid",
             reason="canonical item content hash does not match its current content and evidence",
         )
     graph_plan = invoke_historical_graph_planner(item, llm)
     if graph_plan is None:
-        return GraphEnrichmentResult(status="blocked", block_code="not_source_grounded", reason="no safe graph fact")
+        return GraphEnrichmentResult(
+            status=GraphEnrichmentStatus.blocked,
+            block_code="not_source_grounded",
+            reason="no safe graph fact",
+        )
     return prepare_graph_enrichment(
         item=item,
         plan=graph_plan,
