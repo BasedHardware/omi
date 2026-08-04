@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from '@tschk/moonshine-next/image';
-import { motion } from 'framer-motion';
-import { Plus, Target, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Target, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
 import { useGoals } from '@/hooks/useGoals';
 import { useHomeTasks } from '@/hooks/useHomeTasks';
 import { ChatComposer, type ChatComposerHandle } from '@/components/chat/ChatComposer';
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { RecordingStage } from '@/components/chat/RecordingStage';
+import { useRecordingContext } from '@/components/recording/RecordingContext';
+import { RECORDING_ENABLED } from '@/lib/featureFlags';
 import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
@@ -35,6 +37,49 @@ const quickPrompts = [
   'Summarize my recent conversations',
 ];
 
+/** Telegram's mark; lucide has no brand icons. */
+function TelegramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M21.94 4.6l-3.02 14.25c-.23 1.01-.83 1.26-1.68.78l-4.64-3.42-2.24 2.16c-.25.25-.45.45-.93.45l.33-4.72 8.6-7.77c.37-.33-.08-.52-.58-.19l-10.63 6.7-4.58-1.43c-1-.31-1.02-1 .21-1.48l17.9-6.9c.83-.3 1.56.2 1.26 1.57z" />
+    </svg>
+  );
+}
+
+/**
+ * Omi answers on Telegram and iMessage too, so the two are offered where the
+ * conversation is rather than buried in settings. `sms:` opens Messages with
+ * the number filled in.
+ */
+function ChannelLinks() {
+  const linkClass = cn(
+    'flex h-8 w-8 items-center justify-center rounded-full',
+    'text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary',
+  );
+  return (
+    <div className="flex items-center gap-1">
+      <a
+        href="https://t.me/omi_me_bot"
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkClass}
+        title="Chat with Omi on Telegram"
+        aria-label="Chat with Omi on Telegram"
+      >
+        <TelegramIcon className="h-[18px] w-[18px]" />
+      </a>
+      <a
+        href="sms:+16468591414"
+        className={linkClass}
+        title="Text Omi on iMessage"
+        aria-label="Text Omi on iMessage"
+      >
+        <MessageCircle className="h-[18px] w-[18px]" />
+      </a>
+    </div>
+  );
+}
+
 function firstName(displayName: string | null | undefined): string | null {
   const name = displayName?.trim().split(/\s+/)[0];
   return name || null;
@@ -50,9 +95,23 @@ export function HomePage() {
     currentThinking,
     error,
     sendMessage,
-    clearHistory,
     loadHistory,
   } = useChat();
+
+  const {
+    state: recordingState,
+    segments,
+    duration,
+    micLevel,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+  } = useRecordingContext();
+  const isCapturing =
+    recordingState === 'recording' ||
+    recordingState === 'paused' ||
+    recordingState === 'initializing';
 
   const { items: tasks, loading: tasksLoading, complete: completeTask } = useHomeTasks();
   const {
@@ -67,8 +126,6 @@ export function HomePage() {
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [openGoalId, setOpenGoalId] = useState<string | null>(null);
-  const [showClearDialog, setShowClearDialog] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const askRef = useRef<ChatComposerHandle>(null);
 
   // Track the goal by id, not by value, so the sheet keeps showing live data
@@ -90,32 +147,15 @@ export function HomePage() {
     await sendMessage(text, fileIds);
   };
 
-  const handleClear = async () => {
-    setIsClearing(true);
-    try {
-      await clearHistory();
-      setShowClearDialog(false);
-    } finally {
-      setIsClearing(false);
-    }
-  };
-
   const name = firstName(user?.displayName);
 
   return (
     <div className="flex h-full flex-col">
-      {inChat && (
-        <div className="flex flex-shrink-0 items-center justify-end px-6 pt-4">
-          <button
-            onClick={() => setShowClearDialog(true)}
-            className="flex items-center gap-2 rounded-element px-3 py-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-            title="Clear chat history"
-          >
-            <Trash2 className="h-4 w-4" />
-            <span className="hidden text-sm sm:inline">Clear chat</span>
-          </button>
-        </div>
-      )}
+      {/* The channel links sit at the top-left of the chat surface: the same
+          assistant, reachable where you already are. */}
+      <div className="flex flex-shrink-0 items-center justify-between px-5 pt-4">
+        <ChannelLinks />
+      </div>
 
       {error && (
         <div className="flex-shrink-0 border-b border-error/20 bg-error/10 px-6 py-3">
@@ -123,126 +163,157 @@ export function HomePage() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {inChat ? (
-          <div className="mx-auto max-w-3xl px-6 py-6">
-            <ChatTranscript
-              messages={messages}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              streamingText={streamingText}
-              currentThinking={currentThinking}
-            />
-          </div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-6 py-12"
-          >
-            <Image
-              src="/logo.png"
-              alt="Omi"
-              width={40}
-              height={40}
-              className="rounded-full"
-            />
-            <h1 className="mt-5 text-center text-2xl font-semibold text-text-primary">
-              {name ? `Hey ${name}. I'm ready.` : "I'm ready."}
-            </h1>
-
-            <div className="mt-8 w-full">
-              <HomeTaskList
-                items={tasks}
-                loading={tasksLoading}
-                onComplete={completeTask}
+      {/* The fade belongs to the scroll region, not the page: it sits over the
+          top of the scroller so messages dissolve into the surface instead of
+          being clipped at a hard edge. It is tall and starts fully opaque only
+          at the very top, so a line of text is never half-hidden behind it. */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-bg-pane via-bg-pane/80 to-transparent"
+        />
+        <div className="h-full overflow-y-auto">
+          {inChat ? (
+            <div className="mx-auto max-w-3xl px-6 py-6">
+              <ChatTranscript
+                messages={messages}
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                streamingText={streamingText}
+                currentThinking={currentThinking}
               />
             </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-6 py-12"
+            >
+              <Image
+                src="/logo.png"
+                alt="Omi"
+                width={40}
+                height={40}
+                className="rounded-full"
+              />
+              <h1 className="mt-5 text-center text-2xl font-semibold text-text-primary">
+                {name ? `Hey ${name}. I'm ready.` : "I'm ready."}
+              </h1>
 
-            <div className="mt-8 flex flex-wrap justify-center gap-2">
-              {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => void handleSend(prompt, [])}
-                  disabled={isStreaming}
-                  className={cn(
-                    'rounded-full px-4 py-2 text-sm',
-                    'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
-                    'text-text-secondary hover:text-text-primary',
-                    'transition-colors',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
-                  )}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+              <div className="mt-8 w-full">
+                <HomeTaskList
+                  items={tasks}
+                  loading={tasksLoading}
+                  onComplete={completeTask}
+                />
+              </div>
 
-            <section className="mt-12 w-full">
-              <header className="flex items-baseline justify-between gap-4">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
-                  Goals
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setComposerOpen(true)}
-                  className="flex items-center gap-1.5 rounded-element px-2 py-1 text-xs text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Set a goal
-                </button>
-              </header>
+              <div className="mt-8 flex flex-wrap justify-center gap-2">
+                {quickPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => void handleSend(prompt, [])}
+                    disabled={isStreaming}
+                    className={cn(
+                      'rounded-full px-4 py-2 text-sm',
+                      'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
+                      'text-text-secondary hover:text-text-primary',
+                      'transition-colors',
+                      'disabled:cursor-not-allowed disabled:opacity-50',
+                    )}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
-              {goalsLoading && goals.length === 0 ? (
-                <div className="mt-4 space-y-3">
-                  {[0, 1].map((key) => (
-                    <div
-                      key={key}
-                      className="h-32 animate-pulse rounded-card border border-stroke bg-bg-raised"
-                    />
-                  ))}
-                </div>
-              ) : goals.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setComposerOpen(true)}
-                  className="mt-4 w-full rounded-card border border-dashed border-stroke bg-bg-raised/40 px-6 py-8 text-center transition-colors hover:bg-bg-raised/70"
-                >
-                  <Target className="mx-auto h-6 w-6 text-text-quaternary" />
-                  <p className="mt-2 text-sm text-text-quaternary">
-                    Set a goal and Omi will track progress against it.
-                  </p>
-                </button>
-              ) : (
-                <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {goals.map((goal) => (
-                    <GoalCard
-                      key={goal.id}
-                      goal={goal}
-                      onSetProgress={setProgress}
-                      onRename={renameGoal}
-                      onRemove={removeGoal}
-                      onOpen={(selected) => setOpenGoalId(selected.id)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
-          </motion.div>
-        )}
+              <section className="mt-12 w-full">
+                <header className="flex items-baseline justify-between gap-4">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
+                    Goals
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setComposerOpen(true)}
+                    className="flex items-center gap-1.5 rounded-element px-2 py-1 text-xs text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Set a goal
+                  </button>
+                </header>
+
+                {goalsLoading && goals.length === 0 ? (
+                  <div className="mt-4 space-y-3">
+                    {[0, 1].map((key) => (
+                      <div
+                        key={key}
+                        className="h-32 animate-pulse rounded-card border border-stroke bg-bg-raised"
+                      />
+                    ))}
+                  </div>
+                ) : goals.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setComposerOpen(true)}
+                    className="mt-4 w-full rounded-card border border-dashed border-stroke bg-bg-raised/40 px-6 py-8 text-center transition-colors hover:bg-bg-raised/70"
+                  >
+                    <Target className="mx-auto h-6 w-6 text-text-quaternary" />
+                    <p className="mt-2 text-sm text-text-quaternary">
+                      Set a goal and Omi will track progress against it.
+                    </p>
+                  </button>
+                ) : (
+                  <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {goals.map((goal) => (
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        onSetProgress={setProgress}
+                        onRename={renameGoal}
+                        onRemove={removeGoal}
+                        onOpen={(selected) => setOpenGoalId(selected.id)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </motion.div>
+          )}
+        </div>
       </div>
 
       {/* The ask bar is the one composer for the whole stage, so it holds its
           position while the content above it changes mode. */}
       <div className="flex-shrink-0 px-6 pb-6 pt-3">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl space-y-3">
+          <AnimatePresence>
+            {isCapturing && (
+              <RecordingStage
+                segments={segments}
+                duration={duration}
+                level={micLevel}
+                isPaused={recordingState === 'paused'}
+                onPause={pauseRecording}
+                onResume={resumeRecording}
+                onStop={() => void stopRecording()}
+              />
+            )}
+          </AnimatePresence>
+
           <ChatComposer
             ref={askRef}
             onSend={handleSend}
             isStreaming={isStreaming}
-            placeholder={inChat ? 'Ask anything...' : 'Ask Omi anything...'}
-            hint={inChat ? 'Press Enter to send, Shift+Enter for new line' : undefined}
+            placeholder={
+              isCapturing ? 'Ask about what you are recording...' : 'Ask anything...'
+            }
+            recording={{
+              isActive: isCapturing,
+              onStart: () => void startRecording(),
+              onStop: () => void stopRecording(),
+              disabled: !RECORDING_ENABLED,
+            }}
           />
         </div>
       </div>
@@ -257,18 +328,6 @@ export function HomePage() {
         goal={openGoal}
         onClose={() => setOpenGoalId(null)}
         onSave={editGoal}
-      />
-
-      <ConfirmDialog
-        open={showClearDialog}
-        onOpenChange={setShowClearDialog}
-        title="Clear chat history?"
-        description="This will permanently delete all messages in this conversation. This action cannot be undone."
-        confirmLabel="Clear history"
-        cancelLabel="Cancel"
-        variant="danger"
-        onConfirm={handleClear}
-        isLoading={isClearing}
       />
     </div>
   );
