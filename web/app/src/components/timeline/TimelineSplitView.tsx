@@ -3,13 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  CalendarDays,
-  CheckSquare,
-  GanttChartSquare,
-  Search as SearchIcon,
-  X,
-} from 'lucide-react';
+import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConversations } from '@/hooks/useConversations';
 import { useConversation } from '@/hooks/useConversation';
@@ -19,7 +13,6 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useChat } from '@/components/chat/ChatContext';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ConversationDetailPanel } from '@/components/conversations/ConversationDetailPanel';
-import { SearchBar } from '@/components/conversations/SearchBar';
 import { DateFilter } from '@/components/conversations/DateFilter';
 import { MergeActionBar } from '@/components/conversations/MergeActionBar';
 import { MergeConfirmationDialog } from '@/components/conversations/MergeConfirmationDialog';
@@ -38,7 +31,7 @@ import { MoveFolderDialog } from '@/components/conversations/MoveFolderDialog';
 import { RecapDetailPanel } from '@/components/recaps/RecapDetailPanel';
 import { TimelineGallery, TimelineGallerySkeleton } from './TimelineGallery';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { PageToolbar } from '@/components/layout/PageToolbar';
 import { useToast } from '@/components/ui/Toast';
 import {
   mergeConversations,
@@ -617,13 +610,14 @@ export function TimelineSplitView() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Page Header */}
-      <PageHeader title="Timeline" icon={GanttChartSquare} />
-
-      {/* Toolbar: Folder tabs, search, date filter, select */}
-      <div className="flex-shrink-0 bg-bg-secondary border-b border-stroke">
-        <div className="flex items-center gap-4 px-6 py-3">
-          {/* Folder Tabs - takes up available space */}
+      <PageToolbar
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          onSubmit: handleSearch,
+          placeholder: 'Search conversations...',
+        }}
+        controls={
           <div className="flex-1 min-w-0">
             {foldersLoading ? (
               <FolderTabsSkeleton />
@@ -639,16 +633,9 @@ export function TimelineSplitView() {
               />
             )}
           </div>
-
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              onSearch={handleSearch}
-              placeholder="Search"
-              className="w-56"
-            />
-
+        }
+        actions={
+          <>
             <DateFilter selectedDate={filterDate} onDateChange={handleDateFilterChange} />
 
             {/* Select/Cancel button for merge mode */}
@@ -674,46 +661,54 @@ export function TimelineSplitView() {
                 </>
               )}
             </button>
-          </div>
-        </div>
+          </>
+        }
+        below={
+          (isSearching ||
+            filterDate ||
+            selectedFolderId === FOLDER_STARRED ||
+            isSelectionMode) && (
+            <>
+              {/* Active filter indicators */}
+              {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
+                <div className="flex items-center gap-2 text-xs text-text-tertiary">
+                  {isSearching && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-tertiary">
+                      <SearchIcon className="w-3 h-3" />
+                      {searchResults.length} results
+                    </span>
+                  )}
+                  {filterDate && (
+                    <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
+                      Filtered by date
+                    </span>
+                  )}
+                  {selectedFolderId === FOLDER_STARRED && (
+                    <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
+                      Showing starred only
+                    </span>
+                  )}
+                </div>
+              )}
 
-        {/* Active filter indicators */}
-        {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
-          <div className="flex items-center gap-2 px-6 pb-3 text-xs text-text-tertiary">
-            {isSearching && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-tertiary">
-                <SearchIcon className="w-3 h-3" />
-                {searchResults.length} results
-              </span>
-            )}
-            {filterDate && (
-              <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
-                Filtered by date
-              </span>
-            )}
-            {selectedFolderId === FOLDER_STARRED && (
-              <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
-                Showing starred only
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Inline Merge Action Bar - shows when in selection mode */}
-        {isSelectionMode && (
-          <div className="px-6 pb-3">
-            <MergeActionBar
-              selectedCount={selectedIds.size}
-              onCancel={exitSelectionMode}
-              onMerge={handleMergeClick}
-              onMoveToFolder={handleMoveToFolderClick}
-              onDelete={handleDeleteClick}
-              isLoading={mergeLoading || deleteLoading}
-              inline
-            />
-          </div>
-        )}
-      </div>
+              {/* Inline Merge Action Bar - shows when in selection mode */}
+              {isSelectionMode && (
+                <div className="mt-2">
+                  <MergeActionBar
+                    selectedCount={selectedIds.size}
+                    onCancel={exitSelectionMode}
+                    onMerge={handleMergeClick}
+                    onMoveToFolder={handleMoveToFolderClick}
+                    onDelete={handleDeleteClick}
+                    isLoading={mergeLoading || deleteLoading}
+                    inline
+                  />
+                </div>
+              )}
+            </>
+          )
+        }
+      />
 
       {/* Gallery + detail pane */}
       <div className="flex flex-1 overflow-hidden w-full">

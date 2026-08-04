@@ -62,7 +62,7 @@ export function ConfirmDialog({
                   'border border-bg-tertiary',
                   'shadow-2xl',
                   'p-6',
-                  'focus:outline-none'
+                  'focus:outline-none',
                 )}
               >
                 {/* Close button */}
@@ -79,15 +79,13 @@ export function ConfirmDialog({
                 <div
                   className={cn(
                     'w-12 h-12 rounded-full flex items-center justify-center mb-4',
-                    variant === 'danger'
-                      ? 'bg-error/10'
-                      : 'bg-purple-primary/10'
+                    variant === 'danger' ? 'bg-error/10' : 'bg-white/[0.08]',
                   )}
                 >
                   <AlertTriangle
                     className={cn(
                       'w-6 h-6',
-                      variant === 'danger' ? 'text-error' : 'text-purple-primary'
+                      variant === 'danger' ? 'text-error' : 'text-text-primary',
                     )}
                   />
                 </div>
@@ -110,7 +108,7 @@ export function ConfirmDialog({
                         'flex-1 px-4 py-2.5 rounded-xl',
                         'bg-bg-tertiary hover:bg-bg-quaternary',
                         'text-text-secondary text-sm font-medium',
-                        'transition-colors'
+                        'transition-colors',
                       )}
                     >
                       {cancelLabel}
@@ -126,7 +124,7 @@ export function ConfirmDialog({
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                       variant === 'danger'
                         ? 'bg-error hover:bg-error/90'
-                        : 'bg-purple-primary hover:bg-purple-secondary'
+                        : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                     )}
                   >
                     {isLoading ? (

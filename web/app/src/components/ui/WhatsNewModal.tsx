@@ -18,17 +18,17 @@ interface Feature {
 // Update this list when you want to announce new features
 const CURRENT_FEATURES: Feature[] = [
   {
-    icon: <Mic className="w-4 h-4 text-purple-primary" />,
+    icon: <Mic className="w-4 h-4 text-text-primary" />,
     title: 'Microphone Recording',
     description: 'Record conversations directly from your browser',
   },
   {
-    icon: <Zap className="w-4 h-4 text-purple-primary" />,
+    icon: <Zap className="w-4 h-4 text-text-primary" />,
     title: 'Performance Improvements',
     description: 'Faster loading times and smoother experience',
   },
   {
-    icon: <Sparkles className="w-4 h-4 text-purple-primary" />,
+    icon: <Sparkles className="w-4 h-4 text-text-primary" />,
     title: 'Enhanced UI',
     description: 'Refined interface with better responsiveness',
   },
@@ -76,7 +76,7 @@ export function WhatsNewModal() {
             className={cn(
               'w-full max-w-md bg-bg-secondary rounded-2xl',
               'shadow-xl border border-bg-tertiary',
-              'overflow-hidden relative'
+              'overflow-hidden relative',
             )}
           >
             {/* Close button */}
@@ -89,17 +89,15 @@ export function WhatsNewModal() {
 
             {/* Header with gradient */}
             <div className="relative px-6 pt-8 pb-6 text-center">
-              <div className="absolute inset-0 bg-gradient-to-b from-purple-primary/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-b from-white/[0.06] to-transparent" />
               <div className="relative">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-purple-primary/20 mb-4">
-                  <Rocket className="w-8 h-8 text-purple-primary" />
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/[0.14] mb-4">
+                  <Rocket className="w-8 h-8 text-text-primary" />
                 </div>
                 <h2 className="text-2xl font-semibold text-text-primary mb-2">
                   What&apos;s New
                 </h2>
-                <p className="text-text-tertiary">
-                  Check out the latest updates
-                </p>
+                <p className="text-text-tertiary">Check out the latest updates</p>
               </div>
             </div>
 
@@ -115,16 +113,14 @@ export function WhatsNewModal() {
                     transition={{ delay: 0.1 + index * 0.1 }}
                     className="flex items-start gap-3 p-3 rounded-xl bg-bg-tertiary/50"
                   >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-primary/10 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center">
                       {feature.icon}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-text-primary">
                         {feature.title}
                       </p>
-                      <p className="text-xs text-text-tertiary">
-                        {feature.description}
-                      </p>
+                      <p className="text-xs text-text-tertiary">{feature.description}</p>
                     </div>
                   </motion.div>
                 ))}
@@ -134,7 +130,7 @@ export function WhatsNewModal() {
               <div className="pt-4">
                 <button
                   onClick={handleClose}
-                  className="block w-full py-3 px-4 rounded-xl bg-purple-primary text-white text-center font-medium hover:bg-purple-600 transition-colors"
+                  className="block w-full py-3 px-4 rounded-xl bg-text-primary text-bg-primary text-center font-medium hover:bg-text-primary/90 transition-colors"
                 >
                   Got it!
                 </button>
