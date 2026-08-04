@@ -88,6 +88,7 @@ class CanonicalKnowledgeGraphResponse(BaseModel):
     edges: List[Dict[str, Any]]
     has_more: bool
     next_cursor: Optional[str] = None
+    catalog_nodes: List[Dict[str, Any]] = []
 
 
 class RebuildResponse(BaseModel):
@@ -145,6 +146,7 @@ def get_canonical_knowledge_graph(
         edges=page.edges,
         has_more=page.has_more,
         next_cursor=page.next_cursor,
+        catalog_nodes=getattr(page, 'catalog_nodes', []),
     )
 
 

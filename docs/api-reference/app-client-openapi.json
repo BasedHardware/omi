@@ -5580,6 +5580,15 @@
       },
       "CanonicalKnowledgeGraphResponse": {
         "properties": {
+          "catalog_nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Catalog Nodes",
+            "type": "array"
+          },
           "edges": {
             "items": {
               "additionalProperties": true,
