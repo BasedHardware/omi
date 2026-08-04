@@ -186,6 +186,7 @@ extension SettingsContentView {
   func selectGmailAccount(_ cookiePath: String?, label: String) {
     GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
     showingGmailAccountPicker = false
+    gmailReadGeneration += 1
     // The previous account's read results no longer describe the newly
     // selected profile; reset them so the page cannot label one account while
     // showing another's emails.
@@ -195,12 +196,17 @@ extension SettingsContentView {
   }
 
   func readGmail() async {
+    let readGeneration = gmailReadGeneration
     isReadingGmail = true
     gmailReadError = nil
     gmailMemoriesSaved = 0
 
     do {
       let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+      guard readGeneration == gmailReadGeneration else {
+        isReadingGmail = false
+        return
+      }
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
@@ -208,6 +214,11 @@ extension SettingsContentView {
       if !emails.isEmpty {
         isSavingGmailMemories = true
         let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        guard readGeneration == gmailReadGeneration else {
+          isSavingGmailMemories = false
+          isReadingGmail = false
+          return
+        }
         gmailMemoriesSaved = result.saved
         isSavingGmailMemories = false
       }

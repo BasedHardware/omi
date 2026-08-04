@@ -187,11 +187,13 @@ actor GmailReaderService {
 
   func verifyConnection() async -> GmailConnectionStatus {
     do {
+      let selectedCookiePath = GmailSelectionStore.selectedCookiePath
       _ = try fetchGmailViaAtomFeedSingle(
         maxResults: 1,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
-        allowBootstrap: false
+        allowBootstrap: false,
+        selectedCookiePath: selectedCookiePath
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {

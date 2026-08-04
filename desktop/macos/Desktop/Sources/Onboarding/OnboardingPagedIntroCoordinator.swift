@@ -124,6 +124,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isProbingGmailAccounts = false
   @Published var showingGmailAccountPicker = false
   @Published var gmailAwaitingSelection = false
+  @Published private(set) var gmailAccountSelectionFailed = false
   private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
@@ -851,8 +852,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     guard gmailAccounts.isEmpty else { return }
     isProbingGmailAccounts = true
     defer { isProbingGmailAccounts = false }
-    guard let accounts = try? await GmailAccountProbe.availableAccounts() else { return }
-    gmailAccounts = accounts
+    do {
+      gmailAccounts = try await GmailAccountProbe.availableAccounts()
+      gmailAccountSelectionFailed = false
+    } catch {
+      gmailAccountSelectionFailed = true
+      lastActionError = error.localizedDescription
+    }
   }
 
   func selectGmailAccount(_ cookiePath: String?, label: String) {
@@ -872,6 +878,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       // exact junk-account behavior this feature exists to prevent. Fall back
       // to the automatic default but record the fail-open.
       log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      gmailAccountSelectionFailed = true
       return
     }
     // Re-check after the probe: the user may have picked an account from the
@@ -886,15 +893,21 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     // gmailAwaitingSelection, so without this the gmail background task would
     // suspend forever and onboarding research would never finish.
     showingGmailAccountPicker = true
-    await withTaskCancellationHandler {
-      await withCheckedContinuation { continuation in
-        gmailSelectionWaiter = continuation
-      }
-    } onCancel: {
-      Task { @MainActor in
-        self.resumeGmailSelection()
-      }
-    }
+    await withTaskCancellationHandler(
+      operation: {
+        await withCheckedContinuation { continuation in
+          if Task.isCancelled {
+            continuation.resume()
+            return
+          }
+          gmailSelectionWaiter = continuation
+        }
+      },
+      onCancel: {
+        Task { @MainActor in
+          self.resumeGmailSelection()
+        }
+      })
   }
 
   private func resumeGmailSelection() {
@@ -908,6 +921,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   /// background task: fall back to the automatic (first readable) account.
   func cancelGmailAccountSelection() {
     showingGmailAccountPicker = false
+    GmailSelectionStore.persist(cookiePath: nil, label: "Automatic")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "gmail_account_selection",
+      from: "manual_selection",
+      to: "automatic_profile",
+      reason: "picker_cancelled",
+      outcome: .recovered)
     resumeGmailSelection()
   }
 
@@ -936,6 +956,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       guard !Task.isCancelled else { return }
       await self.awaitGmailAccountSelectionIfNeeded()
       guard !Task.isCancelled else { return }
+      guard !self.gmailAccountSelectionFailed else {
+        await self.markInsightFinished(.gmail)
+        return
+      }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,

@@ -48,28 +48,31 @@ struct GmailAccountPickerView: View {
 
       Divider()
 
-      ForEach(accounts) { account in
-        Button {
-          onSelect(account.id, accountLabel(account))
-        } label: {
-          HStack {
-            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-              Text(account.browserName)
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-              Text(account.email ?? "Unknown account")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            Spacer()
-            if selectedCookiePath == account.id {
-              Image(systemName: "checkmark")
-                .foregroundColor(OmiColors.accent)
+      ScrollView {
+        ForEach(accounts) { account in
+          Button {
+            onSelect(account.id, accountLabel(account))
+          } label: {
+            HStack {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(account.browserName)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(OmiColors.textPrimary)
+                Text(account.email ?? "Unknown account")
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+              Spacer()
+              if selectedCookiePath == account.id {
+                Image(systemName: "checkmark")
+                  .foregroundColor(OmiColors.accent)
+              }
             }
           }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
+      .frame(maxHeight: 280)
     }
     .padding(OmiSpacing.lg)
     .frame(width: 400)
