@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -19,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from google.cloud import firestore  # noqa: E402
 from google.cloud.firestore_v1 import FieldFilter  # noqa: E402
+from google.oauth2 import service_account  # noqa: E402
 
 from database.memory_apply_store import apply_long_term_patch_firestore  # noqa: E402
 from database.memory_collections import MemoryCollections  # noqa: E402
@@ -64,6 +66,15 @@ def _control(uid: str, *, db_client: Any) -> MemoryControlState:
         raise RuntimeError("missing canonical memory apply control state")
     payload = snapshot.to_dict() or {}
     return MemoryControlState(**payload)
+
+
+def _firestore_client(*, project: str) -> Any:
+    """Use an injected runtime service identity when present, else local ADC."""
+    service_account_json = os.getenv("SERVICE_ACCOUNT_JSON", "").strip()
+    if not service_account_json:
+        return firestore.Client(project=project)
+    credentials = service_account.Credentials.from_service_account_info(json.loads(service_account_json))
+    return firestore.Client(project=project, credentials=credentials)
 
 
 def _candidates(uid: str, *, control: MemoryControlState, limit: int, db_client: Any) -> list[MemoryItem]:
@@ -134,7 +145,7 @@ def run_enrichment(
     if apply and confirm_uid != uid:
         raise ValueError("apply requires confirm_uid to exactly match uid")
 
-    db_client = db_client or firestore.Client(project=firestore_project)
+    db_client = db_client or _firestore_client(project=firestore_project)
     if llm is None and not structured_only:
         llm = get_llm("memory_l2")
     report: Counter[str] = Counter()
