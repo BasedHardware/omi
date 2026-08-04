@@ -99,3 +99,5 @@ export function bearerFromAuthorization(header: string | null): string | null {
   const m = /^Bearer\s+(.+)$/i.exec(header.trim());
   return m?.[1]?.trim() || null;
 }
+
+export { sanitize } from "./sanitize.js";

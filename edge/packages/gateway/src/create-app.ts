@@ -11,10 +11,11 @@ import { defaultTenantRecord, ensureTenant, kvTenantStore } from "@omi/tenant";
 import { memoryRoutes } from "@omi/memory";
 import { conversationRoutes } from "@omi/conversation";
 import { tasksRoutes } from "@omi/tasks";
+import { mountOriginParity } from "./parity-proxy.js";
 
 /**
  * Provider-agnostic Hono app. Mount modules via EDGE_MODULES feature gate.
- * Cloudflare / Node / Bun only supply AppDeps + fetch.
+ * Parity paths mirror Python prefixes via origin proxy; /edge/* is native shell.
  */
 export function createApp(deps: AppDeps) {
   const app = new Hono();
@@ -57,14 +58,22 @@ export function createApp(deps: AppDeps) {
   }
 
   if (moduleEnabled(f, "memory")) {
+    // Python parity surface (full method/path passthrough)
+    mountOriginParity(app, deps, { prefix: "/v3/memories", edgeName: "memory-parity" });
+    // Edge-native namespace (origin-backed stores evolving toward local)
     app.route("/edge/memories", memoryRoutes(deps));
   }
 
   if (moduleEnabled(f, "conversation")) {
+    mountOriginParity(app, deps, {
+      prefix: "/v1/conversations",
+      edgeName: "conversation-parity",
+    });
     app.route("/edge/conversations", conversationRoutes(deps));
   }
 
   if (moduleEnabled(f, "tasks")) {
+    mountOriginParity(app, deps, { prefix: "/v1/action-items", edgeName: "tasks-parity" });
     app.route("/edge/tasks", tasksRoutes(deps));
   }
 
