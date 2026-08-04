@@ -184,6 +184,9 @@ AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
+# Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
+# be declined again, so this says the request cannot be answered rather than inviting a retry.
+AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -575,6 +578,18 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+def _refusal_category(response: Any) -> str:
+    """Name the policy category behind a refusal, for logs only.
+
+    ``stop_details`` is populated only alongside ``stop_reason == "refusal"`` and is absent on
+    older provider versions, so every level is optional. The category is a fixed provider enum
+    and carries none of the request content.
+    """
+    details = getattr(response, 'stop_details', None)
+    category = getattr(details, 'category', None) if details is not None else None
+    return category if isinstance(category, str) and category else 'unspecified'
+
+
 async def _run_anthropic_agent_stream(
     system_prompt: str,
     messages: list,
@@ -691,7 +706,9 @@ async def _run_anthropic_agent_stream(
                     continue
 
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
-                await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+                # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+                # router would overwrite this apology with its own canned error.
+                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -703,6 +720,18 @@ async def _run_anthropic_agent_stream(
                 reason=retried_reason,
                 outcome='recovered',
             )
+
+        # A safety classifier can decline the turn. The response is a normal success with an
+        # empty (or partial) content list, so the loop would otherwise exit as if the model had
+        # simply answered nothing: the router sees a blank answer, emits its generic error, and
+        # records no error at all. Say so through the normal streamed/persisted contract and
+        # report the turn as failed instead.
+        if response.stop_reason == "refusal":
+            logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
+            if not full_response:
+                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+            await callback.end()
+            return 'provider_refusal'
 
         # If no tool_use, we're done
         if response.stop_reason != "tool_use":
