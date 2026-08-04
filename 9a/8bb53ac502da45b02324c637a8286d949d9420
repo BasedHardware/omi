@@ -1,0 +1,26 @@
+desktop/lock-in/Sources/LockInCore/Score.swift
+  s_acebfdccb4f1d0::t_0f8a770ad23ba8 154
+desktop/lock-in/Tests/LockInCoreTests/ShareBoundaryTests.swift
+  s_acebfdccb4f1d0::t_b41983a9e5fffd 164-170
+desktop/lock-in/Sources/LockInApp/Model/TodayProvider.swift
+  s_acebfdccb4f1d0::t_a958714993212a 311-315
+desktop/lock-in/Sources/LockInCore/Models.swift
+  s_acebfdccb4f1d0::t_02711dcdaa0a82 238-244
+  s_acebfdccb4f1d0::t_9c2e0b1efaf5ba 253-254,260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "9a8bb53ac502da45b02324c637a8286d949d9420",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
