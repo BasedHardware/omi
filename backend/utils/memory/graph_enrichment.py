@@ -226,12 +226,11 @@ def _assertion_matches_current_item(
 ) -> bool:
     if assertion is None:
         return False
-    if isinstance(assertion, dict):
-        value = assertion.get
-    else:
 
-        def value(key: str, default: Any = None) -> Any:
-            return getattr(assertion, key, default)
+    def value(key: str, default: Any = None) -> Any:
+        if isinstance(assertion, dict):
+            return assertion.get(key, default)
+        return getattr(assertion, key, default)
 
     return (
         value("status", "active") == "active"
