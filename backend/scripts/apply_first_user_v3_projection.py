@@ -30,6 +30,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
+from utils.memory.v3.compatibility_projection_sync import v3_compatibility_projection_skip_reason
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
@@ -39,6 +40,10 @@ from utils.memory.v3.projection_reader_contract import (
 FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"
 DEFAULT_LIMIT = 5_000
+# ``--limit`` is the bounded page size, not a cap on the user's total source
+# rows.  A user can legitimately have more than one page of canonical items.
+# Keep each Firestore request below the batch/read safety threshold while
+# allowing the source cursor to exhaust the collection.
 MAX_LIMIT = 10_000
 FIRESTORE_WRITE_BATCH_SIZE = 400
 RESTRICTED_SENSITIVITY_LABELS = {
@@ -124,14 +129,40 @@ def _stream_memory_items(
         return [(memory_id, path, data)] if data is not None else []
 
     rows: list[tuple[str, str, dict[str, Any]]] = []
-    for snapshot in db_client.collection(paths.memory_items).stream():
-        data = _snapshot_data(snapshot)
-        if data is None:
-            continue
-        doc_id = getattr(snapshot, "id", "") or str(data.get("memory_id") or "")
-        rows.append((doc_id, f"{paths.memory_items}/{doc_id}", data))
-        if len(rows) > limit:
-            raise RuntimeError(f"source memory item count exceeds safety limit ({limit})")
+    collection = db_client.collection(paths.memory_items)
+    # Firestore's collection stream is unbounded.  Use deterministic document
+    # ID ordering and a cursor so large accounts are read in bounded pages,
+    # while the returned list still gives the build phase one stable inventory.
+    # Lightweight fakes used by unit tests may not implement cursors; their
+    # single unbounded stream is already an exhausted source and is safe here.
+    supports_cursor = hasattr(collection, "order_by") and hasattr(collection, "start_after")
+    cursor = None
+    seen_ids: set[str] = set()
+    while True:
+        query = collection
+        if supports_cursor:
+            query = query.order_by("__name__")
+            if cursor is not None:
+                query = query.start_after(cursor)
+            snapshots = list(query.limit(limit).stream())
+        else:
+            snapshots = list(query.stream())
+        if not snapshots:
+            break
+        for snapshot in snapshots:
+            data = _snapshot_data(snapshot)
+            if data is None:
+                continue
+            doc_id = getattr(snapshot, "id", "") or str(data.get("memory_id") or "")
+            if not doc_id:
+                raise RuntimeError("source memory item is missing a document id")
+            if doc_id in seen_ids:
+                raise RuntimeError("source memory item cursor did not advance")
+            seen_ids.add(doc_id)
+            rows.append((doc_id, f"{paths.memory_items}/{doc_id}", data))
+        if not supports_cursor or len(snapshots) < limit:
+            break
+        cursor = snapshots[-1]
     return rows
 
 
@@ -173,31 +204,7 @@ def _projection_skip_reason(data: dict[str, Any]) -> str | None:
     rebuild look incomplete.
     """
 
-    if data.get("status") != "active":
-        return "not_active"
-    if data.get("processing_state") != "processed":
-        return "not_processed"
-    if data.get("source_state") != "active":
-        return "source_not_active"
-    if data.get("tier") not in {"short_term", "long_term"}:
-        return "not_default_tier"
-    if data.get("deleted") is True or data.get("tombstoned") is True:
-        return "deleted_or_tombstoned"
-    if data.get("archive") is True:
-        return "archived"
-    restricted = _labels(data).intersection(RESTRICTED_SENSITIVITY_LABELS)
-    if restricted or data.get("restricted_sensitivity") is True:
-        return "restricted_sensitivity"
-    if data.get("user_review") is False:
-        return "user_rejected"
-    promotion = data.get("promotion")
-    if isinstance(promotion, dict) and promotion.get("user_review") is False:
-        return "user_rejected"
-    try:
-        _content(data)
-    except RuntimeError:
-        return "missing_content"
-    return None
+    return v3_compatibility_projection_skip_reason(data)
 
 
 def _timestamp(data: dict[str, Any], *fields: str) -> datetime:
@@ -418,6 +425,8 @@ def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
             raise RuntimeError(f"refusing delete outside projection items: {path}")
     _apply_item_mutations(
         db_client,
+        uid=build.uid,
+        rebuild_id=build.rebuild_id,
         writes=[(path, build.writes[path]) for path in item_paths],
         deletes=build.stale_projection_paths,
     )
@@ -474,30 +483,76 @@ def _finalize_projection_rebuild(
             transaction._clean_up()
 
 
-def _apply_item_mutations(db_client, *, writes: list[tuple[str, dict[str, Any]]], deletes: list[str]) -> None:
-    """Write the item set in bounded commits; leave state not-ready on any failure."""
+def _apply_item_mutations(
+    db_client,
+    *,
+    uid: str,
+    rebuild_id: str,
+    writes: list[tuple[str, dict[str, Any]]],
+    deletes: list[str],
+) -> None:
+    """Write bounded batches only while this rebuild owns the staged state.
+
+    The ownership read and item writes share one Firestore transaction.  A
+    concurrent rebuild that replaces ``rebuild_id`` therefore conflicts and
+    retries before this worker can overwrite the newer rebuild's rows.
+    """
 
     mutations: list[tuple[str, str, dict[str, Any] | None]] = [("set", path, payload) for path, payload in writes] + [
         ("delete", path, None) for path in deletes
     ]
     if not mutations:
         return
-    if not hasattr(db_client, "batch"):
-        for kind, path, payload in mutations:
-            if kind == "set":
-                db_client.document(path).set(payload)
-            else:
-                db_client.document(path).delete()
-        return
     for start in range(0, len(mutations), FIRESTORE_WRITE_BATCH_SIZE):
-        batch = db_client.batch()
-        for kind, path, payload in mutations[start : start + FIRESTORE_WRITE_BATCH_SIZE]:
-            reference = db_client.document(path)
-            if kind == "set":
-                batch.set(reference, payload)
-            else:
-                batch.delete(reference)
-        batch.commit()
+        batch_mutations = mutations[start : start + FIRESTORE_WRITE_BATCH_SIZE]
+        state_path = MemoryCollections(uid=uid).v3_compatibility_projection_state
+
+        def mutate(transaction=None) -> None:
+            state_ref = db_client.document(state_path)
+            state = (
+                _snapshot_data(state_ref.get(transaction=transaction))
+                if transaction is not None
+                else _snapshot_data(state_ref.get())
+            )
+            if (
+                not isinstance(state, dict)
+                or state.get("uid") != uid
+                or state.get("rebuild_id") != rebuild_id
+                or state.get("ready") is not False
+                or state.get("rebuild_complete") is not False
+            ):
+                raise RuntimeError("projection rebuild was superseded or already cut over")
+            for kind, path, payload in batch_mutations:
+                reference = db_client.document(path)
+                if transaction is None:
+                    if kind == "set":
+                        reference.set(payload)
+                    else:
+                        reference.delete()
+                elif kind == "set":
+                    transaction.set(reference, payload)
+                else:
+                    transaction.delete(reference)
+
+        transaction = db_client.transaction() if hasattr(db_client, "transaction") else None
+        if transaction is None:
+            mutate()
+        elif firestore is not None and transaction.__class__.__module__.startswith("google.cloud.firestore"):
+            firestore.transactional(mutate)(transaction)
+        else:
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                mutate(transaction)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
 
 
 def build_report(build: ProjectionBuild, *, applied_paths: list[str] | None = None) -> dict[str, Any]:

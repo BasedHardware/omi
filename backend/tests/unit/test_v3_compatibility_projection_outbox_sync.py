@@ -12,7 +12,10 @@ from database.memory_compatibility_projection import read_v3_compatibility_proje
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.short_term_promotion import _canonical_outbox_side_effects
-from utils.memory.v3.compatibility_projection_sync import CompatibilityProjectionSyncError
+from utils.memory.v3.compatibility_projection_sync import (
+    CompatibilityProjectionSyncError,
+    v3_compatibility_projection_skip_reason,
+)
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
@@ -197,6 +200,27 @@ def _read(db: _Db) -> list[dict[str, Any]]:
     ).items
 
 
+@pytest.mark.parametrize(
+    ("patch", "expected_reason"),
+    [
+        ({}, None),
+        ({"tier": MemoryLayer.archive}, "not_default_tier"),
+        ({"status": MemoryItemStatus.tombstoned}, "not_active"),
+        ({"source_state": SourceState.tombstoned}, "source_not_active"),
+        ({"sensitivity_labels": ["credential"]}, "restricted_sensitivity"),
+        ({"promotion": {"user_review": False}}, "user_rejected"),
+        ({"content": "  "}, "missing_content"),
+        ({"archive": True}, "archived"),
+        ({"deleted": True}, "deleted_or_tombstoned"),
+        ({"user_review": False}, "user_rejected"),
+        ({"restricted_sensitivity": True}, "restricted_sensitivity"),
+    ],
+)
+def test_projection_eligibility_policy_covers_canonical_and_legacy_representations(patch, expected_reason):
+    payload = {**_item().model_dump(mode="python"), **patch}
+    assert v3_compatibility_projection_skip_reason(payload) == expected_reason
+
+
 def test_normal_projection_callback_creates_then_updates_the_v3_read_model():
     paths = MemoryCollections(uid=UID)
     original_state = _projection_state()
@@ -272,7 +296,6 @@ def test_normal_projection_delete_hides_v3_content_before_retryable_external_cle
     [
         None,
         {"account_generation": 6, "projection_generation": 6},
-        {"write_convergence_complete": False},
     ],
 )
 def test_projection_upsert_fails_closed_without_valid_enrollment_fences(state_patch):
@@ -290,6 +313,25 @@ def test_projection_upsert_fails_closed_without_valid_enrollment_fences(state_pa
         side_effects.projection_upsert(_item(), 7)
 
     assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" not in db.docs
+
+
+def test_projection_upsert_remains_admitted_while_rebuild_convergence_is_pending():
+    paths = MemoryCollections(uid=UID)
+    state = {
+        **_projection_state(),
+        "ready": False,
+        "writer_admission_ready": True,
+        "write_convergence_complete": False,
+        "delete_convergence_complete": False,
+        "tombstone_convergence_complete": False,
+    }
+    db = _Db({paths.v3_compatibility_projection_state: state})
+    side_effects = _canonical_outbox_side_effects(db_client=db)
+
+    with patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", return_value=True):
+        assert side_effects.projection_upsert(_item(), 7) is True
+
+    assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" in db.docs
 
 
 def test_stale_generation_delete_cannot_remove_a_new_generation_projection_row():

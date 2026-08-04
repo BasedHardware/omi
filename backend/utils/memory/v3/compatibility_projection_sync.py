@@ -11,6 +11,7 @@ idempotent even when the state document is unavailable.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Callable, Dict, Optional, cast
 
 from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
@@ -160,22 +161,46 @@ def _item_path(uid: str, memory_id: str) -> str:
     return f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/{memory_id}"
 
 
-def _has_restricted_sensitivity(item: MemoryItem) -> bool:
-    return bool(set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
+def v3_compatibility_projection_skip_reason(payload: Mapping[str, Any]) -> Optional[str]:
+    """Return the single default-read projection exclusion decision.
+
+    The normal writer calls this with a typed canonical ``MemoryItem`` dump.
+    Rebuilds call it with the raw persisted payload so legacy compatibility
+    aliases are rejected too. Keeping both paths here prevents a rebuild from
+    deleting a row that the outbox writer would immediately reintroduce.
+    """
+    if payload.get("status") != MemoryItemStatus.active:
+        return "not_active"
+    if payload.get("processing_state") != ProcessingState.processed:
+        return "not_processed"
+    if payload.get("source_state") != SourceState.active:
+        return "source_not_active"
+    if payload.get("tier") not in {MemoryTier.short_term, MemoryTier.long_term}:
+        return "not_default_tier"
+    if payload.get("deleted") is True or payload.get("tombstoned") is True:
+        return "deleted_or_tombstoned"
+    if payload.get("archive") is True:
+        return "archived"
+    labels = payload.get("sensitivity_labels")
+    if not isinstance(labels, list):
+        return "restricted_sensitivity"
+    normalized_labels = {label.strip().lower() for label in labels if isinstance(label, str) and label.strip()}
+    if normalized_labels.intersection(RESTRICTED_SENSITIVITY_LABELS) or payload.get("restricted_sensitivity") is True:
+        return "restricted_sensitivity"
+    if payload.get("user_review") is False:
+        return "user_rejected"
+    promotion = payload.get("promotion")
+    if isinstance(promotion, dict) and promotion.get("user_review") is False:
+        return "user_rejected"
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return "missing_content"
+    return None
 
 
 def is_v3_compatibility_projection_eligible(item: MemoryItem) -> bool:
     """The sole serving-projection eligibility policy for canonical writers."""
-    promotion = item.promotion or {}
-    return (
-        item.status == MemoryItemStatus.active
-        and item.processing_state == ProcessingState.processed
-        and item.source_state == SourceState.active
-        and item.tier in {MemoryTier.short_term, MemoryTier.long_term}
-        and not _has_restricted_sensitivity(item)
-        and promotion.get("user_review") is not False
-        and bool((item.content or "").strip())
-    )
+    return v3_compatibility_projection_skip_reason(item.model_dump(mode="python")) is None
 
 
 def _run_transaction(db_client: Any, callback: Callable[..., bool], *args: Any) -> bool:
@@ -289,4 +314,5 @@ __all__ = [
     "delete_v3_compatibility_projection_item",
     "is_v3_compatibility_projection_eligible",
     "upsert_v3_compatibility_projection_item",
+    "v3_compatibility_projection_skip_reason",
 ]

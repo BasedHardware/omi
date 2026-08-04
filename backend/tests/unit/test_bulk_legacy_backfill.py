@@ -353,6 +353,31 @@ def test_requested_bucket_processing_waits_for_row_budget_then_resumes():
     assert second.users[0].state == MigrationState.staged
 
 
+def test_incomplete_bucket_report_cannot_mark_staging_complete():
+    store = _CheckpointStore()
+
+    def process_bucket(uid: str, bucket: str, cap: int, stop) -> _BackfillReport:
+        return _BackfillReport(completed=True, verified=False, destination_count=1, intended_count=1)
+
+    summary = run_bulk_migration(
+        ["uid-a"],
+        config=BulkMigrationConfig(
+            dry_run=False,
+            max_admitted_rows_per_user=5,
+            process_buckets=("manual_required_promotion",),
+        ),
+        inventory_fn=lambda uid: _inventory(uid, candidates=1),
+        checkpoint_store=store,
+        enroll_fn=lambda uid: None,
+        backfill_fn=lambda uid, cap, resume, stop: _BackfillReport(intended_count=1, destination_count=1),
+        bucket_process_fn=process_bucket,
+    )
+
+    assert summary.failed_user_count == 1
+    assert summary.users[0].error_codes == ("bucket_processing_incomplete",)
+    assert store.checkpoints["uid-a"].staging_complete is False
+
+
 def test_checkpoint_worker_failure_isolated_from_other_uids():
     class _FailOneStore(_CheckpointStore):
         def write(self, checkpoint: MigrationCheckpoint) -> None:

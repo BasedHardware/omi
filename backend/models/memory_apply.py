@@ -275,6 +275,90 @@ def memory_content_hash(*, content: Optional[str], evidence_ids: List[str]) -> s
     )
 
 
+def _valid_graph_enrichment_receipt(
+    raw_receipt: Any,
+    *,
+    operation: MemoryOperation,
+    existing_item: MemoryItem,
+    control_state: MemoryControlState,
+    graph_plan: Optional[PromotionGraphPlan],
+) -> bool:
+    """Validate a persisted graph receipt without allowing malformed input to escape.
+
+    ``graph_enrichment`` receipts are produced by the graph-enrichment module, but the
+    apply boundary must treat their persisted representation as untrusted.  In
+    particular, do all type checks before sorting or hashing evidence IDs so a bad
+    payload becomes ``invalid_patch`` instead of aborting the transaction.
+    """
+    if not isinstance(raw_receipt, dict) or graph_plan is None:
+        return False
+    if raw_receipt.get("schema_version") != "canonical_memory_graph_enrichment_receipt.v1":
+        return False
+
+    receipt_id = raw_receipt.get("receipt_id")
+    uid = raw_receipt.get("uid")
+    memory_id = raw_receipt.get("memory_id")
+    content_hash = raw_receipt.get("content_hash")
+    plan_hash = raw_receipt.get("plan_hash")
+    if not all(
+        isinstance(value, str) and value.strip() for value in (receipt_id, uid, memory_id, content_hash, plan_hash)
+    ):
+        return False
+
+    evidence_ids = raw_receipt.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return False
+    if any(not isinstance(value, str) or not value.strip() for value in evidence_ids):
+        return False
+    normalized_evidence_ids = [value.strip() for value in evidence_ids]
+    if len(normalized_evidence_ids) != len(set(normalized_evidence_ids)):
+        return False
+    normalized_evidence_ids.sort()
+
+    def _nonnegative_int(value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    item_revision = raw_receipt.get("item_revision")
+    account_generation = raw_receipt.get("account_generation")
+    source_generation = raw_receipt.get("source_generation")
+    if not all(_nonnegative_int(value) for value in (item_revision, account_generation, source_generation)):
+        return False
+
+    try:
+        expected_receipt_id = (
+            "ger_"
+            + deterministic_contract_id(
+                "canonical-memory-graph-enrichment-receipt",
+                {
+                    "schema_version": raw_receipt["schema_version"],
+                    "uid": uid,
+                    "memory_id": memory_id,
+                    "item_revision": item_revision,
+                    "content_hash": content_hash,
+                    "evidence_ids": normalized_evidence_ids,
+                    "account_generation": account_generation,
+                    "source_generation": source_generation,
+                    "plan_hash": plan_hash,
+                },
+            )[:32]
+        )
+    except (TypeError, ValueError):
+        return False
+
+    existing_evidence_ids = [record.evidence_id for record in existing_item.evidence]
+    return (
+        receipt_id == expected_receipt_id
+        and uid == operation.uid
+        and memory_id == existing_item.memory_id
+        and item_revision == existing_item.item_revision
+        and content_hash == existing_item.content_hash
+        and normalized_evidence_ids == sorted(existing_evidence_ids)
+        and account_generation == control_state.account_generation
+        and source_generation == control_state.source_generation
+        and plan_hash == graph_plan.plan_hash
+    )
+
+
 def _processing_state_for_promotion(
     promotion: Optional[Dict[str, Any]],
     *,
@@ -644,6 +728,17 @@ def apply_long_term_patch_transaction(
             reason="observed head does not match current head",
         )
 
+    if (
+        operation.operation_type == MemoryOperationType.graph_enrichment
+        and patch.decision != DurablePatchDecision.update
+    ):
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason="graph enrichment requires an update decision for an existing Long-term item",
+        )
+
     if any(item.source_state != SourceState.active for item in evidence):
         return ApplyResult(
             status=ApplyStatus.source_not_active,
@@ -736,38 +831,12 @@ def apply_long_term_patch_transaction(
                     graph_plan = PromotionGraphPlan(**raw_graph_plan) if isinstance(raw_graph_plan, dict) else None
                 except Exception:
                     graph_plan = None
-                receipt_valid = (
-                    isinstance(raw_graph_receipt, dict)
-                    and raw_graph_receipt.get("schema_version") == "canonical_memory_graph_enrichment_receipt.v1"
-                    and raw_graph_receipt.get("receipt_id")
-                    == "ger_"
-                    + deterministic_contract_id(
-                        "canonical-memory-graph-enrichment-receipt",
-                        {
-                            "schema_version": raw_graph_receipt.get("schema_version"),
-                            "uid": raw_graph_receipt.get("uid"),
-                            "memory_id": raw_graph_receipt.get("memory_id"),
-                            "item_revision": raw_graph_receipt.get("item_revision"),
-                            "content_hash": raw_graph_receipt.get("content_hash"),
-                            "evidence_ids": sorted(raw_graph_receipt.get("evidence_ids") or []),
-                            "account_generation": raw_graph_receipt.get("account_generation"),
-                            "source_generation": raw_graph_receipt.get("source_generation"),
-                            "plan_hash": raw_graph_receipt.get("plan_hash"),
-                        },
-                    )[:32]
-                    and raw_graph_receipt.get("uid") == operation.uid
-                    and raw_graph_receipt.get("memory_id") == existing_item.memory_id
-                    and raw_graph_receipt.get("item_revision") == existing_item.item_revision
-                    and raw_graph_receipt.get("content_hash") == existing_item.content_hash
-                    and isinstance(raw_graph_receipt.get("evidence_ids"), list)
-                    and len(raw_graph_receipt.get("evidence_ids") or [])
-                    == len(set(raw_graph_receipt.get("evidence_ids") or []))
-                    and sorted(set(raw_graph_receipt.get("evidence_ids") or []))
-                    == sorted(set(item.evidence_id for item in existing_item.evidence))
-                    and raw_graph_receipt.get("account_generation") == control_state.account_generation
-                    and raw_graph_receipt.get("source_generation") == control_state.source_generation
-                    and graph_plan is not None
-                    and raw_graph_receipt.get("plan_hash") == graph_plan.plan_hash
+                receipt_valid = _valid_graph_enrichment_receipt(
+                    raw_graph_receipt,
+                    operation=operation,
+                    existing_item=existing_item,
+                    control_state=control_state,
+                    graph_plan=graph_plan,
                 )
                 required_receipt_valid = True
                 existing_promotion = existing_item.promotion or {}
@@ -784,6 +853,7 @@ def apply_long_term_patch_transaction(
                     and existing_item.status == MemoryItemStatus.active
                     and existing_item.tier == MemoryTier.long_term
                     and existing_item.processing_state == ProcessingState.processed
+                    and all(record.source_state == SourceState.active for record in existing_item.evidence)
                     and not set(existing_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
                     and existing_promotion.get("user_review") is not False
                     and required_receipt_valid

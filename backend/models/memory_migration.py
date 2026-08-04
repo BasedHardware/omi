@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -110,6 +110,16 @@ class MigrationPageReceipt(BaseModel):
             raise ValueError("page receipt fields must not be blank")
         return value.strip()
 
+    def matches_replay(self, other: "MigrationPageReceipt") -> bool:
+        """Compare the immutable page result while ignoring local write time.
+
+        A worker can lose the response after Firestore commits a receipt and then
+        reconstruct the same receipt on retry.  ``created_at`` is assigned by the
+        model and is not part of the page identity, so it must not turn that
+        retry into a false immutable-conflict.
+        """
+        return self.model_dump(exclude={"created_at"}) == other.model_dump(exclude={"created_at"})
+
 
 class MigrationVerificationCertificate(BaseModel):
     """Verifier-issued convergence proof, bound to exactly one migration job.
@@ -174,7 +184,10 @@ class MigrationVerificationCertificate(BaseModel):
             raise ValueError("certificate counters must be nonnegative")
         if self.mismatch_count:
             raise ValueError("a cutover certificate cannot contain mismatches")
-        if set(self.required_surfaces) != set(self.converged_surfaces):
+        all_surfaces = set(MigrationSurface)
+        if len(self.required_surfaces) != len(all_surfaces) or set(self.required_surfaces) != all_surfaces:
+            raise ValueError("certificate must require every migration surface")
+        if len(self.converged_surfaces) != len(all_surfaces) or set(self.converged_surfaces) != all_surfaces:
             raise ValueError("certificate requires every requested surface to converge")
         return self
 
@@ -182,7 +195,7 @@ class MigrationVerificationCertificate(BaseModel):
 class CanonicalMigrationJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = MIGRATION_SCHEMA_VERSION
+    schema_version: Literal[MIGRATION_SCHEMA_VERSION] = MIGRATION_SCHEMA_VERSION
     uid: str
     job_id: str
     migration_type: str = "legacy_to_canonical"
@@ -219,6 +232,11 @@ class CanonicalMigrationJob(BaseModel):
 
     @model_validator(mode="after")
     def state_requirements(self) -> "CanonicalMigrationJob":
+        all_surfaces = set(MigrationSurface)
+        if len(self.required_surfaces) != len(all_surfaces) or set(self.required_surfaces) != all_surfaces:
+            raise ValueError("migration jobs must require every migration surface")
+        if (self.source_snapshot_token is None) != (self.source_digest is None):
+            raise ValueError("source snapshot token and digest must be captured together")
         if self.state == MigrationState.complete and (self.certificate is None or not self.cutover_head_commit_id):
             raise ValueError("complete migration requires certificate and cutover head")
         if self.cutover_head_commit_id and self.certificate is None:

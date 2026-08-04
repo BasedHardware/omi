@@ -115,6 +115,63 @@ def _certificate_signing_payload(certificate: MigrationVerificationCertificate) 
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def _read_stage_control_transition(*, control_data: object, uid: str, account_generation: int) -> dict[str, object]:
+    """Build the complete per-user read-stage rollout transition.
+
+    Cutover is a privileged, server-owned operation.  Writing only ``mode`` is
+    insufficient: the V3 reader also requires the fallback projection fence,
+    read stage gate, and consumer grant.  Validate the existing control
+    document before changing those fields so a malformed or cross-generation
+    document cannot be silently upgraded into a readable state.
+    """
+    if not isinstance(control_data, dict):
+        raise MigrationFenceConflict("authoritative memory control is unavailable for cutover")
+    if control_data.get("uid") != uid or control_data.get("account_generation") != account_generation:
+        raise MigrationFenceConflict("authoritative memory control is unavailable for cutover")
+    if control_data.get("schema_version") != 1:
+        raise MigrationFenceConflict("authoritative memory control has an unsupported schema")
+    mode = control_data.get("mode")
+    if mode not in {"off", "shadow", "write", "read"}:
+        raise MigrationFenceConflict("authoritative memory control has an unsupported mode")
+    mode_epoch = control_data.get("mode_epoch")
+    cutover_epoch = control_data.get("cutover_epoch")
+    if (
+        not isinstance(mode_epoch, int)
+        or isinstance(mode_epoch, bool)
+        or mode_epoch < 0
+        or not isinstance(cutover_epoch, int)
+        or isinstance(cutover_epoch, bool)
+        or cutover_epoch < 0
+    ):
+        raise MigrationFenceConflict("authoritative memory control has invalid rollout epochs")
+    stage_gates = control_data.get("stage_gates")
+    grants = control_data.get("grants")
+    if not isinstance(stage_gates, dict) or not isinstance(grants, dict):
+        raise MigrationFenceConflict("authoritative memory control is missing typed read gates")
+    omi_chat_grant = grants.get("omi_chat")
+    if not isinstance(omi_chat_grant, dict):
+        raise MigrationFenceConflict("authoritative memory control is missing the omi_chat grant")
+
+    next_mode_epoch = mode_epoch if mode == "read" else mode_epoch + 1
+    next_cutover_epoch = cutover_epoch if mode == "read" and cutover_epoch > 0 else next_mode_epoch
+    next_stage_gates = dict(stage_gates)
+    next_stage_gates.update({"shadow": "passed", "write": "passed", "read": "passed"})
+    next_grants = dict(grants)
+    next_omi_chat_grant = dict(omi_chat_grant)
+    next_omi_chat_grant["default_memory"] = True
+    next_grants["omi_chat"] = next_omi_chat_grant
+    return {
+        "mode": "read",
+        "mode_epoch": next_mode_epoch,
+        "cutover_epoch": next_cutover_epoch,
+        "fallback_projection_ready": True,
+        "persistent_memory_writes_started": True,
+        "writes_blocked": False,
+        "stage_gates": next_stage_gates,
+        "grants": next_grants,
+    }
+
+
 class InMemoryMigrationStore:
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -144,7 +201,7 @@ class InMemoryMigrationStore:
                 raise MigrationCheckpointConflict("terminal migration jobs cannot be claimed")
             prior = job.claim
             now = _now()
-            if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
+            if prior and not prior.expired(now):
                 raise MigrationLeaseUnavailable("migration claim is held by another owner")
             epoch = (prior.claim_epoch if prior else 0) + 1
             claim = MigrationClaim(
@@ -193,7 +250,7 @@ class InMemoryMigrationStore:
             self._assert_claim(job, claim)
             key = (uid, job_id, receipt.page_id)
             prior = self._pages.get(key)
-            if prior and prior != receipt:
+            if prior and not prior.matches_replay(receipt):
                 raise MigrationFenceConflict("page receipt is immutable")
             self._pages[key] = prior or receipt
             return self._pages[key]
@@ -361,7 +418,7 @@ class FirestoreMigrationStore:
                 raise MigrationCheckpointConflict("terminal migration jobs cannot be claimed")
             prior = job.claim
             now = _now()
-            if prior and not prior.expired(now) and prior.owner_instance_id != owner_instance_id:
+            if prior and not prior.expired(now):
                 raise MigrationLeaseUnavailable("migration claim is held by another owner")
             next_claim = MigrationClaim(
                 owner_instance_id=owner_instance_id,
@@ -414,7 +471,7 @@ class FirestoreMigrationStore:
             snapshot = page_ref.get(transaction=tx)
             if getattr(snapshot, "exists", False):
                 prior = parse_snapshot_strict(MigrationPageReceipt, snapshot)
-                if prior != receipt:
+                if not prior.matches_replay(receipt):
                     raise MigrationFenceConflict("page receipt is immutable")
                 return prior
             if hasattr(tx, "create"):
@@ -537,7 +594,15 @@ class FirestoreMigrationStore:
                 }
             )
             updated = updated.model_copy(update={"version": job.version + 1, "updated_at": _now()})
-            tx.set(control_ref, {"mode": "read"}, merge=True)
+            tx.set(
+                control_ref,
+                _read_stage_control_transition(
+                    control_data=control_data,
+                    uid=uid,
+                    account_generation=job.account_generation,
+                ),
+                merge=True,
+            )
             tx.set(projection_ref, {"ready": True}, merge=True)
             tx.set(job_ref, updated.model_dump(mode="python"))
             return updated

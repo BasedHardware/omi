@@ -34,6 +34,7 @@ from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_
 
 FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"
+MAX_API_PAGES = 1_000
 
 
 @dataclass(frozen=True)
@@ -200,11 +201,35 @@ def verify_api_behavior(
     timeout_seconds: float,
     http_get=urllib_http_get,
 ) -> dict[str, Any]:
-    url = backend_url.rstrip("/") + "/v3/memories?" + urlencode({"limit": str(limit)})
-    authenticated = http_get(url, {"Authorization": f"Bearer {id_token}"}, timeout_seconds)
-    unauthenticated = http_get(url, {}, timeout_seconds)
-    body_is_list = isinstance(authenticated.body, list)
-    body = authenticated.body if body_is_list else []
+    url_base = backend_url.rstrip("/") + "/v3/memories"
+    auth_headers = {"Authorization": f"Bearer {id_token}"}
+    pages: list[HttpResult] = []
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    cursor_error: str | None = None
+    while len(pages) < MAX_API_PAGES:
+        query = {"limit": str(limit)}
+        if cursor is not None:
+            query["cursor"] = cursor
+        page = http_get(url_base + "?" + urlencode(query), auth_headers, timeout_seconds)
+        pages.append(page)
+        if page.status_code != 200 or not isinstance(page.body, list):
+            break
+        next_cursor = page.headers.get("X-Omi-Memory-Next-Cursor")
+        if not next_cursor:
+            break
+        if next_cursor in seen_cursors:
+            cursor_error = "repeated_next_cursor"
+            break
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    else:
+        cursor_error = "api_page_limit_exceeded"
+
+    authenticated = pages[0] if pages else HttpResult(599, None, {})
+    unauthenticated = http_get(url_base + "?" + urlencode({"limit": str(limit)}), {}, timeout_seconds)
+    body_is_list = bool(pages) and all(isinstance(page.body, list) for page in pages)
+    body = [item for page in pages if isinstance(page.body, list) for item in page.body]
     only_requested_uid = all(isinstance(item, dict) and item.get("uid") == uid for item in body)
     lifecycle_fields_present = all(
         isinstance(item, dict) and ("layer" in item or "memory_tier" in item) for item in body
@@ -226,6 +251,7 @@ def verify_api_behavior(
             "authenticated_get_v3_memories_200", authenticated.status_code == 200, status_code=authenticated.status_code
         ),
         _check("authenticated_get_v3_memories_body_list", body_is_list, body_type=type(authenticated.body).__name__),
+        _check("authenticated_get_v3_memories_cursor_terminated", cursor_error is None, reason=cursor_error),
         _check("response_only_requested_uid", only_requested_uid, uid=uid),
         _check(
             "canonical_lifecycle_fields_present",
@@ -244,6 +270,7 @@ def verify_api_behavior(
         "checks": checks,
         "authenticated_status": authenticated.status_code,
         "unauthenticated_status": unauthenticated.status_code,
+        "authenticated_page_count": len(pages),
         "redacted_items": redacted_items,
         "headers": {
             key: authenticated.headers.get(key)

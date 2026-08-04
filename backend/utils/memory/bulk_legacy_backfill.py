@@ -536,12 +536,15 @@ def _apply_user(
             error_codes=(error_code,),
         )
 
+    primary_stage_complete = bool(report.completed and report.verified)
+    # Bucket processing is part of staging.  Do not advertise a complete
+    # checkpoint until every requested bucket has produced a verified report.
     checkpoint_store.write(
         _checkpoint_from_inventory(
             inventory,
             state=MigrationState.staged,
             staged_count=staged_count,
-            staging_complete=bool(report.completed and report.verified),
+            staging_complete=primary_stage_complete and not config.process_buckets,
         )
     )
     if not report.completed or not report.verified:
@@ -572,7 +575,7 @@ def _apply_user(
                 state=MigrationState.paused,
                 resume_state=MigrationState.staged,
                 staged_count=staged_count,
-                staging_complete=True,
+                staging_complete=False,
                 last_error_code="max_admitted_rows_per_user",
             )
         )
@@ -582,23 +585,53 @@ def _apply_user(
             actions=actions + ["bucket_processing_deferred_row_cap", "resume_required"],
             staged_count=staged_count,
         )
+    if config.process_buckets and bucket_process_fn is None:
+        checkpoint_store.write(
+            _checkpoint_from_inventory(
+                inventory,
+                state=MigrationState.failed,
+                resume_state=MigrationState.staged,
+                staged_count=staged_count,
+                staging_complete=False,
+                error_count=current.error_count + 1,
+                last_error_code="bucket_processing_unavailable",
+            )
+        )
+        return BulkUserResult(
+            uid=inventory.uid,
+            state=MigrationState.failed,
+            inventory=inventory,
+            actions=actions + ["bucket_processing_unavailable"],
+            staged_count=staged_count,
+            error_codes=("bucket_processing_unavailable",),
+        )
     for bucket in config.process_buckets:
-        if bucket_process_fn is None or remaining_rows == 0:
+        if remaining_rows == 0:
             break
         bucket_report = bucket_process_fn(inventory.uid, bucket, remaining_rows, stop_fn)
         actions.append(f"processed_bucket:{bucket}")
         consumed = max(bucket_report.legacy_rows_touched, bucket_report.intended_count)
         remaining_rows = max(0, remaining_rows - consumed)
-        if bucket_report.errors or bucket_report.cohort_gated:
+        if (
+            bucket_report.errors
+            or bucket_report.cohort_gated
+            or not bucket_report.completed
+            or not bucket_report.verified
+        ):
+            error_code = (
+                "bucket_processing_failed"
+                if (bucket_report.errors or bucket_report.cohort_gated)
+                else "bucket_processing_incomplete"
+            )
             checkpoint_store.write(
                 _checkpoint_from_inventory(
                     inventory,
                     state=MigrationState.failed,
                     resume_state=MigrationState.staged,
                     staged_count=staged_count,
-                    staging_complete=True,
+                    staging_complete=False,
                     error_count=current.error_count + max(1, len(bucket_report.errors)),
-                    last_error_code="bucket_processing_failed",
+                    last_error_code=error_code,
                 )
             )
             return BulkUserResult(
@@ -607,7 +640,7 @@ def _apply_user(
                 inventory=inventory,
                 actions=tuple(actions),
                 staged_count=staged_count,
-                error_codes=("bucket_processing_failed",),
+                error_codes=(error_code,),
             )
 
     checkpoint_store.write(
