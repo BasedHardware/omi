@@ -33,6 +33,46 @@ smoke test imports `bun:test`.
 Lint moved from `eslint` to `oxlint` with the moonshine migration, so the
 `eslint-config-next` React Compiler backlog no longer applies.
 
+## Destinations
+
+One rail entry per destination, and one place per idea:
+
+| Route | Holds |
+|---|---|
+| `/home` | The hub **and** the chat. Chat is not a separate page: Home rests on the hub for an empty account and opens in the transcript once there is history (`src/lib/homeStage.ts`, ported from desktop's `restingMode`). Live capture starts here too. |
+| `/timeline` | Conversations and daily recaps in one day-grouped gallery. |
+| `/memories`, `/tasks` | As named. |
+| `/connectors` | Installed apps **and** external services — the former Settings → Integrations. |
+| `/settings` | Account (profile + plan merged), Privacy, Developer. |
+
+Removed rather than redirected, so do not re-add aliases: `/chat`, `/conversations`,
+`/recaps`, `/my-apps`, `/persona`.
+
+Page chrome is shared: `components/layout/PageToolbar.tsx` gives every page its
+left controls, right-aligned search and actions, and renders **no page title** —
+the sidebar is the only thing that names the page. `PageHeader` is for detail
+and sub pages that need a back button. shadcn/ui is set up (`components.json`);
+its primitives are restyled onto the Omi tokens, because the generator emits
+literal `oklch(...)` strings that are not valid classes here.
+
+The accent is white and there are no purple tokens left to reach for — see
+`docs/product/invariants/brand-ui.md` (INV-UI-1).
+
+## Runtime
+
+Needs `@tschk/moonshine` **>= 0.3.7**. Before it, the router's location signal
+carried only the pathname, so a navigation that changed only the query wrote the
+same value back and re-rendered nothing — every `useSearchParams` caller in an
+already-mounted tree kept showing the previous query.
+
+Two framer-motion traps this runtime sets, both already paid for:
+- Every route registers its own copy of the authenticated layout, so navigating
+  **remounts the shell**. `AnimatePresence initial={false}` therefore suppresses
+  the enter animation on every navigation, not just the first.
+- A hidden tab freezes rAF and CSS transitions, so animation measured through a
+  backgrounded browser reads as permanently stuck at its initial frame. Check
+  `document.visibilityState` before believing an animation is broken.
+
 ## State
 
 The Home hub runs on `@tschk/moonshine` signals, not React state:
