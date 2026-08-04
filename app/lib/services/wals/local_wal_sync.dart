@@ -121,6 +121,13 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal) async {
+    // Device RTC (SD-card / Limitless flash / ring) can run ahead of the phone
+    // clock; clamp before the sync UI or upload filename see a future start (#4770).
+    final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
+    if (normalized != wal.timerStart) {
+      Logger.debug('LocalWalSync: clamped future timerStart ${wal.timerStart} → $normalized (${wal.seconds}s)');
+      wal.timerStart = normalized;
+    }
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
@@ -149,6 +156,19 @@ class LocalWalSyncImpl implements LocalWalSync {
     await WalFileManager.init();
     _wals = await WalFileManager.loadWals();
     Logger.debug("wal service start: ${_wals.length}");
+
+    // Repair persisted device-RTC skew so the sync list never shows future times (#4770).
+    var clamped = false;
+    for (final wal in _wals) {
+      final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
+      if (normalized != wal.timerStart) {
+        wal.timerStart = normalized;
+        clamped = true;
+      }
+    }
+    if (clamped) {
+      await _saveWalsToFile();
+    }
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
     final syncedCount = _wals.where((w) => w.status == WalStatus.synced).length;
@@ -548,8 +568,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals =
-        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    final corruptedWals = _wals
+        .where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow)
+        .toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -638,7 +659,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture =
+          !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
