@@ -1,7 +1,6 @@
-/// Live transcript stall helpers for BLE device capture (#6977).
-///
-/// Pure predicates so the "zombie Listening" contract can be unit-tested
-/// without spinning up CaptureController / sockets.
+// Live transcript stall helpers for BLE device capture (#6977).
+// Pure predicates so the "zombie Listening" contract can be unit-tested
+// without spinning up CaptureController / sockets.
 
 /// Default: surface a stall warning after this much silence in transcript progress.
 const Duration kTranscriptStallWarningAfter = Duration(seconds: 15);
