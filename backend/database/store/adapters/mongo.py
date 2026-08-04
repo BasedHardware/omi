@@ -161,6 +161,11 @@ class MongoDocumentStore:
         self._mongo_client = client if client is not None else MongoClient(uri)
         self._db = self._mongo_client[db_name]
 
+    def close(self) -> None:
+        """Release the MongoClient (its connection pool). Called on store reset to avoid leaking
+        connections across repeated test resets."""
+        self._mongo_client.close()
+
     # --- internal ops (shared by the public surface and the transaction handle) ---
     def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
         collection_name, _, _ = _doc_meta(path)

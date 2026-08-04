@@ -52,10 +52,21 @@ def get_document_store() -> DocumentStore:
 
 
 def reset_document_store() -> None:
-    """Drop the cached store so the next call re-reads configuration. For tests only."""
+    """Drop the cached store so the next call re-reads configuration. For tests only.
+
+    Releases the previous adapter's client first (the Mongo adapter holds a MongoClient) so repeated
+    resets don't accumulate open connections."""
     global _store
     with _store_lock:
+        store = _store
         _store = None
+    if store is not None:
+        close = getattr(store, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
 
 
 __all__ = ["get_document_store", "reset_document_store"]

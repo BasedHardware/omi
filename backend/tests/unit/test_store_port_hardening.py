@@ -56,3 +56,21 @@ def test_object_store_factory_empty_backend_defaults_to_gcs(monkeypatch):
     object_store_factory.get_object_store()
     object_store_factory.reset_object_store_for_tests()
     assert captured["backend"] == "gcs"
+
+
+def test_reset_document_store_closes_previous_adapter(monkeypatch):
+    """reset_document_store() releases the previous adapter's client (the Mongo adapter holds a
+    MongoClient) so repeated resets don't accumulate open connections."""
+    from database.store import factory as store_factory
+
+    closed = {"n": 0}
+
+    class _ClosableStore:
+        def close(self):
+            closed["n"] += 1
+
+    monkeypatch.setattr(store_factory, "_build_store", lambda: _ClosableStore())
+    store_factory.reset_document_store()  # drop any instance a prior test left cached
+    store_factory.get_document_store()  # build our closable under the patched factory
+    store_factory.reset_document_store()  # must call close() on it
+    assert closed["n"] == 1

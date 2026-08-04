@@ -143,7 +143,9 @@ def get_screen_activity_ocr_text(uid: str, sid: str, max_len: int = 200) -> str:
 
     Returns '' if the document is missing or has no OCR text.
     """
-    doc = _store().get(f'{_collection_path(uid)}/{str(sid)}')
+    # Normalize the id segment (as the write path does) so a sid containing '/' can't compose a path
+    # that reads an unintended document/collection.
+    doc = _store().get(f'{_collection_path(uid)}/{ensure_id_segment(str(sid))}')
     if doc.exists:
         data = cast(Dict[str, Any], doc.to_dict() or {})
         return (data.get('ocrText', '') or '')[:max_len]

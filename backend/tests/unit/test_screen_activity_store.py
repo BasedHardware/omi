@@ -103,6 +103,12 @@ class TestOcrText:
         store.set('users/u1/screen_activity/a', {'ocrText': 'y' * 500})
         assert screen_activity_db.get_screen_activity_ocr_text('u1', 'a', max_len=50) == 'y' * 50
 
+    def test_slash_in_id_is_rejected_not_path_traversed(self, store):
+        # A sid containing '/' must not compose an unintended document path (path injection): the
+        # read normalizes the id segment exactly as the write does, and an unsafe id is refused.
+        with pytest.raises(ValueError):
+            screen_activity_db.get_screen_activity_ocr_text('u1', 'a/b')
+
 
 class TestIds:
     def test_list_ids_for_user(self, store):
