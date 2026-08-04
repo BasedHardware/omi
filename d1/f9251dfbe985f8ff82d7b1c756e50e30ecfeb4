@@ -1,0 +1,19 @@
+.github/failure-classes/FC-aggregate-status-hides-dead-component.json
+  s_6753c03801cb1c::t_9013603a594d35 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "d1f9251dfbe985f8ff82d7b1c756e50e30ecfeb4",
+  "prompts": {},
+  "sessions": {
+    "s_6753c03801cb1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72b90662-7c98-40c1-97b6-59916a7ca4ee",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
