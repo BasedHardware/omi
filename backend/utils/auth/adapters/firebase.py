@@ -14,6 +14,10 @@ from typing import Any, List, Optional
 from utils.auth import errors
 from utils.auth.ports import Principal, UserProfile
 
+# Pin an explicit timeout on the Identity Toolkit call so a hung provider never blocks indefinitely
+# (the utils outbound-timeout guard enforces this).
+_HTTP_TIMEOUT_SECONDS = 10.0
+
 
 def _auth():
     from firebase_admin import auth  # lazy: only the firebase backend needs the SDK
@@ -103,6 +107,7 @@ class FirebaseAuthProvider:
         resp = httpx.post(
             url,
             json={'postBody': post_body, 'requestUri': 'http://localhost', 'returnIdpCredential': True, 'returnSecureToken': True},
+            timeout=_HTTP_TIMEOUT_SECONDS,
         )
         if resp.status_code != 200:
             raise errors.AuthError(f'signInWithIdp failed: status={resp.status_code}')

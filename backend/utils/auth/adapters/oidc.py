@@ -23,6 +23,10 @@ from typing import Any, Dict, Optional
 from utils.auth import errors
 from utils.auth.ports import Principal, UserProfile
 
+# Outbound admin-API calls pin an explicit timeout so a hung IdP never blocks a worker thread
+# indefinitely (the utils outbound-timeout guard enforces this).
+_HTTP_TIMEOUT_SECONDS = 10.0
+
 _jwks_lock = threading.Lock()
 _jwks_client: Any = None
 
@@ -101,6 +105,7 @@ class OIDCAuthProvider:
         resp = httpx.post(
             token_url,
             data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
+            timeout=_HTTP_TIMEOUT_SECONDS,
         )
         if resp.status_code != 200:
             raise errors.AuthError(f"OIDC admin token request failed: status={resp.status_code}")
@@ -116,7 +121,9 @@ class OIDCAuthProvider:
         import httpx
 
         resp = httpx.get(
-            f"{self._admin_api()}/users/{uid}", headers={"Authorization": f"Bearer {self._admin_token()}"}
+            f"{self._admin_api()}/users/{uid}",
+            headers={"Authorization": f"Bearer {self._admin_token()}"},
+            timeout=_HTTP_TIMEOUT_SECONDS,
         )
         if resp.status_code != 200:
             raise errors.AuthError(f"OIDC get_user failed: status={resp.status_code}")
@@ -143,6 +150,7 @@ class OIDCAuthProvider:
             f"{self._admin_api()}/users/{uid}",
             headers={"Authorization": f"Bearer {self._admin_token()}"},
             json={"firstName": first, "lastName": last},
+            timeout=_HTTP_TIMEOUT_SECONDS,
         )
         if resp.status_code not in (200, 204):
             raise errors.AuthError(f"OIDC update_user failed: status={resp.status_code}")
@@ -151,7 +159,9 @@ class OIDCAuthProvider:
         import httpx
 
         resp = httpx.delete(
-            f"{self._admin_api()}/users/{uid}", headers={"Authorization": f"Bearer {self._admin_token()}"}
+            f"{self._admin_api()}/users/{uid}",
+            headers={"Authorization": f"Bearer {self._admin_token()}"},
+            timeout=_HTTP_TIMEOUT_SECONDS,
         )
         # Deletion is idempotent: a 404 means the identity is already gone (a prior attempt succeeded
         # before the wipe marker committed, or the user was removed out-of-band). The account-deletion
