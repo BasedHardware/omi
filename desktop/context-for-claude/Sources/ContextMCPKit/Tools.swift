@@ -1874,8 +1874,6 @@ extension Tools {
     /// deciding what a test observes.
     static func deniedCaptureClause(_ state: CaptureState? = CaptureState.read()) -> String? {
         guard let state else { return nil }
-        let denied = state.capabilities.filter { !$0.granted }.map { capabilityPhrase($0.name) }
-        guard !denied.isEmpty else { return nil }
 
         // Deliberately the wording `status` uses for the same fact. A reader that meets "not
         // granted" in one answer and a synonym in another has to work out that they are the same
@@ -1883,11 +1881,37 @@ extension Tools {
         let asOf = state.isStale
             ? " when Context for Claude last reported, \(duration(ContextTime.now - state.updatedAt)) ago"
             : ""
-        return """
-        **Not granted\(asOf): \(sentenceList(denied)).** That context was never captured at all, so \
-        the absence above is a sensor that was switched off rather than evidence about the user — do \
-        not report it as something that did not happen. `status` lists every capture permission.
-        """
+
+        var clauses: [String] = []
+        let denied = state.capabilities.filter { !$0.granted }.map { capabilityPhrase($0.name) }
+        if !denied.isEmpty {
+            clauses.append("""
+                **Not granted\(asOf): \(sentenceList(denied)).** That context was never captured at \
+                all, so the absence above is a sensor that was switched off rather than evidence \
+                about the user — do not report it as something that did not happen. `status` lists \
+                every capture permission.
+                """)
+        }
+
+        // **The second clause, and the reason this function was not enough on its own.** A stream
+        // can be dead while its permission still reads "granted" — a grant this process cannot use
+        // until it is relaunched, or a WindowServer that has stopped answering — and the capability
+        // list above says nothing at all about that. That combination is what produced twenty-nine
+        // hours of confident, empty answers about a screen that had not been captured since the
+        // previous afternoon.
+        let failing = state.failingStreams
+        if !failing.isEmpty {
+            let names = failing.map { streamPhrase($0.name) }
+            let last = failing.compactMap(\.lastOutputAt).max()
+            let since = last.map { " Nothing since \(ContextTime.describe($0))." } ?? ""
+            clauses.append("""
+                **Stopped working\(asOf): \(sentenceList(names)).**\(since) That half of the record \
+                is missing rather than empty, whatever the permission list says — say so instead of \
+                concluding anything about the user.
+                """)
+        }
+
+        return clauses.isEmpty ? nil : clauses.joined(separator: "\n\n")
     }
 
     /// The `Capability` raw values as a reader meets them: `systemAudio` is a developer's word for
@@ -1901,7 +1925,9 @@ extension Tools {
         }
     }
 
-    private static func sentenceList(_ items: [String]) -> String {
+    /// Internal rather than file-private: `StatusTool` lists the same streams in the same answer,
+    /// and two list-joiners is two places for the phrasing to drift apart.
+    static func sentenceList(_ items: [String]) -> String {
         guard items.count > 1 else { return items.first ?? "" }
         return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
     }

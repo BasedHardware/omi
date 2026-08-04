@@ -346,8 +346,15 @@ public struct CapabilityReport: Codable, Sendable, Equatable {
 /// Capture health. Lets Claude say "I only have data from 2pm" instead of guessing.
 public struct StatusInfo: Codable, Sendable, Equatable {
     public var capturing: Bool
+    /// Three-valued, because "capturing" and "not capturing" cannot say *half*. A recorder with a
+    /// live microphone and a dead screen is neither, and reporting it as either is the failure this
+    /// field exists to end.
+    public var health: CaptureHealth
     public var pausedReason: String?
     public var capabilities: [CapabilityReport]
+    /// The per-stream reports out of the heartbeat, so `status` can name which half is down rather
+    /// than leaving a reader to infer it from a permission list.
+    public var streams: [StreamReport]
     public var segmentCount: Int
     public var frameCount: Int
     public var sessionCount: Int
@@ -358,8 +365,10 @@ public struct StatusInfo: Codable, Sendable, Equatable {
 
     public init(
         capturing: Bool,
+        health: CaptureHealth? = nil,
         pausedReason: String?,
         capabilities: [CapabilityReport],
+        streams: [StreamReport] = [],
         segmentCount: Int,
         frameCount: Int,
         sessionCount: Int,
@@ -368,8 +377,10 @@ public struct StatusInfo: Codable, Sendable, Equatable {
         databasePath: String
     ) {
         self.capturing = capturing
+        self.health = health ?? (capturing ? .capturing : .off)
         self.pausedReason = pausedReason
         self.capabilities = capabilities
+        self.streams = streams
         self.segmentCount = segmentCount
         self.frameCount = frameCount
         self.sessionCount = sessionCount

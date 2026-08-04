@@ -19,14 +19,7 @@ extension Tools {
             return out.joined(separator: "\n")
         }
 
-        let headline: String
-        if status.capturing {
-            headline = "Context for Claude is capturing right now."
-        } else if let reason = status.pausedReason.flatMap(nonEmpty) {
-            headline = "Context for Claude is not capturing right now — \(reason)."
-        } else {
-            headline = "Context for Claude is not capturing right now."
-        }
+        let headline = Self.headline(for: status)
 
         if status.segmentCount == 0 && status.frameCount == 0 {
             out.append("""
@@ -52,6 +45,14 @@ extension Tools {
         // widest on exactly the data a "what was I just looking at?" question needs.
         out.append("")
         out.append(screenLagStatusLine)
+
+        // Before the permission list, because it is the sharper fact: a permission that reads
+        // "granted" over a stream that has produced nothing all day is precisely the combination
+        // this tool used to report as a healthy recorder.
+        if let failing = Self.failingStreamsBlock(status) {
+            out.append("")
+            out.append(failing)
+        }
 
         out.append("")
         if status.capabilities.isEmpty {
@@ -85,6 +86,71 @@ extension Tools {
             """)
         }
         return out.joined(separator: "\n")
+    }
+
+    /// **The sentence a model reasons from, and the one that was wrong for twenty-nine hours.**
+    ///
+    /// "Context for Claude is capturing right now" came off a boolean that was true whenever *any*
+    /// sensor was alive. With a live microphone and a Screen Recording grant macOS had silently
+    /// dropped, this tool told Claude the Mac was being recorded — and `Queries.status` had already
+    /// thrown away the one sentence that said otherwise, because it cleared `pausedReason` whenever
+    /// `capturing` was true. Everything downstream then answered "what was I looking at?" from a
+    /// screen record that had stopped the previous afternoon.
+    ///
+    /// So the middle case gets its own sentence, and the sentence names the half that is down. A
+    /// model that reads it can say "your audio is recorded, your screen is not" instead of guessing.
+    static func headline(for status: StatusInfo) -> String {
+        switch status.health {
+        case .capturing:
+            return "Context for Claude is capturing right now."
+        case .degraded:
+            let live = status.streams.filter { $0.state.isLive }.map { streamPhrase($0.name) }
+            let down = status.streams.filter { $0.state == .blocked || $0.state == .stalled }
+                .map { streamPhrase($0.name) }
+            let recording = live.isEmpty ? "part of what it records" : sentenceList(live)
+            let missing = down.isEmpty ? "part of what it records" : sentenceList(down)
+            return """
+                Context for Claude is only **partly** capturing right now: \(recording) \
+                \(live.count == 1 ? "is" : "are") being recorded and \(missing) \
+                \(down.count == 1 ? "is" : "are") not. Anything that would have come from the \
+                stopped half is missing rather than absent — do not read it as something that did \
+                not happen.
+                """
+        case .off:
+            if let reason = status.pausedReason.flatMap(nonEmpty) {
+                return "Context for Claude is not capturing right now — \(reason)."
+            }
+            return "Context for Claude is not capturing right now."
+        }
+    }
+
+    /// The per-stream detail, listed only for the streams that are failing. A stream that is off
+    /// because the user switched it off is in the permission list below and needs no alarm; a stream
+    /// that was working and has stopped needs its own line and its own sentence.
+    static func failingStreamsBlock(_ status: StatusInfo) -> String? {
+        let failing = status.streams.filter { $0.state == .blocked || $0.state == .stalled }
+        guard !failing.isEmpty else { return nil }
+        var lines = ["**Capture that has stopped working:**"]
+        for stream in failing {
+            let word = stream.state == .stalled ? "producing nothing" : "blocked"
+            let detail = nonEmpty(stream.detail ?? "").map { " — \($0)" } ?? ""
+            let last = stream.lastOutputAt.map {
+                " Last produced anything \(ContextTime.describe($0))."
+            } ?? " It has produced nothing at all in this session."
+            lines.append("- **\(streamPhrase(stream.name))**: \(word)\(detail).\(last)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// The `StreamName` raw values as a reader meets them.
+    static func streamPhrase(_ name: String) -> String {
+        switch name {
+        case StreamName.microphone: return "the microphone"
+        case StreamName.systemAudio: return "call and system audio"
+        case StreamName.screen: return "screen capture"
+        case StreamName.storage: return "the local database"
+        default: return name
+        }
     }
 
     /// One request is the whole budget for `status`: it establishes reachability and gives a bounded

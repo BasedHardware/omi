@@ -168,12 +168,42 @@ public enum ContextPaths {
 
 /// The app writes this; `context-for-claude-mcp` reads it. A file rather than a socket because the MCP server
 /// is spawned per Claude session and must work whether or not the app happens to be running.
+///
+/// **`capturing` is derived, never asserted.** The initializer the app uses takes the per-stream
+/// reports and works the boolean out from them, so there is no expression anywhere in this codebase
+/// that can put `capturing: true` on a state whose screen stream is blocked. That combination is
+/// what this file wrote once every thirty seconds for twenty-nine hours while the screen half was
+/// dead; see ``CaptureHealth``.
 public struct CaptureState: Codable, Sendable, Equatable {
-    public var capturing: Bool
+    /// Everything that should be running is running. `private(set)` because it is a *conclusion*,
+    /// and a conclusion nobody may edit is a conclusion that cannot disagree with its premises.
+    public private(set) var capturing: Bool
     public var pausedReason: String?
     public var capabilities: [CapabilityReport]
+    /// One entry per capture stream. Empty only on a state written by an older build, or by the
+    /// legacy initializer below — readers must treat empty as "this writer had nothing to say",
+    /// never as "there are no streams".
+    public private(set) var streams: [StreamReport]
     public var updatedAt: Double
 
+    /// **The initializer the app uses.** `capturing` is not a parameter: it is
+    /// `CaptureHealth(of: streams) == .capturing`, and there is no other way to set it.
+    public init(
+        streams: [StreamReport],
+        pausedReason: String? = nil,
+        capabilities: [CapabilityReport] = [],
+        updatedAt: Double = ContextTime.now
+    ) {
+        self.streams = streams
+        self.capturing = CaptureHealth(of: streams) == .capturing
+        self.pausedReason = pausedReason
+        self.capabilities = capabilities
+        self.updatedAt = updatedAt
+    }
+
+    /// A state with no per-stream detail: the terminal beat the app writes on its way out, and what
+    /// an older build's file decodes into. Kept because "the app is gone" is a whole answer that
+    /// needs no streams to justify it.
     public init(
         capturing: Bool,
         pausedReason: String? = nil,
@@ -183,7 +213,58 @@ public struct CaptureState: Codable, Sendable, Equatable {
         self.capturing = capturing
         self.pausedReason = pausedReason
         self.capabilities = capabilities
+        self.streams = []
         self.updatedAt = updatedAt
+    }
+
+    /// The three-valued answer. Falls back to the boolean only for a state that carries no streams
+    /// at all, which is exactly the older-writer and terminal-beat cases above.
+    public var health: CaptureHealth {
+        guard !streams.isEmpty else { return capturing ? .capturing : .off }
+        return CaptureHealth(of: streams)
+    }
+
+    public func stream(_ name: String) -> StreamReport? {
+        streams.first { $0.name == name }
+    }
+
+    /// Streams that are neither live nor deliberately off — the half of the recorder that is
+    /// supposed to be working and is not.
+    public var failingStreams: [StreamReport] {
+        streams.filter { $0.state == .blocked || $0.state == .stalled }
+    }
+
+    // MARK: Coding
+    //
+    // Written by hand rather than synthesised for one reason: `streams` is new, and an older
+    // heartbeat file has no such key. A synthesised `init(from:)` throws on a missing key
+    // regardless of the property's default, which would make a newer MCP binary refuse to read the
+    // file a slightly older app is still writing — reported to the user as "Context for Claude is
+    // not running" while it demonstrably is. Decoding is therefore tolerant in both directions:
+    // an old reader ignores `streams`, and a new reader treats its absence as "no detail offered".
+
+    private enum CodingKeys: String, CodingKey {
+        case capturing, pausedReason, capabilities, streams, updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        capturing = try container.decodeIfPresent(Bool.self, forKey: .capturing) ?? false
+        pausedReason = try container.decodeIfPresent(String.self, forKey: .pausedReason)
+        capabilities =
+            try container.decodeIfPresent([CapabilityReport].self, forKey: .capabilities) ?? []
+        streams = try container.decodeIfPresent([StreamReport].self, forKey: .streams) ?? []
+        updatedAt = try container.decodeIfPresent(Double.self, forKey: .updatedAt) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        // Always written, and written first, because it is the only key an older reader knows.
+        try container.encode(capturing, forKey: .capturing)
+        try container.encodeIfPresent(pausedReason, forKey: .pausedReason)
+        try container.encode(capabilities, forKey: .capabilities)
+        try container.encode(streams, forKey: .streams)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 
     /// Considered live only if the app touched it recently; otherwise the app is not running.

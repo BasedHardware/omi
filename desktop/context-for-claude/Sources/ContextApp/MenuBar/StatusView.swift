@@ -92,13 +92,13 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(engine.isCapturing ? Ink.listeningGreen : Ink.tertiary)
+                    .fill(dotColour)
                     .frame(width: 7, height: 7)
                     // The same column the capability rows hold open for their checkmark, so the dot
                     // and the checkmarks share one left edge.
                     .frame(width: 12, alignment: .leading)
 
-                Text(engine.isCapturing ? "Listening · \(todayLabel)" : "Paused")
+                Text(headline)
                     .font(.system(size: Self.menuFontSize))
                     .foregroundStyle(Ink.primary)
             }
@@ -141,8 +141,35 @@ struct StatusView: View {
             .padding(.leading, Self.rowTextInset)
     }
 
+    /// **The line the whole bug is about.**
+    ///
+    /// This used to be two words over one boolean — "Listening" or "Paused" — and the boolean was an
+    /// *or* over three independent sensors. With the screen dead and the microphone alive it read
+    /// "Listening · 4h 12m today" for twenty-nine hours, over a database whose newest screen frame
+    /// was from the previous afternoon. Two words cannot describe three states, so there are now
+    /// three, and the middle one is the one that was missing.
+    private var headline: String {
+        switch engine.health {
+        case .capturing: return "Listening · \(todayLabel)"
+        case .degraded: return "Partly listening · \(todayLabel)"
+        case .off: return engine.isPaused ? "Paused" : "Not capturing"
+        }
+    }
+
+    /// Green for whole, red for a half that has stopped working, grey for off. Red rather than a
+    /// softer amber because this is the app's own rule about when to raise its voice, and a recorder
+    /// that has quietly stopped recording half of what it promised is exactly that moment — the
+    /// previous behaviour was to stay green.
+    private var dotColour: Color {
+        switch engine.health {
+        case .capturing: return Ink.listeningGreen
+        case .degraded: return Ink.errorRed
+        case .off: return Ink.tertiary
+        }
+    }
+
     private var idlePlaceholder: String {
-        engine.isCapturing ? "waiting for something to hear" : "nothing is being captured"
+        engine.health == .off ? "nothing is being captured" : "waiting for something to hear"
     }
 
     private var todayLabel: String {
@@ -371,11 +398,16 @@ struct StatusView: View {
     /// what either of these is.
     private var footer: some View {
         VStack(spacing: 0) {
-            MenuCommand(title: engine.isCapturing ? "Pause" : "Resume") {
-                if engine.isCapturing {
-                    engine.pause()
-                } else {
+            // Keyed on `isPaused`, not on `isCapturing`, and the difference is load-bearing now
+            // that `isCapturing` means "everything is running". A recorder with a dead screen and a
+            // live microphone would otherwise offer **Resume** for a pause that never happened —
+            // and pressing it would do nothing at all, because `resume()` returns immediately when
+            // the engine was never paused. A control that cannot work is worse than no control.
+            MenuCommand(title: engine.isPaused ? "Resume" : "Pause") {
+                if engine.isPaused {
                     engine.resume()
+                } else {
+                    engine.pause()
                 }
             }
 

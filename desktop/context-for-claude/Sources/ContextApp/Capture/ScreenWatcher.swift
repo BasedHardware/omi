@@ -49,7 +49,13 @@ final class ScreenWatcher {
     /// menu bar went on saying the app was capturing and the heartbeat file went on reporting a
     /// healthy pipeline while nothing at all was being recorded — a recorder that lies about
     /// recording is worse than one that admits it stopped.
-    var onPaused: (@MainActor (String?) -> Void)?
+    ///
+    /// It carries a ``ScreenStandDown`` rather than a sentence because the engine has to *act*
+    /// differently on the three of them and a string cannot be branched on. That was the second
+    /// half of the 2 August defect: the grant vanished mid-life, the tick started refusing itself
+    /// on every pass, and there was no shape in this channel that could say "this is not a pause,
+    /// this needs the user" — so it said nothing at all and idled for twenty-nine hours.
+    var onStandDown: (@MainActor (ScreenStandDown?) -> Void)?
 
     /// How the stored picture reaches disk.
     ///
@@ -78,9 +84,10 @@ final class ScreenWatcher {
         guard loop == nil else { return }
         let period = max(0.5, interval)
 
-        if !Self.hasPermission() {
-            ContextLog.info("Screen Recording not granted yet — watcher will idle until it is", "screen")
-        }
+        // The watchdog clock starts now rather than at nil, so a watcher whose first few ticks land
+        // during a login-item launch — window server still coming up, no frontmost application yet —
+        // gets its full patience before anything is called stalled.
+        lastServedAt = ContextTime.now
 
         loop = Task { [weak self] in
             while !Task.isCancelled {
@@ -104,7 +111,7 @@ final class ScreenWatcher {
         // A last, truthful word before the hand-overs go: whatever this watcher was holding capture
         // down for, it is not holding it down any more — the owner is about to say why capture
         // stopped, and a stale "no activity for 5 minutes" underneath that would contradict it.
-        reportPause(nil)
+        reportStandDown(nil)
         // Cancelling a task does not resume an `await` that is already suspended, so a tick sitting
         // in OCR or in an accessibility walk still runs to completion after this returns — that is
         // seconds of work, and it used to end in a write. Clearing *every* hand-over here is what
@@ -115,7 +122,7 @@ final class ScreenWatcher {
         // switched screen capture off.
         onFrame = nil
         onAXNodes = nil
-        onPaused = nil
+        onStandDown = nil
         // Resuming should always produce one full observation: whatever is on screen after a pause
         // is new information regardless of what was there before.
         recentHashes.removeAll()
@@ -125,6 +132,7 @@ final class ScreenWatcher {
         lastSkipReason = nil
         cachedContent = nil
         cachedContentAt = nil
+        lastServedAt = nil
         if wasRunning { ContextLog.info("Screen watcher stopped", "screen") }
     }
 
@@ -169,18 +177,70 @@ final class ScreenWatcher {
 
     private var lastSkipReason: String?
     private var lastErrorLoggedAt: Date?
-    /// The last sentence handed to ``onPaused``, so a steady state is announced once.
-    private var pausedReason: String?
+    /// The last value handed to ``onStandDown``, so a steady state is announced once.
+    private var standDown: ScreenStandDown?
+
+    /// **When the WindowServer last proved it is still answering this process.**
+    ///
+    /// The clock behind ``stallReason(lastServedAt:now:threshold:)``, and what it measures is
+    /// deliberately narrow: *unexplained* silence. A tick that ends because the user is looking at
+    /// an excluded app, at Claude's own output, or at Mission Control never reaches the WindowServer
+    /// at all — that is the app declining to record, not the OS declining to answer — so those ticks
+    /// reset it. What does not reset it is `SCShareableContent` throwing, a frontmost application
+    /// with no window the snapshot can see, and a capture that fails: the three signatures of a
+    /// window-server connection whose capture rights have gone stale.
+    private var lastServedAt: Double?
+
+    /// How long the WindowServer may go on refusing before the app stops calling the screen half
+    /// healthy.
+    ///
+    /// Three minutes — sixty consecutive refused ticks at the 3 s cadence. Long enough that a wake
+    /// from sleep, a display reconfiguration or a fast user switch settles inside it; short enough
+    /// that a user who walks away for a coffee comes back to an app that has already said something.
+    /// The alternative that shipped is *never*, which cost twenty-nine hours.
+    ///
+    /// `nonisolated` so the threshold and the decision it feeds can both be read without the main
+    /// actor — the same reason `PermissionRun.leadIn` is.
+    nonisolated static let stallSeconds: Double = 180
+
+    /// Whether the screen half has been silent long enough to say so, and what to say.
+    ///
+    /// Pure and separate from the tick for the same reason ``idlePauseReason(pausesOnInactivity:isIdle:)``
+    /// is: this is a promise about a threshold, and a promise has to be assertable without a
+    /// WindowServer, a display, or a granted TCC record.
+    nonisolated static func stallReason(
+        lastServedAt: Double?,
+        now: Double,
+        threshold: Double = stallSeconds
+    ) -> String? {
+        guard let lastServedAt else { return nil }
+        let elapsed = now - lastServedAt
+        // A backwards clock (NTP correction, wake from sleep) is not evidence of a stall. Failing
+        // towards "still healthy" is right here: the next tick that genuinely fails re-arms this
+        // against a sane `now`, and a false alarm on the one surface the user trusts is expensive.
+        guard elapsed.isFinite, elapsed >= threshold else { return nil }
+        let minutes = Int((elapsed / 60).rounded(.down))
+        let howLong = minutes >= 1 ? "\(minutes) minute\(minutes == 1 ? "" : "s")" : "a while"
+        return "Screen capture has produced nothing for \(howLong) — macOS is refusing this app's "
+            + "screen requests. Reopening Context for Claude usually fixes it."
+    }
 
     // MARK: - One tick
 
     private func tick() async {
-        guard Self.hasPermission() else {
-            noteSkip("Screen Recording permission not granted")
+        // First, because it is the only guard whose answer can change without anything on this Mac
+        // moving: a grant is dropped by the OS, not by the user's hands. It used to be a bare
+        // `hasPermission()` that logged once and idled — the exact shape of the twenty-nine-hour
+        // failure — and it now reaches the engine as something the engine can act on.
+        if let block = Permissions.screenBlock() {
+            reportStandDown(.blocked(block))
+            noteServed()
             return
         }
         guard !ScreenPipeline.isScreenLocked() else {
+            reportStandDown(.paused("Screen locked"))
             noteSkip("screen locked")
+            noteServed()
             return
         }
         // Settings > Capture > "Pause on Inactivity", which until now was a switch wired to nothing.
@@ -194,13 +254,16 @@ final class ScreenWatcher {
         let idlePause = Self.idlePauseReason(
             pausesOnInactivity: SettingsStore.shared.pausesOnInactivity,
             isIdle: CaptureActivity.isIdle())
-        reportPause(idlePause)
         if let idlePause {
+            reportStandDown(.paused(idlePause))
             noteSkip(idlePause)
+            noteServed()
             return
         }
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
             noteSkip("no frontmost application")
+            // Nothing on screen to capture is not the WindowServer refusing us.
+            noteServed()
             return
         }
 
@@ -211,21 +274,31 @@ final class ScreenWatcher {
         // none of them is a surface the user is reading.
         guard bundleID != ScreenPipeline.dockBundleIdentifier else {
             noteSkip("Mission Control")
+            noteServed()
             return
         }
         // Asked before the window is resolved so an app that must never be read costs no
         // WindowServer enumeration, and asked again below once there is a title to judge.
         guard !ScreenPipeline.isOwnOutput(appName: appName, bundleID: bundleID, title: nil) else {
             noteSkip("own output: \(appName)")
+            // A refusal of our own, taken before the WindowServer is ever asked. It says nothing
+            // about whether capture works, so it must neither arm nor advance the stall clock —
+            // otherwise an hour in front of Claude Desktop would raise a false alarm.
+            noteServed()
             return
         }
         if let reason = exclusions.exclusionReason(for: CaptureSubject(bundleID: bundleID, appName: appName)) {
             noteSkip(reason.logDescription)
+            noteServed()
             return
         }
 
         guard let front = await activeWindow(pid: frontApp.processIdentifier) else {
+            // **Not** served. A frontmost application whose windows are invisible to
+            // `SCShareableContent` is the signature of a window-server connection that no longer
+            // carries capture rights, which is what a grant dropped mid-life leaves behind.
             noteSkip("frontmost app has no capturable window: \(appName)")
+            reportStall()
             return
         }
         let window = front.window
@@ -245,6 +318,7 @@ final class ScreenWatcher {
 
         guard !ScreenPipeline.isOwnOutput(appName: appName, bundleID: bundleID, title: windowTitle) else {
             noteSkip("own output: \(appName)")
+            noteServed()
             return
         }
         let subject = CaptureSubject(
@@ -259,11 +333,22 @@ final class ScreenWatcher {
         let admission = exclusions.admit(subject)
         guard let ticket = admission.ticket else {
             noteSkip(admission.reason?.logDescription ?? "excluded")
+            noteServed()
             return
         }
 
-        guard let image = await capture(window) else { return }
+        guard let image = await capture(window) else {
+            // `capture` already logged; this is the second of the three refusal signatures.
+            reportStall()
+            return
+        }
         lastSkipReason = nil
+        // Pixels came back, so the WindowServer is answering this process. The one signal in the
+        // whole tick that proves the screen half is genuinely alive — deliberately taken here and
+        // not at `emit`, because deduplication legitimately suppresses most frames and a healthy
+        // watcher looking at one unchanging document would otherwise look stalled.
+        noteServed()
+        reportStandDown(nil)
 
         let capturedAt = ContextTime.now
         let hash = ScreenPipeline.dHash(of: image)
@@ -361,12 +446,34 @@ final class ScreenWatcher {
     }
 
     /// Announces a change in why capture is standing down. Repeats are swallowed: this is called on
-    /// every tick, and re-publishing an unchanged sentence would re-write the heartbeat file every
+    /// every tick, and re-publishing an unchanged value would re-write the heartbeat file every
     /// three seconds for as long as a machine sits idle.
-    func reportPause(_ reason: String?) {
-        guard pausedReason != reason else { return }
-        pausedReason = reason
-        onPaused?(reason)
+    func reportStandDown(_ next: ScreenStandDown?) {
+        guard standDown != next else { return }
+        standDown = next
+        // A grant that was working and has stopped is the one event here that has to still be in
+        // the log tomorrow — `info` is evicted from the unified log within minutes, which is why
+        // the twenty-nine-hour outage left one line and no trace of what happened next.
+        if let next, case .blocked(let block) = next, block.isRegression {
+            ContextLog.milestone(block.reason, "screen")
+        }
+        onStandDown?(next)
+    }
+
+    /// The WindowServer answered — or was never asked, because this app declined the window itself.
+    /// Either way the stall clock starts again from here.
+    private func noteServed() {
+        lastServedAt = ContextTime.now
+    }
+
+    /// One tick that tried and got nothing. Raises the alarm once the silence has lasted longer than
+    /// ``stallSeconds``, and says nothing at all before that — a single failed capture is ordinary,
+    /// and a recorder that cries about every one of them teaches its user to ignore it.
+    private func reportStall() {
+        guard let reason = Self.stallReason(lastServedAt: lastServedAt, now: ContextTime.now) else {
+            return
+        }
+        reportStandDown(.stalled(reason))
     }
 
     /// Records a screen we have now seen, evicting the oldest once the ring is full.
@@ -549,6 +656,35 @@ final class ScreenWatcher {
         if let lastErrorLoggedAt, now.timeIntervalSince(lastErrorLoggedAt) < 60 { return }
         lastErrorLoggedAt = now
         ContextLog.error(message, "screen")
+    }
+}
+
+// MARK: - Why the screen half is quiet
+
+/// The three reasons screen capture is not producing, kept apart because the app must *do*
+/// something different about each of them.
+///
+/// A single optional sentence could not: the engine has to know whether to keep calling itself
+/// healthy (a pause), to put something in front of the user (a block), or to try recycling the
+/// watcher (a stall). Collapsing them into `String?` is what let a dropped Screen Recording grant
+/// read as a deliberate pause and then, having no shape to be reported in at all, read as nothing.
+enum ScreenStandDown: Equatable {
+    /// The switch or the system says stop for now, and nothing has failed. The user is away, the
+    /// screen is locked. Capture resumes by itself and the app is not degraded by it.
+    case paused(String)
+    /// Needs the user: the grant is gone, was never given, or cannot be used until this process is
+    /// relaunched. Carries the block so the copy and the log level are decided in one place.
+    case blocked(Permissions.ScreenBlock)
+    /// Believed running, and the WindowServer has answered nothing for longer than
+    /// ``ScreenWatcher/stallSeconds``.
+    case stalled(String)
+
+    var reason: String {
+        switch self {
+        case .paused(let sentence): return sentence
+        case .blocked(let block): return block.reason
+        case .stalled(let sentence): return sentence
+        }
     }
 }
 

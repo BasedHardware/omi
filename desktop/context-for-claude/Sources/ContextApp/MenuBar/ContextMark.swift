@@ -22,9 +22,18 @@ enum ContextMark {
     /// without a click.
     static let menuBarPaused: NSImage = image(size: menuBarSize, struckThrough: true)
 
-    static func image(size: CGSize, struckThrough: Bool = false) -> NSImage {
+    /// One eye shut, for a recorder that is running with half of itself dead.
+    ///
+    /// The menu bar had two marks for three states, so a dropped Screen Recording grant was drawn
+    /// exactly like a healthy app — for twenty-nine hours, on the one surface the user glances at to
+    /// check. Struck-through would have been the other lie: audio was still being recorded the whole
+    /// time, and telling someone their recorder is off when it is half on sends them looking for the
+    /// wrong problem. Half-blind is what it actually was.
+    static let menuBarDegraded: NSImage = image(size: menuBarSize, eyeShut: true)
+
+    static func image(size: CGSize, struckThrough: Bool = false, eyeShut: Bool = false) -> NSImage {
         let image = NSImage(size: size, flipped: false) { _ in
-            draw(in: size, struckThrough: struckThrough)
+            draw(in: size, struckThrough: struckThrough, eyeShut: eyeShut)
             return true
         }
         image.isTemplate = true
@@ -33,7 +42,7 @@ enum ContextMark {
 
     /// All coordinates are expressed against a 20×20 design box and scaled, so the proportions hold
     /// at every size.
-    private static func draw(in size: CGSize, struckThrough: Bool) {
+    private static func draw(in size: CGSize, struckThrough: Bool, eyeShut: Bool = false) {
         let s = min(size.width, size.height) / 20
         func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: x * s, y: y * s) }
 
@@ -47,7 +56,17 @@ enum ContextMark {
         head.stroke()
 
         // Eyes. Vertical ovals, set just below the centre line of the head.
-        for x in [7.9, 12.1] as [CGFloat] {
+        //
+        // The right one closes for the degraded mark: a filled bar at the eye's own mid-height,
+        // wider than the oval it replaces so the change survives an 18 pt menu bar. Drawn rather
+        // than dimmed because a template image has no colour of its own to dim — macOS owns the
+        // fill, and the only thing this app controls is the shape.
+        for (index, x) in ([7.9, 12.1] as [CGFloat]).enumerated() {
+            if eyeShut, index == 1 {
+                NSBezierPath(ovalIn: NSRect(
+                    x: (x - 1.1) * s, y: 11.75 * s, width: 2.2 * s, height: 0.9 * s)).fill()
+                continue
+            }
             NSBezierPath(ovalIn: NSRect(
                 x: (x - 0.78) * s, y: 11.0 * s, width: 1.56 * s, height: 2.1 * s)).fill()
         }

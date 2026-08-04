@@ -1,3 +1,4 @@
+import ContextCore
 import AppKit
 import Combine
 import SwiftUI
@@ -62,13 +63,35 @@ final class StatusItemController: NSObject {
         self.popover = popover
 
         // The icon answers "is it listening?" without a click, so it has to follow the engine
-        // rather than be set once at launch.
-        Engine.shared.$isCapturing
+        // rather than be set once at launch — and it follows `health` rather than a boolean, because
+        // two glyphs over one boolean drew a recorder whose screen half had been dead since the
+        // previous afternoon exactly like a healthy one.
+        Engine.shared.$health
             .removeDuplicates()
-            .sink { [weak self] capturing in
-                self?.item?.button?.image = capturing ? ContextMark.menuBar : ContextMark.menuBarPaused
+            .sink { [weak self] health in
+                self?.item?.button?.image = Self.mark(for: health)
+                self?.item?.button?.toolTip = Self.tooltip(for: health)
             }
             .store(in: &cancellables)
+    }
+
+    /// The glyph for each health state. A pure function so the mapping is assertable without a menu
+    /// bar — there is no way to read an `NSStatusItem`'s image back in a test target that never
+    /// installs one.
+    static func mark(for health: CaptureHealth) -> NSImage {
+        switch health {
+        case .capturing: return ContextMark.menuBar
+        case .degraded: return ContextMark.menuBarDegraded
+        case .off: return ContextMark.menuBarPaused
+        }
+    }
+
+    static func tooltip(for health: CaptureHealth) -> String {
+        switch health {
+        case .capturing: return "Context for Claude — capturing"
+        case .degraded: return "Context for Claude — part of capture has stopped. Click for details."
+        case .off: return "Context for Claude — not capturing"
+        }
     }
 
     @objc private func toggle() {

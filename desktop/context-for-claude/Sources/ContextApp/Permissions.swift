@@ -261,6 +261,88 @@ enum Permissions {
         return systemSettingsIsFrontmost
     }
 
+    // MARK: - Has this ever worked
+
+    /// **Whether this install has ever actually used a capability, as opposed to been offered it.**
+    ///
+    /// "Never granted" and "was granted, then lost" read identically through TCC — both answer the
+    /// preflight with `false` — and they are not remotely the same event. The first is the user's
+    /// own choice and deserves a calm sentence. The second is a promise that has stopped being
+    /// kept, and on 2 August 2026 it cost a day and a half of screen history: re-signing the bundle
+    /// invalidated the Screen Recording grant (TCC keys it to the code signature), the microphone's
+    /// grant survived because it is keyed differently, and nothing anywhere noticed the difference.
+    ///
+    /// **This is not a development-only hazard.** Any update that ships under a changed signing
+    /// identity or a changed designated requirement does the same thing to every install in the
+    /// field, silently. So the fact is written down the first time a capability genuinely produces
+    /// something, and stays written for the life of the install.
+    static func hasEverCaptured(_ c: Capability) -> Bool {
+        defaults.bool(forKey: Key.everCaptured(c))
+    }
+
+    /// Records that `c` has produced real output at least once. Idempotent and cheap enough to call
+    /// from a capture path: the guard makes the steady state a single dictionary read.
+    static func noteCaptureSucceeded(_ c: Capability) {
+        guard !hasEverCaptured(c) else { return }
+        defaults.set(true, forKey: Key.everCaptured(c))
+        ContextLog.milestone("\(c.rawValue) capture confirmed working on this install", "permissions")
+    }
+
+    /// True when a capability this install has demonstrably used is no longer granted.
+    ///
+    /// The one state the product must never meet with silence, and the reason it is a named
+    /// predicate rather than an inline `&&`: every surface that reports a missing permission has to
+    /// agree on which of the two stories it is telling.
+    static func grantWasLost(_ c: Capability) -> Bool {
+        hasEverCaptured(c) && !check(c)
+    }
+
+    /// **Why the screen half cannot run right now, or nil when nothing is in its way.**
+    ///
+    /// Three distinct situations wear the same checkbox, and telling them apart is most of what a
+    /// user needs from this app when the screen goes quiet. One function rather than three
+    /// conditions at three call sites, because the engine, the menu bar and the MCP `status` tool
+    /// all have to be telling the same story — the previous arrangement had the engine writing one
+    /// sentence, the watcher logging a different one, and `status` reporting neither.
+    enum ScreenBlock: Equatable {
+        /// Never granted. The user's own choice, and nothing has gone wrong.
+        case notGranted
+        /// Granted once, used, and now gone. macOS drops a Screen Recording grant when the code
+        /// signature it was keyed to changes — a re-sign, or an update shipped under a different
+        /// identity — and it does so without a word to anybody.
+        case grantLost
+        /// The grant is real and this process cannot use it. Window-server capture rights are fixed
+        /// when a process connects, so a grant made after launch applies to the *next* launch. This
+        /// is the one case no amount of polling can fix.
+        case needsRelaunch
+
+        var reason: String {
+            switch self {
+            case .notGranted:
+                return "Screen off — Screen Recording permission not granted"
+            case .grantLost:
+                return "Screen Recording has stopped working — macOS dropped this app's grant, "
+                    + "which happens when it is updated or re-signed. Switch it back on in System "
+                    + "Settings ▸ Privacy & Security ▸ Screen & System Audio Recording."
+            case .needsRelaunch:
+                return "Screen Recording is on, but I have to be reopened before I can actually "
+                    + "see the screen — click the Screen row to restart me."
+            }
+        }
+
+        /// Whether this is something that was working and is not. Drives the log level, because an
+        /// `info` line is evicted from the unified log within minutes and this is precisely the
+        /// event that has to still be there tomorrow.
+        var isRegression: Bool { self == .grantLost }
+    }
+
+    static func screenBlock() -> ScreenBlock? {
+        guard check(.screen) else {
+            return hasEverCaptured(.screen) ? .grantLost : .notGranted
+        }
+        return screenNeedsRelaunch ? .needsRelaunch : nil
+    }
+
     // MARK: - Screen Recording relaunch
 
     /// Screen Recording only takes effect after a relaunch — the UI has to say so rather than
@@ -632,6 +714,10 @@ enum Permissions {
 
         static func prompted(_ c: Capability) -> String {
             "context.permission.\(c.rawValue).prompted"
+        }
+
+        static func everCaptured(_ c: Capability) -> String {
+            "context.capture.\(c.rawValue).everWorked"
         }
     }
 

@@ -138,22 +138,66 @@ final class CapturePacingTests: XCTestCase {
     /// sentence would rewrite the heartbeat file every three seconds for as long as a machine sits
     /// untouched overnight.
     @MainActor
-    func testThePauseIsAnnouncedOnceAndClearedOnTheFirstActiveTick() {
+    func testThePauseIsAnnouncedOnceAndClearedOnTheFirstActiveTick() throws {
         let watcher = ScreenWatcher()
-        var announced: [String?] = []
-        watcher.onPaused = { announced.append($0) }
+        var announced: [ScreenStandDown?] = []
+        watcher.onStandDown = { announced.append($0) }
 
-        let paused = ScreenWatcher.idlePauseReason(pausesOnInactivity: true, isIdle: true)
-        watcher.reportPause(paused)
-        watcher.reportPause(paused)
-        watcher.reportPause(paused)
+        let paused = try XCTUnwrap(
+            ScreenWatcher.idlePauseReason(pausesOnInactivity: true, isIdle: true))
+        watcher.reportStandDown(.paused(paused))
+        watcher.reportStandDown(.paused(paused))
+        watcher.reportStandDown(.paused(paused))
         XCTAssertEqual(announced.count, 1, "a steady pause must be announced once, not per tick")
 
-        watcher.reportPause(ScreenWatcher.idlePauseReason(pausesOnInactivity: true, isIdle: false))
+        watcher.reportStandDown(nil)
         XCTAssertEqual(announced.count, 2)
         XCTAssertNil(
-            announced.last ?? "still paused",
+            announced.last ?? .paused("still paused"),
             "the first tick with a keystroke behind it must clear the pause, not the first frame")
+    }
+
+    // MARK: - The stall watchdog
+
+    /// **A screen watcher that is refused forever must say so.**
+    ///
+    /// The other half of the 2 August defect. Once the WindowServer stops answering this process
+    /// there is no error to catch and no callback to fire: the tick simply finds no capturable
+    /// window, logs a line it has already logged, and goes round again. Twenty-nine hours of that
+    /// produced one log entry and a heartbeat file that went on claiming a healthy pipeline.
+    ///
+    /// The threshold is asserted from both sides because both are failures: too eager and every wake
+    /// from sleep raises a false alarm on the one surface the user trusts; never, which is what
+    /// shipped, is what this is fixing.
+    func testTheScreenStallIsAnnouncedOnlyAfterTheThresholdHasPassed() {
+        let now: Double = 1_800_000_000
+
+        XCTAssertNil(
+            ScreenWatcher.stallReason(lastServedAt: now - 1, now: now),
+            "a single refused tick is ordinary and must not raise an alarm")
+        XCTAssertNil(
+            ScreenWatcher.stallReason(lastServedAt: now - ScreenWatcher.stallSeconds + 1, now: now),
+            "one second short of the threshold is still inside the patience the watcher promises")
+
+        let stalled = ScreenWatcher.stallReason(
+            lastServedAt: now - ScreenWatcher.stallSeconds, now: now)
+        XCTAssertNotNil(stalled, "the threshold has passed and nothing has been captured")
+        XCTAssertTrue(
+            (stalled ?? "").contains("Reopening"),
+            "screen capture rights are fixed when a process connects to the window server, so the "
+                + "sentence has to offer the only thing that can actually fix it: \(stalled ?? "")")
+    }
+
+    /// A watcher with nothing to compare against cannot be stalled, and a clock that jumped
+    /// backwards is not evidence of one — the direction that keeps the app quiet is the one to fail
+    /// in, because a false alarm on this surface is expensive and the next genuinely refused tick
+    /// re-arms the clock against a sane `now`.
+    func testTheStallWatchdogCannotFireOnNonsense() {
+        XCTAssertNil(ScreenWatcher.stallReason(lastServedAt: nil, now: 1_800_000_000))
+        XCTAssertNil(
+            ScreenWatcher.stallReason(lastServedAt: 1_800_000_000, now: 1_800_000_000 - 10_000),
+            "a backwards clock must not be read as ten thousand seconds of silence")
+        XCTAssertNil(ScreenWatcher.stallReason(lastServedAt: .nan, now: 1_800_000_000))
     }
 
     // MARK: - Helpers

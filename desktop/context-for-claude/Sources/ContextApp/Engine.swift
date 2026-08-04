@@ -53,7 +53,11 @@ private final class HeartbeatSnapshot: @unchecked Sendable {
 
 /// The parts of the pipeline that fail independently. Storage is one of them: it is the single
 /// shared dependency, and a database that will not open makes capture pointless rather than partial.
-private enum CaptureComponent: CaseIterable {
+///
+/// Internal rather than file-private because the function that turns these into published state is
+/// the one with a wrong answer available, and it has to be assertable without a microphone, a
+/// database or a window server.
+enum CaptureComponent: CaseIterable {
     case storage
     case microphone
     case systemAudio
@@ -77,7 +81,66 @@ private enum CaptureComponent: CaseIterable {
         }
     }
 
+    /// The name this component travels under in `capture-state.json`, so the app and
+    /// `context-for-claude-mcp` are talking about the same stream.
+    var streamName: String {
+        switch self {
+        case .storage: return StreamName.storage
+        case .microphone: return StreamName.microphone
+        case .systemAudio: return StreamName.systemAudio
+        case .screen: return StreamName.screen
+        }
+    }
+
     var segmentSource: SegmentSource { self == .microphone ? .mic : .system }
+}
+
+/// What one component is doing, as **one** value.
+///
+/// This replaces a `Set` of what was running standing beside a dictionary of what had gone wrong,
+/// and the replacement is the whole of this fix. Two containers can put a component in neither of
+/// them, and that is precisely where the screen sat for twenty-nine hours: absent from `running`,
+/// carrying a reason that no aggregate consulted, while `running` was non-empty because the
+/// microphone was alive — so `!running.isEmpty` said `capturing: true` over a database that had not
+/// taken a screen frame since the previous afternoon. One value per component cannot be in neither
+/// state, and the aggregate is computed *from* these values rather than beside them.
+enum ComponentState: Equatable {
+    /// Asked to start, nothing observed from it yet. The optional sentence is for the starts that
+    /// take a while and need to say why — the first run downloading a 600 MB transcription model
+    /// looks identical to a wedged one otherwise.
+    case starting(String?)
+    /// Running and producing.
+    case live
+    /// Needs the user. A permission this install had and no longer has, a grant this process cannot
+    /// use until it is relaunched, or hardware the OS is refusing.
+    case blocked(String)
+    /// Believed running and producing nothing for longer than its own patience.
+    case stalled(String)
+    /// Deliberately not running: switched off, never permitted, unsupported, or paused.
+    case off(String)
+
+    /// How this reaches the heartbeat file.
+    var wire: StreamState {
+        switch self {
+        case .starting: return .starting
+        case .live: return .live
+        case .blocked: return .blocked
+        case .stalled: return .stalled
+        case .off: return .off
+        }
+    }
+
+    /// The sentence a person reads, or nil when there is nothing to say. `live` says nothing on
+    /// purpose: a working component is the absence of news.
+    var detail: String? {
+        switch self {
+        case .starting(let note): return note
+        case .live: return nil
+        case .blocked(let reason), .stalled(let reason), .off(let reason): return reason
+        }
+    }
+
+    var isLive: Bool { self == .live }
 }
 
 /// The capture pipeline: three sensors, two transcribers, one database writer, and the published
@@ -104,7 +167,15 @@ final class Engine: ObservableObject {
 
     static let shared = Engine()
 
+    /// True only when **everything that should be running is running**.
+    ///
+    /// It used to be `!running.isEmpty`, which is an or over three independent sensors read by every
+    /// surface downstream as an and. Derived now, and derived in `ContextCore`, so the menu bar, the
+    /// heartbeat file and Claude cannot come to three different conclusions from the same facts.
     @Published private(set) var isCapturing = false
+    /// The three-valued answer, because "on" and "off" cannot say *half*. Surfaces with room for
+    /// more than a dot read this instead of `isCapturing`.
+    @Published private(set) var health: CaptureHealth = .off
     /// Why capture is not whole right now: paused by the user, a permission never granted, or a
     /// source that died. Nil only when everything permitted is actually running.
     @Published private(set) var pausedReason: String?
@@ -132,13 +203,35 @@ final class Engine: ObservableObject {
     /// nothing granted has nothing to wait for, and sign-in still has to be possible there.
     private static let accountGraceSeconds: Double = 5
 
+    /// How long an audio source may go without delivering a chunk before the app stops calling it
+    /// live.
+    ///
+    /// Ninety seconds. `MicCapture` has its own one-second silence watchdog and rebuilds itself
+    /// three times before giving up, so anything that survives to here has already exhausted every
+    /// recovery the device layer has — this is the backstop for the case that layer cannot see,
+    /// where the IOProc is alive and simply never calls back.
+    private static let audioSilenceSeconds: Double = 90
+
+    /// How often a stalled screen watcher is torn down and rebuilt. Some of what the WindowServer
+    /// refuses is transient — a display reconfiguration, a fast user switch — and a fresh connection
+    /// is the cheapest thing that clears it. Bounded so an unrecoverable stall costs one rebuild
+    /// every five minutes rather than one every thirty seconds.
+    private static let screenRecycleSeconds: Double = 300
+
     private var hasStarted = false
-    private var isPaused = false
+    /// Published because the popover's own control depends on it: with `isCapturing` now meaning
+    /// "everything is running", a degraded recorder would otherwise offer a **Resume** button for a
+    /// pause that never happened.
+    @Published private(set) var isPaused = false
     private var isStorageReady = false
-    /// What is genuinely capturing right now — the engine's own bookkeeping, not a poll of the
-    /// sources, so state never depends on when another object flips its `isRunning`.
-    private var running: Set<CaptureComponent> = []
-    private var reasons: [CaptureComponent: String] = [:]
+    /// What every component is doing — the engine's own bookkeeping, not a poll of the sources, so
+    /// state never depends on when another object flips its `isRunning`.
+    private var componentStates: [CaptureComponent: ComponentState] = [:]
+    /// When each component last produced anything. The evidence behind "believed running and
+    /// producing nothing", and the one field of the heartbeat that can prove a stream is alive
+    /// rather than merely started.
+    private var lastOutput: [CaptureComponent: Double] = [:]
+    private var screenRecycledAt: Double?
 
     private var audioSources: [CaptureComponent: AudioSource] = [:]
     private var transcribers: [CaptureComponent: Transcriber] = [:]
@@ -244,7 +337,7 @@ final class Engine: ObservableObject {
             let deadline = ContextTime.now + Self.accountGraceSeconds
             while true {
                 guard let self else { return }
-                if !self.running.isEmpty || ContextTime.now >= deadline { break }
+                if !self.liveComponents.isEmpty || ContextTime.now >= deadline { break }
                 try? await Task.sleep(for: .milliseconds(50))
             }
             guard let self else { return }
@@ -347,7 +440,7 @@ final class Engine: ObservableObject {
     func pause() {
         guard !isPaused else { return }
         isPaused = true
-        stopAllSources()
+        stopAllSources(reason: "Paused")
         // The socket has to close with the capture. Left open with no audio arriving, the server
         // hangs up at 90 s and the client reconnects on backoff for as long as the app is paused —
         // a reconnect loop against the backend for a user who deliberately stopped recording.
@@ -364,9 +457,12 @@ final class Engine: ObservableObject {
         startCloudTranscription()
         guard isPaused else { return }
         isPaused = false
-        // Reasons recorded before the pause describe a pipeline that no longer exists. Storage is
+        // States recorded before the pause describe a pipeline that no longer exists. Storage is
         // the exception: that failure is about the database, not about a source.
-        reasons = reasons.filter { $0.key == .storage }
+        for component in CaptureComponent.allCases where component != .storage {
+            componentStates[component] = .starting(nil)
+            lastOutput[component] = nil
+        }
         capabilities = Permissions.groupedReport()
         startPermittedSources()
         ContextLog.info("Capture resumed", "engine")
@@ -389,11 +485,23 @@ final class Engine: ObservableObject {
     private func ensureStorage() async {
         guard !isStorageReady else { return }
         if let failure = await store.open() {
-            note(.storage, failure)
+            setState(.storage, .blocked(failure))
             return
         }
         isStorageReady = true
-        clear(.storage)
+        setState(.storage, .live)
+        // Seeded from the rows on disk, once the database is open: a flag written on the first
+        // successful capture cannot speak for the frames captured before the flag existed, and the
+        // install that most needs the distinction is exactly the one that was already running when
+        // its grant died. Screen only — an audio segment does not say whether it came from the
+        // microphone or the system tap, and guessing there would raise the false alarm this whole
+        // distinction exists to avoid.
+        if await store.hasAnyFrames() {
+            Permissions.noteCaptureSucceeded(.screen)
+            // The seed may have just turned "you never granted this" into "this stopped working",
+            // which is a different sentence and a different state.
+            refreshCapabilities()
+        }
         // Retention is housekeeping, and housekeeping is not allowed on the startup path: this only
         // *schedules* the sweep, minutes out, on a queue of its own. It used to be enqueued here on
         // the store's own serial queue, which put thousands of file unlinks in front of the frames
@@ -412,18 +520,19 @@ final class Engine: ObservableObject {
         startScreen()
     }
 
-    private func stopAllSources() {
-        stopAudio(.microphone)
-        stopAudio(.systemAudio)
-        stopScreen()
+    private func stopAllSources(reason: String) {
+        stopAudio(.microphone, reason: reason)
+        stopAudio(.systemAudio, reason: reason)
+        stopScreen(reason: reason)
     }
 
     /// Wires one audio device into one transcriber. Identical for the mic and the system tap: the
     /// only difference is which device can fail and what the user is told when it does.
     private func startAudio(_ component: CaptureComponent) {
-        guard starts[component] == nil, !running.contains(component) else { return }
-        guard let capability = component.capability, Permissions.check(capability) else {
-            note(component, "\(component.label) off — permission not granted")
+        guard starts[component] == nil, !isLive(component) else { return }
+        guard let capability = component.capability else { return }
+        guard Permissions.check(capability) else {
+            setState(component, missingPermissionState(component, capability))
             return
         }
         guard let device = makeAudioSource(component) else { return }
@@ -450,9 +559,10 @@ final class Engine: ObservableObject {
                 }
                 if !Transcriber.isModelReady {
                     // ~600 MB on first run. Say so rather than looking silently broken for minutes.
-                    self?.note(
+                    self?.setState(
                         component,
-                        "\(component.label) warming up — first run downloads the transcription model")
+                        .starting(
+                            "\(component.label) warming up — first run downloads the transcription model"))
                     self?.publishState()
                 }
                 // The model load is a cold-start compile measured in minutes, and the device must
@@ -472,6 +582,10 @@ final class Engine: ObservableObject {
                             case .systemAudio: Engine.shared.mixerInput(system: chunk)
                             default: break
                             }
+                            // A chunk of PCM is the only proof this device is genuinely alive
+                            // rather than merely started. `AudioSource.isRunning` is a flag the
+                            // source sets; this is bytes.
+                            Engine.shared.noteOutput(component)
                             return TranscriptOwnership.shouldFeedLocalFallback(
                                 when: ListenSocket.shared.state)
                         }
@@ -488,13 +602,18 @@ final class Engine: ObservableObject {
                     device.stop()
                     return
                 }
-                self.running.insert(component)
-                self.clear(component)
+                self.setState(component, .live)
+                // The device came up, so this install has demonstrably been allowed to use it. That
+                // is what makes a later refusal legible as a regression rather than as a user who
+                // never granted it — see `Permissions.hasEverCaptured`.
+                Permissions.noteCaptureSucceeded(capability)
+                self.noteOutput(component)
                 self.publishState()
             } catch {
                 guard let self, !Task.isCancelled else { return }
                 self.teardownAudio(component)
-                self.note(component, "\(component.label) stopped — \(error.localizedDescription)")
+                self.setState(
+                    component, .blocked("\(component.label) stopped — \(error.localizedDescription)"))
                 self.publishState()
             }
         }
@@ -508,16 +627,41 @@ final class Engine: ObservableObject {
             // Redundant against the deployment target on purpose — the availability checker will
             // not take the platform floor as proof.
             if #available(macOS 14.4, *) { return SystemAudioCapture() }
-            note(component, "\(component.label) off — needs macOS 14.4 or later")
+            setState(component, .off("\(component.label) off — needs macOS 14.4 or later"))
             return nil
         case .storage, .screen:
             return nil
         }
     }
 
-    private func stopAudio(_ component: CaptureComponent) {
+    /// The state a component with no permission is in — and the distinction that matters most in
+    /// this whole file.
+    ///
+    /// **Never granted is `off`.** The app is doing exactly what it was allowed to do; a user who
+    /// declined system audio has not got a broken recorder and must not be told they have, every
+    /// day, forever.
+    ///
+    /// **A grant this install has actually used and no longer has is `blocked`.** That is a promise
+    /// that has stopped being kept, and macOS makes it silently: a Screen Recording grant is keyed
+    /// to the app's code signature, so re-signing the bundle — or shipping an update under a
+    /// different identity — drops it while a microphone grant, keyed differently, survives. Measured
+    /// here on 2 August 2026: the last screen frame landed at 14:20:48, the bundle was re-signed at
+    /// 14:33:28, and nothing was captured or said for the next twenty-nine hours.
+    private func missingPermissionState(
+        _ component: CaptureComponent, _ capability: Capability
+    ) -> ComponentState {
+        guard Permissions.hasEverCaptured(capability) else {
+            return .off("\(component.label) off — permission not granted")
+        }
+        return .blocked(
+            "\(component.label) has stopped working — macOS dropped this app's permission, which "
+                + "happens when it is updated or re-signed. Switch it back on in System Settings.")
+    }
+
+    private func stopAudio(_ component: CaptureComponent, reason: String) {
         starts[component]?.cancel()
         teardownAudio(component)
+        setState(component, .off(reason))
     }
 
     /// Releases everything one audio source owns. Runs on a clean stop and after a failure alike,
@@ -535,43 +679,80 @@ final class Engine: ObservableObject {
             // last partial window — the alternative is blocking termination on the model.
             Task { await transcriber.finish() }
         }
-        running.remove(component)
     }
 
+    /// Brings the screen half up, or says — every time, in a state the rest of the app can act on —
+    /// exactly why it cannot.
+    ///
+    /// The `screenNeedsRelaunch` branch is the one that was missing, and it is not a nicety. A grant
+    /// made after this process connected to the window server is a grant this process cannot use, so
+    /// starting a watcher on the strength of the preflight produces the worst state available: a
+    /// stream the engine believes is live, ticking every three seconds, capturing nothing, and
+    /// telling nobody. Refusing to start and saying "reopen me" is the honest answer, and it is the
+    /// only one that leads anywhere.
     private func startScreen() {
-        guard !running.contains(.screen) else { return }
-        guard SettingsStore.shared.screenCaptureEnabled else { return }
-        guard Permissions.check(.screen) else {
-            // Screen Recording only takes effect after a relaunch; `Permissions` is what tells the
-            // user that, so this stays a plain statement of the gap.
-            note(.screen, "\(CaptureComponent.screen.label) off — Screen Recording permission not granted")
+        // The watcher handle, not the component state: a stalled watcher is not live and must not be
+        // joined by a second one.
+        guard screenWatcher == nil else { return }
+        guard SettingsStore.shared.screenCaptureEnabled else {
+            setState(.screen, .off("Screen capture is off in Settings"))
+            return
+        }
+        if let block = Permissions.screenBlock() {
+            setState(.screen, blockState(block))
+            if block.isRegression {
+                // `info` is evicted from the unified log within minutes; the last time this happened
+                // it left no trace at all of the twenty-nine hours that followed.
+                ContextLog.milestone(block.reason, "engine")
+            }
             return
         }
         let watcher = ScreenWatcher()
         let store = self.store
-        watcher.onFrame = { frame in store.record(frame) }
+        watcher.onFrame = { [weak self] frame in
+            store.record(frame)
+            // A frame on its way to the database is the only unarguable proof the screen half
+            // works. It is what makes a later refusal legible as "this stopped working" rather than
+            // as "you never turned it on".
+            self?.noteOutput(.screen)
+            Permissions.noteCaptureSucceeded(.screen)
+        }
         watcher.onAXNodes = { records in store.record(axNodes: records) }
-        // "Pause on Inactivity" suppressing capture is a state the user has to be able to see. It
-        // reaches the menu bar and `capture-state.json` the same way a dead microphone does, because
-        // it has the same consequence — nothing is being recorded — and the reader of a heartbeat
-        // has no other way to tell a gap in the day from a gap in the app.
-        watcher.onPaused = { [weak self] reason in
+        // Every reason the watcher stands down reaches the menu bar and `capture-state.json`, and
+        // they do **not** all mean the same thing. "Pause on Inactivity" is the app doing as it was
+        // told and leaves the recorder healthy; a dropped grant and a WindowServer that has stopped
+        // answering are failures and have to make the whole app read as degraded. One string could
+        // not carry that difference, which is why this channel now carries a `ScreenStandDown`.
+        watcher.onStandDown = { [weak self] standDown in
             guard let self else { return }
-            if let reason {
-                self.note(.screen, reason, isFailure: false)
-            } else {
-                self.clear(.screen)
+            guard let standDown else {
+                self.setState(.screen, .live)
+                self.publishState()
+                return
+            }
+            switch standDown {
+            case .paused(let sentence):
+                self.setState(.screen, .off(sentence))
+            case .blocked(let block):
+                self.setState(.screen, self.blockState(block))
+            case .stalled(let sentence):
+                self.setState(.screen, .stalled(sentence))
             }
             self.publishState()
         }
         watcher.start(interval: 3.0)
         screenWatcher = watcher
-        running.insert(.screen)
-        clear(.screen)
+        setState(.screen, .live)
         publishState()
     }
 
-    private func stopScreen() {
+    /// A screen block as a component state. Only "never granted" is `off` — everything else is
+    /// something the user has to be shown.
+    private func blockState(_ block: Permissions.ScreenBlock) -> ComponentState {
+        block == .notGranted ? .off(block.reason) : .blocked(block.reason)
+    }
+
+    private func stopScreen(reason: String) {
         // `stop()` is what clears the hand-overs, and it clears *all* of them. Doing it here left
         // `onAXNodes` set: cancelling the loop does not resume a tick already suspended in OCR or in
         // an accessibility walk, so that tick finished and wrote a window's full accessibility text
@@ -579,11 +760,10 @@ final class Engine: ObservableObject {
         // `frames` row references and that pruning therefore never reaches.
         screenWatcher?.stop()
         screenWatcher = nil
-        running.remove(.screen)
-        // Whatever the watcher was last standing down for is no longer why capture is off. Removed
-        // rather than `clear(.screen)`, which announces "Screen is capturing" — the opposite of what
-        // just happened.
-        reasons[.screen] = nil
+        // Whatever the watcher was last standing down for is no longer why capture is off: the
+        // caller owns the reason now, and a stale "no activity for 5 minutes" underneath a
+        // deliberate stop would contradict it.
+        setState(.screen, .off(reason))
         publishState()
     }
 
@@ -596,7 +776,7 @@ final class Engine: ObservableObject {
                 if enabled {
                     self.startScreen()
                 } else {
-                    self.stopScreen()
+                    self.stopScreen(reason: "Screen capture is off in Settings")
                 }
             }
             .store(in: &settingsSubscriptions)
@@ -628,55 +808,112 @@ final class Engine: ObservableObject {
 
     // MARK: - Published state
 
-    /// `isFailure: false` for a component that is standing down on purpose — a deliberate pause is
-    /// still a reason capture is not whole, and still belongs in the published state, but logging it
-    /// at error level would teach whoever reads these logs to ignore the level.
-    private func note(_ component: CaptureComponent, _ reason: String, isFailure: Bool = true) {
-        guard reasons[component] != reason else { return }  // a steady failure logs once, not forever
-        reasons[component] = reason
-        if isFailure {
+    /// The one writer of component state, and the one place a transition is logged.
+    ///
+    /// Idempotent by design: a steady failure logs once rather than every thirty seconds for as long
+    /// as it lasts. `off` logs at info because it is the app doing as it was told — a deliberate
+    /// stand-down at error level would teach whoever reads these logs to ignore the level, which is
+    /// how a real failure goes unread.
+    private func setState(_ component: CaptureComponent, _ next: ComponentState) {
+        guard componentStates[component] != next else { return }
+        componentStates[component] = next
+        switch next {
+        case .live:
+            ContextLog.info("\(component.label) is capturing", "engine")
+        case .blocked(let reason), .stalled(let reason):
             ContextLog.error(reason, "engine")
-        } else {
+        case .off(let reason):
             ContextLog.info(reason, "engine")
+        case .starting(let note):
+            if let note { ContextLog.info(note, "engine") }
         }
     }
 
-    private func clear(_ component: CaptureComponent) {
-        guard reasons.removeValue(forKey: component) != nil else { return }
-        ContextLog.info("\(component.label) is capturing", "engine")
+    private func isLive(_ component: CaptureComponent) -> Bool {
+        componentStates[component]?.isLive ?? false
     }
 
-    /// `synchronously` for pause and quit: an async write can lose the race with process teardown,
-    /// and the heartbeat is the only thing telling `context-for-claude-mcp` what happened.
+    private var liveComponents: [CaptureComponent] {
+        CaptureComponent.allCases.filter { isLive($0) }
+    }
+
+    /// Stamps a component as having produced something just now. Deliberately does **not**
+    /// republish: this is called on every audio chunk and every stored frame, and rewriting the
+    /// heartbeat file at that rate would cost more than the fact is worth. The next publish — at
+    /// worst thirty seconds away, from the maintenance loop — carries it.
+    private func noteOutput(_ component: CaptureComponent) {
+        lastOutput[component] = ContextTime.now
+    }
+
+    /// **The whole published state, as a pure function of what each component is doing.**
+    ///
+    /// Static and parameterised because this is the function with a wrong answer available, and the
+    /// wrong answer it used to give is the defect: `capturing = !isPaused && !running.isEmpty &&
+    /// !storageFailed` is an *or* over three independent sensors, and every reader downstream — the
+    /// menu bar, `capture-state.json`, the MCP `status` tool, the user — takes it for an *and*. With
+    /// a live microphone and a dead screen it said `true`, for twenty-nine hours, over a database
+    /// that had not taken a screen frame since the previous afternoon.
+    ///
+    /// Nothing here can say it again: `CaptureState` derives `capturing` from the stream reports and
+    /// there is no parameter for it. What remains is assembling the reports honestly, which is what
+    /// the tests drive.
     ///
     /// Truthfulness rules, in the order they are applied:
-    /// - Paused is paused.
-    /// - A store that has *failed* to open means nothing is being recorded, whatever the sensors are
-    ///   doing, so `capturing` is false. A store that is merely still opening does not: the sensors
-    ///   are genuinely capturing and `EngineStore` is holding the result.
+    /// - Paused is paused, and says so instead of listing the reasons a paused pipeline has.
+    /// - A store that has *failed* to open means nothing is being recorded whatever the sensors are
+    ///   doing (``CaptureHealth``). A store that is merely still opening does not: the sensors are
+    ///   genuinely capturing and `EngineStore` is holding the result.
     /// - No sensor live and nothing yet gone wrong is the launch window, and it says so rather than
     ///   presenting an empty reason, which reads as "everything is fine".
-    private func publishState(synchronously: Bool = false) {
-        let storageFailed = reasons[.storage] != nil
-        let capturing = !isPaused && !running.isEmpty && !storageFailed
+    static func publishedState(
+        components: [CaptureComponent: ComponentState],
+        isPaused: Bool,
+        capabilities: [CapabilityReport] = [],
+        lastOutput: [CaptureComponent: Double] = [:],
+        updatedAt: Double = ContextTime.now
+    ) -> CaptureState {
+        // Fixed order so neither the popover string nor the stream list shuffles between renders.
+        let states = CaptureComponent.allCases.map { ($0, components[$0] ?? .starting(nil)) }
+        let streams = states.map { pair in
+            StreamReport(
+                name: pair.0.streamName,
+                state: pair.1.wire,
+                detail: pair.1.detail,
+                lastOutputAt: lastOutput[pair.0])
+        }
+
         let reason: String?
         if isPaused {
             reason = "Paused"
         } else {
-            // Fixed order so the popover string does not shuffle between renders.
-            let notes = CaptureComponent.allCases.compactMap { reasons[$0] }
+            let notes = states.compactMap { $0.1.detail }
             if notes.isEmpty {
-                reason = running.isEmpty ? startingUpReason : nil
+                reason = states.contains { $0.1.isLive } ? nil : startingUpReason
             } else {
                 reason = notes.joined(separator: " · ")
             }
         }
 
-        if isCapturing != capturing { isCapturing = capturing }
-        if pausedReason != reason { pausedReason = reason }
+        return CaptureState(
+            streams: streams,
+            pausedReason: reason,
+            capabilities: capabilities,
+            updatedAt: updatedAt)
+    }
 
-        let state = CaptureState(
-            capturing: capturing, pausedReason: reason, capabilities: capabilities)
+    /// `synchronously` for pause and quit: an async write can lose the race with process teardown,
+    /// and the heartbeat is the only thing telling `context-for-claude-mcp` what happened.
+    private func publishState(synchronously: Bool = false) {
+        let state = Self.publishedState(
+            components: componentStates,
+            isPaused: isPaused,
+            capabilities: capabilities,
+            lastOutput: lastOutput)
+
+        if isCapturing != state.capturing { isCapturing = state.capturing }
+        if health != state.health { health = state.health }
+        if pausedReason != state.pausedReason { pausedReason = state.pausedReason }
+
         // Before the write, so a timer tick that fires in between re-stamps the new state, not the
         // one it replaced.
         heartbeat.set(state)
@@ -720,6 +957,13 @@ final class Engine: ObservableObject {
     /// Retries what launch could not finish: a store on a volume that was busy, a permission granted
     /// after launch, a source that died. Separate from the heartbeat on purpose — recovery needs the
     /// main actor, and the heartbeat must not be hostage to it.
+    ///
+    /// Thirty seconds is also the cadence at which a permission is re-read, which is what makes
+    /// "constantly working" more than an intention: a grant restored in System Settings is noticed
+    /// within half a minute with nothing for the user to press. What that cadence **cannot** fix is
+    /// a Screen Recording grant made after this process connected to the window server — those
+    /// rights are fixed at connection time — so that case is detected and named rather than silently
+    /// retried forever; see `startScreen`.
     private func startMaintenanceLoop() {
         maintenanceTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -730,9 +974,65 @@ final class Engine: ObservableObject {
                 } else {
                     await self.ensureStorage()
                     self.refreshCapabilities()
+                    self.superviseSources()
                 }
             }
         }
+    }
+
+    /// The failures with no callback behind them.
+    ///
+    /// Every recovery path in this file so far is event-driven: a start that throws, a watcher that
+    /// reports, a permission that is re-read. None of those fire for a source that simply *stops* —
+    /// `MicCapture` gives up rebuilding after three attempts and tears itself down deliberately, "so
+    /// the app reports state from `isRunning`", except that nothing was ever reading `isRunning`
+    /// after the start succeeded. That is the same failure class as the screen, one stream over: a
+    /// component believed live with nothing checking.
+    private func superviseSources() {
+        guard !isPaused else { return }
+        for component in [CaptureComponent.microphone, .systemAudio] where isLive(component) {
+            guard let source = audioSources[component] else { continue }
+            if !source.isRunning {
+                teardownAudio(component)
+                setState(component, .blocked("\(component.label) stopped — the audio device went away"))
+                startAudio(component)
+                continue
+            }
+            // The device says it is running and no bytes have arrived. `MicCapture`'s own
+            // one-second silence watchdog rebuilds the stack three times before it gives up, so
+            // anything reaching this branch has outlived every recovery the device layer has.
+            if let last = lastOutput[component], ContextTime.now - last > Self.audioSilenceSeconds {
+                setState(
+                    component,
+                    .stalled(
+                        "\(component.label) has delivered no audio for "
+                            + "\(Int(Self.audioSilenceSeconds)) seconds"))
+            }
+        }
+        recycleStalledScreen()
+        publishState()
+    }
+
+    /// Rebuilds a screen watcher the WindowServer has stopped answering.
+    ///
+    /// Some of what it refuses is recoverable — a display reconfiguration, a fast user switch, a
+    /// wake from sleep — and a fresh `SCShareableContent` connection is the cheapest thing that
+    /// clears it, so this is worth one attempt. What it **cannot** clear is capture rights this
+    /// process is not carrying, because those were decided when the process connected to the window
+    /// server and no amount of restarting a `Task` inside it changes them. So the rebuild is bounded
+    /// to one every ``screenRecycleSeconds`` and the stalled sentence keeps saying "reopening
+    /// usually fixes it", which is the truth rather than a promise this code can keep.
+    private func recycleStalledScreen() {
+        guard case .stalled(let reason)? = componentStates[.screen] else {
+            screenRecycledAt = nil
+            return
+        }
+        let now = ContextTime.now
+        if let screenRecycledAt, now - screenRecycledAt < Self.screenRecycleSeconds { return }
+        screenRecycledAt = now
+        ContextLog.error("Rebuilding the screen watcher after a stall: \(reason)", "engine")
+        stopScreen(reason: reason)
+        startScreen()
     }
 
     private func startTodaySecondsLoop() {
@@ -773,7 +1073,7 @@ final class Engine: ObservableObject {
         maintenanceTask?.cancel()
         accountTask?.cancel()
         todayTask?.cancel()
-        stopAllSources()
+        stopAllSources(reason: "Context for Claude is not running")
         store.closeOpenSession()
         lineFeed?.finish()
         lineTask?.cancel()
@@ -872,6 +1172,18 @@ private final class EngineStore: @unchecked Sendable {
                     continuation.resume(
                         returning: "Could not open the database: \(error.localizedDescription)")
                 }
+            }
+        }
+    }
+
+    /// Whether this database already holds screen frames — the evidence that seeds "screen capture
+    /// has worked on this Mac before". On `queue` like every other read here, so a launch never
+    /// blocks the main thread behind a database that is busy flushing what it just held.
+    func hasAnyFrames() async -> Bool {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            queue.async {
+                guard let store = self.store else { return continuation.resume(returning: false) }
+                continuation.resume(returning: (try? Queries.hasAnyFrames(store)) ?? false)
             }
         }
     }

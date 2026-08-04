@@ -363,6 +363,24 @@ public enum Queries {
 
     // MARK: - Status
 
+    /// **Whether this Mac has ever had a screen frame captured on it.**
+    ///
+    /// The durable answer to "did this used to work", and it has to come from the database because
+    /// the cheap answer cannot. macOS reports a permission that was never granted and a permission
+    /// it silently revoked with the same `false`, so the app writes down the first time each stream
+    /// genuinely produces something — but a flag introduced today is absent on every install that
+    /// predates it, including the one whose Screen Recording grant died when the bundle was
+    /// re-signed and which therefore most needs to know the difference. The rows already on disk
+    /// are the proof, so they are what seeds it.
+    ///
+    /// `EXISTS` rather than `COUNT(*)`: this runs once per launch on a table that holds a month of
+    /// capture, and the question is "any" rather than "how many".
+    public static func hasAnyFrames(_ store: ContextStore) throws -> Bool {
+        try store.read { db in
+            try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM frames)") ?? false
+        }
+    }
+
     /// Capture health plus coverage, so a reader can tell "never happened" from "not captured".
     public static func status(_ store: ContextStore) throws -> StatusInfo {
         let totals: Totals = try store.read { db in
@@ -386,10 +404,17 @@ public enum Queries {
         let state = CaptureState.read()
         let live = state.map { !$0.isStale } ?? false
         let capturing = live && (state?.capturing ?? false)
+        // A process that is gone is `off` whatever its last beat claimed; a live one keeps its own
+        // three-valued answer, which is the only way `degraded` survives the trip to Claude.
+        let health: CaptureHealth = live ? (state?.health ?? .off) : .off
         let pausedReason: String?
-        if capturing {
+        if health == .capturing {
             pausedReason = nil
         } else if live {
+            // Deliberately *not* cleared for `degraded`. This branch used to be keyed on
+            // `capturing`, and a degraded recorder is exactly the state whose reason a reader most
+            // needs — "Screen off — Screen Recording permission not granted" is the sentence that
+            // was thrown away for twenty-nine hours.
             pausedReason = state?.pausedReason ?? "Capture is paused"
         } else {
             pausedReason = "Context for Claude is not running"
@@ -397,9 +422,13 @@ public enum Queries {
 
         return StatusInfo(
             capturing: capturing,
+            health: health,
             pausedReason: pausedReason,
             // Permission grants outlive the process, so last-known capabilities beat none at all.
             capabilities: state?.capabilities ?? [],
+            // Only from a live beat: a stream report from a process that has since exited says
+            // nothing about now, and "screen stalled" read off a dead app is a false alarm.
+            streams: live ? (state?.streams ?? []) : [],
             segmentCount: totals.segments,
             frameCount: totals.frames,
             sessionCount: totals.sessions,
