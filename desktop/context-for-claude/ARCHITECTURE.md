@@ -19,14 +19,14 @@ structural decision follows from it:
 - **Capture is ported, not reinvented.** The mic, system-audio and screen paths are lifted from the
   Omi desktop app because they encode years of real-world corrections (Bluetooth A2DP, tap drift
   compensation, transducer decoder state) that are invisible until they bite.
-- **Updates are Sparkle, but nothing else about them is shared with Omi.** Same library, own feed
-  (`appcast.xml`, served from this repository), own EdDSA key, own bundle — so an update prompt
-  carries this app's name, icon and notes and never Omi's. Omi's feed is a backend route reading
-  GitHub Releases through Firestore; borrowing it would mean this app could not ship a fix without a
-  production backend deploy for a service it otherwise has nothing to do with. The hard part is not
-  the mechanism, it is that macOS keys this app's three TCC grants to its code signature, so an
-  update signed by a different identity silently revokes every permission its users granted —
-  `Update/UpdatePolicy.swift` and `docs/releasing.md` are both mostly about that one fact.
+- **Updates use a shared micro-app platform, but retain product trust boundaries.** Sparkle is the
+  same library used by Omi Desktop; the backend serves an identity-scoped Context feed, while this
+  app keeps its own EdDSA key, bundle identifier, artifact namespace, and Developer ID continuity.
+  The release helper publishes GitHub assets and metadata, so adding another micro-app does not
+  require hand-editing an appcast. The hard part is that macOS keys this app's three TCC grants to
+  its code signature, so an update signed by a different identity silently revokes every permission
+  its users granted — `Update/UpdatePolicy.swift` and `docs/releasing.md` are both mostly about that
+  one fact.
 
 ## Targets
 

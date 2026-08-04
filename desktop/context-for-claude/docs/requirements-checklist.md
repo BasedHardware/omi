@@ -128,8 +128,8 @@ title, a grey subtitle, and a right-hand control.
 | I3 | Conflict row, shown ONLY on a real conflict, with a one-click switch | PARTIAL — UI live-queries and never persists; the real `ShortcutConflicts` scanner exists but the pane still reads the stub |
 | I4 | Launch on Login toggle | MISSING (LoginItem exists) |
 | I5 | Airgap Mode toggle — suppresses telemetry, update checks, remote favicon requests; takes effect after relaunch | MISSING (engine flag exists) |
-| I6 | Updates row showing the real version | MISSING |
-| I7 | Automatic Updates toggle | DECIDED, and the decision changed because the premise did — Sparkle now ships (`Sources/ContextApp/Update/`, `appcast.xml`, `docs/releasing.md`). The Updates row has a real `Check Now`; automatic *checks* are on and automatic *installs* are deliberately off, so there is still no toggle. That is not the old omission repeated: replacing this bundle is the one act that can silently cost the user Screen Recording, and someone who watched themselves approve an update can connect a dead capture to a cause where a silent overnight swap cannot be connected to anything. J7 holds in the other direction too — on any build `UpdatePolicy` refuses (every locally signed copy), the button is absent rather than disabled, and the row says which kind of build it is |
+| I6 | Updates row showing the real version | DONE — `UpdatesSettingsRow` reads the bundle version through `ContextUpdater`. |
+| I7 | Automatic Updates toggle | DECIDED — Sparkle now ships (`Sources/ContextApp/Update/`, the shared micro-app feed, `docs/releasing.md`). The Updates row has a real `Check Now`; checks and verified downloads run automatically, while installation always asks before relaunch. A toggle is intentionally omitted because the shipping policy is fixed and locally signed copies are refused by `UpdatePolicy`. |
 
 ### I-Agents
 | # | Requirement | Status |

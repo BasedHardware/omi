@@ -55,9 +55,12 @@ at once, silently. See [`docs/releasing.md`](docs/releasing.md).
 ## Updates
 
 Installed copies update themselves with [Sparkle](https://sparkle-project.org) — the same mechanism
-`desktop/macos` uses, with none of its identity. Its own feed ([`appcast.xml`](appcast.xml), served
-straight from this repository), its own EdDSA key, its own bundle. An update prompt shows this app's
-name, icon and release notes, and never Omi's.
+`desktop/macos` uses, with none of its identity. The shared micro-app update platform serves an
+identity-scoped feed for this app, while Context retains its own EdDSA key and bundle. An update
+prompt shows this app's name, icon and release notes, and never Omi's.
+
+Updates download and verify in the background. Installation stays behind an explicit
+"Install and Relaunch" prompt because replacing the signed bundle can affect capture permissions.
 
 The build you make locally does **not** update itself, and that is enforced rather than assumed:
 `UpdatePolicy` refuses to update any bundle whose signature carries no Team ID, which is every
@@ -66,7 +69,7 @@ and lose its capture permissions doing it.
 
 Airgap Mode covers the update check like every other remote client (`NetworkEgress.Client`).
 
-Cutting a release — including generating the update key, which has not been done yet — is
+Cutting a release — including generating the Context-only update key — is
 [`docs/releasing.md`](docs/releasing.md).
 
 ## What Claude gets

@@ -1,252 +1,189 @@
 # Releasing Context for Claude
 
-How a new version reaches people who already have the old one.
+Context for Claude has its own product identity, Developer ID bundle signature, Sparkle EdDSA key
+pair, artifact names, and release tag namespace. The release path is separate from the Omi Desktop
+release workflow, while reusing the same Apple certificate import and App Store Connect
+notarization inputs in Codemagic.
 
-The app updates itself with [Sparkle](https://sparkle-project.org), the same mechanism
-`desktop/macos` uses. It shares none of that app's identity: its own feed, its own signing key, its
-own bundle. A user of this app must never see Omi's name, icon or release notes in an update prompt,
-and the way that is guaranteed is that Sparkle draws all three from the running bundle and from
-[`../appcast.xml`](../appcast.xml) — neither of which is Omi's.
-
----
-
-## The invariant that matters more than the rest of this document
-
-**Every release must be signed with the same Developer ID certificate and the same Team ID as the
-release before it.**
-
-macOS attaches Screen Recording, Microphone and System Audio consent to a code signature, not to a
-path or a bundle identifier. This app is worth nothing without all three. An update replaces the
-signed bundle, so an update signed by a different identity — a renewed certificate from a different
-team, a second developer's cert, a build that fell back to the local dev identity — silently revokes
-every grant every user has given. The app comes back looking healthy: menu bar item present, audio
-still recording, screen capture returning nothing, forever, with no error anywhere.
-
-That is not a hypothetical. On the machine this was written on, the installed bundle was re-signed at
-14:33 and the last screen frame it ever captured was stamped 14:20 — thirteen minutes earlier — with
-a day of launches after it and not one complaint from the app. An auto-updater is a way to do that to
-everyone at once.
-
-Two things enforce it:
-
-- **`scripts/build.sh` prints the signing identity of every bundle it builds.** Compare it with the
-  previous release before publishing (below).
-- **`UpdatePolicy` refuses to update any bundle whose signature has no Team ID.** Locally built
-  copies are signed with `Omi Local Dev Signing`, a self-signed certificate with no team, so a
-  developer's build can never pull a real release down over itself. That is
-  `UpdatePolicyTests.testALocallySignedCopyWithNoTeamIdentifierRefusesToUpdateItself`.
-
-### Checking it
-
-```sh
-codesign -dv --verbose=2 "/Applications/Context for Claude.app" 2>&1 \
-  | grep -E '^(Identifier|Authority|TeamIdentifier)='
-```
-
-All four of these must be identical to the previous release:
-
-| Field | Must be |
-|---|---|
-| `Identifier` | `com.omi.context-for-claude` |
-| `Authority` (leaf) | `Developer ID Application: <name> (<TEAMID>)` — the same certificate |
-| `TeamIdentifier` | the same 10-character team, and **never** `not set` |
-| `Runtime Version` | present, i.e. the hardened runtime is on |
-
-`TeamIdentifier=not set` means a self-signed certificate. It is fine locally and must never ship.
-
-If the certificate genuinely has to change — expiry, a team migration — that release cannot go out
-through Sparkle. Ship it as a manual download with a note, because every user will have to re-grant
-permissions and they need to be told beforehand, not discover it a week later.
-
----
+The entry point is `scripts/release-context.sh`. It delegates common tag validation, version
+injection, Sparkle ZIP signing, and GitHub publication to the config-driven
+`scripts/release-micro-app.sh`. The package script remains responsible for assembling and signing the
+Context app, nested Sparkle code, DMG, and ZIP enclosure.
 
 ## One-time setup
 
-### 1. Generate the update key pair
+### Sparkle update key pair
 
-Sparkle signs each update with EdDSA (Ed25519) and the app verifies it with the public half baked
-into `Resources/Info.plist`. This is a **different** key from the code-signing certificate and does a
-different job: the certificate says who built the app, this says who authorised this particular
-download.
-
-Get Sparkle's tools — the SwiftPM dependency does not ship them, so take them from the release
-tarball for the version in `Package.resolved`:
+Use the Sparkle tools matching the pinned dependency (`2.9.4` in `Package.resolved`):
 
 ```sh
-# https://github.com/sparkle-project/Sparkle/releases → Sparkle-<version>.tar.xz
 tar xf Sparkle-2.9.4.tar.xz
 ./bin/generate_keys
 ```
 
-`generate_keys` does two things:
+Store the generated values in the Codemagic secret group `context_for_claude_release`:
 
-- Stores the **private key in your login keychain** as `Private key for signing Sparkle updates`. It
-  is never written to a file and must never be committed, pasted into an issue, printed in CI logs,
-  or copied to a second machine except through the deliberate export below.
-- Prints the **public key**, a 44-character base64 string.
+- `CONTEXT_SPARKLE_PUBLIC_KEY`: the 44-character base64 public key printed by `generate_keys`.
+- `CONTEXT_SPARKLE_PRIVATE_KEY`: the private key exported with
+  `./bin/generate_keys -x /secure/offline/context-for-claude-eddsa.key`.
 
-Put the public key in `Resources/Info.plist`, replacing the placeholder:
+The private value is read through standard input by Sparkle's `sign_update`; it is never printed,
+written to the repository, or included in a release artifact. Keep an offline backup. Rotating this
+key makes every existing installation unable to verify future updates, so a rotation requires a
+manual reinstall and a coordinated updater change.
 
-```xml
-<key>SUPublicEDKey</key>
-<string>REPLACE_WITH_SUPublicEDKey_FROM_generate_keys</string>
-```
+The source `Resources/Info.plist` intentionally retains its placeholder public key. Release builds
+inject `CONTEXT_SPARKLE_PUBLIC_KEY` into the copied bundle plist. Release mode fails closed if the
+key is absent or still the placeholder; ordinary local development builds continue to work without
+release secrets and remain unable to auto-update.
 
-Until that is replaced, the updater is off. That is enforced, not incidental: `UpdatePolicy` treats
-the placeholder as "not configured" and never starts Sparkle. It has to, because
-`SPUStandardUpdaterController(startingUpdater: true, …)` calls `abort()` — a process kill — when it
-is started in a bundle whose key it cannot use.
+### GitHub publication
 
-**Back the private key up before you need it.** Losing it means no existing install can ever be
-updated again; there is no recovery, only a new key, a new build, and a manual reinstall for every
-user.
+Create `CONTEXT_GITHUB_TOKEN` as a fine-grained token scoped to `BasedHardware/omi` with repository
+Contents write permission (including releases) and Metadata read permission. Store it only in the
+`context_for_claude_release` group. The helper uses it through `GH_TOKEN`, never as a command-line
+argument.
 
-```sh
-./bin/generate_keys -x /Volumes/<somewhere-offline>/context-for-claude-eddsa.key   # export
-./bin/generate_keys -f /Volumes/<somewhere-offline>/context-for-claude-eddsa.key   # import elsewhere
-```
+### Apple signing and notarization
 
-Keep that file off this machine and out of any repository. `.gitignore` will not save you from
-`git add -f`.
+Add the existing `appstore_credentials` group to the Context workflow. It supplies the Apple inputs
+shared safely with Omi's notarization machinery:
 
-### 2. Get a Developer ID certificate and a notary profile
+- `MACOS_DEVELOPER_ID_P12` and `MACOS_DEVELOPER_ID_P12_PASSWORD` for the Developer ID Application
+  certificate.
+- `APP_STORE_CONNECT_PRIVATE_KEY`, `APP_STORE_CONNECT_KEY_IDENTIFIER`, and
+  `APP_STORE_CONNECT_ISSUER_ID` for `xcrun notarytool`.
 
-Both are required — Gatekeeper refuses an unnotarized download with "damaged and can't be opened",
-which users read as a broken app.
+Context does not use Omi's Sparkle private key, bundle identifier, artifact names, or release
+metadata. Codemagic maps the App Store Connect values to the package script's `CFC_ASC_*` variables
+without logging them. No provisioning profile is needed for this Developer ID distribution bundle.
+
+For a local release rehearsal, a keychain notary profile may be used instead:
 
 ```sh
 xcrun notarytool store-credentials "context-notary" \
   --apple-id you@example.com --team-id TEAMID --password <app-specific-password>
 ```
 
----
+Then set `CFC_NOTARY_PROFILE=context-notary` and use a local Developer ID identity. Do not use a
+self-signed identity for a release.
 
-## Cutting a release
+## Release flow
 
-### 1. Bump the version
+The tag convention is:
 
-`Resources/Info.plist`:
+```text
+context-for-claude-v<major>.<minor>.<patch>
+```
 
-- `CFBundleShortVersionString` — what people see (`1.1.0`)
-- `CFBundleVersion` — a monotonically increasing integer. **Sparkle compares this, not the display
-  version.** A build number that does not increase is an update nobody receives.
+For example, `context-for-claude-v1.1.0` publishes:
 
-### 2. Build, sign, notarize, package
+- `ContextForClaude-1.1.0.dmg` for manual installation.
+- `ContextForClaude-1.1.0.zip` as the Sparkle enclosure.
+
+The helper derives a deterministic numeric Sparkle build number from the tag (`major * 1,000,000 +
+minor * 1,000 + patch`) and injects both version fields into the built plist. This keeps the source
+template untouched while ensuring Sparkle sees an increasing numeric build for increasing stable
+versions.
+
+Before creating a tag, run the no-secret local validation:
 
 ```sh
 cd desktop/context-for-claude
-CFC_SIGN_IDENTITY='Developer ID Application: <name> (<TEAMID>)' \
-CFC_NOTARY_PROFILE='context-notary' \
-  ./scripts/package-dmg.sh
+./scripts/test-release-path.sh
+./scripts/release-context.sh \
+  --tag context-for-claude-v1.1.0 \
+  --dry-run
 ```
 
-This builds the app, embeds and re-signs `Sparkle.framework` inside-out, notarizes and staples both
-the app and the image, and emits two artifacts in `dist/`:
+This validates the tag, artifact names, package entry point, and any supplied public/private key
+presence without building, notarizing, signing, publishing, or changing source files.
 
-- `ContextForClaude-<version>.dmg` — the manual download
-- `ContextForClaude-<version>.zip` — **the Sparkle enclosure**, made with `ditto -c -k --keepParent`
-  because that is the only zipper on macOS that preserves the symlinks inside a framework
-
-It refuses to build the image at all if `Sparkle.framework` is missing from the bundle or if
-`codesign --verify --deep --strict` fails, because both produce an app that will not launch on
-somebody else's Mac and neither is visible in a DMG.
-
-Confirm the verdict it prints says `Gatekeeper: ACCEPTED`, then re-check the signing identity against
-the previous release using the table above.
-
-### 3. Sign the enclosure
+A maintainer then creates and pushes the tag:
 
 ```sh
-./bin/sign_update dist/ContextForClaude-1.1.0.zip
+git tag context-for-claude-v1.1.0
+git push origin context-for-claude-v1.1.0
 ```
 
-It prints the two attributes the appcast needs:
+Codemagic workflow `context-for-claude-release` accepts only that tag prefix. It performs this
+sequence:
 
-```
-sparkle:edSignature="…" length="12345678"
-```
+1. Imports the existing Developer ID certificate into the Codemagic keychain.
+2. Resolves SwiftPM and builds ContextApp plus `context-for-claude-mcp`.
+3. Injects the Context public key and tag-derived versions into the built `Info.plist`.
+4. Signs the app, MCP executable, Sparkle framework, and every present nested Sparkle XPC/helper
+   component inside-out with the Context Developer ID identity.
+5. Notarizes and staples the app, creates the DMG, then signs, notarizes, and staples the DMG.
+6. Creates the Sparkle ZIP from the stapled app and signs that ZIP with
+   `CONTEXT_SPARKLE_PRIVATE_KEY`.
+7. Publishes both artifacts to the GitHub release at the exact tag. The release body contains a
+   generated `KEY_VALUE_START` block with the product slug, numeric build, artifact name, and EdDSA
+   signature.
 
-It reads the private key straight out of the keychain. macOS will ask for permission the first time.
+The generic backend feed reads that GitHub release metadata and the `ContextForClaude-*.zip` asset.
+Do not hand-edit an appcast XML file and do not add an appcast commit to a Context release. The helper's
+GitHub release publication is the release operation.
 
-### 4. Publish the artifacts
+## Verification before announcing a release
 
-Create a GitHub release tagged `context-for-claude-v<version>` — the prefix keeps it out of the way
-of Omi's own `omi-desktop-*` tags — and attach both the `.zip` and the `.dmg`.
-
-### 5. Append the appcast item
-
-Edit [`../appcast.xml`](../appcast.xml), add an `<item>` (the shape is in the comment at the top of
-that file), and merge it to `main`. Because the feed is served from the repository, **the merge is
-the publish** — there is nothing else to deploy.
-
-```xml
-<item>
-  <title>1.1.0</title>
-  <sparkle:version>2</sparkle:version>
-  <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
-  <sparkle:minimumSystemVersion>14.4</sparkle:minimumSystemVersion>
-  <pubDate>Mon, 03 Aug 2026 12:00:00 +0000</pubDate>
-  <description><![CDATA[<ul><li>What changed.</li></ul>]]></description>
-  <enclosure
-    url="https://github.com/BasedHardware/omi/releases/download/context-for-claude-v1.1.0/ContextForClaude-1.1.0.zip"
-    length="12345678"
-    type="application/octet-stream"
-    sparkle:edSignature="…" />
-</item>
-```
-
-The release notes users read are the `<description>` — write them for a person, not a changelog
-generator. This is the only text in the update prompt that is not drawn from the bundle, so it is the
-only place Omi's name could ever leak into this app's UI. Do not put it there.
-
-### 6. Verify against a real install
-
-Installed copies check every six hours; force one:
+Check the exact shipped identity and Team ID against the preceding release:
 
 ```sh
-open "/Applications/Context for Claude.app"
-# Settings › General › About › Updates › Check Now
+codesign -dv --verbose=2 "dist/Context for Claude.app" 2>&1 \
+  | grep -E '^(Identifier|Authority|TeamIdentifier|Runtime Version)='
+xcrun stapler validate "dist/ContextForClaude-1.1.0.dmg"
+codesign --verify --deep --strict "dist/Context for Claude.app"
+unzip -t "dist/ContextForClaude-1.1.0.zip"
 ```
 
-The sheet must say **Context for Claude**, show this app's icon, and list the notes you wrote. If it
-says Omi anything, stop and fix the feed before telling anyone the release is out.
+`Identifier` must be `com.omi.context-for-claude`. The leaf authority and Team ID must match the
+previous public release, and `TeamIdentifier` must not be `not set`. A changed Team ID silently
+revokes Screen Recording, Microphone, and System Audio consent after Sparkle replaces the bundle;
+stop the release if it differs.
 
-Then confirm the thing that actually breaks: after installing, check that screen capture is still
-running. `Settings › Capture`, or:
+The GitHub release must contain exactly the Context DMG and Context Sparkle ZIP, with no Omi Desktop
+asset. Confirm that the release body has a non-empty `edSignature` and numeric `build` metadata. A
+missing signature or a placeholder public key is a hard release failure, not a warning.
+
+## First-install upgrade constraint
+
+Sparkle can update only a Context installation that already has the same product identity and signing
+continuity:
+
+- The first public installation must be the notarized Developer ID Context DMG or an equivalent
+  manually installed bundle signed by the same Apple Team.
+- A local `Omi Local Dev Signing` build, a self-signed build, a placeholder-key build, or a build
+  signed by another Team cannot receive the public release through Sparkle. Install the first public
+  release manually, then future releases can update it.
+- Never point Context at an Omi feed or reuse Omi's EdDSA key. The bundle ID, feed scope, certificate
+  Team ID, and EdDSA key are separate trust boundaries.
+
+## Rollback and recovery
+
+If a release is bad before users install it, stop it at the GitHub release source: remove or unpublish
+the offending GitHub release using the repository's release-operator procedure. The generic feed
+will stop selecting a deleted/draft release after its cache window; do not edit an XML appcast.
+Preserve the tag and incident evidence where policy requires it, and do not reuse the tag for a
+different ZIP.
+
+If users have already installed the bad release, Sparkle will not install a lower numeric build.
+Publish a repaired release with the same Context identity and a higher version/build, then verify the
+new DMG and ZIP before announcing it. A rollback is therefore a feed withdrawal for not-yet-installed
+clients followed by a higher-build forward fix for installed clients; it is not a downgrade.
+
+## Local commands
+
+Normal development remains independent of release secrets:
 
 ```sh
-log show --last 10m --predicate 'subsystem == "com.omi.context-for-claude"' | grep -i update
+./scripts/build.sh --no-install
 ```
 
----
+For a local package smoke test with the development identity and no Finder automation:
 
-## Rolling back
+```sh
+./scripts/package-dmg.sh --no-style
+```
 
-There is no server-side kill switch — that is the price of a feed served from git. To stop a bad
-release reaching anyone who has not taken it yet, revert the `<item>` out of `appcast.xml` and merge.
-The CDN holds the old response for about five minutes.
-
-Anyone who already installed it has to be moved forward, not back: Sparkle will not install a lower
-`sparkle:version`. Publish a fix with a higher build number.
-
----
-
-## Feed hosting, and when to change it
-
-The feed is a file in the repository, served by `raw.githubusercontent.com`. It was chosen over a
-backend route (`backend/routers/updates.py`, which serves Omi's `v2/desktop/appcast.xml`) for three
-reasons: shipping a fix must not require a production backend deploy for a service this app has
-nothing else to do with; the signature is reviewable in the pull request that publishes it; and there
-is no environment where the running configuration differs from what is in git.
-
-Move it when any of these becomes true:
-
-- **Two channels are needed.** Sparkle supports `<sparkle:channel>` in a static feed, so this alone
-  is not yet a reason — but a beta identity with separate enclosures, as Omi has, is.
-- **A kill switch is needed.** A five-minute CDN TTL and a revert commit is the current answer.
-- **Download volume outgrows raw.githubusercontent.com.** It has no SLA and rate-limits
-  unauthenticated traffic.
-
-Whichever replaces it, changing `SUFeedURL` requires a new build, because it is read from the bundle.
-The migration is therefore: ship one release through the old feed whose bundle points at the new one,
-keep the old feed answering until the tail of installs has moved, and only then retire it.
+This is not a distributable release. It must not be uploaded or used as a Sparkle update.

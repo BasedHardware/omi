@@ -30,6 +30,14 @@
 #   --skip-build   package whatever is already at build/<app>, without rebuilding
 #   --out <path>   write the .dmg here instead of dist/
 #   --no-style     emit a plain unstyled UDZO (for a machine with no Finder to drive)
+#   --release      require Developer ID signing, a real Context Sparkle key, and notarization
+#
+# Release-only environment:
+#   CONTEXT_SPARKLE_PUBLIC_KEY       Context's 44-character Ed25519 public key
+#   CFC_SIGN_IDENTITY                Developer ID Application identity
+#   CFC_NOTARY_PROFILE               optional local notarytool keychain profile
+#   CFC_ASC_PRIVATE_KEY              optional App Store Connect API private key
+#   CFC_ASC_KEY_ID / CFC_ASC_ISSUER_ID  matching App Store Connect API credentials
 #
 # Safety: this script only ever touches Context for Claude. assert_not_production() below aborts the
 # run if any path, identifier, device node or volume it is about to act on looks like a production Omi
@@ -91,24 +99,46 @@ SOURCE_APP=""
 DO_BUILD=1
 DO_STYLE=1
 OUT_DMG=""
+DO_RELEASE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app)        SOURCE_APP="${2:?--app needs a path}"; DO_BUILD=0; shift 2 ;;
         --skip-build) DO_BUILD=0; shift ;;
         --out)        OUT_DMG="${2:?--out needs a path}"; shift 2 ;;
         --no-style)   DO_STYLE=0; shift ;;
+        --release)    DO_RELEASE=1; shift ;;
         -h|--help)    sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *)            die "unknown argument: $1" ;;
     esac
 done
 
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PKG_DIR/Resources/Info.plist" 2>/dev/null || echo 1.0.0)"
+is_valid_sparkle_public_key() {
+    local key="$1"
+    [[ "$key" != "REPLACE_WITH_SUPublicEDKey_FROM_generate_keys" ]] \
+        && [[ "$key" =~ ^[A-Za-z0-9+/]{43}=$ ]]
+}
+
+VERSION="${CONTEXT_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PKG_DIR/Resources/Info.plist" 2>/dev/null || echo 1.0.0)}"
 DMG="${OUT_DMG:-$DIST_DIR/ContextForClaude-$VERSION.dmg}"
 assert_not_production "output image" "$DMG"
 
 # ---------------------------------------------------------------- build + sign
 
 RELEASE_IDENTITY="${CFC_SIGN_IDENTITY:-}"
+RELEASE_MODE=0
+if [[ "$DO_RELEASE" -eq 1 || -n "$RELEASE_IDENTITY" ]]; then
+    RELEASE_MODE=1
+fi
+if [[ "$RELEASE_MODE" -eq 1 ]]; then
+    [[ -n "$RELEASE_IDENTITY" ]] \
+        || die "--release requires CFC_SIGN_IDENTITY"
+    [[ "$RELEASE_IDENTITY" == *"Developer ID Application:"* ]] \
+        || die "release packaging requires a Developer ID Application identity"
+    [[ -n "${CONTEXT_SPARKLE_PUBLIC_KEY:-}" ]] \
+        || die "release packaging requires CONTEXT_SPARKLE_PUBLIC_KEY; refusing to ship the placeholder Sparkle key"
+    is_valid_sparkle_public_key "$CONTEXT_SPARKLE_PUBLIC_KEY" \
+        || die "CONTEXT_SPARKLE_PUBLIC_KEY is invalid; refusing to ship the placeholder Sparkle key"
+fi
 if [[ -n "$SOURCE_APP" ]]; then
     # An explicit bundle. It still has to be *our* bundle: same name, same identifier.
     assert_not_production "--app" "$SOURCE_APP"
@@ -127,13 +157,19 @@ elif [[ -n "$RELEASE_IDENTITY" ]]; then
     security find-identity -v -p codesigning 2>/dev/null | grep -q "$RELEASE_IDENTITY" \
         || die "CFC_SIGN_IDENTITY '$RELEASE_IDENTITY' is not in the keychain"
     log "signing for distribution as: $RELEASE_IDENTITY"
-    CONTEXT_SIGN_IDENTITY="$RELEASE_IDENTITY" "$SCRIPT_DIR/build.sh" --no-install
+    CONTEXT_SIGN_IDENTITY="$RELEASE_IDENTITY" "$SCRIPT_DIR/build.sh" --no-install --release
 else
     warn "no CFC_SIGN_IDENTITY set — building with the local development identity."
     warn "The result will NOT open on anyone else's Mac. See the verdict at the end."
     "$SCRIPT_DIR/build.sh" --no-install
 fi
 [[ -d "$APP_BUNDLE" ]] || die "no app bundle at $APP_BUNDLE"
+
+if [[ "$RELEASE_MODE" -eq 1 ]]; then
+    BUNDLE_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)"
+    is_valid_sparkle_public_key "$BUNDLE_KEY" \
+        || die "built app does not contain a valid Context Sparkle public key; refusing to package a placeholder"
+fi
 
 # ---------------------------------------------------------------- the updater, before anything else
 #
@@ -152,20 +188,71 @@ codesign --verify --deep --strict "$APP_BUNDLE" \
 # ---------------------------------------------------------------- notarize
 
 NOTARY_PROFILE="${CFC_NOTARY_PROFILE:-}"
-if [[ -n "$NOTARY_PROFILE" && -n "$RELEASE_IDENTITY" ]]; then
-  log "notarizing — this uploads the app to Apple and usually takes a few minutes"
-  ZIP="$DIST_DIR/notarize.zip"
-  mkdir -p "$DIST_DIR"
-  /usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP"
-  xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait \
-    || die "notarization failed — run 'xcrun notarytool log' with the submission id for the reason"
-  # Stapling puts the ticket inside the bundle so a first launch works offline.
-  xcrun stapler staple "$APP_BUNDLE" || die "stapling failed"
-  rm -f "$ZIP"
-  log "notarized and stapled"
-elif [[ -n "$RELEASE_IDENTITY" ]]; then
-  warn "signed for distribution but NOT notarized (no CFC_NOTARY_PROFILE)."
-  warn "Gatekeeper will still refuse it on a machine that has not seen it before."
+ASC_PRIVATE_KEY="${CFC_ASC_PRIVATE_KEY:-}"
+ASC_KEY_ID="${CFC_ASC_KEY_ID:-}"
+ASC_ISSUER_ID="${CFC_ASC_ISSUER_ID:-}"
+
+has_notary_credentials() {
+    [[ -n "$NOTARY_PROFILE" ]] \
+        || [[ -n "$ASC_PRIVATE_KEY" && -n "$ASC_KEY_ID" && -n "$ASC_ISSUER_ID" ]]
+}
+
+notarize_path() {
+    local target="$1"
+    local payload="$target"
+    local key_path=""
+    local temporary_payload=0
+
+    # Apple accepts an app only inside a ZIP for notarization, while the DMG must be submitted as
+    # the disk image itself so the stapled ticket belongs to the downloadable DMG.
+    if [[ "$target" == *.app ]]; then
+        payload="${target}.notarize.zip"
+        /usr/bin/ditto -c -k --keepParent "$target" "$payload"
+        temporary_payload=1
+    fi
+    if [[ -n "$NOTARY_PROFILE" ]]; then
+        if ! xcrun notarytool submit "$payload" --keychain-profile "$NOTARY_PROFILE" --wait; then
+            [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
+            die "notarization failed for $(basename "$target")"
+        fi
+    else
+        key_path="$(mktemp /tmp/context-app-store-connect-key.XXXXXX)"
+        chmod 600 "$key_path"
+        printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+        if ! xcrun notarytool submit "$payload" \
+            --key "$key_path" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait; then
+            rm -f "$key_path"
+            [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
+            die "notarization failed for $(basename "$target")"
+        fi
+        rm -f "$key_path"
+    fi
+    [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
+}
+
+if [[ -n "$RELEASE_IDENTITY" ]]; then
+  if [[ "$RELEASE_MODE" -eq 1 ]]; then
+    has_notary_credentials \
+      || die "release packaging requires CFC_NOTARY_PROFILE or the CFC_ASC_* App Store Connect credentials"
+    log "notarizing the app — this uploads it to Apple and usually takes a few minutes"
+    notarize_path "$APP_BUNDLE"
+    # Stapling puts the ticket inside the bundle so a first launch works offline.
+    xcrun stapler staple "$APP_BUNDLE" || die "app stapling failed"
+    xcrun stapler validate "$APP_BUNDLE" || die "app staple validation failed"
+    log "app notarized and stapled"
+  elif has_notary_credentials; then
+    log "notarizing the app — this uploads it to Apple and usually takes a few minutes"
+    notarize_path "$APP_BUNDLE"
+    xcrun stapler staple "$APP_BUNDLE" || die "app stapling failed"
+    xcrun stapler validate "$APP_BUNDLE" || die "app staple validation failed"
+    log "app notarized and stapled"
+  else
+    warn "signed for distribution but NOT notarized (no Context notary credentials)."
+    warn "Gatekeeper will still refuse it on a machine that has not seen it before."
+  fi
 fi
 
 # ---------------------------------------------------------------- window geometry + background art
@@ -434,10 +521,15 @@ rm -rf "$STAGE"
 
 if [[ -n "$RELEASE_IDENTITY" ]]; then
   codesign --force --sign "$RELEASE_IDENTITY" "$DMG"
-  if [[ -n "$NOTARY_PROFILE" ]]; then
+  if [[ "$RELEASE_MODE" -eq 1 ]]; then
     # The image is notarized separately from the app inside it.
-    xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait \
-      && xcrun stapler staple "$DMG"
+    notarize_path "$DMG"
+    xcrun stapler staple "$DMG" || die "DMG stapling failed"
+    xcrun stapler validate "$DMG" || die "DMG staple validation failed"
+  elif has_notary_credentials; then
+    notarize_path "$DMG"
+    xcrun stapler staple "$DMG" || die "DMG stapling failed"
+    xcrun stapler validate "$DMG" || die "DMG staple validation failed"
   fi
 fi
 
@@ -445,9 +537,9 @@ fi
 #
 # The DMG is what a person downloads; the zip is what the *app* downloads. They are different
 # artifacts on purpose. A DMG has to be mounted and dragged, which Sparkle cannot do unattended, so
-# the appcast's `<enclosure>` points at a zip of the same bundle — the same one that was signed,
-# notarized and stapled above, so the copy the updater installs is byte-identical to the copy a
-# human would install by hand.
+# the release body's structured metadata points at a zip of the same bundle — the same one that was
+# signed, notarized and stapled above, so the copy the updater installs is byte-identical to the copy
+# a human would install by hand.
 #
 # `ditto -c -k --keepParent` and nothing else: it is the only zipper on macOS that preserves symlinks
 # and extended attributes, and Sparkle.framework is a symlink farm. A `zip -r` archive of this bundle
@@ -463,20 +555,14 @@ log "sparkle enclosure: $ZIP ($(du -h "$ZIP" | cut -f1))"
 echo
 log "built: $DMG ($(du -h "$DMG" | cut -f1))"
 echo
-# The remaining two release steps are a signature and an XML edit, and neither can be done from
-# here: `sign_update` needs the private EdDSA key, which lives only in the releasing maintainer's
-# login keychain and is deliberately absent from this repository. Printing the exact commands is the
-# closest this script can get to running them.
-log "next, to publish this as an update (full procedure: docs/releasing.md):"
-echo "  1. sign the enclosure with the private update key:"
-echo "       \$SPARKLE_BIN/sign_update \"$ZIP\""
-echo "  2. add an <item> to desktop/context-for-claude/appcast.xml with that edSignature,"
-echo "     the length it printed, and the release's download URL"
-echo "  3. upload $(basename "$ZIP") and $(basename "$DMG") to the GitHub release, then merge the appcast change"
+log "Sparkle ZIP ready: $(basename "$ZIP")"
+log "release-context.sh signs the ZIP and publishes both artifacts to the Context GitHub release"
 echo
 VERDICT="$(spctl --assess --type execute --verbose=2 "$APP_BUNDLE" 2>&1 || true)"
 if grep -q "accepted" <<<"$VERDICT"; then
   log "Gatekeeper: ACCEPTED — this will open on other Macs."
+elif [[ "$RELEASE_MODE" -eq 1 ]]; then
+  die "Gatekeeper rejected the release bundle; refusing to ship"
 else
   warn "Gatekeeper: REJECTED. This will NOT open on anyone else's Mac."
   warn "  $(head -2 <<<"$VERDICT" | tr '\n' ' ')"

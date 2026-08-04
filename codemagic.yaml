@@ -2978,3 +2978,85 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/desktop-smoke-result.json
+
+  # ============================================
+  # CONTEXT FOR CLAUDE RELEASE
+  # A separately-installable micro-app release. The package/release helpers own
+  # product identity and artifact naming; only Apple signing/notarization inputs
+  # are shared with the Omi Desktop workflow.
+  #
+  # Trigger: context-for-claude-v1.1.0
+  # Required group: context_for_claude_release
+  #   CONTEXT_SPARKLE_PUBLIC_KEY   — Context-only Sparkle Ed25519 public key
+  #   CONTEXT_SPARKLE_PRIVATE_KEY  — Context-only private ZIP-signing key
+  #   CONTEXT_GITHUB_TOKEN         — repo Contents-write token for release upload
+  # Reused appstore_credentials inputs:
+  #   MACOS_DEVELOPER_ID_P12, MACOS_DEVELOPER_ID_P12_PASSWORD,
+  #   APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
+  #   APP_STORE_CONNECT_ISSUER_ID
+  # ============================================
+  context-for-claude-release:
+    name: Release Context for Claude
+    instance_type: mac_mini_m4
+    max_build_duration: 120
+    environment:
+      groups:
+        - appstore_credentials
+        - context_for_claude_release
+      vars:
+        CONTEXT_RELEASE_REPO: "BasedHardware/omi"
+      xcode: 16.4
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "context-for-claude-v*"
+          include: true
+    working_directory: desktop/context-for-claude
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
+    scripts:
+      - name: Validate Context release tag
+        script: |
+          set -euo pipefail
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --dry-run
+
+      - name: Import Developer ID certificate
+        script: |
+          set -euo pipefail
+          keychain initialize
+          printf '%s' "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/context-developer-id.p12
+          KEYCHAIN_PATH="$(keychain get-default)"
+          security import /tmp/context-developer-id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f /tmp/context-developer-id.p12
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
+          [[ -n "$SIGN_IDENTITY" ]] || {
+            echo "ERROR: Developer ID Application certificate not found" >&2
+            exit 1
+          }
+          printf 'CFC_SIGN_IDENTITY=%s\n' "$SIGN_IDENTITY" >> "$CM_ENV"
+
+      - name: Resolve Context Swift packages
+        script: |
+          set -euo pipefail
+          xcrun swift package resolve
+
+      - name: Build, notarize, sign, and publish Context
+        script: |
+          set -euo pipefail
+          # These are existing Apple notarization inputs from appstore_credentials.
+          # They are mapped to Context-specific helper variables and never printed.
+          export CFC_ASC_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY"
+          export CFC_ASC_KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
+          export CFC_ASC_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID"
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --publish
+
+    artifacts:
+      - dist/*.dmg
+      - dist/*.zip

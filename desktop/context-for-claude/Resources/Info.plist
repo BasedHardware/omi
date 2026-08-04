@@ -55,12 +55,12 @@
 	     Sparkle auto-update.
 
 	     This app updates itself with Sparkle, the same mechanism `desktop/macos` uses, and shares
-	     none of that app's identity: its own feed, its own EdDSA key pair, its own bundle. Sparkle
+	     none of that app's identity: its generic platform feed is scoped by app id, its own EdDSA key pair, its own bundle. Sparkle
 	     draws the update sheet from *this* bundle — `CFBundleName`, `CFBundleIconFile`,
 	     `CFBundleShortVersionString` — and the release notes from the feed below, so a user is never
 	     shown Omi's name, Omi's icon, or Omi's changelog. Nothing here may ever be pointed at
-	     `api.omi.me/v2/desktop/appcast.xml`: that feed's enclosures are Omi Computer bundles, and
-	     Sparkle would replace this app with one.
+	     an Omi Desktop `api.omi.me/v2/desktop/appcast.xml`: that feed's enclosures are Omi Computer bundles, and
+	     Sparkle would replace this app with one. The `micro-apps/context-for-claude` identity path is load-bearing.
 
 	     `SUPublicEDKey` ships as a placeholder on purpose. The private half lives only in the
 	     releasing maintainer's login keychain and is never committed, so this repository cannot
@@ -70,17 +70,16 @@
 	     Generating the pair and filling this in is the first step of `docs/releasing.md`.
 	     ========================================================================================== -->
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/BasedHardware/omi/main/desktop/context-for-claude/appcast.xml</string>
+	<string>https://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>REPLACE_WITH_SUPublicEDKey_FROM_generate_keys</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
-	<!-- Deliberately false: an update is asked for, not applied behind the user's back. Replacing the
-	     bundle is the one operation that can cost this app its Screen Recording grant, and a user who
-	     watched themselves approve an update can connect a dead capture to a cause. A silent
-	     overnight swap cannot be connected to anything. -->
+	<!-- Download and verification may happen in the background. Installation and relaunch remain
+	     behind an explicit prompt because replacing the bundle is the one operation that can cost this
+	     app its Screen Recording grant. -->
 	<key>SUAutomaticallyUpdate</key>
-	<false/>
+	<true/>
 	<!-- Six hours. Omi checks every ten minutes because it publishes a candidate most days; this app
 	     publishes rarely, and a background request every ten minutes for a feed that changes monthly
 	     is chatter nobody asked for. -->

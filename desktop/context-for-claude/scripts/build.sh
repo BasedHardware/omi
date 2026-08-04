@@ -12,6 +12,11 @@
 #   scripts/build.sh --clean         wipe .build/ and build/ first
 #   scripts/build.sh --release       sign with release entitlements (no library-validation disable)
 #
+# Release-only environment:
+#   CONTEXT_SPARKLE_PUBLIC_KEY       Context's 44-character Ed25519 public key
+#   CONTEXT_VERSION                  version injected into the built Info.plist
+#   CONTEXT_BUILD_NUMBER             numeric Sparkle build number injected into the built Info.plist
+#
 # SAFETY: this script only ever touches Context for Claude. It never reads, writes, signs, launches, or kills
 # /Applications/Omi.app, /Applications/Omi Beta.app, or any com.omi.computer-macos* bundle, and
 # assert_not_production() below aborts the run if any path or identifier it is about to act on
@@ -43,6 +48,9 @@ DO_INSTALL=1
 DO_RUN=0
 DO_CLEAN=0
 DO_RELEASE=0
+CONTEXT_VERSION_VALUE="${CONTEXT_VERSION:-}"
+CONTEXT_BUILD_NUMBER_VALUE="${CONTEXT_BUILD_NUMBER:-}"
+SPARKLE_PUBLIC_KEY="${CONTEXT_SPARKLE_PUBLIC_KEY:-}"
 
 log()  { printf '\033[1m[context]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[context]\033[0m %s\n' "$*" >&2; }
@@ -96,6 +104,30 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+is_valid_sparkle_public_key() {
+    local key="$1"
+    [[ "$key" != "REPLACE_WITH_SUPublicEDKey_FROM_generate_keys" ]] \
+        && [[ "$key" =~ ^[A-Za-z0-9+/]{43}=$ ]]
+}
+
+if [[ -n "$CONTEXT_VERSION_VALUE" ]]; then
+    [[ "$CONTEXT_VERSION_VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+        || die "CONTEXT_VERSION must be a stable semantic version (x.y.z), got '$CONTEXT_VERSION_VALUE'"
+fi
+if [[ -n "$CONTEXT_BUILD_NUMBER_VALUE" ]]; then
+    [[ "$CONTEXT_BUILD_NUMBER_VALUE" =~ ^[1-9][0-9]*$ ]] \
+        || die "CONTEXT_BUILD_NUMBER must be a positive integer"
+fi
+
+if [[ "$DO_RELEASE" -eq 1 ]]; then
+    [[ "$SIGN_IDENTITY" == *"Developer ID Application:"* ]] \
+        || die "--release requires a Developer ID Application identity; local signing is for development only"
+    [[ -n "$SPARKLE_PUBLIC_KEY" ]] \
+        || die "--release requires CONTEXT_SPARKLE_PUBLIC_KEY; refusing to ship the placeholder Sparkle key"
+    is_valid_sparkle_public_key "$SPARKLE_PUBLIC_KEY" \
+        || die "CONTEXT_SPARKLE_PUBLIC_KEY is invalid; refusing to ship the placeholder Sparkle key"
+fi
 
 if [[ "$DO_RELEASE" -eq 1 ]] || [[ "$SIGN_IDENTITY" == *"Developer ID"* ]]; then
     ENTITLEMENTS="$ENTITLEMENTS_RELEASE"
@@ -222,6 +254,27 @@ if ! otool -l "$APP_BUNDLE/Contents/MacOS/$APP_NAME" | grep -q "@executable_path
 fi
 
 cp -f "$INFO_PLIST_TEMPLATE" "$APP_BUNDLE/Contents/Info.plist"
+
+# Release metadata belongs to the immutable built bundle, not the source template. This lets a tag
+# select the version in CI without making a release worker edit Info.plist in the shared checkout.
+if [[ -n "$CONTEXT_VERSION_VALUE" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $CONTEXT_VERSION_VALUE" \
+        "$APP_BUNDLE/Contents/Info.plist"
+fi
+if [[ -n "$CONTEXT_BUILD_NUMBER_VALUE" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $CONTEXT_BUILD_NUMBER_VALUE" \
+        "$APP_BUNDLE/Contents/Info.plist"
+fi
+if [[ -n "$SPARKLE_PUBLIC_KEY" ]]; then
+    is_valid_sparkle_public_key "$SPARKLE_PUBLIC_KEY" \
+        || die "CONTEXT_SPARKLE_PUBLIC_KEY is invalid; refusing to write it to the built Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_KEY" \
+        "$APP_BUNDLE/Contents/Info.plist"
+elif [[ "$DO_RELEASE" -eq 1 ]]; then
+    die "--release requires CONTEXT_SPARKLE_PUBLIC_KEY; refusing to write a placeholder key"
+else
+    warn "no CONTEXT_SPARKLE_PUBLIC_KEY set — local build retains the source placeholder and cannot auto-update"
+fi
 
 # Firebase Web API key for project `based-hardware`. This is a public client key by design — it
 # identifies the project to identitytoolkit/securetoken and grants nothing on its own; the user's
