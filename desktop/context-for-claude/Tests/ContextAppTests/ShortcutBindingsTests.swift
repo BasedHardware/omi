@@ -23,17 +23,17 @@ private final class FakeShortcutRegistry: ShortcutRegistry {
     private var bindings: [GlobalShortcuts.Action: GlobalShortcuts.Binding] = [:]
 
     func binding(for action: GlobalShortcuts.Action) -> GlobalShortcuts.Binding {
-        bindings[action] ?? .doubleTapDefault
+        bindings[action] ?? .gestureDefault
     }
 
     func setRecorded(_ recorded: GlobalShortcuts.Recorded?, for action: GlobalShortcuts.Action) {
-        bindings[action] = recorded.map(GlobalShortcuts.Binding.recorded) ?? .doubleTapDefault
+        bindings[action] = recorded.map(GlobalShortcuts.Binding.recorded) ?? .gestureDefault
         reapplies += 1
     }
 
     func readiness(for action: GlobalShortcuts.Action) -> GlobalShortcuts.Readiness {
         switch binding(for: action) {
-        case .doubleTapDefault:
+        case .gestureDefault:
             return .armed
         case .recorded(let recorded):
             guard refusedLabels.contains(recorded.label) else { return .armed }
@@ -45,7 +45,7 @@ private final class FakeShortcutRegistry: ShortcutRegistry {
         var out: [GlobalShortcuts.Action: ShortcutChord] = [:]
         for action in GlobalShortcuts.Action.allCases where readiness(for: action) == .armed {
             switch binding(for: action) {
-            case .doubleTapDefault: out[action] = action.defaultChord
+            case .gestureDefault: out[action] = action.defaultChord
             case .recorded(let recorded): out[action] = recorded.chord
             }
         }
@@ -104,7 +104,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
     // MARK: Nothing recorded
 
     /// The ✕ on each recorder is offered only when `binding(for:)` is non-nil. A store that reported
-    /// the double-tap default as a binding put a "clear" button on a virgin install, offering to
+    /// the gesture default as a binding put a "clear" button on a virgin install, offering to
     /// clear a slot that was already clear.
     func testAVirginInstallReportsNoRecordedBindingSoThereIsNothingToClear() {
         let bindings = provider()
@@ -148,18 +148,17 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(bindings.binding(for: .openTimeline), Self.optionCommandK)
     }
 
-    func testClearingReturnsToTheDoubleTapDefaultAndRearms() {
+    func testClearingReturnsToTheGestureDefaultAndRearms() {
         let bindings = provider()
         XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
 
         bindings.clear(.openTimeline)
 
-        XCTAssertEqual(registry.binding(for: .openTimeline), .doubleTapDefault)
+        XCTAssertEqual(registry.binding(for: .openTimeline), .gestureDefault)
         XCTAssertNil(bindings.binding(for: .openTimeline), "cleared is not 'bound to the default'")
-        // The clear is a re-arm too: it is what puts the double-tap monitor back.
+        // The clear is a re-arm too: it is what puts the `flagsChanged` monitor back.
         XCTAssertEqual(registry.reapplies, 2)
-        XCTAssertEqual(
-            registry.armedChords()[.openTimeline], ShortcutChord.doubleTap(.command, alsoHeld: []))
+        XCTAssertEqual(registry.armedChords()[.openTimeline], ShortcutChord.bothCommandKeys)
     }
 
     // MARK: Refusal
@@ -176,7 +175,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertTrue(reason.contains("already uses"), reason)
 
         // Rolled back, so the user is left with a shortcut that works rather than a stored dead one.
-        XCTAssertEqual(registry.binding(for: .openTimeline), .doubleTapDefault)
+        XCTAssertEqual(registry.binding(for: .openTimeline), .gestureDefault)
         XCTAssertNil(bindings.binding(for: .openTimeline))
         XCTAssertEqual(registry.readiness(for: .openTimeline), .armed)
     }
@@ -219,6 +218,25 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(registry.reapplies, 0, "a refused chord must never be stored or armed")
     }
 
+    /// The app's own gestures are not recordable, and the guard that says so had no test.
+    ///
+    /// The recorder cannot send one today — it arms on `keyDown`, and pressing two Command keys
+    /// produces none — but the seam accepts a modifier-only chord, and a future recorder watching
+    /// `flagsChanged` would produce exactly this. `RegisterEventHotKey` has nothing to take from a
+    /// chord with no key, so accepting it would store a shortcut that shows in the row and never
+    /// fires. Asking for the gesture is what *clearing* the slot already does.
+    func testTheAppsOwnGesturesCannotBeRecorded() {
+        let bindings = provider()
+        for gesture in [SettingsShortcutChord.Gesture.bothCommandKeys, .doubleTap] {
+            let chord = SettingsShortcutChord(modifierFlags: .command, gesture: gesture)
+            guard case .rejected = bindings.record(chord, for: .openTimeline) else {
+                return XCTFail("\(chord.displayString) has no key for a hot key to take")
+            }
+        }
+        XCTAssertEqual(registry.reapplies, 0, "a refused chord must never be stored or armed")
+        XCTAssertNil(bindings.binding(for: .openTimeline))
+    }
+
     func testTheTwoSlotsCannotShareOneChord() {
         let bindings = provider()
         XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
@@ -249,7 +267,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
     /// The scanner had no caller anywhere in the app, so the Conflicts section could never render.
     /// This drives the real scan over real fixture files, exactly as `ShortcutConflictsTests` does,
     /// and asserts the row the pane would draw from it.
-    func testACodexKeymapClaimingDoubleCommandBecomesARowWithItsEvidence() throws {
+    func testACodexKeymapClaimingABareCommandBecomesARowWithItsEvidence() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .resolvingSymlinksInPath()
             .appendingPathComponent("context-live-conflicts-\(UUID().uuidString)", isDirectory: true)
@@ -258,7 +276,11 @@ final class LiveShortcutBindingsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let keymap = root.appendingPathComponent("keybindings.json")
-        try #"[{"command":"hotkeyWindow","key":"doubleCommand"}]"#
+        // A bare left ⌘, which is what a tool has to bind to be in the way of this app's timeline
+        // gesture: it fires on the first of the two keys. A `doubleCommand` binding is not — both
+        // keys going down puts the `.command` bit down once, so Codex's double-tap monitor never
+        // sees it, and the scan says so rather than drawing a row for a collision that cannot happen.
+        try #"[{"command":"hotkeyWindow","key":"leftCommand"}]"#
             .write(to: keymap, atomically: true, encoding: .utf8)
         let locations = ShortcutConflicts.Locations(
             claudeApp: root.appendingPathComponent("Claude.app").path,
@@ -276,11 +298,12 @@ final class LiveShortcutBindingsTests: XCTestCase {
         })
 
         let rows = bindings.conflicts()
-        XCTAssertEqual(rows.count, 1)
-        let row = try XCTUnwrap(rows.first)
-        XCTAssertEqual(row.action, .openTimeline)
+        XCTAssertEqual(rows.count, 2, "a bare ⌘ starts both of this app's gestures")
+        let row = try XCTUnwrap(rows.first { $0.action == .openTimeline })
         XCTAssertEqual(row.owner, "Codex")
-        XCTAssertEqual(row.title, "Codex also uses ⌘⌘")
+        // Spelled by `SettingsShortcutChord` here and by `ShortcutChord` in the scan: one gesture,
+        // one spelling, or the row describes a shortcut the user does not recognise as theirs.
+        XCTAssertEqual(row.title, "Codex also uses ⌘ + ⌘")
         // The claim is inspectable: the row names the file it was read out of.
         XCTAssertTrue(row.subtitle.contains("keybindings.json"), row.subtitle)
         // Never "Switch Codex to ⌥⌥" — this app does not rewrite another product's configuration.
@@ -291,9 +314,9 @@ final class LiveShortcutBindingsTests: XCTestCase {
     /// so no row survives the shortcut it described. A provider that scanned once and cached would
     /// leave the warning on screen after the user did exactly what it asked.
     func testRecordingOffTheContestedChordRemovesTheRow() {
-        // Stands in for a tool that owns ⌘⌘ and nothing else, without touching the filesystem.
+        // Stands in for a tool that owns ⌘ + ⌘ and nothing else, without touching the filesystem.
         let bindings = provider(scan: { ours in
-            let contested = ShortcutChord.doubleTap(.command, alsoHeld: [])
+            let contested = ShortcutChord.bothCommandKeys
             return ShortcutConflicts.Report(
                 findings: [:],
                 conflicts: ours.filter { $0.value == contested }.map { action, chord in
@@ -307,7 +330,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
                 })
         })
 
-        XCTAssertEqual(bindings.conflicts().count, 1, "⌘⌘ is contested while it is the binding")
+        XCTAssertEqual(bindings.conflicts().count, 1, "⌘ + ⌘ is contested while it is the binding")
         // A conflict with nowhere to reveal offers no button rather than a dead one.
         XCTAssertNil(bindings.conflicts().first?.remedyTitle)
 
@@ -430,8 +453,8 @@ final class ShortcutKeyLabelTests: XCTestCase {
     }
 
     /// The recorder and the menu bar describe the same keystroke, so they have to spell it the same
-    /// way. A recorded chord prints in macOS's order; only the double-tap defaults lead with the
-    /// modifier that is tapped, because `⌘⌘⇧` is a gesture and not a modifier list.
+    /// way. A recorded chord prints in macOS's order; the gesture defaults do not, because `⌘⌘⇧` and
+    /// `⌘ + ⌘` are gestures and not modifier lists.
     func testARecordedChordPrintsTheWayTheRestOfMacOSPrintsIt() {
         let controlCommandSpace = SettingsShortcutChord(keyCode: 49, modifierFlags: [.command, .control])
         XCTAssertEqual(controlCommandSpace.displayString, "⌃⌘Space")
@@ -440,5 +463,6 @@ final class ShortcutKeyLabelTests: XCTestCase {
             ShortcutChord.key(label: "Space", modifiers: [.command, .control]).display,
             "Settings and the shortcut layer must not spell one shortcut two ways")
         XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
+        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.displayString, "⌘ + ⌘")
     }
 }

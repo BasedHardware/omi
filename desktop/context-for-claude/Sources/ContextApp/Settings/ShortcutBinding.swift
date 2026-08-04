@@ -5,37 +5,59 @@ import Foundation
 
 /// One recorded shortcut, in the only shape a recorder can actually produce.
 ///
-/// `keyCode` is optional because the two defaults this app ships — `⌘⌘` and `⌘⌘⇧` — have no key at
-/// all: they are a *modifier tapped twice*, which is why `tapCount` exists as a field rather than
-/// being implied. A model that could only express "modifiers + key" could not represent the app's own
-/// defaults, so it would have been wrong before the first row was drawn.
+/// `keyCode` is optional because the two defaults this app ships — `⌘ + ⌘` and `⌘⌘⇧` — have no key
+/// at all: they are gestures made out of modifiers, which is why `gesture` exists as a field rather
+/// than being implied. A model that could only express "modifiers + key" could not represent the
+/// app's own defaults, so it would have been wrong before the first row was drawn.
 struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
+    /// What the user's hands do. One field rather than a tap count plus a flag, because the three
+    /// are alternatives and no pair of them is a thing: a chord cannot be tapped twice *and* be the
+    /// two Command keys, and a state that can spell that is a state something has to check.
+    enum Gesture: String, Equatable, Hashable, Codable, Sendable {
+        /// Hold the modifiers, strike the key. Everything a recorder can produce.
+        case press
+        /// Tap the primary modifier twice, with any others held across both halves.
+        case doubleTap
+        /// Press the two physical Command keys together. Not a modifier set — see
+        /// `ShortcutChord.bothCommandKeys` for why one cannot describe it.
+        case bothCommandKeys
+    }
+
     /// Virtual key code, or nil for a modifier-only chord.
     var keyCode: UInt16?
     /// `NSEvent.ModifierFlags.rawValue`, already masked to `deviceIndependentFlagsMask`.
     var modifierFlags: UInt
-    /// 1 for an ordinary chord, 2 for a double-tap of the modifier set.
-    var tapCount: Int
+    var gesture: Gesture
 
-    init(keyCode: UInt16? = nil, modifierFlags: NSEvent.ModifierFlags, tapCount: Int = 1) {
+    init(keyCode: UInt16? = nil, modifierFlags: NSEvent.ModifierFlags, gesture: Gesture = .press) {
         self.keyCode = keyCode
         self.modifierFlags = modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
-        self.tapCount = max(1, tapCount)
+        self.gesture = gesture
     }
 
     var modifiers: NSEvent.ModifierFlags {
         NSEvent.ModifierFlags(rawValue: modifierFlags).intersection(.deviceIndependentFlagsMask)
     }
 
-    /// `⌘⌘`, `⌘⌘⇧`, `⌥⌥`, `⌘⇧K`. In the order macOS prints modifiers: ⌃⌥⇧⌘.
+    /// `⌘ + ⌘`, `⌘⌘⇧`, `⌥⌥`, `⌘⇧K`. In the order macOS prints modifiers: ⌃⌥⇧⌘.
     ///
     /// A double-tap repeats the *primary* modifier and then appends the rest, because `⌘⌘⇧` is what
-    /// the reference shows and `⌘⇧⌘⇧` is not a thing anyone writes.
+    /// the reference shows and `⌘⇧⌘⇧` is not a thing anyone writes. The two Command keys are the one
+    /// gesture this cannot build out of the modifier set it holds, so it takes the spelling from the
+    /// shortcut layer instead — see below.
     var displayString: String {
         let flags = modifiers
         let key = keyCode.flatMap(Self.keyName) ?? ""
 
-        guard tapCount > 1 else {
+        switch gesture {
+        case .bothCommandKeys:
+            // Spelled once, in `ShortcutChord`, and read from there: the recorder, the menu bar and
+            // the conflict row all describe this one gesture, and `⌘ + ⌘` on one surface next to
+            // `⌘⌘` on another would read as two different shortcuts. `⌘⌘` in particular is *taken* —
+            // it is the search default's first two glyphs.
+            return ShortcutChord.bothCommandKeysDisplay
+
+        case .press:
             // An ordinary chord prints the way macOS prints one, which is also what
             // `ShortcutChord.display` gives the menu bar and the conflict scanner for the same
             // shortcut: two spellings of one keystroke on two surfaces is a bug the user reads as
@@ -43,20 +65,30 @@ struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
             var out = ""
             for (flag, symbol) in Self.systemOrder where flags.contains(flag) { out += symbol }
             return out + key
-        }
 
-        var primary = ""
-        var rest = ""
-        // Primary is the outermost modifier present, which is the one a user taps.
-        for (flag, symbol) in Self.tapOrder where flags.contains(flag) {
-            if primary.isEmpty {
-                primary = symbol
-            } else {
-                rest += symbol
+        case .doubleTap:
+            var primary = ""
+            var rest = ""
+            // Primary is the outermost modifier present, which is the one a user taps.
+            for (flag, symbol) in Self.tapOrder where flags.contains(flag) {
+                if primary.isEmpty {
+                    primary = symbol
+                } else {
+                    rest += symbol
+                }
             }
+            guard !primary.isEmpty else { return key }
+            return primary + primary + rest + key
         }
-        guard !primary.isEmpty else { return key }
-        return String(repeating: primary, count: tapCount) + rest + key
+    }
+
+    /// The chord said out loud, for an accessibility label or for copy that has to teach the
+    /// gesture. Delegates to `ShortcutChord`, so the words and the glyphs are decided in one place.
+    var spokenDescription: String {
+        switch gesture {
+        case .bothCommandKeys: return ShortcutChord.bothCommandKeysPhrase
+        default: return displayString
+        }
     }
 
     /// Apple's order: ⌃⌥⇧⌘, which is the order every macOS menu prints them in.
@@ -116,10 +148,15 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// What the app falls back to when the slot is cleared.
+    ///
+    /// The same two chords `GlobalShortcuts.Action.defaultChord` names, in this pane's vocabulary —
+    /// the timeline is the two Command keys pressed together, search is still a double tap of ⌘ with
+    /// Shift held. Both are asserted against each other in the tests, because a recorder showing a
+    /// gesture the shortcut layer does not listen for is worse than showing nothing.
     var defaultChord: SettingsShortcutChord {
         switch self {
-        case .openTimeline: SettingsShortcutChord(modifierFlags: .command, tapCount: 2)
-        case .openSearch: SettingsShortcutChord(modifierFlags: [.command, .shift], tapCount: 2)
+        case .openTimeline: SettingsShortcutChord(modifierFlags: .command, gesture: .bothCommandKeys)
+        case .openSearch: SettingsShortcutChord(modifierFlags: [.command, .shift], gesture: .doubleTap)
         }
     }
 
@@ -169,7 +206,7 @@ struct SettingsShortcutConflict: Equatable, Identifiable, Sendable {
 
     var id: String { "\(action.rawValue)/\(owner)" }
 
-    /// Reference copy shape: `Codex also uses ⌘⌘` / `Context for Claude and Codex both use ⌘⌘.`
+    /// Reference copy shape: `Codex also uses ⌘ + ⌘` / `Context for Claude and Codex both use ⌘ + ⌘.`
     var title: String { "\(owner) also uses \(chord.displayString)" }
 
     var subtitle: String {
@@ -194,7 +231,7 @@ enum ShortcutRecordResult: Equatable, Sendable {
 /// things about the shape are load-bearing:
 ///
 /// - **`binding(for:)` returns an optional.** Nil is *cleared*, which the reference copy makes a real
-///   state ("Clear it to use ⌘⌘") rather than an error — a cleared slot falls back to
+///   state ("Clear it to use ⌘ + ⌘") rather than an error — a cleared slot falls back to
 ///   `ShortcutAction.defaultChord`, and the recorder shows that chord greyed.
 /// - **`record` can refuse.** A recorder that always succeeds would let the user bind ⌘Q.
 /// - **Conflicts are queried, never stored.** `I3` requires the row to appear *only* on a real
@@ -221,7 +258,7 @@ protocol ShortcutBindingProvider: AnyObject {
 /// real one.
 ///
 /// It registers **nothing** with the system, and says so: a stub that pretended to install a global
-/// hotkey would make the pane look finished while `⌘⌘` did nothing, which is the failure mode `J7`
+/// hotkey would make the pane look finished while `⌘ + ⌘` did nothing, which is the failure mode `J7`
 /// names. The real provider is `LiveShortcutBindings`, assigned to `SettingsWindow.shortcutProvider`
 /// in `ContextApp` beside `GlobalShortcuts.shared.start(…)` — this one keeps real state so the
 /// recorder, the cleared state and the rejection path stay exercisable without a hot key.

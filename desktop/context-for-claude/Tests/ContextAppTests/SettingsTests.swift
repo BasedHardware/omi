@@ -865,11 +865,11 @@ final class SettingsTests: XCTestCase {
 
     /// The two defaults the reference names, printed the way it prints them.
     func testDefaultChordsPrintAsTheReferenceWritesThem() {
-        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.displayString, "⌘⌘")
+        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.displayString, "⌘ + ⌘")
         XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
         XCTAssertEqual(
             ShortcutAction.openTimeline.subtitle,
-            "Record a keyboard shortcut. Clear it to use ⌘⌘.")
+            "Record a keyboard shortcut. Clear it to use ⌘ + ⌘.")
         XCTAssertEqual(
             ShortcutAction.openSearch.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘⌘⇧.")
@@ -885,7 +885,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(provider.binding(for: .openTimeline), chord)
 
         // Cleared is a real state, not an error: the slot falls back to the default chord, which is
-        // exactly what "Clear it to use ⌘⌘" describes.
+        // exactly what "Clear it to use ⌘ + ⌘" describes.
         provider.clear(.openTimeline)
         XCTAssertNil(provider.binding(for: .openTimeline))
 
@@ -915,8 +915,8 @@ final class SettingsTests: XCTestCase {
         let provider = InMemoryShortcutBindings(conflicts: [conflict])
 
         XCTAssertEqual(provider.conflicts(), [conflict])
-        XCTAssertEqual(conflict.title, "Codex also uses ⌘⌘")
-        XCTAssertEqual(conflict.subtitle, "Context for Claude and Codex both use ⌘⌘.")
+        XCTAssertEqual(conflict.title, "Codex also uses ⌘ + ⌘")
+        XCTAssertEqual(conflict.subtitle, "Context for Claude and Codex both use ⌘ + ⌘.")
 
         provider.resolve(conflict)
         XCTAssertTrue(provider.conflicts().isEmpty, "the one-click switch clears the row")

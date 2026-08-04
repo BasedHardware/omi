@@ -62,7 +62,8 @@ enum ShortcutConflicts {
         /// Set when the binding is a *single* bare modifier press.
         ///
         /// This is a real collision that comparing chords would miss: a tool listening for one bare ⌘
-        /// fires on the *first* half of our ⌘⌘, so the user gets both behaviours every time.
+        /// fires on the first ⌘ of either of our gestures — the first half of a ⌘⌘, and the first of
+        /// the two keys in a ⌘ + ⌘ — so the user gets both behaviours every time.
         let bareModifier: ShortcutModifiers?
 
         init(display: String, chord: ShortcutChord? = nil, bareModifier: ShortcutModifiers? = nil) {
@@ -73,8 +74,21 @@ enum ShortcutConflicts {
 
         func collides(with ours: ShortcutChord) -> Bool {
             if let chord, chord == ours { return true }
-            if let bareModifier, case .doubleTap(let tapped, _) = ours, tapped == bareModifier { return true }
-            return false
+            guard let bareModifier else { return false }
+            switch ours {
+            case .doubleTap(let tapped, _):
+                return tapped == bareModifier
+            case .bothCommandKeys:
+                // Whichever of the two the user's hand reaches first is a bare Command press, so a
+                // tool watching for one fires halfway through the gesture. Note the *other*
+                // direction is not a collision and is not listed as one: a tool watching for two
+                // taps of ⌘ never sees them, because both keys going down puts the `.command` bit
+                // down once. Moving the timeline off ⌘⌘ genuinely took it out of Codex's way.
+                return bareModifier == .command
+            case .key:
+                // A bare modifier is not a key equivalent and cannot take one.
+                return false
+            }
         }
     }
 
@@ -354,7 +368,10 @@ enum ShortcutConflicts {
     /// Codex's bare-modifier vocabulary, mapped to what it means for us.
     ///
     /// The `left…+right…` spellings are Codex's own aliases for the double-tap monitors, not two keys
-    /// pressed together — which is why they land on `.doubleTap` and not on a two-modifier chord.
+    /// pressed together — which is why they land on `.doubleTap` and not on `.bothCommandKeys`, even
+    /// now that this app has a chord for exactly that gesture and `leftCommand+rightCommand` reads
+    /// like a description of it. The alias table in the installed build is the evidence, and being
+    /// wrong here would put a row in front of a user for a collision that cannot happen.
     private static let bareModifierNames: [String: ForeignBinding] = {
         var out: [String: ForeignBinding] = [:]
         let doubles: [(names: [String], modifier: ShortcutModifiers, display: String)] = [

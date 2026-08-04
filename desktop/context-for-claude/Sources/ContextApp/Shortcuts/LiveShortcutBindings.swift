@@ -27,7 +27,7 @@ extension GlobalShortcuts: ShortcutRegistry {}
 /// Settings' two recorders, wired to the hot keys that actually fire.
 ///
 /// The General pane talks to `ShortcutBindingProvider`; the system-wide shortcuts live in
-/// `GlobalShortcuts`; the "Codex also uses ⌘⌘" row comes from `ShortcutConflicts`. This is the only
+/// `GlobalShortcuts`; the "Codex also uses ⌘ + ⌘" row comes from `ShortcutConflicts`. This is the only
 /// thing joining the three, and it is deliberately thin — no state of its own beyond the remedies it
 /// has to remember between rendering a row and the user pressing its button. Everything the pane
 /// asks about is read back out of the store on demand, so a shortcut changed anywhere (another
@@ -39,7 +39,7 @@ extension GlobalShortcuts: ShortcutRegistry {}
 ///   and then re-registers, so the new shortcut works immediately. A provider that only wrote to
 ///   `UserDefaults` would look identical in Settings and do nothing until the next launch.
 /// - **`binding(for:)` is nil unless the user recorded something.** The pane reads nil as *cleared*
-///   and hides the ✕ — so a virgin install, which is on the double-tap default and has nothing to
+///   and hides the ✕ — so a virgin install, which is on the gesture default and has nothing to
 ///   clear, must not report that default as a recorded binding.
 @MainActor
 final class LiveShortcutBindings: ShortcutBindingProvider {
@@ -144,7 +144,7 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
     // MARK: Bindings
 
     func binding(for action: ShortcutAction) -> SettingsShortcutChord? {
-        // `.doubleTapDefault` is *not* a recorded chord. Returning the default here would light the
+        // `.gestureDefault` is *not* a recorded chord. Returning the default here would light the
         // "✕ clear" button on a machine where nothing was ever recorded, offering to clear a slot
         // that is already clear.
         guard case .recorded(let recorded) = registry.binding(for: registryAction(action)) else {
@@ -160,7 +160,8 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         let modifiers = ShortcutModifiers(chord.modifiers)
         guard let keyCode = chord.keyCode else {
             // Only reachable if some future recorder sends a modifier-only chord. `RegisterEventHotKey`
-            // has nothing to take from one, and the double-tap defaults are not user-recordable.
+            // has nothing to take from one, and the gesture defaults (`⌘ + ⌘`, `⌘⌘⇧`) are not
+            // user-recordable: asking for one is what *clearing* the slot does.
             return .rejected("Hold a modifier and press a key.")
         }
         let normalized = SettingsShortcutChord(keyCode: keyCode, modifierFlags: modifiers.appKitFlags)
@@ -191,7 +192,7 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         if case .rejected(let reason) = registry.readiness(for: target) {
             // macOS refused it — almost always because another app already holds the chord. Keeping
             // the refused binding would leave the user with a shortcut that is stored, shown in the
-            // recorder, and dead: the hot key is not registered and the double-tap monitor no longer
+            // recorder, and dead: the hot key is not registered and the gesture monitor no longer
             // answers for this action either. So put back what was working and say what happened;
             // the pane prints the reason under the row.
             registry.setRecorded(previous, for: target)
@@ -203,7 +204,7 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
     }
 
     func clear(_ action: ShortcutAction) {
-        // Back to the double-tap default, and re-armed on the way — `setRecorded(nil,…)` is what puts
+        // Back to the gesture default, and re-armed on the way — `setRecorded(nil,…)` is what puts
         // the `flagsChanged` monitor back, which is the half a plain "delete the key" would miss.
         registry.setRecorded(nil, for: registryAction(action))
         notify()
@@ -212,7 +213,7 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
     // MARK: Conflicts
 
     func conflicts() -> [SettingsShortcutConflict] {
-        // Only the chords that are actually armed. A binding macOS refused, or a double-tap default
+        // Only the chords that are actually armed. A binding macOS refused, or a gesture default
         // with no Accessibility grant, is not a chord anyone else can be in the way of.
         let armed = registry.armedChords()
         let report: ShortcutConflicts.Report
