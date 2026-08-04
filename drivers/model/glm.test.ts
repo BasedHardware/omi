@@ -69,6 +69,7 @@ test("GLM placement parsers reject malformed model output instead of repairing i
   await expect(modelFor(fixtureProvider('{"mentions":[{"claim":"k1","slot_id":"subject","span":{"start":0,"end":5},"excerpt":"k1x1","antecedent_handle":null}]}')).invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).rejects.toThrow("missing required field: surface");
   await expect(modelFor(fixtureProvider('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).rejects.toThrow("binds non-candidate entity");
   await expect(modelFor(fixtureProvider('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).rejects.toThrow("was not JSON");
+  await expect(modelFor(fixtureProvider('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "GLM boundary sufficiency abstention" });
 });
 
 test("GLM placement abstentions parse without becoming placement approvals, and unknown strategies still reject", async () => {

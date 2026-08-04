@@ -103,8 +103,9 @@ const promotionTransition = async (input: {
             trigger = "boundary_reconsideration";
           }
         }
-      } catch {
+      } catch (error) {
         // Isolate flaky model calls: leave undecided for the next cycle.
+        console.error(`dream promotion failed for ${item.id}: ${error instanceof Error ? error.message : error}`);
         continue;
       }
     }

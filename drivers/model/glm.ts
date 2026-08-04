@@ -221,12 +221,13 @@ const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
 const parseBoundaryResponse = (content: string): UnitBoundaryJudgment => {
   const root = parseJsonObject(content, "STM/LTM unit-boundary");
   assertKeys(root, ["decision"], ["risk_markers"], "STM/LTM unit-boundary");
-  if (root.risk_markers !== undefined && (!Array.isArray(root.risk_markers) || root.risk_markers.some((marker) => typeof marker !== "string" || !marker.trim()))) throw new Error("GLM STM/LTM unit-boundary risk_markers must be an array of non-empty strings");
-  // The markers were parsed and then thrown away, so the one diagnostic this
-  // edge produces never reached the abstention artifact that records why.
-  const risk_markers = Array.isArray(root.risk_markers) ? root.risk_markers as readonly string[] : undefined;
-  if (root.decision === "accept_ltm") return { decision: "accept_ltm", ...(risk_markers ? { risk_markers } : {}) };
-  if (root.decision === "abstain") return { decision: "abstain", reason: risk_markers?.join("; ") || "GLM boundary sufficiency abstention", ...(risk_markers ? { risk_markers } : {}) };
+  // Coerce junk markers rather than aborting the dream item: empty strings and
+  // non-arrays showed up in live GLM runs and previously stranded owner claims.
+  const risk_markers = Array.isArray(root.risk_markers)
+    ? root.risk_markers.filter((marker): marker is string => typeof marker === "string" && !!marker.trim())
+    : undefined;
+  if (root.decision === "accept_ltm") return { decision: "accept_ltm", ...(risk_markers?.length ? { risk_markers } : {}) };
+  if (root.decision === "abstain") return { decision: "abstain", reason: risk_markers?.join("; ") || "GLM boundary sufficiency abstention", ...(risk_markers?.length ? { risk_markers } : {}) };
   throw new Error('GLM STM/LTM unit-boundary decision must be "accept_ltm" or "abstain"');
 };
 
