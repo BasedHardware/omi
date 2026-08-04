@@ -33,9 +33,16 @@ openssl x509 -req -in "$OUT/server.csr" -CA "$OUT/ca.crt" -CAkey "$OUT/ca.key" -
   -out "$OUT/server.crt" -days 825 -sha256 -extfile "$OUT/san.ext" 2>/dev/null
 
 # Combined bundle (system roots + our CA) for a backend that fetches JWKS over https (optional path).
-if command -v update-ca-certificates >/dev/null 2>&1 || [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-  cat /etc/ssl/certs/ca-certificates.crt "$OUT/ca.crt" > "$OUT/combined.pem" 2>/dev/null || cp "$OUT/ca.crt" "$OUT/combined.pem"
+# Locate the actual system CA bundle across distro layouts (Debian/Ubuntu, RHEL/Fedora, Alpine) — a
+# missing file must not silently drop the system roots.
+SYS_CA=""
+for f in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+  [ -f "$f" ] && { SYS_CA="$f"; break; }
+done
+if [ -n "$SYS_CA" ]; then
+  cat "$SYS_CA" "$OUT/ca.crt" > "$OUT/combined.pem"
 else
+  echo "  WARNING: no system CA bundle found; combined.pem holds only the dev CA (https JWKS to public issuers may fail)." >&2
   cp "$OUT/ca.crt" "$OUT/combined.pem"
 fi
 
