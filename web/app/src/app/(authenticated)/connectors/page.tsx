@@ -7,7 +7,7 @@ import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function AppsPage() {
   useEffect(() => {
-    MixpanelManager.pageView('Apps');
+    MixpanelManager.pageView('Connectors');
   }, []);
 
   return (
@@ -17,4 +17,4 @@ export default function AppsPage() {
   );
 }
 
-registerMoonshineRoute('/my-apps', AppsPage, 'authenticated');
+registerMoonshineRoute('/connectors', AppsPage, 'authenticated');

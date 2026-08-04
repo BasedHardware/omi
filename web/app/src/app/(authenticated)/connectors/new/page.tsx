@@ -11,4 +11,4 @@ export default function NewAppPage() {
   );
 }
 
-registerMoonshineRoute('/my-apps/new', NewAppPage, 'authenticated');
+registerMoonshineRoute('/connectors/new', NewAppPage, 'authenticated');

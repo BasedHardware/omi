@@ -29,10 +29,10 @@ export function AppGridSection({
         <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
         {showViewAll && capabilityId && (
           <Link
-            href={`/my-apps?capability=${capabilityId}`}
+            href={`/connectors?capability=${capabilityId}`}
             className={cn(
-              'flex items-center gap-1 text-sm text-purple-primary',
-              'hover:underline'
+              'flex items-center gap-1 text-sm text-text-primary',
+              'hover:underline',
             )}
           >
             View all ({totalCount})
@@ -42,7 +42,7 @@ export function AppGridSection({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {apps.map(app => (
+        {apps.map((app) => (
           <AppCard key={app.id} app={app} onUpdate={onUpdate} />
         ))}
       </div>
