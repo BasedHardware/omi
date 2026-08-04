@@ -470,6 +470,10 @@ private struct ChatFirstTaskRow: View {
             .focused($titleIsFocused)
             .onSubmit { rename() }
             .onExitCommand { cancelRename() }
+            .onEscapeKey(priority: .editing) {
+              cancelRename()
+              return true
+            }
             .accessibilityLabel("Rename \(task.description)")
             .accessibilityIdentifier("chat-first-tasks-rename-\(task.id)")
             .onAppear {
