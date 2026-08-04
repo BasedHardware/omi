@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import pytest
+
 from models.memory_apply import MemoryControlState, memory_content_hash
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
 from scripts.enrich_historical_memory_graph import _is_replan_candidate
+from scripts.enrich_historical_memory_graph import run_enrichment
 
 
 class _Response:
@@ -128,3 +131,19 @@ def test_replan_candidates_exclude_current_planner_version():
 
     assert _is_replan_candidate(current) is False
     assert _is_replan_candidate(legacy) is True
+
+
+def test_historical_runner_allows_a_bounded_scan_for_unenriched_candidates():
+    """A recent graph-ready head must not hide older non-graph candidates."""
+    with pytest.raises(AttributeError, match="document"):
+        run_enrichment(
+            uid="u1",
+            firestore_project="test",
+            limit=1,
+            scan_limit=2,
+            apply=False,
+            confirm_uid=None,
+            structured_only=False,
+            db_client=object(),
+            llm=object(),
+        )

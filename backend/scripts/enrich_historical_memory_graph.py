@@ -48,7 +48,7 @@ def _arguments() -> argparse.Namespace:
         "--scan-limit",
         type=int,
         help=(
-            f"Candidate rows to read in structured-only mode (1-{MAX_STRUCTURED_SCAN_SIZE}); "
+            f"Candidate rows to read before filtering (1-{MAX_STRUCTURED_SCAN_SIZE}); "
             "does not increase the apply bound"
         ),
     )
@@ -163,8 +163,10 @@ def run_enrichment(
     candidate_limit = scan_limit if scan_limit is not None else limit
     if candidate_limit < 1 or candidate_limit > MAX_STRUCTURED_SCAN_SIZE:
         raise ValueError(f"scan_limit must be between 1 and {MAX_STRUCTURED_SCAN_SIZE}")
-    if candidate_limit != limit and not (structured_only or replan_existing):
-        raise ValueError("scan_limit greater than limit requires structured_only or replan_existing mode")
+    # The serving query orders by recent mutation time. A successful graph
+    # enrichment moves a row to the head of that ordering, so every backfill
+    # mode needs a bounded scan to look past already graph-ready rows without
+    # raising the per-execution write cap.
     if apply and confirm_uid != uid:
         raise ValueError("apply requires confirm_uid to exactly match uid")
 
