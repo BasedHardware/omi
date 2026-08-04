@@ -299,7 +299,7 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
         assert 'verify_sync_ledger_fence_transition.py' in workflow
         assert '--desired-mode="$SYNC_LEDGER_FENCE_MODE"' in workflow
         assert '--allow-tagged-no-percent-targets' in workflow
-        assert workflow.count("SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}") >= 2
+        assert workflow.count('SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}') >= 2
 
     assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in workflow_only
     assert "format('--tag={0}', inputs.transcription_candidate_tag)" in manual
