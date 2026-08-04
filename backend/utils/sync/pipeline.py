@@ -1129,6 +1129,12 @@ def process_segment(
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
 
+        # Clamp mild client clock skew before closest-conversation lookup so
+        # multi-segment offline WALs merge instead of splitting (#4770).
+        # Looking up with raw future timestamps misses the conversation created
+        # from an earlier segment that was already normalized.
+        timestamp, segment_end_timestamp = normalize_capture_window(timestamp, segment_end_timestamp)
+
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
@@ -1142,9 +1148,6 @@ def process_segment(
             closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
         if not closest_memory:
-            # Clamp mild client clock skew so offline conversations never appear
-            # in the future relative to server time (#4770).
-            timestamp, segment_end_timestamp = normalize_capture_window(timestamp, segment_end_timestamp)
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
             finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
             create_memory = CreateConversation(

@@ -62,6 +62,25 @@ def test_normalize_capture_window_leaves_past_windows_unchanged():
     assert lanes.normalize_capture_window(start, end, now=now) == (start, end)
 
 
+def test_normalize_capture_window_overlaps_successive_future_segments_for_merge():
+    """#4770: clamp before closest-conversation lookup so multi-VAD WALs still merge.
+
+    Successive mildly future-dated segments each shift to end at ``now``. The
+    later segment's normalized window therefore overlaps the conversation
+    created from the earlier segment, so closest-conversation lookup can merge
+    instead of opening a second memory (pipeline applies normalize before lookup).
+    """
+    now = 2_000_000_000.0
+    skew = 180.0
+    first_start, first_end = lanes.normalize_capture_window(now + skew, now + skew + 30, now=now)
+    second_start, second_end = lanes.normalize_capture_window(now + skew + 30, now + skew + 60, now=now)
+
+    assert first_end == now
+    assert second_end == now
+    assert first_start <= second_start <= first_end
+    assert second_start == now - 30
+
+
 def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
