@@ -19,11 +19,16 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 import pytest  # noqa: E402
 
+from database.notifications import UnifiedPushEndpoint  # noqa: E402
 from testing.import_isolation import load_module_fresh, stub_modules  # noqa: E402
 from utils.push import unifiedpush as up  # noqa: E402
 from utils.push.base import PushMessage  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ep(url: str, *, p256dh=None, auth=None) -> UnifiedPushEndpoint:
+    return UnifiedPushEndpoint(url=url, p256dh=p256dh, auth=auth)
 
 
 def test_render_payload_visible_carries_notification():
@@ -56,7 +61,9 @@ def test_target_url_rewrites_host_via_internal_base(monkeypatch):
 
 
 def _endpoints(monkeypatch, values):
-    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: list(values))
+    # Accept URL strings (plaintext, keyless) or UnifiedPushEndpoint records.
+    records = [v if isinstance(v, UnifiedPushEndpoint) else _ep(v) for v in values]
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: list(records))
     removed = []
     monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
     return removed
@@ -65,7 +72,7 @@ def _endpoints(monkeypatch, values):
 def test_send_to_user_counts_success_and_drops_dead(monkeypatch):
     removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1', 'http://ntfy/flaky?up=1'])
     statuses = {'http://ntfy/live?up=1': 200, 'http://ntfy/dead?up=1': 410, 'http://ntfy/flaky?up=1': 503}
-    monkeypatch.setattr(up, '_post_sync', lambda url, _body: statuses[url])
+    monkeypatch.setattr(up, '_post_sync', lambda url, _body, _headers: statuses[url])
 
     sent = up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi'))
 
@@ -75,7 +82,7 @@ def test_send_to_user_counts_success_and_drops_dead(monkeypatch):
 
 def test_send_to_user_network_error_keeps_endpoint(monkeypatch):
     removed = _endpoints(monkeypatch, ['http://ntfy/x?up=1'])
-    monkeypatch.setattr(up, '_post_sync', lambda _url, _body: None)  # network error → None
+    monkeypatch.setattr(up, '_post_sync', lambda _url, _body, _headers: None)  # network error → None
 
     assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
     assert removed == []  # transient, not dropped
@@ -84,16 +91,61 @@ def test_send_to_user_network_error_keeps_endpoint(monkeypatch):
 def test_send_to_user_no_endpoints_is_noop(monkeypatch):
     _endpoints(monkeypatch, [])
     called = []
-    monkeypatch.setattr(up, '_post_sync', lambda url, body: called.append(url) or 200)
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: called.append(url) or 200)
     assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 0
     assert called == []
+
+
+def test_keyless_endpoint_posts_plaintext_json(monkeypatch):
+    _endpoints(monkeypatch, ['http://ntfy/plain?up=1'])
+    captured = {}
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: captured.update(url=url, body=body, headers=headers) or 200)
+
+    up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi', data={'type': 'x'}))
+
+    assert captured['headers']['Content-Type'] == 'application/json'
+    assert 'Content-Encoding' not in captured['headers']
+    assert json.loads(captured['body'])['notification'] == {'title': 'omi', 'body': 'hi'}
+
+
+def test_keyed_endpoint_posts_hex_armored_encrypted_body(monkeypatch):
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    import http_ece
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    p256dh = base64.urlsafe_b64encode(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+        )
+    ).rstrip(b'=').decode()
+    auth_bytes = os.urandom(16)
+    auth = base64.urlsafe_b64encode(auth_bytes).rstrip(b'=').decode()
+
+    _endpoints(monkeypatch, [_ep('http://ntfy/enc?up=1', p256dh=p256dh, auth=auth)])
+    captured = {}
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, headers: captured.update(body=body, headers=headers) or 200)
+
+    up.send_to_user('u1', PushMessage(tag='t', title='omi', body='secret', data={'type': 'merge_completed'}))
+
+    # ntfy is a text transport: the body is a lowercase-hex UTF-8 string, not raw binary.
+    assert captured['headers']['Content-Type'] == 'text/plain'
+    assert 'Content-Encoding' not in captured['headers']
+    hex_text = captured['body'].decode('ascii')
+    assert all(c in '0123456789abcdef' for c in hex_text)
+    assert b'secret' not in captured['body']  # confidential on the wire
+    # The app hex-decodes then decrypts (RFC 8291) back to the exact JSON payload.
+    ciphertext = bytes.fromhex(hex_text)
+    decrypted = http_ece.decrypt(ciphertext, private_key=private_key, auth_secret=auth_bytes, version='aes128gcm')
+    assert json.loads(decrypted)['notification'] == {'title': 'omi', 'body': 'secret'}
 
 
 def test_send_to_user_async_drops_dead(monkeypatch):
     removed = _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1'])
     statuses = {'http://ntfy/live?up=1': 202, 'http://ntfy/dead?up=1': 404}
 
-    async def _post(url, _body):
+    async def _post(url, _body, _headers):
         return statuses[url]
 
     monkeypatch.setattr(up, '_post_async', _post)
@@ -108,18 +160,20 @@ def test_send_bulk_posts_all_and_drops_dead(monkeypatch):
     monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', lambda eps: removed.append(list(eps)))
     statuses = {'http://ntfy/a?up=1': 200, 'http://ntfy/b?up=1': 410}
 
-    async def _post(url, _body):
+    async def _post(url, _body, _headers):
         return statuses[url]
 
     monkeypatch.setattr(up, '_post_async', _post)
-    asyncio.run(up.send_bulk(['http://ntfy/a?up=1', 'http://ntfy/b?up=1'], PushMessage(tag='t', title='omi', body='hi')))
+    asyncio.run(
+        up.send_bulk([_ep('http://ntfy/a?up=1'), _ep('http://ntfy/b?up=1')], PushMessage(tag='t', title='omi', body='hi'))
+    )
     assert removed == [['http://ntfy/b?up=1']]  # 410 dropped
 
 
 def test_send_bulk_empty_is_noop(monkeypatch):
     posted = []
 
-    async def _post(url, _body):
+    async def _post(url, _body, _headers):
         posted.append(url)
         return 200
 
@@ -184,9 +238,9 @@ def _loaded_notifications() -> Iterator[ModuleType]:
 
 def test_send_notification_routes_to_unifiedpush(monkeypatch):
     monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
-    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: ['http://ntfy/t?up=1'])
+    monkeypatch.setattr(up.notification_db, 'get_all_endpoints', lambda _uid: [_ep('http://ntfy/t?up=1')])
     posted = []
-    monkeypatch.setattr(up, '_post_sync', lambda url, body: posted.append((url, json.loads(body))) or 200)
+    monkeypatch.setattr(up, '_post_sync', lambda url, body, _headers: posted.append((url, json.loads(body))) or 200)
 
     with _loaded_notifications() as notifications:
         notifications.send_notification('user-1', 'omi', 'hello')

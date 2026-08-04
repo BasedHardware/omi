@@ -14,12 +14,15 @@ cross-parent collection-group queries over the ``fcm_tokens`` group (backends mu
 ``token`` field accordingly).
 
 UnifiedPush endpoints (ADR-0011 on-prem push) mirror the same model in the per-user
-``unifiedpush_endpoints`` subcollection (``{endpoint, created_at, time_zone}``);
+``unifiedpush_endpoints`` subcollection (``{endpoint, p256dh, auth, created_at, time_zone}``);
 ``remove_bulk_endpoints`` runs the same collection-group cleanup over the ``unifiedpush_endpoints``
-group (backends must index the ``endpoint`` field).
+group (backends must index the ``endpoint`` field). ``p256dh``/``auth`` are the recipient's WebPush
+key set (base64url) used by the send channel to encrypt the body (RFC 8291); absent for endpoints
+registered by a pre-encryption client, in which case the send falls back to plaintext.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from database.store import get_document_store
@@ -37,6 +40,27 @@ def _store():
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+@dataclass(frozen=True)
+class UnifiedPushEndpoint:
+    """A registered UnifiedPush endpoint with its optional WebPush key set.
+
+    ``url`` is the push-server address; ``p256dh``/``auth`` (base64url) are present when the client
+    registered encryption keys — the send channel encrypts for them, else POSTs plaintext.
+    """
+
+    url: str
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
+
+
+def _endpoint_from_doc(doc: Any) -> Optional[UnifiedPushEndpoint]:
+    data = _typed_doc(doc)
+    url = data.get('endpoint')
+    if not url:
+        return None
+    return UnifiedPushEndpoint(url=str(url), p256dh=data.get('p256dh'), auth=data.get('auth'))
 
 
 def save_token(uid: str, data: Dict[str, Any]) -> None:
@@ -303,24 +327,27 @@ def save_endpoint(uid: str, data: Dict[str, Any]) -> None:
 
     store = _store()
     user_path = f'users/{uid}'
-    store.set(
-        f'{user_path}/unifiedpush_endpoints/{device_key}',
-        {'endpoint': endpoint, 'time_zone': time_zone, 'created_at': SERVER_TIMESTAMP},
-        merge=True,
-    )
+    record: Dict[str, Any] = {'endpoint': endpoint, 'time_zone': time_zone, 'created_at': SERVER_TIMESTAMP}
+    # WebPush key set (RFC 8291), when the client registers encryption keys. Stored so the send
+    # channel can encrypt the body for this endpoint; omitted keys mean a plaintext-only client.
+    if data.get('p256dh'):
+        record['p256dh'] = data.get('p256dh')
+    if data.get('auth'):
+        record['auth'] = data.get('auth')
+    store.set(f'{user_path}/unifiedpush_endpoints/{device_key}', record, merge=True)
 
     # Also update time_zone in main user document (parity with save_token, for tz queries)
     if time_zone:
         store.set(user_path, {'time_zone': time_zone}, merge=True)
 
 
-def get_all_endpoints(uid: str) -> list[str]:
-    """Get all UnifiedPush endpoint URLs registered for a user."""
-    endpoints: List[str] = []
+def get_all_endpoints(uid: str) -> List[UnifiedPushEndpoint]:
+    """Get all UnifiedPush endpoints (URL + optional WebPush key set) registered for a user."""
+    endpoints: List[UnifiedPushEndpoint] = []
     for doc in _store().query(f'users/{uid}/unifiedpush_endpoints'):
-        value = _typed_doc(doc).get('endpoint')
-        if value:
-            endpoints.append(str(value))
+        endpoint = _endpoint_from_doc(doc)
+        if endpoint is not None:
+            endpoints.append(endpoint)
     return endpoints
 
 
@@ -362,12 +389,13 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_endpoints_in_timezones(timezones: list[str]) -> List[str]:
-    """Flat list of UnifiedPush endpoints for all users currently in the given timezones.
+def get_users_endpoints_in_timezones(timezones: list[str]) -> List[UnifiedPushEndpoint]:
+    """Flat list of UnifiedPush endpoints (URL + optional WebPush key set) for all users currently
+    in the given timezones.
 
     UnifiedPush counterpart of ``get_users_token_in_timezones`` for the bulk daily notification.
     """
-    endpoints: List[str] = []
+    endpoints: List[UnifiedPushEndpoint] = []
     store = _store()
 
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
@@ -378,9 +406,9 @@ def get_users_endpoints_in_timezones(timezones: list[str]) -> List[str]:
             for user_doc in user_docs:
                 uid = str(user_doc.id)
                 for doc in store.query(f'users/{uid}/unifiedpush_endpoints'):
-                    value = _typed_doc(doc).get('endpoint')
-                    if value:
-                        endpoints.append(str(value))
+                    endpoint = _endpoint_from_doc(doc)
+                    if endpoint is not None:
+                        endpoints.append(endpoint)
         except Exception as e:
             logger.error(f"Error querying endpoints chunk for timezones: {e}")
 

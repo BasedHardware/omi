@@ -6,8 +6,11 @@ reproduces the same dispatch it does for an FCM message, so the payload carries 
 fields (``notification``/``data``/``tag``/``priority``/``is_background``).
 
 Dead-endpoint cleanup mirrors the FCM invalid-token taxonomy: HTTP 404/410 (Gone) → the endpoint
-is permanently gone → drop it; any other non-2xx is transient (log only). Encryption of the body
-(WebPush aes128gcm) is deliberately out of scope for now — POST is plaintext (documented debt).
+is permanently gone → drop it; any other non-2xx is transient (log only). When the endpoint carries
+a WebPush key set (``p256dh``/``auth``) the body is encrypted per RFC 8291 and **hex-armored** before
+POST — ntfy is a text-only transport (it turns any non-UTF8 body into an attachment), so the binary
+ciphertext is sent as a lowercase-hex UTF-8 string and the app hex-decodes it before decrypting. One
+ciphertext per recipient; an endpoint without keys (pre-encryption client) falls back to plaintext JSON.
 
 Addressing: when ``UNIFIEDPUSH_INTERNAL_BASE_URL`` is set the backend keeps only the *path* of the
 stored endpoint and POSTs to ``${base}${path}`` — so a phone that registered the push server under
@@ -25,15 +28,20 @@ from urllib.parse import urlsplit
 import httpx
 
 import database.notifications as notification_db
+from database.notifications import UnifiedPushEndpoint
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_ntfy_client
+from utils.push import webpush_encryption
 from utils.push.base import PushMessage
 
 logger = logging.getLogger(__name__)
 
 # HTTP statuses that mean the endpoint is permanently gone (parity with PERMANENT_FAILURE_CODES).
 _DEAD_ENDPOINT_STATUSES = frozenset({404, 410})
-_HEADERS = {'Content-Type': 'application/json'}
+_PLAINTEXT_HEADERS = {'Content-Type': 'application/json'}
+# Encrypted body is hex-armored UTF-8 text (see module docstring) so ntfy carries it as a normal
+# message rather than rejecting it as a binary attachment.
+_ENCRYPTED_HEADERS = {'Content-Type': 'text/plain'}
 
 # Lazy process-wide sync client for the synchronous send seam (used on sync request paths and in
 # executor worker threads). The async seam uses the pooled get_ntfy_client() instead.
@@ -81,38 +89,59 @@ def render_payload(msg: PushMessage) -> dict:
     return payload
 
 
-def _classify(endpoint: str, status: Optional[int], dead: List[str]) -> bool:
-    """Return True if the send succeeded; record permanently-dead endpoints for cleanup."""
+def _classify(endpoint_url: str, status: Optional[int], dead: List[str]) -> bool:
+    """Return True if the send succeeded; record permanently-dead endpoint URLs for cleanup."""
     if status is None:
         return False
     if status in _DEAD_ENDPOINT_STATUSES:
-        dead.append(endpoint)
-        logger.error('Dead UnifiedPush endpoint removed - status %s: %s', status, endpoint)
+        dead.append(endpoint_url)
+        logger.error('Dead UnifiedPush endpoint removed - status %s: %s', status, endpoint_url)
         return False
     if 200 <= status < 300:
         return True
-    logger.error('UnifiedPush send failed - status %s: %s', status, endpoint)
+    logger.error('UnifiedPush send failed - status %s: %s', status, endpoint_url)
     return False
 
 
-def _post_sync(url: str, body: bytes) -> Optional[int]:
+def _encode_for(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> tuple[bytes, dict]:
+    """Return the (body, headers) to POST for one endpoint: RFC 8291-encrypted then hex-armored when
+    it registered a WebPush key set, else the plaintext JSON (back-compat with pre-encryption clients).
+    """
+    if endpoint.p256dh and endpoint.auth:
+        ciphertext = webpush_encryption.encrypt(plaintext, p256dh=endpoint.p256dh, auth=endpoint.auth)
+        # Hex-armor so ntfy carries the ciphertext as UTF-8 text; the app hex-decodes then decrypts.
+        return ciphertext.hex().encode('utf-8'), _ENCRYPTED_HEADERS
+    return plaintext, _PLAINTEXT_HEADERS
+
+
+def _post_sync(url: str, body: bytes, headers: dict) -> Optional[int]:
     try:
-        return _get_sync_client().post(url, content=body, headers=_HEADERS).status_code
+        return _get_sync_client().post(url, content=body, headers=headers).status_code
     except Exception as e:  # network error: transient, keep the endpoint
         logger.error('UnifiedPush POST error to %s: %s', url, e)
         return None
 
 
-async def _post_async(url: str, body: bytes) -> Optional[int]:
+async def _post_async(url: str, body: bytes, headers: dict) -> Optional[int]:
     try:
-        response = await get_ntfy_client().post(url, content=body, headers=_HEADERS)
+        response = await get_ntfy_client().post(url, content=body, headers=headers)
         return response.status_code
     except Exception as e:
         logger.error('UnifiedPush POST error to %s: %s', url, e)
         return None
 
 
-def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[str]] = None) -> int:
+def _send_one_sync(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
+    body, headers = _encode_for(endpoint, plaintext)
+    return _post_sync(_target_url(endpoint.url), body, headers)
+
+
+async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
+    body, headers = _encode_for(endpoint, plaintext)
+    return await _post_async(_target_url(endpoint.url), body, headers)
+
+
+def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[UnifiedPushEndpoint]] = None) -> int:
     """Send to all of a user's UnifiedPush endpoints (sync). Returns successful-send count."""
     if endpoints is None:
         endpoints = notification_db.get_all_endpoints(user_id)
@@ -120,9 +149,9 @@ def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[str
         logger.info('No UnifiedPush endpoints found for user %s', user_id)
         return 0
 
-    body = json.dumps(render_payload(msg)).encode('utf-8')
+    plaintext = json.dumps(render_payload(msg)).encode('utf-8')
     dead: List[str] = []
-    success = sum(1 for ep in endpoints if _classify(ep, _post_sync(_target_url(ep), body), dead))
+    success = sum(1 for ep in endpoints if _classify(ep.url, _send_one_sync(ep, plaintext), dead))
 
     if dead:
         notification_db.remove_bulk_endpoints(dead)
@@ -130,7 +159,9 @@ def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[str
     return success
 
 
-async def send_to_user_async(user_id: str, msg: PushMessage, *, endpoints: Optional[List[str]] = None) -> int:
+async def send_to_user_async(
+    user_id: str, msg: PushMessage, *, endpoints: Optional[List[UnifiedPushEndpoint]] = None
+) -> int:
     """Async counterpart: token read and dead-endpoint cleanup are offloaded to the DB pool."""
     if endpoints is None:
         endpoints = await run_blocking(db_executor, notification_db.get_all_endpoints, user_id)
@@ -138,11 +169,11 @@ async def send_to_user_async(user_id: str, msg: PushMessage, *, endpoints: Optio
         logger.info('No UnifiedPush endpoints found for user %s', user_id)
         return 0
 
-    body = json.dumps(render_payload(msg)).encode('utf-8')
-    statuses = await asyncio.gather(*[_post_async(_target_url(ep), body) for ep in endpoints])
+    plaintext = json.dumps(render_payload(msg)).encode('utf-8')
+    statuses = await asyncio.gather(*[_send_one_async(ep, plaintext) for ep in endpoints])
 
     dead: List[str] = []
-    success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep, status, dead))
+    success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
 
     if dead:
         await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
@@ -150,16 +181,16 @@ async def send_to_user_async(user_id: str, msg: PushMessage, *, endpoints: Optio
     return success
 
 
-async def send_bulk(endpoints: List[str], msg: PushMessage) -> None:
+async def send_bulk(endpoints: List[UnifiedPushEndpoint], msg: PushMessage) -> None:
     """Broadcast a message to many endpoints (bulk daily notification); dead endpoints are dropped."""
     if not endpoints:
         return
 
-    body = json.dumps(render_payload(msg)).encode('utf-8')
-    statuses = await asyncio.gather(*[_post_async(_target_url(ep), body) for ep in endpoints])
+    plaintext = json.dumps(render_payload(msg)).encode('utf-8')
+    statuses = await asyncio.gather(*[_send_one_async(ep, plaintext) for ep in endpoints])
 
     dead: List[str] = []
-    success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep, status, dead))
+    success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
 
     if dead:
         await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)

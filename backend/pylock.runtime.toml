@@ -515,6 +515,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/2c/48/71de9ed269fdae9c8
 wheels = [{ url = "https://files.pythonhosted.org/packages/07/c6/80c95b1b2b94682a72cbdbfb85b81ae2daffa4291fbfa1b1464502ede10d/hpack-4.1.0-py3-none-any.whl", upload-time = 2025-01-22T21:44:56Z, size = 34357, hashes = { sha256 = "157ac792668d995c657d93111f46b4535ed114f0c9c8d672271bbec7eae1b496" } }]
 
 [[packages]]
+name = "http-ece"
+version = "1.2.1"
+sdist = { url = "https://files.pythonhosted.org/packages/7c/af/249d1576653b69c20b9ac30e284b63bd94af6a175d72d87813235caf2482/http_ece-1.2.1.tar.gz", upload-time = 2024-08-08T00:10:47Z, size = 8830, hashes = { sha256 = "8c6ab23116bbf6affda894acfd5f2ca0fb8facbcbb72121c11c75c33e7ce8cff" } }
+
+[[packages]]
 name = "httpcore"
 version = "1.0.9"
 sdist = { url = "https://files.pythonhosted.org/packages/06/94/82699a10bca87a5556c9c59b5963f2d039dbd239f25bc2a63907a05a14cb/httpcore-1.0.9.tar.gz", upload-time = 2025-04-24T22:06:22Z, size = 85484, hashes = { sha256 = "6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8" } }

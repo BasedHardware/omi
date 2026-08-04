@@ -20,4 +20,4 @@ RUN git config --system --add safe.directory '*'
 # Test-only Python deps not in the runtime image.
 RUN pip install --no-cache-dir aioresponses==0.7.8 fake-firestore==0.13.1 fakeredis==2.36.2 \
     lupa==2.8 pytest-httpserver==1.1.5 werkzeug==3.1.8 pymongo==4.10.1 mongomock==4.3.0 \
-    boto3==1.35.36
+    boto3==1.35.36 http-ece==1.2.1

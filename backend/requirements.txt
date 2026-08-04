@@ -74,6 +74,7 @@ grpclib==0.4.7
 h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
+http-ece==1.2.1
 httpcore==1.0.9
 httplib2==0.32.0
 httptools==0.6.1
