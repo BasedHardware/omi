@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
@@ -147,20 +147,27 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   )}
                 >
                   {/* Keyed on the pathname so each destination fades and lifts
-                      in. `mode="wait"` is deliberately not used: holding the
-                      new page back until the old one has left doubles the
-                      perceived latency of every navigation. */}
-                  <AnimatePresence initial={false}>
-                    <motion.div
-                      key={pathname}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                      className="h-full"
-                    >
-                      {children}
-                    </motion.div>
-                  </AnimatePresence>
+                      in.
+                      
+                      Deliberately not wrapped in `AnimatePresence
+                      initial={false}`: every route registers its own copy of
+                      this layout, so navigating remounts the whole shell. That
+                      makes each navigation look like a first render, and
+                      `initial={false}` exists precisely to suppress the enter
+                      animation on a first render — so the transition never
+                      played on any page. A plain keyed `initial` animates on
+                      both a remount and an in-place key change. There is no
+                      exit animation for the same reason: the outgoing tree is
+                      already gone by the time the new one mounts. */}
+                  <motion.div
+                    key={pathname}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-full"
+                  >
+                    {children}
+                  </motion.div>
                 </div>
               </div>
             </main>
