@@ -30,7 +30,10 @@ from models.memory_promotion import PromotionGraphPlan  # noqa: E402
 from models.product_memory import MemoryItem  # noqa: E402
 from utils.llm.clients import get_llm  # noqa: E402
 from utils.memory.graph_enrichment import prepare_graph_enrichment  # noqa: E402
-from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment  # noqa: E402
+from utils.memory.historical_graph_enrichment import (  # noqa: E402
+    HISTORICAL_GRAPH_PLANNER_VERSION,
+    plan_historical_graph_enrichment,
+)
 
 MAX_PAGE_SIZE = 25
 MAX_STRUCTURED_SCAN_SIZE = 1250
@@ -82,6 +85,15 @@ def _firestore_client(*, project: str) -> Any:
     return firestore.Client(project=project, credentials=credentials)
 
 
+def _is_replan_candidate(item: MemoryItem) -> bool:
+    promotion = item.promotion or {}
+    return (
+        item.graph_ready
+        and bool(promotion.get("graph_enrichment"))
+        and promotion.get("graph_enrichment_planner_version") != HISTORICAL_GRAPH_PLANNER_VERSION
+    )
+
+
 def _candidates(
     uid: str, *, control: MemoryControlState, limit: int, db_client: Any, replan_existing: bool = False
 ) -> list[MemoryItem]:
@@ -107,7 +119,7 @@ def _candidates(
     )
     items = [MemoryItem(**(snapshot.to_dict() or {})) for snapshot in query.stream()]
     if replan_existing:
-        return [item for item in items if item.graph_ready and (item.promotion or {}).get("graph_enrichment")]
+        return [item for item in items if _is_replan_candidate(item)]
     return [item for item in items if not item.graph_ready]
 
 
@@ -151,8 +163,8 @@ def run_enrichment(
     candidate_limit = scan_limit if scan_limit is not None else limit
     if candidate_limit < 1 or candidate_limit > MAX_STRUCTURED_SCAN_SIZE:
         raise ValueError(f"scan_limit must be between 1 and {MAX_STRUCTURED_SCAN_SIZE}")
-    if candidate_limit != limit and not structured_only:
-        raise ValueError("scan_limit greater than limit requires structured_only mode")
+    if candidate_limit != limit and not (structured_only or replan_existing):
+        raise ValueError("scan_limit greater than limit requires structured_only or replan_existing mode")
     if apply and confirm_uid != uid:
         raise ValueError("apply requires confirm_uid to exactly match uid")
 

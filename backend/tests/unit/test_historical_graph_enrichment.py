@@ -7,6 +7,7 @@ from models.memory_apply import MemoryControlState, memory_content_hash
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
+from scripts.enrich_historical_memory_graph import _is_replan_candidate
 
 
 class _Response:
@@ -106,3 +107,24 @@ def test_historical_graph_planner_blocks_a_stale_content_hash_before_calling_the
 
     assert planned.status == GraphEnrichmentStatus.blocked
     assert planned.block_code == "content_hash_invalid"
+
+
+def test_replan_candidates_exclude_current_planner_version():
+    current = _item(
+        graph_ready=True,
+        promotion={
+            "graph_enrichment": True,
+            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v2",
+        },
+    )
+    legacy = _item(
+        memory_id="mem_legacy",
+        graph_ready=True,
+        promotion={
+            "graph_enrichment": True,
+            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v1",
+        },
+    )
+
+    assert _is_replan_candidate(current) is False
+    assert _is_replan_candidate(legacy) is True
