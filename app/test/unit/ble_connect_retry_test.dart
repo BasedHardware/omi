@@ -80,6 +80,49 @@ void main() {
     });
   });
 
+  group('shouldInvalidatePendingRetryForDifferentTarget (#6610 review)', () {
+    test('invalidates a pending retry when force-connecting to a different device', () {
+      expect(
+        shouldInvalidatePendingRetryForDifferentTarget(
+          pendingRetryDeviceId: 'old-device',
+          targetDeviceId: 'new-device',
+          force: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not invalidate when there is no pending retry', () {
+      expect(
+        shouldInvalidatePendingRetryForDifferentTarget(
+          pendingRetryDeviceId: null,
+          targetDeviceId: 'new-device',
+          force: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not invalidate the retry\'s own device or a non-forced call', () {
+      expect(
+        shouldInvalidatePendingRetryForDifferentTarget(
+          pendingRetryDeviceId: 'same-device',
+          targetDeviceId: 'same-device',
+          force: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldInvalidatePendingRetryForDifferentTarget(
+          pendingRetryDeviceId: 'old-device',
+          targetDeviceId: 'new-device',
+          force: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('shouldKickStuckConnectingAttempt', () {
     test('kicks only after sustained .connecting without manual disconnect', () {
       expect(

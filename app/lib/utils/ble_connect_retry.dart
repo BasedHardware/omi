@@ -59,3 +59,20 @@ bool shouldKickStuckConnectingAttempt({
   if (manuallyDisconnected) return false;
   return elapsed >= threshold;
 }
+
+/// Whether a force-connect to [targetDeviceId] should invalidate a pending
+/// soft-retry timer tracked for [pendingRetryDeviceId].
+///
+/// Without this, a retry scheduled for a device the user has since moved away
+/// from can still fire later, target the old device id with `force: true`,
+/// and tear down + replace a connection the user explicitly established to a
+/// *different* device in the meantime — see #6610 review discussion.
+bool shouldInvalidatePendingRetryForDifferentTarget({
+  required String? pendingRetryDeviceId,
+  required String targetDeviceId,
+  required bool force,
+}) {
+  if (!force) return false;
+  if (pendingRetryDeviceId == null) return false;
+  return pendingRetryDeviceId != targetDeviceId;
+}

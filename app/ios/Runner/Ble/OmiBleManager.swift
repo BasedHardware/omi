@@ -47,6 +47,13 @@ final class OmiBleManager: NSObject {
     /// Periodic check for CoreBluetooth peripherals stuck in `.connecting`.
     private var connectingWatchdogTimer: Timer?
 
+    /// UUIDs the connecting watchdog just canceled and is about to re-issue.
+    /// `didFailToConnect`/`didDisconnectPeripheral` check this so a delegate
+    /// callback triggered by the watchdog's own cancel doesn't *also* schedule
+    /// its own retry — otherwise the same peripheral gets two overlapping
+    /// `connect()` calls for one stall.
+    private var watchdogPendingReissue: Set<String> = []
+
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
 
@@ -136,9 +143,7 @@ final class OmiBleManager: NSObject {
                 NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
                 return
             }
-            connectAttemptStartTimes[uuid] = Date()
-            startConnectingWatchdogIfNeeded()
-            centralManager.connect(peripheral, options: nil)
+            issueConnect(peripheral, uuid: uuid)
             return
         }
 
@@ -148,10 +153,18 @@ final class OmiBleManager: NSObject {
         if let peripheral = retrieved.first {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
-            connectAttemptStartTimes[uuid] = Date()
-            startConnectingWatchdogIfNeeded()
-            centralManager.connect(peripheral, options: nil)
+            issueConnect(peripheral, uuid: uuid)
         }
+    }
+
+    /// Single funnel for every `centralManager.connect` issuance (#6610 review:
+    /// a connect issued outside this path is invisible to the watchdog and can
+    /// stall in `.connecting` forever with nothing left to recover it).
+    private func issueConnect(_ peripheral: CBPeripheral, uuid: String) {
+        connectAttemptStartTimes[uuid] = Date()
+        startConnectingWatchdogIfNeeded()
+        peripheral.delegate = self
+        centralManager.connect(peripheral, options: nil)
     }
 
     /// CoreBluetooth can leave a peripheral in `.connecting` after backgrounding
@@ -164,28 +177,41 @@ final class OmiBleManager: NSObject {
         }
     }
 
+    /// Threshold mirrors `kBleConnectingWatchdogAfter` in
+    /// `app/lib/utils/ble_connect_retry.dart` (`shouldKickStuckConnectingAttempt`
+    /// documents/tests the same contract in Dart). Keep both in sync — there is
+    /// no shared source of truth across the platform channel.
     private func kickStuckConnectingPeripherals() {
         let threshold: TimeInterval = 65
         for (uuid, peripheral) in peripherals {
             guard peripheral.state == .connecting else { continue }
-            guard !manuallyDisconnected.contains(uuid) else { continue }
+            // A manual disconnect may leave no delegate callback to clear this
+            // entry (cancelPeripheralConnection during .connecting doesn't
+            // always fire one) — drop it here so the timer can still stop.
+            if manuallyDisconnected.contains(uuid) {
+                connectAttemptStartTimes.removeValue(forKey: uuid)
+                continue
+            }
             guard let started = connectAttemptStartTimes[uuid] else { continue }
             let elapsed = Date().timeIntervalSince(started)
             guard elapsed >= threshold else { continue }
 
             NSLog("[OmiBle] connecting watchdog: canceling stuck connect for \(uuid) after \(Int(elapsed))s")
             connectAttemptStartTimes.removeValue(forKey: uuid)
+            // Mark before canceling: CoreBluetooth can route this cancel through
+            // didFailToConnect, whose own retry logic must not fire a second,
+            // overlapping connect for the same stall (see didFailToConnect).
+            watchdogPendingReissue.insert(uuid)
             centralManager.cancelPeripheralConnection(peripheral)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
+                self.watchdogPendingReissue.remove(uuid)
                 guard !self.manuallyDisconnected.contains(uuid) else { return }
                 guard let peripheral = self.peripherals[uuid] else { return }
                 if peripheral.state == .connected { return }
                 NSLog("[OmiBle] connecting watchdog: re-issuing connect for \(uuid)")
-                self.connectAttemptStartTimes[uuid] = Date()
-                peripheral.delegate = self
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid)
             }
         }
 
@@ -231,8 +257,7 @@ final class OmiBleManager: NSObject {
             // silently waiting in congested RF. connect() is idempotent on iOS.
             if peripheral.state == .connected { continue }
             NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
-            peripheral.delegate = self
-            centralManager.connect(peripheral, options: nil)
+            issueConnect(peripheral, uuid: uuid)
         }
     }
 
@@ -617,7 +642,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
                 // Re-establish connection if not already connected
                 if peripheral.state != .connected {
-                    central.connect(peripheral, options: nil)
+                    issueConnect(peripheral, uuid: uuid)
                 } else {
                     peripheral.discoverServices(nil)
                 }
@@ -656,6 +681,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         everConnected.insert(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
         connectAttemptStartTimes.removeValue(forKey: uuid)
+        watchdogPendingReissue.remove(uuid)
 
         peripheral.delegate = self
         peripheral.discoverServices(nil)
@@ -684,12 +710,18 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
+        // The connecting watchdog's own cancel can route here on some iOS
+        // versions. Its re-issue (200ms after cancel, see kickStuckConnectingPeripherals)
+        // is the only retry for this stall — scheduling a second one here would
+        // issue two overlapping connect() calls for the same peripheral.
+        let watchdogOwnsRetry = watchdogPendingReissue.remove(uuid) != nil
+
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. iOS queues this at the chipset level; it's free while waiting.
-        if !isManual, !pairingLost, everConnected.contains(uuid) {
+        if !isManual, !pairingLost, everConnected.contains(uuid), !watchdogOwnsRetry {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid)
             }
         }
     }
@@ -724,12 +756,16 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
+        // See didFailToConnect: don't double-issue a connect for a stall the
+        // watchdog is already re-issuing itself.
+        let watchdogOwnsRetry = watchdogPendingReissue.remove(uuid) != nil
+
         // Auto-reconnect unless manually disconnected
-        if !isManual, !pairingLost {
+        if !isManual, !pairingLost, !watchdogOwnsRetry {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
                 // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid)
             }
         }
     }
