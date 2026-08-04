@@ -52,6 +52,65 @@ enum AppearanceOverride: String, CaseIterable, Identifiable, Codable, Sendable {
 // violate the brand rule is not a setting; it is removed rather than narrowed. `Ink.accent` remains
 // the one accent, guarded by `InkAccentTests` and `BrandColourGuard`.
 
+// MARK: - The Dock
+
+/// **Whether this process shows a Dock icon, and which of AppKit's two app shapes that makes it.**
+///
+/// Free-standing rather than a computed property on `SettingsStore`, because the decision has two
+/// callers and the second one must not build the store. `ContextAppDelegate` applies it in
+/// `applicationDidFinishLaunching` — before anything can draw, and long before the user has opened
+/// Settings — while the store applies it again each time the row is switched. Two readers of one
+/// `UserDefaults` key drift the moment either writes its own default inline, so the key, the default
+/// and the mapping all live here and both callers go through them. `DockPresenceTests` is the
+/// assertion that they still do.
+///
+/// **The default is on, and `Resources/Info.plist` is written to match it.** `LSUIElement` is
+/// `false` there, so the process starts `.regular`, macOS builds the app's main menu during launch,
+/// and this type only ever has work to do for the user who turned the row off. The alternative —
+/// stay `LSUIElement` and promote to `.regular` from Swift — is the transition that leaves a
+/// promoted app holding a Dock icon and no menu bar until it has been deactivated and reactivated.
+/// Demotion is the direction that behaves, so the minority case is the one that transitions.
+enum DockPresence {
+
+    /// Namespaced with the app's other `context.settings.*` defaults, and the single owner of the
+    /// string: `SettingsStore.Key.showsDockIcon` is this constant rather than a second copy of it.
+    static let defaultsKey = "context.settings.showsDockIcon"
+
+    /// **On**, and this reverses the divergence the row shipped with.
+    ///
+    /// It used to be off, on the reasoning that a Dock icon is "the single most visible way this
+    /// product could stop being ambient" — which is half of a real trade and was shipped as if it
+    /// were all of it. The other half is the report: on a menu bar carrying thirty extras, this
+    /// app's mark is genuinely hard to find, and an app nobody can find is not ambient either, it
+    /// is missing. The reference this pane is built from (`docs/rewind-and-settings.md`, Appearance)
+    /// always specified "toggle, on"; the row still works in both directions for anyone who wants
+    /// the menu-bar-only shape back.
+    static let showsByDefault = true
+
+    /// The whole of the mapping, as a function of the preference, so it is assertable without an
+    /// `NSApplication` to install it on.
+    ///
+    /// `.prohibited` is deliberately not a third case. It is not "even more hidden than
+    /// `.accessory`" — it is an app that may not come to the foreground at all, which would take the
+    /// status item's popover and every window this app owns with it.
+    static func activationPolicy(showsDockIcon: Bool) -> NSApplication.ActivationPolicy {
+        showsDockIcon ? .regular : .accessory
+    }
+
+    /// `object(forKey:)` and not `bool(forKey:)`. The latter answers `false` for a key nobody has
+    /// written, so it cannot tell "turned off" from "never opened Settings" — and every install in
+    /// the field is the second one. A reader that used it would hand exactly those users the
+    /// opposite of `showsByDefault`.
+    static func showsDockIcon(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: defaultsKey) as? Bool ?? showsByDefault
+    }
+
+    /// What `applicationDidFinishLaunching` installs on `NSApp`.
+    static func launchPolicy(reading defaults: UserDefaults = .standard) -> NSApplication.ActivationPolicy {
+        activationPolicy(showsDockIcon: showsDockIcon(in: defaults))
+    }
+}
+
 // MARK: - Timeline controls
 
 /// Which of the timeline window's four controls are drawn.
@@ -403,7 +462,9 @@ final class SettingsStore: ObservableObject {
 
     private enum Key {
         static let appearance = "context.settings.appearance"
-        static let showsDockIcon = "context.settings.showsDockIcon"
+        /// Not a second copy of the string: the launch path reads the same key through
+        /// `DockPresence`, and a rename that only reached one of them would be silent.
+        static let showsDockIcon = DockPresence.defaultsKey
         static let timelineControls = "context.settings.timelineControls"
         static let screenCapture = "context.settings.screenCapture"
         static let pausesOnInactivity = "context.settings.pausesOnInactivity"
@@ -509,12 +570,16 @@ final class SettingsStore: ObservableObject {
         }
 
         self.appearance = enumValue(Key.appearance, AppearanceOverride.system)
-        // **Off** by default, which is a deliberate divergence from the reference's "toggle, on".
-        // This app is `LSUIElement` and `ContextAppDelegate` calls appearing in the Dock "the single
-        // most visible way this product could stop being ambient". Defaulting the preference on would
-        // put the icon in the Dock the first time this store is constructed — i.e. the row's default
-        // would silently undo the app's own design. The row still works in both directions.
-        self.showsDockIcon = flag(Key.showsDockIcon, default: false)
+        // **On**, and the default is `DockPresence`'s rather than a literal here.
+        //
+        // It was off, as a deliberate divergence from the reference's "toggle, on", because this app
+        // was `LSUIElement` and appearing in the Dock was called "the single most visible way this
+        // product could stop being ambient". The divergence is reversed and the reason is in
+        // `DockPresence.showsByDefault`: a mark lost among thirty menu-bar extras is not ambient
+        // either. What matters here is only that the literal is gone — this store and the launch
+        // path have to answer the same question the same way for an install that has never opened
+        // Settings, and two `false`s written in two files is how that stops being true.
+        self.showsDockIcon = flag(Key.showsDockIcon, default: DockPresence.showsByDefault)
         if let data = defaults.data(forKey: Key.timelineControls),
             let decoded = try? JSONDecoder().decode(TimelineControlVisibility.self, from: data)
         {
@@ -609,12 +674,18 @@ final class SettingsStore: ObservableObject {
         NSApp.appearance = appearance.nsAppearance
     }
 
-    /// `LSUIElement` starts the process as `.accessory`. Flipping to `.regular` puts the icon in the
-    /// Dock for this launch, which is what the row promises — and it takes effect immediately rather
-    /// than at relaunch, so the row does not need a caveat.
+    /// Live, in both directions, which is what lets the row's subtitle promise what it promises with
+    /// no "takes effect on relaunch" caveat under it: `setActivationPolicy` adds and removes the Dock
+    /// icon for the running process, and the status item is untouched by it either way — an
+    /// `NSStatusItem` belongs to the status bar, not to the activation policy, so the app never loses
+    /// both of its homes at once.
+    ///
+    /// The mapping is `DockPresence`'s and not restated here. `ContextAppDelegate` installs the same
+    /// mapping over the same key at launch, and a switch that meant one thing on click and another
+    /// after a relaunch is the defect that pairing is written to make impossible.
     private func applyDockIcon() {
         guard appliesToRunningApp, NSApp != nil else { return }
-        NSApp.setActivationPolicy(showsDockIcon ? .regular : .accessory)
+        NSApp.setActivationPolicy(DockPresence.activationPolicy(showsDockIcon: showsDockIcon))
     }
 }
 
@@ -622,9 +693,9 @@ final class SettingsStore: ObservableObject {
 
 /// The real version, from the bundle that is running.
 ///
-/// There is no updater in this package, so this is the whole Updates row — see
-/// `docs/requirements-checklist.md` I7 and `SettingsGeneralPane` for why `Update Now` and
-/// `Automatic Updates` are absent rather than disabled.
+/// The one version string in the app: `ContextUpdater.currentVersionDescription` reads this rather
+/// than reaching for the plist a second time, so the Updates row and everything else can never
+/// disagree about what is running. `docs/releasing.md` covers how a newer one reaches a user.
 enum AppVersion {
     static var short: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"

@@ -478,7 +478,15 @@ enum LoginItem {
 ### `Sources/ContextApp/ContextApp.swift` — owner: **app shell agent**
 
 `@main struct ContextApp: App` with a single `MenuBarExtra` scene, `.menuBarExtraStyle(.window)`.
-`LSUIElement` is set in Info.plist so there is no dock icon and no main window. An
+`LSUIElement` is **false** in Info.plist: the app launches as a regular app with a Dock icon, and
+`ContextAppDelegate` demotes it to `.accessory` at launch for a user who turned the "Show Dock Icon"
+row off (`DockPresence` in `Settings/SettingsPreferences.swift`, default **on**). Promotion is the
+transition that misbehaves — a promoted app has no menu bar until it is deactivated and reactivated —
+so the plist declares the majority shape and only the minority case transitions. The status item is
+unaffected either way, so the app has two homes and never loses both. Clicking the Dock icon runs
+`applicationShouldHandleReopen`: an unfinished onboarding run first, otherwise the timeline. There is
+still no main window and no `WindowGroup`; the scene's `.commands` point ⌘, at `SettingsWindow` and
+⌘Q at the same `TerminationOrigin.userAskedToQuit()` + `terminate` pair the menu bar's Quit uses. An
 `NSApplicationDelegateAdaptor` registers the bundled fonts (`CTFontManagerRegisterFontsForURL` over
 `Contents/Resources/Fonts`), starts `Engine.shared`, and opens `OnboardingWindow` when
 `UserDefaults.standard.bool(forKey: "context.onboarded")` is false. Menu bar icon: the eight-dot Omi

@@ -3,12 +3,19 @@ import ContextCore
 import CoreText
 import SwiftUI
 
-/// Context for Claude's entire scene graph: one menu bar item, one popover.
+/// Context for Claude's entire scene graph: one menu bar item, one popover, and the application menu
+/// that comes with having a Dock icon.
 ///
-/// There is deliberately no `WindowGroup`. `LSUIElement` in Info.plist keeps the app out of the
-/// Dock and the ⌘-Tab switcher, and onboarding is an AppKit window owned by `OnboardingWindow`
-/// rather than a SwiftUI scene — so a scene here would only ever be an empty window the user could
-/// summon by accident.
+/// There is deliberately no `WindowGroup`. Onboarding, the timeline, search and Settings are each an
+/// AppKit window owned by their own type rather than a SwiftUI scene — so a scene here would only
+/// ever be an empty window the user could summon by accident.
+///
+/// **The app is no longer `LSUIElement`.** It ships with a Dock icon by default and `DockPresence`
+/// is the row that takes it away again; `Resources/Info.plist` carries the reasoning for why the
+/// plist declares the majority shape rather than the app promoting itself into it. What changes up
+/// here is that "a scene the user could summon by accident" stopped being hypothetical: a regular
+/// app *draws* its main menu, so the two standard items below had to be pointed at this app's real
+/// surfaces rather than left aimed at a placeholder scene and a bare `terminate`.
 @main
 struct ContextApp: App {
     @NSApplicationDelegateAdaptor(ContextAppDelegate.self) private var delegate
@@ -25,8 +32,42 @@ struct ContextApp: App {
         // spotlight needs to ring the icon and walk the cursor to it.
         //
         // A SwiftUI `App` still needs one scene. `Settings` is the only one that never shows itself
-        // unaided, which is what an app with no windows wants.
+        // unaided, which is what an app whose windows are all AppKit's wants.
         Settings { EmptyView() }
+            .commands {
+                // **The two standard items that would otherwise do the wrong thing.**
+                //
+                // Both were invisible while the app was `.accessory` — an accessory app draws no
+                // menu bar, so whatever SwiftUI built for it sat there unseen. A regular app draws
+                // it, which turns two latent defects into two the user can click.
+                //
+                // `Settings…` is the plainer of the two, and the sharper. The scene above exists
+                // only because a SwiftUI `App` must have one; the app's real Settings is
+                // `SettingsWindow`, hand-built in AppKit. Left alone, ⌘, opens `EmptyView` in a
+                // window called Settings — the exact "empty window the user could summon by
+                // accident" the header above says there must not be. Replacing the group is what
+                // removes SwiftUI's own item rather than sitting a second one beside it.
+                CommandGroup(replacing: .appSettings) {
+                    Button("Settings…") { SettingsWindow.present() }
+                        .keyboardShortcut(",", modifiers: .command)
+                }
+
+                // …and `Quit` is the one with teeth. A bare `NSApp.terminate` reaches
+                // `applicationWillTerminate` with nothing having recorded *who asked*, which is
+                // exactly the input `shouldReviveAfterTermination` refuses to guess at: a user who
+                // presses ⌘Q during onboarding would be read as macOS having ended the run, and the
+                // app would spawn its own replacement. An app that cannot be quit is the failure
+                // that file calls worse than an app that needs reopening. The menu bar's Quit has
+                // always said so first (`StatusView`); this is the same two lines, in the order they
+                // have to be in, for the menu a Dock icon comes with.
+                CommandGroup(replacing: .appTermination) {
+                    Button("Quit Context for Claude") {
+                        TerminationOrigin.userAskedToQuit()
+                        NSApp.terminate(nil)
+                    }
+                    .keyboardShortcut("q", modifiers: .command)
+                }
+            }
     }
 }
 
@@ -152,10 +193,25 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     private static let onboardedKey = "context.onboarded"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Belt and braces. `LSUIElement` in the generated Info.plist should already have done this;
-        // if that plist is ever wrong the app would otherwise appear in the Dock and pull focus on
-        // every launch — the single most visible way this product could stop being ambient.
-        NSApp.setActivationPolicy(.accessory)
+        // **The Dock icon, settled before anything can draw.**
+        //
+        // `Resources/Info.plist` launches this process `.regular`, so by the time this line runs the
+        // icon is already in the Dock and macOS has built the app's main menu around it. All this
+        // does is honour a user who turned the row off, and it happens here — first, ahead of the
+        // status item, the engine and onboarding — because an activation policy applied after a
+        // window has been ordered in is a window that has already taken focus under the old shape.
+        //
+        // It reads the stored default through `DockPresence` rather than touching
+        // `SettingsStore.shared`, which would build the whole preference store and install an
+        // appearance on `NSApp` this early for the sake of one boolean. Both paths go through the
+        // same key and the same mapping, which is the only thing that keeps the row's meaning at
+        // launch identical to its meaning on click.
+        //
+        // This was an unconditional `.accessory`, on the reasoning that a Dock icon is "the single
+        // most visible way this product could stop being ambient". That is half of a real trade: the
+        // other half is a 16 pt template mark lost among thirty menu-bar extras, which is the report
+        // that reversed it. An app nobody can find is not ambient either.
+        NSApp.setActivationPolicy(DockPresence.launchPolicy())
 
         // Deliberately no `NSApp.appearance` override. Pinning the process to `.aqua` rendered a
         // light popover inside a dark system menu — the single loudest reason the colours read as
@@ -187,12 +243,19 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             StatusItemController.shared.install()
             Engine.shared.start()
 
+            // After the engine, because an updater is worth nothing next to a capture that never
+            // started — and because this line is a no-op on most machines that run it. The policy
+            // refuses any bundle whose signature carries no Team ID, which is every local build, so
+            // only a Developer ID build with a real public key ever reaches a feed.
+            ContextUpdater.shared.start()
+
             // Decode the four onboarding cues now so the first one does not pay for it mid-beat.
             // Safe with the assets missing: the layer degrades to silence rather than throwing,
             // because nothing about onboarding may depend on audio succeeding.
             Sound.prepare()
 
-            // Double-tap Command opens the timeline, double-tap Command-Shift opens search. Both are
+            // Both Command keys together open the timeline, double-tap Command-Shift opens search.
+            // Both are
             // rebindable, and both simply do not fire while Accessibility is ungranted — a global
             // monitor cannot see keys without it, and pretending to be armed would be worse.
             GlobalShortcuts.shared.start { action in
@@ -200,28 +263,11 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                 case .openSearch:
                     SearchBarWindow.toggle()
                 case .openTimeline:
-                    // The store opens lazily on the engine's own queue, so ask at trigger time
-                    // rather than at launch. Nil means it is not open yet: decline to put a timeline
-                    // over nothing instead of showing an empty one.
-                    //
                     // This is also what the tutorial's timeline beat rides on: it observes the
                     // shortcut rather than opening anything itself, so the window the user learns to
                     // summon is opened here, by their own keypress, exactly as it will be forever
                     // after.
-                    guard let store = Engine.shared.contextStore else { return }
-                    RewindWindow.present(
-                        store: store,
-                        onOpenSettings: { SettingsWindow.present() },
-                        // The tutorial's search beat rides on this the way the timeline beat rides on
-                        // the shortcut above: the press falls straight through, the real bar opens
-                        // because the user clicked the real pill, and the tutorial observes the panel
-                        // that came up rather than taking the press.
-                        //
-                        // It used to `guard !Tutorial.searchPillWasPressed() else { return }` — the
-                        // tutorial consumed the click and drew its own imitation of the results, so
-                        // the one beat that teaches people to search was the one beat where searching
-                        // did not open the search bar.
-                        onSearch: { query in SearchBarWindow.present(prefill: query) })
+                    Self.openTimeline()
                 }
             }
 
@@ -246,8 +292,84 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Menu-bar-only: dismissing onboarding must never take the process with it.
+    /// The app's job is done with nothing on screen, so closing the last window is not a quit —
+    /// dismissing onboarding never was, and now that there is a Dock icon, closing the timeline must
+    /// not be either.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// **What the Dock icon does when it is clicked.**
+    ///
+    /// The whole point of having one is that the app can be found without hunting the menu bar, and
+    /// an icon that answers a click with nothing on screen is not findable, it is broken. macOS
+    /// sends this for a Dock click, an `open -a`, and a Finder double-click of a bundle that is
+    /// already running — every "I want that app" gesture that is not the status item.
+    ///
+    /// Returning `true` rather than `false`: this handles the *summoning*, and AppKit still owns the
+    /// rest of a reopen — un-minimising a window the user had put in the Dock is its half, and
+    /// nothing here duplicates it.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        MainActor.assumeIsolated { Self.surfaceSomethingForTheUser(hasVisibleWindows: hasVisibleWindows) }
+        return true
+    }
+
+    /// The one place that decides *which* surface a "show me the app" gesture means.
+    ///
+    /// Ordered by what the user is in the middle of, not by what is most impressive:
+    ///
+    /// - **An unfinished setup outranks everything.** The card is a floating window that steps aside
+    ///   while System Settings is frontmost (`Permissions.systemSettingsIsFrontmost`) and that the
+    ///   flow itself hides between beats, so "there is no card on screen" is a routine state of a run
+    ///   that is very much in progress. Opening a timeline over it would bury the one thing the user
+    ///   still has to finish; `OnboardingWindow.present()` brings back the run they were in.
+    /// - **Something already up is enough.** AppKit brings the app's windows forward on a reopen by
+    ///   itself. A second window ordered in on top of that is the Dock icon opening a timeline over
+    ///   the Settings sheet the user was reading.
+    /// - **Otherwise the timeline**, which is this app's one real window: the whole capture record,
+    ///   with search and Settings reachable from inside it.
+    @MainActor
+    private static func surfaceSomethingForTheUser(hasVisibleWindows: Bool) {
+        let onboarded = UserDefaults.standard.bool(forKey: onboardedKey)
+        if !onboarded || OnboardingResume().step != nil {
+            OnboardingWindow.present()
+            return
+        }
+
+        guard !hasVisibleWindows else { return }
+
+        openTimeline()
+    }
+
+    /// The timeline, opened the one way it is ever opened.
+    ///
+    /// Lifted out of the shortcut handler when the Dock icon became a second caller, and `static` so
+    /// neither caller has to capture the delegate. The two hand-offs it installs are not incidental —
+    /// they are what makes the window behave, and a second call site that reconstructed them by hand
+    /// is how one of the two quietly stops being passed.
+    @MainActor
+    private static func openTimeline() {
+        // The store opens lazily on the engine's own queue, so ask at open time rather than at
+        // launch. Nil means it is not open yet: decline to put a timeline over nothing instead of
+        // showing an empty one. That answer is worth keeping even though it makes a Dock click do
+        // nothing for the second or two after launch during which it can be true — an empty timeline
+        // claiming the user has no history is a worse first impression than a click that waits.
+        guard let store = Engine.shared.contextStore else {
+            ContextLog.info("timeline asked for before the store was open; nothing shown", "shell")
+            return
+        }
+
+        RewindWindow.present(
+            store: store,
+            onOpenSettings: { SettingsWindow.present() },
+            // The tutorial's search beat rides on this the way the timeline beat rides on the
+            // shortcut: the press falls straight through, the real bar opens because the user
+            // clicked the real pill, and the tutorial observes the panel that came up rather than
+            // taking the press.
+            //
+            // It used to `guard !Tutorial.searchPillWasPressed() else { return }` — the tutorial
+            // consumed the click and drew its own imitation of the results, so the one beat that
+            // teaches people to search was the one beat where searching did not open the search bar.
+            onSearch: { query in SearchBarWindow.present(prefill: query) })
+    }
 
     /// **Whether a process being terminated right now has to bring itself back.**
     ///
@@ -262,8 +384,15 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     ///   LaunchServices open request, no runningboard launch job, not even a failed one. Nothing was
     ///   ever asked. AppKit's only contribution to the "Reopen" is
     ///   `_setShouldRestoreStateOnNextLaunch: 1`, which is state restoration *for whenever something
-    ///   launches the app next* — and this app is `LSUIElement`, so there is no Dock icon, no
-    ///   ⌘-Tab entry, and nothing for the user to click. The app is simply gone, mid-setup.
+    ///   launches the app next* — and this app was `LSUIElement` when that was measured, so there
+    ///   was no Dock icon, no ⌘-Tab entry, and nothing for the user to click. The app is simply
+    ///   gone, mid-setup.
+    ///
+    ///   **The Dock icon softens that and does not remove it, so none of this is relaxed.** A Dock
+    ///   icon belongs to a *running* app unless the user has kept it in the Dock, and the run this
+    ///   is about is one that ended during onboarding — before anybody has thought about keeping
+    ///   anything. The "Show Dock Icon" row also puts the process back into exactly the shape the
+    ///   incident was measured in, on one click, for good.
     /// - Revive too eagerly and the app cannot be quit. That is the worse failure, so every clause
     ///   below is a reason to stay dead and the default is to stay dead.
     ///
