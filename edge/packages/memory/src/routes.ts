@@ -5,7 +5,6 @@ import {
   verifyBearerToken,
   type AppDeps,
 } from "@omi/platform";
-import { defaultTenantRecord } from "@omi/tenant";
 import { originMemoryStore } from "./types.js";
 
 export type MemoryRouteEnv = {
@@ -36,17 +35,19 @@ export function memoryRoutes(deps: AppDeps) {
   app.get("/", async (c) => {
     const uid = c.get("uid");
     const store = originMemoryStore(deps.features.originApiBase, c.get("authHeader"));
-    const limit = Number(c.req.query("limit") || "20");
-    const search = c.req.query("search") || c.req.query("q") || undefined;
-    const category = c.req.query("category") || undefined;
+    const limit = queryInteger(c.req.query("limit"), 100);
+    const offset = queryInteger(c.req.query("offset"), 0);
+    if (limit === null || offset === null) return c.json({ error: "invalid_query" }, 422);
     try {
-      const items = await store.list({ uid, limit, search, category });
-      const tenant = defaultTenantRecord(uid, { shardCount: deps.features.tenantShardCount });
-      return c.json({
-        memories: items,
-        tenant: { shard: tenant.d1DatabaseId },
-        source: "origin",
+      const items = await store.list({
+        uid,
+        limit,
+        offset,
+        cursor: c.req.query("cursor") || undefined,
+        deviceScope: c.req.query("device_scope") || undefined,
+        clientDeviceId: c.req.query("client_device_id") || undefined,
       });
+      return c.json(items);
     } catch (e) {
       return c.json({ error: "list_failed", detail: sanitize(String(e)) }, 502);
     }
@@ -65,4 +66,10 @@ export function memoryRoutes(deps: AppDeps) {
   });
 
   return app;
+}
+
+function queryInteger(value: string | undefined, fallback: number): number | null {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
 }
