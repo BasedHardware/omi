@@ -33,19 +33,13 @@ struct SettingsSearchItem: Identifiable {
         "speaker",
       ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
 
-    // Rewind
+    // Rewind — Screen Capture / Audio Recording live under Listening (General)
+    // as general.screencapture / general.audiorecording; do not keep duplicate
+    // rewind.* search hits that route to highlight ids that no longer exist here.
     SettingsSearchItem(
       name: "Rewind", subtitle: "Browse your screen history",
       keywords: ["screen history", "screenshots", "recording"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.rewind"),
-    SettingsSearchItem(
-      name: "Screen Capture", subtitle: "Toggle screen capture on or off",
-      keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
-      section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
-    SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind,
-      icon: "mic.fill", settingId: "rewind.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
       keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind,

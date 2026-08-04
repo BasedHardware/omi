@@ -101,6 +101,22 @@ final class AutomationSettingsSectionTests: XCTestCase {
     }
   }
 
+  func testListeningCaptureSearchHitsAreNotDuplicatedUnderRewind() {
+    // Capture/audio toggles moved to Listening (general.*). Stale rewind.*
+    // search entries would show duplicate Rewind hits and highlight ids that
+    // no longer exist on the Rewind page.
+    let ids = Set(SettingsSearchItem.allSearchableItems.map(\.settingId))
+    XCTAssertTrue(ids.contains("general.screencapture"))
+    XCTAssertTrue(ids.contains("general.audiorecording"))
+    XCTAssertFalse(ids.contains("rewind.screencapture"))
+    XCTAssertFalse(ids.contains("rewind.audiorecording"))
+
+    let captureHits = SettingsSearchItem.allSearchableItems.filter { $0.name == "Screen Capture" }
+    let audioHits = SettingsSearchItem.allSearchableItems.filter { $0.name == "Audio Recording" }
+    XCTAssertEqual(captureHits.map(\.section), [.general])
+    XCTAssertEqual(audioHits.map(\.section), [.general])
+  }
+
   func testNavigationHandlerUsesTolerantMatch() throws {
     // Source invariant: the automation navigation handler must go through
     // automationMatch, not the strict rawValue init that caused SET-01.
