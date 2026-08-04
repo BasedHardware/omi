@@ -166,7 +166,7 @@ extension SettingsContentView {
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
-          
+
           Text("Improve recognition of names, brands, and technical terms")
             .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
