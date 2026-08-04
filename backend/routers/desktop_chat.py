@@ -22,10 +22,82 @@ from utils.llm.desktop_llm_stub import (
     stub_chat_completions_stream,
 )
 from utils.other import endpoints as auth
+from utils.observability.fallback import record_fallback
 from utils.subscription import enforce_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 _RATE_LIMIT_PER_MINUTE = 120
+_MAX_PAUSE_TURN_CONTINUATIONS = 3
+_WEB_SEARCH_COST_PER_REQUEST = 10.0 / 1_000.0
+
+# Anthropic's built-in server-side web search. The desktop OpenAI-compatible
+# client never sees or executes this tool; Anthropic owns the lookup and returns
+# the grounded answer in the same completion contract.
+_WEB_SEARCH_TOOL = {
+    'type': 'web_search_20260209',
+    'name': 'web_search',
+    'max_uses': 5,
+}
+
+_EXPLICIT_WEB_REQUESTS = (
+    'search the web',
+    'search web',
+    'search the internet',
+    'search online',
+    'look it up online',
+    'look this up online',
+    'look that up online',
+    'find it online',
+    'find this online',
+    'find that online',
+    'google it',
+    'google this',
+    'google that',
+    'browse the web',
+    'web search',
+    'internet search',
+)
+_EXPLICIT_WEB_PROHIBITIONS = (
+    "don't call web search",
+    'do not call web search',
+    "don't call the web search",
+    'do not call the web search',
+    "don't use web search",
+    'do not use web search',
+    "don't use the web search",
+    'do not use the web search',
+    "don't search the web",
+    'do not search the web',
+    "don't search the internet",
+    'do not search the internet',
+    'without web search',
+)
+_EXPLICIT_PRIVATE_CONTEXT = (
+    'my conversations',
+    'our conversations',
+    'my memories',
+    'your memory of me',
+    'my screen history',
+    'my screen activity',
+    'my calendar',
+    'your calendar',
+    'my email',
+    'your email',
+    'my files',
+    'your files',
+    'my tasks',
+    'your tasks',
+    'my action items',
+    'my notes',
+    'your notes',
+    'what did i say',
+    'what have i said',
+    'what did i do',
+    'when did i',
+    'what was i doing',
+    'what do you remember about me',
+)
+_CURRENT_USER_MESSAGE_DELIMITER = '\n# User Message\n'
 
 
 class _BoundedChatRoute(APIRoute):
@@ -86,6 +158,56 @@ def _text(content: object) -> str:
     )
 
 
+def _normalize_policy_text(text: str) -> str:
+    return text.strip().strip('.,:;!?').replace('\u2018', "'").replace('\u2019', "'").lower()
+
+
+def _explicitly_prohibits_public_web(text: str) -> bool:
+    for phrase in _EXPLICIT_WEB_PROHIBITIONS:
+        start = text.find(phrase)
+        while start >= 0:
+            suffix = text[start + len(phrase) :].lstrip()
+            if not any(
+                suffix.startswith(noun) and (len(suffix) == len(noun) or not suffix[len(noun)].isalnum())
+                for noun in ('result', 'results')
+            ):
+                return True
+            start = text.find(phrase, start + 1)
+    return False
+
+
+def _strip_public_web_routing_instruction(text: str) -> str:
+    trimmed = text.lstrip()
+    opening = '<omi_retrieval_policy>'
+    closing = '</omi_retrieval_policy>'
+    if not trimmed.startswith(opening):
+        return text
+    remainder = trimmed.split(closing, 1)
+    return remainder[1].lstrip() if len(remainder) == 2 else text
+
+
+def _public_web_is_prohibited(messages: object) -> bool:
+    if not isinstance(messages, list):
+        return False
+    latest_user = next(
+        (message for message in reversed(messages) if isinstance(message, Mapping) and message.get('role') == 'user'),
+        None,
+    )
+    if latest_user is None:
+        return False
+    rendered = _text(latest_user.get('content'))
+    instruction = rendered.rsplit(_CURRENT_USER_MESSAGE_DELIMITER, 1)[-1]
+    instruction = _strip_public_web_routing_instruction(instruction)
+    normalized = _normalize_policy_text(instruction)
+    if not normalized:
+        return False
+    explicitly_mentions_web = any(phrase in normalized for phrase in _EXPLICIT_WEB_REQUESTS)
+    private_context = any(phrase in normalized for phrase in _EXPLICIT_PRIVATE_CONTEXT)
+    return (explicitly_mentions_web and _explicitly_prohibits_public_web(normalized)) or (
+        private_context and not explicitly_mentions_web
+    )
+
+
 def _user_content(content: object) -> object:
     if not isinstance(content, list):
         return content if isinstance(content, str) else ''
@@ -119,6 +241,23 @@ def _tool_choice(choice: object) -> dict[str, str] | None:
         if isinstance(name, str):
             return {'type': 'tool', 'name': name}
     raise ValueError('unsupported tool_choice')
+
+
+def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
+    if not isinstance(tools, list):
+        return []
+    return [
+        {
+            'name': tool['function']['name'],
+            'description': tool['function'].get('description'),
+            'input_schema': tool['function'].get('parameters', {'type': 'object', 'properties': {}}),
+        }
+        for tool in tools
+        if isinstance(tool, Mapping)
+        and tool.get('type') == 'function'
+        and isinstance(tool.get('function'), Mapping)
+        and isinstance(tool['function'].get('name'), str)
+    ]
 
 
 def _request(body: object) -> tuple[str, dict[str, object]]:
@@ -188,39 +327,70 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         result['temperature'] = body['temperature']
     tools = body.get('tools')
     choice = _tool_choice(body.get('tool_choice'))
-    if isinstance(tools, list) and body.get('tool_choice') != 'none':
-        result['tools'] = [
-            {
-                'name': tool['function']['name'],
-                'description': tool['function'].get('description'),
-                'input_schema': tool['function'].get('parameters', {'type': 'object', 'properties': {}}),
-            }
-            for tool in tools
-            if isinstance(tool, Mapping)
-            and tool.get('type') == 'function'
-            and isinstance(tool.get('function'), Mapping)
-            and isinstance(tool['function'].get('name'), str)
-        ]
+    client_tools = _anthropic_client_tools(tools)
+    upstream_model = cast(str, result['model'])
+    public_web_prohibited = _public_web_is_prohibited(messages)
+    web_search_requested = body.get('tool_choice') != 'none' and (
+        body.get('omi_web_search') is True or bool(client_tools)
+    )
+    web_search_supported = not upstream_model.startswith('claude-haiku')
+    if web_search_requested and not web_search_supported and not public_web_prohibited:
+        record_fallback(
+            component='other',
+            from_mode='anthropic_web_search',
+            to_mode='model_knowledge',
+            reason='capability_mismatch',
+            outcome='degraded',
+        )
+    inject_web_search = (
+        web_search_supported
+        and body.get('tool_choice') != 'none'
+        and not public_web_prohibited
+        and web_search_requested
+    )
+    if body.get('tool_choice') != 'none' and (isinstance(tools, list) or inject_web_search):
+        result['tools'] = ([_WEB_SEARCH_TOOL] if inject_web_search else []) + client_tools
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
     return model, result
 
 
+def _usage_field(usage: object, field: str) -> int:
+    value = usage.get(field, 0) if isinstance(usage, Mapping) else getattr(usage, field, 0)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _web_search_requests(usage: object) -> int:
+    direct = _usage_field(usage, 'web_search_requests')
+    if direct:
+        return direct
+    server_tool_use = (
+        usage.get('server_tool_use') if isinstance(usage, Mapping) else getattr(usage, 'server_tool_use', None)
+    )
+    return _usage_field(server_tool_use, 'web_search_requests')
+
+
 def _usage(usage: object) -> dict[str, object]:
     input_tokens = (
-        int(getattr(usage, 'input_tokens', 0))
-        + int(getattr(usage, 'cache_creation_input_tokens', 0))
-        + int(getattr(usage, 'cache_read_input_tokens', 0))
+        _usage_field(usage, 'input_tokens')
+        + _usage_field(usage, 'cache_creation_input_tokens')
+        + _usage_field(usage, 'cache_read_input_tokens')
     )
-    output_tokens = int(getattr(usage, 'output_tokens', 0))
+    output_tokens = _usage_field(usage, 'output_tokens')
     result: dict[str, object] = {
         'prompt_tokens': input_tokens,
         'completion_tokens': output_tokens,
         'total_tokens': input_tokens + output_tokens,
     }
-    cached_tokens = int(getattr(usage, 'cache_read_input_tokens', 0))
+    cached_tokens = _usage_field(usage, 'cache_read_input_tokens')
     if cached_tokens:
         result['prompt_tokens_details'] = {'cached_tokens': cached_tokens}
+    search_requests = _web_search_requests(usage)
+    if search_requests:
+        result['web_search_requests'] = search_requests
     return result
 
 
@@ -230,18 +400,65 @@ def _stop_reason(value: object) -> str:
     )
 
 
-def _message_response(message: object, public_model: str) -> dict[str, object]:
-    content: list[Any] = list(getattr(message, 'content', []))
+def _serialize_content(content: object) -> list[dict[str, object]]:
+    if not isinstance(content, list):
+        return []
+    serialized: list[dict[str, object]] = []
+    for block in content:
+        if isinstance(block, Mapping):
+            serialized.append(dict(block))
+            continue
+        model_dump = getattr(block, 'model_dump', None)
+        if callable(model_dump):
+            try:
+                dumped = model_dump(mode='json', exclude_none=True)
+            except TypeError:
+                dumped = model_dump(exclude_none=True)
+            if isinstance(dumped, Mapping):
+                serialized.append(dict(dumped))
+                continue
+        block_dict = getattr(block, '__dict__', None)
+        if isinstance(block_dict, dict):
+            serialized.append(dict(block_dict))
+    return serialized
+
+
+def _block_value(block: object, field: str, default: object = None) -> object:
+    if isinstance(block, Mapping):
+        return block.get(field, default)
+    return getattr(block, field, default)
+
+
+def _message_content(message: object) -> list[object]:
+    content = getattr(message, 'content', [])
+    return list(content) if isinstance(content, list) else []
+
+
+def _message_response(
+    message: object,
+    public_model: str,
+    *,
+    content_override: list[object] | None = None,
+    usage_override: object | None = None,
+) -> dict[str, object]:
+    content = content_override if content_override is not None else _message_content(message)
     tool_calls = [
         {
-            'id': block.id,
+            'id': _block_value(block, 'id'),
             'type': 'function',
-            'function': {'name': block.name, 'arguments': json.dumps(block.input, separators=(',', ':'))},
+            'function': {
+                'name': _block_value(block, 'name'),
+                'arguments': json.dumps(_block_value(block, 'input', {}), separators=(',', ':')),
+            },
         }
         for block in content
-        if getattr(block, 'type', None) == 'tool_use'
+        if _block_value(block, 'type') == 'tool_use'
     ]
-    text = ''.join(block.text for block in content if getattr(block, 'type', None) == 'text')
+    text = ''.join(
+        value
+        for block in content
+        if _block_value(block, 'type') == 'text' and isinstance((value := _block_value(block, 'text')), str)
+    )
     stop_reason = _stop_reason(getattr(message, 'stop_reason', None))
     response_message: dict[str, object] = {'role': 'assistant', 'content': text or None}
     if tool_calls:
@@ -252,17 +469,63 @@ def _message_response(message: object, public_model: str) -> dict[str, object]:
         'created': int(time.time()),
         'model': public_model,
         'choices': [{'index': 0, 'message': response_message, 'finish_reason': stop_reason}],
-        'usage': _usage(getattr(message, 'usage', None)),
+        'usage': _usage(usage_override if usage_override is not None else getattr(message, 'usage', None)),
     }
 
 
 def _usage_values(usage: object) -> tuple[int, int, int, int]:
     return (
-        int(getattr(usage, 'input_tokens', 0)),
-        int(getattr(usage, 'output_tokens', 0)),
-        int(getattr(usage, 'cache_read_input_tokens', 0)),
-        int(getattr(usage, 'cache_creation_input_tokens', 0)),
+        _usage_field(usage, 'input_tokens'),
+        _usage_field(usage, 'output_tokens'),
+        _usage_field(usage, 'cache_read_input_tokens'),
+        _usage_field(usage, 'cache_creation_input_tokens'),
     )
+
+
+def _merge_usage(total: dict[str, int], usage: object) -> dict[str, int]:
+    for field in ('input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'):
+        total[field] = total.get(field, 0) + _usage_field(usage, field)
+    search_requests = _web_search_requests(usage)
+    if search_requests:
+        total['web_search_requests'] = total.get('web_search_requests', 0) + search_requests
+    return total
+
+
+async def _continue_pause_turn(
+    payload: dict[str, object],
+    message: object,
+    initial_usage: object | None = None,
+    *,
+    include_initial_content: bool = True,
+) -> tuple[object, dict[str, int], list[object]]:
+    total_usage = _merge_usage({}, initial_usage if initial_usage is not None else getattr(message, 'usage', None))
+    raw_messages = payload.get('messages', [])
+    messages = (
+        [dict(item) for item in raw_messages if isinstance(item, Mapping)] if isinstance(raw_messages, list) else []
+    )
+    request = dict(payload)
+    request['stream'] = False
+    aggregated_content = _message_content(message) if include_initial_content else []
+    for _ in range(_MAX_PAUSE_TURN_CONTINUATIONS):
+        current_content = _message_content(message)
+        messages.append({'role': 'assistant', 'content': _serialize_content(current_content)})
+        request['messages'] = messages
+        message = await anthropic_client.messages.create(**request)
+        _merge_usage(total_usage, getattr(message, 'usage', None))
+        aggregated_content.extend(_message_content(message))
+        if getattr(message, 'stop_reason', None) != 'pause_turn':
+            return message, total_usage, aggregated_content
+    raise RuntimeError('Anthropic pause_turn continuation limit reached')
+
+
+async def _create_with_pause_turn_continuations(
+    payload: dict[str, object],
+) -> tuple[object, dict[str, int], list[object] | None]:
+    message = await anthropic_client.messages.create(**payload)
+    total_usage = _merge_usage({}, getattr(message, 'usage', None))
+    if getattr(message, 'stop_reason', None) != 'pause_turn':
+        return message, total_usage, None
+    return await _continue_pause_turn(payload, message)
 
 
 async def _record_usage(uid: str, usage: object) -> None:
@@ -276,7 +539,7 @@ async def _record_usage(uid: str, usage: object) -> None:
         cache_read_tokens,
         cache_write_tokens,
         input_tokens + output_tokens + cache_read_tokens + cache_write_tokens,
-        0.0,
+        _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST,
     )
 
 
@@ -294,6 +557,9 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
     )
     try:
         async with anthropic_client.messages.stream(**payload) as stream:
+            message_delta_reason: object = None
+            message_delta_usage: object = None
+            next_tool_index = 0
             async for event in stream:
                 event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
@@ -336,6 +602,8 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                     and getattr(getattr(event, 'content_block', None), 'type', '') == 'tool_use'
                 ):
                     block = event.content_block
+                    tool_index = getattr(event, 'index', 0)
+                    next_tool_index = max(next_tool_index, tool_index + 1)
                     yield _sse(
                         {
                             'id': stream_id,
@@ -348,7 +616,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                                     'delta': {
                                         'tool_calls': [
                                             {
-                                                'index': getattr(event, 'index', 0),
+                                                'index': tool_index,
                                                 'id': block.id,
                                                 'type': 'function',
                                                 'function': {'name': block.name, 'arguments': ''},
@@ -361,29 +629,82 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                         }
                     )
                 elif event_type == 'message_delta':
-                    reason = _stop_reason(getattr(getattr(event, 'delta', None), 'stop_reason', None))
-                    yield _sse(
-                        {
-                            'id': stream_id,
-                            'object': 'chat.completion.chunk',
-                            'created': created,
-                            'model': public_model,
-                            'choices': [{'index': 0, 'delta': {}, 'finish_reason': reason}],
-                        }
-                    )
-                    usage = getattr(event, 'usage', None)
-                    if usage is not None:
-                        await _record_usage(uid, usage)
+                    message_delta_reason = getattr(getattr(event, 'delta', None), 'stop_reason', None)
+                    message_delta_usage = getattr(event, 'usage', None)
+            final_message = await stream.get_final_message()
+            final_usage = getattr(final_message, 'usage', None) or message_delta_usage
+            final_content: list[object] | None = None
+            if getattr(final_message, 'stop_reason', None) == 'pause_turn' or message_delta_reason == 'pause_turn':
+                final_message, usage, final_content = await _continue_pause_turn(
+                    payload, final_message, final_usage, include_initial_content=False
+                )
+                for block in final_content:
+                    block_type = _block_value(block, 'type')
+                    if block_type == 'text' and isinstance(text := _block_value(block, 'text'), str):
                         yield _sse(
                             {
                                 'id': stream_id,
                                 'object': 'chat.completion.chunk',
                                 'created': created,
                                 'model': public_model,
-                                'choices': [],
-                                'usage': _usage(usage),
+                                'choices': [{'index': 0, 'delta': {'content': text}, 'finish_reason': None}],
                             }
                         )
+                    elif block_type == 'tool_use':
+                        yield _sse(
+                            {
+                                'id': stream_id,
+                                'object': 'chat.completion.chunk',
+                                'created': created,
+                                'model': public_model,
+                                'choices': [
+                                    {
+                                        'index': 0,
+                                        'delta': {
+                                            'tool_calls': [
+                                                {
+                                                    'index': next_tool_index,
+                                                    'id': _block_value(block, 'id'),
+                                                    'type': 'function',
+                                                    'function': {
+                                                        'name': _block_value(block, 'name'),
+                                                        'arguments': json.dumps(
+                                                            _block_value(block, 'input', {}), separators=(',', ':')
+                                                        ),
+                                                    },
+                                                }
+                                            ]
+                                        },
+                                        'finish_reason': None,
+                                    }
+                                ],
+                            }
+                        )
+                        next_tool_index += 1
+            else:
+                usage = final_usage
+            reason = _stop_reason(getattr(final_message, 'stop_reason', None) or message_delta_reason)
+            yield _sse(
+                {
+                    'id': stream_id,
+                    'object': 'chat.completion.chunk',
+                    'created': created,
+                    'model': public_model,
+                    'choices': [{'index': 0, 'delta': {}, 'finish_reason': reason}],
+                }
+            )
+            if usage is not None:
+                await _record_usage(uid, usage)
+                yield _sse(
+                    {
+                        'id': stream_id,
+                        'object': 'chat.completion.chunk',
+                        'created': created,
+                        'model': public_model,
+                        'choices': [],
+                        'usage': _usage(usage),
+                    }
+                )
     except Exception:
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
     yield 'data: [DONE]\n\n'
@@ -463,12 +784,12 @@ async def chat_completions(
             },
         )
     try:
-        message = await anthropic_client.messages.create(**payload)
+        message, usage, content = await _create_with_pause_turn_continuations(payload)
     except Exception as exc:
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
-    await _record_usage(uid, getattr(message, 'usage', None))
+    await _record_usage(uid, usage)
     return JSONResponse(
-        _message_response(message, public_model),
+        _message_response(message, public_model, content_override=content, usage_override=usage),
         headers={
             'X-Omi-Chat-Contract-Version': '1',
             'X-Request-Id': request_id,
