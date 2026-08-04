@@ -17,7 +17,6 @@ import {
   X,
   PanelLeftClose,
   PanelLeft,
-  User,
   Puzzle,
   Code,
   Settings,
@@ -50,10 +49,9 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
-import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { cn } from '@/lib/utils';
-import { RECORDING_ENABLED } from '@/lib/featureFlags';
 import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
+import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -85,8 +83,8 @@ const navItems: NavItem[] = [
     icon: <House className="w-5 h-5" />,
   },
   {
-    label: 'Conversations',
-    href: '/conversations',
+    label: 'Timeline',
+    href: '/timeline',
     icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
@@ -100,21 +98,6 @@ const navItems: NavItem[] = [
     icon: <ListChecks className="w-5 h-5" />,
   },
   {
-    label: 'Recaps',
-    href: '/recaps',
-    icon: <CalendarDays className="w-5 h-5" />,
-  },
-  {
-    label: 'Record',
-    href: '/record',
-    icon: <Mic className="w-5 h-5" />,
-  },
-  {
-    label: 'My Apps',
-    href: '/my-apps',
-    icon: <LayoutGrid className="w-5 h-5" />,
-  },
-  {
     label: 'Persona',
     href: '/persona',
     icon: <Sparkles className="w-5 h-5" />,
@@ -125,9 +108,7 @@ const navItems: NavItem[] = [
 // The icon map is total over SettingsSectionId, so adding a settings section
 // without giving it a nav entry fails to compile.
 const SETTINGS_SECTION_ICONS: Record<SettingsSectionId, LucideIcon> = {
-  profile: User,
   privacy: Shield,
-  integrations: Puzzle,
   developer: Code,
   account: Settings,
 };
@@ -136,6 +117,57 @@ const settingsMenuItems = SETTINGS_SECTIONS.map((section) => ({
   ...section,
   icon: SETTINGS_SECTION_ICONS[section.id],
 }));
+
+/**
+ * One row of the profile menu. Every row carries its own radius and sits
+ * inside the container's padding, so the menu reads as a stack of chips rather
+ * than as full-bleed bands butting against the surface edge.
+ */
+function MenuRow({
+  href,
+  icon: Icon,
+  label,
+  external = false,
+  onNavigate,
+}: {
+  href: string;
+  icon: LucideIcon | ((props: { className?: string }) => React.ReactNode);
+  label: string;
+  external?: boolean;
+  onNavigate: () => void;
+}) {
+  const className = cn(
+    'group flex items-center gap-3 rounded-element px-3 py-2',
+    'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
+    'transition-colors',
+  );
+  const content = (
+    <>
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <span className="text-sm">{label}</span>
+    </>
+  );
+
+  if (external) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onNavigate}
+        className={className}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} onClick={onNavigate} className={className}>
+      {content}
+    </Link>
+  );
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -146,8 +178,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const { toggleNotificationCenter, unreadCount } = useNotificationContext();
-  const { state: recordingState } = useRecordingContext();
-  const isRecording = recordingState === 'recording' || recordingState === 'paused';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
@@ -206,6 +236,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
+  const closeUserMenu = useCallback(() => {
+    setShowUserMenu(false);
+    if (isTemporaryExpand) {
+      setIsExpanded(false);
+      setIsTemporaryExpand(false);
+    }
+    if (!isDesktop) onClose();
+  }, [isTemporaryExpand, isDesktop, onClose]);
+
   const handleSignOut = useCallback(async () => {
     await signOut();
     onClose();
@@ -216,6 +255,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   // On mobile, sidebar should always show text (behave as expanded)
   const showText = !isDesktop || isExpanded;
+
+  // The menu only makes sense with labels visible; collapsed, the profile
+  // button expands the rail first.
+  const menuOpen = showUserMenu && showText;
 
   return (
     <>
@@ -257,16 +300,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           'lg:relative lg:z-auto',
         )}
       >
-        {/* Header */}
-        <div className="border-b border-white/[0.04]">
-          {/* Logo row - fixed layout */}
+        {/* Header: the mark, then the two controls that act on the shell
+            itself. They share the nav's horizontal padding so they read as one
+            column of icons with the destinations below, rather than as a
+            separate toolbar. */}
+        <div className={cn('pt-6 pb-3', showText ? 'px-3' : 'px-2')}>
           <div
             className={cn(
-              'flex items-center pt-7 px-4 pb-4',
-              showText ? 'justify-between' : 'justify-center',
+              'flex items-center gap-1',
+              showText ? 'justify-between' : 'flex-col gap-2',
             )}
           >
-            <Link href="/conversations" className="flex items-center gap-2">
+            <Link href="/timeline" className="flex items-center gap-2 px-1">
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
@@ -281,79 +326,66 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               )}
             </Link>
 
-            {/* Mobile close button */}
-            {!isDesktop && (
+            <div className={cn('flex items-center gap-1', !showText && 'flex-col')}>
               <button
-                onClick={onClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-              >
-                <X className="w-5 h-5 text-text-secondary" />
-              </button>
-            )}
-          </div>
-
-          {/* Toggle button row (desktop only) - appears on sidebar hover */}
-          {isDesktop && (
-            <div
-              className={cn(
-                'px-4 pb-3',
-                showText ? 'flex justify-end' : 'flex justify-center',
-              )}
-            >
-              <button
-                onClick={handleToggleExpand}
+                onClick={toggleNotificationCenter}
                 className={cn(
-                  'p-2 rounded-lg transition-all duration-200',
-                  'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                  isHeaderHovered ? 'opacity-100' : 'opacity-0',
+                  'flex items-center justify-center p-2 rounded-element transition-colors',
+                  'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                 )}
-                title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                title="Notifications"
+                aria-label="Notifications"
               >
-                {isExpanded ? (
-                  <PanelLeftClose className="w-4 h-4" />
-                ) : (
-                  <PanelLeft className="w-4 h-4" />
-                )}
+                <div className="relative">
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span
+                      className={cn(
+                        'absolute -top-2.5 -right-2.5',
+                        'min-w-[18px] h-[18px] px-1',
+                        'flex items-center justify-center',
+                        'bg-red-500 text-white text-[10px] font-bold',
+                        'rounded-full',
+                      )}
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </div>
               </button>
-            </div>
-          )}
 
-          {/* Notification bell */}
-          <div
-            className={cn(
-              'px-4 pb-3',
-              showText ? 'flex justify-start' : 'flex justify-center',
-            )}
-          >
-            <button
-              onClick={toggleNotificationCenter}
-              className={cn(
-                'flex items-center rounded-lg transition-colors',
-                'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                showText ? 'px-2 py-2' : 'p-2',
+              {/* Collapse sits beside the bell and stays visible. Revealing it
+                  on hover meant it could not be found without already knowing
+                  it was there. */}
+              {isDesktop && (
+                <button
+                  onClick={handleToggleExpand}
+                  className={cn(
+                    'flex items-center justify-center p-2 rounded-element transition-colors',
+                    'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
+                  )}
+                  title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                  aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                >
+                  {isExpanded ? (
+                    <PanelLeftClose className="w-5 h-5" />
+                  ) : (
+                    <PanelLeft className="w-5 h-5" />
+                  )}
+                </button>
               )}
-              title="Notifications"
-            >
-              <div className="relative">
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span
-                    className={cn(
-                      'absolute -top-2.5 -right-2.5',
-                      'min-w-[18px] h-[18px] px-1',
-                      'flex items-center justify-center',
-                      'bg-red-500 text-white text-[10px] font-bold',
-                      'rounded-full',
-                    )}
-                  >
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </div>
-              {showText && (
-                <span className="ml-3 text-sm text-text-secondary">Notifications</span>
+
+              {/* Mobile close button */}
+              {!isDesktop && (
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-element hover:bg-bg-tertiary transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5 text-text-secondary" />
+                </button>
               )}
-            </button>
+            </div>
           </div>
         </div>
 
@@ -363,11 +395,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
-                (item.href === '/conversations' &&
-                  pathname?.startsWith('/conversations'));
-              const showRecordingBadge = item.href === '/record' && isRecording;
-              const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
-
+                (item.href === '/timeline' && pathname?.startsWith('/timeline'));
               return (
                 <Link
                   key={item.href}
@@ -375,13 +403,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   onClick={() => {
                     if (!isDesktop) onClose();
                   }}
-                  title={
-                    !showText
-                      ? showComingSoon
-                        ? `${item.label} (Coming Soon)`
-                        : item.label
-                      : undefined
-                  }
+                  title={!showText ? item.label : undefined}
                   className={cn(
                     'relative flex items-center rounded-chip',
                     'transition-colors duration-150',
@@ -389,7 +411,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     isActive
                       ? 'text-bg-primary'
                       : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                    showComingSoon && 'opacity-60',
                   )}
                 >
                   {/* One shared pill for the whole nav: framer-motion matches it
@@ -402,32 +423,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       className="absolute inset-0 rounded-chip bg-text-primary"
                     />
                   )}
-                  <span className="flex-shrink-0 relative z-10">
-                    {item.icon}
-                    {/* Recording badge - pulsing red dot */}
-                    {showRecordingBadge && (
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                      </span>
-                    )}
-                  </span>
+                  <span className="flex-shrink-0 relative z-10">{item.icon}</span>
                   {showText && (
-                    <span className="relative z-10 font-medium flex items-center gap-2">
-                      {item.label}
-                      {showComingSoon && (
-                        <span
-                          className={cn(
-                            'text-[10px] px-1.5 py-0.5 rounded',
-                            isActive
-                              ? 'bg-bg-primary/10 text-bg-primary'
-                              : 'bg-bg-quaternary text-text-quaternary',
-                          )}
-                        >
-                          Soon
-                        </span>
-                      )}
-                    </span>
+                    <span className="relative z-10 font-medium">{item.label}</span>
                   )}
                 </Link>
               );
@@ -492,211 +490,154 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })()}
 
-        {/* Help, Feedback & Discord links */}
-        <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
-          <Link
-            href="/help"
-            title={!showText ? 'Help' : undefined}
+        {/* Footer: one surface that is the profile at rest and the whole menu
+            when open. The menu grows upward out of the profile row rather than
+            floating over it, so the thing you clicked stays put and becomes the
+            base of what opened — no separate copy of your name and avatar. */}
+        <div
+          ref={userMenuRef}
+          className={cn(
+            // flex-shrink-0: the rail is a flex column whose nav takes the
+            // slack, so without this the footer is the item that gives way and
+            // the opened menu is silently squeezed back to the profile row.
+            'flex-shrink-0 overflow-hidden border border-stroke bg-bg-raised',
+            'm-3 rounded-card',
+          )}
+        >
+          {/* Opened by max-height, not by height:auto and not by a 0fr->1fr grid
+              track. Animating to auto needs a measured target and the measure
+              never ran through this runtime; the grid track collapses because
+              `overflow-hidden` sets the item's automatic minimum size to zero,
+              so `1fr` resolves against zero free space. A max-height ceiling
+              needs neither, and the menu is a fixed set of rows so a ceiling is
+              safe — it is checked by a test rather than left to drift. */}
+          <div
             className={cn(
-              'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
+              'overflow-hidden transition-all duration-200 ease-out',
+              menuOpen ? 'opacity-100' : 'opacity-0',
             )}
+            style={{ maxHeight: menuOpen ? PROFILE_MENU_MAX_HEIGHT : 0 }}
+            aria-hidden={!menuOpen}
           >
-            <LifeBuoy className="w-4 h-4 flex-shrink-0" />
-            {showText && <span className="text-sm">Help</span>}
-          </Link>
-          <a
-            href="https://feedback.omi.me"
-            target="_blank"
-            rel="noopener noreferrer"
-            title={!showText ? 'Feedback' : undefined}
-            className={cn(
-              'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
-            )}
-          >
-            <MessageSquare className="w-4 h-4 flex-shrink-0" />
-            {showText && <span className="text-sm">Feedback</span>}
-          </a>
-          <a
-            href="http://discord.omi.me"
-            target="_blank"
-            rel="noopener noreferrer"
-            title={!showText ? 'Discord' : undefined}
-            className={cn(
-              'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
-            )}
-          >
-            <DiscordIcon className="w-4 h-4 flex-shrink-0" />
-            {showText && <span className="text-sm">Discord</span>}
-          </a>
-        </div>
+            <div inert={!menuOpen}>
+              <div className="p-2 space-y-0.5">
+                <MenuRow
+                  href="/connectors"
+                  icon={Puzzle}
+                  label="Connectors"
+                  onNavigate={closeUserMenu}
+                />
+                {settingsMenuItems.map((item) => (
+                  <MenuRow
+                    key={item.id}
+                    href={`/settings?section=${item.id}`}
+                    icon={item.icon}
+                    label={item.label}
+                    onNavigate={closeUserMenu}
+                  />
+                ))}
+              </div>
 
-        {/* Footer - User Section with Settings Menu */}
-        <div className="border-t border-white/[0.04]">
-          <div className="bg-bg-primary/30">
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => {
-                  if (isExpanded) {
-                    setShowUserMenu(!showUserMenu);
-                  } else {
-                    // In collapsed mode, temporarily expand sidebar and show user menu
-                    setIsExpanded(true);
-                    setIsTemporaryExpand(true);
-                    setShowUserMenu(true);
-                  }
-                }}
-                className={cn(
-                  'w-full flex items-center',
-                  'hover:bg-bg-tertiary/50 transition-colors',
-                  showText ? 'gap-3 p-4' : 'justify-center p-3',
-                )}
-                title={!showText ? 'Settings' : undefined}
-              >
-                {/* Avatar */}
-                <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
-                  {user?.photoURL ? (
-                    <Image
-                      src={user.photoURL}
-                      alt={user.displayName || 'User'}
-                      width={36}
-                      height={36}
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-tertiary text-sm font-medium">
-                      {user?.displayName?.charAt(0) || 'U'}
-                    </div>
+              <div className="border-t border-stroke/60 p-2 space-y-0.5">
+                <MenuRow
+                  href="/help"
+                  icon={LifeBuoy}
+                  label="Help"
+                  onNavigate={closeUserMenu}
+                />
+                <MenuRow
+                  href="https://feedback.omi.me"
+                  icon={MessageSquare}
+                  label="Feedback"
+                  external
+                  onNavigate={closeUserMenu}
+                />
+                <MenuRow
+                  href="http://discord.omi.me"
+                  icon={DiscordIcon}
+                  label="Discord"
+                  external
+                  onNavigate={closeUserMenu}
+                />
+                <button
+                  onClick={handleSignOut}
+                  className={cn(
+                    'w-full flex items-center gap-3 rounded-element px-3 py-2',
+                    'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
+                    'transition-colors',
                   )}
-                </div>
-
-                {showText && (
-                  <>
-                    {/* Name & email */}
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium text-text-primary truncate">
-                        {user?.displayName || 'User'}
-                      </p>
-                      <p className="text-xs text-text-quaternary truncate">
-                        {user?.email}
-                      </p>
-                    </div>
-
-                    {/* Dropdown indicator */}
-                    <svg
-                      className={cn(
-                        'w-4 h-4 text-text-quaternary transition-transform',
-                        showUserMenu && 'rotate-180',
-                      )}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 15l7-7 7 7"
-                      />
-                    </svg>
-                  </>
-                )}
-              </button>
-
-              {/* User menu dropdown with settings */}
-              <AnimatePresence>
-                {showUserMenu && showText && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    className={cn(
-                      'absolute bottom-full left-2 right-2 mb-3',
-                      'bg-[#1a1a1f]/95 backdrop-blur-xl',
-                      'rounded-2xl overflow-hidden',
-                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(0,0,0,0.45),0_10px_30px_-5px_rgba(0,0,0,0.5)]',
-                    )}
-                  >
-                    {/* User info header */}
-                    <div className="p-4 border-b border-white/[0.04]">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center ring-1 ring-white/[0.08] overflow-hidden">
-                          {user?.photoURL ? (
-                            <Image
-                              src={user.photoURL}
-                              alt={user.displayName || 'User'}
-                              width={40}
-                              height={40}
-                              className="object-cover"
-                            />
-                          ) : (
-                            <span className="text-white/70 text-sm font-medium">
-                              {user?.displayName?.charAt(0) || 'U'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white/90 truncate">
-                            {user?.displayName || 'User'}
-                          </p>
-                          <p className="text-xs text-white/40 truncate">{user?.email}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Settings list - single column */}
-                    <div className="py-1.5">
-                      {settingsMenuItems.map((item) => (
-                        <Link
-                          key={item.id}
-                          href={`/settings?section=${item.id}`}
-                          onClick={() => {
-                            setShowUserMenu(false);
-                            if (isTemporaryExpand) {
-                              setIsExpanded(false);
-                              setIsTemporaryExpand(false);
-                            }
-                            if (!isDesktop) onClose();
-                          }}
-                          className={cn(
-                            'group flex items-center gap-3 px-4 py-2.5',
-                            'transition-all duration-150',
-                            'hover:bg-white/[0.04]',
-                          )}
-                        >
-                          <item.icon className="w-4 h-4 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
-                          <span className="text-sm text-white/70 group-hover:text-white/90">
-                            {item.label}
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-
-                    {/* Sign out - separated */}
-                    <div className="p-2 pt-0 border-t border-white/[0.04] mt-1">
-                      <button
-                        onClick={handleSignOut}
-                        className={cn(
-                          'w-full flex items-center gap-2.5 p-2.5 rounded-xl',
-                          'text-red-400/70 hover:text-red-400',
-                          'hover:bg-red-500/[0.08] transition-all',
-                        )}
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span className="text-sm">Sign Out</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                >
+                  <LogOut className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm">Sign Out</span>
+                </button>
+              </div>
             </div>
           </div>
+
+          <button
+            onClick={() => {
+              if (isExpanded) {
+                setShowUserMenu(!showUserMenu);
+              } else {
+                // In collapsed mode, temporarily expand sidebar and show user menu
+                setIsExpanded(true);
+                setIsTemporaryExpand(true);
+                setShowUserMenu(true);
+              }
+            }}
+            className={cn(
+              'w-full flex items-center transition-colors hover:bg-bg-tertiary/60',
+              showText ? 'gap-3 p-3' : 'justify-center p-3',
+            )}
+            title={!showText ? 'Settings' : undefined}
+          >
+            {/* Avatar */}
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
+              {user?.photoURL ? (
+                <Image
+                  src={user.photoURL}
+                  alt={user.displayName || 'User'}
+                  width={36}
+                  height={36}
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-text-tertiary text-sm font-medium">
+                  {user?.displayName?.charAt(0) || 'U'}
+                </div>
+              )}
+            </div>
+
+            {showText && (
+              <>
+                {/* Name & email */}
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium text-text-primary truncate">
+                    {user?.displayName || 'User'}
+                  </p>
+                  <p className="text-xs text-text-quaternary truncate">{user?.email}</p>
+                </div>
+
+                {/* Dropdown indicator */}
+                <svg
+                  className={cn(
+                    'w-4 h-4 text-text-quaternary transition-transform',
+                    showUserMenu && 'rotate-180',
+                  )}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 15l7-7 7 7"
+                  />
+                </svg>
+              </>
+            )}
+          </button>
         </div>
       </aside>
     </>
